@@ -92,6 +92,15 @@
   padding: 0.75rem 0.75rem;
 }
 
+/* Shared focus-visible ring for interactive elements */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 /* Virtualized row variant — data attributes instead of :nth-child */
 .glass-vrow {
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);

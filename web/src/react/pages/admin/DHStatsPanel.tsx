@@ -19,13 +19,13 @@ interface HealthCardProps {
 
 function HealthCard({ label, value, valueColor, sub }: HealthCardProps) {
   return (
-    <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
-      <div className="text-xs text-[var(--text-muted)] mb-1">{label}</div>
-      <div className="text-2xl font-bold" style={valueColor ? { color: valueColor } : undefined}>
+    <CardShell padding="md">
+      <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">{label}</div>
+      <div className="text-2xl font-bold tabular-nums" style={valueColor ? { color: valueColor } : undefined}>
         {value}
       </div>
       {sub && <div className="text-xs text-[var(--text-muted)] mt-1">{sub}</div>}
-    </div>
+    </CardShell>
   );
 }
 
@@ -112,7 +112,7 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
       {/* Integration Health */}
       <div>
-        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Integration Health</h4>
+        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Integration Health</h4>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <HealthCard
             label="API Health"
@@ -137,7 +137,7 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
       {/* DoubleHolo Counts */}
       <div>
-        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">DoubleHolo Counts</h4>
+        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">DoubleHolo Counts</h4>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <SummaryCard
             label="Inventory"
@@ -156,32 +156,32 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
       {/* Orders ingest health */}
       {status?.last_orders_poll_at && (
-        <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
-          <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-3">Orders ingest (24h)</h4>
+        <CardShell padding="md">
+          <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Orders ingest (24h)</h4>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <div className="text-xs text-[var(--text-muted)] mb-1">Last poll</div>
+              <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">Last poll</div>
               <div className="font-mono text-sm text-[var(--text-secondary)]">{new Date(status.last_orders_poll_at).toLocaleString()}</div>
             </div>
             <div>
-              <div className="text-xs text-[var(--text-muted)] mb-1">Matched</div>
-              <div className="text-lg font-semibold text-[var(--success)]">{status.orders_matched_count_24h ?? 0}</div>
+              <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">Matched</div>
+              <div className="text-lg font-semibold tabular-nums text-[var(--success)]">{status.orders_matched_count_24h ?? 0}</div>
             </div>
             <div>
-              <div className="text-xs text-[var(--text-muted)] mb-1">Orphan</div>
-              <div className="text-lg font-semibold text-[var(--warning)]">{status.orders_orphan_count_24h ?? 0}</div>
+              <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">Orphan</div>
+              <div className="text-lg font-semibold tabular-nums text-[var(--warning)]">{status.orders_orphan_count_24h ?? 0}</div>
             </div>
             <div>
-              <div className="text-xs text-[var(--text-muted)] mb-1">Already sold</div>
-              <div className="text-lg font-semibold text-[var(--text-secondary)]">{status.orders_already_sold_count_24h ?? 0}</div>
+              <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">Already sold</div>
+              <div className="text-lg font-semibold tabular-nums text-[var(--text-secondary)]">{status.orders_already_sold_count_24h ?? 0}</div>
             </div>
           </div>
-        </div>
+        </CardShell>
       )}
 
       {/* Market Data */}
       <div>
-        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Market Data</h4>
+        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Market Data</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <SummaryCard
             label="Market Intelligence"

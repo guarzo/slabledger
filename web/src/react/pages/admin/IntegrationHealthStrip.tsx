@@ -1,4 +1,5 @@
 import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
+import CardShell from '../../ui/CardShell';
 
 type TileStatus = 'healthy' | 'warning' | 'unknown';
 
@@ -25,14 +26,14 @@ function StatusDot({ status }: { status: TileStatus }) {
 
 function Tile({ label, status, metric, detail }: TileProps) {
   return (
-    <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] px-4 py-3 flex items-center gap-3 min-w-0">
+    <CardShell padding="sm" className="flex items-center gap-3 min-w-0">
       <StatusDot status={status} />
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate">{label}</div>
         <div className="text-sm font-semibold text-[var(--text)] tabular-nums truncate">{metric}</div>
         {detail && <div className="text-[10px] text-[var(--text-muted)] truncate">{detail}</div>}
       </div>
-    </div>
+    </CardShell>
   );
 }
 
