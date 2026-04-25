@@ -11,3 +11,14 @@
 .t-buy-caution { background: var(--rec-buy-caution-gradient); border-color: var(--rec-buy-caution-border); box-shadow: var(--rec-buy-caution-shadow); color: #422006; }
 .t-watch       { background: var(--rec-watch-gradient);       border-color: var(--rec-watch-border);       box-shadow: var(--rec-watch-shadow); }
 .t-avoid       { background: var(--rec-avoid-gradient);       border-color: var(--rec-avoid-border);       box-shadow: var(--rec-avoid-shadow); }
+
+.soft {
+  font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+}
+.s-act  { background: var(--danger-bg);  color: var(--danger);  border-color: var(--danger-border); }
+.s-tune { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+.s-ok   { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
