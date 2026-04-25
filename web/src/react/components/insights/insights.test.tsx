@@ -62,4 +62,48 @@ describe('CampaignTuningTable', () => {
     wrap(<CampaignTuningTable rows={[]} />);
     expect(screen.getByText(/No active campaigns/)).toBeInTheDocument();
   });
+
+  it('sorts rows so Action precedes Tune precedes OK', () => {
+    const rows: TuningRow[] = [
+      { campaignId: 'a', campaignName: 'A-OK',     cells: {}, status: 'OK' },
+      { campaignId: 'b', campaignName: 'B-Action', cells: {}, status: 'Act' },
+      { campaignId: 'c', campaignName: 'C-Tune',   cells: {}, status: 'Tune' },
+      { campaignId: 'd', campaignName: 'D-Kill',   cells: {}, status: 'Kill' },
+    ];
+    wrap(<CampaignTuningTable rows={rows} />);
+    const links = screen.getAllByRole('link');
+    expect(links.map(l => l.textContent)).toEqual([
+      expect.stringContaining('B-Action'),
+      expect.stringContaining('D-Kill'),
+      expect.stringContaining('C-Tune'),
+      expect.stringContaining('A-OK'),
+    ]);
+  });
+
+  it('applies status-colored left-edge strip per row', () => {
+    const rows: TuningRow[] = [
+      { campaignId: 'a', campaignName: 'A', cells: {}, status: 'Act' },
+      { campaignId: 'b', campaignName: 'B', cells: {}, status: 'OK' },
+    ];
+    wrap(<CampaignTuningTable rows={rows} />);
+    const actRow = screen.getByRole('link', { name: /A/ });
+    const okRow = screen.getByRole('link', { name: /B/ });
+    expect(actRow.getAttribute('style')).toMatch(/border-left-color:\s*var\(--danger\)/);
+    expect(okRow.getAttribute('style')).toMatch(/border-left-color:\s*var\(--success\)/);
+  });
+
+  it('renders cell recommendations as RecommendationBadge text', () => {
+    const rows: TuningRow[] = [{
+      campaignId: 'c1',
+      campaignName: 'Cards',
+      cells: {
+        buyPct: { recommendation: 'high', severity: 'act' },
+        spendCap: { recommendation: 'low', severity: 'tune' },
+      },
+      status: 'Act',
+    }];
+    wrap(<CampaignTuningTable rows={rows} />);
+    expect(screen.getByText('high')).toBeInTheDocument();
+    expect(screen.getByText('low')).toBeInTheDocument();
+  });
 });

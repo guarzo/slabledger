@@ -57,7 +57,7 @@ export { TrendArrow } from './TrendArrow';
 export { StatusPill } from './StatusPill';
 export type { StatusTone } from './StatusPill';
 export { RecommendationBadge } from './RecommendationBadge';
-export type { RecTier } from './RecommendationBadge';
+export type { RecTier, RecSeverity } from './RecommendationBadge';
 
 // Stats & Sections
 export { default as StatCard } from './StatCard';
