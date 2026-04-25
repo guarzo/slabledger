@@ -1,24 +1,43 @@
-/**
- * StatCard
- *
- * Compact stat display with label, value, optional color accent, and optional small text.
- */
+export type StatCardSize = 'lg' | 'md' | 'sm';
 
 export interface StatCardProps {
   label: string;
   value: string;
   color?: 'green' | 'red';
-  small?: boolean;
-  large?: boolean;
+  size?: StatCardSize;
 }
 
-export default function StatCard({ label, value, color, small, large }: StatCardProps) {
-  const colorClass = color === 'green' ? 'text-[var(--success)]' : color === 'red' ? 'text-[var(--danger)]' : 'text-[var(--text)]';
-  const sizeClass = large ? 'text-2xl font-extrabold' : small ? 'text-xs font-bold' : 'text-lg font-bold';
+export default function StatCard({ label, value, color, size = 'md' }: StatCardProps) {
+  const colorClass =
+    color === 'green'
+      ? 'text-[var(--success)]'
+      : color === 'red'
+      ? 'text-[var(--danger)]'
+      : 'text-[var(--text)]';
+
+  if (size === 'sm') {
+    return (
+      <div className="flex gap-2 items-baseline">
+        <span className="text-xs uppercase tracking-wider text-[var(--text-muted)]">
+          {label}
+        </span>
+        <span className={`text-sm font-semibold tabular-nums ${colorClass}`}>{value}</span>
+      </div>
+    );
+  }
+
+  const isLg = size === 'lg';
+  const valueClass = isLg ? 'text-3xl font-extrabold' : 'text-xl font-bold';
+  const padding = isLg ? 'p-5' : 'p-3';
+  const border = isLg ? 'border-[var(--surface-3)]' : 'border-[var(--surface-2)]';
+  const cardClass = ['bg-[var(--surface-1)]', 'rounded-xl', 'border', border, padding, 'text-center'].join(' ');
+
   return (
-    <div className={`bg-[var(--surface-1)] rounded-xl border ${large ? 'border-[var(--surface-3)] p-4' : 'border-[var(--surface-2)] p-3'} text-center`}>
-      <div className="text-xs text-[var(--text-muted)] mb-1">{label}</div>
-      <div className={`${sizeClass} ${colorClass}`}>{value}</div>
+    <div className={cardClass}>
+      <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1">
+        {label}
+      </div>
+      <div className={`${valueClass} tabular-nums ${colorClass}`}>{value}</div>
     </div>
   );
 }
