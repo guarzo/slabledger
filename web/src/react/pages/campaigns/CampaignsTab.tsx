@@ -38,7 +38,8 @@ export default function CampaignsTab({
   showCreate,
   form,
   createMutation,
-  activeOnly,
+  phaseFilter,
+  phaseFilterLabel,
   onToggleCreate,
 }: {
   campaigns: Campaign[];
@@ -47,9 +48,11 @@ export default function CampaignsTab({
   showCreate: boolean;
   form: UseFormReturn<CreateCampaignInput>;
   createMutation: { isPending: boolean };
-  activeOnly: boolean;
+  phaseFilter: 'all' | Phase;
+  phaseFilterLabel: string;
   onToggleCreate: () => void;
 }) {
+  const isFiltered = phaseFilter !== 'all';
   return (
     <>
       {showCreate && (
@@ -80,9 +83,9 @@ export default function CampaignsTab({
       {campaigns.length === 0 ? (
         <EmptyState
           icon="📋"
-          title={activeOnly ? 'No active campaigns' : 'No campaigns yet'}
-          description={activeOnly ? 'No campaigns are currently active.' : 'Create your first campaign to start tracking purchases and sales.'}
-          action={activeOnly ? undefined : { label: '+ New Campaign', onClick: onToggleCreate }}
+          title={isFiltered ? `No ${phaseFilterLabel.toLowerCase()} campaigns` : 'No campaigns yet'}
+          description={isFiltered ? `No campaigns are currently ${phaseFilterLabel.toLowerCase()}.` : 'Create your first campaign to start tracking purchases and sales.'}
+          action={isFiltered ? undefined : { label: '+ New Campaign', onClick: onToggleCreate }}
         />
       ) : (
         <div className="flex flex-col gap-1">
