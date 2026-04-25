@@ -9,6 +9,7 @@ import { DropdownMenu } from 'radix-ui';
 import Navigation from './Navigation';
 import StatusIndicator from './StatusIndicator';
 import { useAuth } from '../contexts/AuthContext';
+import CardShell from '../ui/CardShell';
 import logoSrc from '../../assets/logo.png';
 
 function UserInitial({ name }: { name: string }) {
@@ -83,7 +84,7 @@ export default function Header() {
         {/* Hamburger button - mobile only */}
         <button
           type="button"
-          className="md:hidden p-2 rounded-[var(--radius-md)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]/60 transition-colors"
+          className="md:hidden flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-[var(--radius-md)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]/60 transition-colors"
           onClick={() => setMenuOpen((prev) => !prev)}
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={menuOpen}
@@ -100,6 +101,9 @@ export default function Header() {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           )}
+          <span className="text-2xs uppercase tracking-wider leading-none" aria-hidden="true">
+            MENU
+          </span>
         </button>
 
         {/* Navigation - Centered, desktop only */}
@@ -174,12 +178,16 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Mobile navigation dropdown */}
       {menuOpen && (
-        <div className="md:hidden border-t border-[rgba(255,255,255,0.06)] bg-[var(--surface-1)]/95 backdrop-blur-xl">
+        <CardShell
+          variant="glass"
+          padding="none"
+          radius="sm"
+          className="md:hidden !rounded-none border-x-0 border-b-0"
+        >
           <Navigation mobile onNavigate={closeMenu} />
-         </div>
-       )}
+        </CardShell>
+      )}
      </header>
    );
  }

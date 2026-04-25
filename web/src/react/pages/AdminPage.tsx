@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Tabs } from 'radix-ui';
 import { api } from '../../js/api';
-import { Button, SectionErrorBoundary, TabNavigation, ErrorAlert } from '../ui';
+import { Breadcrumb, Button, SectionErrorBoundary, TabNavigation, ErrorAlert } from '../ui';
 import type { Tab } from '../ui';
 import { UsersTab } from './admin/UsersTab';
 import { PricingTab } from './admin/PricingTab';
@@ -51,8 +51,14 @@ export default function AdminPage() {
     }
   }
 
+  const activeTabLabel = adminTabs.find((t) => t.id === activeTab)?.label ?? activeTab;
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6">
+      <Breadcrumb items={[
+        { label: 'Admin', href: '/admin' },
+        { label: activeTabLabel },
+      ]} />
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Admin</h1>
