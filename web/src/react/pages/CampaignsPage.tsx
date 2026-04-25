@@ -3,7 +3,7 @@
  *
  * Lists all campaigns with P&L summary info and portfolio summary strip.
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
@@ -166,9 +166,39 @@ function buildExportText(campaigns: Campaign[]): string {
   }).join('\n\n');
 }
 
+type PhaseFilter = 'all' | Phase;
+
+const phaseFilterOrder: PhaseFilter[] = ['all', 'active', 'pending', 'closed'];
+const phaseFilterLabels: Record<PhaseFilter, string> = {
+  all: 'All',
+  active: 'Active',
+  pending: 'Pending',
+  closed: 'Closed',
+};
+
 export default function CampaignsPage() {
   const [showCreate, setShowCreate] = useState(false);
-  const [activeOnly, setActiveOnly] = useState(false);
+  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>('all');
+  const phaseRadioGroupRef = useRef<HTMLDivElement>(null);
+  const handlePhaseRadioKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const keys = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'Home', 'End'];
+    if (!keys.includes(e.key)) return;
+    e.preventDefault();
+    const idx = phaseFilterOrder.indexOf(phaseFilter);
+    let next = idx;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      next = (idx - 1 + phaseFilterOrder.length) % phaseFilterOrder.length;
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      next = (idx + 1) % phaseFilterOrder.length;
+    } else if (e.key === 'Home') {
+      next = 0;
+    } else if (e.key === 'End') {
+      next = phaseFilterOrder.length - 1;
+    }
+    setPhaseFilter(phaseFilterOrder[next]);
+    const buttons = phaseRadioGroupRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+    buttons?.[next]?.focus();
+  }, [phaseFilter]);
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -251,11 +281,18 @@ export default function CampaignsPage() {
   }, [pnlQueries, allCampaigns]);
 
   const campaigns = useMemo(() => {
-    const filtered = activeOnly
-      ? allCampaigns.filter(c => c.phase === 'active')
-      : allCampaigns;
+    const filtered = phaseFilter === 'all'
+      ? allCampaigns
+      : allCampaigns.filter(c => c.phase === phaseFilter);
     return sortCampaigns(filtered);
-  }, [allCampaigns, activeOnly]);
+  }, [allCampaigns, phaseFilter]);
+
+  const phaseCounts = useMemo<Record<PhaseFilter, number>>(() => ({
+    all: allCampaigns.length,
+    active: allCampaigns.filter(c => c.phase === 'active').length,
+    pending: allCampaigns.filter(c => c.phase === 'pending').length,
+    closed: allCampaigns.filter(c => c.phase === 'closed').length,
+  }), [allCampaigns]);
 
   const { data: healthData } = usePortfolioHealth();
   const healthMap = useMemo(() => {
@@ -264,7 +301,7 @@ export default function CampaignsPage() {
     return map;
   }, [healthData]);
 
-  const activeCampaignCount = allCampaigns.filter(c => c.phase === 'active').length;
+  const activeCampaignCount = phaseCounts.active;
 
   if (isLoading) {
     return (
@@ -276,14 +313,9 @@ export default function CampaignsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Campaigns</h1>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] cursor-pointer">
-            <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)}
-              className="rounded" />
-            Active only
-          </label>
           <Button
             size="sm"
             variant="secondary"
@@ -381,6 +413,43 @@ export default function CampaignsPage() {
       </div>
 
       {allCampaigns.length > 0 && (
+        <div
+          ref={phaseRadioGroupRef}
+          role="radiogroup"
+          aria-label="Filter campaigns by phase"
+          className="flex flex-wrap items-center gap-2 mb-4"
+          onKeyDown={handlePhaseRadioKeyDown}
+        >
+          {phaseFilterOrder.map(filter => {
+            const isActive = phaseFilter === filter;
+            const count = phaseCounts[filter];
+            const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums text-xs px-3 py-1.5';
+            const stateClass = isActive
+              ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)] font-semibold'
+              : 'border-[var(--surface-2)] text-[var(--text-muted)] font-medium hover:text-[var(--text)] hover:border-[var(--text-muted)]';
+            const countBase = 'ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-semibold px-1 tabular-nums min-w-[22px] h-[18px]';
+            const countState = isActive
+              ? 'bg-[var(--brand-500)]/20 text-[var(--brand-300)]'
+              : 'bg-[rgba(255,255,255,0.06)] text-[var(--text-muted)]';
+            return (
+              <button
+                key={filter}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                tabIndex={isActive ? 0 : -1}
+                onClick={() => setPhaseFilter(filter)}
+                className={`${base} ${stateClass}`}
+              >
+                {phaseFilterLabels[filter]}
+                <span className={`${countBase} ${countState}`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {allCampaigns.length > 0 && (
         <PortfolioSummary campaignCount={activeCampaignCount} pnlMap={pnlMap} />
       )}
 
@@ -392,7 +461,8 @@ export default function CampaignsPage() {
           showCreate={showCreate}
           form={form}
           createMutation={createMutation}
-          activeOnly={activeOnly}
+          phaseFilter={phaseFilter}
+          phaseFilterLabel={phaseFilterLabels[phaseFilter]}
           onToggleCreate={() => setShowCreate(true)}
         />
       </SectionErrorBoundary>
