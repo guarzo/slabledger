@@ -2,7 +2,7 @@ import { useState, useDeferredValue } from 'react';
 import { useLiquidationPreview, useApplyLiquidation } from '../queries/useLiquidationQueries';
 import type { LiquidationPreviewItem, ConfidenceLevel } from '../../types/liquidation';
 import { formatCents } from '../utils/formatters';
-import { GradeBadge } from '../ui';
+import { Breadcrumb, GradeBadge } from '../ui';
 import { LinkDropdown } from '../ui/LinkDropdown';
 import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } from '../utils/marketplaceUrls';
 import StatCard from '../ui/StatCard';
@@ -132,6 +132,10 @@ export default function LiquidationPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 pb-16">
+      <Breadcrumb items={[
+        { label: 'Inventory', href: '/inventory' },
+        { label: 'Reprice' },
+      ]} />
       <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight mb-6">Reprice</h1>
 
       {summary && (
