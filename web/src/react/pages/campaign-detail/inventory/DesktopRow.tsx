@@ -172,7 +172,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           {item.purchase.certNumber && <> &middot; {item.purchase.certNumber}</>}
         </div>
       </div>
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '72px' }}>
         <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
       </div>
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
