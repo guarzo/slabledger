@@ -1,6 +1,6 @@
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
-import { GradeBadge } from '../../../ui';
+import { Button, GradeBadge } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import {
@@ -10,7 +10,7 @@ import {
   referencePricesTooltip,
   syncDotProps, hasCanonicalPriceSignal,
 } from './utils';
-import { wasUnlistedFromDH, deriveActionIntent, canDismiss } from './inventoryCalcs';
+import { wasUnlistedFromDH, deriveActionIntent, canDismiss, type ActionIntent } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
 import InlinePriceEdit from './InlinePriceEdit';
 
@@ -232,7 +232,8 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           style={{ color: dot.color, fontSize: '10px', lineHeight: 1 }}
         >&#9679;</span>
       </div>
-      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '88px' }} onClick={e => e.stopPropagation()}>
+      {/* DH status — read-only signal, no actions (actions live in the ⋯ menu) */}
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '64px' }}>
         <div className="flex flex-col items-center gap-0.5">
           {wasUnlistedFromDH(item) && (
             <span
@@ -242,52 +243,10 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
               Re-list
             </span>
           )}
-          {dhListedOverride ? (
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>
-          ) : actionIntent === 'fix_match' && onFixDHMatch ? (
-            <button
-              type="button"
-              onClick={onFixDHMatch}
-              className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
-              title="Paste the correct DoubleHolo URL to fix the match"
-              aria-label="Fix DH Match"
-            >
-              Fix Match
-            </button>
-          ) : actionIntent === 'list' && onListOnDH ? (
-            <button
-              type="button"
-              onClick={() => onListOnDH(item.purchase.id)}
-              disabled={dhListingLoading}
-              className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
-                dhListingLoading
-                  ? 'bg-[var(--surface-2)] text-[var(--text-muted)] cursor-wait'
-                  : 'bg-[var(--success)]/15 text-[var(--success)] hover:bg-[var(--success)]/30'
-              }`}
-              title="Publish this item on DH"
-            >
-              {dhListingLoading ? 'Listing…' : 'List'}
-            </button>
-          ) : actionIntent === 'set_and_list' ? (
-            <button
-              type="button"
-              onClick={onExpand}
-              className="text-xs font-medium px-2 py-1 rounded bg-[var(--warning)]/15 text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
-              title="Set a price and list on DH"
-              aria-label="Set price and list on DH"
-            >
-              Set &amp; List
-            </button>
-          ) : actionIntent === 'restore' && onUndismiss ? (
-            <button
-              type="button"
-              onClick={onUndismiss}
-              className="text-xs font-medium px-2 py-1 rounded bg-[var(--brand-500)]/15 text-[var(--brand-400)] hover:bg-[var(--brand-500)]/30 transition-colors"
-              title="Restore to DH pipeline"
-            >
-              Restore
-            </button>
-          ) : (() => {
+          {(() => {
+            if (dhListedOverride) {
+              return <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>;
+            }
             const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
             if (badge === 'unenrolled') return null;
             return (
@@ -296,141 +255,184 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
               </span>
             );
           })()}
-          {showDismiss && onDismiss && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm('Dismiss this item from DH listing?')) onDismiss();
-              }}
-              className="text-[9px] text-[var(--text-muted)] hover:text-[var(--danger)] underline underline-offset-2"
-              title="Skip DH for this item"
-            >
-              Dismiss
-            </button>
-          )}
         </div>
       </div>
-      {/* Sell button */}
-      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '48px' }} onClick={e => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={onRecordSale}
-          className="text-xs font-medium px-2 py-1 rounded bg-[var(--brand-500)]/20 text-[var(--brand-400)] hover:bg-[var(--brand-500)]/40 transition-colors"
-        >
-          Sell
-        </button>
+      {/* Hairline divider — separates signal columns from the action cluster */}
+      <div aria-hidden="true" className="glass-table-td flex-shrink-0 self-stretch !p-0 print-hide-actions" style={{ width: '1px' }}>
+        <div className="w-px h-6 bg-white/[0.06] mx-auto my-auto" />
       </div>
-      {/* Actions overflow menu */}
+      {/* Primary action — Sell */}
+      <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '64px' }} onClick={e => e.stopPropagation()}>
+        <Button variant="primary" size="sm" onClick={onRecordSale} aria-label={`Record sale of ${item.purchase.cardName}`}>
+          Sell
+        </Button>
+      </div>
+      {/* Overflow menu — secondary actions */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '28px' }}>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              onClick={e => e.stopPropagation()}
-              onKeyDown={e => e.stopPropagation()}
-              className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)] transition-colors"
-              aria-label="Card actions"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <circle cx="12" cy="5" r="2" />
-                <circle cx="12" cy="12" r="2" />
-                <circle cx="12" cy="19" r="2" />
-              </svg>
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              align="end"
-              sideOffset={4}
-              className="w-40 py-1 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-lg shadow-lg z-50
-                         data-[state=open]:animate-[fadeIn_150ms_ease-out]"
-            >
-              {onSetPrice && (
-                <DropdownMenu.Item
-                  onSelect={onSetPrice}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Set Price
-                </DropdownMenu.Item>
-              )}
-              {onFixPricing && (
-                <DropdownMenu.Item
-                  onSelect={onFixPricing}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Fix Pricing
-                </DropdownMenu.Item>
-              )}
-              {onFixDHMatch && (
-                <DropdownMenu.Item
-                  onSelect={onFixDHMatch}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Fix DH Match
-                </DropdownMenu.Item>
-              )}
-              {onUnmatchDH && (
-                <DropdownMenu.Item
-                  onSelect={onUnmatchDH}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Remove DH Match
-                </DropdownMenu.Item>
-              )}
-              {onRetryDHMatch && (
-                <DropdownMenu.Item
-                  onSelect={onRetryDHMatch}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Retry DH Match
-                </DropdownMenu.Item>
-              )}
-              {showDismiss && onDismiss && (
-                <DropdownMenu.Item
-                  onSelect={() => {
-                    if (window.confirm('Dismiss this item from DH listing?')) onDismiss();
-                  }}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Dismiss from DH
-                </DropdownMenu.Item>
-              )}
-              {actionIntent === 'restore' && onUndismiss && (
-                <DropdownMenu.Item
-                  onSelect={onUndismiss}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Restore to DH
-                </DropdownMenu.Item>
-              )}
-              {isOnSellSheet && onRemoveFromSellSheet && (
-                <DropdownMenu.Item
-                  onSelect={onRemoveFromSellSheet}
-                  className="px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)] outline-none cursor-default"
-                >
-                  Remove from Sell Sheet
-                </DropdownMenu.Item>
-              )}
-              {onDelete && (
-                <>
-                  <DropdownMenu.Separator className="my-1 h-px bg-[var(--surface-2)]" />
-                  <DropdownMenu.Item
-                    onSelect={() => {
-                      if (window.confirm('Delete this item? This cannot be undone.')) {
-                        onDelete();
-                      }
-                    }}
-                    className="px-3 py-2 text-sm text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] outline-none cursor-default"
-                  >
-                    Delete
-                  </DropdownMenu.Item>
-                </>
-              )}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <RowOverflowMenu
+          item={item}
+          actionIntent={actionIntent}
+          showDismiss={showDismiss}
+          dhListingLoading={dhListingLoading}
+          onSetPrice={onSetPrice}
+          onFixPricing={onFixPricing}
+          onFixDHMatch={onFixDHMatch}
+          onUnmatchDH={onUnmatchDH}
+          onRetryDHMatch={onRetryDHMatch}
+          onListOnDH={onListOnDH}
+          onUndismiss={onUndismiss}
+          onDismiss={onDismiss}
+          isOnSellSheet={!!isOnSellSheet}
+          onRemoveFromSellSheet={onRemoveFromSellSheet}
+          onDelete={onDelete}
+        />
       </div>
     </div>
+  );
+}
+
+interface RowOverflowMenuProps {
+  item: AgingItem;
+  actionIntent: ActionIntent;
+  showDismiss: boolean;
+  dhListingLoading?: boolean;
+  onSetPrice?: () => void;
+  onFixPricing?: () => void;
+  onFixDHMatch?: () => void;
+  onUnmatchDH?: () => void;
+  onRetryDHMatch?: () => void;
+  onListOnDH?: (purchaseId: string) => void;
+  onUndismiss?: () => void;
+  onDismiss?: () => void;
+  isOnSellSheet: boolean;
+  onRemoveFromSellSheet?: () => void;
+  onDelete?: () => void;
+}
+
+const ITEM_BASE = 'px-3 py-2 text-sm outline-none cursor-default';
+const ITEM_DEFAULT = `${ITEM_BASE} text-[var(--text-muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]`;
+const ITEM_PRIMARY = `${ITEM_BASE} text-[var(--brand-300)] bg-[var(--brand-500)]/10 hover:bg-[var(--brand-500)]/20`;
+const ITEM_DANGER = `${ITEM_BASE} text-[var(--danger)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]`;
+
+function RowOverflowMenu({
+  item, actionIntent, showDismiss, dhListingLoading,
+  onSetPrice, onFixPricing, onFixDHMatch, onUnmatchDH, onRetryDHMatch,
+  onListOnDH, onUndismiss, onDismiss,
+  isOnSellSheet, onRemoveFromSellSheet, onDelete,
+}: RowOverflowMenuProps) {
+  // The item highlighted at the top is the row's contextual primary action
+  // (driven by deriveActionIntent). Surfacing it as the first menu entry keeps
+  // workflows fast — the user opens the menu and the recommended next step is
+  // already the visually-accented option.
+  const primary = (() => {
+    if (actionIntent === 'list' && onListOnDH) {
+      return {
+        label: dhListingLoading ? 'Listing…' : 'List on DH',
+        disabled: !!dhListingLoading,
+        onSelect: () => onListOnDH(item.purchase.id),
+      };
+    }
+    if (actionIntent === 'set_and_list' && onSetPrice) {
+      return { label: 'Set Price', onSelect: onSetPrice };
+    }
+    if (actionIntent === 'fix_match' && onFixDHMatch) {
+      return { label: 'Fix DH Match', onSelect: onFixDHMatch };
+    }
+    if (actionIntent === 'restore' && onUndismiss) {
+      return { label: 'Restore to DH', onSelect: onUndismiss };
+    }
+    return null;
+  })();
+
+  // Standard items are the always-available secondary actions. We omit the
+  // entry that is currently surfaced as `primary` to avoid duplicates.
+  const showSetPrice = onSetPrice && primary?.label !== 'Set Price';
+  const showFixDHMatch = onFixDHMatch && primary?.label !== 'Fix DH Match';
+  const showRestore = actionIntent === 'restore' && onUndismiss && primary?.label !== 'Restore to DH';
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          onClick={e => e.stopPropagation()}
+          onKeyDown={e => e.stopPropagation()}
+          className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+          aria-label="Card actions"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="12" cy="5" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="12" cy="19" r="2" />
+          </svg>
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={4}
+          className="w-44 py-1 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-lg shadow-lg z-50 data-[state=open]:animate-[fadeIn_150ms_ease-out]"
+        >
+          {primary && (
+            <>
+              <DropdownMenu.Item
+                disabled={primary.disabled}
+                onSelect={primary.onSelect}
+                className={ITEM_PRIMARY}
+              >
+                {primary.label}
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-[var(--surface-2)]" />
+            </>
+          )}
+          {showSetPrice && (
+            <DropdownMenu.Item onSelect={onSetPrice} className={ITEM_DEFAULT}>Set Price</DropdownMenu.Item>
+          )}
+          {onFixPricing && (
+            <DropdownMenu.Item onSelect={onFixPricing} className={ITEM_DEFAULT}>Fix Pricing</DropdownMenu.Item>
+          )}
+          {showFixDHMatch && (
+            <DropdownMenu.Item onSelect={onFixDHMatch} className={ITEM_DEFAULT}>Fix DH Match</DropdownMenu.Item>
+          )}
+          {onUnmatchDH && (
+            <DropdownMenu.Item onSelect={onUnmatchDH} className={ITEM_DEFAULT}>Remove DH Match</DropdownMenu.Item>
+          )}
+          {onRetryDHMatch && (
+            <DropdownMenu.Item onSelect={onRetryDHMatch} className={ITEM_DEFAULT}>Retry DH Match</DropdownMenu.Item>
+          )}
+          {showDismiss && onDismiss && (
+            <DropdownMenu.Item
+              onSelect={() => {
+                if (window.confirm('Dismiss this item from DH listing?')) onDismiss();
+              }}
+              className={ITEM_DEFAULT}
+            >
+              Dismiss from DH
+            </DropdownMenu.Item>
+          )}
+          {showRestore && (
+            <DropdownMenu.Item onSelect={onUndismiss} className={ITEM_DEFAULT}>Restore to DH</DropdownMenu.Item>
+          )}
+          {isOnSellSheet && onRemoveFromSellSheet && (
+            <DropdownMenu.Item onSelect={onRemoveFromSellSheet} className={ITEM_DEFAULT}>
+              Remove from Sell Sheet
+            </DropdownMenu.Item>
+          )}
+          {onDelete && (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-[var(--surface-2)]" />
+              <DropdownMenu.Item
+                onSelect={() => {
+                  if (window.confirm('Delete this item? This cannot be undone.')) onDelete();
+                }}
+                className={ITEM_DANGER}
+              >
+                Delete
+              </DropdownMenu.Item>
+            </>
+          )}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
