@@ -119,9 +119,11 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
 
       invalidateAfterSale(queryClient, groups.keys());
 
-      onSuccess?.();
-      reset();
-      onClose();
+      if (totalFailed === 0) {
+        onSuccess?.();
+        reset();
+        onClose();
+      }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to record sales'));
     } finally {
@@ -171,7 +173,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                   type="radio"
                   name="pricing-mode"
                   checked={pricingMode === 'pctOfCL'}
-                  onChange={() => setPricingMode('pctOfCL')}
+                  onChange={() => { setPricingMode('pctOfCL'); setFillValue(0); }}
                 />
                 Percent of CL
               </label>
@@ -180,7 +182,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                   type="radio"
                   name="pricing-mode"
                   checked={pricingMode === 'flat'}
-                  onChange={() => setPricingMode('flat')}
+                  onChange={() => { setPricingMode('flat'); setFillValue(0); }}
                 />
                 Fixed price
               </label>

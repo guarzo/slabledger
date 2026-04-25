@@ -3,7 +3,7 @@ import { Dialog } from 'radix-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem, SaleChannel } from '../../../types/campaigns';
 import { api } from '../../../js/api';
-import { formatCents, localToday, getErrorMessage } from '../../utils/formatters';
+import { formatCents, localToday, getErrorMessage, dollarsToCents } from '../../utils/formatters';
 import { saleChannelLabels, DEFAULT_SALE_CHANNEL, activeSaleChannels } from '../../utils/campaignConstants';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Input, Select } from '../../ui';
@@ -82,9 +82,9 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
         saleChannel: channel,
         salePriceCents: effectivePrices[item.purchase.id] ?? 0,
         saleDate,
-        ...(originalListPrice ? { originalListPriceCents: Math.round(parseFloat(originalListPrice) * 100) } : {}),
-        ...(priceReductions ? { priceReductions: parseInt(priceReductions, 10) } : {}),
-        ...(daysListed ? { daysListed: parseInt(daysListed, 10) } : {}),
+        ...(originalListPrice ? { originalListPriceCents: dollarsToCents(originalListPrice) } : {}),
+        ...(priceReductions ? { priceReductions: parseInt(priceReductions, 10) || 0 } : {}),
+        ...(daysListed ? { daysListed: parseInt(daysListed, 10) || 0 } : {}),
         ...(soldAtAskingPrice ? { soldAtAskingPrice: true } : {}),
       });
       toast.success('Sale recorded');
