@@ -13,10 +13,10 @@ function wrap(ui: React.ReactNode) {
 describe('DoNowSection', () => {
   it('shows empty-state line when no actions', () => {
     wrap(<DoNowSection actions={[]} />);
-    expect(screen.getByText(/Nothing needs your attention/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing needs attention/i)).toBeInTheDocument();
   });
 
-  it('renders severity dot and link for each action', () => {
+  it('renders left-edge strip and link for each action', () => {
     const actions: Action[] = [{
       id: 'a1',
       severity: 'act',
@@ -24,10 +24,26 @@ describe('DoNowSection', () => {
       detail: '+$386.79 net',
       link: { path: '/global-inventory', query: { filter: 'spike' } },
     }];
-    wrap(<DoNowSection actions={actions} />);
+    const { container } = wrap(<DoNowSection actions={actions} />);
     expect(screen.getByText(/Run profit-capture/i)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /Open:\s*Run profit-capture/i });
     expect(link).toHaveAttribute('href', '/global-inventory?filter=spike');
+    expect(container.querySelector('.border-l-\\[var\\(--danger\\)\\]')).not.toBeNull();
+  });
+
+  it('sorts actions so act precedes tune precedes ok', () => {
+    const actions: Action[] = [
+      { id: 'a', severity: 'ok',   title: 'A-OK',     detail: '', link: { path: '/' } },
+      { id: 'b', severity: 'act',  title: 'B-Action', detail: '', link: { path: '/' } },
+      { id: 'c', severity: 'tune', title: 'C-Tune',   detail: '', link: { path: '/' } },
+    ];
+    wrap(<DoNowSection actions={actions} />);
+    const links = screen.getAllByRole('link');
+    expect(links.map(l => l.getAttribute('aria-label'))).toEqual([
+      expect.stringContaining('B-Action'),
+      expect.stringContaining('C-Tune'),
+      expect.stringContaining('A-OK'),
+    ]);
   });
 });
 

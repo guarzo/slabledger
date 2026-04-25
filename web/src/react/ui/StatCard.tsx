@@ -30,7 +30,10 @@ export default function StatCard({ label, value, color, size = 'md' }: StatCardP
   const valueClass = isLg ? 'text-3xl font-extrabold' : 'text-xl font-bold';
   const padding = isLg ? 'p-5' : 'p-3';
   const border = isLg ? 'border-[var(--surface-3)]' : 'border-[var(--surface-2)]';
-  const cardClass = ['bg-[var(--surface-1)]', 'rounded-xl', 'border', border, padding, 'text-center'].join(' ');
+  const span = isLg ? 'col-span-full md:col-span-2' : '';
+  const cardClass = ['bg-[var(--surface-1)]', 'rounded-xl', 'border', border, padding, 'text-center', span]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className={cardClass}>
