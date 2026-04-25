@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Channel colors</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; }
+  .grid { display:grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .row { display:flex; align-items:center; gap: 10px; padding: 8px 12px; background:#111827; border:1px solid #0b1220; border-radius: 12px; }
+  .swatch { width: 18px; height: 18px; border-radius: 6px; flex-shrink:0; }
+  .name { font-size: 12px; font-weight:600; color: var(--color-heading); }
+  .hex { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-left:auto; }
+  .label { font-size:10px; text-transform:uppercase; letter-spacing: .08em; color:var(--text-muted); margin-bottom:10px; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="label">Sales channel palette</div>
+  <div class="grid">
+    <div class="row"><div class="swatch" style="background:#3b82f6"></div><div class="name">eBay</div><div class="hex">#3b82f6</div></div>
+    <div class="row"><div class="swatch" style="background:#f59e0b"></div><div class="name">Website</div><div class="hex">#f59e0b</div></div>
+    <div class="row"><div class="swatch" style="background:#10b981"></div><div class="name">In-person</div><div class="hex">#10b981</div></div>
+    <div class="row"><div class="swatch" style="background:#8b5cf6"></div><div class="name">TCGPlayer</div><div class="hex">#8b5cf6</div></div>
+    <div class="row"><div class="swatch" style="background:#ec4899"></div><div class="name">Card show</div><div class="hex">#ec4899</div></div>
+    <div class="row"><div class="swatch" style="background:#ef4444"></div><div class="name">GameStop</div><div class="hex">#ef4444</div></div>
+    <div class="row"><div class="swatch" style="background:#10b981"></div><div class="name">Local</div><div class="hex">#10b981</div></div>
+    <div class="row"><div class="swatch" style="background:#6b7280"></div><div class="name">Other</div><div class="hex">#6b7280</div></div>
+  </div>
+</body>
+</html>

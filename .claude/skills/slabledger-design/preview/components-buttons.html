@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Buttons</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; display:flex; flex-direction:column; gap: 14px; }
+  .label { font-size: 9px; text-transform:uppercase; letter-spacing: .1em; color: var(--text-subtle); font-weight:700; margin-bottom: 2px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-family: inherit; font-size:13px; font-weight:600;
+    padding: 9px 16px; border-radius: 10px;
+    border: 1px solid transparent; cursor:pointer;
+    transition: transform 180ms cubic-bezier(.4,0,.2,1), box-shadow 180ms cubic-bezier(.4,0,.2,1), background 180ms ease;
+    letter-spacing: -0.005em;
+    position: relative; overflow: hidden;
+  }
+  .btn:active { transform: translateY(1px) scale(0.99); }
+  .btn svg { width: 14px; height: 14px; }
+  .kbd {
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size: 10px; font-family: var(--font-mono); font-weight:600;
+    min-width: 16px; padding: 1px 5px; border-radius: 4px;
+    background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.75);
+    margin-left: 2px;
+  }
+  .sparkle { font-size: 11px; }
+
+  /* A · Primary — indigo glow, crisp edge highlight */
+  .primary-glow {
+    background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+    color: #fff;
+    border-color: rgba(255,255,255,0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.25),
+      0 1px 0 rgba(0,0,0,0.4),
+      0 6px 20px -4px rgba(99,102,241,0.55),
+      0 0 0 1px rgba(99,102,241,0.25);
+  }
+  .primary-glow:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.3),
+      0 1px 0 rgba(0,0,0,0.4),
+      0 10px 28px -4px rgba(99,102,241,0.7),
+      0 0 0 1px rgba(99,102,241,0.4);
+  }
+
+  /* B · Success · money-green with ledger feel */
+  .success-ledger {
+    background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+    color: #022c22; border-color: rgba(255,255,255,0.15);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.35),
+      0 1px 0 rgba(0,0,0,0.3),
+      0 6px 18px -4px rgba(16,185,129,0.45);
+    font-weight: 700;
+  }
+  .success-ledger:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+  /* C · Danger · tinted with dashed border on hover */
+  .danger-ghost {
+    background: rgba(248,113,113,0.08);
+    color: #fca5a5;
+    border: 1px solid rgba(248,113,113,0.25);
+    box-shadow: inset 0 0 0 1px rgba(248,113,113,0.06);
+  }
+  .danger-ghost:hover {
+    background: rgba(248,113,113,0.14);
+    border-color: rgba(248,113,113,0.5);
+    color: #fecaca;
+  }
+
+  /* D · Secondary · surface chip */
+  .secondary-chip {
+    background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+    color: #e5e7eb;
+    border: 1px solid rgba(255,255,255,0.07);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .secondary-chip:hover { border-color: rgba(255,255,255,0.15); background: linear-gradient(180deg,#273244,#111827); }
+
+  /* E · AI / Insight · violet→teal gradient border */
+  .ai {
+    background: rgba(17,24,39,0.9);
+    color: #c4b5fd;
+    border: 1px solid transparent;
+    background-image:
+      linear-gradient(rgba(17,24,39,0.95), rgba(17,24,39,0.95)),
+      linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: 0 4px 16px -4px rgba(167,139,250,0.4);
+  }
+  .ai:hover { color: #e9d5ff; box-shadow: 0 6px 20px -4px rgba(167,139,250,0.6); transform: translateY(-1px); }
+
+  /* F · MUST BUY · aggressive gold CTA */
+  .gold-cta {
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #f59e0b 100%);
+    color: #422006;
+    border-color: rgba(0,0,0,0.15);
+    font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; font-size: 12px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.5),
+      0 2px 0 #b45309,
+      0 6px 16px -2px rgba(251,191,36,0.5);
+  }
+  .gold-cta:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 0 #b45309, 0 10px 24px -4px rgba(251,191,36,0.7); }
+  .gold-cta:active { transform: translateY(1px); box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 0 #b45309; }
+
+  /* G · Ghost w/ keyboard hint */
+  .ghost-kbd {
+    background: transparent; color: var(--text-muted);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .ghost-kbd:hover { color: var(--text); border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.03); }
+
+  /* H · Segmented */
+  .seg { display:inline-flex; background: #0b1220; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 3px; gap: 2px; }
+  .seg button {
+    background: transparent; border: 0; color: var(--text-muted);
+    font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 7px;
+    cursor: pointer; font-family: inherit;
+  }
+  .seg button.on { background: var(--surface-2); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+
+  /* I · FAB */
+  .fab {
+    width: 40px; height: 40px; border-radius: 999px; padding: 0;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff; border: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 0 6px 20px -2px rgba(99,102,241,0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+  .fab:hover { transform: translateY(-2px) rotate(90deg); box-shadow: 0 10px 28px -2px rgba(99,102,241,0.8), inset 0 1px 0 rgba(255,255,255,0.3); }
+  .fab svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="label">Primary stack · indigo glow + success ledger</div>
+    <div class="row">
+      <button class="btn primary-glow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Create campaign</button>
+      <button class="btn success-ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Record sale</button>
+      <button class="btn secondary-chip">Cancel <span class="kbd">Esc</span></button>
+      <button class="btn danger-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>Archive</button>
+      <button class="btn ghost-kbd">Skip <span class="kbd">⌘K</span></button>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">Specialty · AI insight · MUST BUY · FAB</div>
+    <div class="row">
+      <button class="btn ai"><span class="sparkle">✦</span>Generate insight</button>
+      <button class="btn gold-cta"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8 5.8 21.3l2.4-7.4L2 9.4h7.6z"/></svg>Must buy · lock in</button>
+      <button class="btn fab" aria-label="New"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">Segmented · channel / tenor toggle</div>
+    <div class="row">
+      <div class="seg">
+        <button class="on">All</button>
+        <button>eBay</button>
+        <button>TCGPlayer</button>
+        <button>Website</button>
+        <button>Local</button>
+      </div>
+      <div class="seg">
+        <button>24h</button>
+        <button>7d</button>
+        <button class="on">30d</button>
+        <button>YTD</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

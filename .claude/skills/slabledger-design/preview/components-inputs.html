@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Form inputs</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { display:flex; flex-direction:column; gap: 6px; }
+  label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+  input, select { width:100%; padding: 10px 14px; background: var(--surface-2); border:1px solid var(--surface-2); border-radius: 8px; color: var(--text); font-size: 14px; box-sizing:border-box; font-family: inherit; }
+  input:focus { outline: 2px solid rgba(99,102,241,0.2); outline-offset: 1px; border-color: var(--brand-500); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+  .err { border-color: var(--danger); }
+  .err-msg { font-size: 11px; color: var(--danger); }
+  .hint { font-size: 11px; color: var(--text-subtle); }
+</style>
+</head>
+<body>
+  <div class="field">
+    <label>Campaign name</label>
+    <input value="Scarlet & Violet — Prismatic" />
+    <div class="hint">Appears in reports and invoices.</div>
+  </div>
+  <div class="field">
+    <label>Daily spend cap</label>
+    <input value="$2,500" />
+  </div>
+  <div class="field">
+    <label>Grade range</label>
+    <select><option>PSA 8 – PSA 10</option></select>
+  </div>
+  <div class="field">
+    <label>CL % target</label>
+    <input value="0" class="err" />
+    <div class="err-msg">Must be between 50 and 120%.</div>
+  </div>
+</body>
+</html>

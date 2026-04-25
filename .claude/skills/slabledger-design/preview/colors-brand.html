@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Brand palette</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin: 0; padding: 20px; }
+  .row { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; }
+  .sw { aspect-ratio: 1/1; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; justify-content: flex-end; padding: 6px 8px; }
+  .sw .n { font-size: 9px; color: rgba(255,255,255,0.85); font-weight: 600; letter-spacing: 0.04em; }
+  .sw .h { font-size: 8px; color: rgba(255,255,255,0.55); font-family: var(--font-mono); }
+  .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 10px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="label">Brand · indigo</div>
+  <div class="row">
+    <div class="sw" style="background:#eef2ff;color:#0b1220"><div class="n" style="color:#0b1220">50</div><div class="h" style="color:#0b122099">#eef2ff</div></div>
+    <div class="sw" style="background:#e0e7ff;color:#0b1220"><div class="n" style="color:#0b1220">100</div><div class="h" style="color:#0b122099">#e0e7ff</div></div>
+    <div class="sw" style="background:#c7d2fe;color:#0b1220"><div class="n" style="color:#0b1220">200</div><div class="h" style="color:#0b122099">#c7d2fe</div></div>
+    <div class="sw" style="background:#a5b4fc;color:#0b1220"><div class="n" style="color:#0b1220">300</div><div class="h" style="color:#0b122099">#a5b4fc</div></div>
+    <div class="sw" style="background:#818cf8"><div class="n">400</div><div class="h">#818cf8</div></div>
+    <div class="sw" style="background:#5a5de8;outline:2px solid #fff3;outline-offset:-2px"><div class="n">500</div><div class="h">#5a5de8</div></div>
+    <div class="sw" style="background:#4f46e5"><div class="n">600</div><div class="h">#4f46e5</div></div>
+    <div class="sw" style="background:#4338ca"><div class="n">700</div><div class="h">#4338ca</div></div>
+    <div class="sw" style="background:#3730a3"><div class="n">800</div><div class="h">#3730a3</div></div>
+    <div class="sw" style="background:#312e81"><div class="n">900</div><div class="h">#312e81</div></div>
+  </div>
+</body>
+</html>

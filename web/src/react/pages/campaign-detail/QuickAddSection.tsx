@@ -88,18 +88,18 @@ export default function QuickAddSection({ campaignId, onAdded }: { campaignId: s
               <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-[var(--surface-2)] text-xs">
                 <div>
                   <span className="text-[var(--text-muted)]">Last Sold: </span>
-                  <span className="text-[var(--text)]">{formatCents(lookupResult.market.lastSoldCents)}</span>
+                  <span className="text-[var(--text)] tabular-nums">{formatCents(lookupResult.market.lastSoldCents)}</span>
                 </div>
                 {lookupResult.market.medianCents != null && (
                   <div>
                     <span className="text-[var(--text-muted)]">Median: </span>
-                    <span className="text-[var(--text)]">{formatCents(lookupResult.market.medianCents)}</span>
+                    <span className="text-[var(--text)] tabular-nums">{formatCents(lookupResult.market.medianCents)}</span>
                   </div>
                 )}
                 {lookupResult.market.conservativeCents != null && (
                   <div>
                     <span className="text-[var(--text-muted)]">Conservative: </span>
-                    <span className="text-[var(--text)]">{formatCents(lookupResult.market.conservativeCents)}</span>
+                    <span className="text-[var(--text)] tabular-nums">{formatCents(lookupResult.market.conservativeCents)}</span>
                   </div>
                 )}
               </div>
