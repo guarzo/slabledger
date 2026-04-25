@@ -13,7 +13,7 @@ export default function DoNowSection({ actions }: { actions: Action[] }) {
       <section className="space-y-2">
         <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Do now</div>
         <div className="p-4 rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] text-sm text-[var(--text-muted)]">
-          Nothing needs your attention right now.
+          Nothing needs attention — your campaigns are healthy.
         </div>
       </section>
     );

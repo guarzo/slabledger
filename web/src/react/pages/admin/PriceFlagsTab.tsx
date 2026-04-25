@@ -45,15 +45,15 @@ function FlagCard({ flag }: { flag: PriceFlagWithContext }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <div>
           <div className="text-[var(--text-muted)]">Market Price</div>
-          <div className="text-[var(--text)] font-medium">{formatCents(flag.marketPriceCents)}</div>
+          <div className="text-[var(--text)] font-medium tabular-nums">{formatCents(flag.marketPriceCents)}</div>
         </div>
         <div>
           <div className="text-[var(--text-muted)]">CL Value</div>
-          <div className="text-[var(--text)] font-medium">{formatCents(flag.clValueCents)}</div>
+          <div className="text-[var(--text)] font-medium tabular-nums">{formatCents(flag.clValueCents)}</div>
         </div>
         <div>
           <div className="text-[var(--text-muted)]">Reviewed Price</div>
-          <div className="text-[var(--text)] font-medium">{formatCents(flag.reviewedPriceCents)}</div>
+          <div className="text-[var(--text)] font-medium tabular-nums">{formatCents(flag.reviewedPriceCents)}</div>
         </div>
         <div>
           <div className="text-[var(--text-muted)]">Flagged By</div>
@@ -79,7 +79,7 @@ function FlagCard({ flag }: { flag: PriceFlagWithContext }) {
                 {flag.sourcePrices?.map((sp) => (
                   <tr key={sp.source}>
                     <td className="py-1 pr-3 text-[var(--text)] capitalize">{sp.source}</td>
-                    <td className="py-1 pr-3 text-right text-[var(--text)]">{formatCents(sp.priceCents)}</td>
+                    <td className="py-1 pr-3 text-right text-[var(--text)] tabular-nums">{formatCents(sp.priceCents)}</td>
                     <td className="py-1 pr-3 text-right text-[var(--text-muted)]">{sp.confidence ?? '—'}</td>
                     <td className="py-1 text-right text-[var(--text-muted)]">{sp.saleCount ?? '—'}</td>
                   </tr>
@@ -87,7 +87,7 @@ function FlagCard({ flag }: { flag: PriceFlagWithContext }) {
                 {flag.clValueCents > 0 && (!flag.sourcePrices || flag.sourcePrices.length === 0) && (
                   <tr>
                     <td className="py-1 pr-3 text-[var(--text)] capitalize">Card Ladder</td>
-                    <td className="py-1 pr-3 text-right text-[var(--text)]">{formatCents(flag.clValueCents)}</td>
+                    <td className="py-1 pr-3 text-right text-[var(--text)] tabular-nums">{formatCents(flag.clValueCents)}</td>
                     <td className="py-1 pr-3 text-right text-[var(--text-muted)]">—</td>
                     <td className="py-1 text-right text-[var(--text-muted)]">—</td>
                   </tr>
@@ -193,7 +193,7 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         ) : (
           <div className="text-center py-8 text-[var(--text-muted)]">
-            <p className="text-sm">No {filter} flags found.</p>
+            <p className="text-sm">No {filter} flags — none recorded.</p>
           </div>
         )
       ) : (
