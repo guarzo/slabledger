@@ -85,13 +85,13 @@ export default function OverviewTab({
   const noSalesYet = hasPurchases && saleCount === 0;
 
   return (
-    <div className="space-y-6">
-      <div
-        id="tabpanel-overview"
-        role="tabpanel"
-        aria-labelledby="overview"
-        className="grid grid-cols-1 md:grid-cols-2 gap-4"
-      >
+    <div
+      id="tabpanel-overview"
+      role="tabpanel"
+      aria-labelledby="overview"
+      className="space-y-6"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StatCard
           label="Total Spent"
           value={formatCents(totalSpent)}
