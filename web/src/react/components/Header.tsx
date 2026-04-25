@@ -84,7 +84,7 @@ export default function Header() {
         {/* Hamburger button - mobile only */}
         <button
           type="button"
-          className="md:hidden flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-[var(--radius-md)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]/60 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2"
+          className="md:hidden flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-[var(--radius-md)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]/60 transition-colors focus-ring"
           onClick={() => setMenuOpen((prev) => !prev)}
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={menuOpen}
@@ -121,7 +121,7 @@ export default function Header() {
               <DropdownMenu.Trigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-md)] hover:bg-[var(--surface-2)]/60 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-md)] hover:bg-[var(--surface-2)]/60 transition-colors focus-ring"
                   aria-label={`User menu for ${user.username}`}
                 >
                   {user.avatar_url && !avatarError ? (

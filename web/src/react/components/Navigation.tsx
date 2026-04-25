@@ -28,8 +28,8 @@ export default function Navigation({ mobile, onNavigate }: NavigationProps) {
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
-  const activeClass = 'text-white font-semibold bg-[var(--brand-500)]/15 border border-[var(--brand-500)]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2';
-  const inactiveClass = 'text-[var(--text-muted)] font-medium hover:text-[var(--text)] hover:bg-[var(--surface-2)]/10 border border-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2';
+  const activeClass = 'text-white font-semibold bg-[var(--brand-500)]/15 border border-[var(--brand-500)]/20 focus-ring';
+  const inactiveClass = 'text-[var(--text-muted)] font-medium hover:text-[var(--text)] hover:bg-[var(--surface-2)]/10 border border-transparent focus-ring';
 
   return (
     <nav

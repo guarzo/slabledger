@@ -156,7 +156,7 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
 
       {/* Orders ingest health */}
       {status?.last_orders_poll_at && (
-      <CardShell padding="md">
+        <CardShell padding="md">
           <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Orders ingest (24h)</h4>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>

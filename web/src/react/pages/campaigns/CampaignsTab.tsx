@@ -99,7 +99,7 @@ export default function CampaignsTab({
               <Link
                 key={c.id}
                 to={`/campaigns/${c.id}`}
-                className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] hover:border-[var(--brand-500)]/50 hover:bg-[var(--surface-0)] hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2 transition-colors ${isClosed ? 'opacity-50' : ''}`}
+                className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] hover:border-[var(--brand-500)]/50 hover:bg-[var(--surface-0)] hover:-translate-y-0.5 hover:shadow-sm focus-ring transition-[color,border-color,background-color,transform,box-shadow] ${isClosed ? 'opacity-50' : ''}`}
               >
                 {/* Phase accent bar */}
                 <div
