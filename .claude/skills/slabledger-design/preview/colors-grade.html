@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Grade colors</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; }
+  .label { font-size:10px; text-transform:uppercase; letter-spacing: .08em; color:var(--text-muted); margin-bottom:10px; font-weight:600; }
+  .ramp { display:grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin-bottom: 14px; }
+  .chip {
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+    aspect-ratio: 1/1.25; border-radius: 10px; padding: 6px 4px 8px;
+    border: 1px solid;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip .g { font-size: 20px; font-weight: 800; line-height: 1; }
+  .chip .q { font-size: 7.5px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.8; margin-top: 4px; font-weight:600; }
+  .meta { display:flex; justify-content: space-between; font-size: 10px; color: var(--text-subtle); text-transform:uppercase; letter-spacing: 0.06em; margin-bottom: 18px; }
+
+  .subtle-row { display:flex; gap: 10px; flex-wrap:wrap; align-items:center; }
+  .subtle {
+    display:inline-flex; align-items:center; gap: 6px;
+    padding: 3px 9px 3px 5px; border-radius: 999px;
+    border: 1px solid;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px; font-weight: 700;
+  }
+  .subtle .grader {
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 2px 5px; border-radius: 4px;
+    background: rgba(255,255,255,0.06); color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .caption { font-size: 10px; color: var(--text-subtle); margin-top: 6px; }
+</style>
+</head>
+<body>
+  <div class="label">Grade quality ramp · 1 (poor) → 10 (gem mint)</div>
+  <div class="ramp">
+    <div class="chip" style="background:rgba(127,29,29,0.22); border-color:rgba(127,29,29,0.45); color:#fca5a5">
+      <div class="g">1</div><div class="q">Poor</div>
+    </div>
+    <div class="chip" style="background:rgba(153,27,27,0.22); border-color:rgba(153,27,27,0.45); color:#fca5a5">
+      <div class="g">2</div><div class="q">Fair</div>
+    </div>
+    <div class="chip" style="background:rgba(194,65,12,0.22); border-color:rgba(194,65,12,0.45); color:#fdba74">
+      <div class="g">3</div><div class="q">Good</div>
+    </div>
+    <div class="chip" style="background:rgba(180,83,9,0.22); border-color:rgba(180,83,9,0.45); color:#fdba74">
+      <div class="g">4</div><div class="q">VG</div>
+    </div>
+    <div class="chip" style="background:rgba(161,98,7,0.22); border-color:rgba(161,98,7,0.45); color:#fcd34d">
+      <div class="g">5</div><div class="q">EX</div>
+    </div>
+    <div class="chip" style="background:rgba(133,77,14,0.22); border-color:rgba(133,77,14,0.45); color:#fde68a">
+      <div class="g">6</div><div class="q">EX-MT</div>
+    </div>
+    <div class="chip" style="background:rgba(101,163,13,0.20); border-color:rgba(101,163,13,0.40); color:#bef264">
+      <div class="g">7</div><div class="q">NM</div>
+    </div>
+    <div class="chip" style="background:rgba(22,163,74,0.20); border-color:rgba(22,163,74,0.45); color:#86efac">
+      <div class="g">8</div><div class="q">NM-MT</div>
+    </div>
+    <div class="chip" style="background:rgba(5,150,105,0.22); border-color:rgba(5,150,105,0.50); color:#6ee7b7">
+      <div class="g">9</div><div class="q">Mint</div>
+    </div>
+    <div class="chip" style="background:linear-gradient(135deg, rgba(251,191,36,0.28), rgba(245,158,11,0.22)); border-color:rgba(251,191,36,0.55); color:#fde68a; box-shadow: 0 0 12px rgba(251,191,36,0.25)">
+      <div class="g">10</div><div class="q">Gem Mint</div>
+    </div>
+  </div>
+  <div class="meta">
+    <span style="color:#fca5a5">↓ low quality</span>
+    <span style="color:#fde68a">high quality ↑</span>
+  </div>
+
+  <div class="label">Badge in use · grader label is subtle metadata</div>
+  <div class="subtle-row">
+    <span class="subtle" style="background:linear-gradient(135deg,rgba(251,191,36,0.18),rgba(245,158,11,0.12)); border-color:rgba(251,191,36,0.4); color:#fde68a">
+      <span class="grader">PSA</span> 10
+    </span>
+    <span class="subtle" style="background:rgba(5,150,105,0.16); border-color:rgba(5,150,105,0.40); color:#6ee7b7">
+      <span class="grader">PSA</span> 9
+    </span>
+    <span class="subtle" style="background:rgba(22,163,74,0.16); border-color:rgba(22,163,74,0.38); color:#86efac">
+      <span class="grader">BGS</span> 8
+    </span>
+    <span class="subtle" style="background:rgba(101,163,13,0.16); border-color:rgba(101,163,13,0.36); color:#bef264">
+      <span class="grader">CGC</span> 7
+    </span>
+    <span class="subtle" style="background:rgba(161,98,7,0.18); border-color:rgba(161,98,7,0.40); color:#fcd34d">
+      <span class="grader">PSA</span> 5
+    </span>
+    <span class="subtle" style="background:rgba(153,27,27,0.18); border-color:rgba(153,27,27,0.42); color:#fca5a5">
+      <span class="grader">PSA</span> 2
+    </span>
+  </div>
+  <div class="caption">Grader chip (PSA / BGS / CGC) uses a low-contrast surface tint so the grade number reads first.</div>
+</body>
+</html>

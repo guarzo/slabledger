@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Pokemon gradients</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; }
+  .grid { display:grid; grid-template-columns: repeat(5,1fr); gap: 10px; }
+  .tile { aspect-ratio: 1/1; border-radius: 14px; padding: 10px; display:flex; flex-direction:column; justify-content:space-between; color: #000; font-weight:700; }
+  .tile.dark { color: #fff; }
+  .name { font-size: 11px; text-transform:uppercase; letter-spacing: 0.06em; }
+  .hex { font-size: 9px; font-family: var(--font-mono); opacity: 0.8; font-weight: 500; }
+  .label { font-size:10px; text-transform:uppercase; letter-spacing: .08em; color:var(--text-muted); margin-bottom:10px; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="label">Pokémon-themed gradients · accent only</div>
+  <div class="grid">
+    <div class="tile" style="background:linear-gradient(135deg,#FF3C00,#FFD700)"><div class="name">Charizard</div><div class="hex">#FF3C00 → #FFD700</div></div>
+    <div class="tile" style="background:linear-gradient(135deg,#FFD700,#FFA500)"><div class="name">Pikachu</div><div class="hex">#FFD700 → #FFA500</div></div>
+    <div class="tile dark" style="background:linear-gradient(135deg,#2563eb,#60a5fa)"><div class="name">Lugia</div><div class="hex">#2563eb → #60a5fa</div></div>
+    <div class="tile dark" style="background:linear-gradient(135deg,#764ba2,#9333ea)"><div class="name">Mewtwo</div><div class="hex">#764ba2 → #9333ea</div></div>
+    <div class="tile" style="background:linear-gradient(135deg,#10b981,#34d399)"><div class="name">Rayquaza</div><div class="hex">#10b981 → #34d399</div></div>
+  </div>
+</body>
+</html>

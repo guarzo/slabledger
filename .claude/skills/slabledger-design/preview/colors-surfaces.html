@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Surface elevation</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; }
+  .grid { display:grid; grid-template-columns: repeat(5,1fr); gap: 10px; }
+  .tile { aspect-ratio: 1/1; border-radius: 14px; border: 1px solid var(--surface-0); padding: 10px; display:flex; flex-direction:column; justify-content:space-between; }
+  .name { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .hex { font-size: 10px; color: var(--text-subtle); font-family: var(--font-mono); }
+  .label { font-size:10px; text-transform:uppercase; letter-spacing: .08em; color:var(--text-muted); margin-bottom:10px; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="label">Surface elevation · dark</div>
+  <div class="grid">
+    <div class="tile" style="background:#0b1220"><div class="name">Surface 0</div><div class="hex">#0b1220</div></div>
+    <div class="tile" style="background:#111827"><div class="name">Surface 1</div><div class="hex">#111827</div></div>
+    <div class="tile" style="background:#1f2937"><div class="name">Surface 2</div><div class="hex">#1f2937</div></div>
+    <div class="tile" style="background:#374151"><div class="name">Surface 3</div><div class="hex">#374151</div></div>
+    <div class="tile" style="background:#4b5563"><div class="name">Surface 4</div><div class="hex">#4b5563</div></div>
+  </div>
+</body>
+</html>

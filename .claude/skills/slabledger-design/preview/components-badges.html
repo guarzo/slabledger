@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Badges</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; display:flex; flex-direction:column; gap: 14px; }
+  .label { font-size:10px; text-transform:uppercase; letter-spacing: .08em; color:var(--text-muted); font-weight:600; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding: 4px 10px; border-radius:999px; border-width:1px; border-style:solid; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+  .rec { display:inline-flex; align-items:center; font-size:11px; font-weight:800; padding: 5px 10px; border-radius: 8px; border:1px solid; color:#fff; letter-spacing:0.05em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="label">Semantic capsules</div>
+    <div class="row">
+      <span class="pill" style="background:rgba(16,185,129,0.10); border-color:rgba(16,185,129,0.30); color:#34d399">PAID</span>
+      <span class="pill" style="background:rgba(245,158,11,0.10); border-color:rgba(245,158,11,0.30); color:#fbbf24">AGING 47d</span>
+      <span class="pill" style="background:rgba(239,68,68,0.10); border-color:rgba(239,68,68,0.30); color:#f87171">OVERDUE</span>
+      <span class="pill" style="background:rgba(34,211,238,0.10); border-color:rgba(34,211,238,0.30); color:#22d3ee">RISING</span>
+      <span class="pill" style="background:rgba(99,102,241,0.10); border-color:rgba(99,102,241,0.30); color:#a5b4fc">AI</span>
+      <span class="pill" style="background:rgba(107,114,128,0.10); border-color:rgba(107,114,128,0.30); color:#9ca3af">ARCHIVED</span>
+    </div>
+  </div>
+  <div>
+    <div class="label">Recommendation badges · gradient</div>
+    <div class="row">
+      <span class="rec" style="background:linear-gradient(135deg,#047857,#059669); border-color:#065f46; box-shadow: 0 4px 16px rgba(5,150,105,0.5)">MUST BUY</span>
+      <span class="rec" style="background:linear-gradient(135deg,#059669,#10b981); border-color:#047857">STRONG BUY</span>
+      <span class="rec" style="background:linear-gradient(135deg,#10b981,#34d399); border-color:#059669">BUY</span>
+      <span class="rec" style="background:linear-gradient(135deg,#f59e0b,#fbbf24); border-color:#d97706">BUY W/ CAUTION</span>
+      <span class="rec" style="background:linear-gradient(135deg,#6b7280,#9ca3af); border-color:#4b5563">WATCH</span>
+      <span class="rec" style="background:linear-gradient(135deg,#dc2626,#ef4444); border-color:#b91c1c">AVOID</span>
+    </div>
+  </div>
+</body>
+</html>
