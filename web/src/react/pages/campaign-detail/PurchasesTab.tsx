@@ -157,13 +157,13 @@ function PurchaseMobileCard({ purchase, soldPurchaseIds, otherCampaigns, reassig
         </div>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        <div><span className="text-[var(--text-muted)]">Cost:</span> <span className="text-[var(--text)]">{formatCents(purchase.buyCostCents)}</span></div>
+        <div><span className="text-[var(--text-muted)]">Cost:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(purchase.buyCostCents)}</span></div>
         <div><span className="text-[var(--text-muted)]">Date:</span> <span className="text-[var(--text)]">{purchase.purchaseDate}</span></div>
         <div className="flex items-center gap-1">
           <PricingBadge purchase={purchase} />
           <span className="text-[var(--text-muted)]">Mkt:</span>{' '}
           {purchase.medianCents != null ? (
-            <span className="text-[var(--text)]">
+            <span className="text-[var(--text)] tabular-nums">
               {formatCents(purchase.medianCents)}
               <TrendDelta value={purchase.trend30d} />
             </span>

@@ -109,7 +109,7 @@ export function ThresholdChart({ buckets, currentPct, optimalPct, confidence }: 
 
           return (
             <div key={b.rangeLabel} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-[10px] text-[var(--text-muted)]">{formatPct(b.medianROI)}</span>
+              <span className="text-[10px] text-[var(--text-muted)] tabular-nums">{formatPct(b.medianROI)}</span>
               <div
                 className={`w-full rounded-t transition-colors ${
                   isOptimal ? 'bg-[var(--success)]' : isCurrent ? 'bg-[var(--info)]' : isPositive ? 'bg-[var(--success)]/40' : 'bg-[var(--danger)]/40'
@@ -174,7 +174,7 @@ export function GradeCard({ grade: g }: { grade: GradePerformance }) {
     <div className="p-3 bg-[var(--surface-2)]/50 rounded-lg">
       <div className="flex items-center justify-between mb-2">
         <span className="font-medium text-[var(--text)]">PSA {g.grade}</span>
-        <span className={`text-sm font-medium ${g.roi >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+        <span className={`text-sm font-medium tabular-nums ${g.roi >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
           {formatPct(g.roi)} ROI
         </span>
       </div>
@@ -192,7 +192,7 @@ export function TierCard({ tier: t }: { tier: PriceTierPerformance }) {
     <div className="p-3 bg-[var(--surface-2)]/50 rounded-lg">
       <div className="flex items-center justify-between mb-2">
         <span className="font-medium text-[var(--text)]">{t.tierLabel}</span>
-        <span className={`text-sm font-medium ${t.roi >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+        <span className={`text-sm font-medium tabular-nums ${t.roi >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
           {formatPct(t.roi)} ROI
         </span>
       </div>
@@ -226,7 +226,7 @@ export function CardPerfRow({ cp }: { cp: CardPerformance }) {
             {trendArrow}
           </span>
         )}
-        <span className={pnl >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}>
+        <span className={pnl >= 0 ? 'text-[var(--success)] tabular-nums' : 'text-[var(--danger)] tabular-nums'}>
           {pnl >= 0 ? '+' : ''}{formatCents(pnl)}
         </span>
         <span className="text-xs text-[var(--text-muted)]">({pnlLabel})</span>
@@ -307,16 +307,15 @@ export function MonteCarloSection({ campaignId, isMobile }: { campaignId: string
                       {isCurrent && <span className="ml-2 text-[10px] text-[var(--brand-400)]">(current)</span>}
                       {isBest && <span className="ml-2 text-[10px] text-[var(--success)]">(best)</span>}
                     </td>
-                    <td className={`py-2 px-3 text-right ${result.medianROI >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+                    <td className={`py-2 px-3 text-right tabular-nums ${result.medianROI >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
                       {formatPct(result.medianROI)}
                     </td>
-                    <td className="py-2 px-3 text-right text-[var(--text-muted)]">
-                      {formatPct(result.p10ROI)} - {formatPct(result.p90ROI)}
+                    <td className="py-2 px-3 text-right text-[var(--text-muted)] tabular-nums">
                     </td>
-                    <td className={`py-2 px-3 text-right ${result.medianProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+                    <td className={`py-2 px-3 text-right tabular-nums ${result.medianProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
                       {formatCents(result.medianProfitCents)}
                     </td>
-                    <td className="py-2 px-3 text-right text-[var(--text-muted)]">
+                    <td className="py-2 px-3 text-right text-[var(--text-muted)] tabular-nums">
                       {formatCents(result.p10ProfitCents)} - {formatCents(result.p90ProfitCents)}
                     </td>
                     <td className="py-2 px-3 text-right text-[var(--text)]">
@@ -352,7 +351,7 @@ function MonteCarloCard({ result, isCurrent, isBest }: {
           {isCurrent && <span className="text-[10px] text-[var(--brand-400)]">(current)</span>}
           {isBest && <span className="text-[10px] text-[var(--success)]">(best)</span>}
         </div>
-        <span className={`text-sm font-medium ${result.medianROI >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+        <span className={`text-sm font-medium tabular-nums ${result.medianROI >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
           {formatPct(result.medianROI)} ROI
         </span>
       </div>
@@ -369,7 +368,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-[var(--text-muted)]">{label}</div>
-      <div className="text-[var(--text)] font-medium">{value}</div>
+      <div className="text-[var(--text)] font-medium tabular-nums">{value}</div>
     </div>
   );
 }

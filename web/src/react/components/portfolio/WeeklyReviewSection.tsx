@@ -17,7 +17,7 @@ function DeltaIndicator({ current, previous, isCents = false, muted = false }: {
   const arrowColor = muted ? 'text-[var(--text-muted)]' : '';
 
   return (
-    <span className={color}>
+    <span className={`${color} tabular-nums`}>
       {displayVal} {arrow && <span className={`text-xs ${arrowColor}`}>{arrow} {Math.abs(delta).toFixed(0)}%</span>}
     </span>
   );
@@ -38,7 +38,7 @@ function PerformerList({ title, items, titleColorClass, itemColorClass }: {
             <span className="text-[var(--text)] truncate mr-2" title={p.cardName}>
               {p.cardName} <span className="text-[var(--text-muted)]">{p.grader ?? 'PSA'} {p.grade}</span>
             </span>
-            <span className={`${itemColorClass ?? titleColorClass} whitespace-nowrap font-medium`}>
+            <span className={`${itemColorClass ?? titleColorClass} whitespace-nowrap font-medium tabular-nums`}>
               {formatCents(p.profitCents)} <span className="text-[var(--text-muted)]">({saleChannelLabels[p.channel as keyof typeof saleChannelLabels] ?? p.channel})</span>
             </span>
           </div>

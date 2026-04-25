@@ -70,14 +70,27 @@ ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
 
-# Install Go tools
-RUN go install golang.org/x/tools/gopls@latest && \
-    go install github.com/go-delve/delve/cmd/dlv@latest && \
-    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b /usr/local/bin v2.11.3 && \
-    go install honnef.co/go/tools/cmd/staticcheck@latest && \
-    go install github.com/google/addlicense@latest && \
-    go install mvdan.cc/gofumpt@latest && \
-    go install golang.org/x/tools/cmd/goimports@latest
+# Install Go tools (retry on transient network errors — WSL2/Docker can drop
+# proxy.golang.org connections mid-download)
+RUN set -eu; \
+    retry() { \
+        n=0; \
+        until [ "$n" -ge 5 ]; do \
+            "$@" && return 0; \
+            n=$((n + 1)); \
+            echo "retry $n/5 after failure: $*"; \
+            sleep $((n * 5)); \
+        done; \
+        echo "giving up after 5 attempts: $*" >&2; \
+        return 1; \
+    }; \
+    retry go install golang.org/x/tools/gopls@latest && \
+    retry go install github.com/go-delve/delve/cmd/dlv@latest && \
+    retry sh -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b /usr/local/bin v2.11.3" && \
+    retry go install honnef.co/go/tools/cmd/staticcheck@latest && \
+    retry go install github.com/google/addlicense@latest && \
+    retry go install mvdan.cc/gofumpt@latest && \
+    retry go install golang.org/x/tools/cmd/goimports@latest
 
 # Note: Node.js and npm tools are installed via devcontainer features
 # See devcontainer.json "features" section

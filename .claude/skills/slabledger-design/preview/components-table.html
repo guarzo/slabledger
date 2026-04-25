@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Table row</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; }
+  .tbl { border-radius: 12px; overflow:hidden; background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); }
+  .th-row, .td-row { display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 80px; align-items:center; padding: 10px 14px; font-size: 13px; }
+  .th-row { border-bottom:1px solid rgba(255,255,255,0.06); font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; font-weight:600; }
+  .td-row { border-bottom:1px solid rgba(255,255,255,0.03); }
+  .td-row.pos { border-left: 2px solid var(--success); }
+  .td-row.neg { border-left: 2px solid var(--danger); }
+  .td-row:hover { background: rgba(255,255,255,0.02); }
+  .num { font-variant-numeric: tabular-nums; text-align:right; }
+  .pos-val { color: var(--success); }
+  .neg-val { color: var(--danger); }
+  .pill { display:inline-flex; font-size: 10px; font-weight:700; padding: 2px 7px; border-radius: 999px; border:1px solid rgba(251,191,36,0.3); color:#fbbf24; background: rgba(251,191,36,0.14); }
+</style>
+</head>
+<body>
+  <div class="tbl">
+    <div class="th-row"><div>Card</div><div class="num">Purchase</div><div class="num">Sold</div><div class="num">P/L</div><div class="num">Grade</div></div>
+    <div class="td-row pos"><div>Charizard VMAX · Shining Fates</div><div class="num">$280.00</div><div class="num">$362.50</div><div class="num pos-val">+$82.50</div><div class="num"><span class="pill">10</span></div></div>
+    <div class="td-row pos"><div>Pikachu V · Celebrations</div><div class="num">$42.00</div><div class="num">$58.00</div><div class="num pos-val">+$16.00</div><div class="num"><span class="pill" style="color:#2563eb;background:rgba(37,99,235,.12);border-color:rgba(37,99,235,.25)">9</span></div></div>
+    <div class="td-row neg"><div>Umbreon VMAX · Evolving Skies</div><div class="num">$1,420.00</div><div class="num">$1,280.00</div><div class="num neg-val">−$140.00</div><div class="num"><span class="pill" style="color:#a16207;background:rgba(161,98,7,.12);border-color:rgba(161,98,7,.3)">8</span></div></div>
+  </div>
+</body>
+</html>

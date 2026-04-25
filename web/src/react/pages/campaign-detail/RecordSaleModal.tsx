@@ -189,7 +189,7 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
               <div className="text-sm font-medium text-[var(--text)]">{items[0].purchase.cardName}</div>
               <div className="text-xs text-[var(--text-muted)]">
                 {items[0].purchase.grader ?? 'PSA'} {items[0].purchase.gradeValue} &middot; Cert #{items[0].purchase.certNumber}
-                &middot; Cost: {formatCents(costBasis(items[0].purchase))}
+                &middot; Cost: <span className="tabular-nums">{formatCents(costBasis(items[0].purchase))}</span>
               </div>
             </div>
           )}
@@ -298,8 +298,8 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-[var(--text)] truncate">{item.purchase.cardName}</div>
                       <div className="text-xs text-[var(--text-muted)]">
-                        {item.purchase.grader ?? 'PSA'} {item.purchase.gradeValue} | Cost: {formatCents(costBasis(item.purchase))}
-                        {item.purchase.clValueCents ? ` | CL: ${formatCents(item.purchase.clValueCents)}` : ''}
+                        {item.purchase.grader ?? 'PSA'} {item.purchase.gradeValue} | Cost: <span className="tabular-nums">{formatCents(costBasis(item.purchase))}</span>
+                        {item.purchase.clValueCents ? <> | CL: <span className="tabular-nums">{formatCents(item.purchase.clValueCents)}</span></> : ''}
                         {item.campaignName ? ` | ${item.campaignName}` : ''}
                       </div>
                     </div>

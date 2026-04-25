@@ -241,10 +241,10 @@ export default function ImportSalesTab() {
                     <td className="py-2 px-3 text-xs text-[var(--text-muted)] font-mono">{m.certNumber}</td>
                     <td className="py-2 px-3 text-xs text-[var(--text)]">{saleChannelLabels[m.saleChannel as keyof typeof saleChannelLabels] ?? m.saleChannel}</td>
                     <td className="py-2 px-3 text-xs text-[var(--text-muted)]">{m.saleDate}</td>
-                    <td className="py-2 px-3 text-xs text-right text-[var(--text)]">{formatCents(m.salePriceCents)}</td>
-                    <td className="py-2 px-3 text-xs text-right text-[var(--text-muted)]">{formatCents(m.saleFeeCents)}</td>
-                    <td className="py-2 px-3 text-xs text-right text-[var(--text-muted)]">{formatCents(m.buyCostCents)}</td>
-                    <td className={`py-2 px-3 text-xs text-right font-medium ${m.netProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+                    <td className="py-2 px-3 text-xs text-right text-[var(--text)] tabular-nums">{formatCents(m.salePriceCents)}</td>
+                    <td className="py-2 px-3 text-xs text-right text-[var(--text-muted)] tabular-nums">{formatCents(m.saleFeeCents)}</td>
+                    <td className="py-2 px-3 text-xs text-right text-[var(--text-muted)] tabular-nums">{formatCents(m.buyCostCents)}</td>
+                    <td className={`py-2 px-3 text-xs text-right font-medium tabular-nums ${m.netProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
                       {m.netProfitCents >= 0 ? '+' : ''}{formatCents(m.netProfitCents)}
                     </td>
                   </tr>

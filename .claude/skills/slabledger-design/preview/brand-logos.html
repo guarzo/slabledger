@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Logos</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .panel { background: #111827; border:1px solid #0b1220; border-radius: 14px; padding: 16px; display:flex; flex-direction:column; gap: 8px; align-items:center; justify-content:center; }
+  .panel.light { background: #fff; }
+  .name { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  img.app { width: 80px; height: 80px; border-radius: 14px; object-fit: contain; box-shadow: 0 6px 16px rgba(0,0,0,.24); }
+  img.yeti { width: 200px; height: auto; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.25)); }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <img class="app" src="../assets/slabledger-card-logo.png" alt="SlabLedger"/>
+    <div class="name">slabledger · app</div>
+  </div>
+  <div class="panel">
+    <img class="yeti" src="../assets/card-yeti-logo.png" alt="Card Yeti"/>
+    <div class="name">card yeti · operator brand</div>
+  </div>
+</body>
+</html>

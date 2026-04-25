@@ -82,8 +82,8 @@ export default function InvoicesSection() {
               {invoices.map(inv => (
                 <tr key={inv.id} className="border-b border-[var(--surface-2)]/50">
                   <td className="py-2 px-3 text-xs text-[var(--text)]">{inv.invoiceDate}</td>
-                  <td className="py-2 px-3 text-xs text-right text-[var(--text)]">{formatCents(inv.totalCents)}</td>
-                  <td className="py-2 px-3 text-xs text-right text-[var(--text)]">{formatCents(inv.paidCents)}</td>
+                  <td className="py-2 px-3 text-xs text-right text-[var(--text)] tabular-nums">{formatCents(inv.totalCents)}</td>
+                  <td className="py-2 px-3 text-xs text-right text-[var(--text)] tabular-nums">{formatCents(inv.paidCents)}</td>
                   <td className="py-2 px-3 text-xs text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge(inv.status)}`}>
                       {inv.status}
@@ -91,7 +91,7 @@ export default function InvoicesSection() {
                   </td>
                   <td className="py-2 px-3 text-xs text-right">
                     {inv.pendingReceiptCents > 0 ? (
-                      <span className="text-[var(--warning)]">{formatCents(inv.pendingReceiptCents)} pending</span>
+                      <span className="text-[var(--warning)] tabular-nums">{formatCents(inv.pendingReceiptCents)} pending</span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--success-bg)] text-[var(--success)]">
                         ✓ All received

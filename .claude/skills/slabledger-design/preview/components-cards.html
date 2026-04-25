@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Card shell variants</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; display:grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+  .card { padding: 16px; border-radius: 18px; color: var(--text); }
+  .default { background: #111827; border: 1px solid #0b1220; box-shadow: 0 6px 16px rgba(0,0,0,.24); }
+  .elevated { background: #1f2937; border: 1px solid #0b1220; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .glass { background: rgba(22,27,34,0.7); backdrop-filter: blur(20px) saturate(180%); border: 1px solid rgba(139,152,207,0.1); box-shadow: 0 8px 32px rgba(0,0,0,.37); }
+  .premium { background: linear-gradient(135deg,#111827,#1f2937); border:1px solid rgba(99,102,241,0.3); box-shadow: 0 0 20px rgba(99,102,241,.4); }
+  .label { font-size: 10px; color: var(--brand-400); text-transform:uppercase; letter-spacing: 0.08em; font-weight:600; margin-bottom:6px; }
+  .name { font-size: 13px; font-weight: 600; color: var(--color-heading); }
+  .meta { font-size: 11px; color: var(--text-muted); margin-top:4px; }
+</style>
+</head>
+<body>
+  <div class="card default"><div class="label">Default</div><div class="name">PSA 10 · Charizard VMAX</div><div class="meta">Deployed $840 · +22%</div></div>
+  <div class="card elevated"><div class="label">Elevated</div><div class="name">Raised surface</div><div class="meta">Modal-adjacent</div></div>
+  <div class="card glass"><div class="label">Glass</div><div class="name">Floating panel</div><div class="meta">Backdrop-blur 20px</div></div>
+  <div class="card premium" style="grid-column: 1 / -1"><div class="label">Premium · brand glow</div><div class="name">Featured / recommendation surface</div><div class="meta">Used for MUST BUY detail cards and premium insights.</div></div>
+</body>
+</html>

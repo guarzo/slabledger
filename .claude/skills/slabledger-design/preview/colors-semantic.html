@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Semantic colors</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; }
+  .grid { display:grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .tile { border-radius: 14px; padding: 12px; display:flex; flex-direction:column; gap: 6px; }
+  .dot { width: 28px; height: 28px; border-radius: 999px; }
+  .name { font-size: 11px; font-weight: 700; color: var(--color-heading); }
+  .hex { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding: 2px 8px; border-radius:999px; border-width:1px; border-style:solid; width: fit-content; }
+  .label { font-size:10px; text-transform:uppercase; letter-spacing: .08em; color:var(--text-muted); margin-bottom:10px; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="label">Semantic · bright-on-dark</div>
+  <div class="grid">
+    <div class="tile" style="background:#111827;border:1px solid #0b1220">
+      <div class="dot" style="background:#34d399"></div>
+      <div class="name">Success</div>
+      <div class="hex">#34d399</div>
+      <div class="pill" style="background:rgba(16,185,129,0.10);border-color:rgba(16,185,129,0.20);color:#34d399">paid</div>
+    </div>
+    <div class="tile" style="background:#111827;border:1px solid #0b1220">
+      <div class="dot" style="background:#fbbf24"></div>
+      <div class="name">Warning</div>
+      <div class="hex">#fbbf24</div>
+      <div class="pill" style="background:rgba(245,158,11,0.10);border-color:rgba(245,158,11,0.20);color:#fbbf24">aging</div>
+    </div>
+    <div class="tile" style="background:#111827;border:1px solid #0b1220">
+      <div class="dot" style="background:#f87171"></div>
+      <div class="name">Danger</div>
+      <div class="hex">#f87171</div>
+      <div class="pill" style="background:rgba(239,68,68,0.10);border-color:rgba(239,68,68,0.20);color:#f87171">−12.4%</div>
+    </div>
+    <div class="tile" style="background:#111827;border:1px solid #0b1220">
+      <div class="dot" style="background:#22d3ee"></div>
+      <div class="name">Info</div>
+      <div class="hex">#22d3ee</div>
+      <div class="pill" style="background:rgba(34,211,238,0.10);border-color:rgba(34,211,238,0.20);color:#22d3ee">signal</div>
+    </div>
+  </div>
+</body>
+</html>

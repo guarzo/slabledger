@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Stat card / hero row</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin:0; padding:20px; }
+  .hero { display:flex; align-items:flex-end; gap:28px; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .roi-label { font-size: 11px; font-weight:600; color: var(--brand-400); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px; }
+  .roi-value { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; color: var(--success); font-variant-numeric: tabular-nums; }
+  .stats { display:flex; gap:24px; flex-wrap:wrap; padding-bottom:4px; }
+  .s-label { font-size: 10px; color: var(--text-muted); text-transform:uppercase; letter-spacing: 0.08em; }
+  .s-val { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .s-val.warn { color: var(--warning); }
+  .pill { display:inline-block; font-size: 11px; font-weight:500; color: var(--warning); background: rgba(245,158,11,0.10); padding: 2px 8px; border-radius: 999px; }
+  .divider { border-left: 1px solid rgba(255,255,255,0.08); padding-left: 24px; }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div>
+      <div class="roi-label">Realized ROI</div>
+      <div class="roi-value">+18.4%</div>
+    </div>
+    <div class="stats">
+      <div><div class="s-label">Deployed</div><div class="s-val">$62,480</div></div>
+      <div><div class="s-label">Recovered</div><div class="s-val">$73,990</div></div>
+      <div><div class="s-label">At Risk</div><div class="s-val warn">$4,220</div></div>
+      <div class="divider"><div class="s-label">Wks to Cover</div><div class="s-val">3.1</div></div>
+      <div><div class="s-label">Outstanding</div><div class="s-val">$12,840</div></div>
+      <div><div class="s-label">30d Recovery</div><div class="s-val">$18,240 ↗</div></div>
+      <div style="align-self:center"><span class="pill">3 unpaid invoices →</span></div>
+    </div>
+  </div>
+</body>
+</html>

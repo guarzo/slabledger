@@ -87,10 +87,10 @@ export default function SettingsTab({ campaign, onUpdate, onDelete }: {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
             <div><span className="text-[var(--text-muted)]">Phase:</span> <span className="text-[var(--text)] ml-1">{campaign.phase}</span></div>
-            <div><span className="text-[var(--text-muted)]">Buy Terms:</span> <span className="text-[var(--text)] ml-1">{formatPct(campaign.buyTermsCLPct)} CL</span></div>
-            <div><span className="text-[var(--text-muted)]">Daily Cap:</span> <span className="text-[var(--text)] ml-1">{formatCents(campaign.dailySpendCapCents)}</span></div>
-            <div><span className="text-[var(--text-muted)]">eBay Fee:</span> <span className="text-[var(--text)] ml-1">{formatPct(campaign.ebayFeePct)}</span></div>
-            <div><span className="text-[var(--text-muted)]">Sourcing Fee:</span> <span className="text-[var(--text)] ml-1">{formatCents(campaign.psaSourcingFeeCents)}</span></div>
+            <div><span className="text-[var(--text-muted)]">Buy Terms:</span> <span className="text-[var(--text)] ml-1 tabular-nums">{formatPct(campaign.buyTermsCLPct)} CL</span></div>
+            <div><span className="text-[var(--text-muted)]">Daily Cap:</span> <span className="text-[var(--text)] ml-1 tabular-nums">{formatCents(campaign.dailySpendCapCents)}</span></div>
+            <div><span className="text-[var(--text-muted)]">eBay Fee:</span> <span className="text-[var(--text)] ml-1 tabular-nums">{formatPct(campaign.ebayFeePct)}</span></div>
+            <div><span className="text-[var(--text-muted)]">Sourcing Fee:</span> <span className="text-[var(--text)] ml-1 tabular-nums">{formatCents(campaign.psaSourcingFeeCents)}</span></div>
             <div><span className="text-[var(--text-muted)]">Sport:</span> <span className="text-[var(--text)] ml-1">{campaign.sport || 'Pokemon'}</span></div>
             {campaign.yearRange && <div><span className="text-[var(--text-muted)]">Year Range:</span> <span className="text-[var(--text)] ml-1">{campaign.yearRange}</span></div>}
             {campaign.gradeRange && <div><span className="text-[var(--text-muted)]">Grade Range:</span> <span className="text-[var(--text)] ml-1">PSA {campaign.gradeRange}</span></div>}

@@ -135,10 +135,10 @@ export default function CampaignsTab({
                   {/* P&L */}
                   {pnl && (
                     <div className="hidden sm:flex items-center gap-3">
-                      <span className={`font-medium ${profitColor}`}>
+                      <span className={`font-medium tabular-nums ${profitColor}`}>
                         {formatCents(pnl.netProfitCents)}
                       </span>
-                      <span className={`font-medium ${profitColor}`}>
+                      <span className={`font-medium tabular-nums ${profitColor}`}>
                         {formatPct(pnl.roi)}
                       </span>
                     </div>
@@ -149,7 +149,7 @@ export default function CampaignsTab({
                     const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
                     return (
                       <div className="hidden md:flex items-center gap-2">
-                        <span>{formatPct(pnl.sellThroughPct)}</span>
+                        <span className="tabular-nums">{formatPct(pnl.sellThroughPct)}</span>
                         <div className="w-12 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden" title={`${pnl.totalSold}/${pnl.totalPurchases} sold`}>
                           <div
                             className="h-full rounded-full transition-all duration-300"
@@ -164,7 +164,7 @@ export default function CampaignsTab({
                   })()}
 
                   {/* Buy terms */}
-                  <span className="hidden lg:inline">
+                  <span className="hidden lg:inline tabular-nums">
                     {formatCents(c.dailySpendCapCents)}/d @ {formatPct(c.buyTermsCLPct)}
                   </span>
 

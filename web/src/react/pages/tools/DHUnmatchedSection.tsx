@@ -126,7 +126,7 @@ function UnmatchedRow({ card, onDismiss, isDismissing }: {
       <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{card.card_number}</td>
       <td className="py-2 px-3 text-sm text-[var(--text-muted)]">{card.set_name}</td>
       <td className="py-2 px-3 text-sm text-[var(--text-muted)] text-right">{card.grade}</td>
-      <td className="py-2 px-3 text-sm text-[var(--text-muted)] text-right">{formatCents(card.cl_value_cents)}</td>
+      <td className="py-2 px-3 text-sm text-[var(--text-muted)] text-right tabular-nums">{formatCents(card.cl_value_cents)}</td>
       <td className="py-2 px-3">
         <div className="flex flex-col gap-2 min-w-[280px]">
           {candidates.length > 0 && (
@@ -210,7 +210,7 @@ function DismissedRow({ card, onUndismiss, isUndismissing }: {
       <td className="py-1.5 px-3 text-xs text-[var(--text-muted)]">{card.card_number}</td>
       <td className="py-1.5 px-3 text-xs text-[var(--text-muted)]">{card.set_name}</td>
       <td className="py-1.5 px-3 text-xs text-[var(--text-muted)] text-right">{card.grade}</td>
-      <td className="py-1.5 px-3 text-xs text-[var(--text-muted)] text-right">{formatCents(card.cl_value_cents)}</td>
+      <td className="py-1.5 px-3 text-xs text-[var(--text-muted)] text-right tabular-nums">{formatCents(card.cl_value_cents)}</td>
       <td className="py-1.5 px-3">
         <Button
           variant="ghost"
@@ -383,7 +383,7 @@ export default function DHUnmatchedSection() {
       ) : unmatchedLoading ? (
         <p className="text-sm text-[var(--text-muted)]">Loading unmatched cards...</p>
       ) : unmatchedData?.unmatched !== undefined ? (
-        <p className="text-sm text-[var(--text-muted)]">No unmatched cards found.</p>
+        <p className="text-sm text-[var(--text-muted)]">No unmatched cards — all inventory is mapped.</p>
       ) : (
         <p className="text-sm text-[var(--danger)]">Failed to load unmatched cards.</p>
       )}

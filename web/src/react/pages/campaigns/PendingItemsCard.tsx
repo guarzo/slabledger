@@ -91,7 +91,7 @@ export function PendingItemsCard() {
       )}
 
       {!isLoading && !isError && items.length === 0 && (
-        <p className="text-sm text-[var(--text-muted)]">No pending items - all PSA imports matched or resolved.</p>
+        <p className="text-sm text-[var(--text-muted)]">No pending items — all PSA imports matched or resolved.</p>
       )}
 
       {items.length > 0 && (

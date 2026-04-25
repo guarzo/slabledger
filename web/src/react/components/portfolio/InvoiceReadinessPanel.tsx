@@ -58,7 +58,7 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
 
       {/* Headline: amount owed on next invoice */}
       <div className="flex items-baseline gap-3 mb-1">
-        <span className={`text-2xl font-bold ${overdue ? 'text-[var(--danger)]' : 'text-[var(--text)]'}`}>
+        <span className={`text-2xl font-bold tabular-nums ${overdue ? 'text-[var(--danger)]' : 'text-[var(--text)]'}`}>
           {formatCents(capital.nextInvoiceAmountCents)}
         </span>
         <span className={`text-xs ${overdue ? 'text-[var(--danger)]' : daysUntil <= 7 ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'}`}>
@@ -76,7 +76,7 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
       <div className="flex justify-between text-xs mb-2">
         <span className="text-[var(--text-muted)]">Pending receipt (at PSA)</span>
         {capital.nextInvoicePendingReceiptCents > 0 ? (
-          <span className="text-[var(--warning)] font-medium">
+          <span className="text-[var(--warning)] font-medium tabular-nums">
             {formatCents(capital.nextInvoicePendingReceiptCents)} pending
           </span>
         ) : (
@@ -94,7 +94,7 @@ export default function InvoiceReadinessPanel({ capital }: InvoiceReadinessPanel
         </div>
         <div className="flex justify-between text-xs">
           <span className="text-[var(--text-muted)]">Revenue / cost</span>
-          <span className="text-[var(--text)] font-medium">
+          <span className="text-[var(--text)] font-medium tabular-nums">
             {formatCents(st.saleRevenueCents)} / {formatCents(st.totalCostCents)}
           </span>
         </div>
