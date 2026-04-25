@@ -124,7 +124,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   // Reset scroll + collapse expanded row on sort/filter change
   useEffect(() => {
     setExpandedId(null);
-    setPinnedIds(new Set());
+    setPinnedIds(prev => prev.size > 0 ? new Set() : prev);
     scrollContainerRef.current?.scrollTo({ top: 0 });
     mobileScrollRef.current?.scrollTo({ top: 0 });
   }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]);
@@ -510,7 +510,6 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handlePriceSaved,
     handleInlinePriceSave,
     handleHintSaved,
-    // Pinned highlight for missing-CL banner
     pinnedIds, handleDeselectMissingCL, handleHighlightMissingCL,
     // Sell sheet
     sellSheet,

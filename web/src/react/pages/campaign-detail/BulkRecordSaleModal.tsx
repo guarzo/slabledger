@@ -3,13 +3,13 @@ import { Dialog } from 'radix-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem, SaleChannel } from '../../../types/campaigns';
 import { api } from '../../../js/api';
-import { formatCents, localToday, getErrorMessage } from '../../utils/formatters';
+import { formatCents, localToday, getErrorMessage, dollarsToCents } from '../../utils/formatters';
 import { saleChannelLabels, DEFAULT_SALE_CHANNEL, activeSaleChannels } from '../../utils/campaignConstants';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Input, Select } from '../../ui';
-import { queryKeys } from '../../queries/queryKeys';
 import { costBasis } from './inventory/utils';
 import { computeSalePrice, type PricingMode } from './saleModal/pricingModes';
+import { invalidateAfterSale } from './saleModal/invalidateAfterSale';
 
 interface Props {
   open: boolean;
@@ -117,24 +117,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
         return;
       }
 
-      // Invalidate caches for affected campaigns
-      const affected = new Set(items.map(i => i.purchase.campaignId));
-      for (const cid of affected) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.sales(cid) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.purchases(cid) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.pnl(cid) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(cid) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.channelPnl(cid) });
-        queryClient.invalidateQueries({ queryKey: ['campaigns', cid, 'fillRate'] });
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.daysToSell(cid) });
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.channelVelocity });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.suggestions });
+      invalidateAfterSale(queryClient, groups.keys());
 
       onSuccess?.();
       reset();
@@ -213,9 +196,13 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
               onChange={e => {
                 const raw = e.target.value;
                 if (raw === '') { setFillValue(0); return; }
-                const n = parseFloat(raw);
-                if (Number.isNaN(n)) { setFillValue(0); return; }
-                setFillValue(pricingMode === 'pctOfCL' ? n : Math.round(n * 100));
+                if (pricingMode === 'pctOfCL') {
+                  const n = parseFloat(raw);
+                  if (Number.isNaN(n)) { setFillValue(0); return; }
+                  setFillValue(n);
+                } else {
+                  setFillValue(dollarsToCents(raw));
+                }
               }}
             />
             <div className="mt-2 text-sm text-[var(--text-muted)]">
@@ -264,9 +251,8 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                         onChange={e => {
                           const raw = e.target.value;
                           if (raw === '') { setOverrides(prev => ({ ...prev, [item.purchase.id]: undefined })); return; }
-                          const n = parseFloat(raw);
-                          if (Number.isNaN(n)) return;
-                          setOverrides(prev => ({ ...prev, [item.purchase.id]: Math.round(n * 100) }));
+                          const cents = dollarsToCents(raw);
+                          setOverrides(prev => ({ ...prev, [item.purchase.id]: cents }));
                         }}
                         className="w-24 px-2 py-1 text-sm rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
                       />

@@ -21,7 +21,6 @@ export function computeSalePrice(
     return Math.round(value);
   }
 
-  // pctOfCL
   const cl = item.purchase.clValueCents ?? 0;
   if (cl <= 0) return 0;
   return Math.round((cl * value) / 100);

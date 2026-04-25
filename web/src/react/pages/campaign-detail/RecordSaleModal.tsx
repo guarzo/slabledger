@@ -7,8 +7,8 @@ import { formatCents, localToday, getErrorMessage } from '../../utils/formatters
 import { saleChannelLabels, DEFAULT_SALE_CHANNEL, activeSaleChannels } from '../../utils/campaignConstants';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Input, Select } from '../../ui';
-import { queryKeys } from '../../queries/queryKeys';
 import { costBasis } from './inventory/utils';
+import { invalidateAfterSale } from './saleModal/invalidateAfterSale';
 
 interface RecordSaleModalProps {
   open: boolean;
@@ -89,22 +89,7 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
       });
       toast.success('Sale recorded');
 
-      // Invalidate caches
-      const cid = item.purchase.campaignId;
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.sales(cid) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.purchases(cid) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.pnl(cid) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(cid) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.channelVelocity });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.suggestions });
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.channelPnl(cid) });
-      queryClient.invalidateQueries({ queryKey: ['campaigns', cid, 'fillRate'] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.daysToSell(cid) });
+      invalidateAfterSale(queryClient, [item.purchase.campaignId]);
 
       onSuccess?.();
       resetAndClose();

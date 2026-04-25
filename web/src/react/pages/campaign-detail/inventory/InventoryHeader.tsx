@@ -60,10 +60,10 @@ export default function InventoryHeader({
   onRecordSale, onBulkListOnDH, onClearSelected, onPrint,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
-  const missingCLIds = useMemo(
-    () => items.filter(i => selected.has(i.purchase.id) && !i.purchase.clValueCents).map(i => i.purchase.id),
-    [items, selected],
-  );
+  const missingCLIds = useMemo(() => {
+    if (selected.size === 0) return [];
+    return items.filter(i => selected.has(i.purchase.id) && !i.purchase.clValueCents).map(i => i.purchase.id);
+  }, [items, selected]);
 
   const primary = useMemo(() => [
     { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
@@ -195,14 +195,12 @@ export default function InventoryHeader({
         </div>
       )}
 
-      {selected.size > 0 && (
-        <BulkSelectionMissingCLWarning
-          missingCLIds={missingCLIds}
-          selectedCount={selected.size}
-          onDeselect={onDeselectMissingCL}
-          onHighlight={onHighlightMissingCL}
-        />
-      )}
+      <BulkSelectionMissingCLWarning
+        missingCLIds={missingCLIds}
+        selectedCount={selected.size}
+        onDeselect={onDeselectMissingCL}
+        onHighlight={onHighlightMissingCL}
+      />
 
       {selected.size > 0 || (sellSheetActive && pageSellSheetCount > 0) ? (
         <SellSheetActions
