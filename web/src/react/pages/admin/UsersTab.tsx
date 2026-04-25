@@ -2,6 +2,7 @@ import type { AdminUser } from '../../../types/admin';
 import PokeballLoader from '../../PokeballLoader';
 import { useAdminUsers } from '../../queries/useAdminQueries';
 import { AllowlistTab } from './AllowlistTab';
+import { StatusPill } from '../../ui';
 
 function formatLastLogin(value: string | null | undefined): string {
   if (!value) return 'Never';
@@ -27,9 +28,9 @@ function UserRow({ u }: { u: AdminUser }) {
       <td className="glass-table-td text-[var(--text-muted)] hidden sm:table-cell">{u.email}</td>
       <td className="glass-table-td">
         {u.is_admin ? (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--brand-500)]/20 text-[var(--brand-400)]">Admin</span>
+          <StatusPill tone="brand">Admin</StatusPill>
         ) : (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--surface-2)] text-[var(--text-muted)]">User</span>
+          <StatusPill tone="neutral">User</StatusPill>
         )}
       </td>
       <td className="glass-table-td text-[var(--text-muted)] hidden md:table-cell">

@@ -113,32 +113,34 @@ export default function OverviewTab({
           compact
         />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Revenue" value={formatCents(totalRevenue)} />
-          <StatCard
-            label="ROI"
-            value={pnl && hasPurchases ? formatPct(pnl.roi) : '—'}
-            color={pnl && hasPurchases ? (pnl.roi >= 0 ? 'green' : 'red') : undefined}
-          />
-          <StatCard label="Cards Purchased" value={String(purchaseCount)} />
-          <StatCard label="Sell-Through" value={`${sellThrough}%`} color={sellThroughColor} />
-        </div>
-      )}
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard label="Revenue" value={formatCents(totalRevenue)} />
+            <StatCard
+              label="ROI"
+              value={pnl && hasPurchases ? formatPct(pnl.roi) : '—'}
+              color={pnl && hasPurchases ? (pnl.roi >= 0 ? 'green' : 'red') : undefined}
+            />
+            <StatCard label="Cards Purchased" value={String(purchaseCount)} />
+            <StatCard label="Sell-Through" value={`${sellThrough}%`} color={sellThroughColor} />
+          </div>
 
-      <div className="flex flex-wrap gap-x-6 gap-y-2 px-1">
-        <StatCard label="Sold" value={String(saleCount)} size="sm" />
-        <StatCard label="Unsold" value={String(unsoldCount)} size="sm" />
-        <StatCard
-          label="Avg Days to Sell"
-          value={pnl && saleCount > 0 ? pnl.avgDaysToSell.toFixed(1) : '—'}
-          size="sm"
-        />
-        <StatCard
-          label="Daily Cap"
-          value={formatCents(dailySpendCapCents)}
-          size="sm"
-        />
-      </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 px-1">
+            <StatCard label="Sold" value={String(saleCount)} size="sm" />
+            <StatCard label="Unsold" value={String(unsoldCount)} size="sm" />
+            <StatCard
+              label="Avg Days to Sell"
+              value={pnl && saleCount > 0 ? pnl.avgDaysToSell.toFixed(1) : '—'}
+              size="sm"
+            />
+            <StatCard
+              label="Daily Cap"
+              value={formatCents(dailySpendCapCents)}
+              size="sm"
+            />
+          </div>
+        </>
+      )}
 
       {/* Analytics section */}
       {analyticsLoading ? (

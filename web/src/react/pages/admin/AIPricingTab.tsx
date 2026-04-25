@@ -1,7 +1,7 @@
 import PokeballLoader from '../../PokeballLoader';
 import { usePriceOverrideStats } from '../../queries/useAdminQueries';
 import { currency } from '../../utils/formatters';
-import { ErrorAlert } from '../../ui';
+import { CardShell, ErrorAlert } from '../../ui';
 import { SummaryCard } from './shared';
 
 function pct(n: number, total: number): string {
@@ -59,21 +59,21 @@ export function AIPricingTab({ enabled = true }: { enabled?: boolean }) {
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-[var(--text)]">Override Sources</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+          <CardShell variant="default">
             <div className="text-xs text-[var(--text-muted)]">Manual</div>
             <div className="text-xl font-semibold text-[var(--text)]">{stats.manualCount}</div>
             <div className="text-xs text-[var(--text-muted)]">Free-form price entry</div>
-          </div>
-          <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+          </CardShell>
+          <CardShell variant="default">
             <div className="text-xs text-[var(--text-muted)]">12% Cost Markup</div>
             <div className="text-xl font-semibold text-[var(--text)]">{stats.costMarkupCount}</div>
             <div className="text-xs text-[var(--text-muted)]">Quick markup button</div>
-          </div>
-          <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+          </CardShell>
+          <CardShell variant="default">
             <div className="text-xs text-[var(--text-muted)]">AI Accepted</div>
             <div className="text-xl font-semibold" style={{ color: 'var(--ai-accent)' }}>{stats.aiAcceptedCount}</div>
             <div className="text-xs text-[var(--text-muted)]">AI suggestion accepted by user</div>
-          </div>
+          </CardShell>
         </div>
       </div>
 
@@ -83,18 +83,18 @@ export function AIPricingTab({ enabled = true }: { enabled?: boolean }) {
           <h3 className="text-sm font-medium text-[var(--text)]">Value Summary</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {stats.overrideTotalUsd > 0 && (
-              <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+              <CardShell variant="default">
                 <div className="text-xs text-[var(--text-muted)]">Total Override Value</div>
                 <div className="text-xl font-semibold text-[var(--text)]">{currency(stats.overrideTotalUsd)}</div>
                 <div className="text-xs text-[var(--text-muted)]">Sum of all override prices across {stats.overrideCount} cards</div>
-              </div>
+              </CardShell>
             )}
             {stats.suggestionTotalUsd > 0 && (
-              <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+              <CardShell variant="default">
                 <div className="text-xs text-[var(--text-muted)]">Pending Suggestion Value</div>
                 <div className="text-xl font-semibold" style={{ color: 'var(--ai-accent)' }}>{currency(stats.suggestionTotalUsd)}</div>
                 <div className="text-xs text-[var(--text-muted)]">Sum of AI-suggested prices awaiting review</div>
-              </div>
+              </CardShell>
             )}
           </div>
         </div>
