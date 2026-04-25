@@ -4,15 +4,9 @@ import { MarketMoversTab } from './MarketMoversTab';
 import { PSASyncTab } from './PSASyncTab';
 import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import SalesImportSection from '../tools/SalesImportSection';
+import { StatusPill } from '../../ui';
 
-function StatusBadge({ connected, label }: { connected: boolean; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5 text-xs">
-      <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-[var(--success)]' : 'bg-[var(--text-muted)]'}`} />
-      <span className={connected ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'}>{label}</span>
-    </span>
-  );
-}
+const SECTION_HEADER = 'text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3';
 
 export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
   const { data: dhStatus } = useDHStatus({ enabled });
@@ -28,9 +22,13 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="space-y-8 mt-4">
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[var(--text)]">DoubleHolo</h3>
-          <StatusBadge connected={dhHealthy} label={dhHealthy ? 'Healthy' : 'Unknown'} />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className={SECTION_HEADER}>DoubleHolo</h3>
+          {dhHealthy ? (
+            <StatusPill tone="success">Healthy</StatusPill>
+          ) : (
+            <StatusPill tone="neutral">Unknown</StatusPill>
+          )}
         </div>
         <DHTab enabled={enabled} />
       </section>
@@ -38,9 +36,13 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <hr className="border-[var(--surface-2)]" />
 
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[var(--text)]">Card Ladder</h3>
-          <StatusBadge connected={clConnected} label={clConnected ? 'Connected' : 'Not connected'} />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className={SECTION_HEADER}>Card Ladder</h3>
+          {clConnected ? (
+            <StatusPill tone="success">Connected</StatusPill>
+          ) : (
+            <StatusPill tone="danger">Not connected</StatusPill>
+          )}
         </div>
         <CardLadderTab enabled={enabled} />
       </section>
@@ -48,9 +50,13 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <hr className="border-[var(--surface-2)]" />
 
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[var(--text)]">Market Movers</h3>
-          <StatusBadge connected={mmConnected} label={mmConnected ? 'Connected' : 'Not connected'} />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className={SECTION_HEADER}>Market Movers</h3>
+          {mmConnected ? (
+            <StatusPill tone="success">Connected</StatusPill>
+          ) : (
+            <StatusPill tone="danger">Not connected</StatusPill>
+          )}
         </div>
         <MarketMoversTab enabled={enabled} />
       </section>
@@ -58,9 +64,13 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <hr className="border-[var(--surface-2)]" />
 
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[var(--text)]">PSA Sheets Sync</h3>
-          <StatusBadge connected={psaConfigured} label={psaConfigured ? 'Configured' : 'Not configured'} />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className={SECTION_HEADER}>PSA Sheets Sync</h3>
+          {psaConfigured ? (
+            <StatusPill tone="success">Configured</StatusPill>
+          ) : (
+            <StatusPill tone="danger">Not configured</StatusPill>
+          )}
         </div>
         <PSASyncTab enabled={enabled} />
       </section>
@@ -68,8 +78,8 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <hr className="border-[var(--surface-2)]" />
 
       <section>
-        <div className="mb-4">
-          <h3 className="text-base font-semibold text-[var(--text)]">Import Sales</h3>
+        <div className="mb-3">
+          <h3 className={SECTION_HEADER}>Import Sales</h3>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Import sales from order CSVs.</p>
         </div>
         <SalesImportSection />
