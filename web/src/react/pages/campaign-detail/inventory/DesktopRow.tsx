@@ -259,7 +259,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       </div>
       {/* Hairline divider — separates signal columns from the action cluster */}
       <div aria-hidden="true" className="glass-table-td flex-shrink-0 self-stretch !p-0 print-hide-actions" style={{ width: '1px' }}>
-        <div className="w-px h-6 bg-white/[0.06] mx-auto my-auto" />
+        <div className="w-px h-full bg-white/[0.06]" />
       </div>
       {/* Primary action — Sell */}
       <div className="glass-table-td flex-shrink-0 text-center !px-1 print-hide-actions" style={{ width: '64px' }} onClick={e => e.stopPropagation()}>
@@ -348,7 +348,6 @@ function RowOverflowMenu({
   // entry that is currently surfaced as `primary` to avoid duplicates.
   const showSetPrice = onSetPrice && primary?.label !== 'Set Price';
   const showFixDHMatch = onFixDHMatch && primary?.label !== 'Fix DH Match';
-  const showRestore = actionIntent === 'restore' && onUndismiss && primary?.label !== 'Restore to DH';
 
   return (
     <DropdownMenu.Root>
@@ -409,9 +408,6 @@ function RowOverflowMenu({
             >
               Dismiss from DH
             </DropdownMenu.Item>
-          )}
-          {showRestore && (
-            <DropdownMenu.Item onSelect={onUndismiss} className={ITEM_DEFAULT}>Restore to DH</DropdownMenu.Item>
           )}
           {isOnSellSheet && onRemoveFromSellSheet && (
             <DropdownMenu.Item onSelect={onRemoveFromSellSheet} className={ITEM_DEFAULT}>
