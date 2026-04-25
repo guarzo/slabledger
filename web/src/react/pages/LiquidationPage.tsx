@@ -6,6 +6,7 @@ import { GradeBadge } from '../ui';
 import { LinkDropdown } from '../ui/LinkDropdown';
 import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } from '../utils/marketplaceUrls';
 import StatCard from '../ui/StatCard';
+import CardShell from '../ui/CardShell';
 
 function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
@@ -133,12 +134,37 @@ export default function LiquidationPage() {
     <div className="max-w-7xl mx-auto px-4 pb-16">
       <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight mb-6">Reprice</h1>
 
-      <div className="mb-6 p-4 rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)]">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <DiscountSlider label="With comps" value={discountWithComps} onChange={setDiscountWithComps} />
-          <DiscountSlider label="Without comps" value={discountNoComps} onChange={setDiscountNoComps} />
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <StatCard label="Total Cards" value={String(summary.totalCards)} />
+          <StatCard label="With Comps" value={String(summary.withComps)} color="green" />
+          <StatCard label="Without Comps" value={String(summary.withoutComps)} />
+          <StatCard label="No Data" value={String(summary.noData)} color={summary.noData > 0 ? 'red' : undefined} />
         </div>
-      </div>
+      )}
+
+      <CardShell variant="elevated" className="mb-6">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4">
+          Reprice Preview
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-6 lg:gap-8 items-start">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <DiscountSlider label="With comps" value={discountWithComps} onChange={setDiscountWithComps} />
+            <DiscountSlider label="Without comps" value={discountNoComps} onChange={setDiscountNoComps} />
+          </div>
+          {summary && (
+            <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-2 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
+              <PreviewStat label="Current Value" value={formatCents(summary.totalCurrentValueCents)} />
+              <PreviewStat label="Suggested Value" value={formatCents(summary.totalSuggestedValueCents)} />
+              <PreviewStat
+                label="Below Cost"
+                value={String(summary.belowCostCount)}
+                tone={summary.belowCostCount > 0 ? 'danger' : undefined}
+              />
+            </div>
+          )}
+        </div>
+      </CardShell>
 
       {isLoading && !data && (
         <div className="text-sm text-[var(--text-muted)] py-8 text-center">Loading inventory…</div>
@@ -150,27 +176,8 @@ export default function LiquidationPage() {
         </div>
       )}
 
-      {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
-          <StatCard label="Total Cards" value={String(summary.totalCards)} />
-          <StatCard label="With Comps" value={String(summary.withComps)} color="green" />
-          <StatCard label="Without Comps" value={String(summary.withoutComps)} />
-          <StatCard label="No Data" value={String(summary.noData)} color={summary.noData > 0 ? 'red' : undefined} />
-          <StatCard label="Current Value" value={formatCents(summary.totalCurrentValueCents)} />
-          <StatCard label="Suggested Value" value={formatCents(summary.totalSuggestedValueCents)} />
-          <StatCard label="Below Cost" value={String(summary.belowCostCount)} color={summary.belowCostCount > 0 ? 'red' : undefined} />
-        </div>
-      )}
-
       {items.length > 0 && (
         <>
-          <div className="flex items-center gap-3 mb-2">
-            <button type="button" onClick={selectAll} className="text-xs text-[var(--brand-500)] hover:underline">Select All</button>
-            <button type="button" onClick={deselectAll} className="text-xs text-[var(--text-muted)] hover:underline">Deselect All</button>
-            <button type="button" onClick={acceptAllSuggested} className="text-xs text-[var(--success)] hover:opacity-80">Accept All</button>
-            <span className="text-xs text-[var(--text-muted)]">{selected.size} selected</span>
-          </div>
-
           <div className="glass-table">
             <div className="glass-table-header flex items-center sticky top-0 z-10">
               <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}>
@@ -283,15 +290,37 @@ export default function LiquidationPage() {
       )}
 
       {selected.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--surface)] border-t border-[var(--border)] flex items-center justify-between gap-4 z-10">
-          <span className="text-sm text-[var(--text)]">{selected.size} card{selected.size !== 1 ? 's' : ''} selected</span>
-          <button
-            type="button"
-            onClick={() => setShowConfirm(true)}
-            className="px-5 py-2 bg-[var(--brand-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--brand-600)] transition-colors"
-          >
-            Apply Prices
-          </button>
+        <div
+          className="sticky bottom-0 -mx-4 mt-4 px-4 py-3 bg-[var(--surface-1)]/80 backdrop-blur-xl border-t border-[var(--surface-2)] flex items-center justify-between gap-3 z-10 flex-wrap"
+          role="region"
+          aria-label="Reprice actions"
+        >
+          <span className="text-sm font-medium text-[var(--text)] tabular-nums">
+            Selected: {selected.size}
+          </span>
+          <div className="flex items-center gap-3 ml-auto">
+            <button
+              type="button"
+              onClick={acceptAllSuggested}
+              className="text-xs font-medium text-[var(--success)] hover:opacity-80"
+            >
+              Accept All
+            </button>
+            <button
+              type="button"
+              onClick={deselectAll}
+              className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)] hover:underline"
+            >
+              Deselect All
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowConfirm(true)}
+              className="px-5 py-2 bg-[var(--brand-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--brand-600)] transition-colors"
+            >
+              Apply Prices
+            </button>
+          </div>
         </div>
       )}
 
@@ -333,6 +362,26 @@ export default function LiquidationPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PreviewStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'danger';
+}) {
+  const valueColor = tone === 'danger' ? 'text-[var(--danger)]' : 'text-[var(--text)]';
+  return (
+    <div className="lg:flex lg:items-baseline lg:justify-between lg:gap-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-0.5 lg:mb-0">
+        {label}
+      </div>
+      <div className={`text-base font-bold tabular-nums ${valueColor}`}>{value}</div>
     </div>
   );
 }
