@@ -114,13 +114,6 @@
   --grade-black-label-bd: rgba(255, 255, 255, 0.2);
   --grade-black-label-fg: #e5e7eb;
 
-  /* DEPRECATED — use --grade-{1..10}-* instead. Remove in next release. */
-  --grade-psa10: #fbbf24;    /* Gold - PSA 10 Gem Mint (avoids warning-red confusion) */
-  --grade-psa9: #2563eb;     /* Blue - PSA 9 Mint */
-  --grade-psa8: #a16207;     /* Dark amber - PSA 8 (distinct from gold PSA 10) */
-  --grade-bgs10: #000000;    /* Black - BGS 10 Black Label */
-  --grade-cgc: #f59e0b;      /* Orange/Amber - CGC grades */
-
   /* ===================================
      SURFACES & BACKGROUNDS (Dark Default)
      =================================== */
@@ -192,17 +185,10 @@
   --glow-brand-color: rgba(99, 102, 241, 0.4);
   --glow-white: rgba(255, 255, 255, 0.8);
   --glow-violet: 0 0 40px rgba(139, 92, 246, 0.5);
-  --glow-psa10: 0 0 20px rgba(251, 191, 36, 0.25);
-  --glow-psa9: 0 0 20px rgba(37, 99, 235, 0.2);
-
   /* Navigation shadows */
   --shadow-nav-inset: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-nav-active: 0 4px 16px rgba(99, 102, 241, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
   --shadow-brand-scroll: 0 8px 32px rgba(99, 102, 241, 0.15);
-
-  /* PSA highlight gradients */
-  --gradient-psa10-highlight: linear-gradient(90deg, rgba(251, 191, 36, 0.08) 0%, transparent 100%);
-  --gradient-psa9-highlight: linear-gradient(90deg, rgba(37, 99, 235, 0.04) 0%, transparent 100%);
 
   /* ===================================
      PRICE QUALITY INDICATORS
