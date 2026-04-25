@@ -34,11 +34,6 @@ const LoginPage: React.FC = () => {
         <p>Graded Card Portfolio Tracker</p>
       </div>
 
-      {/* Logo */}
-      <div className="login-logo">
-        <img src={logoSrc} alt="Card Yeti" className="login-logo-img" width="180" height="120" />
-      </div>
-
       {/* Login Button */}
       <CardShell variant="glass" padding="lg" radius="lg" className="login-card">
         {error && (
@@ -74,6 +69,11 @@ const LoginPage: React.FC = () => {
             <span className="feature-icon" role="img" aria-hidden="true">🔍</span>
             <span className="feature-text">Price lookup</span>
           </div>
+        </div>
+
+        <div className="login-powered-by">
+          <span className="login-powered-by-label">Powered by</span>
+          <img src={logoSrc} alt="Card Yeti" className="login-powered-by-img" />
         </div>
       </CardShell>
     </div>

@@ -63,6 +63,7 @@
   text-align: center;
   position: relative;
   z-index: 1;
+  margin-bottom: var(--space-4);
 }
 
 .login-page > .login-header h1 {
@@ -100,17 +101,35 @@
   text-transform: uppercase;
 }
 
-/* Logo */
-.login-logo {
-  position: relative;
-  z-index: 1;
-  text-align: center;
+/* "Powered by Card Yeti" — demoted from primary brand to attribution at the bottom of the auth card */
+.login-powered-by {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  opacity: 0.5;
+  transition: opacity var(--transition-base);
 }
 
-.login-logo-img {
-  width: 180px;
-  height: auto;
-  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
+.login-powered-by:hover {
+  opacity: 0.75;
+}
+
+.login-powered-by-label {
+  font-size: var(--font-size-2xs);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.login-powered-by-img {
+  max-height: 40px;
+  width: auto;
+  display: block;
 }
 
 /* Sign-in card — layout only; chrome (bg/blur/border/radius/padding) owned by CardShell variant="glass" */
