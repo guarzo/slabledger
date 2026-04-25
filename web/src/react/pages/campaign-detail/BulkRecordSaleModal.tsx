@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem, SaleChannel } from '../../../types/campaigns';
@@ -27,25 +27,29 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
   const [pricingMode, setPricingMode] = useState<PricingMode>('pctOfCL');
   const [fillValue, setFillValue] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingItems, setPendingItems] = useState<AgingItem[]>(items);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, number | undefined>>({});
 
+  // Sync pendingItems when props change (new modal open)
+  useEffect(() => { setPendingItems(items); }, [items]);
+
   const computedPrices = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const item of items) {
+    for (const item of pendingItems) {
       m[item.purchase.id] = computeSalePrice(item, pricingMode, fillValue);
     }
     return m;
-  }, [items, pricingMode, fillValue]);
+  }, [pendingItems, pricingMode, fillValue]);
 
   const effectivePrices = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const item of items) {
+    for (const item of pendingItems) {
       const ov = overrides[item.purchase.id];
       m[item.purchase.id] = ov != null ? ov : (computedPrices[item.purchase.id] ?? 0);
     }
     return m;
-  }, [items, computedPrices, overrides]);
+  }, [pendingItems, computedPrices, overrides]);
 
   function reset() {
     setChannel(DEFAULT_SALE_CHANNEL);
@@ -54,6 +58,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
     setFillValue(0);
     setReviewOpen(false);
     setOverrides({});
+    setPendingItems(items);
   }
 
   function handleClose() {
@@ -68,7 +73,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
       return;
     }
 
-    const invalid = items.filter(i => (effectivePrices[i.purchase.id] || 0) <= 0);
+    const invalid = pendingItems.filter(i => (effectivePrices[i.purchase.id] || 0) <= 0);
     if (invalid.length > 0) {
       toast.error(`${invalid.length} card(s) have no sale price set`);
       return;
@@ -77,7 +82,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
     setSubmitting(true);
     try {
       const groups = new Map<string, { purchaseId: string; salePriceCents: number }[]>();
-      for (const item of items) {
+      for (const item of pendingItems) {
         const cid = item.purchase.campaignId;
         if (!groups.has(cid)) groups.set(cid, []);
         groups.get(cid)!.push({
@@ -95,18 +100,23 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
 
       let totalCreated = 0;
       let totalFailed = 0;
+      // Collect failed purchase IDs so retries only resubmit failures
+      const failedPurchaseIds = new Set<string>();
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         if (r.status === 'fulfilled') {
           totalCreated += r.value.created;
           totalFailed += r.value.failed;
           if (r.value.errors) {
+            const errorPurchaseIds = new Set(r.value.errors.map((e: { purchaseId?: string }) => e.purchaseId).filter(Boolean));
+            for (const id of errorPurchaseIds) failedPurchaseIds.add(id as string);
             for (const err of r.value.errors.slice(0, 3)) {
               toast.error(`Failed: ${err.error}`);
             }
           }
         } else {
           totalFailed += groupEntries[i][1].length;
+          for (const gi of groupEntries[i][1]) failedPurchaseIds.add(gi.purchaseId);
           toast.error(getErrorMessage(r.reason, 'Bulk sale failed'));
         }
       }
@@ -123,6 +133,9 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
         onSuccess?.();
         reset();
         onClose();
+      } else {
+        // Narrow to only failed rows so retry doesn't resubmit successes
+        setPendingItems(prev => prev.filter(i => failedPurchaseIds.has(i.purchase.id)));
       }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to record sales'));
@@ -141,7 +154,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
           className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-xl p-6 max-w-lg w-[calc(100%-2rem)] shadow-xl data-[state=open]:animate-[scaleIn_150ms_ease-out] max-h-[85vh] overflow-y-auto"
         >
           <Dialog.Title className="text-lg font-semibold text-[var(--text)] mb-4">
-            Record Sale ({items.length} cards)
+            Record Sale ({pendingItems.length} cards)
           </Dialog.Title>
           <Dialog.Description className="sr-only">
             Enter sale details for multiple cards
@@ -224,11 +237,11 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
               onClick={() => setReviewOpen(o => !o)}
               className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
             >
-              {reviewOpen ? '▴' : '▾'} Review prices ({items.length})
+              {reviewOpen ? '▴' : '▾'} Review prices ({pendingItems.length})
             </button>
             {reviewOpen && (
               <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                {items.map(item => (
+                {pendingItems.map(item => (
                   <div key={item.purchase.id} className="flex items-center gap-3 p-2 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-2)]/20">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-[var(--text)] truncate">{item.purchase.cardName}</div>
@@ -284,7 +297,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
               <Button variant="ghost" size="sm" disabled={submitting}>Cancel</Button>
             </Dialog.Close>
             <Button size="sm" onClick={handleSubmit} loading={submitting}>
-              {submitting ? 'Recording...' : `Record ${items.length} Sales`}
+              {submitting ? 'Recording...' : `Record ${pendingItems.length} Sales`}
             </Button>
           </div>
         </Dialog.Content>

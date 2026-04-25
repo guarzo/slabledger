@@ -67,7 +67,7 @@ export function usePricingActions({ toast, invalidateInventory, onReviewed }: Pr
     }
   }, [flagTarget, toast, onReviewed]);
 
-  function handleSetPrice(item: AgingItem) {
+  const handleSetPrice = useCallback((item: AgingItem) => {
     const currentPrice = bestPrice(item);
     setPriceTarget({
       purchaseId: item.purchase.id,
@@ -78,11 +78,11 @@ export function usePricingActions({ toast, invalidateInventory, onReviewed }: Pr
       currentOverrideSource: item.purchase.overrideSource,
       aiSuggestedCents: item.purchase.aiSuggestedPriceCents,
     });
-  }
+  }, []);
 
-  function handlePriceSaved() {
+  const handlePriceSaved = useCallback(() => {
     invalidateInventory({ sellSheet: true });
-  }
+  }, [invalidateInventory]);
 
   const handleInlinePriceSave = useCallback(async (purchaseId: string, priceCents: number) => {
     try {
@@ -95,17 +95,17 @@ export function usePricingActions({ toast, invalidateInventory, onReviewed }: Pr
     }
   }, [toast, invalidateInventory]);
 
-  function handleFixPricing(purchase: Purchase) {
+  const handleFixPricing = useCallback((purchase: Purchase) => {
     if (!purchase.setName || !purchase.cardNumber) {
       toast.error('Cannot create hint: set name and card number are required');
       return;
     }
     setHintTarget({ cardName: purchase.cardName, setName: purchase.setName, cardNumber: purchase.cardNumber });
-  }
+  }, [toast]);
 
-  function handleHintSaved() {
+  const handleHintSaved = useCallback(() => {
     invalidateInventory();
-  }
+  }, [invalidateInventory]);
 
   return {
     priceTarget, setPriceTarget,

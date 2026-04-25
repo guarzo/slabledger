@@ -49,6 +49,11 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
     setPrices({});
     setChannel(DEFAULT_SALE_CHANNEL);
     setSaleDate(localToday());
+    setOriginalListPrice('');
+    setPriceReductions('');
+    setDaysListed('');
+    setSoldAtAskingPrice(false);
+    setShowOutcomeFields(false);
     onClose();
   }
 

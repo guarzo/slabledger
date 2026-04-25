@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AgingItem, Purchase } from '../../../../types/campaigns';
 import { api, isAPIError } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
@@ -151,8 +151,11 @@ export function useDHActions({ toast, invalidateInventory, items, setSelected }:
     }
   }, [toast, invalidateInventory]);
 
+  const dhRetryInFlightRef = useRef(dhRetryInFlight);
+  dhRetryInFlightRef.current = dhRetryInFlight;
+
   const handleRetryDHMatch = useCallback(async (purchase: Purchase) => {
-    if (dhRetryInFlight.has(purchase.id)) return;
+    if (dhRetryInFlightRef.current.has(purchase.id)) return;
     setDHRetryInFlight(prev => new Set(prev).add(purchase.id));
     try {
       await api.retryDHMatch(purchase.id);
@@ -163,20 +166,20 @@ export function useDHActions({ toast, invalidateInventory, items, setSelected }:
     } finally {
       setDHRetryInFlight(prev => { const next = new Set(prev); next.delete(purchase.id); return next; });
     }
-  }, [toast, invalidateInventory, dhRetryInFlight]);
+  }, [toast, invalidateInventory]);
 
-  function handleFixDHMatch(purchase: Purchase) {
+  const handleFixDHMatch = useCallback((purchase: Purchase) => {
     setFixMatchTarget({
       purchaseId: purchase.id,
       cardName: purchase.cardName,
       certNumber: purchase.certNumber,
       currentDHCardId: purchase.dhCardId,
     });
-  }
+  }, []);
 
-  function handleFixDHMatchSaved() {
+  const handleFixDHMatchSaved = useCallback(() => {
     invalidateInventory();
-  }
+  }, [invalidateInventory]);
 
   return {
     dhListingInFlight,

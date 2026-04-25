@@ -30,18 +30,18 @@ export function useInventorySelection(): InventorySelection {
     setPinnedIds(new Set(purchaseIds));
   }, []);
 
-  function toggleSelect(purchaseId: string) {
+  const toggleSelect = useCallback((purchaseId: string) => {
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(purchaseId)) next.delete(purchaseId);
       else next.add(purchaseId);
       return next;
     });
-  }
+  }, []);
 
-  function toggleExpand(purchaseId: string) {
+  const toggleExpand = useCallback((purchaseId: string) => {
     setExpandedId(prev => prev === purchaseId ? null : purchaseId);
-  }
+  }, []);
 
   return {
     selected, setSelected,
