@@ -1,14 +1,34 @@
+import { useMemo } from 'react';
 import PokeballLoader from '../PokeballLoader';
-import { usePortfolioHealth, useWeeklyReview, useCapitalSummary } from '../queries/useCampaignQueries';
+import {
+  usePortfolioHealth,
+  useWeeklyReview,
+  useCapitalSummary,
+  useGlobalInventory,
+} from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
 import InvoiceReadinessPanel from '../components/portfolio/InvoiceReadinessPanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
+import TopPerformersSection from '../components/portfolio/TopPerformersSection';
+import { computeInventoryMeta } from './campaign-detail/inventory/inventoryCalcs';
 import { SectionErrorBoundary } from '../ui';
 
 export default function DashboardPage() {
   const { data: healthData, isLoading: healthLoading } = usePortfolioHealth();
   const { data: weeklyReview } = useWeeklyReview();
   const { data: capitalData } = useCapitalSummary();
+  const { data: inventoryItems } = useGlobalInventory();
+
+  const inventoryCounts = useMemo(() => {
+    if (!inventoryItems || inventoryItems.length === 0) {
+      return { needsAttention: 0, pendingListings: 0 };
+    }
+    const { tabCounts } = computeInventoryMeta(inventoryItems);
+    return {
+      needsAttention: tabCounts.needs_attention,
+      pendingListings: tabCounts.ready_to_list,
+    };
+  }, [inventoryItems]);
 
   if (healthLoading) {
     return (
@@ -26,7 +46,12 @@ export default function DashboardPage() {
       </div>
 
       {/* Tier 1: Hero Stats Bar */}
-      <HeroStatsBar health={healthData} capital={capitalData} />
+      <HeroStatsBar
+        health={healthData}
+        capital={capitalData}
+        needsAttentionCount={inventoryCounts.needsAttention}
+        pendingListingsCount={inventoryCounts.pendingListings}
+      />
 
       {/* Invoice Readiness */}
       {capitalData && (
@@ -46,7 +71,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-
-      </div>
-   );
+      {/* Top Performers — campaign-level */}
+      {healthData && healthData.campaigns.length > 0 && (
+        <div className="mb-6">
+          <SectionErrorBoundary sectionName="Top Performers">
+            <TopPerformersSection campaigns={healthData.campaigns} />
+          </SectionErrorBoundary>
+        </div>
+      )}
+    </div>
+  );
 }
