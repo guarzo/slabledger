@@ -43,6 +43,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleRetryDHMatch, dhRetryInFlight, handleSetPrice,
     handlePriceSaved, handleHintSaved, handleInlinePriceSave, handleDismiss, handleUndismiss, sellSheet, toast,
+    handleDeselectMissingCL, handleHighlightMissingCL,
   } = state;
 
   const rowVirtualizer = useVirtualizer({
@@ -112,6 +113,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         onBulkListOnDH={handleBulkListOnDH}
         onClearSelected={() => setSelected(new Set())}
         onPrint={handlePrint}
+        onDeselectMissingCL={handleDeselectMissingCL}
+        onHighlightMissingCL={handleHighlightMissingCL}
       />
 
       {isMobile && sellSheetActive ? (

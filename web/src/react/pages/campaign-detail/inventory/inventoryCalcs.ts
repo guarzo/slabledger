@@ -181,9 +181,44 @@ export function filterAndSortItems(
     sortKey: SortKey;
     sortDir: SortDir;
     evMap: Map<string, ExpectedValue>;
+    pinnedIds?: Set<string>;
   },
 ): AgingItem[] {
   const { debouncedSearch, showAll, filterTab, sellSheetHas, sortKey, sortDir, evMap } = opts;
+
+  if (opts.pinnedIds && opts.pinnedIds.size > 0) {
+    const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...subset].sort((a, b) => {
+      switch (sortKey) {
+        case 'name':
+          return dir * a.purchase.cardName.localeCompare(b.purchase.cardName);
+        case 'grade':
+          return dir * (a.purchase.gradeValue - b.purchase.gradeValue);
+        case 'cost':
+          return dir * (costBasis(a.purchase) - costBasis(b.purchase));
+        case 'market': {
+          const ma = bestPrice(a);
+          const mb = bestPrice(b);
+          return dir * (ma - mb);
+        }
+        case 'pl': {
+          const pa = unrealizedPL(costBasis(a.purchase), a) ?? -Infinity;
+          const pb = unrealizedPL(costBasis(b.purchase), b) ?? -Infinity;
+          return dir * (pa - pb);
+        }
+        case 'days':
+          return dir * (a.daysHeld - b.daysHeld);
+        case 'ev': {
+          const ea = evMap.get(a.purchase.certNumber)?.evCents ?? -Infinity;
+          const eb = evMap.get(b.purchase.certNumber)?.evCents ?? -Infinity;
+          return dir * (ea - eb);
+        }
+        default:
+          return 0;
+      }
+    });
+  }
   let result = items;
 
   if (debouncedSearch.trim()) {

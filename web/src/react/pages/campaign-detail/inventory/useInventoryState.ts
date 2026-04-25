@@ -27,6 +27,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const { has: sellSheetHas } = sellSheet;
   const { data: evPortfolio } = useExpectedValues(campaignId ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [saleModalItems, setSaleModalItems] = useState<AgingItem[]>([]);
@@ -59,6 +60,22 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleDeselectMissingCL = useCallback((purchaseIds: string[]) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      for (const id of purchaseIds) next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleHighlightMissingCL = useCallback((purchaseIds: string[]) => {
+    setPinnedIds(new Set(purchaseIds));
+  }, []);
+
+  const clearPinnedIds = useCallback(() => {
+    setPinnedIds(new Set());
+  }, []);
 
   const handlePrint = useCallback(() => {
     setIsPrinting(true);
@@ -111,6 +128,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   // Reset scroll + collapse expanded row on sort/filter change
   useEffect(() => {
     setExpandedId(null);
+    setPinnedIds(new Set());
     scrollContainerRef.current?.scrollTo({ top: 0 });
     mobileScrollRef.current?.scrollTo({ top: 0 });
   }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]);
@@ -301,8 +319,9 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       sortKey,
       sortDir,
       evMap,
+      pinnedIds,
     }),
-    [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheetHas],
+    [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheetHas, pinnedIds],
   );
 
   function toggleSelect(purchaseId: string) {
@@ -495,6 +514,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handlePriceSaved,
     handleInlinePriceSave,
     handleHintSaved,
+    // Pinned highlight for missing-CL banner
+    pinnedIds, clearPinnedIds, handleDeselectMissingCL, handleHighlightMissingCL,
     // Sell sheet
     sellSheet,
     // Toast (for inline JSX handlers)

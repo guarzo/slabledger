@@ -8,6 +8,7 @@ import ReviewSummaryBar from './ReviewSummaryBar';
 import type { StatClickTarget } from './ReviewSummaryBar';
 import CrackCandidatesBanner from './CrackCandidatesBanner';
 import { SellSheetActions } from '../SellSheetView';
+import BulkSelectionMissingCLWarning from './BulkSelectionMissingCLWarning';
 
 export interface InventoryHeaderProps {
   isMobile: boolean;
@@ -41,6 +42,8 @@ export interface InventoryHeaderProps {
   onBulkListOnDH: (ids: string[]) => void;
   onClearSelected: () => void;
   onPrint: () => void;
+  onDeselectMissingCL: (purchaseIds: string[]) => void;
+  onHighlightMissingCL: (purchaseIds: string[]) => void;
 }
 
 export default function InventoryHeader({
@@ -55,7 +58,13 @@ export default function InventoryHeader({
   campaignId, isPrinting,
   onStatClick, onAddToSellSheet, onRemoveFromSellSheet,
   onRecordSale, onBulkListOnDH, onClearSelected, onPrint,
+  onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
+  const missingCLIds = useMemo(
+    () => items.filter(i => selected.has(i.purchase.id) && !i.purchase.clValueCents).map(i => i.purchase.id),
+    [items, selected],
+  );
+
   const primary = useMemo(() => [
     { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
     { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
@@ -184,6 +193,15 @@ export default function InventoryHeader({
             </div>
           </div>
         </div>
+      )}
+
+      {selected.size > 0 && (
+        <BulkSelectionMissingCLWarning
+          missingCLIds={missingCLIds}
+          selectedCount={selected.size}
+          onDeselect={onDeselectMissingCL}
+          onHighlight={onHighlightMissingCL}
+        />
       )}
 
       {selected.size > 0 || (sellSheetActive && pageSellSheetCount > 0) ? (
