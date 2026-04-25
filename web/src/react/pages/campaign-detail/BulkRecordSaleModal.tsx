@@ -27,6 +27,8 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
   const [pricingMode, setPricingMode] = useState<PricingMode>('pctOfCL');
   const [fillValue, setFillValue] = useState<number>(0);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, number | undefined>>({});
 
   const computedPrices = useMemo(() => {
     const m: Record<string, number> = {};
@@ -36,11 +38,22 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
     return m;
   }, [items, pricingMode, fillValue]);
 
+  const effectivePrices = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const item of items) {
+      const ov = overrides[item.purchase.id];
+      m[item.purchase.id] = ov != null ? ov : (computedPrices[item.purchase.id] ?? 0);
+    }
+    return m;
+  }, [items, computedPrices, overrides]);
+
   function reset() {
     setChannel(DEFAULT_SALE_CHANNEL);
     setSaleDate(localToday());
     setPricingMode('pctOfCL');
     setFillValue(0);
+    setReviewOpen(false);
+    setOverrides({});
   }
 
   function handleClose() {
@@ -55,7 +68,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
       return;
     }
 
-    const invalid = items.filter(i => (computedPrices[i.purchase.id] || 0) <= 0);
+    const invalid = items.filter(i => (effectivePrices[i.purchase.id] || 0) <= 0);
     if (invalid.length > 0) {
       toast.error(`${invalid.length} card(s) have no sale price set`);
       return;
@@ -69,7 +82,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
         if (!groups.has(cid)) groups.set(cid, []);
         groups.get(cid)!.push({
           purchaseId: item.purchase.id,
-          salePriceCents: computedPrices[item.purchase.id] ?? 0,
+          salePriceCents: effectivePrices[item.purchase.id] ?? 0,
         });
       }
 
@@ -205,24 +218,77 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                 setFillValue(pricingMode === 'pctOfCL' ? n : Math.round(n * 100));
               }}
             />
+            <div className="mt-2 text-sm text-[var(--text-muted)]">
+              →{' '}
+              <span data-testid="bulk-sale-total" className="tabular-nums text-[var(--text)]">
+                {formatCents(
+                  Object.values(effectivePrices).reduce((sum, c) => sum + c, 0)
+                )}
+              </span>{' '}
+              total at this {pricingMode === 'pctOfCL' ? '%' : 'price'}
+            </div>
           </div>
 
-          <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
-            {items.map(item => (
-              <div key={item.purchase.id} className="flex items-center gap-3 p-2 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-2)]/20">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-[var(--text)] truncate">{item.purchase.cardName}</div>
-                  <div className="text-xs text-[var(--text-muted)]">
-                    {item.purchase.grader ?? 'PSA'} {item.purchase.gradeValue} | Cost: <span className="tabular-nums">{formatCents(costBasis(item.purchase))}</span>
-                    {item.purchase.clValueCents ? <> | CL: <span className="tabular-nums">{formatCents(item.purchase.clValueCents)}</span></> : ''}
-                    {item.campaignName ? ` | ${item.campaignName}` : ''}
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setReviewOpen(o => !o)}
+              className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            >
+              {reviewOpen ? '▴' : '▾'} Review prices ({items.length})
+            </button>
+            {reviewOpen && (
+              <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
+                {items.map(item => (
+                  <div key={item.purchase.id} className="flex items-center gap-3 p-2 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-2)]/20">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-[var(--text)] truncate">{item.purchase.cardName}</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {item.purchase.grader ?? 'PSA'} {item.purchase.gradeValue} | Cost: <span className="tabular-nums">{formatCents(costBasis(item.purchase))}</span>
+                        {item.purchase.clValueCents ? <> | CL: <span className="tabular-nums">{formatCents(item.purchase.clValueCents)}</span></> : ''}
+                        {item.campaignName ? ` | ${item.campaignName}` : ''}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 w-44 flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        aria-label={`override price for ${item.purchase.cardName}`}
+                        placeholder="$"
+                        value={
+                          overrides[item.purchase.id] != null
+                            ? (overrides[item.purchase.id] as number) / 100
+                            : (computedPrices[item.purchase.id] ?? 0) / 100
+                        }
+                        onChange={e => {
+                          const raw = e.target.value;
+                          setOverrides(prev => ({
+                            ...prev,
+                            [item.purchase.id]: raw === '' ? undefined : Math.round(parseFloat(raw) * 100),
+                          }));
+                        }}
+                        className="w-24 px-2 py-1 text-sm rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
+                      />
+                      {overrides[item.purchase.id] != null && (
+                        <button
+                          type="button"
+                          aria-label={`reset to computed price for ${item.purchase.cardName}`}
+                          onClick={() => setOverrides(prev => {
+                            const next = { ...prev };
+                            delete next[item.purchase.id];
+                            return next;
+                          })}
+                          className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] underline"
+                        >
+                          ↩ reset to computed
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex-shrink-0 w-28 text-right text-sm tabular-nums">
-                  {formatCents(computedPrices[item.purchase.id] ?? 0)}
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
 
           <div className="flex justify-end gap-3 mt-6">

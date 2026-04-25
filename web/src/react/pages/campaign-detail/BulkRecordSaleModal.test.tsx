@@ -111,4 +111,76 @@ describe('BulkRecordSaleModal', () => {
     });
     expect(vi.mocked(api.createBulkSales)).not.toHaveBeenCalled();
   });
+
+  it('shows a live gross total that updates as the fill-all input changes', () => {
+    const items = [makeItem('1', 'c1', 5000), makeItem('2', 'c1', 6000)];
+    renderModal(items);
+
+    expect(screen.getByTestId('bulk-sale-total').textContent).toMatch(/\$0\.00/);
+
+    const pctInput = screen.getByLabelText(/% of CL/i) as HTMLInputElement;
+    fireEvent.change(pctInput, { target: { value: '70' } });
+
+    expect(screen.getByTestId('bulk-sale-total').textContent).toMatch(/\$77\.00/);
+  });
+
+  it('hides the per-row review by default and reveals it on click', () => {
+    const items = [makeItem('1', 'c1', 5000), makeItem('2', 'c1', 6000)];
+    renderModal(items);
+
+    expect(screen.queryByText('Card 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card 2')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices \(2\)/i }));
+
+    expect(screen.getByText('Card 1')).toBeInTheDocument();
+    expect(screen.getByText('Card 2')).toBeInTheDocument();
+  });
+
+  it('persists per-row overrides when the fill-all percent changes', async () => {
+    vi.mocked(api.createBulkSales).mockResolvedValue({ created: 2, failed: 0 });
+    const items = [makeItem('1', 'c1', 5000), makeItem('2', 'c1', 6000)];
+    renderModal(items);
+
+    const pctInput = screen.getByLabelText(/% of CL/i) as HTMLInputElement;
+    fireEvent.change(pctInput, { target: { value: '70' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices/i }));
+
+    const row1Input = screen.getByLabelText(/override price for Card 1/i) as HTMLInputElement;
+    fireEvent.change(row1Input, { target: { value: '25' } });
+
+    fireEvent.change(pctInput, { target: { value: '80' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Record 2 Sales/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(api.createBulkSales)).toHaveBeenCalledWith(
+        'c1',
+        expect.any(String),
+        expect.any(String),
+        expect.arrayContaining([
+          { purchaseId: '1', salePriceCents: 2500 },
+          { purchaseId: '2', salePriceCents: 4800 },
+        ]),
+      );
+    });
+  });
+
+  it('reset link reverts a row override to the computed price', () => {
+    const items = [makeItem('1', 'c1', 5000)];
+    renderModal(items);
+
+    const pctInput = screen.getByLabelText(/% of CL/i) as HTMLInputElement;
+    fireEvent.change(pctInput, { target: { value: '70' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices/i }));
+
+    const row1Input = screen.getByLabelText(/override price for Card 1/i) as HTMLInputElement;
+    fireEvent.change(row1Input, { target: { value: '25' } });
+    expect(row1Input.value).toBe('25');
+
+    fireEvent.click(screen.getByRole('button', { name: /reset to computed/i }));
+    expect(row1Input.value).toBe('35');
+  });
 });
