@@ -2,7 +2,7 @@ import type { Sale } from '../../../types/campaigns';
 import { formatCents } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { saleChannelLabels } from '../../utils/campaignConstants';
-import { EmptyState } from '../../ui';
+import { EmptyState, CardShell } from '../../ui';
 
 interface SalesTabProps {
   sales: Sale[];
@@ -10,8 +10,7 @@ interface SalesTabProps {
 
 function SaleMobileCard({ sale }: { sale: Sale }) {
   return (
-    <div className="p-3 rounded-xl border border-[var(--surface-2)] transition-colors duration-150 hover:border-[var(--surface-3)]"
-      style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(8px)' }}>
+    <CardShell variant="glass" padding="sm">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-[var(--text)]">{saleChannelLabels[sale.saleChannel] || sale.saleChannel}</span>
         <span className={`text-sm font-semibold tabular-nums ${sale.netProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
@@ -22,7 +21,7 @@ function SaleMobileCard({ sale }: { sale: Sale }) {
         <div><span className="text-[var(--text-muted)]">Price:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(sale.salePriceCents)}</span></div>
         <div><span className="text-[var(--text-muted)]">Fees:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(sale.saleFeeCents)}</span></div>
         <div><span className="text-[var(--text-muted)]">Date:</span> <span className="text-[var(--text)]">{sale.saleDate}</span></div>
-        <div><span className="text-[var(--text-muted)]">Days:</span> <span className="text-[var(--text)]">{sale.daysToSell}</span></div>
+        <div><span className="text-[var(--text-muted)]">Days:</span> <span className="text-[var(--text)] tabular-nums">{sale.daysToSell}</span></div>
         {sale.medianCents != null && (
           <div><span className="text-[var(--text-muted)]">Median:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(sale.medianCents)}</span></div>
         )}
@@ -30,7 +29,7 @@ function SaleMobileCard({ sale }: { sale: Sale }) {
           <div><span className="text-[var(--text-muted)]">Last sold:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(sale.lastSoldCents)}</span></div>
         )}
       </div>
-    </div>
+    </CardShell>
   );
 }
 
@@ -52,7 +51,7 @@ function SaleDesktopRow({ sale }: { sale: Sale }) {
           <span className="text-xs text-[var(--text-muted)]">-</span>
         )}
       </td>
-      <td className="glass-table-td text-center text-[var(--text-muted)]">{sale.daysToSell}</td>
+      <td className="glass-table-td text-center text-[var(--text-muted)] tabular-nums">{sale.daysToSell}</td>
       <td className="glass-table-td text-[var(--text-muted)]">{sale.saleDate}</td>
     </tr>
   );

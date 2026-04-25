@@ -1,5 +1,6 @@
 import type { Signals } from '../../../types/insights';
 import { currency } from '../../utils/formatters';
+import CardShell from '../../ui/CardShell';
 
 type Tone = 'good' | 'warn' | 'bad' | 'muted';
 
@@ -52,11 +53,11 @@ export default function HealthSignalsTiles({ signals }: { signals: Signals }) {
 
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: Tone }) {
   return (
-    <div className="p-3 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)]">
+    <CardShell padding="sm">
       <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</div>
       <div className={`text-lg font-bold tabular-nums ${toneClass[tone]}`}>{value}</div>
       <div className="text-[11px] text-[var(--text-muted)]">{sub}</div>
-    </div>
+    </CardShell>
   );
 }
 

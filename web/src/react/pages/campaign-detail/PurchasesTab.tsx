@@ -4,7 +4,7 @@ import type { Purchase, Campaign } from '../../../types/campaigns';
 import { formatCents, getErrorMessage } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useToast } from '../../contexts/ToastContext';
-import { EmptyState, TrendArrow } from '../../ui';
+import { EmptyState, TrendArrow, CardShell } from '../../ui';
 import { queryKeys } from '../../queries/queryKeys';
 import { useDeletePurchase, useReassignPurchase, useCampaigns } from '../../queries/useCampaignQueries';
 import QuickAddSection from './QuickAddSection';
@@ -122,8 +122,7 @@ function PurchaseMobileCard({ purchase, soldPurchaseIds, otherCampaigns, reassig
   const isSold = soldPurchaseIds.has(purchase.id);
 
   return (
-    <div className="p-3 rounded-xl border border-[var(--surface-2)] transition-colors duration-150 hover:border-[var(--surface-3)]"
-      style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(8px)' }}>
+    <CardShell variant="glass" padding="sm">
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="text-sm font-medium text-[var(--text)]">{purchase.cardName}</div>
@@ -172,7 +171,7 @@ function PurchaseMobileCard({ purchase, soldPurchaseIds, otherCampaigns, reassig
           )}
         </div>
       </div>
-    </div>
+    </CardShell>
   );
 }
 

@@ -51,9 +51,9 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
   const d2d = daysUntil(inv.dueDate);
   const overdue = inv.status !== 'paid' && d2d < 0;
   return (
-    <tr className="border-b border-[var(--surface-2)] last:border-b-0 hover:bg-[var(--surface-2)]/30">
-      <td className="pl-4 py-2.5 pr-4 text-sm text-[var(--text)] tabular-nums">{formatDate(inv.invoiceDate)}</td>
-      <td className="py-2.5 pr-4 text-sm text-[var(--text)] tabular-nums">
+    <tr className="glass-table-row">
+      <td className="glass-table-td tabular-nums">{formatDate(inv.invoiceDate)}</td>
+      <td className="glass-table-td tabular-nums">
         {formatDate(inv.dueDate)}
         {inv.dueDate && inv.status !== 'paid' && (
           <span className={`ml-2 text-[11px] ${overdue ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}`}>
@@ -61,15 +61,15 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
           </span>
         )}
       </td>
-      <td className="py-2.5 pr-4 text-sm text-right text-[var(--text)] tabular-nums">{formatCents(inv.totalCents)}</td>
-      <td className="py-2.5 pr-4 text-sm text-right text-[var(--text-muted)] tabular-nums">{formatCents(inv.paidCents)}</td>
-      <td className="py-2.5 pr-4 text-sm text-right tabular-nums font-semibold text-[var(--text)]">
+      <td className="glass-table-td text-right tabular-nums">{formatCents(inv.totalCents)}</td>
+      <td className="glass-table-td text-right text-[var(--text-muted)] tabular-nums">{formatCents(inv.paidCents)}</td>
+      <td className="glass-table-td text-right tabular-nums font-semibold">
         {inv.status === 'paid' ? <span className="text-[var(--text-muted)]">—</span> : formatCents(outstanding)}
       </td>
-      <td className="py-2.5 pr-4 text-sm text-right text-[var(--text-muted)] tabular-nums">
+      <td className="glass-table-td text-right text-[var(--text-muted)] tabular-nums">
         {inv.pendingReceiptCents > 0 ? formatCents(inv.pendingReceiptCents) : '—'}
       </td>
-      <td className="py-2.5">{statusPill(inv.status, d2d)}</td>
+      <td className="glass-table-td">{statusPill(inv.status, d2d)}</td>
     </tr>
   );
 }
@@ -173,19 +173,19 @@ function InvoicesContent() {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+        <CardShell padding="md">
           <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Open invoices</div>
           <div className="text-2xl font-bold text-[var(--text)] tabular-nums">{openInvoices.length}</div>
-        </div>
-        <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+        </CardShell>
+        <CardShell padding="md">
           <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
           <div className="text-2xl font-bold text-[var(--warning)] tabular-nums">{formatCents(outstandingTotal)}</div>
-        </div>
-        <div className="rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-4">
+        </CardShell>
+        <CardShell padding="md">
           <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Pending receipt</div>
           <div className="text-2xl font-bold text-[var(--text)] tabular-nums">{formatCents(pendingReceiptTotal)}</div>
           <div className="text-[11px] text-[var(--text-muted)] mt-1">cards still at PSA</div>
-        </div>
+        </CardShell>
       </div>
 
       <CardShell padding="none">
@@ -195,22 +195,24 @@ function InvoicesContent() {
         </div>
         {/* Desktop: table */}
         <div className="hidden md:block overflow-x-auto">
+          <div className="glass-table">
           <table className="w-full text-left">
             <thead>
-              <tr className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--surface-2)]">
-                <th className="pl-4 py-2.5 pr-4">Invoice date</th>
-                <th className="py-2.5 pr-4">Due</th>
-                <th className="py-2.5 pr-4 text-right">Total</th>
-                <th className="py-2.5 pr-4 text-right">Paid</th>
-                <th className="py-2.5 pr-4 text-right">Outstanding</th>
-                <th className="py-2.5 pr-4 text-right">Pending receipt</th>
-                <th className="py-2.5 pr-4">Status</th>
+              <tr className="glass-table-header">
+                <th className="glass-table-th text-left">Invoice date</th>
+                <th className="glass-table-th text-left">Due</th>
+                <th className="glass-table-th text-right">Total</th>
+                <th className="glass-table-th text-right">Paid</th>
+                <th className="glass-table-th text-right">Outstanding</th>
+                <th className="glass-table-th text-right">Pending receipt</th>
+                <th className="glass-table-th text-left">Status</th>
               </tr>
             </thead>
             <tbody>
               {sorted.map((inv) => <InvoiceRow key={inv.id} inv={inv} />)}
             </tbody>
           </table>
+          </div>
         </div>
       </CardShell>
     </>

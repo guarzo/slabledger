@@ -57,12 +57,12 @@ function MetricTile({ title, current, previous, isCents, className, muted }: {
   muted?: boolean;
 }) {
   return (
-    <div className={`bg-[var(--surface-0)]/40 rounded-xl border border-[var(--surface-2)]/50 p-3 text-center ${className ?? ''}`}>
-      <div className="text-xs text-[var(--text-muted)] mb-1">{title}</div>
+    <CardShell variant="data" padding="sm" className={`text-center ${className ?? ''}`}>
+      <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">{title}</div>
       <div className="text-sm font-semibold">
         <DeltaIndicator current={current} previous={previous} isCents={isCents} muted={muted} />
       </div>
-    </div>
+    </CardShell>
   );
 }
 

@@ -4,14 +4,14 @@ import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import StatCard from '../../ui/StatCard';
 import { EmptyState } from '../../ui';
+import CardShell from '../../ui/CardShell';
 import { saleChannelLabels } from '../../utils/campaignConstants';
 import { useCampaignPNL, useChannelPNL, useFillRate, useDaysToSell } from '../../queries/useCampaignQueries';
 import type { ChannelPNL } from '../../../types/campaigns';
 
 function ChannelMobileCard({ ch }: { ch: ChannelPNL }) {
   return (
-    <div className="p-3 rounded-xl border border-[var(--surface-2)] transition-colors duration-150 hover:border-[var(--surface-3)]"
-      style={{ background: 'var(--glass-bg)', backdropFilter: 'blur(8px)' }}>
+    <CardShell variant="glass" padding="sm">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-[var(--text)]">{saleChannelLabels[ch.channel] || ch.channel}</span>
         <span className={`text-sm font-semibold tabular-nums ${ch.netProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
@@ -19,12 +19,12 @@ function ChannelMobileCard({ ch }: { ch: ChannelPNL }) {
         </span>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        <div><span className="text-[var(--text-muted)]">Sales:</span> <span className="text-[var(--text)]">{ch.saleCount}</span></div>
+        <div><span className="text-[var(--text-muted)]">Sales:</span> <span className="text-[var(--text)] tabular-nums">{ch.saleCount}</span></div>
         <div><span className="text-[var(--text-muted)]">Revenue:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(ch.revenueCents)}</span></div>
         <div><span className="text-[var(--text-muted)]">Fees:</span> <span className="text-[var(--text)] tabular-nums">{formatCents(ch.feesCents)}</span></div>
-        <div><span className="text-[var(--text-muted)]">Avg Days:</span> <span className="text-[var(--text)]">{ch.avgDaysToSell.toFixed(1)}</span></div>
+        <div><span className="text-[var(--text-muted)]">Avg Days:</span> <span className="text-[var(--text)] tabular-nums">{ch.avgDaysToSell.toFixed(1)}</span></div>
       </div>
-    </div>
+    </CardShell>
   );
 }
 
@@ -32,13 +32,13 @@ function ChannelDesktopRow({ ch }: { ch: ChannelPNL }) {
   return (
     <tr className="glass-table-row">
       <td className="glass-table-td text-[var(--text)] font-medium">{saleChannelLabels[ch.channel] || ch.channel}</td>
-      <td className="glass-table-td text-center text-[var(--text)]">{ch.saleCount}</td>
+      <td className="glass-table-td text-center text-[var(--text)] tabular-nums">{ch.saleCount}</td>
       <td className="glass-table-td text-right text-[var(--text)] tabular-nums">{formatCents(ch.revenueCents)}</td>
       <td className="glass-table-td text-right text-[var(--text-muted)] tabular-nums">{formatCents(ch.feesCents)}</td>
       <td className={`glass-table-td text-right font-semibold tabular-nums ${ch.netProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
         {formatCents(ch.netProfitCents)}
       </td>
-      <td className="glass-table-td text-center text-[var(--text-muted)]">{ch.avgDaysToSell.toFixed(1)}</td>
+      <td className="glass-table-td text-center text-[var(--text-muted)] tabular-nums">{ch.avgDaysToSell.toFixed(1)}</td>
     </tr>
   );
 }

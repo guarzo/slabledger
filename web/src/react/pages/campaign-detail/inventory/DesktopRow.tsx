@@ -99,7 +99,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
 
   return (
     <div
-      className="flex items-center cursor-pointer"
+      className="flex items-center cursor-pointer focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-[-2px]"
       role="row"
       tabIndex={0}
       onClick={onExpand}
@@ -172,7 +172,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
           {item.purchase.certNumber && <> &middot; {item.purchase.certNumber}</>}
         </div>
       </div>
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '72px' }}>
         <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
       </div>
       <div className="glass-table-td flex-shrink-0 text-right text-[var(--text)] tabular-nums" style={{ width: '72px' }}>{formatCents(cb)}</div>
@@ -223,7 +223,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
         )}
       </div>
       {/* Days held */}
-      <div className={`glass-table-td flex-shrink-0 text-center print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
+      <div className={`glass-table-td flex-shrink-0 text-center tabular-nums print-hide-col ${daysColor}`} style={{ width: '40px' }}>{item.daysHeld}</div>
       {/* Sync freshness dot */}
       <div className="glass-table-td flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}>
         <span
