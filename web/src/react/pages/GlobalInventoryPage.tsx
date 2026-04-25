@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useSellSheet } from '../hooks/useSellSheet';
 import { useGlobalInventory } from '../queries/useCampaignQueries';
-import { SectionErrorBoundary } from '../ui';
+import { Breadcrumb, SectionErrorBoundary } from '../ui';
 import InventoryTab from './campaign-detail/InventoryTab';
 
 export default function GlobalInventoryPage() {
@@ -35,6 +35,7 @@ export default function GlobalInventoryPage() {
       </div>
 
       <div className="print:hidden">
+        <Breadcrumb items={[{ label: 'Inventory' }]} />
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Inventory</h1>
         </div>
