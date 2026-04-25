@@ -263,10 +263,10 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                         }
                         onChange={e => {
                           const raw = e.target.value;
-                          setOverrides(prev => ({
-                            ...prev,
-                            [item.purchase.id]: raw === '' ? undefined : Math.round(parseFloat(raw) * 100),
-                          }));
+                          if (raw === '') { setOverrides(prev => ({ ...prev, [item.purchase.id]: undefined })); return; }
+                          const n = parseFloat(raw);
+                          if (Number.isNaN(n)) return;
+                          setOverrides(prev => ({ ...prev, [item.purchase.id]: Math.round(n * 100) }));
                         }}
                         className="w-24 px-2 py-1 text-sm rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
                       />

@@ -172,7 +172,7 @@ export function SellSheetModals({
 }: SellSheetModalsProps) {
   return (
     <>
-      {saleModalItems.length <= 1 ? (
+      {saleModalItems.length === 1 ? (
         <RecordSaleModal
           open={saleModalOpen}
           onClose={onSaleClose}

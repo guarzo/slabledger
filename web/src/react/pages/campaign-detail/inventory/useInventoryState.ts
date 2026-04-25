@@ -73,10 +73,6 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     setPinnedIds(new Set(purchaseIds));
   }, []);
 
-  const clearPinnedIds = useCallback(() => {
-    setPinnedIds(new Set());
-  }, []);
-
   const handlePrint = useCallback(() => {
     setIsPrinting(true);
     requestAnimationFrame(() => {
@@ -515,7 +511,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleInlinePriceSave,
     handleHintSaved,
     // Pinned highlight for missing-CL banner
-    pinnedIds, clearPinnedIds, handleDeselectMissingCL, handleHighlightMissingCL,
+    pinnedIds, handleDeselectMissingCL, handleHighlightMissingCL,
     // Sell sheet
     sellSheet,
     // Toast (for inline JSX handlers)
