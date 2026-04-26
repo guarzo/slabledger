@@ -10,6 +10,7 @@ import CardShell from '../ui/CardShell';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import StickyActionBar from '../ui/StickyActionBar';
 import Button from '../ui/Button';
+import TabularPriceTriplet from '../ui/TabularPriceTriplet';
 import sliderStyles from './DiscountSlider.module.css';
 
 function confidenceColor(level: ConfidenceLevel): string {
@@ -147,11 +148,22 @@ export default function LiquidationPage() {
       <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Reprice</h1>
 
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total Cards" value={String(summary.totalCards)} />
-          <StatCard label="With Comps" value={String(summary.withComps)} color="green" />
-          <StatCard label="Without Comps" value={String(summary.withoutComps)} />
-          <StatCard label="No Data" value={String(summary.noData)} color={summary.noData > 0 ? 'red' : undefined} />
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-3 mb-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">Below Cost</div>
+            <div className={`text-3xl font-extrabold tabular-nums ${summary.belowCostCount > 0 ? 'text-[var(--state-problem)]' : 'text-[var(--text-muted)]'}`}>
+              {summary.belowCostCount}
+            </div>
+            <div className="text-xs text-[var(--text-muted)] mt-1">
+              {summary.belowCostCount === 0 ? 'all cards above their cost basis' : 'cards underwater after suggested price'}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums text-[var(--text-muted)]">
+            <span>Total <span className="text-[var(--text)] font-medium">{summary.totalCards}</span></span>
+            <span>With comps <span className="text-[var(--text)] font-medium">{summary.withComps}</span></span>
+            <span>Without comps <span className="text-[var(--text)] font-medium">{summary.withoutComps}</span></span>
+            <span>No data <span className={`font-medium ${summary.noData > 0 ? 'text-[var(--state-problem)]' : 'text-[var(--text)]'}`}>{summary.noData}</span></span>
+          </div>
         </div>
       )}
 
@@ -165,15 +177,9 @@ export default function LiquidationPage() {
             <DiscountSlider label="Without comps" value={discountNoComps} onChange={setDiscountNoComps} />
           </div>
           {summary && (
-            <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
               <StatCard size="sm" label="Current Value" value={formatCents(summary.totalCurrentValueCents)} />
               <StatCard size="sm" label="Suggested Value" value={formatCents(summary.totalSuggestedValueCents)} />
-              <StatCard
-                size="sm"
-                label="Below Cost"
-                value={String(summary.belowCostCount)}
-                color={summary.belowCostCount > 0 ? 'red' : undefined}
-              />
             </div>
           )}
         </div>
@@ -205,7 +211,7 @@ export default function LiquidationPage() {
               <div className="glass-table-th flex-1 min-w-0 text-left">Card</div>
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '48px' }}>Gr</div>
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}>Conf</div>
-              <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '250px' }}>Price Options</div>
+              <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '320px' }}>Price Options</div>
               <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '56px' }}>Current</div>
               <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '100px' }}>Final Price</div>
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}></div>
@@ -258,12 +264,22 @@ export default function LiquidationPage() {
                       {item.confidenceLevel}
                       {item.compCount > 0 && <div className="text-[var(--text-muted)]">{item.compCount}c</div>}
                     </div>
-                    <div className="glass-table-td flex-shrink-0" style={{ width: '250px' }}>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <PricePill label="Cost" cents={item.buyCostCents} active={currentFinal === item.buyCostCents} onClick={() => setPillPrice(item.purchaseId, item.buyCostCents)} />
-                        <PricePill label="CL" cents={item.clValueCents} active={currentFinal === item.clValueCents} onClick={() => setPillPrice(item.purchaseId, item.clValueCents)} />
-                        <PricePill label="Comp" cents={item.compPriceCents} active={currentFinal === item.compPriceCents} onClick={() => setPillPrice(item.purchaseId, item.compPriceCents)} />
-                        <PricePill label="Sug" cents={item.suggestedPriceCents} active={currentFinal === item.suggestedPriceCents} onClick={() => setPillPrice(item.purchaseId, item.suggestedPriceCents)} />
+                    <div className="glass-table-td flex-shrink-0" style={{ width: '320px' }}>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <TabularPriceTriplet
+                          rows={[
+                            { label: 'Cost', value: item.buyCostCents > 0 ? formatCents(item.buyCostCents) : '—' },
+                            { label: 'CL', value: item.clValueCents > 0 ? formatCents(item.clValueCents) : '—' },
+                            { label: 'Sug', value: item.suggestedPriceCents > 0 ? formatCents(item.suggestedPriceCents) : '—', highlighted: true },
+                          ]}
+                          className="min-w-[120px]"
+                        />
+                        <div className="flex flex-wrap items-center gap-1">
+                          <PricePill label="Cost" cents={item.buyCostCents} active={currentFinal === item.buyCostCents} onClick={() => setPillPrice(item.purchaseId, item.buyCostCents)} />
+                          <PricePill label="CL" cents={item.clValueCents} active={currentFinal === item.clValueCents} onClick={() => setPillPrice(item.purchaseId, item.clValueCents)} />
+                          <PricePill label="Comp" cents={item.compPriceCents} active={currentFinal === item.compPriceCents} onClick={() => setPillPrice(item.purchaseId, item.compPriceCents)} />
+                          <PricePill label="Sug" cents={item.suggestedPriceCents} active={currentFinal === item.suggestedPriceCents} onClick={() => setPillPrice(item.purchaseId, item.suggestedPriceCents)} />
+                        </div>
                       </div>
                     </div>
                     <div className="glass-table-td flex-shrink-0 text-right text-[var(--text-muted)] tabular-nums text-xs" style={{ width: '56px' }}>
@@ -347,10 +363,10 @@ export default function LiquidationPage() {
 function DiscountSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const id = `discount-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label htmlFor={id} className="text-xs font-medium text-[var(--text-muted)]">{label}</label>
-        <span className="text-sm font-semibold text-[var(--text)] tabular-nums">{value.toFixed(1)}% below CL</span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-xs">
+        <label htmlFor={id} className="font-medium text-[var(--text-muted)]">{label}</label>
+        <span className="tabular-nums font-semibold text-[var(--text)]">{value.toFixed(1)}% below CL</span>
       </div>
       <input
         id={id}
@@ -361,8 +377,9 @@ function DiscountSlider({ label, value, onChange }: { label: string; value: numb
         value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
         className={sliderStyles.slider}
+        aria-label={`${label} below CL: ${value.toFixed(1)}%`}
       />
-      <div className="flex justify-between text-[10px] text-[var(--text-muted)] mt-1">
+      <div className="flex justify-between text-[10px] text-[var(--text-muted)] tabular-nums">
         <span>0%</span>
         <span>25%</span>
       </div>

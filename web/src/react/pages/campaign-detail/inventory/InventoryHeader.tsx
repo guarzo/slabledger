@@ -17,8 +17,6 @@ export interface InventoryHeaderProps {
   totalCost: number;
   totalMarket: number;
   totalPL: number;
-  statsExpanded: boolean;
-  setStatsExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   showEV: boolean;
   evPortfolio: EVPortfolio | null | undefined;
   reviewStats: ReviewStats;
@@ -49,7 +47,6 @@ export interface InventoryHeaderProps {
 export default function InventoryHeader({
   isMobile, items, filteredCount,
   totalCost, totalMarket, totalPL,
-  statsExpanded, setStatsExpanded,
   showEV, evPortfolio,
   reviewStats, searchQuery, setSearchQuery,
   showAll, setShowAll, filterTab, setFilterTab,
@@ -100,100 +97,44 @@ export default function InventoryHeader({
 
   return (
     <>
-      {/* Summary stat cards — collapsible on mobile */}
-      {isMobile ? (
-        <div className="mb-4 sell-sheet-no-print">
-          <button
-            type="button"
-            onClick={() => setStatsExpanded(prev => !prev)}
-            aria-expanded={statsExpanded}
-            aria-controls="inventory-stats-panel"
-            className="flex items-center justify-between w-full bg-[var(--surface-1)] rounded-xl border border-[var(--surface-2)] px-3 py-2.5 text-left"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-xs text-[var(--text-muted)]">{items.length} cards</span>
-              <span className="text-xs font-semibold text-[var(--text)]">{formatCents(totalCost)}</span>
-              {totalMarket > 0 && (
-                <span className={`text-xs font-semibold ${totalPL > 0 ? 'text-[var(--success)]' : totalPL < 0 ? 'text-[var(--danger)]' : 'text-[var(--text)]'}`}>
-                  {formatPL(totalPL)}
+      {/* Compact one-line breadcrumb of inventory totals */}
+      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm sell-sheet-no-print">
+        <span className="text-[var(--text)] font-semibold tabular-nums">
+          {filteredCount} cards
+        </span>
+        <span className="text-[var(--text-muted)]">·</span>
+        <span className="text-[var(--text-muted)] tabular-nums">
+          Cost <span className="text-[var(--text)] font-medium">{formatCents(totalCost)}</span>
+        </span>
+        {totalMarket > 0 && (
+          <>
+            <span className="text-[var(--text-muted)]">·</span>
+            <span className="text-[var(--text-muted)] tabular-nums">
+              Market <span className="text-[var(--text)] font-medium">{formatCents(totalMarket)}</span>
+            </span>
+            <span className="text-[var(--text-muted)]">·</span>
+            <span
+              className={`tabular-nums font-semibold ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
+              aria-label={`Unrealized ${totalPL >= 0 ? 'gain' : 'loss'} ${formatPL(totalPL)}`}
+            >
+              {totalPL >= 0 ? '+' : ''}{formatPL(totalPL)} unrealized
+              {totalCost > 0 && (
+                <span className="ml-1 opacity-80">
+                  ({totalPL >= 0 ? '+' : ''}{formatPct(totalPL / totalCost)})
                 </span>
               )}
-            </div>
-            <svg className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${statsExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {statsExpanded && (
-            <div id="inventory-stats-panel" className="mt-3 pb-4 border-b border-[rgba(255,255,255,0.05)]">
-              <div className="mb-2">
-                <div className="text-[11px] font-semibold text-[var(--brand-400)] uppercase tracking-wider mb-0.5">Unrealized P/L</div>
-                <div className={`text-2xl font-extrabold tracking-tight ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                  {totalMarket > 0 ? formatPL(totalPL) : '-'}
-                </div>
-                {totalMarket > 0 && totalCost > 0 && (
-                  <div className={`text-xs mt-0.5 ${totalPL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {totalPL > 0 ? '+' : ''}{formatPct(totalPL / totalCost)} return
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cards</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary)]">{items.length}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cost Basis</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary)]">{formatCents(totalCost)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Market</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="mb-7 pb-6 border-b border-[rgba(255,255,255,0.05)] sell-sheet-no-print">
-          <div className="flex items-end gap-7">
-            <div>
-              <div className="text-[11px] font-semibold text-[var(--brand-400)] uppercase tracking-wider mb-0.5">
-                Unrealized P/L
-              </div>
-              <div className={`text-[32px] font-extrabold tracking-tight leading-none ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                {totalMarket > 0 ? formatPL(totalPL) : '-'}
-              </div>
-              {totalMarket > 0 && totalCost > 0 && (
-                <div className={`text-xs mt-1 ${totalPL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {totalPL > 0 ? '+' : ''}{formatPct(totalPL / totalCost)} return
-                </div>
-              )}
-            </div>
-            <div className="flex gap-6 pb-1">
-              <div>
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cards</div>
-                <div className="text-base font-semibold text-[var(--text-secondary)]">{items.length}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cost Basis</div>
-                <div className="text-base font-semibold text-[var(--text-secondary)]">{formatCents(totalCost)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Market Value</div>
-                <div className="text-base font-semibold text-[var(--text-secondary)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
-              </div>
-              {showEV && evPortfolio && (
-                <div>
-                  <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Portfolio EV</div>
-                  <div className={`text-base font-semibold ${evPortfolio.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                    {formatPL(evPortfolio.totalEvCents)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+            </span>
+          </>
+        )}
+        {showEV && evPortfolio && (
+          <>
+            <span className="text-[var(--text-muted)]">·</span>
+            <span className="text-[var(--text-muted)] tabular-nums">
+              EV <span className={`font-medium ${evPortfolio.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}>{formatPL(evPortfolio.totalEvCents)}</span>
+            </span>
+          </>
+        )}
+      </div>
 
       <BulkSelectionMissingCLWarning
         missingCLIds={missingCLIds}

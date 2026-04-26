@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
@@ -37,9 +37,48 @@ vi.mock('../../../queries/queryKeys', () => ({
   },
 }));
 
+// Mock inventoryCalcs so we can drive tabCounts without building real AgingItems
+const mockMeta = vi.hoisted(() => ({
+  current: {
+    reviewStats: { total: 0, reviewed: 0, flagged: 0, aging60d: 0 },
+    tabCounts: {
+      needs_attention: 0,
+      awaiting_intake: 0,
+      pending_dh_match: 0,
+      pending_price: 0,
+      ready_to_list: 0,
+      dh_listed: 0,
+      skipped: 0,
+      in_hand: 0,
+      all: 0,
+    },
+    summary: { totalCost: 0, totalMarket: 0, totalPL: 0 },
+  },
+}));
+
+vi.mock('./inventoryCalcs', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./inventoryCalcs')>();
+  return {
+    ...original,
+    computeInventoryMeta: () => mockMeta.current,
+    filterAndSortItems: () => [],
+  };
+});
+
 // Imports after vi.mock declarations receive the mocked modules.
 import { useInventoryState } from './useInventoryState';
 import { api, APIError } from '../../../../js/api';
+import type { AgingItem } from '../../../../types/campaigns';
+
+// Minimal typed factory for AgingItem — keeps tests away from `as never`
+// while still allowing per-test overrides for any required field.
+function mockItem(overrides: { id: string } & Partial<AgingItem['purchase']>): AgingItem {
+  const { id, ...rest } = overrides;
+  return {
+    purchase: { id, ...rest } as AgingItem['purchase'],
+    daysHeld: 0,
+  } as AgingItem;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -127,5 +166,54 @@ describe('useInventoryState — handleBulkListOnDH', () => {
     expect(result.current.dhListedOptimistic.has('p-b')).toBe(true);
     expect(result.current.dhListingInFlight.size).toBe(0);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['campaigns', 'camp-1', 'inventory'] });
+  });
+});
+
+describe('useInventoryState — default filter tab', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMeta.current = {
+      reviewStats: { total: 0, reviewed: 0, flagged: 0, aging60d: 0 },
+      tabCounts: {
+        needs_attention: 0,
+        awaiting_intake: 0,
+        pending_dh_match: 0,
+        pending_price: 0,
+        ready_to_list: 0,
+        dh_listed: 0,
+        skipped: 0,
+        in_hand: 0,
+        all: 0,
+      },
+      summary: { totalCost: 0, totalMarket: 0, totalPL: 0 },
+    };
+  });
+
+  it('defaults to "all" when needs_attention count is 0', async () => {
+    mockMeta.current = {
+      ...mockMeta.current,
+      tabCounts: { ...mockMeta.current.tabCounts, needs_attention: 0, all: 5 },
+    };
+    const items = [mockItem({ id: 'p1' })];
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(items, 'camp-1'), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.filterTab).toBe('all');
+    });
+  });
+
+  it('defaults to "needs_attention" when count > 0', async () => {
+    mockMeta.current = {
+      ...mockMeta.current,
+      tabCounts: { ...mockMeta.current.tabCounts, needs_attention: 3, all: 5 },
+    };
+    const items = [mockItem({ id: 'p1' })];
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(items, 'camp-1'), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.filterTab).toBe('needs_attention');
+    });
   });
 });
