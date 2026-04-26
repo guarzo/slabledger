@@ -114,12 +114,11 @@ export default function CampaignsTab({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-[var(--text)] truncate">{c.name}</span>
                     <PhaseBadge phase={c.phase} />
-                    {healthMap[c.id] && (
+                    {healthMap[c.id] && healthMap[c.id] !== 'healthy' && (
                       <>
                         <span
                           className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                            healthMap[c.id] === 'critical' ? 'bg-[var(--danger)]' :
-                            healthMap[c.id] === 'warning' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'
+                            healthMap[c.id] === 'critical' ? 'bg-[var(--danger)]' : 'bg-[var(--warning)]'
                           }`}
                           aria-hidden="true"
                         />
@@ -144,13 +143,26 @@ export default function CampaignsTab({
                     </div>
                   )}
 
-                  {/* Sell-through with mini bar */}
+                  {/* Sell-through with mini bar (sell-through % + visible color bar) */}
                   {pnl && (() => {
                     const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
+                    const pctText = formatPct(pnl.sellThroughPct);
                     return (
-                      <div className="hidden md:flex items-center gap-2">
-                        <span className="tabular-nums">{formatPct(pnl.sellThroughPct)}</span>
-                        <div className="w-12 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden" title={`${pnl.totalSold}/${pnl.totalPurchases} sold`}>
+                      <div
+                        className="hidden md:flex items-center gap-2"
+                        role="group"
+                        aria-label={`Sell-through ${pctText}, ${pnl.totalSold} of ${pnl.totalPurchases} sold`}
+                      >
+                        <span className="tabular-nums">{pctText}</span>
+                        <div
+                          className="w-14 h-2.5 rounded-full bg-[var(--surface-3)] overflow-hidden"
+                          role="progressbar"
+                          aria-valuenow={Math.round(st * 100)}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuetext={`${pctText} sold`}
+                          title={`${pnl.totalSold}/${pnl.totalPurchases} sold`}
+                        >
                           <div
                             className="h-full rounded-full transition-all duration-300"
                             style={{
