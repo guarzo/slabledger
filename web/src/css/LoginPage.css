@@ -264,6 +264,10 @@
   }
 
   .login-header h1 {
-    font-size: var(--font-size-xl);
+    font-size: var(--font-size-3xl);  /* 30px — was xl (20px), too small on phones */
+  }
+
+  .login-header {
+    margin-bottom: var(--space-4);    /* tighten gap above the glass card */
   }
 }
