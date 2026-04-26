@@ -15,7 +15,7 @@ const STATUS_LABEL: Record<TileStatus, string> = {
   warning: 'Degraded',
   down: 'Down',
   unconfigured: 'Not configured (optional)',
-  unknown: 'Status loading…',
+  unknown: 'Status unavailable',
 };
 
 function StatusDot({ status, label }: { status: TileStatus; label: string }) {
@@ -26,6 +26,7 @@ function StatusDot({ status, label }: { status: TileStatus; label: string }) {
     /* unconfigured + unknown */ 'var(--text-muted)';
   return (
     <span
+      role="img"
       aria-label={`${label}: ${STATUS_LABEL[status]}`}
       title={`${label}: ${STATUS_LABEL[status]}`}
       className="inline-block rounded-full"
