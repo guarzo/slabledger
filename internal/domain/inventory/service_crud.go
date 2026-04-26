@@ -172,8 +172,8 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 
 		// Inline sale creation without captureMarketSnapshot to avoid hitting
 		// external pricing APIs for every card (which causes timeouts on bulk sales).
-		// The purchase already has a market snapshot from when it was created;
-		// the scheduler will refresh it if needed.
+		// Bulk-created sales will not have MarketSnapshotData unless SaleRepository
+		// gains an update/backfill path.
 		if err := ValidateSale(sa); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
@@ -208,9 +208,13 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			continue
 		}
 
-		// Best-effort: clear eBay export flag
-		if s.purchases != nil {
-			_ = s.purchases.ClearEbayExportFlags(ctx, []string{sa.PurchaseID})
+		// Best-effort: clear eBay export flag since the card is now sold
+		if clearErr := s.purchases.ClearEbayExportFlags(ctx, []string{sa.PurchaseID}); clearErr != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "bulk sale: failed to clear ebay export flag",
+					observability.String("purchaseID", sa.PurchaseID),
+					observability.Err(clearErr))
+			}
 		}
 
 		result.Created++
