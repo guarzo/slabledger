@@ -79,13 +79,15 @@ export default function TransactionsTab({ campaignId, purchases, sales, soldPurc
           soldPurchaseIds={soldPurchaseIds}
         />
       ) : showNoSalesEmpty ? (
-        <EmptyState
-          icon="🛒"
-          title="No sales yet"
-          description="Record your first sale to see P&L for this campaign."
-          lastAction={lastActionText}
-          compact
-        />
+        <div id="tabpanel-sales" role="tabpanel" aria-labelledby="sales-tab">
+          <EmptyState
+            icon="🛒"
+            title="No sales yet"
+            description="Record your first sale to see P&L for this campaign."
+            lastAction={lastActionText}
+            compact
+          />
+        </div>
       ) : (
         <SalesTab
           sales={sales}

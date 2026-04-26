@@ -34,7 +34,7 @@ export default function CampaignHeroStats({
   const hasPurchases = purchaseCount > 0;
   const hasSales = saleCount > 0;
   const profitTone = hasSales ? (totalProfitCents >= 0 ? 'success' : 'problem') : undefined;
-  const roiTone = hasSales ? (roi !== null && roi >= 0 ? 'success' : 'problem') : undefined;
+  const roiTone = hasSales && roi !== null ? (roi >= 0 ? 'success' : 'problem') : undefined;
 
   return (
     <section className={styles.hero} aria-label="Campaign summary">

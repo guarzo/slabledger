@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import CampaignHeroStats from './CampaignHeroStats';
+import heroStyles from '../../components/portfolio/HeroStatsBar.module.css';
 
 describe('CampaignHeroStats', () => {
   it('renders all stats with values', () => {
@@ -54,6 +55,6 @@ describe('CampaignHeroStats', () => {
       />,
     );
     const profit = screen.getByTestId('stat-value-net-profit');
-    expect(profit.className).toMatch(/success|tone-pos/i);
+    expect(profit).toHaveClass(heroStyles.tSuccess);
   });
 });
