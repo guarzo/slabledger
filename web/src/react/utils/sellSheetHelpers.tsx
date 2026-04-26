@@ -24,13 +24,13 @@ export function formatCardName(name: string): string {
 }
 
 /** Format grader prefix and grade for display. */
-export function gradeDisplay(item: SellSheetItem): string {
+export function gradeDisplay(item: { grader?: string; grade: number }): string {
   const prefix = item.grader && item.grader !== 'PSA' ? item.grader : 'PSA';
   return `${prefix} ${item.grade}`;
 }
 
 /** Build a subtitle from set name and card number. */
-export function cardSubtitle(item: SellSheetItem): string | null {
+export function cardSubtitle(item: { setName?: string; cardNumber?: string }): string | null {
   const parts: string[] = [];
   if (item.setName) parts.push(item.setName);
   if (item.cardNumber) parts.push(`#${item.cardNumber}`);
@@ -58,4 +58,41 @@ export function checkHotSeller(snap: MarketSnapshot | undefined, targetPriceCent
 /** Check if a SellSheetItem is a "hot seller" based on market data. */
 export function isHotSellerFromSellSheet(item: SellSheetItem): boolean {
   return checkHotSeller(item.currentMarket, item.targetSellPrice ?? 0);
+}
+
+/**
+ * Resolve the CL price to display on the printed sell sheet.
+ * Returns null when neither CL nor recommended price is available.
+ * `estimated: true` means the value came from the recommended price fallback
+ * and should be rendered with a `~` prefix.
+ */
+export function clPriceDisplayCents(
+  src: { clValueCents?: number; recommendedPriceCents?: number },
+): { cents: number; estimated: boolean } | null {
+  if (src.clValueCents && src.clValueCents > 0) {
+    return { cents: src.clValueCents, estimated: false };
+  }
+  if (src.recommendedPriceCents && src.recommendedPriceCents > 0) {
+    return { cents: src.recommendedPriceCents, estimated: true };
+  }
+  return null;
+}
+
+/**
+ * Format an ISO date as MM/DD/YY for the printed last-sale column.
+ * Returns '' for missing/unparseable input.
+ */
+export function formatLastSaleDate(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const yy = String(d.getUTCFullYear()).slice(-2);
+  return `${mm}/${dd}/${yy}`;
+}
+
+/** Format cents as a whole-dollar string with thousands separator (e.g. 27900 → "$279"). */
+export function dollars(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
 }

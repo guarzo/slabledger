@@ -1,18 +1,21 @@
+/* Print-only sell-sheet styles. No effect on screen view. */
+
 @media print {
-  /* Hide all chrome: nav, header, sidebar, controls */
+  /* Hide all chrome */
   header,
   nav,
   .print\:hidden,
-  [class*="print:hidden"] {
-    display: none !important;
-  }
-
-  /* Hide inventory controls that shouldn't print */
+  [class*="print:hidden"],
   .sell-sheet-no-print {
     display: none !important;
   }
 
-  /* Reset page background */
+  /* Hide the on-screen inventory table entirely while printing */
+  .glass-table {
+    display: none !important;
+  }
+
+  /* Reset page chrome */
   body,
   main,
   #main-content {
@@ -22,93 +25,132 @@
     margin: 0 !important;
   }
 
-  /* Print header — injected above inventory table when printing */
-  .sell-sheet-print-header {
-    display: flex !important;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    margin-bottom: 8px;
-    border-bottom: 2px solid #333;
+  @page {
+    size: letter landscape;
+    margin: 0.4in;
   }
 
-  .sell-sheet-print-header h1 {
-    font-size: 14pt;
-    font-weight: bold;
+  /* Print container, header strip, footer strip */
+  .sell-sheet-print {
+    display: block !important;
+    font-size: 8pt;
     color: black;
   }
 
-  .sell-sheet-print-header .print-meta {
+  .sell-sheet-print-header {
+    display: flex !important;
+    align-items: flex-end;
+    justify-content: space-between;
+    border-bottom: 2px solid #333;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+  }
+
+  .sell-sheet-print-header h1 {
+    font-size: 13pt;
+    font-weight: bold;
+    margin: 0;
+  }
+
+  .sell-sheet-print-header .meta {
     font-size: 8pt;
-    color: #666;
+    color: #555;
+    text-align: right;
   }
 
-  /* Make table fit the page */
-  .glass-table {
-    border: none !important;
-    background: none !important;
-    box-shadow: none !important;
+  /* Column header row. Renders once at the top of the printed output; the
+     grid-based layout doesn't support per-page repeating headers. */
+  .sell-sheet-print-thead {
+    display: block;
   }
 
-  .glass-table-header {
-    border-bottom: 2px solid #333 !important;
-    background: none !important;
-  }
-
-  .glass-table-th {
-    color: #333 !important;
-    font-size: 8pt !important;
-  }
-
-  .glass-table-td {
-    font-size: 8pt !important;
-    color: black !important;
-    padding: 2px 4px !important;
-  }
-
-  .glass-vrow {
-    border-bottom: 1px solid #ddd !important;
-    background: none !important;
+  .sell-sheet-print-headrow,
+  .sell-sheet-print-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 56px 140px 64px 80px 80px;
+    align-items: start;
+    column-gap: 6px;
+    padding: 3px 4px;
+    border-bottom: 1px solid #ddd;
     break-inside: avoid;
   }
 
-  /* Remove virtual scroll container height constraint.
-     Targets inline max-height set by the virtual scroll library. */
-  .glass-table > div[style*="max-height"] {
-    max-height: none !important;
-    overflow: visible !important;
+  .sell-sheet-print-headrow {
+    font-weight: bold;
+    border-bottom: 1.5px solid #333;
+    background: white;
   }
 
-  /* Hide analytics columns when printing */
-  .print-hide-col {
-    display: none !important;
+  /* Alternating row bands for scanning ease */
+  .sell-sheet-print-row:nth-child(even) {
+    background: #f5f5f5;
   }
 
-  /* Allow card name and subtitle to wrap instead of truncate */
-  .glass-table-td .truncate {
-    overflow: visible !important;
-    white-space: normal !important;
-    text-overflow: unset !important;
+  .sell-sheet-print-cell[data-cell="num"]      { text-align: right; color: #666; }
+  .sell-sheet-print-cell[data-cell="grade"]    { text-align: center; }
+  .sell-sheet-print-cell[data-cell="cl"]       { text-align: right; font-variant-numeric: tabular-nums; }
+  .sell-sheet-print-cell[data-cell="last-sale"]{ text-align: right; font-variant-numeric: tabular-nums; }
+  .sell-sheet-print-cell[data-cell="agreed"]   {
+    border: 1px solid #999;
+    background: white;
+    height: 28px;
   }
 
-  /* Hide actions column and checkbox when printing */
-  .print-hide-actions {
-    display: none !important;
+  .sell-sheet-print-name {
+    font-size: 9pt;
+    font-weight: 600;
+  }
+  .sell-sheet-print-sub {
+    font-size: 7.5pt;
+    color: #555;
+  }
+  .sell-sheet-print-cert {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 8pt;
+  }
+  .sell-sheet-print-barcode {
+    width: 120px;
+    height: 24px;
+    display: block;
+  }
+  .sell-sheet-print-date {
+    color: #555;
+    font-size: 7pt;
   }
 
-  /* Print footer */
+  /* Footer totals strip (last page only) */
   .sell-sheet-print-footer {
     display: block !important;
     margin-top: 12px;
-    padding-top: 8px;
+    padding-top: 6px;
     border-top: 1px solid #999;
+    font-size: 8pt;
+  }
+  .sell-sheet-print-footer .totals-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 2px 0;
+  }
+  .sell-sheet-print-footer .totals-row .label {
+    color: #555;
+  }
+  .sell-sheet-print-footer .blank-line {
+    display: inline-block;
+    border-bottom: 1px solid #999;
+    min-width: 100px;
+    height: 14px;
+  }
+  .sell-sheet-print-footer .note {
+    margin-top: 8px;
     font-size: 7pt;
     color: #666;
     text-align: center;
   }
 }
 
-/* Hide print-only elements on screen */
+/* Hide print-only nodes on screen */
+.sell-sheet-print,
 .sell-sheet-print-header,
 .sell-sheet-print-footer {
   display: none;
