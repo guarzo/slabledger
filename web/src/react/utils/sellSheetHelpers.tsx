@@ -91,3 +91,8 @@ export function formatLastSaleDate(iso?: string): string {
   const yy = String(d.getUTCFullYear()).slice(-2);
   return `${mm}/${dd}/${yy}`;
 }
+
+/** Format cents as a whole-dollar string with thousands separator (e.g. 27900 → "$279"). */
+export function dollars(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+}

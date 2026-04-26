@@ -7,15 +7,12 @@ import {
   gradeDisplay,
   clPriceDisplayCents,
   formatLastSaleDate,
+  dollars,
 } from '../../../utils/sellSheetHelpers';
 
 interface Props {
   item: AgingItem;
   rowNumber: number;
-}
-
-function dollars(cents: number): string {
-  return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
 }
 
 export default function SellSheetPrintRow({ item, rowNumber }: Props) {

@@ -1,4 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useMemo } from 'react';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
 import PokeballLoader from '../../PokeballLoader';
@@ -9,7 +10,7 @@ import { needsPriceReview } from './inventory/inventoryCalcs';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
 import SellSheetPrintRow from './inventory/SellSheetPrintRow';
-import { clPriceDisplayCents } from '../../utils/sellSheetHelpers';
+import { clPriceDisplayCents, dollars } from '../../utils/sellSheetHelpers';
 import MobileCard from './inventory/MobileCard';
 import MobileSellSheetView from './inventory/MobileSellSheetView';
 import SortableHeader from './inventory/SortableHeader';
@@ -87,6 +88,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     overscan: 5,
   });
 
+  const printSortedItems = useMemo(() => sortForPrint(filteredAndSortedItems), [filteredAndSortedItems]);
+  const printClTotalCents = useMemo(() => clTotalCents(filteredAndSortedItems), [filteredAndSortedItems]);
+
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
   if (items.length === 0) {
@@ -163,15 +167,14 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               <div className="sell-sheet-print-cell" data-cell="agreed">Agreed $</div>
             </div>
           </div>
-          {sortForPrint(filteredAndSortedItems).map((item, idx) => (
+          {printSortedItems.map((item, idx) => (
             <SellSheetPrintRow key={item.purchase.id} item={item} rowNumber={idx + 1} />
           ))}
           <div className="sell-sheet-print-footer">
             <div className="totals-row">
               <span><span className="label">Items:</span> {filteredAndSortedItems.length}</span>
               <span>
-                <span className="label">CL Price total:</span>{' '}
-                ${(Math.round(clTotalCents(filteredAndSortedItems) / 100)).toLocaleString('en-US')}
+                <span className="label">CL Price total:</span> {dollars(printClTotalCents)}
               </span>
             </div>
             <div className="totals-row">
