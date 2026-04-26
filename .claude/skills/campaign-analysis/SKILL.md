@@ -164,6 +164,8 @@ After the data quality audit, before writing the opener. Answer three questions 
 
 No movers, no actions, no portfolio-at-a-glance — just the contradiction and a question. Resume normal analysis only after the user resolves the contradiction or tells you which source to trust.
 
+### Step 3c — Opener structure
+
 Present the opener as **a data-sources block, reconciliation summary, movers, conditional actions, portfolio snapshot, and close**:
 
 **Data sources block** — output from Step 3a (the data quality audit). Always first.
@@ -263,13 +265,17 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 
 ## Step 4 — Follow-up playbooks
 
-Route each user follow-up to a playbook. Load `references/playbooks.md` for the full content of Playbooks A–G (tuning, liquidation, aging inventory, strategy-doc reconciliation, single-campaign deep dive, coverage gaps, DH marketplace) and the Step 5 retrospective procedure.
+Route each user follow-up to a playbook. Load `references/playbooks.md` for the full content of Playbooks A–G (tuning, liquidation, aging inventory, strategy-doc reconciliation, single-campaign deep dive, coverage gaps, DH marketplace).
 
-## Step 5 — Strategy Doc Sync + Retrospective
+## Step 5 — Strategy doc sync
 
-**CRITICAL: Step 5a (strategy doc sync) is the most important step in the entire skill.** If campaign parameters changed, campaigns were added/removed/paused, or Brady emails were sent during this session, `docs/private/CAMPAIGN_STRATEGY.md` MUST be updated before the session ends. The next session's analysis depends entirely on this document being current. Failing to update it was identified as a critical process failure on 2026-04-23.
+Strategy doc sync runs before the retrospective because the doc is the persistent state that carries across sessions — memory doesn't. The 4/23 session shipped parameter changes without updating the doc, and the next session anchored on stale numbers. If parameters changed, campaigns moved phase, or a Brady email went out this session, update the doc here.
 
-See `references/playbooks.md` for the full procedure — Step 5a (strategy doc sync) and Step 5b (retrospective capture).
+See `references/playbooks.md` for the full procedure.
+
+## Step 6 — Retrospective
+
+Capture data gaps, partner-asks, client-side work, and lessons about the operator's edge. See `references/playbooks.md` for the full procedure.
 
 ## Conversational guidelines
 

@@ -203,13 +203,7 @@ Present:
 
 When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution. DH approvals are capital-positive (they turn inventory into sales), so the capital guardrail does NOT apply.
 
-## Step 5 — Retrospective (mandatory at session end)
-
-Every `/campaign-analysis` conversation must close with a short retrospective block. The goal is to compound the skill's quality over time by capturing what couldn't be answered from the data we have.
-
-**When to write it.** At the end of a session, right before the closing question, or when the user signals they're wrapping up ("thanks, that's it for tonight", "ok let's apply these", etc.). Don't write it on every individual turn — once per session.
-
-### Step 5a — Strategy doc sync (MANDATORY, runs before the retrospective)
+## Step 5 — Strategy doc sync
 
 **This step is non-negotiable.** If any campaign parameters were changed, campaigns were added/removed/paused, or emails were sent to Brady during this session, the strategy document MUST be updated before the session ends. Failing to do this breaks the next session's analysis — the strategy doc is the persistent state that carries across sessions, not memory.
 
@@ -233,7 +227,9 @@ Every `/campaign-analysis` conversation must close with a short retrospective bl
 
 **Verification:** After writing, re-read the Quick-Copy section and confirm each campaign's parameters match what was sent to Brady. A mismatch here is the exact failure mode this step prevents.
 
-### Step 5b — Retrospective capture
+## Step 6 — Retrospective
+
+Every `/campaign-analysis` conversation must close with a short retrospective block — at the end of a session or when the user signals they're wrapping up ("thanks, that's it for tonight", "ok let's apply these"). Don't write it on every turn; once per session.
 
 **What to capture.** Four buckets, each 1-3 bullets. Skip any bucket that's empty, don't invent filler:
 
