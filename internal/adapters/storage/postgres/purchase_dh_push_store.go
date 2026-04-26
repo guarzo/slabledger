@@ -108,7 +108,7 @@ func (ps *PurchaseStore) ListStaleDHStatusSoldPurchases(ctx context.Context) ([]
 	rows, err := ps.db.QueryContext(ctx,
 		`SELECT cp.id FROM campaign_purchases cp
 		 JOIN campaign_sales cs ON cs.purchase_id = cp.id
-		 WHERE cp.dh_status IS DISTINCT FROM 'sold'`)
+		 WHERE cp.dh_status != '' AND cp.dh_status IS DISTINCT FROM 'sold'`)
 	if err != nil {
 		return nil, err
 	}
