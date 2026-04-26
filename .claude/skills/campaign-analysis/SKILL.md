@@ -7,6 +7,10 @@ allowed-tools: ["Bash", "Read", "Glob", "Grep", "Edit"]
 
 # Campaign Analysis
 
+## How to use
+
+Default invocation runs Steps 0–3 (load config, fetch snapshot, present an opener). The user's follow-up routes to one of seven playbooks in `references/playbooks.md`. Session closes with Step 5 (strategy-doc sync) and Step 6 (retrospective). Named modes (`health`, `weekly`, `tuning`, `campaign <id>`, `gaps`, `dh`) live in the appendix but are rarely used — the conversational flow covers the same ground.
+
 ## Step 0 — Load operator configuration
 
 Read `docs/private/campaign-analysis-config.md`. This file contains:
@@ -88,28 +92,35 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
-Fetch these in parallel:
+**Mandatory in every opener** — fetch all of these in parallel, every time:
 
-- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and `kind == "external"` (see API footguns for why External is excluded everywhere)
-- `GET /api/portfolio/snapshot` — **composite endpoint** returning `health`, `insights`, `weeklyReview`, `weeklyHistory` (8 weeks), `channelVelocity`, `suggestions`, `creditSummary`, and `invoices` in a single response. This replaces 8 individual calls with one round-trip; the server loads shared data once internally. **Consult `references/api-cheatsheet.md` for exact JSON shapes and field names before writing any parsing code.** Parse each sub-field:
-  - `snapshot.health` — **a dict** with a `campaigns` array plus portfolio-wide totals (`totalDeployedCents`, `totalRecoveredCents`, `totalAtRiskCents`, `overallROI`, `realizedROI`). Each campaign entry carries `campaignId`, `campaignName`, `kind`, `roi`, `sellThroughPct`, `totalPurchases`, `totalUnsold`, `capitalAtRiskCents`, `inHandUnsoldCount`, `inHandCapitalCents`, `inTransitUnsoldCount`, `inTransitCapitalCents`, `healthStatus`, `healthReason`.
-  - `snapshot.weeklyReview` — week-over-week deltas. Includes `daysIntoWeek` for partial-week awareness.
-  - `snapshot.insights` — cross-campaign segmentation by character, grade, era, tier. **All segment arrays use a uniform shape** with `label` (the segment name, e.g. `"PSA 9"`, `"Charizard"`, `"Gengar PSA 6"`, `"$200-500"`) and `dimension` — there is NO `character`, `grade`, `gradeValue`, or `tier` field. **Extract** `byCharacter` (filter `soldCount ≥ 3`, sort by `roi` desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only the response keys is not analysis.
-  - `snapshot.weeklyHistory` — trailing 8-week summaries (newest first). **Each entry is a full `WeeklyReviewSummary` with the same field names** as `weeklyReview` (`purchasesThisWeek`, `spendThisWeekCents`, `salesThisWeek`, `revenueThisWeekCents`, `profitThisWeekCents` — NOT `purchases`, `spendCents`, `sales`, `revenueCents`). Used by the hold-verdict rule for the trailing-mean comparison.
-  - `snapshot.channelVelocity` — array of `{channel, avgDaysToSell, count}`. Sources channel-shift recommendations and feeds the days-to-sell delta math in repricing playbooks.
-  - `snapshot.creditSummary` — `{outstandingCents, weeksToCover, recoveryTrend, alertLevel}`
-  - `snapshot.invoices` — list of *all* unpaid invoices with `dueDate` (may be empty for legacy rows) and `totalCents` per row. Use this endpoint to plan a multi-invoice horizon (next 2–4 weeks of obligations), not just one invoice.
-  - `snapshot.suggestions` — **a dict** (NOT an array) with keys `newCampaigns` (array), `adjustments` (array), and `dataSummary` (object). **Apply the stale-suggestion filter** (Recommendation rules) before surfacing any entry: drop suggestions targeting fields on a campaign whose `updatedAt` is within the last 72h. Treat the remainder as one input among several, not the primary source — the per-campaign tuning + insights segmentation below has the higher-resolution signal.
-- `GET /api/inventory` — per-purchase inventory detail; the opener uses the `inHandUnsoldCount`, `inHandCapitalCents`, `inTransitUnsoldCount`, and `inTransitCapitalCents` fields already on each `CampaignHealth` entry from `snapshot.health` to distinguish **in-hand** (received, sellable now) from **in-transit** (purchased but not yet received) capital. Fetch `/api/inventory` when you need per-card detail for a specific campaign, not just portfolio-wide sums.
-- `GET /api/dh/status` — reads `dh_listings_count` vs `dh_inventory_count` vs `pending_count`. This tells you how much of the in-hand inventory is actually *listed* and generating sales signal. A large received-but-not-listed gap is informational by default; promote it to a mover candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities` (otherwise it's a known-system-issue for some operators).
-- `GET /api/dh/pending` — the actual per-item pending-push queue (not just the aggregate count). Returns `{items: DHPendingItem[], count: int}` where each item carries `{purchaseId, cardName, setName, grade, recommendedPriceCents, daysQueued, dhConfidence}`. `dhConfidence` is `"high"` (listing synced <24h ago), `"medium"` (<7d), `"low"` (>7d or never synced) — use this as a data-freshness signal when reasoning about whether the queued recommendation is still trustworthy. This is the right endpoint for prioritizing the approval queue by `daysQueued` and sizing projected recovery from `recommendedPriceCents`.
-- `GET /api/campaigns/{id}/tuning` for **each** active campaign with ≥10 purchases — **mandatory in the opener, do not defer to follow-up.** The `byGrade` array uses `grade` (string), `count` (NOT `purchaseCount`), `avgBuyPctOfCL`, `roi` (NOT `avgRoi`), `sellThroughPct`. Grade × price-tier × `avgBuyPctOfCL` is the highest-resolution tuning signal in the API. The opener's movers should look here BEFORE leaning on `/portfolio/suggestions`. Run these in parallel — one call per campaign — not sequentially.
-- `GET /api/campaigns/{id}/fill-rate` for each active campaign — **mandatory in the opener, do not defer to follow-up.** Returns a **flat array** of daily objects (NOT `{daily: [...]}`). Each entry has `date`, `spendUSD`, `capUSD` (dollars, NOT cents), `fillRatePct` (NOT `fillPct`), `purchaseCount`. Daily spend vs cap (30-day rolling). Replaces fabricated fill stats from the strategy doc when the opener wants to flag a campaign that's pegged at cap (ramp candidate) or running well below cap (supply constraint, not a tuning issue).
-- `GET /api/intelligence/niches?window=30d&limit=20` — returns `{opportunities: [...]}` (NOT a flat array). Each opportunity has nested `demand` and `market` objects with `demand.score`, `opportunity_score`, and `current_coverage`. High opportunity score with zero coverage = coverage-gap candidate.
-- `GET /api/intelligence/campaign-signals` — returns `{computed_at, data_quality, signals: [...]}`. When empty: `signals: []`, `data_quality: "empty"`. A sharply decelerating campaign is a tuning candidate (drop terms, narrow scope); an accelerating campaign is a ramp candidate (capital guardrail applies).
-- `GET /api/opportunities/crack` — returns a **flat array** (empty `[]` when none). Slabs in inventory where raw value > slabbed value net of cracking cost. Capital-positive moves; bypass the capital guardrail.
-- `GET /api/opportunities/acquisition` — returns a **flat array** (empty `[]` when none). Raw-to-graded acquisition mispricings (cards worth buying raw and grading). Feeds Playbook F coverage-gap analysis and provides additional mover candidates when a clear $ spread exists.
-- `GET /api/campaigns/{id}/projections` ONLY when validating a specific tuning suggestion's projected impact (the projections endpoint is heavy; prefer per-campaign `/tuning` byGrade for sizing).
+| Endpoint | What it provides |
+|----------|------------------|
+| `GET /api/campaigns` | Name ↔ UUID resolution; filter `phase=archived` and `kind=external` |
+| `GET /api/portfolio/snapshot` | Composite: `health`, `insights`, `weeklyReview`, `weeklyHistory` (8w), `channelVelocity`, `suggestions`, `creditSummary`, `invoices` — replaces 8 individual calls |
+| `GET /api/inventory` | Per-purchase detail. The opener uses `inHandUnsoldCount` / `inHandCapitalCents` / `inTransitUnsoldCount` / `inTransitCapitalCents` already on `snapshot.health`; fetch `/api/inventory` for per-card detail |
+| `GET /api/dh/status` | Listed vs in-inventory vs pending counts |
+| `GET /api/dh/pending` | Per-item pending-push queue with `daysQueued` and `dhConfidence` (high <24h, medium <7d, low >7d) |
+| `GET /api/intelligence/niches?window=30d&limit=20` | Coverage-gap demand signal — high `opportunity_score` + zero `current_coverage` = candidate |
+| `GET /api/intelligence/campaign-signals` | Per-campaign acceleration/deceleration. Empty body has `signals: []`, `data_quality: "empty"` |
+| `GET /api/opportunities/crack` | Slabs worth cracking — capital-positive, bypasses guardrail |
+| `GET /api/opportunities/acquisition` | Raw-to-graded mispricings — feeds Playbook F |
+| `GET /api/campaigns/{id}/tuning` ×N | Grade-level ROI, `avgBuyPctOfCL`, sample sizes — one call per active campaign with ≥10 purchases, **in parallel** |
+| `GET /api/campaigns/{id}/fill-rate` ×N | Daily spend vs cap (30-day rolling) — one call per active campaign, **in parallel** |
+
+**Per-campaign fetches must be parallel, not sequential.** `/tuning` byGrade and `/fill-rate` are the highest-resolution tuning signals in the API; the opener's movers should look there before leaning on `/portfolio/suggestions`.
+
+**Procedural rules attached to specific endpoints:**
+
+- **`snapshot.suggestions`** — apply the stale-suggestion filter (drop suggestions targeting fields on a campaign whose `updatedAt` is within 72h) before surfacing any entry. Treat the remainder as one input among several; per-campaign `/tuning` + `/insights` segmentation has higher-resolution signal.
+- **`snapshot.insights`** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by `roi` desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only response keys is not analysis.
+- **`/dh/status` listing gap** — informational by default. Promote to a mover candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities`.
+
+For JSON shapes and field names of every endpoint above, consult `references/api-cheatsheet.md` before writing parsing code.
+
+**Conditional fetch** (use only when warranted):
+
+- `GET /api/campaigns/{id}/projections` — only when validating a specific tuning suggestion's projected impact. The endpoint is heavy; prefer `/tuning` byGrade for sizing.
 
 ### Step 3a — Data quality audit
 
