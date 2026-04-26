@@ -5,9 +5,11 @@ export interface StatCardProps {
   value: string;
   color?: 'green' | 'red';
   size?: StatCardSize;
+  /** Optional secondary line below the value */
+  sub?: string;
 }
 
-export default function StatCard({ label, value, color, size = 'md' }: StatCardProps) {
+export default function StatCard({ label, value, color, size = 'md', sub }: StatCardProps) {
   const colorClass =
     color === 'green'
       ? 'text-[var(--success)]'
@@ -41,6 +43,7 @@ export default function StatCard({ label, value, color, size = 'md' }: StatCardP
         {label}
       </div>
       <div className={`${valueClass} tabular-nums ${colorClass}`}>{value}</div>
+      {sub && <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{sub}</div>}
     </div>
   );
 }

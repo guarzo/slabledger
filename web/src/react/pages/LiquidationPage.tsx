@@ -7,6 +7,10 @@ import { LinkDropdown } from '../ui/LinkDropdown';
 import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } from '../utils/marketplaceUrls';
 import StatCard from '../ui/StatCard';
 import CardShell from '../ui/CardShell';
+import ConfirmDialog from '../ui/ConfirmDialog';
+import StickyActionBar from '../ui/StickyActionBar';
+import Button from '../ui/Button';
+import sliderStyles from './DiscountSlider.module.css';
 
 function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
@@ -130,16 +134,20 @@ export default function LiquidationPage() {
 
   const summary = data?.summary;
 
+  const confirmMessage = `This will update the reviewed price for ${applyableCount} card${applyableCount !== 1 ? 's' : ''}.${
+    applyableCount < selected.size ? ` (${selected.size - applyableCount} skipped — no price set)` : ''
+  } Continue?`;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 pb-16">
+    <div className="max-w-7xl mx-auto px-4 pb-16 space-y-4">
       <Breadcrumb items={[
         { label: 'Inventory', href: '/inventory' },
         { label: 'Reprice' },
       ]} />
-      <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight mb-6">Reprice</h1>
+      <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Reprice</h1>
 
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Total Cards" value={String(summary.totalCards)} />
           <StatCard label="With Comps" value={String(summary.withComps)} color="green" />
           <StatCard label="Without Comps" value={String(summary.withoutComps)} />
@@ -147,7 +155,7 @@ export default function LiquidationPage() {
         </div>
       )}
 
-      <CardShell variant="elevated" className="mb-6">
+      <CardShell variant="elevated">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4">
           Reprice Preview
         </h2>
@@ -157,13 +165,14 @@ export default function LiquidationPage() {
             <DiscountSlider label="Without comps" value={discountNoComps} onChange={setDiscountNoComps} />
           </div>
           {summary && (
-            <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-2 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
-              <PreviewStat label="Current Value" value={formatCents(summary.totalCurrentValueCents)} />
-              <PreviewStat label="Suggested Value" value={formatCents(summary.totalSuggestedValueCents)} />
-              <PreviewStat
+            <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
+              <StatCard size="sm" label="Current Value" value={formatCents(summary.totalCurrentValueCents)} />
+              <StatCard size="sm" label="Suggested Value" value={formatCents(summary.totalSuggestedValueCents)} />
+              <StatCard
+                size="sm"
                 label="Below Cost"
                 value={String(summary.belowCostCount)}
-                tone={summary.belowCostCount > 0 ? 'danger' : undefined}
+                color={summary.belowCostCount > 0 ? 'red' : undefined}
               />
             </div>
           )}
@@ -175,7 +184,7 @@ export default function LiquidationPage() {
       )}
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-[var(--danger)]/10 border border-[var(--danger)]/20 text-sm text-[var(--danger)]">
+        <div className="p-3 rounded-lg bg-[var(--danger)]/10 border border-[var(--danger)]/20 text-sm text-[var(--danger)]">
           {error.message}
         </div>
       )}
@@ -220,7 +229,7 @@ export default function LiquidationPage() {
                     className="glass-vrow flex items-center"
                     data-stripe={index % 2 === 1}
                     data-selected={isSelected}
-                    style={item.belowCost ? { background: 'rgba(248,113,113,0.05)' } : undefined}
+                    data-belowcost={item.belowCost || undefined}
                   >
                     <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }}>
                       <input
@@ -294,98 +303,42 @@ export default function LiquidationPage() {
       )}
 
       {selected.size > 0 && (
-        <div
-          className="sticky bottom-0 -mx-4 mt-4 px-4 py-3 bg-[var(--surface-1)]/80 backdrop-blur-xl border-t border-[var(--surface-2)] flex items-center justify-between gap-3 z-10 flex-wrap"
-          role="region"
-          aria-label="Reprice actions"
-        >
-          <span className="text-sm font-medium text-[var(--text)] tabular-nums">
-            Selected: {selected.size}
-          </span>
-          <div className="flex items-center gap-3 ml-auto">
-            <button
-              type="button"
-              onClick={acceptAllSuggested}
-              className="text-xs font-medium text-[var(--success)] hover:opacity-80"
-            >
-              Accept All
-            </button>
-            <button
-              type="button"
-              onClick={deselectAll}
-              className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)] hover:underline"
-            >
-              Deselect All
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowConfirm(true)}
-              className="px-5 py-2 bg-[var(--brand-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--brand-600)] transition-colors"
-            >
-              Apply Prices
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-20 p-4">
-          <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6 max-w-sm w-full">
-            <h2 className="text-lg font-bold text-[var(--text)] mb-2">Apply Repriced Values</h2>
-            <p className="text-sm text-[var(--text-muted)] mb-6">
-              This will update the reviewed price for {applyableCount} card{applyableCount !== 1 ? 's' : ''}.
-              {applyableCount < selected.size && ` (${selected.size - applyableCount} skipped — no price set)`}
-              {' '}Continue?
-            </p>
-            {applyMutation.error && (
-              <p className="text-xs text-[var(--danger)] mb-4">{applyMutation.error.message}</p>
-            )}
-            {applyMutation.data && (
-              <p className="text-xs text-[var(--success)] mb-4">
-                Applied {applyMutation.data.applied} price{applyMutation.data.applied !== 1 ? 's' : ''}.
-                {applyMutation.data.failed > 0 && ` ${applyMutation.data.failed} failed.`}
-              </p>
-            )}
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowConfirm(false)}
-                className="px-4 py-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] text-sm hover:bg-[var(--surface-2)] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleApply}
-                disabled={applyMutation.isPending}
-                className="px-4 py-2 bg-[var(--brand-500)] text-white rounded-lg text-sm font-medium hover:bg-[var(--brand-600)] transition-colors disabled:opacity-50"
-              >
-                {applyMutation.isPending ? 'Applying…' : 'Confirm'}
-              </button>
+        <StickyActionBar
+          left={
+            <span className="text-sm font-medium text-[var(--text)] tabular-nums">
+              Selected: {selected.size}
+            </span>
+          }
+          right={
+            <div className="flex items-center gap-3 ml-auto">
+              <Button variant="ghost" size="sm" onClick={acceptAllSuggested}>Accept All</Button>
+              <Button variant="ghost" size="sm" onClick={deselectAll}>Deselect All</Button>
+              <Button variant="primary" size="sm" onClick={() => setShowConfirm(true)}>Apply Prices</Button>
             </div>
-          </div>
-        </div>
+          }
+        />
       )}
-    </div>
-  );
-}
 
-function PreviewStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: 'danger';
-}) {
-  const valueColor = tone === 'danger' ? 'text-[var(--danger)]' : 'text-[var(--text)]';
-  return (
-    <div className="lg:flex lg:items-baseline lg:justify-between lg:gap-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-0.5 lg:mb-0">
-        {label}
-      </div>
-      <div className={`text-base font-bold tabular-nums ${valueColor}`}>{value}</div>
+      <ConfirmDialog
+        open={showConfirm}
+        title="Apply Repriced Values"
+        message={confirmMessage}
+        confirmLabel={applyMutation.isPending ? 'Applying…' : 'Confirm'}
+        variant="primary"
+        loading={applyMutation.isPending}
+        onConfirm={handleApply}
+        onCancel={() => setShowConfirm(false)}
+      >
+        {applyMutation.error && (
+          <p className="text-xs text-[var(--danger)] mb-2">{applyMutation.error.message}</p>
+        )}
+        {applyMutation.data && (
+          <p className="text-xs text-[var(--success)] mb-2">
+            Applied {applyMutation.data.applied} price{applyMutation.data.applied !== 1 ? 's' : ''}.
+            {applyMutation.data.failed > 0 && ` ${applyMutation.data.failed} failed.`}
+          </p>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }
@@ -406,7 +359,7 @@ function DiscountSlider({ label, value, onChange }: { label: string; value: numb
         step={0.5}
         value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
-        className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[var(--surface-2)] accent-[var(--brand-500)]"
+        className={sliderStyles.slider}
       />
       <div className="flex justify-between text-[10px] text-[var(--text-muted)] mt-1">
         <span>0%</span>
