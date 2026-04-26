@@ -2,12 +2,11 @@ import { useMemo } from 'react';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-import StatCard from '../../ui/StatCard';
-import { EmptyState } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import { saleChannelLabels } from '../../utils/campaignConstants';
 import { useCampaignPNL, useChannelPNL, useFillRate, useDaysToSell } from '../../queries/useCampaignQueries';
 import type { ChannelPNL } from '../../../types/campaigns';
+import CampaignHeroStats from './CampaignHeroStats';
 
 function ChannelMobileCard({ ch }: { ch: ChannelPNL }) {
   return (
@@ -72,18 +71,6 @@ export default function OverviewTab({
     [daysToSell]
   );
 
-  const hasPurchases = purchaseCount > 0;
-  const sellThroughNum = parseFloat(sellThrough);
-  const sellThroughColor = !hasPurchases
-    ? undefined
-    : sellThroughNum >= 50
-      ? 'green'
-      : sellThroughNum < 10
-        ? 'red'
-        : undefined;
-
-  const noSalesYet = hasPurchases && saleCount === 0;
-
   return (
     <div
       id="tabpanel-overview"
@@ -91,56 +78,22 @@ export default function OverviewTab({
       aria-labelledby="overview"
       className="space-y-6"
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <StatCard
-          label="Total Spent"
-          value={formatCents(totalSpent)}
-          size="lg"
-        />
-        <StatCard
-          label="Net Profit"
-          value={formatCents(totalProfit)}
-          color={hasPurchases ? (totalProfit >= 0 ? 'green' : 'red') : undefined}
-          size="lg"
-        />
+      <CampaignHeroStats
+        totalSpentCents={totalSpent}
+        totalProfitCents={totalProfit}
+        totalRevenueCents={totalRevenue}
+        roi={pnl?.roi ?? null}
+        purchaseCount={purchaseCount}
+        saleCount={saleCount}
+        sellThroughPct={sellThrough}
+        avgDaysToSell={pnl?.avgDaysToSell ?? null}
+      />
+
+      <div className="flex flex-wrap gap-x-6 gap-y-2 px-1 text-sm text-[var(--text-muted)]">
+        <span><span className="text-[var(--text)] font-medium tabular-nums">{saleCount}</span> sold</span>
+        <span><span className="text-[var(--text)] font-medium tabular-nums">{unsoldCount}</span> unsold</span>
+        <span>Daily cap <span className="text-[var(--text)] font-medium tabular-nums">{formatCents(dailySpendCapCents)}</span></span>
       </div>
-
-      {noSalesYet ? (
-        <EmptyState
-          icon="🛒"
-          title="No sales yet"
-          description="Record your first sale to see P&L for this campaign."
-          compact
-        />
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Revenue" value={formatCents(totalRevenue)} />
-            <StatCard
-              label="ROI"
-              value={pnl && hasPurchases ? formatPct(pnl.roi) : '—'}
-              color={pnl && hasPurchases ? (pnl.roi >= 0 ? 'green' : 'red') : undefined}
-            />
-            <StatCard label="Cards Purchased" value={String(purchaseCount)} />
-            <StatCard label="Sell-Through" value={`${sellThrough}%`} color={sellThroughColor} />
-          </div>
-
-          <div className="flex flex-wrap gap-x-6 gap-y-2 px-1">
-            <StatCard label="Sold" value={String(saleCount)} size="sm" />
-            <StatCard label="Unsold" value={String(unsoldCount)} size="sm" />
-            <StatCard
-              label="Avg Days to Sell"
-              value={pnl && saleCount > 0 ? pnl.avgDaysToSell.toFixed(1) : '—'}
-              size="sm"
-            />
-            <StatCard
-              label="Daily Cap"
-              value={formatCents(dailySpendCapCents)}
-              size="sm"
-            />
-          </div>
-        </>
-      )}
 
       {/* Analytics section */}
       {analyticsLoading ? (

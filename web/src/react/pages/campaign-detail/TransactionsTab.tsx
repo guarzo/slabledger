@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Purchase, Sale } from '../../../types/campaigns';
 import PurchasesTab from './PurchasesTab';
 import SalesTab from './SalesTab';
+import { EmptyState } from '../../ui';
 
 type SubView = 'purchases' | 'sales';
 
@@ -14,6 +15,27 @@ interface TransactionsTabProps {
 
 export default function TransactionsTab({ campaignId, purchases, sales, soldPurchaseIds }: TransactionsTabProps) {
   const [view, setView] = useState<SubView>('purchases');
+
+  if (purchases.length === 0 && sales.length === 0) {
+    return (
+      <EmptyState
+        icon="🛒"
+        title="No transactions yet"
+        description="Record your first purchase or sale to see it here."
+      />
+    );
+  }
+
+  // When the campaign has purchases but no sales, show "no sales yet" inside
+  // the Sales sub-view with a last-action breadcrumb.
+  // (The Purchases sub-view will render normally because purchases.length > 0.)
+  const showNoSalesEmpty = view === 'sales' && sales.length === 0;
+  const lastPurchase = showNoSalesEmpty && purchases.length > 0
+    ? purchases.reduce((latest, p) => (p.purchaseDate > latest.purchaseDate ? p : latest))
+    : null;
+  const lastActionText = lastPurchase
+    ? `Last purchase ${new Date(lastPurchase.purchaseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+    : undefined;
 
   return (
     <div>
@@ -55,6 +77,14 @@ export default function TransactionsTab({ campaignId, purchases, sales, soldPurc
           campaignId={campaignId}
           purchases={purchases}
           soldPurchaseIds={soldPurchaseIds}
+        />
+      ) : showNoSalesEmpty ? (
+        <EmptyState
+          icon="🛒"
+          title="No sales yet"
+          description="Record your first sale to see P&L for this campaign."
+          lastAction={lastActionText}
+          compact
         />
       ) : (
         <SalesTab
