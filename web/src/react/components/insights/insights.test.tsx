@@ -28,7 +28,7 @@ describe('DoNowSection', () => {
     expect(screen.getByText(/Run profit-capture/i)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /Open:\s*Run profit-capture/i });
     expect(link).toHaveAttribute('href', '/global-inventory?filter=spike');
-    expect(container.querySelector('.border-l-\\[var\\(--danger\\)\\]')).not.toBeNull();
+    expect(container.querySelector('[data-severity="act"]')).not.toBeNull();
   });
 
   it('sorts actions so act precedes tune precedes ok', () => {
@@ -104,8 +104,8 @@ describe('CampaignTuningTable', () => {
     wrap(<CampaignTuningTable rows={rows} />);
     const actRow = screen.getByRole('link', { name: /A/ });
     const okRow = screen.getByRole('link', { name: /B/ });
-    expect(actRow.getAttribute('style')).toMatch(/border-left-color:\s*var\(--danger\)/);
-    expect(okRow.getAttribute('style')).toMatch(/border-left-color:\s*var\(--success\)/);
+    expect(actRow).toHaveAttribute('data-severity', 'act');
+    expect(okRow).toHaveAttribute('data-severity', 'ok');
   });
 
   it('renders cell recommendations as RecommendationBadge text', () => {
