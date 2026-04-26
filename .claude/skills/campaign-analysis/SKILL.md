@@ -33,6 +33,8 @@ When the strategy doc describes a **proposed or planned change** (language like 
 
 When the strategy doc states **current parameters**, cross-check against `/api/campaigns` for fields the API stores (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`). Disagreement between the strategy doc and live API is a Playbook D signal — surface it, don't silently resolve it in either direction.
 
+**Current-state claims about operational status (paused, archived, removed, active) require the same adversarial treatment as proposals.** If the doc says "Campaign X is paused in app" or "Campaign Y was removed," verify against `/api/campaigns` `phase` field and presence in `/portfolio/health`. When the doc and API disagree on present-tense reality, **default to the API as ground truth and surface the doc as a cleanup candidate** — never reason from the stale doc as if it were authoritative. After being corrected once on a doc-vs-API mismatch in a session, do not re-anchor on the doc later in the same conversation; re-read the live record.
+
 ### Step 1a — Parse current campaign parameters from the API and strategy doc
 
 **`/api/campaigns` returns all campaign parameters:** year range, grade range, price range, CL confidence, inclusion list, buy terms, daily cap, and eBay fee. Use the API as the source of truth for current values.
@@ -49,7 +51,11 @@ When the strategy doc states **current parameters**, cross-check against `/api/c
 - **Inclusion list** — the exact character list, or `None (open net)`
 - **Exclusion markers** — characters explicitly removed and why (e.g. "Mew removed from C1 to stop Ancient Mew flood")
 
+**Inclusion-list diff is mandatory, not optional.** For every campaign that has an inclusion list in either the doc or the API, compute the symmetric diff between the two character sets. Any nonempty diff (characters in doc but not API, or in API but not doc) is a Playbook D signal — surface it in the opener's data-quality block, BEFORE drafting movers, with the specific characters listed. The "16 added vintage characters never made it from PSA submission to app" mismatch is the canonical failure mode this rule exists to catch. Eyeballing the lists is not enough — diff them programmatically.
+
 Before recommending any inclusion-list change, verify against the parsed list. Recommending "add X to campaign Y" when X is already there is a failure mode the skill must prevent.
+
+**Pending phase is the soft-delete state, not drift.** A campaign with `phase: "pending"` that the strategy doc describes as "removed" is **expected** — the operator preserves purchase history rather than hard-deleting. Do not flag `phase: pending` as a doc-vs-API mismatch when the doc says removed/deleted. (This is operator-specific; check `docs/private/campaign-analysis-config.md` for any operator override.)
 
 ## Step 2 — Resolve auth and pick the base URL
 
@@ -75,6 +81,8 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 - **`purchaseDate` lags `createdAt` by 1–2 days.** The date a purchase appears in date-bucketed views is not the date it was made. This affects any week-boundary calculation.
 - **`/api/inventory` is unsold-only, not a purchase log.** It shows current stock. It does not show what was bought and already sold. Don't infer purchase volume from inventory count alone.
 - **External campaign: filter from all ROI and margin calculations.** The "External" campaign has `cost basis = 0` for pre-campaign purchases. Any portfolio-wide character/grade/era ROI calculation that includes External will be inflated. This is a hard exclusion, not a caveat — filter it out everywhere.
+- **`inHandCapitalCents == 0` portfolio-wide is NOT automatically a data-pipeline gap.** It is a real and common business state: "every received card has sold; remaining unsold inventory is all PSA-side in-transit, not yet shipped." Before treating zero in-hand as broken data and working around it, **ask the user to confirm** ("Is in-hand really $0 across all campaigns — i.e. everything received has sold? Or is the in-hand/in-transit split not populating for some other reason?"). Treating real business state as a pipeline gap is a worse failure than the inverse — it leads to phantom "low sell-through" alarms when the actual sell-through on received inventory is 100%. Note: when in-hand is zero and unsold is large, sell-through percentages computed against `totalUnsold` will read low and feel alarming, but that's an artifact of in-transit denominator inflation — not a real velocity problem.
+- **`phase: "pending"` is a soft-delete marker, not "in flight" or "drift."** Card Yeti uses `pending` to retire campaigns from active fills while preserving purchase history (hard-delete would break referential integrity on past purchases). A campaign with `phase: "pending"` that the strategy doc calls "removed" is the expected state — do not flag as a mismatch.
 
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
@@ -257,9 +265,10 @@ See `references/playbooks.md` for the full procedure — Step 5a (strategy doc s
 1. Lead with the most actionable finding, then details. Be direct about what's not working — don't hedge.
 2. Use specific dollar amounts and percentages, rounded to sensible precision. Caveat anything with < 10 observations so the reader knows when a number is noisy.
 3. Cross-reference findings against the strategy doc. When checking for campaign mismatches, compare the purchase era, grade, character, and price against the campaign's parameters from the doc.
-4. End every response with a question that invites the user deeper.
-5. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
-6. Keep it conversational. Natural language, not bullet-heavy reports.
+4. **Use campaign names, not bare numbers.** "C1" / "C7" / "C11" is internal jargon — the operator has to look up which is which to validate. On every first reference in a turn, write the full name with the number in parentheses: "Vintage Core (C1)", "Vintage-EX PSA 8 Precision (C11)", "EX/e-Reader Era (C3)". Subsequent references in the same paragraph can use the short form. In tables and bullet lists, prefer names over numbers in the lead column. When the user asks "what is C11?" — that's a signal you've over-relied on numbers; correct course immediately, not just for that one campaign.
+5. End every response with a question that invites the user deeper.
+6. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
+7. Keep it conversational. Natural language, not bullet-heavy reports.
 
 ## Data integrity
 
