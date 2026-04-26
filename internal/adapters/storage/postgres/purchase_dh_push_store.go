@@ -112,7 +112,7 @@ func (ps *PurchaseStore) ListStaleDHStatusSoldPurchases(ctx context.Context) ([]
 	if err != nil {
 		return nil, fmt.Errorf("list stale dh status sold purchases: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	var ids []string
 	for rows.Next() {
 		var id string
