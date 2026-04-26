@@ -37,7 +37,7 @@ Treat the strategy doc as a claim to verify, not as ground truth. Three cases ne
 
 1. **Proposed/planned changes** (language like "considering", "planning to", "next step", "proposed"): verify against live API data (`/api/campaigns`, `/api/portfolio/snapshot`) that the change was or was NOT already applied before using any of the proposal's numbers.
 
-2. **Current-state claims about operational status** (paused, archived, removed, active): verify against `/api/campaigns` `phase` field and presence in `/portfolio/health`. When the doc and API disagree on present-tense reality, default to the API as ground truth and surface the doc as a cleanup candidate. After being corrected once on a doc-vs-API mismatch in a session, do not re-anchor on the doc later in the same conversation; re-read the live record.
+2. **Current-state claims about operational status** (paused, archived, removed, active): The 4/26 session reasserted the doc's "C10 paused in app" claim despite the live API showing `phase: active`, even after user pushback. The fix: treat `/api/campaigns` `phase` and presence in `/portfolio/health` as ground truth on present-tense reality, surface the doc as a cleanup candidate when they disagree, and do not re-anchor on the doc later in the same session after a correction.
 
 3. **Current parameters** (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`): cross-check against `/api/campaigns`. Disagreement is a Playbook D signal — surface it, don't silently resolve in either direction.
 
@@ -57,7 +57,7 @@ Treat the strategy doc as a claim to verify, not as ground truth. Three cases ne
 - **Inclusion list** — the exact character list, or `None (open net)`
 - **Exclusion markers** — characters explicitly removed and why (e.g. "Mew removed from C1 to stop Ancient Mew flood")
 
-**Inclusion-list diff is mandatory, not optional.** For every campaign that has an inclusion list in either the doc or the API, compute the symmetric diff between the two character sets. Any nonempty diff (characters in doc but not API, or in API but not doc) is a Playbook D signal — surface it in the opener's data-quality block, BEFORE drafting movers, with the specific characters listed. The "16 added vintage characters never made it from PSA submission to app" mismatch is the canonical failure mode this rule exists to catch. Eyeballing the lists is not enough — diff them programmatically.
+**Inclusion-list diff.** The 4/26 session missed an 18-vs-34 character mismatch between the strategy doc and the live API because the lists were eyeballed rather than diffed. For every campaign with an inclusion list in either source, compute the symmetric diff. Any nonempty diff is a Playbook D signal — surface it in the data-quality block before drafting movers, with the specific characters listed.
 
 Before recommending any inclusion-list change, verify against the parsed list. Recommending "add X to campaign Y" when X is already there is a failure mode the skill must prevent.
 

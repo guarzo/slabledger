@@ -23,7 +23,7 @@ Fetch in parallel (most should already be in the opener cache from Step 3):
 - `GET /api/portfolio/weekly-history?weeks=8` — trailing means for hold-verdict checks.
 - `GET /api/campaigns/{id}/projections` — only when validating a specific candidate change worth sizing (heavy endpoint).
 
-**Required output structure (do not skip sections, do not return without a per-campaign verdict block):**
+**Output structure.** Playbook A's value comes from per-campaign verdicts grounded in `/tuning` byGrade — not generic suggestions echoed from the server. The structure below is the minimum signal density that makes the response useful; trimming sections collapses it to a list.
 
 State the **capital posture** once at the top (`Healthy / Tight / Critical` from the guardrail rule), then:
 
