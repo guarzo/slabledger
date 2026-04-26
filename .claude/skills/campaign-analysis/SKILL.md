@@ -217,36 +217,33 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 > **User:** /campaign-analysis
 >
 > **Assistant:**
-> Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, channel-velocity ✓, suggestions ✓}, /credit/{summary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches (0 rows), campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×6
-> Missing/degraded: /intelligence/niches (0 rows)
-> Impact: coverage-gap analysis unavailable this session.
+> Data sources: snapshot ✓, /dh/{status, pending} ✓, /intelligence/niches (0 rows), /opportunities ✓, /campaigns/{id}/{tuning, fill-rate} ×6 ✓.
+> Impact: coverage-gap analysis unavailable.
 >
-> Buying active (12 purchases this week, trailing mean 11/wk). Sales up 22% WoW vs 4-week mean (weekly-history + health). Credit recovery tracking (summary trend matches revenue direction).
+> Buying active (12/wk vs trailing 11). Sales +22% WoW (weekly-history + health). Credit recovery tracking.
 >
-> Biggest movers this week: C3 sell-through jumped from 31% to 44%, driven by a DH channel surge (health + weekly-history). C7 fill rate dropped to 12% of cap — down from 35% last week (fill-rate + weekly-history spend). In-hand capital rose to $18.2K of $26.1K total unsold as this week's transit batch landed (health).
+> Movers: Wildcard ST 31%→44% on a DH surge. C7 fill-rate 35%→12% — single-week, holding on params. In-hand rose to $18.2K of $26.1K as transit landed.
 >
-> The C3 surge and rising in-hand capital point to a clean liquidation window for the 4/29 invoice: est. +$3.7K recovery from ~$4.2K of in-hand Wildcard inventory via DH, ~8 days to turn (Confidence: H — channel-velocity + health agree on days-to-sell). C7's fill-rate drop is interesting but single-week — holding on parameter changes per the trailing-mean rule.
+> Action: Wildcard liquidation window — est. +$3.7K recovery from ~$4.2K in-hand via DH, ~8 days (Confidence: H — channel-velocity + health agree).
 >
-> **Portfolio at a glance:** Wildcard 14% / 38% ST / 47 unsold $18.2K • C7 3% / 22% ST / 61 unsold $12.6K • C3 9% / 44% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks to cover / trend → • Invoices: $8.2K due 2026-04-29 • In-hand $18.2K of $26.1K unsold (rest in-transit), DH listed: 34 of 47 mapped.
+> **Portfolio at a glance:** Wildcard 14% / 38% ST / 47 unsold $18.2K • C7 3% / 22% ST / 61 unsold $12.6K • C3 9% / 44% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks / → • Invoices: $8.2K due 2026-04-29 • In-hand $18.2K of $26.1K, DH listed: 34 of 47.
 >
-> Want me to walk through the Wildcard liquidation list, or dig into C7's fill-rate drop?
+> Walk through the Wildcard liquidation list, or dig into C7's fill-rate drop?
 
 #### Example opening turn — hold week, no actions
 
 > **User:** /campaign-analysis
 >
 > **Assistant:**
-> Data sources: /portfolio/{health ✓, insights ✓, weekly-review ✓, weekly-history ✓, channel-velocity ✓, suggestions ✓}, /credit/{summary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches (0 rows), campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×6
-> Missing/degraded: /intelligence/niches (0 rows)
-> Impact: coverage-gap analysis unavailable this session.
+> Data sources: same as above; niches (0 rows). Impact: coverage-gap unavailable.
 >
-> Buying active (11 purchases, trailing mean 12/wk). Sales flat — 1.2% below 4-week mean (weekly-history + health). Credit recovery tracking (summary trend matches).
+> Buying steady (11/wk vs trailing 12). Sales flat — 1.2% below 4-week mean. Credit recovery tracking.
 >
-> Hold — this week's portfolio ROI of 11.4% is within ±10% of the 11.8% trailing-mean. No significant movers across campaigns. C7 fill rate steady at 34%. DH pending queue is 4 items (oldest 3 days — not urgent).
+> Hold — portfolio ROI 11.4% within ±10% of 11.8% trailing-mean. No significant movers. C7 fill steady at 34%. DH pending queue: 4 items (oldest 3 days).
 >
-> **Portfolio at a glance:** Wildcard 13% / 36% ST / 45 unsold $17.8K • C7 7% / 31% ST / 38 unsold $8.2K • C3 10% / 44% ST / 19 unsold $4.9K • Outstanding $38.4K / 3.0 weeks to cover / trend ↘ • Invoices: $7.6K due 2026-05-06 • In-hand $15.2K of $22.8K unsold, DH listed: 31 of 45 mapped.
+> **Portfolio at a glance:** Wildcard 13% / 36% ST / 45 unsold $17.8K • C7 7% / 31% ST / 38 unsold $8.2K • Outstanding $38.4K / 3.0 weeks / ↘ • Invoices: $7.6K due 2026-05-06 • In-hand $15.2K of $22.8K, DH listed: 31 of 45.
 >
-> Quiet week. Want me to look at the DH pending queue, review aging inventory, or something else?
+> Quiet week. Look at the DH pending queue, review aging inventory, or something else?
 
 #### Example opening turn — contradiction detected
 
