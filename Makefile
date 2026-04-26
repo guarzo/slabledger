@@ -1,6 +1,6 @@
 # SlabLedger - Makefile
 
-.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull db-push ci hooks screenshots kill
+.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull db-push ci hooks screenshots screenshots-quick kill
 
 # Default target
 all: help
@@ -19,6 +19,7 @@ help:
 	@echo "  test-verbose  Run all tests with verbose output"
 	@echo "  coverage      Run tests with coverage report"
 	@echo "  screenshots   Take screenshots of all pages (Playwright, real backend)"
+	@echo "  screenshots-quick  Same but skip db-pull (use existing local data)"
 	@echo "  lint          Run linting and formatting"
 	@echo "  check         Run full quality check (lint + architecture + file size)"
 	@echo "  clean         Clean build artifacts"
@@ -90,13 +91,20 @@ coverage:
 # Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
 SCREENSHOT_TOKEN ?= playwright-screenshots
 SCREENSHOT_DB_URL ?= postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
-screenshots: db-pull build web-build
+define run-screenshots
 	@echo "Taking screenshots of all pages (real backend)..."
 	@LOCAL_API_TOKEN=$(SCREENSHOT_TOKEN) DATABASE_URL=$(SCREENSHOT_DB_URL) ./slabledger --web --port 4173 & SERVER_PID=$$! ; \
 	  sleep 3 ; \
 	  cd web && CI=1 SCREENSHOT_BACKEND=1 SCREENSHOT_TOKEN=$(SCREENSHOT_TOKEN) ./node_modules/.bin/playwright test tests/screenshot-all-pages.spec.ts --project=chromium ; \
 	  EXIT=$$? ; kill $$SERVER_PID 2>/dev/null ; exit $$EXIT
 	@echo "Screenshots saved to web/screenshots/"
+endef
+
+screenshots: db-pull build web-build
+	$(run-screenshots)
+
+screenshots-quick: build web-build
+	$(run-screenshots)
 
 # Code quality
 lint:
