@@ -121,7 +121,10 @@ func (ps *PurchaseStore) ListStaleDHStatusSoldPurchases(ctx context.Context) ([]
 		}
 		ids = append(ids, id)
 	}
-	return ids, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list stale dh status sold purchases: rows iteration: %w", err)
+	}
+	return ids, nil
 }
 
 // UpdatePurchaseDHCardID updates only the dh_card_id column on a purchase.
