@@ -17,7 +17,7 @@ const baseItem: AgingItem = {
     buyCostCents: 0,
     purchaseDate: '2026-01-01',
     phase: 'in_stock',
-  } as AgingItem['purchase'],
+  } as unknown as AgingItem['purchase'],
   daysHeld: 30,
   currentMarket: { lastSoldCents: 26500, lastSoldDate: '2026-03-12', gradePriceCents: 0 },
   recommendedPriceCents: 25000,
