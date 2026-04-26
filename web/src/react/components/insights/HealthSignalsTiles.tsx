@@ -5,9 +5,9 @@ import StatCard from '../../ui/StatCard';
 
 type Tone = 'good' | 'warn' | 'bad' | 'muted';
 
-const toneToColor: Record<Tone, 'green' | 'red' | undefined> = {
+const toneToColor: Record<Tone, 'green' | 'red' | 'yellow' | undefined> = {
   good: 'green',
-  warn: undefined,
+  warn: 'yellow',
   bad: 'red',
   muted: undefined,
 };

@@ -28,7 +28,6 @@ export default function DoNowSection({ actions }: { actions: Action[] }) {
       <section className="space-y-2">
         <SectionEyebrow>Do now</SectionEyebrow>
         <EmptyState
-          icon=""
           title="Nothing needs attention"
           description="Your campaigns are healthy."
           compact

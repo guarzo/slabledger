@@ -36,7 +36,6 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
       <section className="space-y-2">
         <SectionEyebrow>Campaign tuning</SectionEyebrow>
         <EmptyState
-          icon=""
           title="No active campaigns"
           description="Campaign tuning will appear here once campaigns are running."
           compact

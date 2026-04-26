@@ -3,7 +3,7 @@ export type StatCardSize = 'lg' | 'md' | 'sm';
 export interface StatCardProps {
   label: string;
   value: string;
-  color?: 'green' | 'red';
+  color?: 'green' | 'red' | 'yellow';
   size?: StatCardSize;
   /** Optional secondary line below the value */
   sub?: string;
@@ -15,6 +15,8 @@ export default function StatCard({ label, value, color, size = 'md', sub }: Stat
       ? 'text-[var(--success)]'
       : color === 'red'
       ? 'text-[var(--danger)]'
+      : color === 'yellow'
+      ? 'text-[var(--warning)]'
       : 'text-[var(--text)]';
 
   if (size === 'sm') {

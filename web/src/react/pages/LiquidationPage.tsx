@@ -16,7 +16,7 @@ function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
     case 'high': return 'text-[var(--success)]';
     case 'medium': return 'text-[var(--warning)]';
-    case 'low': return 'text-orange-400';
+    case 'low': return 'text-[var(--warning)]';
     default: return 'text-[var(--text-muted)]';
   }
 }
