@@ -83,3 +83,48 @@
 .hero[data-mag="big"]  .roiValue { font-size: calc(var(--hero-roi-size) * 1.15); }
 .hero[data-mag="huge"] .roiValue { font-size: calc(var(--hero-roi-size) * 1.30); text-shadow: 0 0 24px rgba(16,185,129,0.45); }
 .hero[data-tone="neg"][data-mag="huge"] .roiValue { text-shadow: 0 0 24px rgba(239,68,68,0.45); }
+
+/* Stat cluster broken into two visually grouped sub-rows separated by a hairline. */
+.clusterGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  column-gap: 0;
+  row-gap: 0;
+}
+.subCluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: 32px;
+  row-gap: 12px;
+  padding: 4px 24px 4px 0;
+}
+.subCluster + .subCluster {
+  border-left: 1px solid rgba(255,255,255,0.04);
+  padding-left: 24px;
+}
+@media (max-width: 768px) {
+  .subCluster + .subCluster {
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    padding-left: 0;
+    padding-top: 12px;
+    margin-top: 12px;
+    width: 100%;
+  }
+}
+
+/* Micro-context caption beneath a stat label (e.g. "all-time", "trailing 30d"). */
+.statCaption {
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  margin-top: -2px;
+  opacity: 0.75;
+}
+
+/* Apply state tokens. */
+.tWaiting { color: var(--state-waiting); }
+.tAtRisk  { color: var(--state-at-risk); }
+.tProblem { color: var(--state-problem); }

@@ -64,11 +64,11 @@ export default function CampaignDetailPage() {
         { label: campaign.name },
       ]} />
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-[var(--text)]">{campaign.name}</h1>
-        <span className="text-sm text-[var(--text-muted)]">
-          {campaign.sport} &middot; {campaign.yearRange} &middot; PSA {campaign.gradeRange}
-        </span>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-[var(--text)] leading-tight">{campaign.name}</h1>
+        <p className="text-xs text-[var(--text-muted)] font-mono mt-1 tabular-nums">
+          {campaign.sport} · {campaign.yearRange} · PSA {campaign.gradeRange}
+        </p>
       </div>
 
       <Tabs.Root value={tab} onValueChange={(v) => setTab(v as CampaignTabId)}>
