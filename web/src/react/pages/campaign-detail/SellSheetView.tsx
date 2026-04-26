@@ -13,7 +13,7 @@ import { isReadyToList } from './inventory/inventoryCalcs';
 /* ── Sell-sheet action bar (shown when items are selected) ───────── */
 
 interface SellSheetActionsProps {
-  selected: Set<string>;
+  selected: ReadonlySet<string>;
   sellSheetActive: boolean;
   items: AgingItem[];
   onAddToSellSheet: (ids: string[]) => void;

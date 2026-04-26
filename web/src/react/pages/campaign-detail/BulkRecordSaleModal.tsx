@@ -31,8 +31,12 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
   const [reviewOpen, setReviewOpen] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, number | undefined>>({});
 
-  // Sync pendingItems when props change (new modal open)
-  useEffect(() => { setPendingItems(items); }, [items]);
+  // Sync pendingItems when the modal opens or the actual item set changes
+  useEffect(() => {
+    const currentIds = pendingItems.map(i => i.purchase.id).join(',');
+    const nextIds = items.map(i => i.purchase.id).join(',');
+    if (currentIds !== nextIds) setPendingItems(items);
+  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const computedPrices = useMemo(() => {
     const m: Record<string, number> = {};

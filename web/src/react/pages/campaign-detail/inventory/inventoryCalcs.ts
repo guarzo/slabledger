@@ -219,7 +219,7 @@ export function filterAndSortItems(
     sortKey: SortKey;
     sortDir: SortDir;
     evMap: Map<string, ExpectedValue>;
-    pinnedIds?: Set<string>;
+    pinnedIds?: ReadonlySet<string>;
   },
 ): AgingItem[] {
   const { debouncedSearch, showAll, filterTab, sellSheetHas, sortKey, sortDir, evMap } = opts;

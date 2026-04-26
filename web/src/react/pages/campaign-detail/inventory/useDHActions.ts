@@ -40,7 +40,7 @@ export function useDHActions({ toast, invalidateInventory, items, setSelected }:
   const [fixMatchTarget, setFixMatchTarget] = useState<DHActionsState['fixMatchTarget']>(null);
 
   // Clear optimistic overrides when fresh data arrives
-  useEffect(() => { if (dhListedOptimistic.size > 0) setDHListedOptimistic(new Set()); }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setDHListedOptimistic(prev => prev.size > 0 ? new Set() : prev); }, [items]);
 
   const handleApproveDHPush = useCallback(async (purchaseId: string) => {
     try {

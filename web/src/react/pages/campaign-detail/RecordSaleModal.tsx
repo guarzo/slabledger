@@ -44,8 +44,7 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
   // Use initialPrices as defaults, overlaid by user edits
   const effectivePrices = { ...initialPrices, ...prices };
 
-  function handleClose() {
-    if (submitting) return;
+  function resetState() {
     setPrices({});
     setChannel(DEFAULT_SALE_CHANNEL);
     setSaleDate(localToday());
@@ -54,18 +53,11 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
     setDaysListed('');
     setSoldAtAskingPrice(false);
     setShowOutcomeFields(false);
-    onClose();
   }
 
-  function resetAndClose() {
-    setPrices({});
-    setChannel(DEFAULT_SALE_CHANNEL);
-    setSaleDate(localToday());
-    setOriginalListPrice('');
-    setPriceReductions('');
-    setDaysListed('');
-    setSoldAtAskingPrice(false);
-    setShowOutcomeFields(false);
+  function handleClose() {
+    if (submitting) return;
+    resetState();
     onClose();
   }
 
@@ -97,7 +89,8 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
       invalidateAfterSale(queryClient, [item.purchase.campaignId]);
 
       onSuccess?.();
-      resetAndClose();
+      resetState();
+      onClose();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to record sale'));
     } finally {

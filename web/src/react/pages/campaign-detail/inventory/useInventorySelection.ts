@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type Dispatch, type SetStateAction } from 'react';
 
 export interface InventorySelection {
-  selected: Set<string>;
-  setSelected: React.Dispatch<React.SetStateAction<Set<string>>>;
-  pinnedIds: Set<string>;
-  setPinnedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
+  selected: ReadonlySet<string>;
+  setSelected: Dispatch<SetStateAction<Set<string>>>;
+  pinnedIds: ReadonlySet<string>;
+  setPinnedIds: Dispatch<SetStateAction<Set<string>>>;
   expandedId: string | null;
-  setExpandedId: React.Dispatch<React.SetStateAction<string | null>>;
+  setExpandedId: Dispatch<SetStateAction<string | null>>;
   toggleSelect: (purchaseId: string) => void;
   toggleExpand: (purchaseId: string) => void;
   handleDeselectMissingCL: (purchaseIds: string[]) => void;

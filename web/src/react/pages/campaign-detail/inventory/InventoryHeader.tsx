@@ -32,7 +32,7 @@ export interface InventoryHeaderProps {
   pageSellSheetCount: number;
   debouncedSearch: string;
   sellSheetActive: boolean;
-  selected: Set<string>;
+  selected: ReadonlySet<string>;
   campaignId?: string;
   isPrinting: boolean;
   onStatClick: (target: StatClickTarget) => void;
