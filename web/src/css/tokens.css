@@ -163,6 +163,15 @@
   --info-border: rgba(34, 211, 238, 0.2);
 
   /* ===================================
+     MONEY-STATE SEMANTIC TOKENS
+     Money I expect / might lose / lost.
+     Aliases over the generic semantic palette so call sites express intent.
+     =================================== */
+  --state-waiting: var(--text-muted);   /* Outstanding, Awaiting Intake, Awaiting Receipt */
+  --state-at-risk: var(--warning);      /* At Risk capital */
+  --state-problem: var(--danger);       /* Below Cost, Unrealized loss */
+
+  /* ===================================
      BORDER RADIUS
      =================================== */
   --radius-sm: 10px;
