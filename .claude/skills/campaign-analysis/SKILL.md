@@ -29,11 +29,13 @@ If the file is missing (fresh checkout, sanitised worktree), don't fail. Tell th
 
 ### Step 1 addendum — Strategy-doc adversarial treatment
 
-When the strategy doc describes a **proposed or planned change** (language like "considering", "planning to", "next step", "proposed"), treat it as a claim to verify, NOT as current state. Before using any proposal's numbers in analysis, verify against live API data (`/api/campaigns`, `/api/portfolio/snapshot`, etc.) that the change was or was NOT already applied. Do not anchor on unverified proposals.
+Treat the strategy doc as a claim to verify, not as ground truth. Three cases need this discipline:
 
-When the strategy doc states **current parameters**, cross-check against `/api/campaigns` for fields the API stores (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`). Disagreement between the strategy doc and live API is a Playbook D signal — surface it, don't silently resolve it in either direction.
+1. **Proposed/planned changes** (language like "considering", "planning to", "next step", "proposed"): verify against live API data (`/api/campaigns`, `/api/portfolio/snapshot`) that the change was or was NOT already applied before using any of the proposal's numbers.
 
-**Current-state claims about operational status (paused, archived, removed, active) require the same adversarial treatment as proposals.** If the doc says "Campaign X is paused in app" or "Campaign Y was removed," verify against `/api/campaigns` `phase` field and presence in `/portfolio/health`. When the doc and API disagree on present-tense reality, **default to the API as ground truth and surface the doc as a cleanup candidate** — never reason from the stale doc as if it were authoritative. After being corrected once on a doc-vs-API mismatch in a session, do not re-anchor on the doc later in the same conversation; re-read the live record.
+2. **Current-state claims about operational status** (paused, archived, removed, active): verify against `/api/campaigns` `phase` field and presence in `/portfolio/health`. When the doc and API disagree on present-tense reality, default to the API as ground truth and surface the doc as a cleanup candidate. After being corrected once on a doc-vs-API mismatch in a session, do not re-anchor on the doc later in the same conversation; re-read the live record.
+
+3. **Current parameters** (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`): cross-check against `/api/campaigns`. Disagreement is a Playbook D signal — surface it, don't silently resolve in either direction.
 
 ### Step 1a — Parse current campaign parameters from the API and strategy doc
 
@@ -150,8 +152,6 @@ After the data quality audit, before writing the opener. Answer three questions 
 > "Before I can analyze this week, these signals disagree: [specifics with endpoint citations]. Which do you trust, or should we dig into why they diverge?"
 
 No movers, no actions, no portfolio-at-a-glance — just the contradiction and a question. Resume normal analysis only after the user resolves the contradiction or tells you which source to trust.
-
-**Strategy-doc adversarial check.** After the three questions pass, if the strategy doc describes any *proposed* change (language like "considering", "planning to", "next step"), verify against live API data that the change was NOT already applied before using any of the proposal's numbers in the opener. See Step 1 addendum.
 
 Present the opener as **a data-sources block, reconciliation summary, movers, conditional actions, portfolio snapshot, and close**:
 
