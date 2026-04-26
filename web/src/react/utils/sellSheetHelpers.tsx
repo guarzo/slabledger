@@ -24,13 +24,13 @@ export function formatCardName(name: string): string {
 }
 
 /** Format grader prefix and grade for display. */
-export function gradeDisplay(item: SellSheetItem): string {
+export function gradeDisplay(item: { grader?: string; grade: number }): string {
   const prefix = item.grader && item.grader !== 'PSA' ? item.grader : 'PSA';
   return `${prefix} ${item.grade}`;
 }
 
 /** Build a subtitle from set name and card number. */
-export function cardSubtitle(item: SellSheetItem): string | null {
+export function cardSubtitle(item: { setName?: string; cardNumber?: string }): string | null {
   const parts: string[] = [];
   if (item.setName) parts.push(item.setName);
   if (item.cardNumber) parts.push(`#${item.cardNumber}`);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clPriceDisplayCents } from './sellSheetHelpers';
+import { clPriceDisplayCents, formatLastSaleDate } from './sellSheetHelpers';
 
 describe('clPriceDisplayCents', () => {
   it('returns CL value when present', () => {
@@ -13,8 +13,6 @@ describe('clPriceDisplayCents', () => {
     expect(clPriceDisplayCents({ clValueCents: 0 })).toBeNull();
   });
 });
-
-import { formatLastSaleDate } from './sellSheetHelpers';
 
 describe('formatLastSaleDate', () => {
   it('formats ISO date as MM/DD/YY', () => {

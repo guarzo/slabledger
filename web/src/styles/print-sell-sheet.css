@@ -58,9 +58,10 @@
     text-align: right;
   }
 
-  /* Column header row, repeats on each printed page via display:table-header-group on .sell-sheet-print-thead */
+  /* Column header row. Renders once at the top of the printed output; the
+     grid-based layout doesn't support per-page repeating headers. */
   .sell-sheet-print-thead {
-    display: table-header-group;
+    display: block;
   }
 
   .sell-sheet-print-headrow,

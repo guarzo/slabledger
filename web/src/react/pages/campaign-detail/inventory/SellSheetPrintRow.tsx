@@ -3,6 +3,8 @@ import JsBarcode from 'jsbarcode';
 import type { AgingItem } from '../../../../types/campaigns';
 import {
   formatCardName,
+  cardSubtitle,
+  gradeDisplay,
   clPriceDisplayCents,
   formatLastSaleDate,
 } from '../../../utils/sellSheetHelpers';
@@ -14,18 +16,6 @@ interface Props {
 
 function dollars(cents: number): string {
   return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
-}
-
-function subtitle(setName?: string, cardNumber?: string): string {
-  const parts: string[] = [];
-  if (setName) parts.push(setName);
-  if (cardNumber) parts.push(`#${cardNumber}`);
-  return parts.join(' · ');
-}
-
-function gradeLabel(grader: string | undefined, gradeValue: number): string {
-  const prefix = grader && grader !== 'PSA' ? grader : 'PSA';
-  return `${prefix} ${gradeValue}`;
 }
 
 export default function SellSheetPrintRow({ item, rowNumber }: Props) {
@@ -59,10 +49,12 @@ export default function SellSheetPrintRow({ item, rowNumber }: Props) {
       <div className="sell-sheet-print-cell" data-cell="num">{rowNumber}</div>
       <div className="sell-sheet-print-cell" data-cell="card">
         <div className="sell-sheet-print-name">{formatCardName(purchase.cardName)}</div>
-        <div className="sell-sheet-print-sub">{subtitle(purchase.setName, purchase.cardNumber)}</div>
+        <div className="sell-sheet-print-sub">
+          {cardSubtitle({ setName: purchase.setName, cardNumber: purchase.cardNumber })}
+        </div>
       </div>
       <div className="sell-sheet-print-cell" data-cell="grade">
-        {gradeLabel(purchase.grader, purchase.gradeValue)}
+        {gradeDisplay({ grader: purchase.grader, grade: purchase.gradeValue })}
       </div>
       <div className="sell-sheet-print-cell" data-cell="cert">
         <div className="sell-sheet-print-cert">{purchase.certNumber}</div>

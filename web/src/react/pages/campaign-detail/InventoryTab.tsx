@@ -218,76 +218,49 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
             </div>
           )}
-          <div ref={mobileScrollRef} className={isPrinting ? '' : 'max-h-[calc(100vh-280px)] max-h-[calc(100dvh-280px)] overflow-y-auto scrollbar-dark overscroll-contain touch-pan-y'}>
-            {isPrinting ? (
-              filteredAndSortedItems.map((item) => (
-                <div key={item.purchase.id}>
-                  <MobileCard
-                    item={item}
-                    selected={selected.has(item.purchase.id)}
-                    onToggle={() => toggleSelect(item.purchase.id)}
-                    onRecordSale={() => openSaleModal([item])}
-                    onFixPricing={() => handleFixPricing(item.purchase)}
-                    onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                    onUnmatchDH={getOnUnmatchDH(item.purchase)}
-                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
-                    onSetPrice={() => handleSetPrice(item)}
-                    onDelete={() => handleDelete(item)}
-                    onListOnDH={handleListOnDH}
-                    onDismiss={() => handleDismiss(item.purchase.id)}
-                    onUndismiss={() => handleUndismiss(item.purchase.id)}
-                    dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                    dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
-                    ev={evMap.get(item.purchase.certNumber)}
-                    showCampaignColumn={showCampaignColumn}
-                    isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
-                  />
-                </div>
-              ))
-            ) : (
-              <div style={{ height: `${mobileVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-                {mobileVirtualizer.getVirtualItems().map(virtualRow => {
-                  const item = filteredAndSortedItems[virtualRow.index];
-                  return (
-                    <div key={item.purchase.id}
-                      data-index={virtualRow.index}
-                      ref={mobileVirtualizer.measureElement}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}>
-                      <MobileCard
-                        item={item}
-                        selected={selected.has(item.purchase.id)}
-                        onToggle={() => toggleSelect(item.purchase.id)}
-                        onRecordSale={() => openSaleModal([item])}
-                        onFixPricing={() => handleFixPricing(item.purchase)}
-                        onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                        onUnmatchDH={getOnUnmatchDH(item.purchase)}
-                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
-                        onSetPrice={() => handleSetPrice(item)}
-                        onDelete={() => handleDelete(item)}
-                        onListOnDH={handleListOnDH}
-                        onDismiss={() => handleDismiss(item.purchase.id)}
-                        onUndismiss={() => handleUndismiss(item.purchase.id)}
-                        dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                        dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
-                        ev={evMap.get(item.purchase.certNumber)}
-                        showCampaignColumn={showCampaignColumn}
-                        isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
-                        onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
-                          sellSheet.remove([item.purchase.id]);
-                          toast.success('Removed from sell sheet');
-                        } : undefined}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          <div ref={mobileScrollRef} className="max-h-[calc(100vh-280px)] max-h-[calc(100dvh-280px)] overflow-y-auto scrollbar-dark overscroll-contain touch-pan-y">
+            <div style={{ height: `${mobileVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+              {mobileVirtualizer.getVirtualItems().map(virtualRow => {
+                const item = filteredAndSortedItems[virtualRow.index];
+                return (
+                  <div key={item.purchase.id}
+                    data-index={virtualRow.index}
+                    ref={mobileVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}>
+                    <MobileCard
+                      item={item}
+                      selected={selected.has(item.purchase.id)}
+                      onToggle={() => toggleSelect(item.purchase.id)}
+                      onRecordSale={() => openSaleModal([item])}
+                      onFixPricing={() => handleFixPricing(item.purchase)}
+                      onFixDHMatch={() => handleFixDHMatch(item.purchase)}
+                      onUnmatchDH={getOnUnmatchDH(item.purchase)}
+                      onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
+                      onSetPrice={() => handleSetPrice(item)}
+                      onDelete={() => handleDelete(item)}
+                      onListOnDH={handleListOnDH}
+                      onDismiss={() => handleDismiss(item.purchase.id)}
+                      onUndismiss={() => handleUndismiss(item.purchase.id)}
+                      dhListingLoading={dhListingInFlight.has(item.purchase.id)}
+                      dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
+                      ev={evMap.get(item.purchase.certNumber)}
+                      showCampaignColumn={showCampaignColumn}
+                      isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                      onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
+                        sellSheet.remove([item.purchase.id]);
+                        toast.success('Removed from sell sheet');
+                      } : undefined}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       ) : (
@@ -316,101 +289,61 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
             </div>
           )}
-          <div ref={scrollContainerRef} className={isPrinting ? '' : 'max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark'}>
-            {isPrinting ? (
-              filteredAndSortedItems.map((item, index) => {
+          <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
+            <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+              {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                const item = filteredAndSortedItems[virtualRow.index];
                 const isExpanded = expandedId === item.purchase.id;
                 const rowPl = unrealizedPL(costBasis(item.purchase), item);
                 const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
                 const isSelected = selected.has(item.purchase.id);
                 return (
-                  <div key={item.purchase.id} className="glass-vrow" data-stripe={index % 2 === 1} data-selected={isSelected} data-pl={plStatus}>
+                  <div key={item.purchase.id}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    className="glass-vrow"
+                    data-stripe={virtualRow.index % 2 === 1}
+                    data-selected={isSelected}
+                    data-pl={plStatus}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}>
                     <div className="text-sm">
-                    <DesktopRow
-                      item={item}
-                      selected={isSelected}
-                      onToggle={() => toggleSelect(item.purchase.id)}
-                      onExpand={() => toggleExpand(item.purchase.id)}
-                      onRecordSale={() => openSaleModal([item])}
-                      onFixPricing={() => handleFixPricing(item.purchase)}
-                      onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                      onUnmatchDH={getOnUnmatchDH(item.purchase)}
-                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
-                      onSetPrice={() => handleSetPrice(item)}
-                      onDelete={() => handleDelete(item)}
-                      onListOnDH={handleListOnDH}
-                      onDismiss={() => handleDismiss(item.purchase.id)}
-                      onUndismiss={() => handleUndismiss(item.purchase.id)}
-                      dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                      dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
-                      showCampaignColumn={showCampaignColumn}
-                      isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
-                      onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
-                        sellSheet.remove([item.purchase.id]);
-                        toast.success('Removed from sell sheet');
-                      } : undefined}
-                    />
+                      <DesktopRow
+                        item={item}
+                        selected={isSelected}
+                        onToggle={() => toggleSelect(item.purchase.id)}
+                        onExpand={() => toggleExpand(item.purchase.id)}
+                        onRecordSale={() => openSaleModal([item])}
+                        onFixPricing={() => handleFixPricing(item.purchase)}
+                        onFixDHMatch={() => handleFixDHMatch(item.purchase)}
+                        onUnmatchDH={getOnUnmatchDH(item.purchase)}
+                        onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
+                        onSetPrice={() => handleSetPrice(item)}
+                        onDelete={() => handleDelete(item)}
+                        onListOnDH={handleListOnDH}
+                        onInlinePriceSave={handleInlinePriceSave}
+                        onDismiss={() => handleDismiss(item.purchase.id)}
+                        onUndismiss={() => handleUndismiss(item.purchase.id)}
+                        dhListingLoading={dhListingInFlight.has(item.purchase.id)}
+                        dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
+                        showCampaignColumn={showCampaignColumn}
+                        isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
+                        onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
+                          sellSheet.remove([item.purchase.id]);
+                          toast.success('Removed from sell sheet');
+                        } : undefined}
+                      />
                     </div>
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} />}
                   </div>
                 );
-              })
-            ) : (
-              <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-                {rowVirtualizer.getVirtualItems().map(virtualRow => {
-                  const item = filteredAndSortedItems[virtualRow.index];
-                  const isExpanded = expandedId === item.purchase.id;
-                  const rowPl = unrealizedPL(costBasis(item.purchase), item);
-                  const plStatus = rowPl != null ? (rowPl > 0 ? 'positive' : rowPl < 0 ? 'negative' : 'neutral') : 'neutral';
-                  const isSelected = selected.has(item.purchase.id);
-                  return (
-                    <div key={item.purchase.id}
-                      data-index={virtualRow.index}
-                      ref={rowVirtualizer.measureElement}
-                      className="glass-vrow"
-                      data-stripe={virtualRow.index % 2 === 1}
-                      data-selected={isSelected}
-                      data-pl={plStatus}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}>
-                      <div className="text-sm">
-                        <DesktopRow
-                          item={item}
-                          selected={isSelected}
-                          onToggle={() => toggleSelect(item.purchase.id)}
-                          onExpand={() => toggleExpand(item.purchase.id)}
-                          onRecordSale={() => openSaleModal([item])}
-                          onFixPricing={() => handleFixPricing(item.purchase)}
-                          onFixDHMatch={() => handleFixDHMatch(item.purchase)}
-                          onUnmatchDH={getOnUnmatchDH(item.purchase)}
-                    onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
-                          onSetPrice={() => handleSetPrice(item)}
-                          onDelete={() => handleDelete(item)}
-                          onListOnDH={handleListOnDH}
-                          onInlinePriceSave={handleInlinePriceSave}
-                          onDismiss={() => handleDismiss(item.purchase.id)}
-                          onUndismiss={() => handleUndismiss(item.purchase.id)}
-                          dhListingLoading={dhListingInFlight.has(item.purchase.id)}
-                          dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
-                          showCampaignColumn={showCampaignColumn}
-                          isOnSellSheet={!sellSheetActive && sellSheet.has(item.purchase.id)}
-                          onRemoveFromSellSheet={sellSheet.has(item.purchase.id) ? () => {
-                            sellSheet.remove([item.purchase.id]);
-                            toast.success('Removed from sell sheet');
-                          } : undefined}
-                        />
-                      </div>
-                      {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} />}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+              })}
+            </div>
           </div>
         </div>
       ))}

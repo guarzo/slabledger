@@ -2,22 +2,27 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SellSheetPrintRow from './SellSheetPrintRow';
 import type { AgingItem } from '../../../../types/campaigns';
+import type { Purchase } from '../../../../types/campaigns/core';
+
+const basePurchase: Purchase = {
+  id: 'p1',
+  campaignId: 'c1',
+  cardName: 'GOLEM HOLO',
+  certNumber: '133487731',
+  cardNumber: '76',
+  setName: 'Pokemon Japanese Vending',
+  grader: 'PSA',
+  gradeValue: 4,
+  clValueCents: 27900,
+  buyCostCents: 0,
+  psaSourcingFeeCents: 0,
+  purchaseDate: '2026-01-01',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+};
 
 const baseItem: AgingItem = {
-  purchase: {
-    id: 'p1',
-    campaignId: 'c1',
-    cardName: 'GOLEM HOLO',
-    certNumber: '133487731',
-    cardNumber: '76',
-    setName: 'Pokemon Japanese Vending',
-    grader: 'PSA',
-    gradeValue: 4,
-    clValueCents: 27900,
-    buyCostCents: 0,
-    purchaseDate: '2026-01-01',
-    phase: 'in_stock',
-  } as unknown as AgingItem['purchase'],
+  purchase: basePurchase,
   daysHeld: 30,
   currentMarket: { lastSoldCents: 26500, lastSoldDate: '2026-03-12', gradePriceCents: 0 },
   recommendedPriceCents: 25000,
