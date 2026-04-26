@@ -68,6 +68,17 @@ vi.mock('./inventoryCalcs', async (importOriginal) => {
 // Imports after vi.mock declarations receive the mocked modules.
 import { useInventoryState } from './useInventoryState';
 import { api, APIError } from '../../../../js/api';
+import type { AgingItem } from '../../../../types/campaigns';
+
+// Minimal typed factory for AgingItem — keeps tests away from `as never`
+// while still allowing per-test overrides for any required field.
+function mockItem(overrides: { id: string } & Partial<AgingItem['purchase']>): AgingItem {
+  const { id, ...rest } = overrides;
+  return {
+    purchase: { id, ...rest } as AgingItem['purchase'],
+    daysHeld: 0,
+  } as AgingItem;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -183,7 +194,7 @@ describe('useInventoryState — default filter tab', () => {
       ...mockMeta.current,
       tabCounts: { ...mockMeta.current.tabCounts, needs_attention: 0, all: 5 },
     };
-    const items = [{ purchase: { id: 'p1' } }] as never;
+    const items = [mockItem({ id: 'p1' })];
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useInventoryState(items, 'camp-1'), { wrapper });
 
@@ -197,7 +208,7 @@ describe('useInventoryState — default filter tab', () => {
       ...mockMeta.current,
       tabCounts: { ...mockMeta.current.tabCounts, needs_attention: 3, all: 5 },
     };
-    const items = [{ purchase: { id: 'p1' } }] as never;
+    const items = [mockItem({ id: 'p1' })];
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useInventoryState(items, 'camp-1'), { wrapper });
 
