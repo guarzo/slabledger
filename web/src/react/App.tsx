@@ -39,7 +39,7 @@ function AppContent() {
         {!isLoginPage && <Header />}
         <main
           id="main-content"
-          className="min-h-screen bg-bg-primary dark:bg-slate-900 py-8"
+          className="min-h-screen bg-[var(--bg)] py-8"
 
         >
           <Suspense fallback={

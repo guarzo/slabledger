@@ -30,7 +30,7 @@ export default function PokeballLoader({ size = "md", text = "Loading..." }: Pok
         </div>
       </div>
       {text && (
-        <p className="text-sm text-gray-600 dark:text-gray-300 animate-pulse">
+        <p className="text-sm text-[var(--text-muted)] animate-pulse">
           {text}
         </p>
       )}

@@ -1,88 +1,59 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./src/**/*.{html,js,jsx,ts,tsx}"],
-  darkMode: "class",
   theme: {
     extend: {
       // Accessibility: Reduced motion is handled globally in design-system.css
       // Use motion-safe: and motion-reduce: variants for granular control
       // Example: motion-safe:animate-fadeIn motion-reduce:transition-none
       colors: {
-        // Primary palette
+        // Token-referencing semantic palette — use var() so Tailwind classes
+        // like `text-success` or `bg-primary` resolve to tokens.css values.
         primary: {
-          DEFAULT: '#2563eb',
-          hover: '#1d4ed8',
-          light: '#dbeafe',
-          dark: '#1e40af',
+          DEFAULT: 'var(--brand-500)',
+          hover: 'var(--brand-600)',
         },
-        // Success palette
         success: {
-          DEFAULT: '#059669',
-          hover: '#047857',
-          light: '#d1fae5',
-          text: '#065f46',
-          bg: '#d1fae5',
-          border: '#059669',
+          DEFAULT: 'var(--success)',
+          bg: 'var(--success-bg)',
+          border: 'var(--success-border)',
         },
-        // Warning palette
         warning: {
-          DEFAULT: '#d97706',
-          hover: '#b45309',
-          light: '#fef3c7',
-          text: '#92400e',
-          bg: '#fef3c7',
-          border: '#d97706',
+          DEFAULT: 'var(--warning)',
+          bg: 'var(--warning-bg)',
+          border: 'var(--warning-border)',
         },
-        // Danger palette
         danger: {
-          DEFAULT: '#dc2626',
-          hover: '#b91c1c',
-          light: '#fee2e2',
-          text: '#991b1b',
-          bg: '#fee2e2',
-          border: '#dc2626',
+          DEFAULT: 'var(--danger)',
+          bg: 'var(--danger-bg)',
+          border: 'var(--danger-border)',
         },
-        // Info palette
         info: {
-          DEFAULT: '#0891b2',
-          hover: '#0e7490',
-          light: '#cffafe',
-          text: '#164e63',
-          bg: '#cffafe',
-          border: '#0891b2',
+          DEFAULT: 'var(--info)',
+          bg: 'var(--info-bg)',
+          border: 'var(--info-border)',
         },
-        // Text colors
-        text: {
-          primary: '#111827',
-          secondary: '#4b5563',
-          tertiary: '#6b7280',
-          inverse: '#ffffff',
-          link: '#2563eb',
-          'link-hover': '#1d4ed8',
-        },
-        // Background colors
+        // Surface / background
         bg: {
-          primary: '#fefefe',
-          secondary: '#f9fafb',
-          tertiary: '#f3f4f6',
-          elevated: '#ffffff',
-          // Legacy aliases for backwards compatibility
-          DEFAULT: '#fefefe',
-          surface: '#f9fafb',
-          raised: '#ffffff',
+          DEFAULT: 'var(--bg)',
+          primary: 'var(--bg)',
         },
-        // Surface colors
         surface: {
-          raised: '#ffffff',
-          sunken: '#f3f4f6',
-          overlay: 'rgba(0, 0, 0, 0.5)',
+          0: 'var(--surface-0)',
+          1: 'var(--surface-1)',
+          2: 'var(--surface-2)',
+          3: 'var(--surface-3)',
+          4: 'var(--surface-4)',
         },
-        // Border colors
+        // Text
+        text: {
+          DEFAULT: 'var(--text)',
+          muted: 'var(--text-muted)',
+          secondary: 'var(--text-secondary)',
+        },
+        // Border
         border: {
-          DEFAULT: '#e5e7eb',
-          hover: '#d1d5db',
-          focus: '#2563eb',
-          error: '#dc2626',
+          DEFAULT: 'var(--surface-3)',
         },
         // Grade colors (Pokemon TCG specific)
         grade: {
@@ -91,13 +62,13 @@ module.exports = {
           bgs: '#00a8ff',
           cgc: '#ff6b35',
         },
-        // Legacy brand colors for backwards compatibility
+        // Brand palette (for direct brand color usage)
         brand: {
-          start: "#2563eb",
-          end: "#60a5fa",
-          warn: "#f59e0b",
-          success: "#10b981",
-          danger: "#ef4444",
+          start: 'var(--brand-500)',
+          end: 'var(--brand-300)',
+          warn: 'var(--warning)',
+          success: 'var(--success)',
+          danger: 'var(--danger)',
         },
       },
       // Spacing extensions
@@ -121,17 +92,16 @@ module.exports = {
         extrabold: '800',
       },
       // Border radius extensions
+      // Border radius — matches design system tokens in tokens.css
       borderRadius: {
-        'xs': '0.125rem',
-        'sm': '0.25rem',
-        DEFAULT: '0.375rem',
-        'md': '0.5rem',
-        'lg': '0.75rem',
-        'xl': '1rem',
+        'xs': '6px',
+        'sm': '10px',
+        DEFAULT: '12px',
+        'md': '14px',
+        'lg': '18px',
+        'xl': '22px',
         '2xl': '1.5rem',
         '3xl': '2rem',
-        // Legacy alias
-        'xl2': '1rem',
       },
       // Shadow extensions - Enhanced for modern UI
       boxShadow: {

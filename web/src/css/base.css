@@ -13,6 +13,7 @@
 
 @import "tailwindcss";
 @import "./tokens.css";
+@import "./pokeball-loader.css";
 
 @utility scrollbar-none {
   scrollbar-width: none;
