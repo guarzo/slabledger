@@ -78,46 +78,63 @@ export default function HeroStatsBar({
 
       <div className={styles.divider} aria-hidden />
 
-      <div className={styles.cluster}>
-        <Stat label="Deployed" value={formatCents(health.totalDeployedCents ?? 0)} />
-        <Stat
-          label="Recovered"
-          value={formatCents(health.totalRecoveredCents ?? 0)}
-          delta={health.totalRecoveredDelta}
-        />
-        <Stat
-          label="At Risk"
-          value={formatCents(health.totalAtRiskCents ?? 0)}
-          tone={(health.totalAtRiskCents ?? 0) > 0 ? 'warn' : undefined}
-        />
+      <div className={styles.clusterGroup}>
+        {/* Capital row */}
+        <div className={styles.subCluster}>
+          <Stat
+            label="Deployed"
+            caption="all-time"
+            value={formatCents(health.totalDeployedCents ?? 0)}
+          />
+          <Stat
+            label="Recovered"
+            caption="all-time"
+            value={formatCents(health.totalRecoveredCents ?? 0)}
+            delta={health.totalRecoveredDelta}
+          />
+          <Stat
+            label="At Risk"
+            caption="exposed capital"
+            value={formatCents(health.totalAtRiskCents ?? 0)}
+            tone={(health.totalAtRiskCents ?? 0) > 0 ? 'atRisk' : undefined}
+          />
+          {capital && (
+            <Stat
+              label="Outstanding"
+              caption="awaiting recovery"
+              value={formatCents(capital.outstandingCents)}
+              tone={capital.alertLevel === 'critical' ? 'problem'
+                : capital.alertLevel === 'warning' ? 'atRisk'
+                : 'waiting'}
+            />
+          )}
+        </div>
 
+        {/* Velocity row */}
         {capital && (
-          <>
+          <div className={styles.subCluster}>
             <Stat
               label="Wks to Cover"
+              caption="at current pace"
               value={capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0
                 ? '0'
                 : formatWeeksToCover(capital.weeksToCover, capital.recoveryRate30dCents > 0)}
-              tone={capital.alertLevel === 'critical' ? 'neg'
-                : capital.alertLevel === 'warning' ? 'warn'
+              tone={capital.alertLevel === 'critical' ? 'problem'
+                : capital.alertLevel === 'warning' ? 'atRisk'
                 : capital.recoveryRate30dCents === 0 ? 'muted'
                 : 'success'}
-            />
-            <Stat
-              label="Outstanding"
-              value={formatCents(capital.outstandingCents)}
-              tone={capital.alertLevel === 'critical' ? 'neg' : capital.alertLevel === 'warning' ? 'warn' : undefined}
             />
             {capital.recoveryRate30dCents > 0 && (
               <div className={styles.stat}>
                 <div className={styles.statLabel}>30d Recovery</div>
+                <div className={styles.statCaption}>trailing 30d</div>
                 <div className={styles.statValue}>
                   {formatCents(capital.recoveryRate30dCents)}
                   <TrendArrow trend={trendToArrow[capital.recoveryTrend]} />
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -179,18 +196,26 @@ function DeltaChip({ delta, small }: { delta: PortfolioDelta; small?: boolean })
 }
 
 const TONE_CLASS: Record<string, string> = {
-  warn: styles.tWarn, neg: styles.tNeg, muted: styles.tMuted, success: styles.tSuccess,
+  warn: styles.tWarn,
+  neg: styles.tNeg,
+  muted: styles.tMuted,
+  success: styles.tSuccess,
+  waiting: styles.tWaiting,
+  atRisk: styles.tAtRisk,
+  problem: styles.tProblem,
 };
 
-function Stat({ label, value, tone, delta }: {
+function Stat({ label, caption, value, tone, delta }: {
   label: string;
+  caption?: string;
   value: string;
-  tone?: 'warn' | 'neg' | 'muted' | 'success';
+  tone?: 'warn' | 'neg' | 'muted' | 'success' | 'waiting' | 'atRisk' | 'problem';
   delta?: PortfolioDelta;
 }) {
   return (
     <div className={styles.stat}>
       <div className={styles.statLabel}>{label}</div>
+      {caption && <div className={styles.statCaption}>{caption}</div>}
       <div className={clsx(styles.statValue, tone && TONE_CLASS[tone])}>
         {value}
         {delta && <DeltaChip delta={delta} small />}
