@@ -10,6 +10,7 @@ import CardShell from '../ui/CardShell';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import StickyActionBar from '../ui/StickyActionBar';
 import Button from '../ui/Button';
+import TabularPriceTriplet from '../ui/TabularPriceTriplet';
 import sliderStyles from './DiscountSlider.module.css';
 
 function confidenceColor(level: ConfidenceLevel): string {
@@ -210,7 +211,7 @@ export default function LiquidationPage() {
               <div className="glass-table-th flex-1 min-w-0 text-left">Card</div>
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '48px' }}>Gr</div>
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}>Conf</div>
-              <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '250px' }}>Price Options</div>
+              <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '320px' }}>Price Options</div>
               <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '56px' }}>Current</div>
               <div className="glass-table-th flex-shrink-0 text-right" style={{ width: '100px' }}>Final Price</div>
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}></div>
@@ -263,12 +264,22 @@ export default function LiquidationPage() {
                       {item.confidenceLevel}
                       {item.compCount > 0 && <div className="text-[var(--text-muted)]">{item.compCount}c</div>}
                     </div>
-                    <div className="glass-table-td flex-shrink-0" style={{ width: '250px' }}>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <PricePill label="Cost" cents={item.buyCostCents} active={currentFinal === item.buyCostCents} onClick={() => setPillPrice(item.purchaseId, item.buyCostCents)} />
-                        <PricePill label="CL" cents={item.clValueCents} active={currentFinal === item.clValueCents} onClick={() => setPillPrice(item.purchaseId, item.clValueCents)} />
-                        <PricePill label="Comp" cents={item.compPriceCents} active={currentFinal === item.compPriceCents} onClick={() => setPillPrice(item.purchaseId, item.compPriceCents)} />
-                        <PricePill label="Sug" cents={item.suggestedPriceCents} active={currentFinal === item.suggestedPriceCents} onClick={() => setPillPrice(item.purchaseId, item.suggestedPriceCents)} />
+                    <div className="glass-table-td flex-shrink-0" style={{ width: '320px' }}>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <TabularPriceTriplet
+                          rows={[
+                            { label: 'Cost', value: item.buyCostCents > 0 ? formatCents(item.buyCostCents) : '—' },
+                            { label: 'CL', value: item.clValueCents > 0 ? formatCents(item.clValueCents) : '—' },
+                            { label: 'Sug', value: item.suggestedPriceCents > 0 ? formatCents(item.suggestedPriceCents) : '—', highlighted: true },
+                          ]}
+                          className="min-w-[120px]"
+                        />
+                        <div className="flex flex-wrap items-center gap-1">
+                          <PricePill label="Cost" cents={item.buyCostCents} active={currentFinal === item.buyCostCents} onClick={() => setPillPrice(item.purchaseId, item.buyCostCents)} />
+                          <PricePill label="CL" cents={item.clValueCents} active={currentFinal === item.clValueCents} onClick={() => setPillPrice(item.purchaseId, item.clValueCents)} />
+                          <PricePill label="Comp" cents={item.compPriceCents} active={currentFinal === item.compPriceCents} onClick={() => setPillPrice(item.purchaseId, item.compPriceCents)} />
+                          <PricePill label="Sug" cents={item.suggestedPriceCents} active={currentFinal === item.suggestedPriceCents} onClick={() => setPillPrice(item.purchaseId, item.suggestedPriceCents)} />
+                        </div>
                       </div>
                     </div>
                     <div className="glass-table-td flex-shrink-0 text-right text-[var(--text-muted)] tabular-nums text-xs" style={{ width: '56px' }}>
