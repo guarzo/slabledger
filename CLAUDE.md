@@ -19,9 +19,9 @@ cd web && npm install && npm run dev       # Dev server on :5173
 npm run build                              # Production build
 npm test                                   # Run tests
 
-# Screenshots (all pages, mocked API — no backend needed)
-cd web && npx playwright test tests/screenshot-all-pages.spec.ts --project=chromium
-# Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (iPhone 14)
+# Screenshots (all pages, real backend + local Postgres)
+make screenshots
+# Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
 
 # Quality
 make check                                 # Full quality check (lint + architecture + file size)
