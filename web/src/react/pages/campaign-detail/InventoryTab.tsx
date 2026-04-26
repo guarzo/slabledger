@@ -8,6 +8,8 @@ import { costBasis, unrealizedPL } from './inventory/utils';
 import { needsPriceReview } from './inventory/inventoryCalcs';
 import '../../../styles/print-sell-sheet.css';
 import DesktopRow from './inventory/DesktopRow';
+import SellSheetPrintRow from './inventory/SellSheetPrintRow';
+import { clPriceDisplayCents } from '../../utils/sellSheetHelpers';
 import MobileCard from './inventory/MobileCard';
 import MobileSellSheetView from './inventory/MobileSellSheetView';
 import SortableHeader from './inventory/SortableHeader';
@@ -21,6 +23,30 @@ export interface InventoryTabProps {
   isLoading: boolean;
   campaignId?: string;
   showCampaignColumn?: boolean;
+}
+
+function sortForPrint(items: AgingItem[]): AgingItem[] {
+  const score = (i: AgingItem) =>
+    clPriceDisplayCents({
+      clValueCents: i.purchase.clValueCents,
+      recommendedPriceCents: i.recommendedPriceCents,
+    })?.cents ?? 0;
+  return [...items].sort((a, b) => {
+    if (b.purchase.gradeValue !== a.purchase.gradeValue) {
+      return b.purchase.gradeValue - a.purchase.gradeValue;
+    }
+    return score(b) - score(a);
+  });
+}
+
+function clTotalCents(items: AgingItem[]): number {
+  return items.reduce((sum, i) => {
+    const cl = clPriceDisplayCents({
+      clValueCents: i.purchase.clValueCents,
+      recommendedPriceCents: i.recommendedPriceCents,
+    });
+    return sum + (cl?.cents ?? 0);
+  }, 0);
 }
 
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
@@ -117,7 +143,59 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         onHighlightMissingCL={handleHighlightMissingCL}
       />
 
-      {isMobile && sellSheetActive ? (
+      {isPrinting && (
+        <div className="sell-sheet-print">
+          <div className="sell-sheet-print-header">
+            <h1>SlabLedger Sell Sheet</h1>
+            <div className="meta">
+              <div>Generated: {new Date().toLocaleDateString('en-US')}</div>
+              <div>{filteredAndSortedItems.length} cards</div>
+            </div>
+          </div>
+          <div className="sell-sheet-print-thead">
+            <div className="sell-sheet-print-headrow">
+              <div className="sell-sheet-print-cell" data-cell="num">#</div>
+              <div className="sell-sheet-print-cell" data-cell="card">Card</div>
+              <div className="sell-sheet-print-cell" data-cell="grade">Grade</div>
+              <div className="sell-sheet-print-cell" data-cell="cert">Cert</div>
+              <div className="sell-sheet-print-cell" data-cell="cl">CL Price</div>
+              <div className="sell-sheet-print-cell" data-cell="last-sale">Last Sale</div>
+              <div className="sell-sheet-print-cell" data-cell="agreed">Agreed $</div>
+            </div>
+          </div>
+          {sortForPrint(filteredAndSortedItems).map((item, idx) => (
+            <SellSheetPrintRow key={item.purchase.id} item={item} rowNumber={idx + 1} />
+          ))}
+          <div className="sell-sheet-print-footer">
+            <div className="totals-row">
+              <span><span className="label">Items:</span> {filteredAndSortedItems.length}</span>
+              <span>
+                <span className="label">CL Price total:</span>{' '}
+                ${(Math.round(clTotalCents(filteredAndSortedItems) / 100)).toLocaleString('en-US')}
+              </span>
+            </div>
+            <div className="totals-row">
+              <span className="label">Agreed total:</span>
+              <span className="blank-line" />
+            </div>
+            <div className="totals-row">
+              <span className="label">Offer %:</span>
+              <span className="blank-line" style={{ minWidth: 60 }} />
+            </div>
+            <div className="totals-row">
+              <span className="label">Offer $:</span>
+              <span className="blank-line" />
+            </div>
+            <div className="note">
+              CL price reflects most-recent CardLadder market value (~ = estimate from our recommended price).
+              Last Sale shows our most recent realized sale where available.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isPrinting && (
+      isMobile && sellSheetActive ? (
         <MobileSellSheetView
           items={filteredAndSortedItems}
           onRecordSale={(item) => openSaleModal([item])}
@@ -335,7 +413,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             )}
           </div>
         </div>
-      )}
+      ))}
 
       <SellSheetModals
         saleModalOpen={saleModalOpen}
