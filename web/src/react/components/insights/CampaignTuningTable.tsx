@@ -63,7 +63,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
                 className="block rounded-xl border border-l-2 border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2.5 hover:bg-[var(--surface-2)]/30"
               >
                 <div className="flex items-baseline justify-between gap-2 mb-2">
-                  <span className="text-sm font-semibold text-[var(--text)] truncate">{row.campaignName}</span>
+                  <span className="text-sm font-semibold text-[var(--text)] truncate min-w-0">{row.campaignName}</span>
                   <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${meta.badge} whitespace-nowrap`}>
                     {meta.label}
                   </span>

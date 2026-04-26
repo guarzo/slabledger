@@ -146,7 +146,7 @@ export default function CampaignsTab({
                   {/* Sell-through with mini bar (sell-through % + visible color bar) */}
                   {pnl && (() => {
                     const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
-                    const pctText = formatPct(pnl.sellThroughPct);
+                    const pctText = formatPct(st);
                     return (
                       <div
                         className="hidden md:flex items-center gap-2"

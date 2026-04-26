@@ -17,6 +17,7 @@ export default function HealthSignalsTiles({ signals }: { signals: Signals }) {
     signals.aiAcceptRate.resolved === 0 &&
     signals.liquidationRecoverableUsd === 0 &&
     signals.spikeProfitUsd === 0 &&
+    signals.spikeCertCount === 0 &&
     signals.stuckInPipelineCount === 0;
 
   if (allClear) {

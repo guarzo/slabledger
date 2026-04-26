@@ -75,6 +75,20 @@ describe('HealthSignalsTiles', () => {
     expect(screen.queryByText('All clear')).not.toBeInTheDocument();
   });
 
+  it('renders the grid when spikeCertCount is non-zero even if spikeProfitUsd is zero', () => {
+    const signals: Signals = {
+      aiAcceptRate: { pct: 0, accepted: 0, resolved: 0 },
+      liquidationRecoverableUsd: 0,
+      spikeProfitUsd: 0,
+      spikeCertCount: 1,
+      stuckInPipelineCount: 0,
+    };
+    wrap(<HealthSignalsTiles signals={signals} />);
+    expect(screen.getByText('Spike profit queued')).toBeInTheDocument();
+    expect(screen.getByText(/1 cert awaiting capture/)).toBeInTheDocument();
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument();
+  });
+
   it('shows em-dash for AI accept rate when nothing resolved but other signals are active', () => {
     const signals: Signals = {
       aiAcceptRate: { pct: 0, accepted: 0, resolved: 0 },
