@@ -181,6 +181,8 @@ Array of invoice objects:
 | `totalCents` | int | Invoice amount |
 | `paid` | bool | |
 
+**Note: `snapshot.invoices` vs `/api/credit/invoices`.** Playbook B fetches `/api/credit/invoices` directly and uses enriched fields (`pendingReceiptCents`, `sellThroughPct`, `soldCount`, `totalCount`). It is unverified whether `snapshot.invoices` carries those same enrichments or only the base `{dueDate, totalCents, paid}` shown above. Default behavior: use `snapshot.invoices` for the opener's "upcoming invoices" line (only `dueDate` and `totalCents` are needed there) and keep Playbook B's separate `/credit/invoices` fetch for liquidation planning. A future session with live API access should diff the two shapes and consolidate if possible.
+
 ### snapshot.channelVelocity
 
 Array of `{channel, avgDaysToSell, count}`.

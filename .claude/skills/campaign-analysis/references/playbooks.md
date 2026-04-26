@@ -1,6 +1,22 @@
 # Campaign Analysis — Playbooks and Reference Rules
 
-Load this file when routing to any follow-up playbook (Step 4), running the retrospective (Step 5), or consulting recommendation rules, data conventions, or mutations.
+Load this file when routing to any follow-up playbook (Step 4), running the strategy doc sync or retrospective (Steps 5-6), or consulting recommendation rules, data conventions, or mutations.
+
+## Contents
+
+- [Step 4 — Follow-up playbooks](#step-4--follow-up-playbooks)
+  - Playbook A — "What campaign updates should we make?" (tuning)
+  - Playbook B — "What should we liquidate to pay our invoice?" (liquidation)
+  - Playbook C — "Should we consider price adjustments on aging inventory?" (repricing)
+  - Playbook D — "Does the strategy doc still match reality?" (doc reconciliation)
+  - Playbook E — Single-campaign deep dive
+  - Playbook F — "What niches are we missing?" (coverage gaps / new campaigns)
+  - Playbook G — "How are our DH listings doing?" (marketplace)
+- [Step 5 — Strategy doc sync](#step-5--strategy-doc-sync)
+- [Step 6 — Retrospective](#step-6--retrospective)
+- [Recommendation rules](#recommendation-rules) — Sizing, Stale-suggestion filter, Confidence bands, Hold verdict, Capital guardrail, Sequencing, Popular-tier exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic, Partner-ask verification
+- [Data conventions](#data-conventions) — buy terms, CL-lag vs CL-lead framing, exit channels, net-proceeds math
+- [Mutations](#mutations) — write endpoints by intent
 
 ## Step 4 — Follow-up playbooks
 
@@ -23,7 +39,7 @@ Fetch in parallel (most should already be in the opener cache from Step 3):
 - `GET /api/portfolio/weekly-history?weeks=8` — trailing means for hold-verdict checks.
 - `GET /api/campaigns/{id}/projections` — only when validating a specific candidate change worth sizing (heavy endpoint).
 
-**Required output structure (do not skip sections, do not return without a per-campaign verdict block):**
+**Output structure.** Playbook A's value comes from per-campaign verdicts grounded in `/tuning` byGrade — not generic suggestions echoed from the server. The structure below is the minimum signal density that makes the response useful; trimming sections collapses it to a list.
 
 State the **capital posture** once at the top (`Healthy / Tight / Critical` from the guardrail rule), then:
 
@@ -203,13 +219,7 @@ Present:
 
 When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution. DH approvals are capital-positive (they turn inventory into sales), so the capital guardrail does NOT apply.
 
-## Step 5 — Retrospective (mandatory at session end)
-
-Every `/campaign-analysis` conversation must close with a short retrospective block. The goal is to compound the skill's quality over time by capturing what couldn't be answered from the data we have.
-
-**When to write it.** At the end of a session, right before the closing question, or when the user signals they're wrapping up ("thanks, that's it for tonight", "ok let's apply these", etc.). Don't write it on every individual turn — once per session.
-
-### Step 5a — Strategy doc sync (MANDATORY, runs before the retrospective)
+## Step 5 — Strategy doc sync
 
 **This step is non-negotiable.** If any campaign parameters were changed, campaigns were added/removed/paused, or emails were sent to Brady during this session, the strategy document MUST be updated before the session ends. Failing to do this breaks the next session's analysis — the strategy doc is the persistent state that carries across sessions, not memory.
 
@@ -233,7 +243,9 @@ Every `/campaign-analysis` conversation must close with a short retrospective bl
 
 **Verification:** After writing, re-read the Quick-Copy section and confirm each campaign's parameters match what was sent to Brady. A mismatch here is the exact failure mode this step prevents.
 
-### Step 5b — Retrospective capture
+## Step 6 — Retrospective
+
+Every `/campaign-analysis` conversation must close with a short retrospective block — at the end of a session or when the user signals they're wrapping up ("thanks, that's it for tonight", "ok let's apply these"). Don't write it on every turn; once per session.
 
 **What to capture.** Four buckets, each 1-3 bullets. Skip any bucket that's empty, don't invent filler:
 
