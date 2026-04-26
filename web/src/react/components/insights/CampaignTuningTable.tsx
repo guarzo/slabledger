@@ -1,15 +1,17 @@
 import { Link } from 'react-router-dom';
 import { RecommendationBadge } from '../../ui/RecommendationBadge';
+import SectionEyebrow from '../../ui/SectionEyebrow';
+import EmptyState from '../../ui/EmptyState';
 import type { Status, TuningColumn, TuningRow } from '../../../types/insights';
+import tableStyles from './CampaignTuningTable.module.css';
 
-const STATUS_META: Record<Status, { label: string; badge: string; strip: string }> = {
-  Act:  { label: 'Action', badge: 'bg-[var(--danger)]/15 text-[var(--danger)]',           strip: 'var(--danger)' },
-  Kill: { label: 'Kill',   badge: 'bg-[var(--danger)]/25 text-[var(--danger)] font-bold', strip: 'var(--danger)' },
-  Tune: { label: 'Tune',   badge: 'bg-[var(--warning)]/15 text-[var(--warning)]',         strip: 'var(--warning)' },
-  OK:   { label: 'OK',     badge: 'bg-[var(--success)]/15 text-[var(--success)]',         strip: 'var(--success)' },
+const STATUS_META: Record<Status, { label: string; badge: string }> = {
+  Act:  { label: 'Action', badge: 'bg-[var(--danger)]/15 text-[var(--danger)]' },
+  Kill: { label: 'Kill',   badge: 'bg-[var(--danger)]/25 text-[var(--danger)] font-bold' },
+  Tune: { label: 'Tune',   badge: 'bg-[var(--warning)]/15 text-[var(--warning)]' },
+  OK:   { label: 'OK',     badge: 'bg-[var(--success)]/15 text-[var(--success)]' },
 };
 
-// Sort order: Act and Kill (most urgent) first, then Tune, then OK, then anything else.
 const STATUS_ORDER: Record<Status, number> = { Act: 0, Kill: 1, Tune: 2, OK: 3 };
 
 function sortByUrgency(rows: TuningRow[]): TuningRow[] {
@@ -32,23 +34,21 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
   if (rows.length === 0) {
     return (
       <section className="space-y-2">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-          Campaign tuning
-        </div>
-        <div className="p-4 rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] text-sm text-[var(--text-muted)]">
-          No active campaigns.
-        </div>
+        <SectionEyebrow>Campaign tuning</SectionEyebrow>
+        <EmptyState
+          title="No active campaigns"
+          description="Campaign tuning will appear here once campaigns are running."
+          compact
+        />
       </section>
     );
   }
   const sorted = sortByUrgency(rows);
   return (
     <section className="space-y-2">
-      <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
-        Campaign tuning · all active campaigns
-      </div>
+      <SectionEyebrow>Campaign tuning · all active campaigns</SectionEyebrow>
       <div className="border border-[var(--surface-2)] rounded-xl overflow-hidden">
-        <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] gap-2 pl-4 pr-3 py-2 bg-[var(--surface-2)]/40 text-[10px] uppercase tracking-wider font-semibold text-[var(--text-muted)]">
+        <div className={`${tableStyles.grid} pl-4 pr-3 py-2 bg-[var(--surface-2)]/40 text-[10px] uppercase tracking-wider font-semibold text-[var(--text-muted)]`}>
           <div>Campaign</div>
           {columns.map(c => (
             <div key={c.key}>{c.label}</div>
@@ -61,9 +61,8 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
             <Link
               key={row.campaignId}
               to={`/campaigns/${row.campaignId}`}
-              data-status={row.status}
-              style={{ borderLeftColor: meta.strip }}
-              className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_auto] gap-2 pl-3 pr-3 py-2.5 border-t border-l-2 border-[var(--surface-2)] text-sm items-center hover:bg-[var(--surface-2)]/30"
+              data-severity={row.status.toLowerCase()}
+              className={`${tableStyles.grid} pl-3 pr-3 py-2.5 border-t border-l-2 border-[var(--surface-2)] text-sm items-center hover:bg-[var(--surface-2)]/30`}
             >
               <div className="font-semibold">{row.campaignName}</div>
               {columns.map(c => {

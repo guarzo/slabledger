@@ -35,7 +35,7 @@ export default function MobileSellSheetRow({ item, onTap }: MobileSellSheetRowPr
           {item.purchase.setName && <>{item.purchase.setName}</>}
           {item.purchase.cardNumber && <> &middot; #{item.purchase.cardNumber}</>}
           {item.purchase.certNumber && (
-            <> &middot; <span className="font-mono text-[var(--text-secondary,#94a3b8)]">{item.purchase.certNumber}</span></>
+            <> &middot; <span className="font-mono text-[var(--text-secondary)]">{item.purchase.certNumber}</span></>
           )}
         </div>
       </div>

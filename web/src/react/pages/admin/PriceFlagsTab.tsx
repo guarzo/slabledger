@@ -109,7 +109,7 @@ function FlagCard({ flag }: { flag: PriceFlagWithContext }) {
           <button
             onClick={() => resolveMutation.mutate(flag.id)}
             disabled={resolveMutation.isPending}
-            className="text-xs px-3 py-1 rounded-lg bg-[var(--success-bg,#16a34a22)] text-[var(--success)] border border-[var(--success-border,#16a34a44)] hover:opacity-80 disabled:opacity-50 transition-opacity"
+            className="text-xs px-3 py-1 rounded-lg bg-[var(--success-bg)] text-[var(--success)] border border-[var(--success-border)] hover:opacity-80 disabled:opacity-50 transition-opacity"
           >
             {resolveMutation.isPending ? 'Resolving...' : 'Mark Resolved'}
           </button>

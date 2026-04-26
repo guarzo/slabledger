@@ -176,7 +176,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-// Default inline styles (can be overridden with CSS)
+// Default inline styles — uses tokens.css custom properties with dark-mode fallbacks
 const defaultStyles: Record<string, CSSProperties> = {
   container: {
     display: 'flex',
@@ -184,8 +184,8 @@ const defaultStyles: Record<string, CSSProperties> = {
     justifyContent: 'center',
     minHeight: '400px',
     padding: 'var(--space-8, 32px)',
-    backgroundColor: 'var(--color-bg-secondary, #f9fafb)',
-    borderRadius: 'var(--radius-lg, 12px)',
+    backgroundColor: 'var(--surface-1, #111827)',
+    borderRadius: 'var(--radius-lg, 18px)',
   },
   content: {
     maxWidth: '600px',
@@ -198,12 +198,12 @@ const defaultStyles: Record<string, CSSProperties> = {
   title: {
     fontSize: 'var(--font-size-2xl, 24px)',
     fontWeight: '600',
-    color: 'var(--color-text-primary, #111827)',
+    color: 'var(--text, #f1f5f9)',
     marginBottom: 'var(--space-2, 8px)',
   },
   message: {
     fontSize: 'var(--font-size-base, 16px)',
-    color: 'var(--color-text-secondary, #6b7280)',
+    color: 'var(--text-muted, #94a3b8)',
     marginBottom: 'var(--space-6, 24px)',
     lineHeight: '1.5',
   },
@@ -211,10 +211,10 @@ const defaultStyles: Record<string, CSSProperties> = {
     marginTop: 'var(--space-4, 16px)',
     marginBottom: 'var(--space-4, 16px)',
     textAlign: 'left',
-    backgroundColor: 'var(--color-bg-primary, #ffffff)',
-    borderRadius: 'var(--radius-md, 8px)',
+    backgroundColor: 'var(--surface-2, #1f2937)',
+    borderRadius: 'var(--radius-md, 14px)',
     padding: 'var(--space-4, 16px)',
-    border: '1px solid var(--color-border, #e5e7eb)',
+    border: '1px solid var(--surface-3, #374151)',
   },
   summary: {
     cursor: 'pointer',
@@ -225,7 +225,7 @@ const defaultStyles: Record<string, CSSProperties> = {
     overflow: 'auto',
     fontSize: 'var(--font-size-sm, 14px)',
     fontFamily: 'monospace',
-    color: 'var(--color-danger, #dc2626)',
+    color: 'var(--danger, #f87171)',
     maxHeight: '300px',
   },
   actions: {
@@ -236,7 +236,7 @@ const defaultStyles: Record<string, CSSProperties> = {
   },
   button: {
     padding: 'var(--space-3, 12px) var(--space-5, 20px)',
-    borderRadius: 'var(--radius-md, 8px)',
+    borderRadius: 'var(--radius-md, 14px)',
     fontSize: 'var(--font-size-base, 16px)',
     fontWeight: '500',
     border: 'none',
@@ -244,17 +244,17 @@ const defaultStyles: Record<string, CSSProperties> = {
     transition: 'all 0.2s',
   },
   buttonPrimary: {
-    backgroundColor: 'var(--color-primary, #3b82f6)',
-    color: 'var(--color-text-inverse, #ffffff)',
+    backgroundColor: 'var(--brand-500, #5a5de8)',
+    color: '#ffffff',
   },
   buttonSecondary: {
-    backgroundColor: 'var(--color-bg-elevated, #ffffff)',
-    color: 'var(--color-text-primary, #111827)',
-    border: '1px solid var(--color-border, #e5e7eb)',
+    backgroundColor: 'var(--surface-2, #1f2937)',
+    color: 'var(--text, #f1f5f9)',
+    border: '1px solid var(--surface-3, #374151)',
   },
   buttonTertiary: {
     backgroundColor: 'transparent',
-    color: 'var(--color-text-secondary, #6b7280)',
+    color: 'var(--text-muted, #94a3b8)',
     textDecoration: 'underline',
   },
 };

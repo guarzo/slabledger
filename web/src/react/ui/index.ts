@@ -64,3 +64,5 @@ export { default as StatCard } from './StatCard';
 export type { StatCardProps } from './StatCard';
 export { default as Section } from './Section';
 export type { SectionProps } from './Section';
+export { default as SectionEyebrow } from './SectionEyebrow';
+export { default as StickyActionBar } from './StickyActionBar';

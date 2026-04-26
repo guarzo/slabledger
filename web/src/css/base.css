@@ -13,6 +13,7 @@
 
 @import "tailwindcss";
 @import "./tokens.css";
+@import "./pokeball-loader.css";
 
 @utility scrollbar-none {
   scrollbar-width: none;
@@ -121,6 +122,9 @@
 .glass-vrow[data-selected="true"]:hover {
   background-color: var(--table-row-selected-hover);
 }
+.glass-vrow[data-belowcost="true"] {
+  background-color: var(--danger-tint);
+}
 
 /* P/L status indicators */
 .glass-vrow[data-pl="positive"] {
@@ -132,6 +136,12 @@
 .glass-vrow[data-pl="neutral"] {
   border-left: 2px solid transparent;
 }
+
+/* Severity strip colors (Insights: DoNow, CampaignTuning) */
+[data-severity="act"]  { border-left-color: var(--danger); }
+[data-severity="kill"] { border-left-color: var(--danger); }
+[data-severity="tune"] { border-left-color: var(--warning); }
+[data-severity="ok"]   { border-left-color: var(--success); }
 
 /* Expanded detail panel within virtualized rows */
 .glass-vrow-expanded {

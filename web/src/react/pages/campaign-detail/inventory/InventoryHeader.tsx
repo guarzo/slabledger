@@ -139,15 +139,15 @@ export default function InventoryHeader({
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cards</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary,#cbd5e1)]">{items.length}</div>
+                  <div className="text-sm font-semibold text-[var(--text-secondary)]">{items.length}</div>
                 </div>
                 <div>
                   <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cost Basis</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary,#cbd5e1)]">{formatCents(totalCost)}</div>
+                  <div className="text-sm font-semibold text-[var(--text-secondary)]">{formatCents(totalCost)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Market</div>
-                  <div className="text-sm font-semibold text-[var(--text-secondary,#cbd5e1)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
+                  <div className="text-sm font-semibold text-[var(--text-secondary)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
                 </div>
               </div>
             </div>
@@ -172,15 +172,15 @@ export default function InventoryHeader({
             <div className="flex gap-6 pb-1">
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cards</div>
-                <div className="text-base font-semibold text-[var(--text-secondary,#cbd5e1)]">{items.length}</div>
+                <div className="text-base font-semibold text-[var(--text-secondary)]">{items.length}</div>
               </div>
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Cost Basis</div>
-                <div className="text-base font-semibold text-[var(--text-secondary,#cbd5e1)]">{formatCents(totalCost)}</div>
+                <div className="text-base font-semibold text-[var(--text-secondary)]">{formatCents(totalCost)}</div>
               </div>
               <div>
                 <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Market Value</div>
-                <div className="text-base font-semibold text-[var(--text-secondary,#cbd5e1)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
+                <div className="text-base font-semibold text-[var(--text-secondary)]">{totalMarket > 0 ? formatCents(totalMarket) : '-'}</div>
               </div>
               {showEV && evPortfolio && (
                 <div>

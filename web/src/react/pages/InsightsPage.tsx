@@ -1,5 +1,6 @@
 import PokeballLoader from '../PokeballLoader';
 import { SectionErrorBoundary } from '../ui';
+import Button from '../ui/Button';
 import CampaignTuningTable from '../components/insights/CampaignTuningTable';
 import DoNowSection from '../components/insights/DoNowSection';
 import HealthSignalsTiles from '../components/insights/HealthSignalsTiles';
@@ -17,13 +18,9 @@ export default function InsightsPage() {
             Actions you can take, signals unique to this page, and per-campaign tuning.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => { void refetch(); }}
-          className="text-xs text-[var(--brand-400)] hover:underline"
-        >
+        <Button variant="ghost" size="sm" onClick={() => { void refetch(); }}>
           Refresh
-        </button>
+        </Button>
       </header>
 
       {isLoading && (
