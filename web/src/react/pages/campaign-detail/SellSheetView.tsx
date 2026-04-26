@@ -3,6 +3,7 @@ import type { AgingItem } from '../../../types/campaigns';
 import type { PriceFlagReason } from '../../../types/campaigns/priceReview';
 import { Button } from '../../ui';
 import RecordSaleModal from './RecordSaleModal';
+import BulkRecordSaleModal from './BulkRecordSaleModal';
 import PriceHintDialog from '../../PriceHintDialog';
 import PriceOverrideDialog from '../../PriceOverrideDialog';
 import PriceFlagDialog from './inventory/PriceFlagDialog';
@@ -12,7 +13,7 @@ import { isReadyToList } from './inventory/inventoryCalcs';
 /* ── Sell-sheet action bar (shown when items are selected) ───────── */
 
 interface SellSheetActionsProps {
-  selected: Set<string>;
+  selected: ReadonlySet<string>;
   sellSheetActive: boolean;
   items: AgingItem[];
   onAddToSellSheet: (ids: string[]) => void;
@@ -171,12 +172,21 @@ export function SellSheetModals({
 }: SellSheetModalsProps) {
   return (
     <>
-      <RecordSaleModal
-        open={saleModalOpen}
-        onClose={onSaleClose}
-        onSuccess={() => onSaleSuccess(saleModalItems.map(i => i.purchase.id))}
-        items={saleModalItems}
-      />
+      {saleModalItems.length === 1 ? (
+        <RecordSaleModal
+          open={saleModalOpen}
+          onClose={onSaleClose}
+          onSuccess={() => onSaleSuccess(saleModalItems.map(i => i.purchase.id))}
+          items={saleModalItems as [AgingItem]}
+        />
+      ) : (
+        <BulkRecordSaleModal
+          open={saleModalOpen}
+          onClose={onSaleClose}
+          onSuccess={() => onSaleSuccess(saleModalItems.map(i => i.purchase.id))}
+          items={saleModalItems}
+        />
+      )}
 
       {hintTarget && (
         <PriceHintDialog
