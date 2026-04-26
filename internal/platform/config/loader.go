@@ -226,6 +226,10 @@ func FromEnv(base Config) Config {
 	envBool("DH_RECONCILE_ENABLED", &cfg.DHReconcile.Enabled, true)
 	envDurationPositive("DH_RECONCILE_INTERVAL", &cfg.DHReconcile.Interval)
 
+	// DH sold-status reconciler scheduler.
+	envBool("DH_SOLD_RECONCILER_ENABLED", &cfg.DHSoldReconciler.Enabled, true)
+	envDurationPositive("DH_SOLD_RECONCILER_INTERVAL", &cfg.DHSoldReconciler.Interval)
+
 	// DH price-sync scheduler (reconciles reviewed_price_cents vs dh_listing_price_cents)
 	envBool("DH_PRICE_SYNC_ENABLED", &cfg.DHPriceSync.Enabled, true)
 	envDurationPositive("DH_PRICE_SYNC_INTERVAL", &cfg.DHPriceSync.Interval)

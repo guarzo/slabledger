@@ -115,6 +115,10 @@ func Default() Config {
 			Enabled:  true,
 			Interval: 1 * time.Hour,
 		},
+		DHSoldReconciler: DHSoldReconcilerConfig{
+			Enabled:  true,
+			Interval: 1 * time.Hour,
+		},
 		DHPriceSync: DHPriceSyncConfig{
 			Enabled:  true,
 			Interval: 15 * time.Minute,

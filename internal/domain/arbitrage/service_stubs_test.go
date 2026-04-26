@@ -136,6 +136,9 @@ func (r *stubPurchaseRepo) IncrementDHPushAttempts(_ context.Context, _ string) 
 func (r *stubPurchaseRepo) UpdatePurchaseDHStatus(_ context.Context, _ string, _ string) error {
 	return nil
 }
+func (r *stubPurchaseRepo) ListStaleDHStatusSoldPurchases(_ context.Context) ([]string, error) {
+	return nil, nil
+}
 func (r *stubPurchaseRepo) UpdatePurchaseDHCardID(_ context.Context, _ string, _ int) error {
 	return nil
 }

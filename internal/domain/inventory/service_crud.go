@@ -119,6 +119,15 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 		return err
 	}
 
+	// Best-effort: mark DH status as sold so inventory UI reflects reality
+	if dhErr := s.purchases.UpdatePurchaseDHStatus(ctx, sa.PurchaseID, string(DHStatusSold)); dhErr != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "create sale: failed to update dh_status to sold",
+				observability.String("purchaseID", sa.PurchaseID),
+				observability.Err(dhErr))
+		}
+	}
+
 	// Best-effort: clear eBay export flag since the card is now sold
 	if clearErr := s.purchases.ClearEbayExportFlags(ctx, []string{sa.PurchaseID}); clearErr != nil {
 		if s.logger != nil {
@@ -206,6 +215,15 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
 			continue
+		}
+
+		// Best-effort: mark DH status as sold so inventory UI reflects reality
+		if dhErr := s.purchases.UpdatePurchaseDHStatus(ctx, sa.PurchaseID, string(DHStatusSold)); dhErr != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "bulk sale: failed to update dh_status to sold",
+					observability.String("purchaseID", sa.PurchaseID),
+					observability.Err(dhErr))
+			}
 		}
 
 		// Best-effort: clear eBay export flag since the card is now sold

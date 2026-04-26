@@ -18,6 +18,7 @@ const DH_BADGE_TITLES: Record<string, string> = {
   sold:              'Sold on DoubleHolo',
   listed:            'Currently listed on DoubleHolo marketplace',
   'in stock':        'In DoubleHolo inventory — not yet listed',
+  shipped:           'Shipped from PSA — not yet received',
   held:              'DoubleHolo push is on hold pending review',
   'no DH match':     'No matching DoubleHolo card found — use "Fix DH Match" to map manually',
   dismissed:         'DoubleHolo listing was dismissed',
@@ -247,7 +248,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
             if (dhListedOverride) {
               return <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>;
             }
-            const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt);
+            const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt, item.purchase.psaShipDate);
             if (badge === 'unenrolled') return null;
             return (
               <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={DH_BADGE_TITLES[badge] ?? badge}>
