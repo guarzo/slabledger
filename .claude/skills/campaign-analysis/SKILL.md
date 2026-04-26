@@ -13,7 +13,7 @@ Default invocation runs Steps 0–3 (load config, fetch snapshot, present an ope
 
 ## Step 0 — Load operator configuration
 
-Read `docs/private/campaign-analysis-config.md`. This file contains:
+Read `docs/private/campaign-analysis-config.md` (see `references/config-schema.md` for the expected shape if recreating this file). This file contains:
 - Operator identity and persona
 - Production base URL
 - Canonical campaign numbering (1–10)
