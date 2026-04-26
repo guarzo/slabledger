@@ -55,7 +55,7 @@ When the strategy doc states **current parameters**, cross-check against `/api/c
 
 Before recommending any inclusion-list change, verify against the parsed list. Recommending "add X to campaign Y" when X is already there is a failure mode the skill must prevent.
 
-**Pending phase is the soft-delete state, not drift.** A campaign with `phase: "pending"` that the strategy doc describes as "removed" is **expected** — the operator preserves purchase history rather than hard-deleting. Do not flag `phase: pending` as a doc-vs-API mismatch when the doc says removed/deleted. (This is operator-specific; check `docs/private/campaign-analysis-config.md` for any operator override.)
+**Pending phase is soft-delete** — see API footguns. (Operator-specific; check the config file for overrides.)
 
 ## Step 2 — Resolve auth and pick the base URL
 
@@ -88,7 +88,7 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 
 Fetch these in parallel:
 
-- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and any campaign with `kind == "external"` (synthetic catch-all buckets for pre-campaign purchases with cost basis = 0 — excluded from the portfolio-at-a-glance line AND from all ROI, margin, and sell-through calculations throughout the session; see API footguns)
+- `GET /api/campaigns` — for name ↔ UUID resolution; filter out archived campaigns and `kind == "external"` (see API footguns for why External is excluded everywhere)
 - `GET /api/portfolio/snapshot` — **composite endpoint** returning `health`, `insights`, `weeklyReview`, `weeklyHistory` (8 weeks), `channelVelocity`, `suggestions`, `creditSummary`, and `invoices` in a single response. This replaces 8 individual calls with one round-trip; the server loads shared data once internally. **Consult `references/api-cheatsheet.md` for exact JSON shapes and field names before writing any parsing code.** Parse each sub-field:
   - `snapshot.health` — **a dict** with a `campaigns` array plus portfolio-wide totals (`totalDeployedCents`, `totalRecoveredCents`, `totalAtRiskCents`, `overallROI`, `realizedROI`). Each campaign entry carries `campaignId`, `campaignName`, `kind`, `roi`, `sellThroughPct`, `totalPurchases`, `totalUnsold`, `capitalAtRiskCents`, `inHandUnsoldCount`, `inHandCapitalCents`, `inTransitUnsoldCount`, `inTransitCapitalCents`, `healthStatus`, `healthReason`.
   - `snapshot.weeklyReview` — week-over-week deltas. Includes `daysIntoWeek` for partial-week awareness.
@@ -277,7 +277,6 @@ Every numeric claim about purchases, sales, capital, campaign state, or market s
 Operating rules:
 
 - **Two-source rule for opener claims.** Every numeric claim in the opener (reconciliation summary, movers, conditional actions) must be backed by 2+ endpoints that agree, or explicitly labeled *"(single-source, unverified: [endpoint])."* This rule applies to the opener only — playbook follow-up responses can cite single endpoints since the user has already chosen what to dig into.
-- **External campaign exclusion.** Filter the External campaign (`kind == "external"`) from all ROI, margin, and sell-through calculations throughout the session. This is a hard exclusion, not a caveat. External's zero cost basis inflates every aggregate it touches.
 - **Data sources block.** The opener's data-sources block is produced by Step 3a (data quality audit). It replaces the old one-line prefix — it now names failures, staleness, and their impact on analysis. Playbook follow-up responses still use the compact one-line form: `Data sources: /api/...`.
 - If an endpoint returned 4xx/5xx, an empty body, or was skipped intentionally, name it explicitly. Do not paper over a missing fetch with prior knowledge.
 - **Parse what you fetch.** When you fetch `/insights` or `/tuning`, surface at least one segment-level aggregate (`byCharacter` row, `byGrade` row, `byPriceTier` row, or `(campaign, grade) avgBuyPctOfCL`) before drafting the opener. Listing the response keys is not analysis.
