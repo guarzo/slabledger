@@ -24,11 +24,12 @@ describe('DoNowSection', () => {
       detail: '+$386.79 net',
       link: { path: '/global-inventory', query: { filter: 'spike' } },
     }];
-    const { container } = wrap(<DoNowSection actions={actions} />);
+    wrap(<DoNowSection actions={actions} />);
     expect(screen.getByText(/Run profit-capture/i)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /Open:\s*Run profit-capture/i });
     expect(link).toHaveAttribute('href', '/global-inventory?filter=spike');
-    expect(container.querySelector('[data-severity="act"]')).not.toBeNull();
+    const actionRow = link.closest('[data-severity]');
+    expect(actionRow).toHaveAttribute('data-severity', 'act');
   });
 
   it('sorts actions so act precedes tune precedes ok', () => {
