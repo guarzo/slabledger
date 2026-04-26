@@ -74,7 +74,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  background: '#34d399',
+                  background: 'var(--success)',
                   border: '2px solid var(--surface-1)',
                   flexShrink: 0,
                 }}

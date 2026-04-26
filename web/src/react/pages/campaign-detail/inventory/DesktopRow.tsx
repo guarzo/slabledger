@@ -131,7 +131,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
                    width: 10,
                    height: 10,
                    borderRadius: '50%',
-                   background: '#34d399',
+                   background: 'var(--success)',
                    border: '2px solid var(--surface-1)',
                    flexShrink: 0,
                  }}
@@ -215,8 +215,8 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       <div className="glass-table-td flex-shrink-0 text-right tabular-nums print-hide-col" style={{ width: '72px' }}>
         {pl != null ? (
           <span className={`text-xs font-medium px-2 py-[3px] rounded-md ${
-            pl > 0 ? 'bg-[rgba(52,211,153,0.1)] text-[#34d399]' :
-            pl < 0 ? 'bg-[rgba(248,113,113,0.1)] text-[#f87171]' :
+            pl > 0 ? 'bg-[var(--success-bg)] text-[var(--success)]' :
+            pl < 0 ? 'bg-[var(--danger-bg)] text-[var(--danger)]' :
             'text-[var(--text-muted)]'
           }`}>{formatPL(pl)}</span>
         ) : (

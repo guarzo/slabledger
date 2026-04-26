@@ -1,7 +1,7 @@
 import Button from './Button';
 
 interface EmptyStateProps {
-  icon: string;
+  icon?: string;
   title: string;
   description: string;
   action?: {
@@ -17,7 +17,7 @@ interface EmptyStateProps {
 export default function EmptyState({ icon, title, description, action, compact, steps }: EmptyStateProps) {
   return (
     <div className={`flex flex-col items-center justify-center ${compact ? 'py-6' : 'py-16'} text-center`}>
-      <div className={`${compact ? 'text-3xl mb-2' : 'text-5xl mb-4'}`}>{icon}</div>
+      {icon && <div className={`${compact ? 'text-3xl mb-2' : 'text-5xl mb-4'}`}>{icon}</div>}
       <h3 className={`${compact ? 'text-sm' : 'text-lg'} font-semibold text-[var(--text)] mb-2`}>{title}</h3>
       <p className="text-sm text-[var(--text-muted)] max-w-md mb-4">{description}</p>
       {steps && steps.length > 0 && (
