@@ -352,10 +352,10 @@ export default function LiquidationPage() {
 function DiscountSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const id = `discount-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label htmlFor={id} className="text-xs font-medium text-[var(--text-muted)]">{label}</label>
-        <span className="text-sm font-semibold text-[var(--text)] tabular-nums">{value.toFixed(1)}% below CL</span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-xs">
+        <label htmlFor={id} className="font-medium text-[var(--text-muted)]">{label}</label>
+        <span className="tabular-nums font-semibold text-[var(--text)]">{value.toFixed(1)}% below CL</span>
       </div>
       <input
         id={id}
@@ -366,8 +366,9 @@ function DiscountSlider({ label, value, onChange }: { label: string; value: numb
         value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
         className={sliderStyles.slider}
+        aria-label={`${label} below CL: ${value.toFixed(1)}%`}
       />
-      <div className="flex justify-between text-[10px] text-[var(--text-muted)] mt-1">
+      <div className="flex justify-between text-[10px] text-[var(--text-muted)] tabular-nums">
         <span>0%</span>
         <span>25%</span>
       </div>
