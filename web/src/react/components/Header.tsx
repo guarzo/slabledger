@@ -12,6 +12,25 @@ import { useAuth } from '../contexts/AuthContext';
 import CardShell from '../ui/CardShell';
 import logoSrc from '../../assets/logo.png';
 
+const NAV_LABELS: { path: string; label: string }[] = [
+  { path: '/', label: 'Dashboard' },
+  { path: '/inventory', label: 'Inventory' },
+  { path: '/campaigns', label: 'Campaigns' },
+  { path: '/insights', label: 'Insights' },
+  { path: '/scan', label: 'Scan' },
+  { path: '/reprice', label: 'Reprice' },
+  { path: '/invoices', label: 'Invoices' },
+  { path: '/admin', label: 'Admin' },
+];
+
+function pageLabelFor(pathname: string): string {
+  // Longest-prefix match wins so /campaigns/123 picks "Campaigns".
+  const match = NAV_LABELS
+    .filter((item) => item.path === '/' ? pathname === '/' : pathname === item.path || pathname.startsWith(item.path + '/'))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+  return match?.label ?? 'Menu';
+}
+
 function UserInitial({ name }: { name: string }) {
   const initial = name.charAt(0).toUpperCase();
   return (
@@ -28,6 +47,7 @@ export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const location = useLocation();
+  const currentPageLabel = pageLabelFor(location.pathname);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -101,8 +121,8 @@ export default function Header() {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           )}
-          <span className="text-2xs uppercase tracking-wider leading-none text-[var(--text-muted)]" aria-hidden="true">
-            MENU
+          <span className="text-2xs uppercase tracking-wider leading-none text-[var(--text-muted)] max-w-[80px] truncate" aria-hidden="true">
+            {currentPageLabel}
           </span>
         </button>
 

@@ -438,40 +438,42 @@ export default function CardIntakeTab() {
   return (
     <div className="space-y-3">
       {/* Scan input + mode toggle */}
-      <div className="flex items-center gap-2">
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Scan or type cert number..."
-          className="flex-1 rounded-lg border border-[var(--brand-500)]/60 bg-[var(--surface-1)] px-3 py-2.5 font-mono text-base text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--brand-400)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-400)]/40"
-          autoFocus
-        />
-        <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">↵ Enter</span>
-        <div className="flex overflow-hidden rounded-md border border-zinc-700">
-          <button
-            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === 'intake'
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-            onClick={() => handleModeSwitch('intake')}
-          >
-            Intake
-          </button>
-          <button
-            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === 'sale'
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-            onClick={() => handleModeSwitch('sale')}
-          >
-            Sale
-          </button>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Scan or type cert number..."
+            className="flex-1 rounded-lg border border-[var(--brand-500)]/60 bg-[var(--surface-1)] px-3 py-2.5 font-mono text-base text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--brand-400)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-400)]/40"
+            autoFocus
+          />
+          <div className="flex overflow-hidden rounded-md border border-zinc-700">
+            <button
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                mode === 'intake'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              onClick={() => handleModeSwitch('intake')}
+            >
+              Intake
+            </button>
+            <button
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                mode === 'sale'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              onClick={() => handleModeSwitch('sale')}
+            >
+              Sale
+            </button>
+          </div>
         </div>
+        <p className="text-xs text-[var(--text-muted)] pl-1">↵ Enter to submit</p>
       </div>
 
       {mode === 'intake' ? (
