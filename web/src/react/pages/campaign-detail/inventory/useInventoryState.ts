@@ -26,8 +26,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
-  const [statsExpanded, setStatsExpanded] = useState(false);
-  const [filterTab, setFilterTab] = useState<FilterTab>('needs_attention');
+  const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const userTabChosenRef = useRef(false);
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -77,21 +76,16 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     [items],
   );
 
-  // Smart default tab
+  // Smart default tab: needs_attention if > 0, else all
   useEffect(() => {
     if (userTabChosenRef.current || items.length === 0) return;
     userTabChosenRef.current = true;
-    if (tabCounts.needs_attention > 0) return;
-    if (tabCounts.ready_to_list > 0) {
-      setFilterTab('ready_to_list');
-    } else if (tabCounts.pending_price > 0) {
-      setFilterTab('pending_price');
-    } else if (tabCounts.pending_dh_match > 0) {
-      setFilterTab('pending_dh_match');
+    if (tabCounts.needs_attention > 0) {
+      setFilterTab('needs_attention');
     } else {
       setFilterTab('all');
     }
-  }, [items.length, tabCounts.needs_attention, tabCounts.ready_to_list, tabCounts.pending_price, tabCounts.pending_dh_match]);
+  }, [items.length, tabCounts.needs_attention]);
 
   const chooseFilterTab = useCallback((tab: FilterTab) => {
     userTabChosenRef.current = true;
@@ -210,7 +204,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     flagSubmitting: pricingActions.flagSubmitting,
     fixMatchTarget: dhActions.fixMatchTarget, setFixMatchTarget: dhActions.setFixMatchTarget,
     sortKey, sortDir, searchQuery, setSearchQuery, isPrinting,
-    statsExpanded, setStatsExpanded, filterTab, setFilterTab: chooseFilterTab,
+    filterTab, setFilterTab: chooseFilterTab,
     showAll, setShowAll, debouncedSearch,
     reviewStats, tabCounts, showEV: !!showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,

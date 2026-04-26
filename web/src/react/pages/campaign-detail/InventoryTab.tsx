@@ -34,7 +34,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     flagTarget, setFlagTarget, flagSubmitting,
     fixMatchTarget, setFixMatchTarget,
     sortKey, sortDir, searchQuery, setSearchQuery,
-    isPrinting, statsExpanded, setStatsExpanded,
+    isPrinting,
     filterTab, setFilterTab, showAll, setShowAll, debouncedSearch,
     reviewStats, tabCounts, showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
@@ -88,8 +88,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         totalCost={totalCost}
         totalMarket={totalMarket}
         totalPL={totalPL}
-        statsExpanded={statsExpanded}
-        setStatsExpanded={setStatsExpanded}
         showEV={showEV}
         evPortfolio={evPortfolio}
         reviewStats={reviewStats}

@@ -3,6 +3,7 @@ import { formatCents, daysHeldColor } from '../../../utils/formatters';
 import { Button, GradeBadge } from '../../../ui';
 import { DropdownMenu } from 'radix-ui';
 import MarketplaceLinks from './MarketplaceLinks';
+import TruncatedCardName from '../../../ui/TruncatedCardName';
 import {
   costBasis, bestPrice, unrealizedPL,
   formatPL,
@@ -148,10 +149,10 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
               </span>
             );
           })()}
-          <span className="text-[var(--text)] truncate">
+          <span className="text-[var(--text)] truncate flex items-center gap-1 min-w-0">
             {hotSeller && <span className="text-[var(--warning)] mr-1" title="High demand">★</span>}
             {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
-            {item.purchase.cardName}
+            <TruncatedCardName name={item.purchase.cardName} className="text-[var(--text)] font-medium" />
           </span>
           {item.priceAnomaly && (
             <span className="shrink-0 text-xs text-[var(--warning)]" title={item.anomalyReason || 'Pricing may be inaccurate'}>&#9888;</span>

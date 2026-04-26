@@ -2,6 +2,7 @@ import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor, signalLabel, signalBgColor } from '../../../utils/formatters';
 import { TrendArrow, ConfidenceIndicator, GradeBadge } from '../../../ui';
 import MarketplaceLinks from './MarketplaceLinks';
+import TruncatedCardName from '../../../ui/TruncatedCardName';
 import {
   costBasis, bestPrice, unrealizedPL, marketTrend, velocityLabel,
   getSourceByType, fmtDateShort, plColor, formatPL, mostRecentSale,
@@ -85,7 +86,7 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
               {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
-              {item.purchase.cardName}
+              <TruncatedCardName name={item.purchase.cardName} className="text-[var(--text)] font-medium" />
               {item.purchase.cardName && item.purchase.setName && (
                 <MarketplaceLinks
                   cardName={item.purchase.cardName}
