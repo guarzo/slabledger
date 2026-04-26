@@ -59,3 +59,21 @@ export function checkHotSeller(snap: MarketSnapshot | undefined, targetPriceCent
 export function isHotSellerFromSellSheet(item: SellSheetItem): boolean {
   return checkHotSeller(item.currentMarket, item.targetSellPrice ?? 0);
 }
+
+/**
+ * Resolve the CL price to display on the printed sell sheet.
+ * Returns null when neither CL nor recommended price is available.
+ * `estimated: true` means the value came from the recommended price fallback
+ * and should be rendered with a `~` prefix.
+ */
+export function clPriceDisplayCents(
+  src: { clValueCents?: number; recommendedPriceCents?: number },
+): { cents: number; estimated: boolean } | null {
+  if (src.clValueCents && src.clValueCents > 0) {
+    return { cents: src.clValueCents, estimated: false };
+  }
+  if (src.recommendedPriceCents && src.recommendedPriceCents > 0) {
+    return { cents: src.recommendedPriceCents, estimated: true };
+  }
+  return null;
+}
