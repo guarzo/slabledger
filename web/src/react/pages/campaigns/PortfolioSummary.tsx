@@ -30,14 +30,15 @@ export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSum
         const recoveryPct = (totalRevenue / totalSpent) * 100;
         const clampedRecovery = Math.max(0, Math.min(100, recoveryPct));
         return (
-          <div>
-            <div className="text-sm tabular-nums text-[var(--text-muted)] mb-1.5">
-              {formatCents(totalRevenue)} of {formatCents(totalSpent)} recovered (
-              <span className="text-[var(--text)] font-medium">{recoveryPct.toFixed(0)}%</span>
-              )
+          <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] px-4 py-3">
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Capital recovered</span>
+              <span className="text-base font-bold tabular-nums text-[var(--text)]">
+                {recoveryPct.toFixed(0)}%
+              </span>
             </div>
             <div
-              className="w-full h-1 rounded-full bg-[var(--surface-2)] overflow-hidden"
+              className="w-full h-2.5 rounded-full bg-[var(--surface-2)] overflow-hidden"
               role="progressbar"
               aria-label={`Capital recovered: ${formatCents(totalRevenue)} of ${formatCents(totalSpent)} invested (${recoveryPct.toFixed(0)}%)`}
               aria-valuenow={Math.round(clampedRecovery)}
@@ -49,6 +50,9 @@ export default function PortfolioSummary({ campaignCount, pnlMap }: PortfolioSum
                 className="h-full rounded-full transition-all duration-500 bg-[var(--brand-500)]"
                 style={{ width: `${clampedRecovery}%` }}
               />
+            </div>
+            <div className="text-xs tabular-nums text-[var(--text-muted)] mt-2">
+              {formatCents(totalRevenue)} of {formatCents(totalSpent)} invested
             </div>
           </div>
         );
