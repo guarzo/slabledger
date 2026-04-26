@@ -1,6 +1,22 @@
 # Campaign Analysis — Playbooks and Reference Rules
 
-Load this file when routing to any follow-up playbook (Step 4), running the retrospective (Step 5), or consulting recommendation rules, data conventions, or mutations.
+Load this file when routing to any follow-up playbook (Step 4), running the strategy doc sync or retrospective (Steps 5-6), or consulting recommendation rules, data conventions, or mutations.
+
+## Contents
+
+- [Step 4 — Follow-up playbooks](#step-4--follow-up-playbooks)
+  - Playbook A — "What campaign updates should we make?" (tuning)
+  - Playbook B — "What should we liquidate to pay our invoice?" (liquidation)
+  - Playbook C — "Should we consider price adjustments on aging inventory?" (repricing)
+  - Playbook D — "Does the strategy doc still match reality?" (doc reconciliation)
+  - Playbook E — Single-campaign deep dive
+  - Playbook F — "What niches are we missing?" (coverage gaps / new campaigns)
+  - Playbook G — "How are our DH listings doing?" (marketplace)
+- [Step 5 — Strategy doc sync](#step-5--strategy-doc-sync)
+- [Step 6 — Retrospective](#step-6--retrospective)
+- [Recommendation rules](#recommendation-rules) — Sizing, Stale-suggestion filter, Confidence bands, Hold verdict, Capital guardrail, Sequencing, Popular-tier exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic, Partner-ask verification
+- [Data conventions](#data-conventions) — buy terms, CL-lag vs CL-lead framing, exit channels, net-proceeds math
+- [Mutations](#mutations) — write endpoints by intent
 
 ## Step 4 — Follow-up playbooks
 
