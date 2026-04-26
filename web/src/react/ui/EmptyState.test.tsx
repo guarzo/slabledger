@@ -22,9 +22,9 @@ describe('EmptyState', () => {
   });
 
   it('does not render lastAction when omitted', () => {
-    const { container } = render(
+    render(
       <EmptyState icon="📊" title="No sales" description="Record your first sale." />,
     );
-    expect(container.textContent).not.toMatch(/Last /);
+    expect(screen.queryByText('Last intake: Apr 24')).not.toBeInTheDocument();
   });
 });

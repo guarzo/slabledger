@@ -19,6 +19,8 @@ const NAV_LABELS: { path: string; label: string }[] = [
   { path: '/insights', label: 'Insights' },
   { path: '/scan', label: 'Scan' },
   { path: '/reprice', label: 'Reprice' },
+  { path: '/invoices', label: 'Invoices' },
+  { path: '/admin', label: 'Admin' },
 ];
 
 function pageLabelFor(pathname: string): string {

@@ -263,11 +263,11 @@
     padding: var(--space-4);
   }
 
-  .login-header h1 {
+  .login-page > .login-header h1 {
     font-size: var(--font-size-3xl);  /* 30px — was xl (20px), too small on phones */
   }
 
-  .login-header {
-    margin-bottom: var(--space-4);    /* tighten gap above the glass card */
+  .login-page > .login-header {
+    margin-bottom: var(--space-3);    /* tighten gap above the glass card */
   }
 }
