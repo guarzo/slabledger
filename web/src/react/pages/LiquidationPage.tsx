@@ -16,7 +16,7 @@ function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
     case 'high': return 'text-[var(--success)]';
     case 'medium': return 'text-[var(--warning)]';
-    case 'low': return 'text-[var(--warning)]';
+    case 'low': return 'text-[var(--danger)]';
     default: return 'text-[var(--text-muted)]';
   }
 }
@@ -313,7 +313,7 @@ export default function LiquidationPage() {
             <div className="flex items-center gap-3 ml-auto">
               <Button variant="ghost" size="sm" onClick={acceptAllSuggested}>Accept All</Button>
               <Button variant="ghost" size="sm" onClick={deselectAll}>Deselect All</Button>
-              <Button variant="primary" size="sm" onClick={() => setShowConfirm(true)}>Apply Prices</Button>
+              <Button variant="primary" size="sm" disabled={applyableCount === 0} onClick={() => setShowConfirm(true)}>Apply Prices</Button>
             </div>
           }
         />
@@ -326,6 +326,7 @@ export default function LiquidationPage() {
         confirmLabel={applyMutation.isPending ? 'Applying…' : 'Confirm'}
         variant="primary"
         loading={applyMutation.isPending}
+        disabled={applyableCount === 0}
         onConfirm={handleApply}
         onCancel={() => setShowConfirm(false)}
       >
