@@ -147,11 +147,22 @@ export default function LiquidationPage() {
       <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Reprice</h1>
 
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total Cards" value={String(summary.totalCards)} />
-          <StatCard label="With Comps" value={String(summary.withComps)} color="green" />
-          <StatCard label="Without Comps" value={String(summary.withoutComps)} />
-          <StatCard label="No Data" value={String(summary.noData)} color={summary.noData > 0 ? 'red' : undefined} />
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-3 mb-2">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">Below Cost</div>
+            <div className={`text-3xl font-extrabold tabular-nums ${summary.belowCostCount > 0 ? 'text-[var(--state-problem)]' : 'text-[var(--text-muted)]'}`}>
+              {summary.belowCostCount}
+            </div>
+            <div className="text-xs text-[var(--text-muted)] mt-1">
+              {summary.belowCostCount === 0 ? 'all cards above their cost basis' : 'cards underwater after suggested price'}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums text-[var(--text-muted)]">
+            <span>Total <span className="text-[var(--text)] font-medium">{summary.totalCards}</span></span>
+            <span>With comps <span className="text-[var(--text)] font-medium">{summary.withComps}</span></span>
+            <span>Without comps <span className="text-[var(--text)] font-medium">{summary.withoutComps}</span></span>
+            <span>No data <span className={`font-medium ${summary.noData > 0 ? 'text-[var(--state-problem)]' : 'text-[var(--text)]'}`}>{summary.noData}</span></span>
+          </div>
         </div>
       )}
 
@@ -165,15 +176,9 @@ export default function LiquidationPage() {
             <DiscountSlider label="Without comps" value={discountNoComps} onChange={setDiscountNoComps} />
           </div>
           {summary && (
-            <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
+            <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
               <StatCard size="sm" label="Current Value" value={formatCents(summary.totalCurrentValueCents)} />
               <StatCard size="sm" label="Suggested Value" value={formatCents(summary.totalSuggestedValueCents)} />
-              <StatCard
-                size="sm"
-                label="Below Cost"
-                value={String(summary.belowCostCount)}
-                color={summary.belowCostCount > 0 ? 'red' : undefined}
-              />
             </div>
           )}
         </div>
