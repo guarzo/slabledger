@@ -69,7 +69,7 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
 
   const clStatus: TileStatus = !cl ? 'unknown' : (cl.configured ? 'healthy' : 'unconfigured');
   const clMapped = cl?.cardsMapped ?? 0;
-  const clMetric = cl?.configured ? `${clMapped} mapped` : 'Not configured';
+  const clMetric = cl ? (cl.configured ? `${clMapped} mapped` : 'Not configured') : 'Unknown';
   const clStale = cl?.priceStats?.staleCount ?? 0;
   const clDetail = clStale > 0 ? `${clStale} stale (>7d)` : undefined;
 
@@ -83,12 +83,12 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
       : mmStale > 0
         ? 'warning'
         : 'healthy';
-  const mmMetric = mm?.configured ? `${mmPriced}/${mmTotal} priced` : 'Not configured';
+  const mmMetric = mm ? (mm.configured ? `${mmPriced}/${mmTotal} priced` : 'Not configured') : 'Unknown';
   const mmDetail = mmStale > 0 ? `${mmStale} stale` : undefined;
 
   const psaStatus: TileStatus = !psa ? 'unknown' : (psa.configured ? 'healthy' : 'unconfigured');
   const psaPending = psa?.pendingCount ?? 0;
-  const psaMetric = psa?.configured ? `${psa.interval || 'configured'}` : 'Not configured';
+  const psaMetric = psa ? (psa.configured ? `${psa.interval || 'configured'}` : 'Not configured') : 'Unknown';
   const psaDetail = psaPending > 0 ? `${psaPending} pending` : undefined;
 
   return (
