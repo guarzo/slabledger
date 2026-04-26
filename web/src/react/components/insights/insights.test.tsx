@@ -49,13 +49,53 @@ describe('DoNowSection', () => {
 });
 
 describe('HealthSignalsTiles', () => {
-  it('shows em-dash for AI accept rate when nothing resolved', () => {
+  it('renders "All clear" line when every signal is zero', () => {
     const signals: Signals = {
       aiAcceptRate: { pct: 0, accepted: 0, resolved: 0 },
       liquidationRecoverableUsd: 0,
       spikeProfitUsd: 0,
       spikeCertCount: 0,
       stuckInPipelineCount: 0,
+    };
+    wrap(<HealthSignalsTiles signals={signals} />);
+    expect(screen.getByText('All clear')).toBeInTheDocument();
+    expect(screen.queryByText('AI accept rate (7d)')).not.toBeInTheDocument();
+  });
+
+  it('renders the grid when at least one signal is non-zero', () => {
+    const signals: Signals = {
+      aiAcceptRate: { pct: 0, accepted: 0, resolved: 0 },
+      liquidationRecoverableUsd: 0,
+      spikeProfitUsd: 0,
+      spikeCertCount: 0,
+      stuckInPipelineCount: 3,
+    };
+    wrap(<HealthSignalsTiles signals={signals} />);
+    expect(screen.getByText('Stuck in DH pipeline')).toBeInTheDocument();
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument();
+  });
+
+  it('renders the grid when spikeCertCount is non-zero even if spikeProfitUsd is zero', () => {
+    const signals: Signals = {
+      aiAcceptRate: { pct: 0, accepted: 0, resolved: 0 },
+      liquidationRecoverableUsd: 0,
+      spikeProfitUsd: 0,
+      spikeCertCount: 1,
+      stuckInPipelineCount: 0,
+    };
+    wrap(<HealthSignalsTiles signals={signals} />);
+    expect(screen.getByText('Spike profit queued')).toBeInTheDocument();
+    expect(screen.getByText(/1 cert awaiting capture/)).toBeInTheDocument();
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument();
+  });
+
+  it('shows em-dash for AI accept rate when nothing resolved but other signals are active', () => {
+    const signals: Signals = {
+      aiAcceptRate: { pct: 0, accepted: 0, resolved: 0 },
+      liquidationRecoverableUsd: 0,
+      spikeProfitUsd: 0,
+      spikeCertCount: 0,
+      stuckInPipelineCount: 1,
     };
     wrap(<HealthSignalsTiles signals={signals} />);
     expect(screen.getByText('—')).toBeInTheDocument();
