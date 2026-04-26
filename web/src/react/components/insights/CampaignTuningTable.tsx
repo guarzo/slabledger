@@ -3,6 +3,7 @@ import { RecommendationBadge } from '../../ui/RecommendationBadge';
 import SectionEyebrow from '../../ui/SectionEyebrow';
 import EmptyState from '../../ui/EmptyState';
 import type { Status, TuningColumn, TuningRow } from '../../../types/insights';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import tableStyles from './CampaignTuningTable.module.css';
 
 const STATUS_META: Record<Status, { label: string; badge: string }> = {
@@ -31,6 +32,8 @@ const columns: Array<{ key: TuningColumn; label: string }> = [
 ];
 
 export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
+  const isMobile = useMediaQuery('(max-width: 480px)');
+
   if (rows.length === 0) {
     return (
       <section className="space-y-2">
@@ -44,6 +47,52 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
     );
   }
   const sorted = sortByUrgency(rows);
+
+  if (isMobile) {
+    return (
+      <section className="space-y-2">
+        <SectionEyebrow>Campaign tuning · all active campaigns</SectionEyebrow>
+        <div className="space-y-2">
+          {sorted.map((row) => {
+            const meta = STATUS_META[row.status];
+            return (
+              <Link
+                key={row.campaignId}
+                to={`/campaigns/${row.campaignId}`}
+                data-severity={row.status.toLowerCase()}
+                className="block rounded-xl border border-l-2 border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2.5 hover:bg-[var(--surface-2)]/30"
+              >
+                <div className="flex items-baseline justify-between gap-2 mb-2">
+                  <span className="text-sm font-semibold text-[var(--text)] truncate min-w-0">{row.campaignName}</span>
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${meta.badge} whitespace-nowrap`}>
+                    {meta.label}
+                  </span>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                  {columns.map((c) => {
+                    const cell = row.cells[c.key];
+                    return (
+                      <div key={c.key} className="flex items-center justify-between gap-2">
+                        <dt className="text-[var(--text-muted)] uppercase tracking-wider text-[10px]">{c.label}</dt>
+                        <dd className="min-w-0">
+                          {cell ? (
+                            <RecommendationBadge label={cell.recommendation} severity={cell.severity} />
+                          ) : (
+                            <span className="text-[var(--text-muted)]">—</span>
+                          )}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-2">
       <SectionEyebrow>Campaign tuning · all active campaigns</SectionEyebrow>

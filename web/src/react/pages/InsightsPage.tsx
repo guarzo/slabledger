@@ -6,6 +6,17 @@ import DoNowSection from '../components/insights/DoNowSection';
 import HealthSignalsTiles from '../components/insights/HealthSignalsTiles';
 import { useInsightsOverview } from '../queries/useInsightsOverview';
 
+function formatRefreshedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default function InsightsPage() {
   const { data, isLoading, isError, refetch } = useInsightsOverview();
 
@@ -17,6 +28,11 @@ export default function InsightsPage() {
           <p className="text-sm text-[var(--text-muted)] mt-1">
             Actions you can take, signals unique to this page, and per-campaign tuning.
           </p>
+          {data?.generatedAt && (
+            <p className="text-xs text-[var(--text-muted)] tabular-nums mt-1">
+              Last refreshed {formatRefreshedAt(data.generatedAt)}
+            </p>
+          )}
         </div>
         <Button variant="ghost" size="sm" onClick={() => { void refetch(); }}>
           Refresh
