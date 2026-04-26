@@ -49,6 +49,7 @@ type PurchaseRepositoryMock struct {
 	UpdatePurchaseDHPushStatusFn         func(ctx context.Context, id string, status string) error
 	IncrementDHPushAttemptsFn            func(ctx context.Context, id string) (int, error)
 	UpdatePurchaseDHStatusFn             func(ctx context.Context, id string, status string) error
+	ListStaleDHStatusSoldPurchasesFn     func(ctx context.Context) ([]string, error)
 	UpdatePurchaseDHCardIDFn             func(ctx context.Context, id string, cardID int) error
 	GetPurchasesByDHPushStatusFn         func(ctx context.Context, status string, limit int) ([]inventory.Purchase, error)
 	CountUnsoldByDHPushStatusFn          func(ctx context.Context) (map[string]int, error)
@@ -344,6 +345,13 @@ func (m *PurchaseRepositoryMock) UpdatePurchaseDHStatus(ctx context.Context, id 
 		return m.UpdatePurchaseDHStatusFn(ctx, id, status)
 	}
 	return nil
+}
+
+func (m *PurchaseRepositoryMock) ListStaleDHStatusSoldPurchases(ctx context.Context) ([]string, error) {
+	if m.ListStaleDHStatusSoldPurchasesFn != nil {
+		return m.ListStaleDHStatusSoldPurchasesFn(ctx)
+	}
+	return nil, nil
 }
 
 func (m *PurchaseRepositoryMock) UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error {

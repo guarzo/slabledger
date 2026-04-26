@@ -102,6 +102,28 @@ func (ps *PurchaseStore) UpdatePurchaseDHStatus(ctx context.Context, id string, 
 	)
 }
 
+// ListStaleDHStatusSoldPurchases returns IDs of purchases that have a linked
+// sale but whose dh_status is not 'sold'.
+func (ps *PurchaseStore) ListStaleDHStatusSoldPurchases(ctx context.Context) ([]string, error) {
+	rows, err := ps.db.QueryContext(ctx,
+		`SELECT cp.id FROM campaign_purchases cp
+		 JOIN campaign_sales cs ON cs.purchase_id = cp.id
+		 WHERE cp.dh_status IS DISTINCT FROM 'sold'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // UpdatePurchaseDHCardID updates only the dh_card_id column on a purchase.
 // Targeted update — does not touch other DH fields.
 func (ps *PurchaseStore) UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error {

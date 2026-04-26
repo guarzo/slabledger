@@ -92,6 +92,9 @@ type PurchaseRepository interface {
 	// This is a targeted update that does not touch any other DH fields, unlike
 	// UpdatePurchaseDHFields which overwrites the full field set.
 	UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error
+	// ListStaleDHStatusSoldPurchases returns IDs of purchases that have a linked
+	// sale but whose dh_status is not 'sold'. Used by the reconciler scheduler.
+	ListStaleDHStatusSoldPurchases(ctx context.Context) ([]string, error)
 	// UpdatePurchaseDHCardID updates only the dh_card_id column on a purchase.
 	// Targeted update that does not touch any other DH fields.
 	UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error
