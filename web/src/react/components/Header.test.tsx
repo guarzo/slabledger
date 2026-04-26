@@ -34,10 +34,10 @@ describe('Header — Track I mobile chrome', () => {
     });
   });
 
-  it('shows MENU micro-label inside the hamburger button', async () => {
+  it('shows the current page name as the hamburger micro-label', async () => {
     renderHeader();
     const button = await screen.findByRole('button', { name: 'Open menu' });
-    expect(button.textContent).toMatch(/MENU/);
+    expect(button.textContent).toMatch(/Dashboard/);
     expect(button.className).toMatch(/md:hidden/);
   });
 
