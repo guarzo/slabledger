@@ -70,6 +70,7 @@ type InMemoryCampaignStore struct {
 	UpdatePurchaseDHPushStatusFn        func(ctx context.Context, id string, status string) error
 	IncrementDHPushAttemptsFn           func(ctx context.Context, id string) (int, error)
 	UpdatePurchaseDHStatusFn            func(ctx context.Context, id string, status string) error
+	ListStaleDHStatusSoldPurchasesFn    func(ctx context.Context) ([]string, error)
 	UpdatePurchaseDHCardIDFn            func(ctx context.Context, id string, cardID int) error
 	UpdatePurchaseDHCandidatesFn        func(ctx context.Context, id string, candidatesJSON string) error
 	UpdatePurchaseDHHoldReasonFn        func(ctx context.Context, id string, reason string) error
@@ -1079,6 +1080,13 @@ func (m *InMemoryCampaignStore) UpdatePurchaseDHStatus(ctx context.Context, id s
 		return m.UpdatePurchaseDHStatusFn(ctx, id, status)
 	}
 	return nil
+}
+
+func (m *InMemoryCampaignStore) ListStaleDHStatusSoldPurchases(ctx context.Context) ([]string, error) {
+	if m.ListStaleDHStatusSoldPurchasesFn != nil {
+		return m.ListStaleDHStatusSoldPurchasesFn(ctx)
+	}
+	return nil, nil
 }
 
 func (m *InMemoryCampaignStore) UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error {

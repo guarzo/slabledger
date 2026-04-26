@@ -346,6 +346,20 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
+	// DH sold-status reconciler (safety net for best-effort dh_status update in CreateSale)
+	if deps.PurchaseRepo != nil {
+		soldReconcilerCfg := DHSoldReconcilerConfig{
+			Enabled:  cfg.DHSoldReconciler.Enabled,
+			Interval: cfg.DHSoldReconciler.Interval,
+		}
+		schedulers = append(schedulers, NewDHSoldReconcilerScheduler(
+			deps.PurchaseRepo,
+			deps.PurchaseRepo,
+			deps.Logger,
+			soldReconcilerCfg,
+		))
+	}
+
 	// DH inventory reconciliation scheduler (hourly drift scan).
 	if deps.DHReconciler != nil {
 		reconcileCfg := config.DHReconcileConfig{

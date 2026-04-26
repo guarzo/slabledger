@@ -802,6 +802,10 @@ func (m *mockRepo) UpdatePurchaseDHStatus(_ context.Context, id string, status s
 	return nil
 }
 
+func (m *mockRepo) ListStaleDHStatusSoldPurchases(_ context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func (m *mockRepo) UpdatePurchaseDHCardID(_ context.Context, id string, cardID int) error {
 	if p, ok := m.purchases[id]; ok && p != nil {
 		p.DHCardID = cardID

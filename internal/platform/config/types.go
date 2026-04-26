@@ -170,10 +170,11 @@ type Config struct {
 	GoogleSheets       GoogleSheetsConfig
 	PSASync            PSASyncConfig
 	DH                 DHConfig
-	DHAnalyticsRefresh DHAnalyticsRefreshConfig
-	DHReconcile        DHReconcileConfig
-	DHPriceSync        DHPriceSyncConfig
-	Adapters           AdapterConfig
+	DHAnalyticsRefresh  DHAnalyticsRefreshConfig
+	DHReconcile         DHReconcileConfig
+	DHSoldReconciler    DHSoldReconcilerConfig
+	DHPriceSync         DHPriceSyncConfig
+	Adapters            AdapterConfig
 }
 
 // DHAnalyticsRefreshConfig controls the daily DH demand analytics refresh
@@ -199,6 +200,20 @@ type DHReconcileConfig struct {
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.
 func (c *DHReconcileConfig) ApplyDefaults() {
+	if c.Interval <= 0 {
+		c.Interval = 1 * time.Hour
+	}
+}
+
+// DHSoldReconcilerConfig controls the scheduler that reconciles dh_status for
+// purchases that have a linked sale but whose dh_status is not 'sold'.
+type DHSoldReconcilerConfig struct {
+	Enabled  bool          // default: true
+	Interval time.Duration // default: 1h
+}
+
+// ApplyDefaults sets zero-valued fields to sensible defaults.
+func (c *DHSoldReconcilerConfig) ApplyDefaults() {
 	if c.Interval <= 0 {
 		c.Interval = 1 * time.Hour
 	}
