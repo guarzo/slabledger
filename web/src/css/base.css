@@ -123,7 +123,7 @@
   background-color: var(--table-row-selected-hover);
 }
 .glass-vrow[data-belowcost="true"] {
-  background-color: rgba(248, 113, 113, 0.05);
+  background-color: var(--danger-tint);
 }
 
 /* P/L status indicators */

@@ -156,6 +156,7 @@
   /* --danger-bg: Used for container backgrounds (e.g., alert boxes, error message containers) */
   --danger-bg: rgba(239, 68, 68, 0.1);
   --danger-border: rgba(239, 68, 68, 0.2);
+  --danger-tint: rgba(248, 113, 113, 0.05);  /* Subtle row tint for below-cost items */
 
   --info: #22d3ee;            /* Brighter cyan for better contrast on dark backgrounds */
   --info-bg: rgba(34, 211, 238, 0.1);

@@ -28,7 +28,7 @@
   left: 0;
   right: 0;
   height: 50%;
-  background: #ef4444;
+  background: var(--danger, #ef4444);
   border-top-left-radius: 9999px;
   border-top-right-radius: 9999px;
 }
@@ -40,7 +40,7 @@
   left: 0;
   right: 0;
   height: 50%;
-  background: #f8fafc;
+  background: var(--surface-4, #f8fafc);
   border-bottom-left-radius: 9999px;
   border-bottom-right-radius: 9999px;
 }
@@ -53,7 +53,7 @@
   right: 0;
   height: 4px;
   margin-top: -2px;
-  background: #1e293b;
+  background: var(--surface-0, #1e293b);
   z-index: 2;
   display: flex;
   align-items: center;
@@ -64,9 +64,9 @@
   width: 28%;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: #f8fafc;
-  border: 3px solid #1e293b;
-  box-shadow: 0 0 0 2px #1e293b inset, 0 0 6px rgba(0, 0, 0, 0.2);
+  background: var(--surface-4, #f8fafc);
+  border: 3px solid var(--surface-0, #1e293b);
+  box-shadow: 0 0 0 2px var(--surface-0, #1e293b) inset, 0 0 6px rgba(0, 0, 0, 0.2);
 }
 
 @keyframes pokeball-spin {
