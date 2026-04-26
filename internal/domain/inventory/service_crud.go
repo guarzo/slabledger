@@ -169,11 +169,54 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			SalePriceCents: item.SalePriceCents,
 			SaleDate:       saleDate,
 		}
-		if err := s.CreateSale(ctx, sa, campaign, purchase); err != nil {
+
+		// Inline sale creation without captureMarketSnapshot to avoid hitting
+		// external pricing APIs for every card (which causes timeouts on bulk sales).
+		// Bulk-created sales will not have MarketSnapshotData unless SaleRepository
+		// gains an update/backfill path.
+		if err := ValidateSale(sa); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
 			continue
 		}
+
+		sa.ID = s.idGen()
+		sa.SaleFeeCents = CalculateSaleFee(sa.SaleChannel, sa.SalePriceCents, campaign)
+
+		purchaseDate, parseErr := time.Parse("2006-01-02", purchase.PurchaseDate)
+		if parseErr == nil {
+			saleDateParsed, parseErr2 := time.Parse("2006-01-02", sa.SaleDate)
+			if parseErr2 == nil {
+				if saleDateParsed.Before(purchaseDate) {
+					result.Failed++
+					result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: ErrSaleDateBeforePurchase.Error()})
+					continue
+				}
+				sa.DaysToSell = int(saleDateParsed.Sub(purchaseDate).Hours() / 24)
+			}
+		}
+
+		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
+
+		now := time.Now()
+		sa.CreatedAt = now
+		sa.UpdatedAt = now
+
+		if err := s.sales.CreateSale(ctx, sa); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
+			continue
+		}
+
+		// Best-effort: clear eBay export flag since the card is now sold
+		if clearErr := s.purchases.ClearEbayExportFlags(ctx, []string{sa.PurchaseID}); clearErr != nil {
+			if s.logger != nil {
+				s.logger.Warn(ctx, "bulk sale: failed to clear ebay export flag",
+					observability.String("purchaseID", sa.PurchaseID),
+					observability.Err(clearErr))
+			}
+		}
+
 		result.Created++
 	}
 	return result, nil
