@@ -28,15 +28,35 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-[var(--text)]">DoubleHolo isn't responding.</p>
-          <p className="text-sm text-[var(--text-muted)]">
-            DH credentials are set on the server, not in the UI. Ask the operator to verify{' '}
-            <code className="px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text)] text-xs">DH_ENTERPRISE_API_KEY</code>
-            {' '}and{' '}
-            <code className="px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text)] text-xs">DH_API_BASE_URL</code>
-            {' '}in the backend environment, then restart the service.
-          </p>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="inline-block w-2 h-2 rounded-full bg-[var(--danger)]"
+            />
+            <p className="text-sm font-semibold text-[var(--text)]">
+              DoubleHolo not responding · check credentials and restart
+            </p>
+          </div>
+          <details className="text-sm text-[var(--text-muted)]">
+            <summary className="cursor-pointer text-[var(--brand-400)] hover:underline select-none">
+              How to fix
+            </summary>
+            <div className="mt-2 space-y-1.5 pl-4 border-l border-[var(--surface-2)]">
+              <p>
+                DH credentials are set on the server, not in the UI. Ask the operator to verify the following environment variables in the backend:
+              </p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>
+                  <code className="px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text)] text-xs">DH_ENTERPRISE_API_KEY</code>
+                </li>
+                <li>
+                  <code className="px-1 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text)] text-xs">DH_API_BASE_URL</code>
+                </li>
+              </ul>
+              <p>Then restart the service.</p>
+            </div>
+          </details>
         </div>
       </CardShell>
     );

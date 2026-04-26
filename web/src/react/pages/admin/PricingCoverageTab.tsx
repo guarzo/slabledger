@@ -40,16 +40,38 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
         </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-        <SummaryCard label="Inventory Cards" value={totalUnsold} />
-        <SummaryCard label="Listed" value={`${listedCards} / ${totalUnsold}`} color={listedColor} />
-        <SummaryCard label="Ready to List" value={readyToListCards} color={readyToListCards > 0 ? 'var(--warning)' : undefined} />
-        <SummaryCard label="Unmatched" value={unmatchedCards} color={unmatchedCards > 0 ? 'var(--danger)' : undefined} />
-        <SummaryCard label="Matching" value={matchingCards} color={matchingCards > 0 ? 'var(--text-muted)' : undefined} />
-        <SummaryCard label="Awaiting Receipt" value={awaitingReceiptCards} color="var(--text-muted)" />
-        <SummaryCard label="CL Priced" value={`${clPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
-        <SummaryCard label="MM Priced" value={`${mmPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
+      {/* Summary cards — grouped by intake state vs price source */}
+      <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)]/40 p-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-x-6 gap-y-3">
+          {/* Intake state */}
+          <div>
+            <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
+              Intake state
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+              <SummaryCard label="Inventory Cards" value={totalUnsold} />
+              <SummaryCard label="Listed" value={`${listedCards} / ${totalUnsold}`} color={listedColor} />
+              <SummaryCard label="Ready to List" value={readyToListCards} color={readyToListCards > 0 ? 'var(--warning)' : undefined} />
+              <SummaryCard label="Unmatched" value={unmatchedCards} color={unmatchedCards > 0 ? 'var(--danger)' : undefined} />
+              <SummaryCard label="Matching" value={matchingCards} color={matchingCards > 0 ? 'var(--text-muted)' : undefined} />
+              <SummaryCard label="Awaiting Receipt" value={awaitingReceiptCards} color="var(--text-muted)" />
+            </div>
+          </div>
+
+          {/* Vertical divider — hidden on small screens */}
+          <div aria-hidden="true" className="hidden lg:block w-px bg-[var(--surface-3)] self-stretch" />
+
+          {/* Price source */}
+          <div>
+            <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
+              Price source
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <SummaryCard label="CL Priced" value={`${clPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
+              <SummaryCard label="MM Priced" value={`${mmPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Recent failure patterns */}
