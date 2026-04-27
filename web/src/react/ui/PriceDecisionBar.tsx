@@ -203,6 +203,7 @@ export default function PriceDecisionBar({
           size="sm"
           onClick={handleSecondaryConfirm}
           disabled={!hasSelection || allDisabled}
+          loading={isSubmitting}
         >
           {secondaryConfirm.label}
         </Button>
