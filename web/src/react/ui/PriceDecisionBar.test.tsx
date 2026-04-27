@@ -241,4 +241,48 @@ describe('PriceDecisionBar', () => {
     expect((screen.getByPlaceholderText('0.00') as HTMLInputElement).value).toBe('285.00');
     expect(screen.getByRole('button', { name: /CL/ })).toHaveAttribute('aria-pressed', 'true');
   });
+
+  describe('secondaryConfirm', () => {
+    it('renders the secondary button when secondaryConfirm is provided', () => {
+      render(
+        <PriceDecisionBar
+          sources={sources}
+          onConfirm={() => {}}
+          secondaryConfirm={{ label: 'Set Price', onConfirm: () => {} }}
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Set Price' })).toBeInTheDocument();
+    });
+
+    it('does not render a secondary button when secondaryConfirm is omitted', () => {
+      render(<PriceDecisionBar sources={sources} onConfirm={() => {}} />);
+      expect(screen.queryByRole('button', { name: 'Set Price' })).toBeNull();
+    });
+
+    it('fires the secondary handler with current selection cents and source', async () => {
+      const user = userEvent.setup();
+      const secondary = vi.fn();
+      render(
+        <PriceDecisionBar
+          sources={sources}
+          preSelected={clSelected}
+          onConfirm={() => {}}
+          secondaryConfirm={{ label: 'Set Price', onConfirm: secondary }}
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: 'Set Price' }));
+      expect(secondary).toHaveBeenCalledWith(28500, 'cl');
+    });
+
+    it('shares disabled state with primary when nothing is selected', () => {
+      render(
+        <PriceDecisionBar
+          sources={sources}
+          onConfirm={() => {}}
+          secondaryConfirm={{ label: 'Set Price', onConfirm: () => {} }}
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Set Price' })).toBeDisabled();
+    });
+  });
 });

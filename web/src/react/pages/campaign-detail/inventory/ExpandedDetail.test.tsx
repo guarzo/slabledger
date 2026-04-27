@@ -96,4 +96,22 @@ describe('ExpandedDetail combined set-and-list', () => {
     await waitFor(() => expect(api.setReviewedPrice).toHaveBeenCalled());
     expect(api.listPurchaseOnDH).not.toHaveBeenCalled();
   });
+
+  it('exposes a Set Price secondary button that saves the price without listing on DH', async () => {
+    const { api } = await import('../../../../js/api');
+    const item = makeItem();
+
+    const { getByRole } = renderWithProviders(
+      <ExpandedDetail item={item} combineWithList />,
+    );
+
+    // Both buttons appear when combineWithList is true.
+    expect(getByRole('button', { name: /list on dh/i })).toBeInTheDocument();
+    const setPriceButton = getByRole('button', { name: /^set price$/i });
+
+    await userEvent.click(setPriceButton);
+
+    await waitFor(() => expect(api.setReviewedPrice).toHaveBeenCalledWith('pur-1', expect.any(Number), expect.any(String)));
+    expect(api.listPurchaseOnDH).not.toHaveBeenCalled();
+  });
 });

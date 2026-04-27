@@ -29,6 +29,12 @@ export interface PriceDecisionBarProps {
   recommendedSource?: string;
   /** Cost basis in cents — shows live margin badge when set. */
   costBasisCents?: number;
+  /** Optional secondary confirm action rendered next to the primary Confirm button.
+   *  Shares the current selection / disabled state with the primary button. */
+  secondaryConfirm?: {
+    label: string;
+    onConfirm: (priceCents: number, source: string) => void;
+  };
 }
 
 export default function PriceDecisionBar({
@@ -45,6 +51,7 @@ export default function PriceDecisionBar({
   acceptedPriceCents,
   recommendedSource,
   costBasisCents,
+  secondaryConfirm,
 }: PriceDecisionBarProps) {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [customValue, setCustomValue] = useState('');
@@ -105,6 +112,15 @@ export default function PriceDecisionBar({
     if (values) {
       setLastConfirmedCents(values.priceCents);
       onConfirm(values.priceCents, values.source);
+    }
+  };
+
+  const handleSecondaryConfirm = () => {
+    if (!secondaryConfirm) return;
+    const values = getConfirmValues();
+    if (values) {
+      setLastConfirmedCents(values.priceCents);
+      secondaryConfirm.onConfirm(values.priceCents, values.source);
     }
   };
 
@@ -180,6 +196,18 @@ export default function PriceDecisionBar({
       >
         {confirmLabel}
       </Button>
+
+      {secondaryConfirm && (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleSecondaryConfirm}
+          disabled={!hasSelection || allDisabled}
+          loading={isSubmitting}
+        >
+          {secondaryConfirm.label}
+        </Button>
+      )}
 
       {onSkip && (
         <Button variant="ghost" size="sm" onClick={onSkip} disabled={allDisabled}>
