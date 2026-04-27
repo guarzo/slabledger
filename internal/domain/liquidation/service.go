@@ -128,4 +128,3 @@ const (
 	discountWithComps = 2.5
 	discountNoComps   = 10.0
 )
-
