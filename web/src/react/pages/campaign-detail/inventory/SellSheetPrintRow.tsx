@@ -6,10 +6,8 @@ import {
   cardSubtitle,
   gradeDisplay,
   clPriceDisplayCents,
-  formatLastSaleDate,
   dollars,
 } from '../../../utils/sellSheetHelpers';
-import { mostRecentSale } from './utils';
 
 interface Props {
   item: AgingItem;
@@ -39,13 +37,6 @@ export default function SellSheetPrintRow({ item, rowNumber }: Props) {
     ? (cl.estimated ? `~${dollars(cl.cents)}` : dollars(cl.cents))
     : '—';
 
-  // Prefer the most-recent realized comp sale (compSummary), fall back to
-  // the snapshot's last-sold figure so we still surface a number whenever
-  // the data exists.
-  const recent = mostRecentSale(item);
-  const lastSoldCents = recent?.cents ?? 0;
-  const lastSoldDate = formatLastSaleDate(recent?.date);
-
   return (
     <div className="sell-sheet-print-row">
       <div className="sell-sheet-print-cell" data-cell="num">{rowNumber}</div>
@@ -65,14 +56,6 @@ export default function SellSheetPrintRow({ item, rowNumber }: Props) {
         )}
       </div>
       <div className="sell-sheet-print-cell" data-cell="cl">{clText}</div>
-      <div className="sell-sheet-print-cell" data-cell="last-sale">
-        {lastSoldCents > 0 && (
-          <>
-            <div>{dollars(lastSoldCents)}</div>
-            {lastSoldDate && <div className="sell-sheet-print-date">{lastSoldDate}</div>}
-          </>
-        )}
-      </div>
       <div className="sell-sheet-print-cell" data-cell="agreed" />
     </div>
   );

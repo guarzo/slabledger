@@ -160,7 +160,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               <div className="sell-sheet-print-cell" data-cell="grade">Grade</div>
               <div className="sell-sheet-print-cell" data-cell="cert">Cert</div>
               <div className="sell-sheet-print-cell" data-cell="cl">CL Price</div>
-              <div className="sell-sheet-print-cell" data-cell="last-sale">Last Sale</div>
               <div className="sell-sheet-print-cell" data-cell="agreed">Agreed $</div>
             </div>
           </div>
