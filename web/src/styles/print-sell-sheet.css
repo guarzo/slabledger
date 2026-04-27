@@ -90,10 +90,15 @@
   .sell-sheet-print-cell[data-cell="num"]      { text-align: right; color: #666; }
   .sell-sheet-print-cell[data-cell="grade"]    { text-align: center; }
   .sell-sheet-print-cell[data-cell="cl"]       { text-align: right; font-variant-numeric: tabular-nums; }
-  .sell-sheet-print-cell[data-cell="agreed"]   {
+  .sell-sheet-print-row .sell-sheet-print-cell[data-cell="agreed"] {
     border: 1px solid #999;
     background: white;
     height: 28px;
+  }
+  .sell-sheet-print-headrow .sell-sheet-print-cell[data-cell="agreed"] {
+    border: none;
+    height: 28px;
+    line-height: 28px;
   }
 
   .sell-sheet-print-name {

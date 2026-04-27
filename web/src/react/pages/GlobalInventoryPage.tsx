@@ -1,13 +1,9 @@
-import { useMemo } from 'react';
-import { useSellSheet } from '../hooks/useSellSheet';
 import { useGlobalInventory } from '../queries/useCampaignQueries';
 import { Breadcrumb, SectionErrorBoundary } from '../ui';
 import InventoryTab from './campaign-detail/InventoryTab';
 
 export default function GlobalInventoryPage() {
   const { data: items = [], warnings, isLoading, isError, error } = useGlobalInventory();
-  const sellSheet = useSellSheet();
-  const pageSellSheetCount = useMemo(() => items.filter(i => sellSheet.has(i.purchase.id)).length, [items, sellSheet]);
 
   if (isError) {
     return (
@@ -26,14 +22,6 @@ export default function GlobalInventoryPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4">
-      {/* Print header — visible only when printing */}
-      <div className="sell-sheet-print-header">
-        <h1>Sell Sheet</h1>
-        <div className="print-meta">
-          {new Date().toLocaleDateString()} &middot; {pageSellSheetCount} items
-        </div>
-      </div>
-
       <div className="print:hidden">
         <Breadcrumb items={[{ label: 'Inventory' }]} />
         <div className="flex items-center justify-between mb-6">
@@ -52,11 +40,6 @@ export default function GlobalInventoryPage() {
       <SectionErrorBoundary sectionName="Inventory">
         <InventoryTab items={items} isLoading={isLoading} showCampaignColumn />
       </SectionErrorBoundary>
-
-      {/* Print footer — visible only when printing */}
-      <div className="sell-sheet-print-footer">
-        {pageSellSheetCount} items &middot; {new Date().toLocaleDateString()}
-      </div>
     </div>
   );
 }
