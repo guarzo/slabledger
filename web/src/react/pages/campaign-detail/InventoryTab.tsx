@@ -148,10 +148,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       {isPrinting && (
         <div className="sell-sheet-print">
           <div className="sell-sheet-print-header">
-            <h1>SlabLedger Sell Sheet</h1>
+            <h1>Sell Sheet</h1>
             <div className="meta">
-              <div>Generated: {new Date().toLocaleDateString('en-US')}</div>
-              <div>{filteredAndSortedItems.length} cards</div>
+              {new Date().toLocaleDateString('en-US')} &middot; {filteredAndSortedItems.length} cards
             </div>
           </div>
           <div className="sell-sheet-print-thead">
@@ -171,25 +170,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           <div className="sell-sheet-print-footer">
             <div className="totals-row">
               <span><span className="label">Items:</span> {filteredAndSortedItems.length}</span>
-              <span>
-                <span className="label">CL Price total:</span> {dollars(printClTotalCents)}
-              </span>
-            </div>
-            <div className="totals-row">
-              <span className="label">Agreed total:</span>
-              <span className="blank-line" />
-            </div>
-            <div className="totals-row">
-              <span className="label">Offer %:</span>
-              <span className="blank-line" style={{ minWidth: 60 }} />
-            </div>
-            <div className="totals-row">
-              <span className="label">Offer $:</span>
-              <span className="blank-line" />
-            </div>
-            <div className="note">
-              CL price reflects most-recent CardLadder market value (~ = estimate from our recommended price).
-              Last Sale shows our most recent realized sale where available.
+              <span><span className="label">CL Total:</span> {dollars(printClTotalCents)}</span>
+              <span><span className="label">Agreed:</span> <span className="blank-line" /></span>
             </div>
           </div>
         </div>
