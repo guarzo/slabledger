@@ -209,6 +209,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         onFlag={onOpenFlagDialog}
         isSubmitting={isSubmitting}
         confirmLabel={combineWithList ? 'List on DH' : undefined}
+        secondaryConfirm={combineWithList ? { label: 'Set Price', onConfirm: handleConfirm } : undefined}
       />
 
       {/* Ship date chip (only when not yet received) */}

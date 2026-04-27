@@ -67,7 +67,7 @@
   .sell-sheet-print-headrow,
   .sell-sheet-print-row {
     display: grid;
-    grid-template-columns: 24px minmax(180px, 2fr) 50px 150px 80px 100px 90px;
+    grid-template-columns: 24px minmax(180px, 2fr) 50px 150px 80px 90px;
     align-items: start;
     column-gap: 12px;
     padding: 4px 6px;
@@ -90,7 +90,6 @@
   .sell-sheet-print-cell[data-cell="num"]      { text-align: right; color: #666; }
   .sell-sheet-print-cell[data-cell="grade"]    { text-align: center; }
   .sell-sheet-print-cell[data-cell="cl"]       { text-align: right; font-variant-numeric: tabular-nums; }
-  .sell-sheet-print-cell[data-cell="last-sale"]{ text-align: right; font-variant-numeric: tabular-nums; }
   .sell-sheet-print-cell[data-cell="agreed"]   {
     border: 1px solid #999;
     background: white;
