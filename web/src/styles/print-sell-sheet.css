@@ -67,10 +67,10 @@
   .sell-sheet-print-headrow,
   .sell-sheet-print-row {
     display: grid;
-    grid-template-columns: 28px 1fr 56px 140px 64px 80px 80px;
+    grid-template-columns: 24px minmax(180px, 2fr) 50px 150px 80px 100px 90px;
     align-items: start;
-    column-gap: 6px;
-    padding: 3px 4px;
+    column-gap: 12px;
+    padding: 4px 6px;
     border-bottom: 1px solid #ddd;
     break-inside: avoid;
   }
@@ -79,6 +79,7 @@
     font-weight: bold;
     border-bottom: 1.5px solid #333;
     background: white;
+    white-space: nowrap;
   }
 
   /* Alternating row bands for scanning ease */

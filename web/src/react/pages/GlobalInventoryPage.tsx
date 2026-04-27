@@ -55,7 +55,7 @@ export default function GlobalInventoryPage() {
 
       {/* Print footer — visible only when printing */}
       <div className="sell-sheet-print-footer">
-        {pageSellSheetCount} items &middot; {new Date().toLocaleDateString()} &middot; card-yeti.com
+        {pageSellSheetCount} items &middot; {new Date().toLocaleDateString()}
       </div>
     </div>
   );

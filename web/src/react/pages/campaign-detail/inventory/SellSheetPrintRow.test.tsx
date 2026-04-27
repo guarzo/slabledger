@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SellSheetPrintRow from './SellSheetPrintRow';
+import { mostRecentSale } from './utils';
 import type { AgingItem } from '../../../../types/campaigns';
 import type { Purchase } from '../../../../types/campaigns/core';
+import type { CompSummary } from '../../../../types/campaigns/analytics';
 
 const basePurchase: Purchase = {
   id: 'p1',
@@ -72,6 +74,60 @@ describe('SellSheetPrintRow', () => {
     const item = { ...baseItem, currentMarket: undefined };
     const { container } = render(<SellSheetPrintRow item={item} rowNumber={1} />);
     expect(container.querySelector('[data-cell="last-sale"]')?.textContent).toBe('');
+  });
+
+  it('prefers compSummary.lastSaleCents over currentMarket.lastSoldCents for the last-sale cell', () => {
+    // Construct a fixture where compSummary.lastSaleCents and
+    // currentMarket.lastSoldCents differ; mostRecentSale should pick
+    // compSummary first, and SellSheetPrintRow should render the
+    // compSummary value (recent.cents -> lastSoldCents in the component).
+    const compSummary: CompSummary = {
+      gemRateId: 'gr-1',
+      totalComps: 10,
+      recentComps: 4,
+      medianCents: 30000,
+      highestCents: 40000,
+      lowestCents: 20000,
+      trend90d: 0,
+      compsAboveCL: 0,
+      compsAboveCost: 0,
+      byPlatform: [],
+      lastSaleDate: '2026-04-20',
+      lastSaleCents: 31200,
+    };
+    const item: AgingItem = {
+      ...baseItem,
+      currentMarket: { lastSoldCents: 26500, lastSoldDate: '2026-03-12', gradePriceCents: 0 },
+      compSummary,
+    };
+
+    const recent = mostRecentSale(item);
+    expect(recent?.cents).toBe(compSummary.lastSaleCents);
+    expect(recent?.date).toBe(compSummary.lastSaleDate);
+
+    render(<SellSheetPrintRow item={item} rowNumber={1} />);
+    // $312 comes from compSummary.lastSaleCents (31200), NOT $265 from currentMarket.lastSoldCents
+    expect(screen.getByText('$312')).toBeInTheDocument();
+    expect(screen.queryByText('$265')).toBeNull();
+    expect(screen.getByText('04/20/26')).toBeInTheDocument();
+  });
+
+  it('falls back to currentMarket.lastSoldCents when compSummary is absent', () => {
+    // No compSummary on the item — mostRecentSale should fall back to the
+    // snapshot's lastSoldCents/lastSoldDate, and the row should render that.
+    const item: AgingItem = {
+      ...baseItem,
+      compSummary: undefined,
+      currentMarket: { lastSoldCents: 26500, lastSoldDate: '2026-03-12', gradePriceCents: 0 },
+    };
+
+    const recent = mostRecentSale(item);
+    expect(recent?.cents).toBe(item.currentMarket?.lastSoldCents);
+    expect(recent?.date).toBe(item.currentMarket?.lastSoldDate);
+
+    render(<SellSheetPrintRow item={item} rowNumber={1} />);
+    expect(screen.getByText('$265')).toBeInTheDocument();
+    expect(screen.getByText('03/12/26')).toBeInTheDocument();
   });
 
   it('renders the row number and an empty Agreed $ cell', () => {

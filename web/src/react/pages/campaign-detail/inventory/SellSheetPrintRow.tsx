@@ -9,6 +9,7 @@ import {
   formatLastSaleDate,
   dollars,
 } from '../../../utils/sellSheetHelpers';
+import { mostRecentSale } from './utils';
 
 interface Props {
   item: AgingItem;
@@ -16,7 +17,7 @@ interface Props {
 }
 
 export default function SellSheetPrintRow({ item, rowNumber }: Props) {
-  const { purchase, currentMarket, recommendedPriceCents } = item;
+  const { purchase, recommendedPriceCents } = item;
   const barcodeRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
@@ -38,8 +39,12 @@ export default function SellSheetPrintRow({ item, rowNumber }: Props) {
     ? (cl.estimated ? `~${dollars(cl.cents)}` : dollars(cl.cents))
     : '—';
 
-  const lastSoldCents = currentMarket?.lastSoldCents ?? 0;
-  const lastSoldDate = formatLastSaleDate(currentMarket?.lastSoldDate);
+  // Prefer the most-recent realized comp sale (compSummary), fall back to
+  // the snapshot's last-sold figure so we still surface a number whenever
+  // the data exists.
+  const recent = mostRecentSale(item);
+  const lastSoldCents = recent?.cents ?? 0;
+  const lastSoldDate = formatLastSaleDate(recent?.date);
 
   return (
     <div className="sell-sheet-print-row">
