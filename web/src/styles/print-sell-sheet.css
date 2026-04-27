@@ -95,6 +95,11 @@
     background: white;
     height: 28px;
   }
+  .sell-sheet-print-headrow .sell-sheet-print-cell[data-cell="agreed"] {
+    border: none;
+    height: 28px;
+    line-height: 28px;
+  }
 
   .sell-sheet-print-name {
     font-size: 9pt;
