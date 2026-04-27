@@ -170,11 +170,11 @@ type Config struct {
 	GoogleSheets       GoogleSheetsConfig
 	PSASync            PSASyncConfig
 	DH                 DHConfig
-	DHAnalyticsRefresh  DHAnalyticsRefreshConfig
-	DHReconcile         DHReconcileConfig
-	DHSoldReconciler    DHSoldReconcilerConfig
-	DHPriceSync         DHPriceSyncConfig
-	Adapters            AdapterConfig
+	DHAnalyticsRefresh DHAnalyticsRefreshConfig
+	DHReconcile        DHReconcileConfig
+	DHSoldReconciler   DHSoldReconcilerConfig
+	DHPriceSync        DHPriceSyncConfig
+	Adapters           AdapterConfig
 }
 
 // DHAnalyticsRefreshConfig controls the daily DH demand analytics refresh

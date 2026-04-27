@@ -226,4 +226,3 @@ func TestGetExpectedValues_UsesCampaignFee(t *testing.T) {
 			portfolioDefault.TotalEVCents, portfolioHighFee.TotalEVCents)
 	}
 }
-
