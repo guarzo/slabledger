@@ -19,6 +19,7 @@ export default function Navigation({ mobile, onNavigate }: NavigationProps) {
     { path: '/inventory', label: 'Inventory', shortLabel: 'Inventory' },
     { path: '/campaigns', label: 'Campaigns', shortLabel: 'Campaigns' },
     { path: '/insights', label: 'Insights', shortLabel: 'Insights' },
+    { path: '/opportunities/psa-exchange', label: 'Opportunities', shortLabel: 'Opps' },
     { path: '/scan', label: 'Scan', shortLabel: 'Scan' },
     { path: '/reprice', label: 'Reprice', shortLabel: 'Reprice' },
   ];
