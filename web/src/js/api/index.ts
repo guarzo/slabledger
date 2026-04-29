@@ -11,6 +11,7 @@
 import './campaigns';
 import './admin';
 import './liquidation';
+import './psaExchange';
 
 // Re-export everything consumers depend on from client.ts
 export {

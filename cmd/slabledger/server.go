@@ -50,6 +50,7 @@ type ServerDependencies struct {
 	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
+	PSAExchangeHandler        *handlers.PSAExchangeHandler     // PSA-Exchange opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
 	DHReconcileHandler        *handlers.DHReconcileHandler     // Admin DH reconcile trigger; nil = disabled
 	DHListingService          domainDHListing.Service          // optional: orchestrates DH listing after cert import
@@ -212,6 +213,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		MarketMoversHandler:       deps.MarketMoversHandler,
 		PSASyncHandler:            deps.PSASyncHandler,
 		OpportunitiesHandler:      deps.OpportunitiesHandler,
+		PSAExchangeHandler:        deps.PSAExchangeHandler,
 		DHHandler:                 deps.DHHandler,
 		DHReconcileHandler:        deps.DHReconcileHandler,
 		SellSheetItemsHandler:     deps.SellSheetItemsHandler,

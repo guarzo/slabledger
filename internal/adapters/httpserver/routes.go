@@ -318,6 +318,15 @@ func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "opportunities routes registered")
 }
 
+// registerPSAExchangeRoutes wires the PSA-exchange opportunity endpoints.
+func (rt *Router) registerPSAExchangeRoutes(mux *http.ServeMux) {
+	if rt.psaExchangeHandler == nil || rt.authMW == nil {
+		return
+	}
+	mux.Handle("GET /api/psa-exchange/opportunities", rt.authMW.RequireAuth(http.HandlerFunc(rt.psaExchangeHandler.HandleGetOpportunities)))
+	rt.logger.Info(context.Background(), "psa-exchange routes registered")
+}
+
 // registerLiquidationRoutes wires the liquidation pricing endpoints.
 func (rt *Router) registerLiquidationRoutes(mux *http.ServeMux) {
 	if rt.liquidationHandler == nil {

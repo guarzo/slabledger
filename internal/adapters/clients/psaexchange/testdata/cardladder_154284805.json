@@ -1,0 +1,30 @@
+{
+    "estimatedValue": 15600,
+    "lastSaleDate": "2026-04-29T03:59:01.000Z",
+    "confidence": 5,
+    "grader": "psa",
+    "index": "Pikachu",
+    "indexId": "Pikachu",
+    "description": "2016 Pokemon Japanese Xy Promo #208 Poncho-Wear. Pikachu M.C. Y Pikachu Special Box",
+    "grade": "g10",
+    "twoWeekData": {
+        "velocity": 7,
+        "averagePrice": 16732.71
+    },
+    "oneMonthData": {
+        "velocity": 12,
+        "averagePrice": 16359.83
+    },
+    "oneQuarterData": {
+        "velocity": 34,
+        "averagePrice": 15279.01
+    },
+    "oneYearData": {
+        "velocity": 118,
+        "averagePrice": 10665.47
+    },
+    "population": 2340,
+    "lastSalePrice": 15600,
+    "isPlayerIndex": true,
+    "indexPercentChange": 0
+}

@@ -39,6 +39,7 @@ type Router struct {
 	cardLadderHandler         *handlers.CardLadderHandler
 	marketMoversHandler       *handlers.MarketMoversHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
+	psaExchangeHandler        *handlers.PSAExchangeHandler
 	dhHandler                 *handlers.DHHandler
 	dhReconcileHandler        *handlers.DHReconcileHandler
 	sellSheetItemsHandler     *handlers.SellSheetItemsHandler
@@ -78,6 +79,7 @@ type RouterConfig struct {
 	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
 	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
+	PSAExchangeHandler        *handlers.PSAExchangeHandler     // PSA-exchange opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
 	DHReconcileHandler        *handlers.DHReconcileHandler     // Admin DH reconcile trigger; nil = disabled
 	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
@@ -173,6 +175,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.OpportunitiesHandler != nil {
 		rt.opportunitiesHandler = cfg.OpportunitiesHandler
+	}
+
+	if cfg.PSAExchangeHandler != nil {
+		rt.psaExchangeHandler = cfg.PSAExchangeHandler
 	}
 
 	if cfg.DHHandler != nil {
@@ -281,6 +287,9 @@ func (rt *Router) Setup() http.Handler {
 
 	// Arbitrage opportunities routes
 	rt.registerOpportunitiesRoutes(mux)
+
+	// PSA-exchange opportunity routes
+	rt.registerPSAExchangeRoutes(mux)
 
 	// DH routes
 	rt.registerDHRoutes(mux)
