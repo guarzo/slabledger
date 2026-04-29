@@ -38,14 +38,21 @@ type ScoreOutputs struct {
 }
 
 // ScoreListing computes the offer + score fields for a listing.
-// Returns a zero-value ScoreOutputs (with default tier) when CompCents <= 0,
-// since we can't make any meaningful offer without a comp.
+// Returns a zero-value ScoreOutputs (with default tier) when CompCents <= 0
+// or when the rounded target offer would be <= 0, since we can't make any
+// meaningful offer in either case.
 func ScoreListing(in ScoreInputs) ScoreOutputs {
 	tier := SelectTier(in.VelocityMonth, in.Confidence)
 	if in.CompCents <= 0 {
 		return ScoreOutputs{Tier: tier, MaxOfferPct: tier.MaxOfferPct}
 	}
-	target := int64(float64(in.CompCents) * tier.MaxOfferPct)
+	// Round to nearest cent (rather than truncating) for sub-cent accuracy.
+	// Guard target <= 0: a sub-cent comp paired with a low offer pct would
+	// otherwise produce edge = +Inf and corrupt sort order.
+	target := int64(math.Round(float64(in.CompCents) * tier.MaxOfferPct))
+	if target <= 0 {
+		return ScoreOutputs{Tier: tier, MaxOfferPct: tier.MaxOfferPct}
+	}
 	edge := float64(in.CompCents-target) / float64(target)
 	// Clamp velocity at 0 to avoid NaN from log(<=0) if upstream ever
 	// returns a negative count. Velocity = 0 yields velocityScore = 0,
