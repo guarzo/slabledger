@@ -130,8 +130,10 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		opportunitiesHandler = handlers.NewOpportunitiesHandler(in.ArbitrageService, logger)
 	}
 
-	// PSA-Exchange (read-only acquisition feed; nil unless token is configured)
-	var psaExchangeHandler *handlers.PSAExchangeHandler
+	// PSA-Exchange (read-only acquisition feed). Handler is always constructed
+	// so the route registers; service stays nil when no token is configured,
+	// causing the handler to return 503 (documented disabled-mode behavior).
+	var pxeService psaexchange.Service
 	if in.Cfg.Adapters.PSAExchangeToken != "" {
 		pxeHTTP := httpx.NewClient(httpx.DefaultConfig("psaexchange"))
 		pxeOpts := []psaexchangeadapter.Option{
@@ -142,9 +144,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			pxeOpts = append(pxeOpts, psaexchangeadapter.WithBaseURL(in.Cfg.Adapters.PSAExchangeBaseURL))
 		}
 		pxeClient := psaexchangeadapter.NewClient(pxeHTTP, pxeOpts...)
-		pxeService := psaexchange.NewService(pxeClient, psaexchange.WithLogger(logger))
-		psaExchangeHandler = handlers.NewPSAExchangeHandler(pxeService, logger)
+		pxeService = psaexchange.NewService(pxeClient, psaexchange.WithLogger(logger))
 	}
+	psaExchangeHandler := handlers.NewPSAExchangeHandler(pxeService, logger)
 
 	// DH handler (bulk match + intelligence; nil when client is not configured)
 	var dhHandler *handlers.DHHandler

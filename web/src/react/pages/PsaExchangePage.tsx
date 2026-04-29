@@ -94,7 +94,7 @@ export default function PsaExchangePage() {
                             </span>
                           )}
                         </td>
-                        <td className="p-2"><GradeBadge grade={row.grade} /></td>
+                        <td className="p-2"><GradeBadge grade={Number(row.grade) || 0} /></td>
                         <td className="p-2 text-right tabular-nums">{dollar(row.listPrice)}</td>
                         <td className="p-2 text-right tabular-nums">{dollar(row.targetOffer)}</td>
                         <td className="p-2 text-right tabular-nums">{dollar(row.comp)}</td>

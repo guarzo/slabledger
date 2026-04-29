@@ -78,9 +78,9 @@ func TestPSAExchangeHandler_GetOpportunities_Success(t *testing.T) {
 	if row["cert"] != "28660366" {
 		t.Fatalf("cert = %v", row["cert"])
 	}
-	// Money serialized as dollars (float)
-	if row["listPrice"].(float64) <= 10000 || row["listPrice"].(float64) >= 11000 {
-		t.Fatalf("listPrice = %v, expected ~10032", row["listPrice"])
+	// Money serialized as dollars (float). 1003219 cents → 10032.19 USD.
+	if row["listPrice"].(float64) != 10032.19 {
+		t.Fatalf("listPrice = %v, want 10032.19", row["listPrice"])
 	}
 	if row["targetOffer"].(float64) != 13950.00 {
 		t.Fatalf("targetOffer = %v, want 13950", row["targetOffer"])

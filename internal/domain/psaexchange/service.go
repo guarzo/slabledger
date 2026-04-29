@@ -61,8 +61,8 @@ func WithCardLadderCacheTTL(d time.Duration) Option {
 	return func(s *service) { s.cacheTTL = d }
 }
 
-// withClock is package-private; used by tests to inject a deterministic clock.
-func withClock(fn func() time.Time) Option {
+// WithClock injects a deterministic clock; intended for tests.
+func WithClock(fn func() time.Time) Option {
 	return func(s *service) { s.clock = fn }
 }
 

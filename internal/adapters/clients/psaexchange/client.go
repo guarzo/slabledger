@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
@@ -27,8 +28,12 @@ type Client struct {
 // Option configures a Client.
 type Option func(*Client)
 
-// WithBaseURL overrides the default upstream base URL.
-func WithBaseURL(u string) Option { return func(c *Client) { c.baseURL = u } }
+// WithBaseURL overrides the default upstream base URL. Trailing slashes are
+// stripped so URL construction in FetchCatalog/FetchCardLadder/CategoryURL
+// can append "/api/..." without producing double slashes.
+func WithBaseURL(u string) Option {
+	return func(c *Client) { c.baseURL = strings.TrimRight(u, "/") }
+}
 
 // WithToken sets the buyer access token (required for CategoryURL only).
 func WithToken(t string) Option { return func(c *Client) { c.token = t } }

@@ -47,7 +47,10 @@ func ScoreListing(in ScoreInputs) ScoreOutputs {
 	}
 	target := int64(float64(in.CompCents) * tier.MaxOfferPct)
 	edge := float64(in.CompCents-target) / float64(target)
-	velocityScore := math.Log(1.0 + float64(in.VelocityMonth))
+	// Clamp velocity at 0 to avoid NaN from log(<=0) if upstream ever
+	// returns a negative count. Velocity = 0 yields velocityScore = 0,
+	// which is the correct "no-movement" weight.
+	velocityScore := math.Log(1.0 + float64(max(in.VelocityMonth, 0)))
 	score := edge * velocityScore
 
 	out := ScoreOutputs{

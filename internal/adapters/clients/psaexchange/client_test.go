@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
@@ -140,15 +139,13 @@ func TestClient_CategoryURL_NoToken(t *testing.T) {
 	}
 }
 
-// TestClient_Default_BaseURL verifies the default base URL prefix.
+// TestClient_Default_BaseURL verifies the default base URL.
 func TestClient_Default_BaseURL(t *testing.T) {
 	cfg := httpx.DefaultConfig("psaexchange-test")
 	httpClient := httpx.NewClient(cfg)
 	c := psaexchange.NewClient(httpClient)
 
-	got := c.BaseURL()
-	if !strings.HasPrefix(got, "https://psa-exchange-catalog.com/") &&
-		got != "https://psa-exchange-catalog.com" {
-		t.Errorf("BaseURL = %q, want prefix https://psa-exchange-catalog.com/", got)
+	if got := c.BaseURL(); got != "https://psa-exchange-catalog.com" {
+		t.Errorf("BaseURL = %q, want %q", got, "https://psa-exchange-catalog.com")
 	}
 }
