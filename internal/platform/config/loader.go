@@ -209,6 +209,9 @@ func FromEnv(base Config) Config {
 	}
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
+	cfg.Adapters.PSAExchangeToken = os.Getenv("PSA_EXCHANGE_TOKEN")
+	cfg.Adapters.PSAExchangeBuyerCID = os.Getenv("PSA_EXCHANGE_BUYER_CID")
+	envString("PSA_EXCHANGE_BASE_URL", &cfg.Adapters.PSAExchangeBaseURL)
 	envDurationPositive("AZURE_AI_TIMEOUT", &cfg.Adapters.AzureAICompletionTimeout)
 	envIntPositive("DH_CACHE_TTL_HOURS", &cfg.DH.CacheTTLHours)
 	envIntPositive("DH_RATE_LIMIT_RPS", &cfg.DH.RateLimitRPS)
