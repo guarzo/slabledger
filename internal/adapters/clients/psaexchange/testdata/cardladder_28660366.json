@@ -1,0 +1,30 @@
+{
+    "estimatedValue": 18600,
+    "lastSaleDate": "2026-04-19T23:56:00.000Z",
+    "confidence": 5,
+    "grader": "psa",
+    "index": "Charizard",
+    "indexId": "Charizard",
+    "description": "2009 Pokemon Platinum Supreme Victors 143 Charizard G Lv.x-Holo",
+    "grade": "g10",
+    "twoWeekData": {
+        "velocity": 1,
+        "averagePrice": 18600
+    },
+    "oneMonthData": {
+        "velocity": 1,
+        "averagePrice": 18600
+    },
+    "oneQuarterData": {
+        "velocity": 6,
+        "averagePrice": 13945
+    },
+    "oneYearData": {
+        "velocity": 13,
+        "averagePrice": 10878.46
+    },
+    "population": 118,
+    "lastSalePrice": 18600,
+    "isPlayerIndex": true,
+    "indexPercentChange": 0
+}

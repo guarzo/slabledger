@@ -108,6 +108,9 @@ type AdapterConfig struct {
 	AzureAIDeployment        string        // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
 	DHEnterpriseKey          string        // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
 	DHBaseURL                string        // DH_API_BASE_URL
+	PSAExchangeToken         string        // PSA_EXCHANGE_TOKEN - buyer access token
+	PSAExchangeBuyerCID      string        // PSA_EXCHANGE_BUYER_CID - buyer CID (reserved for v2)
+	PSAExchangeBaseURL       string        // PSA_EXCHANGE_BASE_URL - base URL (default: https://psa-exchange-catalog.com)
 	AzureAICompletionTimeout time.Duration // AZURE_AI_TIMEOUT - Completion poll fallback timeout (default: 3m)
 }
 
