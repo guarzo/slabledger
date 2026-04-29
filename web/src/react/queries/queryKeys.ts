@@ -53,4 +53,7 @@ export const queryKeys = {
   liquidation: {
     preview: ['liquidation', 'preview'] as const,
   },
+  psaExchange: {
+    opportunities: ['psaExchange', 'opportunities'] as const,
+  },
 } as const;
