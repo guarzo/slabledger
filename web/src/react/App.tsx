@@ -29,6 +29,7 @@ const InsightsPage = lazy(() => import('./pages/InsightsPage'));
 const ScanPage = lazy(() => import('./pages/ScanPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
 const LiquidationPage = lazy(() => import('./pages/LiquidationPage'));
+const PsaExchangePage = lazy(() => import('./pages/PsaExchangePage'));
 
 function AppContent() {
   const location = useLocation();
@@ -65,6 +66,14 @@ function AppContent() {
                 <ProtectedRoute>
                   <PageTransition>
                     <ScanPage />
+                  </PageTransition>
+                </ProtectedRoute>
+              } />
+              {/* PSA-Exchange Opportunities */}
+              <Route path="/opportunities/psa-exchange" element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <PsaExchangePage />
                   </PageTransition>
                 </ProtectedRoute>
               } />
