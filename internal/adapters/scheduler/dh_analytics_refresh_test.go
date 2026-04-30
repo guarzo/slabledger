@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -364,3 +365,204 @@ func TestDHAnalyticsRefresh_DisabledByConfig_Noop(t *testing.T) {
 }
 
 func ptrF64(v float64) *float64 { return &v }
+
+// TestFetchAllVelocity_PaginatesUntilTotalCount verifies that fetchAllVelocity
+// walks pages until total_count is reached, instead of stopping at page 1.
+// Reproduces the production bug where only the top per_page=50 entries had
+// velocity hydrated even though the leaderboard contained more characters.
+func TestFetchAllVelocity_PaginatesUntilTotalCount(t *testing.T) {
+	tests := []struct {
+		name        string
+		pageRespFn  func(page int) (*dh.CharacterVelocityResponse, error)
+		wantEntries int
+		wantCalls   int
+	}{
+		{
+			name: "walks until total_count satisfied",
+			pageRespFn: func(page int) (*dh.CharacterVelocityResponse, error) {
+				// total_count = 120, per_page = 50 → expect 3 pages (50+50+20).
+				switch page {
+				case 1:
+					return makeVelPage(1, 50, 50, 120), nil
+				case 2:
+					return makeVelPage(51, 50, 50, 120), nil
+				case 3:
+					return makeVelPage(101, 20, 50, 120), nil
+				}
+				return nil, errors.New("unexpected page")
+			},
+			wantEntries: 120,
+			wantCalls:   3,
+		},
+		{
+			name: "stops on empty page when total_count is missing",
+			pageRespFn: func(page int) (*dh.CharacterVelocityResponse, error) {
+				if page <= 2 {
+					return makeVelPage((page-1)*50+1, 50, 50, 0), nil
+				}
+				// Empty page = end of stream.
+				return &dh.CharacterVelocityResponse{}, nil
+			},
+			wantEntries: 100,
+			wantCalls:   3,
+		},
+		{
+			name: "caps at characterListMaxPages",
+			pageRespFn: func(page int) (*dh.CharacterVelocityResponse, error) {
+				// Always returns a full page, no total_count → must stop at cap.
+				return makeVelPage((page-1)*50+1, 50, 50, 0), nil
+			},
+			wantEntries: characterListMaxPages * 50,
+			wantCalls:   characterListMaxPages,
+		},
+		{
+			name: "stops on transport error",
+			pageRespFn: func(page int) (*dh.CharacterVelocityResponse, error) {
+				if page == 1 {
+					return makeVelPage(1, 50, 50, 200), nil
+				}
+				return nil, errors.New("boom")
+			},
+			wantEntries: 50,
+			wantCalls:   2, // page 1 success + page 2 errored
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &fakeAnalyticsClient{
+				available: true,
+				characterVelocityFn: func(_ context.Context, opts dh.CharacterListOpts) (*dh.CharacterVelocityResponse, error) {
+					return tc.pageRespFn(opts.Page)
+				},
+			}
+			s := NewDHAnalyticsRefreshScheduler(client, &mocks.DemandRepositoryMock{}, nil, mocks.NewMockLogger(), config.DHAnalyticsRefreshConfig{Window: "30d"})
+			entries, calls := s.fetchAllVelocity(context.Background())
+			if len(entries) != tc.wantEntries {
+				t.Errorf("entries: got %d, want %d", len(entries), tc.wantEntries)
+			}
+			if calls != tc.wantCalls {
+				t.Errorf("calls: got %d, want %d", calls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+// makeVelPage builds a CharacterVelocityResponse with `count` entries named
+// "char-N" starting at startIdx. totalCount of 0 omits the total (signalling
+// missing pagination metadata).
+func makeVelPage(startIdx, count, perPage, totalCount int) *dh.CharacterVelocityResponse {
+	chars := make([]dh.CharacterVelocityEntry, count)
+	for i := 0; i < count; i++ {
+		chars[i] = dh.CharacterVelocityEntry{
+			CharacterName: fmtChar(startIdx + i),
+		}
+	}
+	return &dh.CharacterVelocityResponse{
+		Characters: chars,
+		Pagination: dh.PaginationMeta{
+			Page:       (startIdx-1)/perPage + 1,
+			PerPage:    perPage,
+			TotalCount: totalCount,
+		},
+	}
+}
+
+func fmtChar(i int) string {
+	return "char-" + strconv.Itoa(i)
+}
+
+// TestFetchAllSaturation_PaginatesUntilTotalCount mirrors the velocity test:
+// saturation pagination has identical stop conditions (total_count reached,
+// empty page, hard cap, transport error) so we cover the same matrix.
+func TestFetchAllSaturation_PaginatesUntilTotalCount(t *testing.T) {
+	tests := []struct {
+		name        string
+		pageRespFn  func(page int) (*dh.CharacterSaturationResponse, error)
+		wantEntries int
+		wantCalls   int
+	}{
+		{
+			name: "walks until total_count satisfied",
+			pageRespFn: func(page int) (*dh.CharacterSaturationResponse, error) {
+				switch page {
+				case 1:
+					return makeSatPage(1, 50, 50, 120), nil
+				case 2:
+					return makeSatPage(51, 50, 50, 120), nil
+				case 3:
+					return makeSatPage(101, 20, 50, 120), nil
+				}
+				return nil, errors.New("unexpected page")
+			},
+			wantEntries: 120,
+			wantCalls:   3,
+		},
+		{
+			name: "stops on empty page when total_count is missing",
+			pageRespFn: func(page int) (*dh.CharacterSaturationResponse, error) {
+				if page <= 2 {
+					return makeSatPage((page-1)*50+1, 50, 50, 0), nil
+				}
+				return &dh.CharacterSaturationResponse{}, nil
+			},
+			wantEntries: 100,
+			wantCalls:   3,
+		},
+		{
+			name: "caps at characterListMaxPages",
+			pageRespFn: func(page int) (*dh.CharacterSaturationResponse, error) {
+				return makeSatPage((page-1)*50+1, 50, 50, 0), nil
+			},
+			wantEntries: characterListMaxPages * 50,
+			wantCalls:   characterListMaxPages,
+		},
+		{
+			name: "stops on transport error",
+			pageRespFn: func(page int) (*dh.CharacterSaturationResponse, error) {
+				if page == 1 {
+					return makeSatPage(1, 50, 50, 200), nil
+				}
+				return nil, errors.New("boom")
+			},
+			wantEntries: 50,
+			wantCalls:   2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &fakeAnalyticsClient{
+				available: true,
+				characterSaturationFn: func(_ context.Context, opts dh.CharacterListOpts) (*dh.CharacterSaturationResponse, error) {
+					return tc.pageRespFn(opts.Page)
+				},
+			}
+			s := NewDHAnalyticsRefreshScheduler(client, &mocks.DemandRepositoryMock{}, nil, mocks.NewMockLogger(), config.DHAnalyticsRefreshConfig{Window: "30d"})
+			entries, calls := s.fetchAllSaturation(context.Background())
+			if len(entries) != tc.wantEntries {
+				t.Errorf("entries: got %d, want %d", len(entries), tc.wantEntries)
+			}
+			if calls != tc.wantCalls {
+				t.Errorf("calls: got %d, want %d", calls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+func makeSatPage(startIdx, count, perPage, totalCount int) *dh.CharacterSaturationResponse {
+	chars := make([]dh.CharacterSaturationEntry, count)
+	for i := 0; i < count; i++ {
+		chars[i] = dh.CharacterSaturationEntry{
+			CharacterName: fmtChar(startIdx + i),
+		}
+	}
+	return &dh.CharacterSaturationResponse{
+		Characters: chars,
+		Pagination: dh.PaginationMeta{
+			Page:       (startIdx-1)/perPage + 1,
+			PerPage:    perPage,
+			TotalCount: totalCount,
+		},
+	}
+}
