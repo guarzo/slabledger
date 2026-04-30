@@ -110,6 +110,16 @@ export function needsAttention(item: AgingItem, status = getReviewStatus(item)):
   return false;
 }
 
+export function computeTotals(items: AgingItem[]): SummaryStats {
+  let totalCost = 0;
+  let totalMarket = 0;
+  for (const item of items) {
+    totalCost += costBasis(item.purchase);
+    totalMarket += bestPrice(item);
+  }
+  return { totalCost, totalMarket, totalPL: totalMarket - totalCost };
+}
+
 export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   const stats: ReviewStats = { total: items.length, reviewed: 0, flagged: 0, aging60d: 0 };
   const counts: TabCounts = {

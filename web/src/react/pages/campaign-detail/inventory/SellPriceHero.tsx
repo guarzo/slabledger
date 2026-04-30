@@ -41,7 +41,7 @@ export default function SellPriceHero({ item, costBasisCents }: SellPriceHeroPro
   }
 
   return (
-    <div className="mb-4 rounded-xl border border-[rgba(255,255,255,0.08)] bg-gradient-to-br from-[rgba(99,102,241,0.06)] to-[rgba(255,255,255,0.02)] px-5 py-4">
+    <div className="mb-4 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[var(--surface-1)] px-5 py-4">
       <div className="flex items-start justify-between gap-6 flex-wrap">
         {/* Left: Most recent sale headline */}
         <div className="min-w-0">
@@ -89,7 +89,7 @@ export default function SellPriceHero({ item, costBasisCents }: SellPriceHeroPro
         <div className="mt-4">
           <div className="relative h-1.5 rounded-full bg-[rgba(255,255,255,0.06)] overflow-visible">
             {/* fill — low to high */}
-            <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[rgba(248,113,113,0.35)] via-[rgba(148,163,184,0.5)] to-[rgba(52,211,153,0.4)]" />
+            <div className="absolute inset-0 rounded-full bg-[rgba(255,255,255,0.06)]" />
             {/* median tick */}
             <TickMark pct={medianPct} color="var(--brand-400)" label="med" />
             {/* cost tick */}

@@ -65,7 +65,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     filterTab, setFilterTab, showAll, setShowAll, debouncedSearch,
     reviewStats, tabCounts, showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
-    totalCost, totalMarket, totalPL,
+    totalCost, totalMarket, totalPL, fullInventoryTotals,
     handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handlePrint, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleRetryDHMatch, dhRetryInFlight, handleSetPrice,
@@ -118,6 +118,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         totalCost={totalCost}
         totalMarket={totalMarket}
         totalPL={totalPL}
+        fullInventoryTotals={fullInventoryTotals}
         showEV={showEV}
         evPortfolio={evPortfolio}
         reviewStats={reviewStats}

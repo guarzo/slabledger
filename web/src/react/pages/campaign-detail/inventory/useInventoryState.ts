@@ -9,7 +9,7 @@ import { useExpectedValues } from '../../../queries/useCampaignQueries';
 import { api } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
 import type { SortKey, SortDir } from './utils';
-import { computeInventoryMeta, filterAndSortItems } from './inventoryCalcs';
+import { computeInventoryMeta, computeTotals, filterAndSortItems } from './inventoryCalcs';
 import type { FilterTab } from './inventoryCalcs';
 import { useInventorySelection } from './useInventorySelection';
 import { useDHActions } from './useDHActions';
@@ -154,6 +154,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheetHas, selection.pinnedIds],
   );
 
+  const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
+
   function toggleAll() {
     const visibleIds = filteredAndSortedItems.map(i => i.purchase.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selection.selected.has(id));
@@ -191,7 +193,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [toast, selection.expandedId, invalidateInventory, selection.setExpandedId]);
 
-  const { totalCost, totalMarket, totalPL } = summary;
+  const { totalCost, totalMarket, totalPL } = filteredTotals;
+  const fullInventoryTotals = summary;
 
   return {
     scrollContainerRef, mobileScrollRef,
@@ -208,7 +211,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     showAll, setShowAll, debouncedSearch,
     reviewStats, tabCounts, showEV: !!showEV, evPortfolio, evMap,
     pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
-    totalCost, totalMarket, totalPL,
+    totalCost, totalMarket, totalPL, fullInventoryTotals,
     handleSort, handleReviewed,
     handleResolveFlag: pricingActions.handleResolveFlag,
     handleApproveDHPush: dhActions.handleApproveDHPush,

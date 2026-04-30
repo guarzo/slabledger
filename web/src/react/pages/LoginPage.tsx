@@ -28,10 +28,8 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="login-page">
-      {/* Header */}
       <div className="login-header">
         <h1>SlabLedger</h1>
-        <p>Graded Card Portfolio Tracker</p>
       </div>
 
       {/* Login Button */}
@@ -55,21 +53,6 @@ const LoginPage: React.FC = () => {
           </svg>
           <span>Sign in with Google</span>
         </button>
-
-        <div className="login-features">
-          <div className="feature">
-            <span className="feature-icon" role="img" aria-hidden="true">📊</span>
-            <span className="feature-text">Campaign tracking</span>
-          </div>
-          <div className="feature">
-            <span className="feature-icon" role="img" aria-hidden="true">💰</span>
-            <span className="feature-text">P&L analytics</span>
-          </div>
-          <div className="feature">
-            <span className="feature-icon" role="img" aria-hidden="true">🔍</span>
-            <span className="feature-text">Price lookup</span>
-          </div>
-        </div>
 
         <div className="login-powered-by">
           <span className="login-powered-by-label">Powered by</span>

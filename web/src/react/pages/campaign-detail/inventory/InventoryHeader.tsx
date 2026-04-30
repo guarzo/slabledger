@@ -17,6 +17,7 @@ export interface InventoryHeaderProps {
   totalCost: number;
   totalMarket: number;
   totalPL: number;
+  fullInventoryTotals: { totalCost: number; totalMarket: number; totalPL: number };
   showEV: boolean;
   evPortfolio: EVPortfolio | null | undefined;
   reviewStats: ReviewStats;
@@ -47,6 +48,7 @@ export interface InventoryHeaderProps {
 export default function InventoryHeader({
   isMobile, items, filteredCount,
   totalCost, totalMarket, totalPL,
+  fullInventoryTotals,
   showEV, evPortfolio,
   reviewStats, searchQuery, setSearchQuery,
   showAll, setShowAll, filterTab, setFilterTab,
@@ -117,7 +119,7 @@ export default function InventoryHeader({
               className={`tabular-nums font-semibold ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
               aria-label={`Unrealized ${totalPL >= 0 ? 'gain' : 'loss'} ${formatPL(totalPL)}`}
             >
-              {totalPL >= 0 ? '+' : ''}{formatPL(totalPL)} unrealized
+              {formatPL(totalPL)} unrealized
               {totalCost > 0 && (
                 <span className="ml-1 opacity-80">
                   ({totalPL >= 0 ? '+' : ''}{formatPct(totalPL / totalCost)})
@@ -135,6 +137,15 @@ export default function InventoryHeader({
           </>
         )}
       </div>
+
+      {(filterTab !== 'all' || debouncedSearch?.trim()) && filteredCount !== items.length && (
+        <div className="mb-4 -mt-3 text-xs text-[var(--text-subtle)] tabular-nums sell-sheet-no-print">
+          All {items.length} cards · Cost {formatCents(fullInventoryTotals.totalCost)}
+          {fullInventoryTotals.totalMarket > 0 && (
+            <> · Market {formatCents(fullInventoryTotals.totalMarket)}</>
+          )}
+        </div>
+      )}
 
       <BulkSelectionMissingCLWarning
         missingCLIds={missingCLIds}

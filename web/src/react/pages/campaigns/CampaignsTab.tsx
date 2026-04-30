@@ -56,8 +56,7 @@ export default function CampaignsTab({
   return (
     <>
       {showCreate && (
-        <div className="relative overflow-hidden rounded-xl mb-6">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[var(--brand-500)] via-[var(--brand-400)] to-[var(--brand-600)]" />
+        <div className="mb-6">
           <CardShell variant="elevated" padding="lg">
             <form onSubmit={form.handleSubmit}>
               <div className="mb-5">

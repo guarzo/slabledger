@@ -23,7 +23,7 @@ export default function PriceFlagDialog({ cardName, grade, onSubmit, onCancel, i
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--surface-overlay)]"
       onClick={handleBackdropClick}
     >
       <div className="w-full max-w-md mx-4 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] shadow-xl">

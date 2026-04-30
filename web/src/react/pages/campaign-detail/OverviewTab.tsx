@@ -145,7 +145,7 @@ export default function OverviewTab({
                           className="w-full rounded-t transition-all duration-300"
                           style={{
                             height: `${Math.max(height, 4)}%`,
-                            background: 'linear-gradient(180deg, var(--brand-400), var(--brand-600))',
+                            background: 'var(--brand-500)',
                           }}
                         />
                         <div className="text-[10px] text-[var(--text-muted)] mt-1.5">{b.label}</div>
