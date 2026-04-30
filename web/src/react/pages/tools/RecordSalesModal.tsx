@@ -26,7 +26,7 @@ export function RecordSalesModal({ rows, summary, onConfirm, onCancel, loading, 
   const resolvedRows = rows.filter(r => r.status === 'resolved');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={loading ? undefined : onCancel}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--surface-overlay)]" onClick={loading ? undefined : onCancel}>
       <div className="max-h-[80vh] w-full max-w-lg overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-6" onClick={e => e.stopPropagation()}>
         <h2 className="mb-4 text-lg font-semibold text-white">Record {summary.cardCount} Sale{summary.cardCount > 1 ? 's' : ''}</h2>
 
