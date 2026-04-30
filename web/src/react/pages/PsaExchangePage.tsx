@@ -1,19 +1,80 @@
+import { useMemo, useState } from 'react';
 import { usePsaExchangeOpportunities } from '../queries/usePsaExchangeQueries';
-import { Breadcrumb, GradeBadge } from '../ui';
+import { Breadcrumb } from '../ui';
 import CardShell from '../ui/CardShell';
 import Button from '../ui/Button';
-
-const dollar = (n: number) =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+import OpportunitiesTable from './psa-exchange/OpportunitiesTable';
+import Toolbar from './psa-exchange/Toolbar';
+import {
+  applyFilters,
+  applySort,
+  defaultDirFor,
+  defaultFilters,
+  groupByDescription,
+  topDecileThreshold,
+  type Filters,
+  type QuickView,
+  type SortDir,
+  type SortKey,
+} from './psa-exchange/utils';
 
 export default function PsaExchangePage() {
   const { data, isLoading, error, refetch } = usePsaExchangeOpportunities();
 
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
+  const [quickView, setQuickView] = useState<QuickView>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [groupDuplicates, setGroupDuplicates] = useState(true);
+
+  const allRows = useMemo(() => data?.opportunities ?? [], [data?.opportunities]);
+
+  const filtered = useMemo(
+    () => applyFilters(allRows, filters, quickView),
+    [allRows, filters, quickView],
+  );
+
+  const sorted = useMemo(
+    () => applySort(filtered, sortKey, sortDir),
+    [filtered, sortKey, sortDir],
+  );
+
+  const groups = useMemo(
+    () => (groupDuplicates ? groupByDescription(sorted) : null),
+    [sorted, groupDuplicates],
+  );
+
+  const topDecileScore = useMemo(
+    () => topDecileThreshold(allRows.map((r) => r.score)),
+    [allRows],
+  );
+
+  const handleQuickView = (v: QuickView) => {
+    setQuickView(v);
+    if (v === 'takeAtList') {
+      setSortKey('edgeAtOffer');
+      setSortDir('desc');
+    } else {
+      setSortKey('score');
+      setSortDir('desc');
+    }
+  };
+
+  const handleSort = (k: SortKey) => {
+    if (sortKey === k) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(k);
+      setSortDir(defaultDirFor(k));
+    }
+  };
+
+  const visibleCount = groups ? groups.length : sorted.length;
+
   return (
     <div className="p-6 space-y-4">
       <Breadcrumb items={[{ label: 'Opportunities' }, { label: 'PSA-Exchange' }]} />
-      <header className="flex items-center justify-between">
+      <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">PSA-Exchange Opportunities</h1>
           <p className="text-sm text-[var(--text-muted)]">
@@ -29,12 +90,16 @@ export default function PsaExchangePage() {
           >
             Open Pokemon catalog ↗
           </a>
-        ) : (
+        ) : !isLoading && !error ? (
           <span className="text-xs text-[var(--text-muted)]">PSA-Exchange token not configured</span>
-        )}
+        ) : null}
       </header>
 
-      {isLoading && <CardShell><div className="p-4 text-sm text-[var(--text-muted)]">Loading…</div></CardShell>}
+      {isLoading && (
+        <CardShell>
+          <div className="p-4 text-sm text-[var(--text-muted)]">Loading…</div>
+        </CardShell>
+      )}
 
       {error && (
         <CardShell>
@@ -45,72 +110,36 @@ export default function PsaExchangePage() {
         </CardShell>
       )}
 
-      {data && (
+      {data && !isLoading && !error && (
         <>
+          <CardShell>
+            <div className="p-3">
+              <Toolbar
+                quickView={quickView}
+                onQuickViewChange={handleQuickView}
+                filters={filters}
+                onFiltersChange={setFilters}
+                groupDuplicates={groupDuplicates}
+                onGroupDuplicatesChange={setGroupDuplicates}
+              />
+            </div>
+          </CardShell>
+
           <div className="text-xs text-[var(--text-muted)]">
-            Showing {data.afterFilter} of {data.totalCatalogPokemon} Pokemon listings.
-            {data.enrichmentErrors > 0 && ` (${data.enrichmentErrors} enrichment errors)`}
+            Showing {visibleCount} of {data.afterFilter} listings · {data.totalCatalogPokemon} total Pokemon
+            {data.enrichmentErrors > 0 && ` · ${data.enrichmentErrors} enrichment errors`}
           </div>
 
-          {data.opportunities.length === 0 ? (
-            <CardShell>
-              <div className="p-6 text-center text-sm text-[var(--text-muted)]">
-                No PSA-Exchange opportunities match the current filters.
-              </div>
-            </CardShell>
-          ) : (
-            <CardShell>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-xs uppercase text-[var(--text-muted)] border-b border-[var(--surface-2)]">
-                    <tr>
-                      <th className="text-left p-2"></th>
-                      <th className="text-left p-2">Cert</th>
-                      <th className="text-left p-2">Description</th>
-                      <th className="text-left p-2">Grade</th>
-                      <th className="text-right p-2">List</th>
-                      <th className="text-right p-2">Target Offer</th>
-                      <th className="text-right p-2">Comp</th>
-                      <th className="text-right p-2">Vel 1m / 3m</th>
-                      <th className="text-right p-2">Edge @ Offer</th>
-                      <th className="text-right p-2">List Runway</th>
-                      <th className="text-right p-2">Score</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.opportunities.map((row) => (
-                      <tr key={row.cert} className="border-b border-[var(--surface-2)]/40 hover:bg-[var(--surface-1)]/40">
-                        <td className="p-2">
-                          {row.frontImage && (
-                            <img src={row.frontImage} alt="" className="h-12 w-9 object-cover rounded-sm" loading="lazy" />
-                          )}
-                        </td>
-                        <td className="p-2 font-mono text-xs">{row.cert}</td>
-                        <td className="p-2 max-w-[28rem]">
-                          <div>{row.description || row.name}</div>
-                          {row.mayTakeAtList && (
-                            <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--success)]/15 text-[var(--success)]">
-                              May take at list
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-2"><GradeBadge grade={Number(row.grade) || 0} /></td>
-                        <td className="p-2 text-right tabular-nums">{dollar(row.listPrice)}</td>
-                        <td className="p-2 text-right tabular-nums">{dollar(row.targetOffer)}</td>
-                        <td className="p-2 text-right tabular-nums">{dollar(row.comp)}</td>
-                        <td className="p-2 text-right tabular-nums">{row.velocityMonth} / {row.velocityQuarter}</td>
-                        <td className="p-2 text-right tabular-nums">{pct(row.edgeAtOffer)}</td>
-                        <td className={`p-2 text-right tabular-nums ${row.listRunwayPct < 0 ? 'text-[var(--success)]' : ''}`}>
-                          {pct(row.listRunwayPct)}
-                        </td>
-                        <td className="p-2 text-right tabular-nums">{row.score.toFixed(3)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardShell>
-          )}
+          <CardShell>
+            <OpportunitiesTable
+              rows={sorted}
+              groups={groups}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+              topDecileScore={topDecileScore}
+            />
+          </CardShell>
         </>
       )}
     </div>
