@@ -71,14 +71,14 @@ func (m *DemandRepositoryMock) ListCharacterCache(ctx context.Context, window st
 
 // CampaignCoverageLookupMock is a Fn-field mock of demand.CampaignCoverageLookup.
 type CampaignCoverageLookupMock struct {
-	CampaignsCoveringFn func(ctx context.Context, character, era string, grade int) ([]int64, error)
+	CampaignsCoveringFn func(ctx context.Context, character, era string, grade int) ([]string, error)
 	UnsoldCountForFn    func(ctx context.Context, character, era string, grade int) (int, error)
 	ActiveCampaignsFn   func(ctx context.Context) ([]demand.ActiveCampaign, error)
 }
 
 var _ demand.CampaignCoverageLookup = (*CampaignCoverageLookupMock)(nil)
 
-func (m *CampaignCoverageLookupMock) CampaignsCovering(ctx context.Context, character, era string, grade int) ([]int64, error) {
+func (m *CampaignCoverageLookupMock) CampaignsCovering(ctx context.Context, character, era string, grade int) ([]string, error) {
 	if m.CampaignsCoveringFn != nil {
 		return m.CampaignsCoveringFn(ctx, character, era, grade)
 	}

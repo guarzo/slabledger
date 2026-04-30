@@ -24,7 +24,7 @@ func TestCampaignSignalsHandler(t *testing.T) {
 		ComputedAt:  &computed,
 		DataQuality: demand.QualityFull,
 		Signals: []demand.CampaignSignal{{
-			CampaignID:              1,
+			CampaignID:              "c1",
 			CampaignName:            "Vintage Core",
 			TrackedCharacters:       3,
 			AcceleratingCount:       1,
@@ -57,7 +57,7 @@ func TestCampaignSignalsHandler(t *testing.T) {
 				assert.Equal(t, "full", body.DataQuality)
 				require.Len(t, body.Signals, 1)
 				sig := body.Signals[0]
-				assert.Equal(t, int64(1), sig.CampaignID)
+				assert.Equal(t, "c1", sig.CampaignID)
 				assert.Equal(t, "Vintage Core", sig.CampaignName)
 				require.Len(t, sig.TopAccelerating, 1)
 				assert.Equal(t, "Pikachu", sig.TopAccelerating[0].Character)

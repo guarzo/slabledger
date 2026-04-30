@@ -50,7 +50,7 @@ type campaignSignalsResponseDTO struct {
 }
 
 type campaignSignalDTO struct {
-	CampaignID              int64                          `json:"campaign_id"`
+	CampaignID              string                         `json:"campaign_id"`
 	CampaignName            string                         `json:"campaign_name"`
 	TrackedCharacters       int                            `json:"tracked_characters"`
 	AcceleratingCount       int                            `json:"accelerating_count"`

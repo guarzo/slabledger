@@ -109,6 +109,6 @@ type NicheMarket struct {
 // NicheCoverage describes which existing campaigns cover this bucket.
 type NicheCoverage struct {
 	OurUnsoldCount    int
-	ActiveCampaignIDs []int64
+	ActiveCampaignIDs []string
 	Covered           bool
 }

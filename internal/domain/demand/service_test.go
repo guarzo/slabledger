@@ -32,9 +32,9 @@ func uncoveredLookup() *mocks.CampaignCoverageLookupMock {
 
 // coveredOnlyForLookup returns a lookup mock that claims coverage for a
 // single (character, era, grade) bucket; everything else is uncovered.
-func coveredOnlyForLookup(character, era string, grade int, ids []int64, unsold int) *mocks.CampaignCoverageLookupMock {
+func coveredOnlyForLookup(character, era string, grade int, ids []string, unsold int) *mocks.CampaignCoverageLookupMock {
 	return &mocks.CampaignCoverageLookupMock{
-		CampaignsCoveringFn: func(_ context.Context, c, e string, g int) ([]int64, error) {
+		CampaignsCoveringFn: func(_ context.Context, c, e string, g int) ([]string, error) {
 			if c == character && e == era && g == grade {
 				return ids, nil
 			}
@@ -190,7 +190,7 @@ func TestService_Leaderboard_SortLowCoverage_UncoveredFirst(t *testing.T) {
 	}
 	// Only a single grade-10 sword_shield bucket for CoveredChar is covered;
 	// everything else (including its scarlet_violet bucket) is uncovered.
-	svc := demand.NewService(newRepoWithRows(rows), coveredOnlyForLookup("CoveredChar", "sword_shield", 10, []int64{42}, 3))
+	svc := demand.NewService(newRepoWithRows(rows), coveredOnlyForLookup("CoveredChar", "sword_shield", 10, []string{"c42"}, 3))
 
 	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
 		Window: "30d",
@@ -363,7 +363,7 @@ func TestService_Leaderboard_Acceleration(t *testing.T) {
 
 func TestOpportunityScore_CoverageAndSaturation(t *testing.T) {
 	base := demand.OpportunityScore(0.8, nil, 10, demand.NicheCoverage{})
-	covered := demand.OpportunityScore(0.8, nil, 10, demand.NicheCoverage{Covered: true, ActiveCampaignIDs: []int64{1}})
+	covered := demand.OpportunityScore(0.8, nil, 10, demand.NicheCoverage{Covered: true, ActiveCampaignIDs: []string{"c1"}})
 	saturated := demand.OpportunityScore(0.8, nil, 500, demand.NicheCoverage{})
 
 	if !(base > covered) {

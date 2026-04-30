@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/demand"
@@ -38,33 +37,32 @@ func NewCampaignCoverageLookup(db *sql.DB) *CampaignCoverageLookup {
 // Matching logic mirrors inventory.PurchaseMatchesCampaign's inclusion-list
 // semantics: case-insensitive substring match of `character` against the
 // campaign's inclusion_list, combined with a grade-range containment check.
-// Campaign IDs are TEXT in SQL; non-numeric IDs (e.g. "external") cannot be
-// represented as int64 and are omitted.
-func (l *CampaignCoverageLookup) CampaignsCovering(ctx context.Context, character, _ string, grade int) ([]int64, error) {
+func (l *CampaignCoverageLookup) CampaignsCovering(ctx context.Context, character, _ string, grade int) ([]string, error) {
 	if strings.TrimSpace(character) == "" {
-		return []int64{}, nil
+		return []string{}, nil
 	}
 
 	rows, err := l.db.QueryContext(ctx,
 		`SELECT id, grade_range, inclusion_list, exclusion_mode
 		 FROM campaigns
-		 WHERE phase = $1`,
+		 WHERE phase = $1 AND id <> $2`,
 		string(inventory.PhaseActive),
+		inventory.ExternalCampaignID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query active campaigns: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck
 
-	var out []int64
+	var out []string
 	for rows.Next() {
 		var (
-			idStr         string
+			id            string
 			gradeRange    string
 			inclusionList string
 			exclusionMode bool
 		)
-		if err := rows.Scan(&idStr, &gradeRange, &inclusionList, &exclusionMode); err != nil {
+		if err := rows.Scan(&id, &gradeRange, &inclusionList, &exclusionMode); err != nil {
 			return nil, fmt.Errorf("scan campaign: %w", err)
 		}
 
@@ -75,19 +73,13 @@ func (l *CampaignCoverageLookup) CampaignsCovering(ctx context.Context, characte
 			continue
 		}
 
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			// Non-numeric campaign IDs (e.g. "external") can't round-trip to int64.
-			// Skip them — the interface only exposes numeric IDs.
-			continue
-		}
 		out = append(out, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate campaigns: %w", err)
 	}
 	if out == nil {
-		out = []int64{}
+		out = []string{}
 	}
 	return out, nil
 }
@@ -131,16 +123,17 @@ func gradeInRange(grade int, rangeStr string) bool {
 	return grade >= lo && grade <= hi
 }
 
-// ActiveCampaigns returns all campaigns with phase=active. Campaigns whose
-// ID is non-numeric (e.g. "external") are omitted — ActiveCampaign.ID is
-// typed as int64 and can't hold them. An empty slice is returned when there
-// are no qualifying campaigns.
+// ActiveCampaigns returns all standard campaigns with phase=active. The
+// "external" bucket is excluded — it represents pre-campaign imports with no
+// targeting rules and would distort signal aggregations. Returns an empty
+// slice when there are no qualifying campaigns.
 func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
 	rows, err := l.db.QueryContext(ctx,
 		`SELECT id, name, grade_range, inclusion_list, exclusion_mode
 		 FROM campaigns
-		 WHERE phase = $1`,
+		 WHERE phase = $1 AND id <> $2`,
 		string(inventory.PhaseActive),
+		inventory.ExternalCampaignID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query active campaigns: %w", err)
@@ -150,18 +143,14 @@ func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.
 	out := []demand.ActiveCampaign{}
 	for rows.Next() {
 		var (
-			idStr         string
+			id            string
 			name          string
 			gradeRange    string
 			inclusionList string
 			exclusionMode bool
 		)
-		if err := rows.Scan(&idStr, &name, &gradeRange, &inclusionList, &exclusionMode); err != nil {
+		if err := rows.Scan(&id, &name, &gradeRange, &inclusionList, &exclusionMode); err != nil {
 			return nil, fmt.Errorf("scan campaign: %w", err)
-		}
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			continue // non-numeric IDs (e.g. "external") omitted
 		}
 		out = append(out, demand.ActiveCampaign{
 			ID:            id,

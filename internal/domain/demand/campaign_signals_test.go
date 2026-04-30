@@ -74,7 +74,7 @@ func TestCampaignSignals(t *testing.T) {
 		{
 			name:      "empty cache",
 			rows:      nil,
-			campaigns: []demand.ActiveCampaign{{ID: 1, Name: "Modern", InclusionList: ""}},
+			campaigns: []demand.ActiveCampaign{{ID: "c1", Name: "Modern", InclusionList: ""}},
 			wantSigs:  0,
 			wantQual:  demand.QualityEmpty,
 		},
@@ -85,7 +85,7 @@ func TestCampaignSignals(t *testing.T) {
 				charRow("Charizard", 8, 2.0, 52, computed), // below accel threshold
 				charRow("Umbreon", 21, -8.3, 18, computed), // decelerating
 			},
-			campaigns: []demand.ActiveCampaign{{ID: 1, Name: "Vintage Core", InclusionList: "Charizard,Pikachu,Umbreon", GradeRange: "9-10"}},
+			campaigns: []demand.ActiveCampaign{{ID: "c1", Name: "Vintage Core", InclusionList: "Charizard,Pikachu,Umbreon", GradeRange: "9-10"}},
 			wantSigs:  1,
 			wantTop:   "Pikachu",
 			wantQual:  demand.QualityFull,
@@ -96,7 +96,7 @@ func TestCampaignSignals(t *testing.T) {
 				charRow("Pikachu", 11, 22.1, 34, computed),
 				charRow("Gengar", 12, 10.0, 20, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: 4, Name: "Modern", InclusionList: ""}},
+			campaigns: []demand.ActiveCampaign{{ID: "c4", Name: "Modern", InclusionList: ""}},
 			wantSigs:  1,
 			wantTop:   "Pikachu",
 			wantQual:  demand.QualityFull,
@@ -106,7 +106,7 @@ func TestCampaignSignals(t *testing.T) {
 			rows: []demand.CharacterCache{
 				charRow("Pikachu", 11, 22.1, 34, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: 7, Name: "Crystal", InclusionList: "Kingdra,Kabutops"}},
+			campaigns: []demand.ActiveCampaign{{ID: "c7", Name: "Crystal", InclusionList: "Kingdra,Kabutops"}},
 			wantSigs:  0,
 			wantQual:  demand.QualityEmpty,
 		},
@@ -116,7 +116,7 @@ func TestCampaignSignals(t *testing.T) {
 				charRowNoChange("Pikachu", computed),
 				charRow("Charizard", 8, 15.7, 52, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: 1, Name: "Vintage Core", InclusionList: "Pikachu,Charizard"}},
+			campaigns: []demand.ActiveCampaign{{ID: "c1", Name: "Vintage Core", InclusionList: "Pikachu,Charizard"}},
 			wantSigs:  1,
 			wantTop:   "Charizard",
 			wantQual:  demand.QualityFull,
@@ -132,7 +132,7 @@ func TestCampaignSignals(t *testing.T) {
 				charRow("F", 5, 20.0, 20, computed),
 				charRow("G", 5, 18.0, 20, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: 4, Name: "Modern", InclusionList: ""}},
+			campaigns: []demand.ActiveCampaign{{ID: "c4", Name: "Modern", InclusionList: ""}},
 			wantSigs:  1,
 			wantTop:   "A",
 			wantQual:  demand.QualityFull,
@@ -145,7 +145,7 @@ func TestCampaignSignals(t *testing.T) {
 				charRow("Gengar", 12, 10.0, 20, computed),
 			},
 			campaigns: []demand.ActiveCampaign{{
-				ID:            5,
+				ID:            "c5",
 				Name:          "No Pikachu",
 				InclusionList: "Pikachu",
 				ExclusionMode: true,
@@ -234,7 +234,7 @@ func TestCampaignSignals_MedianVelocity(t *testing.T) {
 					return rows, nil
 				},
 			}
-			campaign := demand.ActiveCampaign{ID: 1, Name: "Test", InclusionList: ""}
+			campaign := demand.ActiveCampaign{ID: "c1", Name: "Test", InclusionList: ""}
 			svc := demand.NewService(repo, campaignLookupWith([]demand.ActiveCampaign{campaign}))
 
 			resp, err := svc.CampaignSignals(context.Background())

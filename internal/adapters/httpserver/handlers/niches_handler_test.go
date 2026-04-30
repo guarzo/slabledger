@@ -51,7 +51,7 @@ func TestNichesHandler_HappyPath(t *testing.T) {
 						DataQuality:             demand.QualityFull,
 					},
 					Coverage: demand.NicheCoverage{
-						OurUnsoldCount: 2, ActiveCampaignIDs: []int64{}, Covered: false,
+						OurUnsoldCount: 2, ActiveCampaignIDs: []string{}, Covered: false,
 					},
 					OpportunityScore: 0.64,
 				},
