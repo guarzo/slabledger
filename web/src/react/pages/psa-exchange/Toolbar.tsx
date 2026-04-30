@@ -12,7 +12,7 @@ interface ToolbarProps {
 
 const QUICK_VIEWS: { value: QuickView; label: string; hint: string }[] = [
   { value: 'all', label: 'All', hint: 'Default ranking by score' },
-  { value: 'takeAtList', label: 'Take at list', hint: 'List price ≤ our target offer' },
+  { value: 'takeAtList', label: 'PSA value < target', hint: 'PSA value ≤ our target offer' },
   { value: 'highLiquidity', label: 'High liquidity', hint: 'Velocity ≥ 5 / mo and confidence ≥ 5' },
 ];
 
@@ -128,7 +128,7 @@ export default function Toolbar({
             onChange={(e) => setTakeAtList(e.target.checked)}
             className="h-3.5 w-3.5 accent-[var(--brand-500)]"
           />
-          Take at list only
+          PSA value &lt; target only
         </label>
 
         <label className="inline-flex items-center gap-2 text-xs text-[var(--text)] py-1.5 cursor-pointer">

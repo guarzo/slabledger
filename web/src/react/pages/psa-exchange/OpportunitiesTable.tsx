@@ -62,7 +62,7 @@ export default function OpportunitiesTable({
             <SortableHeader label="Cert" sortKey="cert" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
             <SortableHeader label="Description" sortKey="description" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
             <SortableHeader label="Grade" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
-            <SortableHeader label="List" sortKey="listPrice" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
+            <SortableHeader label="PSA Value" sortKey="listPrice" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
             <SortableHeader label="Target" sortKey="targetOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
             <SortableHeader label="Comp" sortKey="comp" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
             <SortableHeader label="Edge" sortKey="edgeAtOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
@@ -128,7 +128,7 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
         </div>
         {row.mayTakeAtList && !isMember && (
           <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--success)]/15 text-[var(--success)]">
-            May take at list
+            PSA value &lt; target
           </span>
         )}
       </td>
