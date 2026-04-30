@@ -117,7 +117,7 @@ export default function InventoryHeader({
               className={`tabular-nums font-semibold ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
               aria-label={`Unrealized ${totalPL >= 0 ? 'gain' : 'loss'} ${formatPL(totalPL)}`}
             >
-              {totalPL >= 0 ? '+' : ''}{formatPL(totalPL)} unrealized
+              {formatPL(totalPL)} unrealized
               {totalCost > 0 && (
                 <span className="ml-1 opacity-80">
                   ({totalPL >= 0 ? '+' : ''}{formatPct(totalPL / totalCost)})
