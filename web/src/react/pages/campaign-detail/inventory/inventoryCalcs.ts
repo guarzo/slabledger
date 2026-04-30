@@ -110,7 +110,7 @@ export function needsAttention(item: AgingItem, status = getReviewStatus(item)):
   return false;
 }
 
-export function computeTotals(items: AgingItem[]): { totalCost: number; totalMarket: number; totalPL: number } {
+export function computeTotals(items: AgingItem[]): SummaryStats {
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {

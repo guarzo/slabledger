@@ -138,7 +138,7 @@ export default function InventoryHeader({
         )}
       </div>
 
-      {(filterTab !== 'all' || debouncedSearch) && fullInventoryTotals.totalCost > 0 && filteredCount !== items.length && (
+      {(filterTab !== 'all' || debouncedSearch?.trim()) && filteredCount !== items.length && (
         <div className="mb-4 -mt-3 text-xs text-[var(--text-subtle)] tabular-nums sell-sheet-no-print">
           All {items.length} cards · Cost {formatCents(fullInventoryTotals.totalCost)}
           {fullInventoryTotals.totalMarket > 0 && (
