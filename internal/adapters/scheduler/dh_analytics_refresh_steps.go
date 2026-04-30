@@ -81,37 +81,21 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		}
 	}
 
-	// 1c. Velocity + saturation page 1.
-	apiCalls++
-	velResp, err := s.dhClient.CharacterVelocity(ctx, dh.CharacterListOpts{
-		Page:    1,
-		PerPage: characterListPerPage,
-	})
-	if err != nil && !errors.Is(err, dh.ErrAnalyticsNotComputed) {
-		s.logger.Warn(ctx, "character_velocity failed", observability.Err(err))
-	}
-	var velocityEntries []dh.CharacterVelocityEntry
-	if velResp != nil {
-		velocityEntries = velResp.Characters
-		for _, e := range velocityEntries {
-			addCharacter(e.CharacterName)
-		}
+	// 1c. Velocity + saturation — walk pages until we've seen total_count
+	// rows, an empty page, or we hit characterListMaxPages. Without this,
+	// only the top per_page=50 entries from each leaderboard get analytics
+	// hydrated; characters ranked further down were silently missed and
+	// caused our coverage diff with DH (~9% on our cache vs ~44% system-wide).
+	velocityEntries, velCalls := s.fetchAllVelocity(ctx)
+	apiCalls += velCalls
+	for _, e := range velocityEntries {
+		addCharacter(e.CharacterName)
 	}
 
-	apiCalls++
-	satResp, err := s.dhClient.CharacterSaturation(ctx, dh.CharacterListOpts{
-		Page:    1,
-		PerPage: characterListPerPage,
-	})
-	if err != nil && !errors.Is(err, dh.ErrAnalyticsNotComputed) {
-		s.logger.Warn(ctx, "character_saturation failed", observability.Err(err))
-	}
-	var saturationEntries []dh.CharacterSaturationEntry
-	if satResp != nil {
-		saturationEntries = satResp.Characters
-		for _, e := range saturationEntries {
-			addCharacter(e.CharacterName)
-		}
+	saturationEntries, satCalls := s.fetchAllSaturation(ctx)
+	apiCalls += satCalls
+	for _, e := range saturationEntries {
+		addCharacter(e.CharacterName)
 	}
 
 	// Cap character set size. orderedCharacters preserves order-of-first-
@@ -387,4 +371,76 @@ func parseDHTimestamp(s string) (time.Time, error) {
 		return time.Time{}, errors.New("empty timestamp")
 	}
 	return time.Parse(time.RFC3339, s)
+}
+
+// fetchAllVelocity walks /characters/velocity pages until total_count is
+// reached, an empty page is returned, or characterListMaxPages is hit. Returns
+// the accumulated entries and the number of API calls made (always ≥1 even on
+// error so the caller's call counter stays accurate).
+func (s *DHAnalyticsRefreshScheduler) fetchAllVelocity(ctx context.Context) ([]dh.CharacterVelocityEntry, int) {
+	var out []dh.CharacterVelocityEntry
+	calls := 0
+	for page := 1; page <= characterListMaxPages; page++ {
+		calls++
+		resp, err := s.dhClient.CharacterVelocity(ctx, dh.CharacterListOpts{
+			Page:    page,
+			PerPage: characterListPerPage,
+		})
+		if err != nil {
+			if !errors.Is(err, dh.ErrAnalyticsNotComputed) {
+				s.logger.Warn(ctx, "character_velocity failed",
+					observability.Int("page", page),
+					observability.Err(err))
+			}
+			break
+		}
+		if resp == nil || len(resp.Characters) == 0 {
+			break
+		}
+		out = append(out, resp.Characters...)
+		if resp.Pagination.TotalCount > 0 && len(out) >= resp.Pagination.TotalCount {
+			break
+		}
+	}
+	if len(out) > 0 {
+		s.logger.Info(ctx, "character_velocity fetched",
+			observability.Int("entries", len(out)),
+			observability.Int("pages", calls))
+	}
+	return out, calls
+}
+
+// fetchAllSaturation walks /characters/saturation the same way as
+// fetchAllVelocity. See that function's docstring for stop conditions.
+func (s *DHAnalyticsRefreshScheduler) fetchAllSaturation(ctx context.Context) ([]dh.CharacterSaturationEntry, int) {
+	var out []dh.CharacterSaturationEntry
+	calls := 0
+	for page := 1; page <= characterListMaxPages; page++ {
+		calls++
+		resp, err := s.dhClient.CharacterSaturation(ctx, dh.CharacterListOpts{
+			Page:    page,
+			PerPage: characterListPerPage,
+		})
+		if err != nil {
+			if !errors.Is(err, dh.ErrAnalyticsNotComputed) {
+				s.logger.Warn(ctx, "character_saturation failed",
+					observability.Int("page", page),
+					observability.Err(err))
+			}
+			break
+		}
+		if resp == nil || len(resp.Characters) == 0 {
+			break
+		}
+		out = append(out, resp.Characters...)
+		if resp.Pagination.TotalCount > 0 && len(out) >= resp.Pagination.TotalCount {
+			break
+		}
+	}
+	if len(out) > 0 {
+		s.logger.Info(ctx, "character_saturation fetched",
+			observability.Int("entries", len(out)),
+			observability.Int("pages", calls))
+	}
+	return out, calls
 }
