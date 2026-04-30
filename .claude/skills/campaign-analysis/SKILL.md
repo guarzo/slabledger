@@ -63,6 +63,37 @@ Before recommending any inclusion-list change, verify against the parsed list. R
 
 **Pending phase is soft-delete** — see API footguns. (Operator-specific; check the config file for overrides.)
 
+### Step 1b — Build the current-scope filter (mandatory before any mover)
+
+The single most chronic failure mode in this skill is drawing movers from historical aggregates (`/tuning` byGrade, `/insights.byGrade`, `/insights.byCharacter`, `snapshot.suggestions`) that span the campaign's **lifetime**, when the campaign's current config excludes those segments. Past examples:
+
+- 4/30 — drafted "pull C4 Modern PSA 9 buy% from 91→85" when C4 was restricted to PSA 8 only on 4/23. Drafted "pull PSA 10 out of C3 EX/e-Reader" when C3 was already PSA 8 only on 4/23. Drafted "C1 Vintage Core PSA 8 ROI -9%" when C1 was restricted to PSA 9 only on 4/26.
+- 4/26 — eyeballed the inclusion list instead of diffing it, missing an 18-vs-34 character mismatch.
+
+The mechanical fix: before any mover or recommendation references a `/tuning` row, an `/insights` row, or a `snapshot.suggestions` entry, filter that row through the **current campaign config** parsed in Step 1a.
+
+**For each active campaign, build a `currentScope` object:**
+
+| Field | Source | Used to filter |
+|-------|--------|----------------|
+| `grades` | `/api/campaigns[].gradeRange` parsed as a set (e.g. `"8-8"` → `{8}`, `"5-7"` → `{5,6,7}`) | `/tuning.byGrade`, `/insights.byGrade`, `/insights.byCharacterGrade` (grade dim) |
+| `years` | `yearRange` parsed as a numeric range | `/insights.byEra` rows |
+| `priceMinCents`, `priceMaxCents` | `priceRange` parsed | `/insights.byPriceTier` rows |
+| `inclusion` | `inclusionList` tokenized lowercase, or `null` for open net | `/tuning.byCharacter`, `/insights.byCharacter`, `/insights.byCharacterGrade` (character dim) |
+| `buyTermsCLPct`, `dailySpendCapCents`, `ebayFeePct` | direct | citation reference for any realized-buy% mention |
+
+**Hard rules — no exceptions:**
+
+1. **A historical row outside `currentScope` cannot drive a mover, action, or recommendation.** It can be cited as context ("Mid-Era's PSA 8/9 history shows -4%/-11% ROI; the 4/23 PSA-10-only restriction excluded those grades"), but never as a present-tense observation or lever.
+2. **Citing `avgBuyPctOfCL` from `/tuning` requires also citing `currentScope.buyTermsCLPct` from `/api/campaigns` in the same sentence.** This rule applies both to your own prose AND to any `snapshot.suggestions` entry you echo: a suggestion saying "Lower CL% from 75% to 70%" must be paired with the contract `buyTermsCLPct` and the realized `avgBuyPctOfCL` so the reader can see whether the suggestion is acting on a contract value or a measurement. Never write a buy% number without saying whether it's the realized measurement or the contract parameter. Realized minus contract is a *diagnostic question* (CL anchor lag, mix shift, inclusion-list drift), not a parameter recommendation.
+3. **`snapshot.suggestions` entries that target a field outside `currentScope`** (e.g. a "lower buy terms" suggestion that's actually advocating to revisit a grade no longer in the campaign) get filtered out alongside the existing 72-hour stale-suggestion filter. The suggestions endpoint operates on lifetime data and does not know about recent grade restrictions.
+
+**Output expected during the opener.** When the data-quality block lists `/tuning` and `/insights` as `✓`, the next line must explicitly state which historical segments were filtered out by the current-scope gate. Example:
+
+    Current scope filter: C1 Vintage Core grades={9} (PSA 8/8.5/10 history filtered); C3 EX/e-Reader grades={8} (PSA 8.5/9/10 filtered); C4 Modern grades={8} (PSA 8.5/9/10 filtered); C6 Mid-Era grades={10} (PSA 8/9 filtered); C10 Modern PSA 10 grades={10} (none filtered); C11 Vintage-EX grades={8} (none filtered). Inclusion-list diffs: none.
+
+If the filter removes ≥50% of historical rows for a campaign, that campaign's tuning sample is effectively "post-restriction only" — note this and apply the small-sample caveat. Don't pretend a 7-row PSA 8 sample is the same signal as a 60-row pre-restriction byGrade aggregate.
+
 ## Step 2 — Resolve auth and pick the base URL
 
 All endpoints except `/api/health` require authentication. Resolve in this order:
@@ -89,6 +120,8 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 - **External campaign: filter from all ROI and margin calculations.** The "External" campaign has `cost basis = 0` for pre-campaign purchases. Any portfolio-wide character/grade/era ROI calculation that includes External will be inflated. This is a hard exclusion, not a caveat — filter it out everywhere.
 - **`inHandCapitalCents == 0` portfolio-wide is NOT automatically a data-pipeline gap.** It is a real and common business state: "every received card has sold; remaining unsold inventory is all PSA-side in-transit, not yet shipped." Before treating zero in-hand as broken data and working around it, **ask the user to confirm** ("Is in-hand really $0 across all campaigns — i.e. everything received has sold? Or is the in-hand/in-transit split not populating for some other reason?"). Treating real business state as a pipeline gap is a worse failure than the inverse — it leads to phantom "low sell-through" alarms when the actual sell-through on received inventory is 100%. Note: when in-hand is zero and unsold is large, sell-through percentages computed against `totalUnsold` will read low and feel alarming, but that's an artifact of in-transit denominator inflation — not a real velocity problem.
 - **`phase: "pending"` is a soft-delete marker, not "in flight" or "drift."** Card Yeti uses `pending` to retire campaigns from active fills while preserving purchase history (hard-delete would break referential integrity on past purchases). A campaign with `phase: "pending"` that the strategy doc calls "removed" is the expected state — do not flag as a mismatch.
+- **`/tuning` and `/insights` are lifetime-cumulative, not current-config-scoped.** A campaign restricted to PSA 8 on 4/23 still shows PSA 9/10 rows in `/tuning.byGrade` because those are historical fills before the restriction. Always run the Step 1b currentScope filter before drawing movers. Citing a tuning byGrade row for a grade outside the current `gradeRange` as a present-tense observation has burned three sessions (4/26 inclusion-list miss, 4/30 PSA-9-already-removed misses on C1/C3/C4).
+- **`avgBuyPctOfCL` is a measurement, `buyTermsCLPct` is the contract.** They are different fields on different endpoints (`/tuning` vs `/api/campaigns`) and they will routinely disagree by 5–15 points. Never present a realized buy% as if it were a contract parameter. See Step 1b rule 2 for the citation requirement.
 
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
@@ -113,7 +146,7 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 **Procedural rules attached to specific endpoints:**
 
 - **`snapshot.suggestions`** — apply the stale-suggestion filter (drop suggestions targeting fields on a campaign whose `updatedAt` is within 72h) before surfacing any entry. Treat the remainder as one input among several; per-campaign `/tuning` + `/insights` segmentation has higher-resolution signal.
-- **`snapshot.insights`** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by `roi` desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. Listing only response keys is not analysis.
+- **`snapshot.insights`** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by `roi` desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. **Apply the Step 1b currentScope filter to every campaign-attributed segment row before it can drive a mover.** Listing only response keys is not analysis.
 - **`/dh/status` listing gap** — informational by default. Promote to a mover candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities`.
 
 For JSON shapes and field names of every endpoint above, consult `references/api-cheatsheet.md` before writing parsing code.

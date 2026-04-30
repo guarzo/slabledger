@@ -46,7 +46,7 @@ type CampaignSignalsResponse struct {
 // CampaignSignal summarises DH market acceleration for a single campaign's
 // character slice.
 type CampaignSignal struct {
-	CampaignID              int64
+	CampaignID              string
 	CampaignName            string
 	TrackedCharacters       int // Contributing characters (those with parseable velocity_change_pct).
 	AcceleratingCount       int // Subset where velocity_change_pct >= AccelerationThresholdPct.

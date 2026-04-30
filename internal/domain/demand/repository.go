@@ -22,7 +22,7 @@ type Repository interface {
 // by the campaign-signals service to correlate per-campaign market data.
 // Kept minimal — only the fields needed to filter characters and grades.
 type ActiveCampaign struct {
-	ID            int64 // Numeric ID only; non-numeric IDs (e.g. "external") are excluded.
+	ID            string // Campaign primary key (UUID for standard campaigns, "external" for the imported bucket).
 	Name          string
 	GradeRange    string // e.g. "9-10"; empty means no grade constraint.
 	InclusionList string // Comma-separated; empty means open-net.
@@ -34,8 +34,7 @@ type ActiveCampaign struct {
 // makes the two access patterns explicit: per-niche indexed lookup (leaderboard)
 // vs. full table scan (campaign signals).
 type ActiveCampaignSource interface {
-	// ActiveCampaigns returns all campaigns with Phase="active". Campaigns with
-	// non-numeric IDs are omitted (the ID field only holds int64). Returns an
+	// ActiveCampaigns returns all campaigns with Phase="active". Returns an
 	// empty slice when there are no active campaigns.
 	ActiveCampaigns(ctx context.Context) ([]ActiveCampaign, error)
 }
@@ -53,7 +52,7 @@ type CampaignCoverageLookup interface {
 	// CampaignsCovering returns active campaign IDs whose inclusion rules match
 	// the given (character, era, grade) triple. An empty slice means no campaign
 	// currently targets this niche.
-	CampaignsCovering(ctx context.Context, character, era string, grade int) ([]int64, error)
+	CampaignsCovering(ctx context.Context, character, era string, grade int) ([]string, error)
 
 	// UnsoldCountFor returns the count of our unsold inventory matching the
 	// bucket. Zero means the niche is uncovered by our holdings.
