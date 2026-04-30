@@ -16,7 +16,7 @@ import { useForm } from '../hooks/useForm';
 import { defaultCampaignInput } from '../utils/campaignConstants';
 import { Button, SectionErrorBoundary } from '../ui';
 import { useCampaigns, useCreateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
-import PortfolioSummary from './campaigns/PortfolioSummary';
+import CampaignsPortfolioHero from './campaigns/CampaignsPortfolioHero';
 import CampaignsTab from './campaigns/CampaignsTab';
 import InvoicesSection from '../components/insights/InvoicesSection';
 
@@ -450,7 +450,7 @@ export default function CampaignsPage() {
       )}
 
       {allCampaigns.length > 0 && (
-        <PortfolioSummary campaignCount={activeCampaignCount} pnlMap={pnlMap} />
+        <CampaignsPortfolioHero campaignCount={activeCampaignCount} pnlMap={pnlMap} />
       )}
 
       <SectionErrorBoundary sectionName="Campaigns">
