@@ -193,9 +193,9 @@ type nicheAccelerationDTO struct {
 }
 
 type nicheCoverageDTO struct {
-	OurUnsoldCount    int     `json:"our_unsold_count"`
-	ActiveCampaignIDs []int64 `json:"active_campaign_ids"`
-	Covered           bool    `json:"covered"`
+	OurUnsoldCount    int      `json:"our_unsold_count"`
+	ActiveCampaignIDs []string `json:"active_campaign_ids"`
+	Covered           bool     `json:"covered"`
 }
 
 func toNicheDTO(o demand.NicheOpportunity) nicheOpportunityDTO {
@@ -245,7 +245,7 @@ func toNicheDTO(o demand.NicheOpportunity) nicheOpportunityDTO {
 func toCoverageDTO(c demand.NicheCoverage) nicheCoverageDTO {
 	ids := c.ActiveCampaignIDs
 	if ids == nil {
-		ids = []int64{}
+		ids = []string{}
 	}
 	return nicheCoverageDTO{
 		OurUnsoldCount:    c.OurUnsoldCount,
