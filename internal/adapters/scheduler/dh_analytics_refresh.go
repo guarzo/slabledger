@@ -50,8 +50,14 @@ const (
 	topCharactersOverallLimit = 50
 	topCharactersPerEraLimit  = 20
 	characterListPerPage      = 50
-	maxCharactersPerRun       = 200
-	maxSeedCardIDs            = 1000
+	// characterListMaxPages bounds /characters/velocity and
+	// /characters/saturation pagination per refresh tick. At per_page=50, a
+	// 10-page cap means up to 500 characters per source — plenty of headroom
+	// over our maxCharactersPerRun cap of 200, while keeping the daily DH
+	// call volume bounded if their leaderboards grow unexpectedly.
+	characterListMaxPages = 10
+	maxCharactersPerRun   = 200
+	maxSeedCardIDs        = 1000
 )
 
 // DHAnalyticsRefreshScheduler pulls DH demand + analytics signals once per day
