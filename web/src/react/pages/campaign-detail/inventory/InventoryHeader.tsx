@@ -17,6 +17,7 @@ export interface InventoryHeaderProps {
   totalCost: number;
   totalMarket: number;
   totalPL: number;
+  fullInventoryTotals: { totalCost: number; totalMarket: number; totalPL: number };
   showEV: boolean;
   evPortfolio: EVPortfolio | null | undefined;
   reviewStats: ReviewStats;
@@ -47,6 +48,7 @@ export interface InventoryHeaderProps {
 export default function InventoryHeader({
   isMobile, items, filteredCount,
   totalCost, totalMarket, totalPL,
+  fullInventoryTotals,
   showEV, evPortfolio,
   reviewStats, searchQuery, setSearchQuery,
   showAll, setShowAll, filterTab, setFilterTab,
@@ -135,6 +137,15 @@ export default function InventoryHeader({
           </>
         )}
       </div>
+
+      {(filterTab !== 'all' || debouncedSearch) && fullInventoryTotals.totalCost > 0 && filteredCount !== items.length && (
+        <div className="mb-4 -mt-3 text-xs text-[var(--text-subtle)] tabular-nums sell-sheet-no-print">
+          All {items.length} cards · Cost {formatCents(fullInventoryTotals.totalCost)}
+          {fullInventoryTotals.totalMarket > 0 && (
+            <> · Market {formatCents(fullInventoryTotals.totalMarket)}</>
+          )}
+        </div>
+      )}
 
       <BulkSelectionMissingCLWarning
         missingCLIds={missingCLIds}
