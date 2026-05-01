@@ -41,7 +41,7 @@ describe('Header — Track I mobile chrome', () => {
     expect(button.className).toMatch(/md:hidden/);
   });
 
-  it('opens a glass-variant CardShell drawer when the hamburger is tapped', async () => {
+  it('opens an elevated-variant CardShell drawer when the hamburger is tapped', async () => {
     const user = userEvent.setup();
     const { container } = renderHeader();
     await user.click(await screen.findByRole('button', { name: 'Open menu' }));
@@ -52,7 +52,7 @@ describe('Header — Track I mobile chrome', () => {
 
     const drawer = container.querySelector('header > .md\\:hidden') as HTMLElement | null;
     expect(drawer).not.toBeNull();
-    expect(drawer).toHaveClass(cardStyles['v-glass']);
+    expect(drawer).toHaveClass(cardStyles['v-elevated']);
     expect(drawer!.querySelector('nav[aria-label="Main navigation"]')).not.toBeNull();
   });
 });
