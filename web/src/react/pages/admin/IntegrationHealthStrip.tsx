@@ -88,7 +88,9 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
 
   const psaStatus: TileStatus = !psa ? 'unknown' : (psa.configured ? 'healthy' : 'unconfigured');
   const psaPending = psa?.pendingCount ?? 0;
-  const psaMetric = psa ? (psa.configured ? `${psa.interval || 'configured'}` : 'Not configured') : 'Unknown';
+  const psaMetric = psa
+    ? (psa.configured ? (psa.interval ? `every ${psa.interval}` : 'configured') : 'Not configured')
+    : 'Unknown';
   const psaDetail = psaPending > 0 ? `${psaPending} pending` : undefined;
 
   return (
