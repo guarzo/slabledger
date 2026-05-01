@@ -37,7 +37,7 @@ export function ScoreCardHeader({ scoreCard }: ScoreCardHeaderProps) {
       className="rounded-lg mb-4"
       style={{
         background: 'var(--surface-2)',
-        borderLeft: `4px solid ${config.color}`,
+        borderLeft: `2px solid ${config.color}`,
         padding: '16px',
       }}
     >
