@@ -10,7 +10,7 @@ interface SalesTabProps {
 
 function SaleMobileCard({ sale }: { sale: Sale }) {
   return (
-    <CardShell variant="glass" padding="sm">
+    <CardShell variant="data" padding="sm">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-[var(--text)]">{saleChannelLabels[sale.saleChannel] || sale.saleChannel}</span>
         <span className={`text-sm font-semibold tabular-nums ${sale.netProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>

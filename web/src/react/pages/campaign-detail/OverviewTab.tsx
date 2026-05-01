@@ -10,7 +10,7 @@ import CampaignHeroStats from './CampaignHeroStats';
 
 function ChannelMobileCard({ ch }: { ch: ChannelPNL }) {
   return (
-    <CardShell variant="glass" padding="sm">
+    <CardShell variant="data" padding="sm">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-[var(--text)]">{saleChannelLabels[ch.channel] || ch.channel}</span>
         <span className={`text-sm font-semibold tabular-nums ${ch.netProfitCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
