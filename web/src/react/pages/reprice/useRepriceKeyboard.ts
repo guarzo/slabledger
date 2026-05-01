@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 interface RepriceKeyboardDeps {
   itemCount: number;
   selectedCount: number;
+  isModalOpen: boolean;     // when true, the hook skips all handling so modal owns keystrokes
   onAcceptFocused: (index: number) => void;
   onToggleFocused: (index: number) => void;
   onJumpToInput: () => void;
@@ -53,6 +54,9 @@ export function useRepriceKeyboard(deps: RepriceKeyboardDeps): RepriceKeyboardRe
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
+      // When a modal is open it owns all keystrokes; the page-level shortcuts pause.
+      if (deps.isModalOpen) return;
+
       const editable = isEditableTarget(document.activeElement);
 
       // Cmd/Ctrl+Enter is the one combo that wins over editable focus

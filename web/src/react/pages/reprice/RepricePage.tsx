@@ -10,6 +10,7 @@ import CardShell from '../../ui/CardShell';
 import ConfirmDialog from '../../ui/ConfirmDialog';
 import TabularPriceTriplet from '../../ui/TabularPriceTriplet';
 import RepriceFooter, { type BucketName } from './RepriceFooter';
+import RepriceShortcutSheet from './RepriceShortcutSheet';
 import sliderStyles from './DiscountSlider.module.css';
 import { useRepriceKeyboard } from './useRepriceKeyboard';
 
@@ -55,6 +56,7 @@ export default function RepricePage() {
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
   const [finalPriceInputs, setFinalPriceInputs] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -157,7 +159,7 @@ export default function RepricePage() {
   };
 
   const handleShowShortcuts = () => {
-    // Wired in Task 4 — for now, no-op. The shortcut sheet doesn't exist yet.
+    setShortcutsOpen(prev => !prev);
   };
 
   const handleSubmit = () => {
@@ -167,6 +169,7 @@ export default function RepricePage() {
   const { focusedIndex } = useRepriceKeyboard({
     itemCount: items.length,
     selectedCount: selected.size,
+    isModalOpen: shortcutsOpen || showConfirm,
     onAcceptFocused: handleAcceptFocused,
     onToggleFocused: handleToggleFocused,
     onJumpToInput: handleJumpToInput,
@@ -375,6 +378,8 @@ export default function RepricePage() {
         onDeselectAll={deselectAll}
         onApply={() => setShowConfirm(true)}
       />
+
+      <RepriceShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <ConfirmDialog
         open={showConfirm}

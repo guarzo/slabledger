@@ -23,11 +23,12 @@ describe('useRepriceKeyboard', () => {
     onDeselectAll = vi.fn<() => void>();
   });
 
-  function setup(itemCount = 5, selectedCount = 0) {
+  function setup(itemCount = 5, selectedCount = 0, isModalOpen = false) {
     return renderHook(() =>
       useRepriceKeyboard({
         itemCount,
         selectedCount,
+        isModalOpen,
         onAcceptFocused,
         onToggleFocused,
         onJumpToInput,
@@ -202,6 +203,7 @@ describe('useRepriceKeyboard', () => {
         useRepriceKeyboard({
           itemCount,
           selectedCount: 0,
+          isModalOpen: false,
           onAcceptFocused,
           onToggleFocused,
           onJumpToInput,
@@ -214,5 +216,17 @@ describe('useRepriceKeyboard', () => {
     act(() => result.current.setFocusedIndex(4));
     rerender({ itemCount: 2 });
     expect(result.current.focusedIndex).toBe(1);
+  });
+
+  it('Skips all keystrokes when isModalOpen is true', () => {
+    const { result } = setup(5, 3, true);
+    act(() => dispatchKey('j'));
+    expect(result.current.focusedIndex).toBeNull();
+    act(() => dispatchKey('Enter'));
+    expect(onAcceptFocused).not.toHaveBeenCalled();
+    act(() => dispatchKey('Escape'));
+    expect(onDeselectAll).not.toHaveBeenCalled();
+    act(() => dispatchKey('?'));
+    expect(onShowShortcuts).not.toHaveBeenCalled();
   });
 });
