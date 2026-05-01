@@ -8,9 +8,8 @@ import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } 
 import StatCard from '../../ui/StatCard';
 import CardShell from '../../ui/CardShell';
 import ConfirmDialog from '../../ui/ConfirmDialog';
-import StickyActionBar from '../../ui/StickyActionBar';
-import Button from '../../ui/Button';
 import TabularPriceTriplet from '../../ui/TabularPriceTriplet';
+import RepriceFooter, { type BucketName } from './RepriceFooter';
 import sliderStyles from './DiscountSlider.module.css';
 import { useRepriceKeyboard } from './useRepriceKeyboard';
 
@@ -109,9 +108,15 @@ export default function RepricePage() {
     setSelected(prev => new Set(prev).add(id));
   };
 
-  const acceptAllSuggested = () => {
-    const priceable = items.filter(i => i.suggestedPriceCents > 0 || getFinalPrice(i) > 0);
-    setSelected(prev => new Set([...prev, ...priceable.map(i => i.purchaseId)]));
+  const handleAcceptBucket = (bucket: BucketName) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      for (const item of items) {
+        if (bucket === 'belowCost' && item.belowCost) next.add(item.purchaseId);
+        else if (bucket === 'withComps' && !item.belowCost && item.compCount > 0) next.add(item.purchaseId);
+      }
+      return next;
+    });
   };
 
   const handleApply = () => {
@@ -362,22 +367,14 @@ export default function RepricePage() {
         </>
       )}
 
-      {selected.size > 0 && (
-        <StickyActionBar
-          left={
-            <span className="text-sm font-medium text-[var(--text)] tabular-nums">
-              Selected: {selected.size}
-            </span>
-          }
-          right={
-            <div className="flex items-center gap-3 ml-auto">
-              <Button variant="ghost" size="sm" onClick={acceptAllSuggested}>Accept All</Button>
-              <Button variant="ghost" size="sm" onClick={deselectAll}>Deselect All</Button>
-              <Button variant="primary" size="sm" disabled={applyableCount === 0} onClick={() => setShowConfirm(true)}>Apply Prices</Button>
-            </div>
-          }
-        />
-      )}
+      <RepriceFooter
+        items={items}
+        selectedCount={selected.size}
+        applyableCount={applyableCount}
+        onAcceptBucket={handleAcceptBucket}
+        onDeselectAll={deselectAll}
+        onApply={() => setShowConfirm(true)}
+      />
 
       <ConfirmDialog
         open={showConfirm}
