@@ -1,16 +1,16 @@
 import { useState, useDeferredValue } from 'react';
-import { useLiquidationPreview, useApplyLiquidation } from '../queries/useLiquidationQueries';
-import type { LiquidationPreviewItem, ConfidenceLevel } from '../../types/liquidation';
-import { formatCents } from '../utils/formatters';
-import { Breadcrumb, GradeBadge } from '../ui';
-import { LinkDropdown } from '../ui/LinkDropdown';
-import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } from '../utils/marketplaceUrls';
-import StatCard from '../ui/StatCard';
-import CardShell from '../ui/CardShell';
-import ConfirmDialog from '../ui/ConfirmDialog';
-import StickyActionBar from '../ui/StickyActionBar';
-import Button from '../ui/Button';
-import TabularPriceTriplet from '../ui/TabularPriceTriplet';
+import { useLiquidationPreview, useApplyLiquidation } from '../../queries/useLiquidationQueries';
+import type { LiquidationPreviewItem, ConfidenceLevel } from '../../../types/liquidation';
+import { formatCents } from '../../utils/formatters';
+import { Breadcrumb, GradeBadge } from '../../ui';
+import { LinkDropdown } from '../../ui/LinkDropdown';
+import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } from '../../utils/marketplaceUrls';
+import StatCard from '../../ui/StatCard';
+import CardShell from '../../ui/CardShell';
+import ConfirmDialog from '../../ui/ConfirmDialog';
+import StickyActionBar from '../../ui/StickyActionBar';
+import Button from '../../ui/Button';
+import TabularPriceTriplet from '../../ui/TabularPriceTriplet';
 import sliderStyles from './DiscountSlider.module.css';
 
 function confidenceColor(level: ConfidenceLevel): string {
@@ -46,7 +46,7 @@ function PricePill({ label, cents, active, onClick }: PricePillProps) {
   );
 }
 
-export default function LiquidationPage() {
+export default function RepricePage() {
   const [discountWithComps, setDiscountWithComps] = useState(2.5);
   const [discountNoComps, setDiscountNoComps] = useState(10);
   const deferredWithComps = useDeferredValue(discountWithComps);
