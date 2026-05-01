@@ -122,7 +122,7 @@ function PurchaseMobileCard({ purchase, soldPurchaseIds, otherCampaigns, reassig
   const isSold = soldPurchaseIds.has(purchase.id);
 
   return (
-    <CardShell variant="glass" padding="sm">
+    <CardShell variant="data" padding="sm">
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="text-sm font-medium text-[var(--text)]">{purchase.cardName}</div>

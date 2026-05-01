@@ -405,7 +405,6 @@
 
   --card-glass-bg: rgba(22, 27, 34, 0.70);
   --card-glass-bd: rgba(139, 152, 207, 0.10);
-  --card-glass-blur: blur(20px) saturate(180%);
   --card-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
 
   --card-premium-bg: linear-gradient(135deg, #111827 0%, #1f2937 100%);

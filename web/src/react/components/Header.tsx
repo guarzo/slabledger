@@ -200,7 +200,7 @@ export default function Header() {
 
       {menuOpen && (
         <CardShell
-          variant="glass"
+          variant="elevated"
           padding="none"
           radius="sm"
           className="md:hidden !rounded-none border-x-0 border-b-0"

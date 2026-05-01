@@ -303,7 +303,7 @@ function CertRowDetail({ row }: { row: CertRow }) {
             <img
               src={row.frontImageUrl}
               alt={row.cardName ? `Slab photo: ${row.cardName}` : 'Slab photo'}
-              className="h-32 w-auto rounded border border-[var(--surface-2)] bg-black/20 object-contain"
+              className="h-32 w-auto rounded border border-[var(--surface-2)] bg-[var(--surface-2)] object-contain"
               loading="lazy"
             />
           </a>
