@@ -34,7 +34,7 @@ function pageLabelFor(pathname: string): string {
 function UserInitial({ name }: { name: string }) {
   const initial = name.charAt(0).toUpperCase();
   return (
-    <div className="w-8 h-8 rounded-full bg-[var(--brand-500)] flex items-center justify-center text-white text-sm font-bold">
+    <div className="w-8 h-8 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-[var(--text)] text-sm font-bold">
       {initial}
     </div>
   );
