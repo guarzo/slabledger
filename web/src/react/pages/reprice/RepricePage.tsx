@@ -1,17 +1,18 @@
-import { useState, useDeferredValue } from 'react';
-import { useLiquidationPreview, useApplyLiquidation } from '../queries/useLiquidationQueries';
-import type { LiquidationPreviewItem, ConfidenceLevel } from '../../types/liquidation';
-import { formatCents } from '../utils/formatters';
-import { Breadcrumb, GradeBadge } from '../ui';
-import { LinkDropdown } from '../ui/LinkDropdown';
-import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } from '../utils/marketplaceUrls';
-import StatCard from '../ui/StatCard';
-import CardShell from '../ui/CardShell';
-import ConfirmDialog from '../ui/ConfirmDialog';
-import StickyActionBar from '../ui/StickyActionBar';
-import Button from '../ui/Button';
-import TabularPriceTriplet from '../ui/TabularPriceTriplet';
+import { useState, useDeferredValue, useEffect, useRef } from 'react';
+import { useLiquidationPreview, useApplyLiquidation } from '../../queries/useLiquidationQueries';
+import type { LiquidationPreviewItem, ConfidenceLevel } from '../../../types/liquidation';
+import { formatCents } from '../../utils/formatters';
+import { Breadcrumb, GradeBadge } from '../../ui';
+import { LinkDropdown } from '../../ui/LinkDropdown';
+import { defaultEbayUrl, defaultAltUrl, defaultCardLadderUrl, gradeToGradeKey } from '../../utils/marketplaceUrls';
+import StatCard from '../../ui/StatCard';
+import CardShell from '../../ui/CardShell';
+import ConfirmDialog from '../../ui/ConfirmDialog';
+import TabularPriceTriplet from '../../ui/TabularPriceTriplet';
+import RepriceFooter, { type BucketName } from './RepriceFooter';
+import RepriceShortcutSheet from './RepriceShortcutSheet';
 import sliderStyles from './DiscountSlider.module.css';
+import { useRepriceKeyboard } from './useRepriceKeyboard';
 
 function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
@@ -46,7 +47,7 @@ function PricePill({ label, cents, active, onClick }: PricePillProps) {
   );
 }
 
-export default function LiquidationPage() {
+export default function RepricePage() {
   const [discountWithComps, setDiscountWithComps] = useState(2.5);
   const [discountNoComps, setDiscountNoComps] = useState(10);
   const deferredWithComps = useDeferredValue(discountWithComps);
@@ -55,6 +56,9 @@ export default function LiquidationPage() {
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
   const [finalPriceInputs, setFinalPriceInputs] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, error } = useLiquidationPreview(deferredWithComps, deferredNoComps);
   const applyMutation = useApplyLiquidation();
@@ -106,9 +110,15 @@ export default function LiquidationPage() {
     setSelected(prev => new Set(prev).add(id));
   };
 
-  const acceptAllSuggested = () => {
-    const priceable = items.filter(i => i.suggestedPriceCents > 0 || getFinalPrice(i) > 0);
-    setSelected(prev => new Set([...prev, ...priceable.map(i => i.purchaseId)]));
+  const handleAcceptBucket = (bucket: BucketName) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      for (const item of items) {
+        if (bucket === 'belowCost' && item.belowCost) next.add(item.purchaseId);
+        else if (bucket === 'withComps' && !item.belowCost && item.compCount > 0) next.add(item.purchaseId);
+      }
+      return next;
+    });
   };
 
   const handleApply = () => {
@@ -132,6 +142,47 @@ export default function LiquidationPage() {
     const item = items.find(i => i.purchaseId === id);
     return item && getFinalPrice(item) > 0;
   }).length;
+
+  const handleAcceptFocused = (index: number) => {
+    const item = items[index];
+    if (item) acceptItem(item.purchaseId);
+  };
+
+  const handleToggleFocused = (index: number) => {
+    const item = items[index];
+    if (item) toggleSelect(item.purchaseId);
+  };
+
+  const handleJumpToInput = () => {
+    const firstInput = tableRef.current?.querySelector<HTMLInputElement>('input[type="text"]');
+    firstInput?.focus();
+  };
+
+  const handleShowShortcuts = () => {
+    setShortcutsOpen(prev => !prev);
+  };
+
+  const handleSubmit = () => {
+    if (applyableCount > 0) setShowConfirm(true);
+  };
+
+  const { focusedIndex } = useRepriceKeyboard({
+    itemCount: items.length,
+    selectedCount: selected.size,
+    isModalOpen: shortcutsOpen || showConfirm,
+    onAcceptFocused: handleAcceptFocused,
+    onToggleFocused: handleToggleFocused,
+    onJumpToInput: handleJumpToInput,
+    onShowShortcuts: handleShowShortcuts,
+    onSubmit: handleSubmit,
+    onDeselectAll: deselectAll,
+  });
+
+  useEffect(() => {
+    if (focusedIndex === null || !tableRef.current) return;
+    const row = tableRef.current.querySelectorAll('.glass-vrow')[focusedIndex];
+    if (row) (row as HTMLElement).scrollIntoView({ block: 'nearest' });
+  }, [focusedIndex]);
 
   const summary = data?.summary;
 
@@ -217,7 +268,7 @@ export default function LiquidationPage() {
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}></div>
             </div>
 
-            <div className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
+            <div ref={tableRef} className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
               {items.map((item, index) => {
                 const isSelected = selected.has(item.purchaseId);
                 const currentFinal = getFinalPrice(item);
@@ -236,6 +287,7 @@ export default function LiquidationPage() {
                     data-stripe={index % 2 === 1}
                     data-selected={isSelected}
                     data-belowcost={item.belowCost || undefined}
+                    data-focused={focusedIndex === index || undefined}
                   >
                     <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }}>
                       <input
@@ -318,22 +370,16 @@ export default function LiquidationPage() {
         </>
       )}
 
-      {selected.size > 0 && (
-        <StickyActionBar
-          left={
-            <span className="text-sm font-medium text-[var(--text)] tabular-nums">
-              Selected: {selected.size}
-            </span>
-          }
-          right={
-            <div className="flex items-center gap-3 ml-auto">
-              <Button variant="ghost" size="sm" onClick={acceptAllSuggested}>Accept All</Button>
-              <Button variant="ghost" size="sm" onClick={deselectAll}>Deselect All</Button>
-              <Button variant="primary" size="sm" disabled={applyableCount === 0} onClick={() => setShowConfirm(true)}>Apply Prices</Button>
-            </div>
-          }
-        />
-      )}
+      <RepriceFooter
+        items={items}
+        selectedCount={selected.size}
+        applyableCount={applyableCount}
+        onAcceptBucket={handleAcceptBucket}
+        onDeselectAll={deselectAll}
+        onApply={() => setShowConfirm(true)}
+      />
+
+      <RepriceShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <ConfirmDialog
         open={showConfirm}

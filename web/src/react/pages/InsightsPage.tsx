@@ -18,7 +18,7 @@ function formatRefreshedAt(iso: string): string {
 }
 
 export default function InsightsPage() {
-  const { data, isLoading, isError, refetch } = useInsightsOverview();
+  const { data, isLoading, isFetching, isError, refetch } = useInsightsOverview();
 
   return (
     <div className="max-w-6xl mx-auto px-4 space-y-6">
@@ -34,8 +34,13 @@ export default function InsightsPage() {
             </p>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={() => { void refetch(); }}>
-          Refresh
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isFetching}
+          onClick={() => { void refetch(); }}
+        >
+          {isFetching && data ? 'Refreshing…' : 'Refresh'}
         </Button>
       </header>
 

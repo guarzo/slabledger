@@ -125,6 +125,9 @@
 .glass-vrow[data-belowcost="true"] {
   background-color: var(--danger-tint);
 }
+.glass-vrow[data-focused="true"] {
+  box-shadow: inset 2px 0 0 var(--brand-500);
+}
 
 /* P/L status indicators */
 .glass-vrow[data-pl="positive"] {

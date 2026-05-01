@@ -30,7 +30,7 @@ function HealthCard({ label, value, valueColor, sub }: HealthCardProps) {
 }
 
 export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading, error } = useDHStatus({ enabled });
+  const { data: status, isLoading, error, refetch } = useDHStatus({ enabled });
   const reconcileMutation = useTriggerDHReconcile();
   const toast = useToast();
 
@@ -70,9 +70,12 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <p className="text-[var(--danger)] text-sm">
-          Failed to load DH status. Configure credentials in the Integrations tab.
-        </p>
+        <div className="space-y-2">
+          <p className="text-[var(--danger)] text-sm">
+            Failed to load DH status. Configure credentials in the Integrations tab.
+          </p>
+          <Button size="sm" onClick={() => { void refetch(); }}>Retry</Button>
+        </div>
       </CardShell>
     );
   }

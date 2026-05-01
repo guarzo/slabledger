@@ -28,7 +28,7 @@ const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
 const InsightsPage = lazy(() => import('./pages/InsightsPage'));
 const ScanPage = lazy(() => import('./pages/ScanPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
-const LiquidationPage = lazy(() => import('./pages/LiquidationPage'));
+const RepricePage = lazy(() => import('./pages/reprice/RepricePage'));
 const PsaExchangePage = lazy(() => import('./pages/PsaExchangePage'));
 
 function AppContent() {
@@ -110,7 +110,7 @@ function AppContent() {
               <Route path="/reprice" element={
                 <ProtectedRoute>
                   <PageTransition>
-                    <LiquidationPage />
+                    <RepricePage />
                   </PageTransition>
                 </ProtectedRoute>
               } />
