@@ -10,6 +10,7 @@ import { SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
 import { FailureBreakdownModal } from './FailureBreakdownModal';
 import PokeballLoader from '../../PokeballLoader';
+import Button from '../../ui/Button';
 
 function formatMs(ms: number): string {
   if (!Number.isFinite(ms)) return '-';
@@ -18,14 +19,21 @@ function formatMs(ms: number): string {
 }
 
 export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading, isError } = useMarketMoversStatus({ enabled });
+  const { data: status, isLoading, isError, refetch } = useMarketMoversStatus({ enabled });
   const [showFailures, setShowFailures] = useState(false);
   // Fetch failures eagerly so the diagnostics row can surface the
   // "unprocessed" bucket — rows with no MM value and no error tag.
   const { data: failures } = useMarketMoversFailures({ enabled });
 
   if (isLoading) return <PokeballLoader size="sm" />;
-  if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
+  if (isError) {
+    return (
+      <div className="space-y-2">
+        <p className="text-[var(--danger)] text-sm">Failed to load status.</p>
+        <Button size="sm" onClick={() => { void refetch(); }}>Retry</Button>
+      </div>
+    );
+  }
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
   const ps = status.priceStats;
@@ -135,7 +143,7 @@ export function MMStatsPanel({ enabled = true }: { enabled?: boolean }) {
 }
 
 export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading, isError } = useCardLadderStatus({ enabled });
+  const { data: status, isLoading, isError, refetch } = useCardLadderStatus({ enabled });
   const [showFailures, setShowFailures] = useState(false);
   // Fetch failures eagerly (not just on modal open) so the diagnostics row
   // can surface the "unprocessed" bucket — rows with no CL value and no
@@ -144,7 +152,14 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const { data: failures } = useCardLadderFailures({ enabled });
 
   if (isLoading) return <PokeballLoader size="sm" />;
-  if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
+  if (isError) {
+    return (
+      <div className="space-y-2">
+        <p className="text-[var(--danger)] text-sm">Failed to load status.</p>
+        <Button size="sm" onClick={() => { void refetch(); }}>Retry</Button>
+      </div>
+    );
+  }
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
   const ps = status.priceStats;
@@ -254,10 +269,17 @@ export function CLStatsPanel({ enabled = true }: { enabled?: boolean }) {
 }
 
 export function PSAStatsPanel({ enabled = true }: { enabled?: boolean }) {
-  const { data: status, isLoading, isError } = usePSASyncStatus({ enabled });
+  const { data: status, isLoading, isError, refetch } = usePSASyncStatus({ enabled });
 
   if (isLoading) return <PokeballLoader size="sm" />;
-  if (isError) return <p className="text-[var(--danger)] text-sm">Failed to load status.</p>;
+  if (isError) {
+    return (
+      <div className="space-y-2">
+        <p className="text-[var(--danger)] text-sm">Failed to load status.</p>
+        <Button size="sm" onClick={() => { void refetch(); }}>Retry</Button>
+      </div>
+    );
+  }
   if (!status?.configured) return <p className="text-[var(--text-muted)] text-sm">Not configured.</p>;
 
   const lr = status.lastRun;
