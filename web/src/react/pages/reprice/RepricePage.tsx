@@ -1,4 +1,4 @@
-import { useState, useDeferredValue } from 'react';
+import { useState, useDeferredValue, useEffect, useRef } from 'react';
 import { useLiquidationPreview, useApplyLiquidation } from '../../queries/useLiquidationQueries';
 import type { LiquidationPreviewItem, ConfidenceLevel } from '../../../types/liquidation';
 import { formatCents } from '../../utils/formatters';
@@ -12,6 +12,7 @@ import StickyActionBar from '../../ui/StickyActionBar';
 import Button from '../../ui/Button';
 import TabularPriceTriplet from '../../ui/TabularPriceTriplet';
 import sliderStyles from './DiscountSlider.module.css';
+import { useRepriceKeyboard } from './useRepriceKeyboard';
 
 function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
@@ -55,6 +56,8 @@ export default function RepricePage() {
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
   const [finalPriceInputs, setFinalPriceInputs] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState(false);
+
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, error } = useLiquidationPreview(deferredWithComps, deferredNoComps);
   const applyMutation = useApplyLiquidation();
@@ -132,6 +135,46 @@ export default function RepricePage() {
     const item = items.find(i => i.purchaseId === id);
     return item && getFinalPrice(item) > 0;
   }).length;
+
+  const handleAcceptFocused = (index: number) => {
+    const item = items[index];
+    if (item) acceptItem(item.purchaseId);
+  };
+
+  const handleToggleFocused = (index: number) => {
+    const item = items[index];
+    if (item) toggleSelect(item.purchaseId);
+  };
+
+  const handleJumpToInput = () => {
+    const firstInput = tableRef.current?.querySelector<HTMLInputElement>('input[type="text"]');
+    firstInput?.focus();
+  };
+
+  const handleShowShortcuts = () => {
+    // Wired in Task 4 — for now, no-op. The shortcut sheet doesn't exist yet.
+  };
+
+  const handleSubmit = () => {
+    if (applyableCount > 0) setShowConfirm(true);
+  };
+
+  const { focusedIndex } = useRepriceKeyboard({
+    itemCount: items.length,
+    selectedCount: selected.size,
+    onAcceptFocused: handleAcceptFocused,
+    onToggleFocused: handleToggleFocused,
+    onJumpToInput: handleJumpToInput,
+    onShowShortcuts: handleShowShortcuts,
+    onSubmit: handleSubmit,
+    onDeselectAll: deselectAll,
+  });
+
+  useEffect(() => {
+    if (focusedIndex === null || !tableRef.current) return;
+    const row = tableRef.current.querySelectorAll('.glass-vrow')[focusedIndex];
+    if (row) (row as HTMLElement).scrollIntoView({ block: 'nearest' });
+  }, [focusedIndex]);
 
   const summary = data?.summary;
 
@@ -217,7 +260,7 @@ export default function RepricePage() {
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}></div>
             </div>
 
-            <div className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
+            <div ref={tableRef} className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
               {items.map((item, index) => {
                 const isSelected = selected.has(item.purchaseId);
                 const currentFinal = getFinalPrice(item);
@@ -236,6 +279,7 @@ export default function RepricePage() {
                     data-stripe={index % 2 === 1}
                     data-selected={isSelected}
                     data-belowcost={item.belowCost || undefined}
+                    data-focused={focusedIndex === index || undefined}
                   >
                     <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }}>
                       <input

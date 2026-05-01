@@ -30,6 +30,7 @@ export default [
         // TypeScript DOM types
         RequestInit: 'readonly',
         EventListener: 'readonly',
+        KeyboardEventInit: 'readonly',
         // Test globals
         describe: 'readonly',
         it: 'readonly',
