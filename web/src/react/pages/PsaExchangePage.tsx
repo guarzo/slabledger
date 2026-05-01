@@ -4,6 +4,7 @@ import { Breadcrumb } from '../ui';
 import CardShell from '../ui/CardShell';
 import Button from '../ui/Button';
 import OpportunitiesTable from './psa-exchange/OpportunitiesTable';
+import OpportunitiesTableSkeleton from './psa-exchange/OpportunitiesTableSkeleton';
 import Toolbar from './psa-exchange/Toolbar';
 import {
   applyFilters,
@@ -95,11 +96,7 @@ export default function PsaExchangePage() {
         ) : null}
       </header>
 
-      {isLoading && (
-        <CardShell>
-          <div className="p-4 text-sm text-[var(--text-muted)]">Loading…</div>
-        </CardShell>
-      )}
+      {isLoading && <OpportunitiesTableSkeleton />}
 
       {error && (
         <CardShell>
