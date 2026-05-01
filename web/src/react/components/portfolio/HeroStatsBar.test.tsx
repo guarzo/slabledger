@@ -181,6 +181,16 @@ describe('HeroStatsBar', () => {
       expect(link).toHaveAttribute('href', '/invoices');
     });
 
+    it('hides the unpaid invoice chip when hideInvoiceChip is true', () => {
+      const capital = baseCapital({ unpaidInvoiceCount: 3 });
+      render(
+        <MemoryRouter>
+          <HeroStatsBar health={baseHealth()} capital={capital} hideInvoiceChip />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByRole('link', { name: /unpaid invoice/i })).not.toBeInTheDocument();
+    });
+
     it('renders needs-attention chip routed to /inventory', () => {
       renderBar(baseHealth(), baseCapital(), { needsAttentionCount: 2 });
       const link = screen.getByRole('link', { name: /2 needs attention/i });
