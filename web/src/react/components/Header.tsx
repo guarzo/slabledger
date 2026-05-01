@@ -121,7 +121,7 @@ export default function Header() {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           )}
-          <span className="text-2xs uppercase tracking-wider leading-none text-[var(--text-muted)] max-w-[80px] truncate" aria-hidden="true">
+          <span className="text-2xs uppercase tracking-wider leading-none text-[var(--text-muted)]" aria-hidden="true">
             {currentPageLabel}
           </span>
         </button>
