@@ -50,12 +50,12 @@ export default function InventoryHeader({
   totalCost, totalMarket, totalPL,
   fullInventoryTotals,
   showEV, evPortfolio,
-  reviewStats, searchQuery, setSearchQuery,
+  reviewStats: _reviewStats, searchQuery, setSearchQuery,
   showAll, setShowAll, filterTab, setFilterTab,
   tabCounts, pageSellSheetCount, debouncedSearch,
   sellSheetActive, selected,
   campaignId, isPrinting,
-  onStatClick, onAddToSellSheet, onRemoveFromSellSheet,
+  onStatClick: _onStatClick, onAddToSellSheet, onRemoveFromSellSheet,
   onRecordSale, onBulkListOnDH, onClearSelected, onPrint,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
@@ -176,12 +176,10 @@ export default function InventoryHeader({
       {/* Review Summary Bar */}
       <div className="mb-4 sell-sheet-no-print">
         <ReviewSummaryBar
-          stats={reviewStats}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           showAll={showAll}
           onToggleShowAll={() => setShowAll(prev => !prev)}
-          onStatClick={onStatClick}
         />
       </div>
 
