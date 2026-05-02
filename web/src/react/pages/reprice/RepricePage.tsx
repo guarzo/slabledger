@@ -90,8 +90,25 @@ export default function RepricePage() {
   const selectAll = () => setSelected(new Set(items.map(i => i.purchaseId)));
   const deselectAll = () => setSelected(new Set());
 
-  const getFinalPrice = (item: LiquidationPreviewItem): number =>
-    finalPrices[item.purchaseId] ?? item.suggestedPriceCents;
+  // Parse a "12.34" dollar string into cents. Returns null on empty/invalid.
+  function parseDollarsToCents(val: string | undefined): number | null {
+    if (!val || val === '.') return null;
+    const parts = val.split('.');
+    const d = parseInt(parts[0] || '0', 10);
+    const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
+    const cents = d * 100 + parseInt(frac, 10);
+    return isNaN(cents) || cents < 0 ? null : cents;
+  }
+
+  // Precedence: explicit blur/pill commit (finalPrices) → persisted typed
+  // input string (finalPriceInputs, survives refresh) → suggested price.
+  const getFinalPrice = (item: LiquidationPreviewItem): number => {
+    const committed = finalPrices[item.purchaseId];
+    if (committed != null) return committed;
+    const persisted = parseDollarsToCents(finalPriceInputs[item.purchaseId]);
+    if (persisted != null) return persisted;
+    return item.suggestedPriceCents;
+  };
 
   const setPillPrice = (id: string, cents: number) => {
     setFinalPrices(prev => ({ ...prev, [id]: cents }));
@@ -109,11 +126,8 @@ export default function RepricePage() {
       setFinalPriceInputs(prev => ({ ...prev, [id]: '' }));
       return;
     }
-    const parts = val.split('.');
-    const d = parseInt(parts[0] || '0', 10);
-    const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
-    const cents = d * 100 + parseInt(frac, 10);
-    if (!isNaN(cents) && cents >= 0) {
+    const cents = parseDollarsToCents(val);
+    if (cents != null) {
       setFinalPrices(prev => ({ ...prev, [id]: cents }));
       setFinalPriceInputs(prev => ({ ...prev, [id]: cents > 0 ? (cents / 100).toFixed(2) : '' }));
     }
@@ -343,9 +357,16 @@ export default function RepricePage() {
                         <LinkDropdown links={links} stopPropagation />
                       </div>
                       <div className="text-[10px] text-[var(--text-muted)] truncate leading-tight">
-                        {item.setName && <>{item.setName}</>}
-                        {item.cardNumber && <> <span aria-hidden>&middot;</span> #{item.cardNumber}</>}
-                        {item.certNumber && <> <span aria-hidden>&middot;</span> {item.certNumber}</>}
+                        {[
+                          item.setName,
+                          item.cardNumber ? `#${item.cardNumber}` : null,
+                          item.certNumber,
+                        ].filter(Boolean).map((part, i) => (
+                          <span key={i}>
+                            {i > 0 && <> <span aria-hidden>&middot;</span> </>}
+                            {part}
+                          </span>
+                        ))}
                       </div>
                     </div>
                     <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>

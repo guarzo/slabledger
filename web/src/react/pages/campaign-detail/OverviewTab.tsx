@@ -149,7 +149,9 @@ export default function OverviewTab({
             </div>
           )}
 
-          {showAnalytics && daysToSell.length > 0 && (
+          {showAnalytics && (
+          <div id="deep-analytics" className="space-y-6">
+          {daysToSell.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Days to Sell Distribution</h3>
               <div className="glass-table p-4">
@@ -175,7 +177,7 @@ export default function OverviewTab({
             </div>
           )}
 
-          {showAnalytics && fillRate.length > 0 && expectedFillRate && (() => {
+          {fillRate.length > 0 && expectedFillRate && (() => {
             const avgFillRatePct = fillRate.reduce((sum, d) => sum + (d.fillRatePct ?? 0), 0) / fillRate.length;
             const actualPct = avgFillRatePct * 100;
             const fillColor = actualPct >= expectedFillRate
@@ -194,8 +196,8 @@ export default function OverviewTab({
             );
           })()}
 
-          {showAnalytics && fillRate.length > 0 && (
-            <div id="deep-analytics">
+          {fillRate.length > 0 && (
+            <div>
               <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Daily Spend (Last 30 Days)</h3>
               <div className="glass-table max-h-[400px] overflow-y-auto scrollbar-dark">
                 <table className="w-full text-sm">
@@ -224,6 +226,8 @@ export default function OverviewTab({
                 </table>
               </div>
             </div>
+          )}
+          </div>
           )}
         </>
       )}

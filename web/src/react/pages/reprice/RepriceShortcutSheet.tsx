@@ -23,7 +23,6 @@ export default function RepriceShortcutSheet({ open, onClose }: RepriceShortcutS
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--surface-overlay)] data-[state=open]:animate-[fadeIn_150ms_ease-out]" />
         <Dialog.Content
-          aria-describedby={undefined}
           className="fixed right-0 top-0 bottom-0 z-50 w-[min(420px,calc(100%-2rem))] bg-[var(--surface-1)] border-l border-[var(--surface-2)] p-6 shadow-2xl data-[state=open]:animate-[slideInFromRight_200ms_cubic-bezier(0.4,0,0.2,1)] flex flex-col"
         >
           <Dialog.Title className="text-lg font-semibold text-[var(--text)] mb-4">
