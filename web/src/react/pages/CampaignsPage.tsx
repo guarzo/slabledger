@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
+import { reportError } from '../../js/errors';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../types/campaigns';
 import { queryKeys } from '../queries/queryKeys';
 import PokeballLoader from '../PokeballLoader';
@@ -388,8 +389,9 @@ export default function CampaignsPage() {
                 if (updated > 0) parts.push(`${updated} updated`);
                 if (parts.length > 0) toast.success(`Imported: ${parts.join(', ')}`);
                 if (errors.length > 0) {
-                  // Full details to console for the operator; concise summary in toast.
-                  console.error('Campaign paste import errors:', errors);
+                  // Full details to the central error handler for the operator;
+                  // concise summary in toast.
+                  reportError('Campaign paste import errors', errors.join('\n'));
                   const preview = errors.slice(0, 3).join('\n');
                   const more = errors.length > 3 ? `\n…and ${errors.length - 3} more (see console)` : '';
                   toast.error(`${errors.length} import error${errors.length !== 1 ? 's' : ''}:\n${preview}${more}`);
