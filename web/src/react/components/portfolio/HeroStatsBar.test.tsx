@@ -188,7 +188,12 @@ describe('HeroStatsBar', () => {
           <HeroStatsBar health={baseHealth()} capital={capital} hideInvoiceChip />
         </MemoryRouter>,
       );
+      // Chip itself must be absent
       expect(screen.queryByRole('link', { name: /unpaid invoice/i })).not.toBeInTheDocument();
+      // And when the invoice chip is the only alert, the alerts wrapper must not render
+      // an empty row — confirm by asserting NO alert link is present at all.
+      expect(screen.queryByRole('link', { name: /needs attention/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /pending listing/i })).not.toBeInTheDocument();
     });
 
     it('renders needs-attention chip routed to /inventory', () => {

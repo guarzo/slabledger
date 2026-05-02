@@ -59,7 +59,10 @@ export default function HeroStatsBar({
     : 'normal';
 
   const unpaidInvoiceCount = capital?.unpaidInvoiceCount ?? 0;
-  const showAlerts = unpaidInvoiceCount > 0 || needsAttentionCount > 0 || pendingListingsCount > 0;
+  const showAlerts =
+    (unpaidInvoiceCount > 0 && !hideInvoiceChip) ||
+    needsAttentionCount > 0 ||
+    pendingListingsCount > 0;
 
   return (
     <section
