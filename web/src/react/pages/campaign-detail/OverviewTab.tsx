@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -65,6 +65,13 @@ export default function OverviewTab({
   const { data: daysToSell = [], isLoading: dtsLoading } = useDaysToSell(campaignId);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [showAnalytics, setShowAnalytics] = useState(false);
+
+  // Collapse the analytics disclosure when navigating to a different
+  // campaign — without this, useState retains the previous campaign's
+  // open/closed state.
+  useEffect(() => {
+    setShowAnalytics(false);
+  }, [campaignId]);
 
   // Visible loading gates the channel section (always shown). Deep loading
   // gates the histogram / fill-rate / daily-spend sections, which only

@@ -1,4 +1,4 @@
-import { useState, useDeferredValue, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useDeferredValue, useEffect, useRef, useMemo } from 'react';
 import { useLiquidationPreview, useApplyLiquidation } from '../../queries/useLiquidationQueries';
 import type { LiquidationPreviewItem, ConfidenceLevel } from '../../../types/liquidation';
 import { formatCents } from '../../utils/formatters';
@@ -13,7 +13,8 @@ import RepriceFooter, { type BucketName } from './RepriceFooter';
 import RepriceShortcutSheet from './RepriceShortcutSheet';
 import sliderStyles from './DiscountSlider.module.css';
 import { useRepriceKeyboard } from './useRepriceKeyboard';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { useRepricePricing } from './useRepricePricing';
+import { useRepriceSelection } from './useRepriceSelection';
 
 function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
@@ -53,21 +54,6 @@ export default function RepricePage() {
   const [discountNoComps, setDiscountNoComps] = useState(10);
   const deferredWithComps = useDeferredValue(discountWithComps);
   const deferredNoComps = useDeferredValue(discountNoComps);
-  // Persist user-typed price inputs and selection so a mid-flow refresh
-  // doesn't wipe an operator's work scrolling 200 cards.
-  const [selectedArr, setSelectedArr] = useLocalStorage<string[]>('reprice.selected', []);
-  const [finalPriceInputs, setFinalPriceInputs] = useLocalStorage<Record<string, string>>('reprice.priceInputs', {});
-  const selected = useMemo(() => new Set(selectedArr), [selectedArr]);
-  const setSelected = useCallback(
-    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
-      setSelectedArr(prev => {
-        const next = typeof updater === 'function' ? updater(new Set(prev)) : updater;
-        return Array.from(next);
-      });
-    },
-    [setSelectedArr],
-  );
-  const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -78,91 +64,11 @@ export default function RepricePage() {
 
   const items: LiquidationPreviewItem[] = useMemo(() => data?.items ?? [], [data?.items]);
 
-  // Reconcile persisted state against the current items set: when the
-  // liquidation preview returns a different cohort (rare, e.g. server-side
-  // filter change), drop selected IDs and finalPriceInputs entries that
-  // no longer correspond to a real item so counts and the confirm-skipped
-  // message reflect only items the operator can actually act on. Skip the
-  // reconcile until items have loaded so we don't wipe state on first paint.
-  useEffect(() => {
-    if (items.length === 0) return;
-    const itemIds = new Set(items.map(i => i.purchaseId));
-    setSelectedArr(prev => {
-      const filtered = prev.filter(id => itemIds.has(id));
-      return filtered.length === prev.length ? prev : filtered;
-    });
-    setFinalPriceInputs(prev => {
-      const filtered: Record<string, string> = {};
-      let dropped = 0;
-      for (const [id, val] of Object.entries(prev)) {
-        if (itemIds.has(id)) filtered[id] = val;
-        else dropped++;
-      }
-      return dropped === 0 ? prev : filtered;
-    });
-  }, [items, setSelectedArr, setFinalPriceInputs]);
-
-  const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAll = () => setSelected(new Set(items.map(i => i.purchaseId)));
-  const deselectAll = () => setSelected(new Set());
-
-  // Parse a "12.34" dollar string into cents. Returns null on empty/invalid.
-  // Strict: rejects anything that isn't an integer, optional '.', and up to
-  // two fractional digits — `parseInt` would silently coerce "12abc" → 12.
-  function parseDollarsToCents(val: string | undefined): number | null {
-    if (!val || val === '.') return null;
-    if (!/^\d*(\.\d{0,2})?$/.test(val)) return null;
-    const parts = val.split('.');
-    const d = Number(parts[0] || '0');
-    const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
-    const cents = d * 100 + Number(frac);
-    return Number.isNaN(cents) || cents < 0 ? null : cents;
-  }
-
-  // Precedence: explicit blur/pill commit (finalPrices) → persisted typed
-  // input string (finalPriceInputs, survives refresh) → suggested price.
-  const getFinalPrice = (item: LiquidationPreviewItem): number => {
-    const committed = finalPrices[item.purchaseId];
-    if (committed != null) return committed;
-    const persisted = parseDollarsToCents(finalPriceInputs[item.purchaseId]);
-    if (persisted != null) return persisted;
-    return item.suggestedPriceCents;
-  };
-
-  const setPillPrice = (id: string, cents: number) => {
-    setFinalPrices(prev => ({ ...prev, [id]: cents }));
-    setFinalPriceInputs(prev => ({ ...prev, [id]: cents > 0 ? (cents / 100).toFixed(2) : '' }));
-  };
-
-  const handleInputChange = (id: string, val: string) => {
-    setFinalPriceInputs(prev => ({ ...prev, [id]: val }));
-  };
-
-  const handleInputBlur = (id: string) => {
-    const val = finalPriceInputs[id] ?? '';
-    if (val === '' || val === '.') {
-      setFinalPrices(prev => ({ ...prev, [id]: 0 }));
-      setFinalPriceInputs(prev => ({ ...prev, [id]: '' }));
-      return;
-    }
-    const cents = parseDollarsToCents(val);
-    if (cents != null) {
-      setFinalPrices(prev => ({ ...prev, [id]: cents }));
-      setFinalPriceInputs(prev => ({ ...prev, [id]: cents > 0 ? (cents / 100).toFixed(2) : '' }));
-    }
-  };
-
-  const acceptItem = (id: string) => {
-    setSelected(prev => new Set(prev).add(id));
-  };
+  // Persist user-typed price inputs and selection so a mid-flow refresh
+  // doesn't wipe an operator's work scrolling 200 cards.
+  const { selected, setSelected, toggleSelect, selectAll, deselectAll, acceptItem } = useRepriceSelection({ items, isLoading });
+  const { finalPriceInputs, getFinalPrice, setPillPrice, handleInputChange, handleInputBlur, resetPricing } =
+    useRepricePricing({ items, isLoading });
 
   const handleAcceptBucket = (bucket: BucketName) => {
     setSelected(prev => {
@@ -186,8 +92,7 @@ export default function RepricePage() {
       onSuccess: () => {
         setShowConfirm(false);
         setSelected(new Set());
-        setFinalPrices({});
-        setFinalPriceInputs({});
+        resetPricing();
       },
     });
   };
