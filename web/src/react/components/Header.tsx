@@ -34,7 +34,7 @@ function pageLabelFor(pathname: string): string {
 function UserInitial({ name }: { name: string }) {
   const initial = name.charAt(0).toUpperCase();
   return (
-    <div className="w-8 h-8 rounded-full bg-[var(--brand-500)] flex items-center justify-center text-white text-sm font-bold">
+    <div className="w-8 h-8 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-[var(--text)] text-sm font-bold">
       {initial}
     </div>
   );
@@ -121,7 +121,7 @@ export default function Header() {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           )}
-          <span className="text-2xs uppercase tracking-wider leading-none text-[var(--text-muted)] max-w-[80px] truncate" aria-hidden="true">
+          <span className="text-2xs uppercase tracking-wider leading-none text-[var(--text-muted)]" aria-hidden="true">
             {currentPageLabel}
           </span>
         </button>

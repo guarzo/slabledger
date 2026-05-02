@@ -13,6 +13,7 @@ interface HeroStatsBarProps {
   capital?: CapitalSummary;
   needsAttentionCount?: number;
   pendingListingsCount?: number;
+  hideInvoiceChip?: boolean;
 }
 
 export default function HeroStatsBar({
@@ -20,6 +21,7 @@ export default function HeroStatsBar({
   capital,
   needsAttentionCount = 0,
   pendingListingsCount = 0,
+  hideInvoiceChip = false,
 }: HeroStatsBarProps) {
   if (!health) {
     return (
@@ -57,7 +59,10 @@ export default function HeroStatsBar({
     : 'normal';
 
   const unpaidInvoiceCount = capital?.unpaidInvoiceCount ?? 0;
-  const showAlerts = unpaidInvoiceCount > 0 || needsAttentionCount > 0 || pendingListingsCount > 0;
+  const showAlerts =
+    (unpaidInvoiceCount > 0 && !hideInvoiceChip) ||
+    needsAttentionCount > 0 ||
+    pendingListingsCount > 0;
 
   return (
     <section
@@ -140,7 +145,7 @@ export default function HeroStatsBar({
 
       {showAlerts && (
         <div className={styles.alerts}>
-          {unpaidInvoiceCount > 0 && (
+          {unpaidInvoiceCount > 0 && !hideInvoiceChip && (
             <Link
               to="/invoices"
               className={styles.alertLink}

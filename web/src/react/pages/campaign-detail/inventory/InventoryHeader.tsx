@@ -1,11 +1,9 @@
 import { useMemo } from 'react';
 import type { AgingItem, EVPortfolio } from '../../../../types/campaigns';
-import type { ReviewStats } from '../../../../types/campaigns/priceReview';
 import type { TabCounts, FilterTab } from './inventoryCalcs';
 import { formatCents, formatPct } from '../../../utils/formatters';
 import { formatPL } from './utils';
 import ReviewSummaryBar from './ReviewSummaryBar';
-import type { StatClickTarget } from './ReviewSummaryBar';
 import CrackCandidatesBanner from './CrackCandidatesBanner';
 import { SellSheetActions } from '../SellSheetView';
 import BulkSelectionMissingCLWarning from './BulkSelectionMissingCLWarning';
@@ -20,7 +18,6 @@ export interface InventoryHeaderProps {
   fullInventoryTotals: { totalCost: number; totalMarket: number; totalPL: number };
   showEV: boolean;
   evPortfolio: EVPortfolio | null | undefined;
-  reviewStats: ReviewStats;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   showAll: boolean;
@@ -34,7 +31,6 @@ export interface InventoryHeaderProps {
   selected: ReadonlySet<string>;
   campaignId?: string;
   isPrinting: boolean;
-  onStatClick: (target: StatClickTarget) => void;
   onAddToSellSheet: (ids: string[]) => void;
   onRemoveFromSellSheet: (ids: string[]) => void;
   onRecordSale: (items: AgingItem[]) => void;
@@ -50,12 +46,12 @@ export default function InventoryHeader({
   totalCost, totalMarket, totalPL,
   fullInventoryTotals,
   showEV, evPortfolio,
-  reviewStats, searchQuery, setSearchQuery,
+  searchQuery, setSearchQuery,
   showAll, setShowAll, filterTab, setFilterTab,
   tabCounts, pageSellSheetCount, debouncedSearch,
   sellSheetActive, selected,
   campaignId, isPrinting,
-  onStatClick, onAddToSellSheet, onRemoveFromSellSheet,
+  onAddToSellSheet, onRemoveFromSellSheet,
   onRecordSale, onBulkListOnDH, onClearSelected, onPrint,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
@@ -176,12 +172,10 @@ export default function InventoryHeader({
       {/* Review Summary Bar */}
       <div className="mb-4 sell-sheet-no-print">
         <ReviewSummaryBar
-          stats={reviewStats}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           showAll={showAll}
           onToggleShowAll={() => setShowAll(prev => !prev)}
-          onStatClick={onStatClick}
         />
       </div>
 
