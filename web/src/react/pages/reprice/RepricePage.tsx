@@ -76,7 +76,31 @@ export default function RepricePage() {
   const { data, isLoading, error } = useLiquidationPreview(deferredWithComps, deferredNoComps);
   const applyMutation = useApplyLiquidation();
 
-  const items: LiquidationPreviewItem[] = data?.items ?? [];
+  const items: LiquidationPreviewItem[] = useMemo(() => data?.items ?? [], [data?.items]);
+
+  // Reconcile persisted state against the current items set: when the
+  // liquidation preview returns a different cohort (rare, e.g. server-side
+  // filter change), drop selected IDs and finalPriceInputs entries that
+  // no longer correspond to a real item so counts and the confirm-skipped
+  // message reflect only items the operator can actually act on. Skip the
+  // reconcile until items have loaded so we don't wipe state on first paint.
+  useEffect(() => {
+    if (items.length === 0) return;
+    const itemIds = new Set(items.map(i => i.purchaseId));
+    setSelectedArr(prev => {
+      const filtered = prev.filter(id => itemIds.has(id));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+    setFinalPriceInputs(prev => {
+      const filtered: Record<string, string> = {};
+      let dropped = 0;
+      for (const [id, val] of Object.entries(prev)) {
+        if (itemIds.has(id)) filtered[id] = val;
+        else dropped++;
+      }
+      return dropped === 0 ? prev : filtered;
+    });
+  }, [items, setSelectedArr, setFinalPriceInputs]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -91,13 +115,16 @@ export default function RepricePage() {
   const deselectAll = () => setSelected(new Set());
 
   // Parse a "12.34" dollar string into cents. Returns null on empty/invalid.
+  // Strict: rejects anything that isn't an integer, optional '.', and up to
+  // two fractional digits — `parseInt` would silently coerce "12abc" → 12.
   function parseDollarsToCents(val: string | undefined): number | null {
     if (!val || val === '.') return null;
+    if (!/^\d*(\.\d{0,2})?$/.test(val)) return null;
     const parts = val.split('.');
-    const d = parseInt(parts[0] || '0', 10);
+    const d = Number(parts[0] || '0');
     const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
-    const cents = d * 100 + parseInt(frac, 10);
-    return isNaN(cents) || cents < 0 ? null : cents;
+    const cents = d * 100 + Number(frac);
+    return Number.isNaN(cents) || cents < 0 ? null : cents;
   }
 
   // Precedence: explicit blur/pill commit (finalPrices) → persisted typed
