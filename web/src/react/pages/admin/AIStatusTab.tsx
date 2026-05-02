@@ -2,12 +2,21 @@ import type { AIOperationSummary } from '../../../types/apiStatus';
 import PokeballLoader from '../../PokeballLoader';
 import { useAIUsage } from '../../queries/useAdminQueries';
 import { formatTokens, formatLatency } from '../../utils/formatters';
-import { SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
 
 function formatCost(cents: number): string {
   if (cents === 0) return '$0';
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function SupportStat({ label, value, caption, color }: { label: string; value: string; caption?: string; color?: string }) {
+  return (
+    <div className="flex flex-col gap-1 min-w-[80px]">
+      <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">{label}</div>
+      <div className="text-lg font-bold tabular-nums" style={color ? { color } : { color: 'var(--text)' }}>{value}</div>
+      {caption && <div className="text-[10px] text-[var(--text-muted)] tracking-[0.06em] opacity-75">{caption}</div>}
+    </div>
+  );
 }
 
 const operationLabels: Record<string, string> = {
@@ -72,35 +81,63 @@ export function AIStatusTab({ enabled = true }: { enabled?: boolean }) {
         </div>
       )}
 
-      {/* Summary cards — 5 cards: 2 cols → 3 cols on sm → 5 on lg */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <SummaryCard
-          label="Total Calls (7d)"
-          value={summary.totalCalls}
-          sub={`${summary.callsLast24h} in last 24h`}
-        />
-        <SummaryCard
-          label="Success Rate"
-          value={summary.totalCalls > 0 ? `${summary.successRate.toFixed(1)}%` : '-'}
-          sub={summary.rateLimitHits > 0 ? `${summary.rateLimitHits} rate limited` : undefined}
-          color={summary.totalCalls > 0 ? (summary.successRate >= 90 ? 'var(--success)' : summary.successRate >= 75 ? 'var(--warning)' : 'var(--danger)') : undefined}
-        />
-        <SummaryCard
-          label="Total Tokens"
-          value={formatTokens(summary.totalTokens)}
-          sub={summary.totalTokens > 0 ? `${inputPct}% in / ${outputPct}% out` : undefined}
-        />
-        <SummaryCard
-          label="Avg Latency"
-          value={summary.totalCalls > 0 ? formatLatency(summary.avgLatencyMs) : '-'}
-          sub={summary.lastCallAt ? `Last: ${formatAdminDate(summary.lastCallAt)}` : 'No calls yet'}
-          color={summary.totalCalls > 0 ? (summary.avgLatencyMs > 60000 ? 'var(--danger)' : summary.avgLatencyMs > 30000 ? 'var(--warning)' : undefined) : undefined}
-        />
-        <SummaryCard
-          label="Est. Cost (7d)"
-          value={formatCost(summary.totalCostCents)}
-        />
-      </div>
+      {/* Summary as typography row: Success Rate (hero) + supporting stats with hairline divider. */}
+      <section
+        className="flex flex-wrap items-end gap-x-7 gap-y-3 pb-5 border-b border-[var(--surface-2)]/40"
+        aria-label="AI usage summary"
+      >
+        <div className="flex flex-col gap-1.5">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--brand-400)]">Success Rate</div>
+          <div
+            className="text-[clamp(28px,3.5vw,40px)] font-extrabold leading-none tabular-nums"
+            style={{
+              color: summary.totalCalls > 0
+                ? summary.successRate >= 90
+                  ? 'var(--success)'
+                  : summary.successRate >= 75
+                    ? 'var(--warning)'
+                    : 'var(--danger)'
+                : 'var(--text-muted)',
+            }}
+          >
+            {summary.totalCalls > 0 ? `${summary.successRate.toFixed(1)}%` : '—'}
+          </div>
+          {summary.rateLimitHits > 0 && (
+            <div className="text-[11px] text-[var(--text-muted)] tabular-nums">{summary.rateLimitHits} rate limited</div>
+          )}
+        </div>
+        <div className="w-px self-stretch bg-[rgba(255,255,255,0.05)] my-1" aria-hidden />
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-3 pb-1">
+          <SupportStat
+            label="Total Calls (7d)"
+            value={String(summary.totalCalls)}
+            caption={`${summary.callsLast24h} in last 24h`}
+          />
+          <SupportStat
+            label="Total Tokens"
+            value={formatTokens(summary.totalTokens)}
+            caption={summary.totalTokens > 0 ? `${inputPct}% in / ${outputPct}% out` : undefined}
+          />
+          <SupportStat
+            label="Avg Latency"
+            value={summary.totalCalls > 0 ? formatLatency(summary.avgLatencyMs) : '—'}
+            caption={summary.lastCallAt ? `Last: ${formatAdminDate(summary.lastCallAt)}` : 'No calls yet'}
+            color={
+              summary.totalCalls > 0
+                ? summary.avgLatencyMs > 60000
+                  ? 'var(--danger)'
+                  : summary.avgLatencyMs > 30000
+                    ? 'var(--warning)'
+                    : undefined
+                : undefined
+            }
+          />
+          <SupportStat
+            label="Est. Cost (7d)"
+            value={formatCost(summary.totalCostCents)}
+          />
+        </div>
+      </section>
 
       {/* Operations breakdown */}
       {operations.length > 0 && (

@@ -175,7 +175,7 @@ export function CertRowItem({
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border bg-[var(--surface-1)] transition-all ${
+      className={`overflow-hidden rounded-xl border bg-[var(--surface-1)] transition-colors ${
         highlighted ? 'border-[var(--warning)] ring-2 ring-[var(--warning)]/30' : 'border-[var(--surface-2)]'
       }`}
       style={{ borderLeft: `2px solid ${s.leftBorder}` }}

@@ -103,7 +103,7 @@ export default function RecordSaleModal({ open, onClose, onSuccess, items }: Rec
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--surface-overlay)] data-[state=open]:animate-[fadeIn_150ms_ease-out]" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-xl p-6 max-w-lg w-[calc(100%-2rem)] shadow-xl data-[state=open]:animate-[scaleIn_150ms_ease-out] max-h-[85vh] overflow-y-auto"
+          className="fixed right-0 top-0 bottom-0 z-50 w-[min(520px,calc(100%-2rem))] bg-[var(--surface-1)] border-l border-[var(--surface-2)] p-6 shadow-2xl data-[state=open]:animate-[slideInFromRight_200ms_cubic-bezier(0.4,0,0.2,1)] overflow-y-auto"
         >
           <Dialog.Title className="text-lg font-semibold text-[var(--text)] mb-4">
             Record Sale

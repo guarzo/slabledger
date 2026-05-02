@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -64,12 +64,15 @@ export default function OverviewTab({
   const { data: fillRate = [], isLoading: fillLoading } = useFillRate(campaignId, 30);
   const { data: daysToSell = [], isLoading: dtsLoading } = useDaysToSell(campaignId);
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const analyticsLoading = pnlLoading || channelLoading || fillLoading || dtsLoading;
   const maxDaysToSellCount = useMemo(
     () => daysToSell.reduce((max, x) => Math.max(max, x.count), 1),
     [daysToSell]
   );
+
+  const hasDeepAnalytics = daysToSell.length > 0 || fillRate.length > 0;
 
   return (
     <div
@@ -131,7 +134,22 @@ export default function OverviewTab({
             </div>
           )}
 
-          {daysToSell.length > 0 && (
+          {hasDeepAnalytics && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAnalytics(s => !s)}
+                aria-expanded={showAnalytics}
+                aria-controls="deep-analytics"
+                className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text)] focus:outline-none focus-visible:text-[var(--text)] inline-flex items-center gap-1.5 py-1"
+              >
+                <span aria-hidden className="inline-block transition-transform" style={{ transform: showAnalytics ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
+                {showAnalytics ? 'Hide analytics' : 'View analytics'}
+              </button>
+            </div>
+          )}
+
+          {showAnalytics && daysToSell.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Days to Sell Distribution</h3>
               <div className="glass-table p-4">
@@ -142,7 +160,7 @@ export default function OverviewTab({
                       <div key={b.label} className="flex-1 flex flex-col items-center">
                         <div className="text-xs text-[var(--text)] mb-1 font-medium">{b.count}</div>
                         <div
-                          className="w-full rounded-t transition-all duration-300"
+                          className="w-full rounded-t"
                           style={{
                             height: `${Math.max(height, 4)}%`,
                             background: 'var(--brand-500)',
@@ -157,7 +175,7 @@ export default function OverviewTab({
             </div>
           )}
 
-          {fillRate.length > 0 && expectedFillRate && (() => {
+          {showAnalytics && fillRate.length > 0 && expectedFillRate && (() => {
             const avgFillRatePct = fillRate.reduce((sum, d) => sum + (d.fillRatePct ?? 0), 0) / fillRate.length;
             const actualPct = avgFillRatePct * 100;
             const fillColor = actualPct >= expectedFillRate
@@ -176,8 +194,8 @@ export default function OverviewTab({
             );
           })()}
 
-          {fillRate.length > 0 && (
-            <div>
+          {showAnalytics && fillRate.length > 0 && (
+            <div id="deep-analytics">
               <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Daily Spend (Last 30 Days)</h3>
               <div className="glass-table max-h-[400px] overflow-y-auto scrollbar-dark">
                 <table className="w-full text-sm">

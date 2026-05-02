@@ -111,7 +111,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       const msg = err instanceof Error ? err.message : 'Listing failed';
       toast.error(
         msg.toLowerCase().includes('stock')
-          ? 'DH push pending — check back after sync'
+          ? 'DH push pending. Check back after sync.'
           : msg,
       );
       // Set-price succeeded; reflect it in the cache so the row doesn't

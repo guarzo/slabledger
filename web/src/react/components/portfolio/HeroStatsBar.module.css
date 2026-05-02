@@ -19,12 +19,10 @@
   letter-spacing: -0.03em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  background: linear-gradient(180deg, var(--success) 0%, color-mix(in srgb, var(--success) 70%, #fff) 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  color: var(--success);
 }
 .hero[data-tone="neg"] .roiValue {
-  background: linear-gradient(180deg, var(--danger) 0%, color-mix(in srgb, var(--danger) 70%, #fff) 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  color: var(--danger);
 }
 
 .cluster {

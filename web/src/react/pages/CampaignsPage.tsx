@@ -387,7 +387,13 @@ export default function CampaignsPage() {
                 if (created > 0) parts.push(`${created} created`);
                 if (updated > 0) parts.push(`${updated} updated`);
                 if (parts.length > 0) toast.success(`Imported: ${parts.join(', ')}`);
-                if (errors.length > 0) toast.error(`Failed: ${errors.join('; ')}`);
+                if (errors.length > 0) {
+                  // Full details to console for the operator; concise summary in toast.
+                  console.error('Campaign paste import errors:', errors);
+                  const preview = errors.slice(0, 3).join('\n');
+                  const more = errors.length > 3 ? `\n…and ${errors.length - 3} more (see console)` : '';
+                  toast.error(`${errors.length} import error${errors.length !== 1 ? 's' : ''}:\n${preview}${more}`);
+                }
               } catch {
                 toast.error('Failed to read clipboard. Check browser permissions.');
               }
@@ -437,12 +443,13 @@ export default function CampaignsPage() {
                 type="button"
                 role="radio"
                 aria-checked={isActive}
+                aria-label={`${phaseFilterLabels[filter]}, ${count}`}
                 tabIndex={isActive ? 0 : -1}
                 onClick={() => setPhaseFilter(filter)}
                 className={`${base} ${stateClass}`}
               >
                 {phaseFilterLabels[filter]}
-                <span className={`${countBase} ${countState}`}>{count}</span>
+                <span aria-hidden className={`${countBase} ${countState}`}>{count}</span>
               </button>
             );
           })}

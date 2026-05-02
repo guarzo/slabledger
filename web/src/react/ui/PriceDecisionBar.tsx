@@ -263,7 +263,7 @@ function NoPriceDataView({ onFlag, allDisabled }: { onFlag?: () => void; allDisa
         <span className={styles.warningIcon} aria-hidden="true">&#9888;</span>
         <div className={styles.warningText}>
           <span className={styles.warningTitle}>No price data</span>
-          <span className={styles.warningDesc}>CL, DH, and last-sold signals are all missing — investigate before pricing.</span>
+          <span className={styles.warningDesc}>CL, DH, and last-sold signals are all missing. Investigate before pricing.</span>
         </div>
       </div>
       {onFlag && (
