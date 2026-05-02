@@ -34,6 +34,10 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [saleModalItems, setSaleModalItems] = useState<AgingItem[]>([]);
+  // Single-item inline sale recording — expands the row in place rather than
+  // opening a modal, so the operator keeps row context (price signals,
+  // comp panel) visible while recording.
+  const [inlineSaleId, setInlineSaleId] = useState<string | null>(null);
 
   const invalidateInventory = useCallback((opts?: { sellSheet?: boolean }) => {
     if (campaignId) {
@@ -180,6 +184,23 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     setSaleModalItems([]);
   }
 
+  // Single-item inline sale: expand the row in place and switch its
+  // expanded panel into "recording sale" mode.
+  function startInlineSale(saleItem: AgingItem) {
+    selection.setExpandedId(saleItem.purchase.id);
+    setInlineSaleId(saleItem.purchase.id);
+  }
+
+  function cancelInlineSale() {
+    setInlineSaleId(null);
+  }
+
+  function handleInlineSaleSuccess() {
+    setInlineSaleId(null);
+    selection.setExpandedId(null);
+    invalidateInventory({ sellSheet: true });
+  }
+
   const handleDelete = useCallback(async (item: AgingItem) => {
     const name = item.purchase.cardName || 'this card';
     if (!window.confirm(`Delete "${name}"? This will permanently remove it and any associated sale.`)) return;
@@ -223,6 +244,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handlePrint, handleDelete,
     toggleSelect: selection.toggleSelect, toggleAll, toggleExpand: selection.toggleExpand,
     openSaleModal, closeSaleModal,
+    inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
     handleFixPricing: pricingActions.handleFixPricing,
     handleFixDHMatch: dhActions.handleFixDHMatch, handleFixDHMatchSaved: dhActions.handleFixDHMatchSaved,
     handleUnmatchDH: dhActions.handleUnmatchDH, handleRetryDHMatch: dhActions.handleRetryDHMatch,

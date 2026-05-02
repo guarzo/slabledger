@@ -10,6 +10,7 @@ import CompSummaryPanel from './CompSummaryPanel';
 import { costBasis, formatShipDate, mostRecentSale, isShipmentOverdue } from './utils';
 import { formatCents } from '../../../utils/formatters';
 import { PriceDecisionBar, buildPriceSources, preSelectSource, Button } from '../../../ui';
+import RecordSaleForm from '../RecordSaleForm';
 
 interface ExpandedDetailProps {
   item: AgingItem;
@@ -20,6 +21,10 @@ interface ExpandedDetailProps {
   onApproveDHPush?: (purchaseId: string) => void;
   onSetPrice?: () => void;
   combineWithList?: boolean;
+  /** When true, swap the pricing panel for an inline RecordSaleForm. */
+  recordingSale?: boolean;
+  onCancelInlineSale?: () => void;
+  onInlineSaleSuccess?: () => void;
 }
 
 const holdReasonLabels: Record<string, string> = {
@@ -37,7 +42,7 @@ function formatHoldReason(reason: string): string {
   return reason || 'Unknown reason';
 }
 
-export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice, combineWithList }: ExpandedDetailProps) {
+export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice, combineWithList, recordingSale, onCancelInlineSale, onInlineSaleSuccess }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -127,6 +132,22 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const listedCents = purchase.dhListingPriceCents ?? 0;
 
   const purchaseDateDisplay = purchase.purchaseDate ? formatShipDate(purchase.purchaseDate) : null;
+
+  if (recordingSale && onCancelInlineSale && onInlineSaleSuccess) {
+    return (
+      <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
+        <div className="max-w-2xl">
+          <div className="text-sm font-semibold text-[var(--text)] mb-3">Record sale</div>
+          <RecordSaleForm
+            item={item}
+            onCancel={onCancelInlineSale}
+            onSuccess={onInlineSaleSuccess}
+            hideItemHeader
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-vrow-expanded px-6 py-4 border-t border-[rgba(255,255,255,0.05)]">
