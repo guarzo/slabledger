@@ -1,4 +1,4 @@
-import { useState, useDeferredValue, useEffect, useRef } from 'react';
+import { useState, useDeferredValue, useEffect, useRef, useMemo } from 'react';
 import { useLiquidationPreview, useApplyLiquidation } from '../../queries/useLiquidationQueries';
 import type { LiquidationPreviewItem, ConfidenceLevel } from '../../../types/liquidation';
 import { formatCents } from '../../utils/formatters';
@@ -13,6 +13,8 @@ import RepriceFooter, { type BucketName } from './RepriceFooter';
 import RepriceShortcutSheet from './RepriceShortcutSheet';
 import sliderStyles from './DiscountSlider.module.css';
 import { useRepriceKeyboard } from './useRepriceKeyboard';
+import { useRepricePricing } from './useRepricePricing';
+import { useRepriceSelection } from './useRepriceSelection';
 
 function confidenceColor(level: ConfidenceLevel): string {
   switch (level) {
@@ -52,9 +54,6 @@ export default function RepricePage() {
   const [discountNoComps, setDiscountNoComps] = useState(10);
   const deferredWithComps = useDeferredValue(discountWithComps);
   const deferredNoComps = useDeferredValue(discountNoComps);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
-  const [finalPriceInputs, setFinalPriceInputs] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -63,52 +62,13 @@ export default function RepricePage() {
   const { data, isLoading, error } = useLiquidationPreview(deferredWithComps, deferredNoComps);
   const applyMutation = useApplyLiquidation();
 
-  const items: LiquidationPreviewItem[] = data?.items ?? [];
+  const items: LiquidationPreviewItem[] = useMemo(() => data?.items ?? [], [data?.items]);
 
-  const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAll = () => setSelected(new Set(items.map(i => i.purchaseId)));
-  const deselectAll = () => setSelected(new Set());
-
-  const getFinalPrice = (item: LiquidationPreviewItem): number =>
-    finalPrices[item.purchaseId] ?? item.suggestedPriceCents;
-
-  const setPillPrice = (id: string, cents: number) => {
-    setFinalPrices(prev => ({ ...prev, [id]: cents }));
-    setFinalPriceInputs(prev => ({ ...prev, [id]: cents > 0 ? (cents / 100).toFixed(2) : '' }));
-  };
-
-  const handleInputChange = (id: string, val: string) => {
-    setFinalPriceInputs(prev => ({ ...prev, [id]: val }));
-  };
-
-  const handleInputBlur = (id: string) => {
-    const val = finalPriceInputs[id] ?? '';
-    if (val === '' || val === '.') {
-      setFinalPrices(prev => ({ ...prev, [id]: 0 }));
-      setFinalPriceInputs(prev => ({ ...prev, [id]: '' }));
-      return;
-    }
-    const parts = val.split('.');
-    const d = parseInt(parts[0] || '0', 10);
-    const frac = (parts[1] || '0').slice(0, 2).padEnd(2, '0');
-    const cents = d * 100 + parseInt(frac, 10);
-    if (!isNaN(cents) && cents >= 0) {
-      setFinalPrices(prev => ({ ...prev, [id]: cents }));
-      setFinalPriceInputs(prev => ({ ...prev, [id]: cents > 0 ? (cents / 100).toFixed(2) : '' }));
-    }
-  };
-
-  const acceptItem = (id: string) => {
-    setSelected(prev => new Set(prev).add(id));
-  };
+  // Persist user-typed price inputs and selection so a mid-flow refresh
+  // doesn't wipe an operator's work scrolling 200 cards.
+  const { selected, setSelected, toggleSelect, selectAll, deselectAll, acceptItem } = useRepriceSelection({ items, isLoading });
+  const { finalPriceInputs, getFinalPrice, setPillPrice, handleInputChange, handleInputBlur, resetPricing } =
+    useRepricePricing({ items, isLoading });
 
   const handleAcceptBucket = (bucket: BucketName) => {
     setSelected(prev => {
@@ -132,8 +92,7 @@ export default function RepricePage() {
       onSuccess: () => {
         setShowConfirm(false);
         setSelected(new Set());
-        setFinalPrices({});
-        setFinalPriceInputs({});
+        resetPricing();
       },
     });
   };
@@ -142,6 +101,20 @@ export default function RepricePage() {
     const item = items.find(i => i.purchaseId === id);
     return item && getFinalPrice(item) > 0;
   }).length;
+
+  const applyableTotals = Array.from(selected).reduce(
+    (acc, id) => {
+      const item = items.find(i => i.purchaseId === id);
+      if (!item) return acc;
+      const newPrice = getFinalPrice(item);
+      if (newPrice <= 0) return acc;
+      return {
+        currentCents: acc.currentCents + (item.currentReviewedPriceCents ?? 0),
+        nextCents: acc.nextCents + newPrice,
+      };
+    },
+    { currentCents: 0, nextCents: 0 },
+  );
 
   const handleAcceptFocused = (index: number) => {
     const item = items[index];
@@ -186,17 +159,29 @@ export default function RepricePage() {
 
   const summary = data?.summary;
 
-  const confirmMessage = `This will update the reviewed price for ${applyableCount} card${applyableCount !== 1 ? 's' : ''}.${
-    applyableCount < selected.size ? ` (${selected.size - applyableCount} skipped — no price set)` : ''
-  } Continue?`;
+  const deltaCents = applyableTotals.nextCents - applyableTotals.currentCents;
+  const deltaSign = deltaCents > 0 ? '+' : deltaCents < 0 ? '−' : '';
+  const deltaText = applyableTotals.currentCents > 0
+    ? `Total list value: ${formatCents(applyableTotals.currentCents)} → ${formatCents(applyableTotals.nextCents)} (${deltaSign}${formatCents(Math.abs(deltaCents))}).`
+    : `Total list value: ${formatCents(applyableTotals.nextCents)}.`;
+  const skippedSuffix = applyableCount < selected.size ? ` (${selected.size - applyableCount} skipped, no price set)` : '';
+  const confirmMessage = `This will update the reviewed price for ${applyableCount} card${applyableCount !== 1 ? 's' : ''}.${skippedSuffix} ${deltaText} Continue?`;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 pb-16 space-y-4">
+    <div
+      className="max-w-7xl mx-auto px-4 pb-16 space-y-4"
+      aria-keyshortcuts="J ArrowDown K ArrowUp Enter Space Escape Slash ? Control+Enter"
+    >
       <Breadcrumb items={[
         { label: 'Inventory', href: '/inventory' },
         { label: 'Reprice' },
       ]} />
-      <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Reprice</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Reprice</h1>
+        <span className="text-xs text-[var(--text-muted)] hidden md:inline" aria-hidden>
+          Press <kbd className="px-1.5 py-0.5 rounded bg-[var(--surface-2)] font-mono text-[10px]">?</kbd> for shortcuts
+        </span>
+      </div>
 
       {summary && (
         <div className="flex flex-wrap items-end gap-x-8 gap-y-3 mb-2">
@@ -304,9 +289,16 @@ export default function RepricePage() {
                         <LinkDropdown links={links} stopPropagation />
                       </div>
                       <div className="text-[10px] text-[var(--text-muted)] truncate leading-tight">
-                        {item.setName && <>{item.setName}</>}
-                        {item.cardNumber && <> &middot; #{item.cardNumber}</>}
-                        {item.certNumber && <> &middot; {item.certNumber}</>}
+                        {[
+                          item.setName,
+                          item.cardNumber ? `#${item.cardNumber}` : null,
+                          item.certNumber,
+                        ].filter(Boolean).map((part, i) => (
+                          <span key={i}>
+                            {i > 0 && <> <span aria-hidden>&middot;</span> </>}
+                            {part}
+                          </span>
+                        ))}
                       </div>
                     </div>
                     <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '48px' }}>

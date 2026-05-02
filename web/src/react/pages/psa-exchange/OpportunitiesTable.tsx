@@ -95,7 +95,6 @@ interface DataRowProps {
 }
 
 function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps) {
-  const isHighLiq = row.tier === 'high_liquidity';
   const isTopDecile = row.score >= topDecileScore;
   const days = daysToSell(row);
   const grade = Number(row.grade) || 0;
@@ -111,7 +110,6 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
       <td
         className={clsx(
           'w-12 p-2',
-          isHighLiq && !isMember && 'border-l-2 border-[var(--brand-400)]',
           isMember && 'pl-8',
         )}
       >

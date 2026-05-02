@@ -82,7 +82,7 @@ function InlinePrice({ market, buyCostCents }: { market?: MarketSnapshot; buyCos
 const STALL_THRESHOLD_SEC = 60;
 
 function syncBlockerLabel(row: CertRow): string {
-  if (row.dhPushStatus === 'unmatched') return 'DH match failed — Fix DH Match';
+  if (row.dhPushStatus === 'unmatched') return 'DH match failed: Fix DH Match';
   if (row.dhPushStatus === 'held') return 'DH push held for review';
   if (row.dhPushStatus === 'dismissed') return 'DH push dismissed';
   const inv = hasDHInventory(row);
@@ -106,11 +106,11 @@ function SyncingIndicator({ row }: { row: CertRow }) {
   const color = stalled ? 'var(--warning)' : 'var(--brand-400)';
   const textColor = stalled ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]';
   const title = pushStuck
-    ? 'Push pipeline is blocked — use Fix DH Match or dismiss this row.'
+    ? 'Push pipeline is blocked. Use Fix DH Match or dismiss this row.'
     : stalled
-      ? `Stalled ${elapsedSec}s — try Fix DH Match or dismiss and retry from the Inventory tab.`
+      ? `Stalled ${elapsedSec}s. Try Fix DH Match or dismiss and retry from the Inventory tab.`
       : undefined;
-  const trailing = pushStuck ? '' : stalled ? ' — stalled' : '…';
+  const trailing = pushStuck ? '' : stalled ? ' (stalled)' : '…';
   return (
     <span
       className={`inline-flex items-center gap-1.5 text-[10px] ${textColor}`}
@@ -175,7 +175,7 @@ export function CertRowItem({
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border bg-[var(--surface-1)] transition-all ${
+      className={`overflow-hidden rounded-xl border bg-[var(--surface-1)] transition duration-200 ${
         highlighted ? 'border-[var(--warning)] ring-2 ring-[var(--warning)]/30' : 'border-[var(--surface-2)]'
       }`}
       style={{ borderLeft: `2px solid ${s.leftBorder}` }}

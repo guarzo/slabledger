@@ -16,7 +16,7 @@ export function ProgressBar({ value, max, warningThreshold, dangerThreshold, inv
   }
   return (
     <div className="w-full bg-[var(--surface-2)] rounded-full h-2.5 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
-      <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} aria-hidden="true" />
+      <div className={`h-full rounded-full transition-[width] duration-500 ${color}`} style={{ width: `${pct}%` }} aria-hidden="true" />
     </div>
   );
 }
