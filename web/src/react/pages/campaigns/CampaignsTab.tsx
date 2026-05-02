@@ -163,7 +163,7 @@ export default function CampaignsTab({
                           title={`${pnl.totalSold}/${pnl.totalPurchases} sold`}
                         >
                           <div
-                            className="h-full rounded-full transition-all duration-300"
+                            className="h-full rounded-full transition-[width] duration-300"
                             style={{
                               width: `${st * 100}%`,
                               background: st >= 0.5 ? 'var(--success)' : st >= 0.10 ? 'var(--warning)' : 'var(--danger)',

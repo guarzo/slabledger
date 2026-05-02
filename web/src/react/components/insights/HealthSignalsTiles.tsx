@@ -27,7 +27,7 @@ export default function HealthSignalsTiles({ signals }: { signals: Signals }) {
         <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] px-4 py-3 flex items-center gap-2 text-sm">
           <span className="text-[var(--success)]" aria-hidden="true">✓</span>
           <span className="text-[var(--text)]">All clear</span>
-          <span className="text-[var(--text-muted)]">— no actionable signals right now</span>
+          <span className="text-[var(--text-muted)]">no actionable signals right now</span>
         </div>
       </section>
     );

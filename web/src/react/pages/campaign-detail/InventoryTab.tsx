@@ -71,6 +71,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleRetryDHMatch, dhRetryInFlight, handleSetPrice,
     handlePriceSaved, handleHintSaved, handleInlinePriceSave, handleDismiss, handleUndismiss, sellSheet, toast,
     handleDeselectMissingCL, handleHighlightMissingCL,
+    inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
   } = state;
 
   const rowVirtualizer = useVirtualizer({
@@ -299,7 +300,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         selected={isSelected}
                         onToggle={() => toggleSelect(item.purchase.id)}
                         onExpand={() => toggleExpand(item.purchase.id)}
-                        onRecordSale={() => openSaleModal([item])}
+                        onRecordSale={() => startInlineSale(item)}
                         onFixPricing={() => handleFixPricing(item.purchase)}
                         onFixDHMatch={() => handleFixDHMatch(item.purchase)}
                         onUnmatchDH={getOnUnmatchDH(item.purchase)}
@@ -320,7 +321,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         } : undefined}
                       />
                     </div>
-                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} />}
+                    {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} recordingSale={inlineSaleId === item.purchase.id} onCancelInlineSale={cancelInlineSale} onInlineSaleSuccess={handleInlineSaleSuccess} />}
                   </div>
                 );
               })}

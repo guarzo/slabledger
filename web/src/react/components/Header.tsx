@@ -78,7 +78,7 @@ export default function Header() {
         bg-[var(--surface-1)]/80
         border-b border-[rgba(255,255,255,0.06)]
         backdrop-blur-xl
-        transition-all duration-300
+        transition-shadow duration-300
         ${isScrolled ? 'shadow-md' : 'shadow-sm'}
       `}
       role="banner"

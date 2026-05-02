@@ -62,7 +62,7 @@ export default function InvoicesSection() {
 
       {invoices.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)] py-1">
-          No invoices yet — created automatically on PSA import.
+          No invoices yet. Created automatically on PSA import.
         </p>
       ) : (
         <div className="overflow-x-auto">

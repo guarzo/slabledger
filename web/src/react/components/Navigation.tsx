@@ -45,7 +45,7 @@ export default function Navigation({ mobile, onNavigate }: NavigationProps) {
           onClick={mobile ? onNavigate : undefined}
           className={`
             ${mobile ? 'flex items-center px-3.5 py-2.5' : 'relative inline-flex items-center px-3.5 py-2'}
-            text-sm rounded-md transition-all duration-200
+            text-sm rounded-md transition-colors duration-200
             ${isActive(item.path) ? activeClass : inactiveClass}
           `}
           title={item.label}

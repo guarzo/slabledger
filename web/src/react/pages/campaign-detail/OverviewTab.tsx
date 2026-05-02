@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -64,12 +64,28 @@ export default function OverviewTab({
   const { data: fillRate = [], isLoading: fillLoading } = useFillRate(campaignId, 30);
   const { data: daysToSell = [], isLoading: dtsLoading } = useDaysToSell(campaignId);
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
-  const analyticsLoading = pnlLoading || channelLoading || fillLoading || dtsLoading;
+  // Collapse the analytics disclosure when navigating to a different
+  // campaign — without this, useState retains the previous campaign's
+  // open/closed state.
+  useEffect(() => {
+    setShowAnalytics(false);
+  }, [campaignId]);
+
+  // Visible loading gates the channel section (always shown). Deep loading
+  // gates the histogram / fill-rate / daily-spend sections, which only
+  // render when the disclosure is expanded — splitting these means the
+  // channel breakdown surfaces immediately when its query resolves rather
+  // than waiting on the slower aggregations.
+  const visibleLoading = pnlLoading || channelLoading;
+  const deepLoading = fillLoading || dtsLoading;
   const maxDaysToSellCount = useMemo(
     () => daysToSell.reduce((max, x) => Math.max(max, x.count), 1),
     [daysToSell]
   );
+
+  const hasDeepAnalytics = daysToSell.length > 0 || fillRate.length > 0;
 
   return (
     <div
@@ -96,7 +112,7 @@ export default function OverviewTab({
       </div>
 
       {/* Analytics section */}
-      {analyticsLoading ? (
+      {visibleLoading ? (
         <div className="py-8 text-center"><PokeballLoader /></div>
       ) : (
         <>
@@ -131,6 +147,27 @@ export default function OverviewTab({
             </div>
           )}
 
+          {(hasDeepAnalytics || deepLoading) && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAnalytics(s => !s)}
+                aria-expanded={showAnalytics}
+                aria-controls="deep-analytics"
+                disabled={!hasDeepAnalytics && deepLoading}
+                className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text)] focus:outline-none focus-visible:text-[var(--text)] inline-flex items-center gap-1.5 py-1 disabled:opacity-60 disabled:cursor-wait"
+              >
+                <span aria-hidden className="inline-block transition-transform" style={{ transform: showAnalytics ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
+                {showAnalytics ? 'Hide analytics' : deepLoading && !hasDeepAnalytics ? 'Loading analytics…' : 'View analytics'}
+              </button>
+            </div>
+          )}
+
+          {showAnalytics && (
+          <div id="deep-analytics" className="space-y-6">
+          {deepLoading && !hasDeepAnalytics && (
+            <div className="py-6 text-center"><PokeballLoader /></div>
+          )}
           {daysToSell.length > 0 && (
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Days to Sell Distribution</h3>
@@ -142,7 +179,7 @@ export default function OverviewTab({
                       <div key={b.label} className="flex-1 flex flex-col items-center">
                         <div className="text-xs text-[var(--text)] mb-1 font-medium">{b.count}</div>
                         <div
-                          className="w-full rounded-t transition-all duration-300"
+                          className="w-full rounded-t"
                           style={{
                             height: `${Math.max(height, 4)}%`,
                             background: 'var(--brand-500)',
@@ -157,7 +194,7 @@ export default function OverviewTab({
             </div>
           )}
 
-          {fillRate.length > 0 && expectedFillRate && (() => {
+          {fillRate.length > 0 && expectedFillRate != null && (() => {
             const avgFillRatePct = fillRate.reduce((sum, d) => sum + (d.fillRatePct ?? 0), 0) / fillRate.length;
             const actualPct = avgFillRatePct * 100;
             const fillColor = actualPct >= expectedFillRate
@@ -206,6 +243,8 @@ export default function OverviewTab({
                 </table>
               </div>
             </div>
+          )}
+          </div>
           )}
         </>
       )}

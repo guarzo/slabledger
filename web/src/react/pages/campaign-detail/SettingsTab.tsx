@@ -127,7 +127,7 @@ export default function SettingsTab({ campaign, onUpdate, onDelete }: {
                     </span>
                     <div>
                       <span className="font-medium text-[var(--text)]">{check.name}</span>
-                      <span className="text-[var(--text-muted)] ml-1">— {check.message}</span>
+                      <span className="text-[var(--text-muted)] ml-1">: {check.message}</span>
                     </div>
                   </div>
                 ))}

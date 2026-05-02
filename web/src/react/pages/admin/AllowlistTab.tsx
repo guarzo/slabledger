@@ -47,7 +47,7 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
           onChange={e => setNewEmail(e.target.value)}
           placeholder="email@example.com"
           aria-label="Email address"
-          className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface-0)]/60 border border-[var(--surface-2)]/50 text-[var(--text)] text-sm placeholder:text-[var(--text-subtle)] focus:outline-none focus:border-[var(--brand-500)]/50 focus:bg-[var(--surface-0)] transition-all duration-200"
+          className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface-0)]/60 border border-[var(--surface-2)]/50 text-[var(--text)] text-sm placeholder:text-[var(--text-subtle)] focus:outline-none focus:border-[var(--brand-500)]/50 focus:bg-[var(--surface-0)] transition-colors duration-200"
           required
         />
         <input
@@ -56,7 +56,7 @@ export function AllowlistTab({ enabled = true }: { enabled?: boolean }) {
           onChange={e => setNotes(e.target.value)}
           placeholder="Notes (optional)"
           aria-label="Notes (optional)"
-          className="sm:w-48 px-3 py-2 rounded-lg bg-[var(--surface-0)]/60 border border-[var(--surface-2)]/50 text-[var(--text)] text-sm placeholder:text-[var(--text-subtle)] focus:outline-none focus:border-[var(--brand-500)]/50 focus:bg-[var(--surface-0)] transition-all duration-200"
+          className="sm:w-48 px-3 py-2 rounded-lg bg-[var(--surface-0)]/60 border border-[var(--surface-2)]/50 text-[var(--text)] text-sm placeholder:text-[var(--text-subtle)] focus:outline-none focus:border-[var(--brand-500)]/50 focus:bg-[var(--surface-0)] transition-colors duration-200"
         />
         <Button type="submit" loading={addMutation.isPending}>
           {addMutation.isPending ? 'Adding...' : 'Add Email'}

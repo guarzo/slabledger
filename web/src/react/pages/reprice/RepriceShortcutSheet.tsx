@@ -22,7 +22,9 @@ export default function RepriceShortcutSheet({ open, onClose }: RepriceShortcutS
     <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--surface-overlay)] data-[state=open]:animate-[fadeIn_150ms_ease-out]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-xl p-6 max-w-md w-[calc(100%-2rem)] shadow-xl data-[state=open]:animate-[scaleIn_150ms_ease-out]">
+        <Dialog.Content
+          className="fixed right-0 top-0 bottom-0 z-50 w-[min(420px,calc(100%-2rem))] bg-[var(--surface-1)] border-l border-[var(--surface-2)] p-6 shadow-2xl data-[state=open]:animate-[slideInFromRight_200ms_cubic-bezier(0.4,0,0.2,1)] flex flex-col"
+        >
           <Dialog.Title className="text-lg font-semibold text-[var(--text)] mb-4">
             Keyboard shortcuts
           </Dialog.Title>
@@ -39,7 +41,7 @@ export default function RepriceShortcutSheet({ open, onClose }: RepriceShortcutS
               ))}
             </tbody>
           </table>
-          <div className="flex justify-end mt-4">
+          <div className="flex justify-end mt-auto pt-4">
             <Dialog.Close asChild>
               <Button variant="ghost" size="sm">Close</Button>
             </Dialog.Close>

@@ -1,5 +1,5 @@
+import { Fragment } from 'react';
 import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
-import CardShell from '../../ui/CardShell';
 
 type TileStatus = 'healthy' | 'warning' | 'down' | 'unconfigured' | 'unknown';
 
@@ -29,7 +29,7 @@ function StatusDot({ status, label }: { status: TileStatus; label: string }) {
       role="img"
       aria-label={`${label}: ${STATUS_LABEL[status]}`}
       title={`${label}: ${STATUS_LABEL[status]}`}
-      className="inline-block rounded-full"
+      className="inline-block rounded-full shrink-0"
       style={{ width: 8, height: 8, background: color }}
     />
   );
@@ -37,14 +37,14 @@ function StatusDot({ status, label }: { status: TileStatus; label: string }) {
 
 function Tile({ label, status, metric, detail }: TileProps) {
   return (
-    <CardShell padding="sm" className="flex items-center gap-3 min-w-0">
+    <div className="flex items-center gap-2.5 min-w-0">
       <StatusDot status={status} label={label} />
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate">{label}</div>
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] truncate">{label}</div>
         <div className="text-sm font-semibold text-[var(--text)] tabular-nums truncate">{metric}</div>
         {detail && <div className="text-[10px] text-[var(--text-muted)] truncate">{detail}</div>}
       </div>
-    </CardShell>
+    </div>
   );
 }
 
@@ -93,12 +93,24 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
     : 'Unknown';
   const psaDetail = psaPending > 0 ? `${psaPending} pending` : undefined;
 
+  const tiles: TileProps[] = [
+    { label: 'DoubleHolo', status: dhStatus, metric: dhMetric, detail: dhDetail },
+    { label: 'Card Ladder', status: clStatus, metric: clMetric, detail: clDetail },
+    { label: 'Market Movers', status: mmStatus, metric: mmMetric, detail: mmDetail },
+    { label: 'PSA Sync', status: psaStatus, metric: psaMetric, detail: psaDetail },
+  ];
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <Tile label="DoubleHolo" status={dhStatus} metric={dhMetric} detail={dhDetail} />
-      <Tile label="Card Ladder" status={clStatus} metric={clMetric} detail={clDetail} />
-      <Tile label="Market Movers" status={mmStatus} metric={mmMetric} detail={mmDetail} />
-      <Tile label="PSA Sync" status={psaStatus} metric={psaMetric} detail={psaDetail} />
-    </div>
+    <section
+      className="flex flex-wrap items-center gap-x-7 gap-y-4 py-3 border-b border-[var(--surface-2)]/40"
+      aria-label="Integration health"
+    >
+      {tiles.map((t, i) => (
+        <Fragment key={t.label}>
+          {i > 0 && <div className="hidden sm:block w-px self-stretch bg-[rgba(255,255,255,0.05)]" aria-hidden />}
+          <Tile {...t} />
+        </Fragment>
+      ))}
+    </section>
   );
 }

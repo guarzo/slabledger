@@ -24,7 +24,7 @@ export default function InsightsPage() {
     <div className="max-w-6xl mx-auto px-4 space-y-6">
       <header className="flex items-baseline justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text)]">Insights</h1>
+          <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Insights</h1>
           <p className="text-sm text-[var(--text-muted)] mt-1">
             Actions you can take, signals unique to this page, and per-campaign tuning.
           </p>

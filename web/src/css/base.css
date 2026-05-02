@@ -99,7 +99,7 @@
 }
 .focus-ring:focus-visible {
   outline: 3px solid var(--color-focus);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 /* Virtualized row variant — data attributes instead of :nth-child */

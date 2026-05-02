@@ -39,7 +39,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
+    <div className="max-w-[1600px] mx-auto px-4">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Dashboard</h1>

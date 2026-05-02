@@ -7,8 +7,8 @@ export default function ScanPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Scan</h1>
-        <p className="text-sm text-zinc-400">Scan, match, and assign</p>
+        <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Scan</h1>
+        <p className="text-sm text-[var(--text-muted)]">Scan, match, and assign</p>
       </div>
 
       <SectionErrorBoundary sectionName="Card Intake">

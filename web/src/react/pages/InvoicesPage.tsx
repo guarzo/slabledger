@@ -172,21 +172,29 @@ function InvoicesContent() {
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <CardShell padding="md">
-          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Open invoices</div>
-          <div className="text-2xl font-bold text-[var(--text)] tabular-nums">{openInvoices.length}</div>
-        </CardShell>
-        <CardShell padding="md">
-          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Outstanding</div>
-          <div className="text-2xl font-bold text-[var(--warning)] tabular-nums">{formatCents(outstandingTotal)}</div>
-        </CardShell>
-        <CardShell padding="md">
-          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Pending receipt</div>
-          <div className="text-2xl font-bold text-[var(--text)] tabular-nums">{formatCents(pendingReceiptTotal)}</div>
-          <div className="text-[11px] text-[var(--text-muted)] mt-1">cards still at PSA</div>
-        </CardShell>
-      </div>
+      <section
+        className="flex flex-wrap items-end gap-x-7 gap-y-3 pb-6 mb-5 border-b border-[rgba(255,255,255,0.05)]"
+        aria-label="Invoice summary"
+      >
+        <div className="flex flex-col gap-1.5">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--brand-400)]">Outstanding</div>
+          <div className="text-[clamp(28px,3.5vw,40px)] font-extrabold leading-none tabular-nums text-[var(--warning)]">
+            {formatCents(outstandingTotal)}
+          </div>
+        </div>
+        <div className="w-px self-stretch bg-[rgba(255,255,255,0.05)] my-1" aria-hidden />
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-3 pb-1">
+          <div className="flex flex-col gap-1 min-w-[80px]">
+            <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Open invoices</div>
+            <div className="text-lg font-bold tabular-nums text-[var(--text)]">{openInvoices.length}</div>
+          </div>
+          <div className="flex flex-col gap-1 min-w-[80px]">
+            <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Pending receipt</div>
+            <div className="text-lg font-bold tabular-nums text-[var(--text)]">{formatCents(pendingReceiptTotal)}</div>
+            <div className="text-[9px] text-[var(--text-muted)] tracking-[0.06em] opacity-75">cards still at PSA</div>
+          </div>
+        </div>
+      </section>
 
       <CardShell padding="none">
         {/* Mobile: stacked cards — the 7-column table overflows <480px */}
