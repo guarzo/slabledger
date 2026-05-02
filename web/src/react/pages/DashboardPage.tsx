@@ -51,6 +51,7 @@ export default function DashboardPage() {
         capital={capitalData}
         needsAttentionCount={inventoryCounts.needsAttention}
         pendingListingsCount={inventoryCounts.pendingListings}
+        hideInvoiceChip
       />
 
       {/* Invoice Readiness */}

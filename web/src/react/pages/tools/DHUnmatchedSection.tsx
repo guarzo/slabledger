@@ -383,7 +383,7 @@ export default function DHUnmatchedSection() {
       ) : unmatchedLoading ? (
         <p className="text-sm text-[var(--text-muted)]">Loading unmatched cards...</p>
       ) : unmatchedData?.unmatched !== undefined ? (
-        <p className="text-sm text-[var(--text-muted)]">No unmatched cards — all inventory is mapped.</p>
+        <p className="text-sm text-[var(--text-muted)]">No unmatched cards.</p>
       ) : (
         <p className="text-sm text-[var(--danger)]">Failed to load unmatched cards.</p>
       )}

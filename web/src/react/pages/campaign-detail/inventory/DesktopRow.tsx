@@ -106,7 +106,7 @@ export default function DesktopRow({ item, selected, onToggle, onExpand, onRecor
       tabIndex={0}
       onClick={onExpand}
       onKeyDown={handleKeyDown}
-      style={{ borderLeft: `3px solid ${statusBorderColor(reviewStatus)}` }}
+      style={{ borderLeft: `2px solid ${statusBorderColor(reviewStatus)}` }}
     >
       <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }} onClick={e => e.stopPropagation()}>
         <input type="checkbox" checked={selected} onChange={onToggle} onKeyDown={e => e.stopPropagation()} className="rounded accent-[var(--brand-500)]" />

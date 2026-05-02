@@ -178,7 +178,7 @@ export function CertRowItem({
       className={`overflow-hidden rounded-xl border bg-[var(--surface-1)] transition-all ${
         highlighted ? 'border-[var(--warning)] ring-2 ring-[var(--warning)]/30' : 'border-[var(--surface-2)]'
       }`}
-      style={{ borderLeft: `3px solid ${s.leftBorder}` }}
+      style={{ borderLeft: `2px solid ${s.leftBorder}` }}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-2.5">
         <div className="flex items-center gap-3 min-w-0">
