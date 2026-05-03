@@ -17,6 +17,7 @@ export default function Navigation({ mobile, onNavigate }: NavigationProps) {
   const navItems = [
     { path: '/', label: 'Dashboard', shortLabel: 'Home' },
     { path: '/inventory', label: 'Inventory', shortLabel: 'Inventory' },
+    { path: '/sell-sheet', label: 'Sell Sheet', shortLabel: 'Sheet' },
     { path: '/campaigns', label: 'Campaigns', shortLabel: 'Campaigns' },
     { path: '/insights', label: 'Insights', shortLabel: 'Insights' },
     { path: '/opportunities/psa-exchange', label: 'Opportunities', shortLabel: 'Opps' },

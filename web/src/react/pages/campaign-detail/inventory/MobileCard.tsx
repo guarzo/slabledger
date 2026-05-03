@@ -21,7 +21,6 @@ interface MobileCardProps {
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
-  onRemoveFromSellSheet?: () => void;
   onUnmatchDH?: () => void;
   onRetryDHMatch?: () => void;
   onDismiss?: () => void;
@@ -30,10 +29,9 @@ interface MobileCardProps {
   dhListedOverride?: boolean;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
-  isOnSellSheet?: boolean;
 }
 
-export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onRemoveFromSellSheet, onUnmatchDH, onRetryDHMatch, onDismiss, onUndismiss, dhListingLoading, dhListedOverride, ev, showCampaignColumn, isOnSellSheet }: MobileCardProps) {
+export default function MobileCard({ item, selected, onToggle, onRecordSale, onFixPricing, onFixDHMatch, onSetPrice, onDelete, onListOnDH, onUnmatchDH, onRetryDHMatch, onDismiss, onUndismiss, dhListingLoading, dhListedOverride, ev, showCampaignColumn }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -85,7 +83,6 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
-              {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
               <TruncatedCardName name={item.purchase.cardName} className="text-[var(--text)] font-medium" />
               {item.purchase.cardName && item.purchase.setName && (
                 <MarketplaceLinks
@@ -258,17 +255,6 @@ export default function MobileCard({ item, selected, onToggle, onRecordSale, onF
             aria-label="Retry DH match"
           >
             Retry DH
-          </button>
-        )}
-        {isOnSellSheet && onRemoveFromSellSheet && (
-          <button
-            type="button"
-            onClick={onRemoveFromSellSheet}
-            className="text-xs text-[var(--text-muted)] underline"
-            title="Remove from sell sheet"
-            aria-label="Remove from sell sheet"
-          >
-            Remove
           </button>
         )}
         {wasUnlistedFromDH(item) && (

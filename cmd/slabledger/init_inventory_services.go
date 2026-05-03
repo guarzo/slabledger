@@ -25,11 +25,10 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
-// exportReaderComposite satisfies export.ExportReader by composing the three
+// exportReaderComposite satisfies export.ExportReader by composing the
 // required stores. Named explicitly so that adding methods to export.ExportReader
 // produces a compile error here if any store doesn't implement the new method.
 type exportReaderComposite struct {
-	*postgres.SellSheetStore
 	*postgres.PurchaseStore
 	*postgres.CampaignStore
 }
@@ -44,7 +43,6 @@ type campaignsInitResult struct {
 	financeStore     *postgres.FinanceStore
 	pricingStore     *postgres.PricingStore
 	dhStore          *postgres.DHStore
-	sellSheetStore   *postgres.SellSheetStore
 	certLookup       inventory.CertLookup
 	certEnrichJob    *scheduler.CertEnrichJob    // nil if PSA not configured
 	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL/MM schedulers exist
@@ -81,7 +79,6 @@ func initializeCampaignsService(
 	financeStore := postgres.NewFinanceStore(db.DB, logger)
 	pricingStore := postgres.NewPricingStore(db.DB, logger)
 	dhStore := postgres.NewDHStore(db.DB, logger)
-	sellSheetStore := postgres.NewSellSheetStore(db.DB, logger)
 
 	priceLookupAdapter := lookup.NewAdapter(priceProvImpl)
 	campaignOpts := []inventory.ServiceOption{
@@ -221,9 +218,8 @@ func initializeCampaignsService(
 	}
 	// Create a minimal composite wrapper to satisfy ExportReader interface
 	exportReader := &exportReaderComposite{
-		SellSheetStore: sellSheetStore,
-		PurchaseStore:  purchaseStore,
-		CampaignStore:  campaignStore,
+		PurchaseStore: purchaseStore,
+		CampaignStore: campaignStore,
 	}
 	exportSvc = export.New(exportReader, exportOpts...)
 
@@ -239,7 +235,6 @@ func initializeCampaignsService(
 		financeStore:     financeStore,
 		pricingStore:     pricingStore,
 		dhStore:          dhStore,
-		sellSheetStore:   sellSheetStore,
 		certLookup:       certLookup,
 		certEnrichJob:    certEnrichJobForSvc,
 		pricingEnrichJob: pricingEnrichJob,

@@ -433,7 +433,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		FinanceService:     financeService,
 		ExportService:      exportService,
 		PurchaseStore:      campaignsInit.purchaseStore,
-		SellSheetStore:     campaignsInit.sellSheetStore,
 		CardIDMappingRepo:  cardIDMappingRepo,
 		IntelRepo:          intelRepo,
 		TrajectoryRepo:     trajectoryRepo,

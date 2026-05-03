@@ -104,6 +104,7 @@ type SellSheetItem struct {
 	CardNumber            string            `json:"cardNumber,omitempty"`
 	Grade                 float64           `json:"grade"`
 	Grader                string            `json:"grader,omitempty"`
+	CardYear              string            `json:"cardYear,omitempty"`
 	Population            int               `json:"population,omitempty"`
 	BuyCostCents          int               `json:"buyCostCents"`
 	CostBasisCents        int               `json:"costBasisCents"`
