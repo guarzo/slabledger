@@ -112,14 +112,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/sell-sheet", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/inventory", rt.spaHandler.HandleIndex)
 
-	// Sell sheet item persistence
-	if rt.sellSheetItemsHandler != nil && rt.authMW != nil {
-		mux.Handle("GET /api/sell-sheet/items", rt.authMW.RequireAuth(http.HandlerFunc(rt.sellSheetItemsHandler.HandleGetItems)))
-		mux.Handle("PUT /api/sell-sheet/items", rt.authMW.RequireAuth(http.HandlerFunc(rt.sellSheetItemsHandler.HandleAddItems)))
-		mux.Handle("DELETE /api/sell-sheet/items", rt.authMW.RequireAuth(http.HandlerFunc(rt.sellSheetItemsHandler.HandleRemoveItems)))
-		mux.Handle("DELETE /api/sell-sheet/items/all", rt.authMW.RequireAuth(http.HandlerFunc(rt.sellSheetItemsHandler.HandleClearItems)))
-	}
-
 	// Campaign CRUD
 	mux.Handle("GET /api/campaigns", authRoute(rt.campaignsHandler.HandleListCampaigns))
 	mux.Handle("POST /api/campaigns", authRoute(rt.campaignsHandler.HandleCreateCampaign))

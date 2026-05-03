@@ -15,42 +15,10 @@ import (
 // stubExportReader implements export.ExportReader for testing.
 // Each method delegates to a function field; nil fields return safe defaults.
 type stubExportReader struct {
-	getSellSheetItemsFn      func(ctx context.Context) ([]string, error)
-	addSellSheetItemsFn      func(ctx context.Context, purchaseIDs []string) error
-	removeSellSheetItemsFn   func(ctx context.Context, purchaseIDs []string) error
-	clearSellSheetFn         func(ctx context.Context) error
 	getPurchasesByIDsFn      func(ctx context.Context, purchaseIDs []string) (map[string]*inventory.Purchase, error)
 	listAllUnsoldPurchasesFn func(ctx context.Context) ([]inventory.Purchase, error)
 	getCampaignFn            func(ctx context.Context, id string) (*inventory.Campaign, error)
 	listCampaignsFn          func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
-}
-
-func (s *stubExportReader) GetSellSheetItems(ctx context.Context) ([]string, error) {
-	if s.getSellSheetItemsFn != nil {
-		return s.getSellSheetItemsFn(ctx)
-	}
-	return []string{}, nil
-}
-
-func (s *stubExportReader) AddSellSheetItems(ctx context.Context, purchaseIDs []string) error {
-	if s.addSellSheetItemsFn != nil {
-		return s.addSellSheetItemsFn(ctx, purchaseIDs)
-	}
-	return nil
-}
-
-func (s *stubExportReader) RemoveSellSheetItems(ctx context.Context, purchaseIDs []string) error {
-	if s.removeSellSheetItemsFn != nil {
-		return s.removeSellSheetItemsFn(ctx, purchaseIDs)
-	}
-	return nil
-}
-
-func (s *stubExportReader) ClearSellSheet(ctx context.Context) error {
-	if s.clearSellSheetFn != nil {
-		return s.clearSellSheetFn(ctx)
-	}
-	return nil
 }
 
 func (s *stubExportReader) GetPurchasesByIDs(ctx context.Context, purchaseIDs []string) (map[string]*inventory.Purchase, error) {
