@@ -5,49 +5,30 @@
   justify-content: center;
   min-height: 100vh;
   padding: var(--space-6);
-  background: linear-gradient(135deg, var(--bg) 0%, var(--surface-1) 100%);
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 30%, rgba(99, 102, 241, 0.10), transparent 70%),
+    linear-gradient(180deg, var(--bg) 0%, var(--surface-0) 100%);
   gap: var(--space-6);
   position: relative;
   overflow: hidden;
 }
 
-/* Animated background orbs */
-.login-page::before,
-.login-page::after {
+/* Subtle horizon line — replaces the floating gradient orbs */
+.login-page::before {
   content: '';
   position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.4;
-  animation: float 8s ease-in-out infinite;
+  left: 0;
+  right: 0;
+  bottom: 30%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08) 30%,
+    rgba(255, 255, 255, 0.08) 70%,
+    transparent
+  );
   pointer-events: none;
-}
-
-.login-page::before {
-  width: 400px;
-  height: 400px;
-  background: var(--gradient-brand-orb-primary);
-  top: -100px;
-  right: -100px;
-  animation-delay: 0s;
-}
-
-.login-page::after {
-  width: 300px;
-  height: 300px;
-  background: var(--gradient-brand-orb-secondary);
-  bottom: -50px;
-  left: -50px;
-  animation-delay: -4s;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(30px, -30px) scale(1.1);
-  }
 }
 
 .login-container {
@@ -67,29 +48,32 @@
 }
 
 .login-page > .login-header h1 {
-  font-size: clamp(2rem, 8vw, 3.5rem);
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 6vw, 3rem);
+  font-weight: 500;
+  font-style: italic;
   margin: 0;
-  background: var(--gradient-brand-extended);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: -0.02em;
-  text-shadow: var(--glow-brand);
-  animation: titleGlow 3s ease-in-out infinite alternate;
+  color: var(--color-heading);
+  letter-spacing: -0.025em;
+  font-feature-settings: "ss01", "ss02";
 }
 
-/* `filter` requires a filter-function (drop-shadow, blur, etc.), not a
-   bare box-shadow value. The glow tokens are shadow shorthands, so we
-   inline the same numeric values here as drop-shadow() so the animation
-   actually renders. */
-@keyframes titleGlow {
-  from {
-    filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.3));
-  }
-  to {
-    filter: drop-shadow(0 0 40px rgba(139, 92, 246, 0.5));
-  }
+/* Small slab/diamond mark above the wordmark — gives the login a deliberate
+   identity instead of relying on glow effects. */
+.login-page > .login-header h1::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto var(--space-3);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--brand-400) 20%,
+    var(--brand-400) 80%,
+    transparent
+  );
+  opacity: 0.7;
 }
 
 /* "Powered by Card Yeti" — demoted from primary brand to attribution at the bottom of the auth card */
@@ -97,16 +81,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-1-5);
   margin-top: var(--space-5);
   padding-top: var(--space-4);
-  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-  opacity: 0.7;
-  transition: opacity var(--transition-base);
-}
-
-.login-powered-by:hover {
-  opacity: 0.95;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .login-powered-by-label {

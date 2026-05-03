@@ -132,7 +132,7 @@ export default function SellSheetPage() {
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold">Sell Sheet</h1>
+        <h1 className="page-title">Sell Sheet</h1>
         <div className="text-sm text-[var(--text-muted)] mt-1">
           All Inventory · {slices.totalItemCount} cards in hand ·{' '}
           {dollars(slices.totalAskCents)} total ask

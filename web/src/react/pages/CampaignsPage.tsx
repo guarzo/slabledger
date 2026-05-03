@@ -315,7 +315,7 @@ export default function CampaignsPage() {
   return (
     <div className="max-w-6xl mx-auto px-4">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Campaigns</h1>
+        <h1 className="page-title">Campaigns</h1>
         <div className="flex items-center gap-3">
           <Button
             size="sm"

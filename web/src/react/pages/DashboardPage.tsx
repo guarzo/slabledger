@@ -43,7 +43,7 @@ export default function DashboardPage() {
     <div className="max-w-[1600px] mx-auto px-4">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Dashboard</h1>
+        <h1 className="page-title">Dashboard</h1>
       </div>
 
       {/* Tier 1: Hero Stats Bar */}
