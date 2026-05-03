@@ -218,7 +218,7 @@ export default function DesktopRow({
       </div>
 
       {/* Cost */}
-      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text-muted)] tabular-nums" style={{ width: '72px' }}>
+      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text-muted)] tabular-nums" style={{ width: '100px' }}>
         {formatCents(cb)}
       </div>
 
