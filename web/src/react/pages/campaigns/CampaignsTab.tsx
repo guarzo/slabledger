@@ -147,17 +147,21 @@ export default function CampaignsTab({
                     render unconditionally so columns stay aligned with the
                     header even when pnl hasn't loaded for a given campaign. */}
                 <div className="flex items-center gap-4 flex-shrink-0 text-xs text-[var(--text-muted)]">
-                  {/* P&L + ROI */}
+                  {/* P&L + ROI. The visual column header is aria-hidden, so
+                      each value carries its own metric label for screen
+                      readers via aria-label. */}
                   <div className="hidden sm:flex items-center gap-3">
                     <span
                       className={`font-medium tabular-nums text-right ${pnl ? profitColor : ''}`}
                       style={{ minWidth: '5rem' }}
+                      aria-label={pnl ? `Net profit ${formatCents(pnl.netProfitCents)}` : 'Net profit unavailable'}
                     >
                       {pnl ? formatCents(pnl.netProfitCents) : ''}
                     </span>
                     <span
                       className={`font-medium tabular-nums text-right ${pnl ? profitColor : ''}`}
                       style={{ minWidth: '3rem' }}
+                      aria-label={pnl ? `ROI ${formatPct(pnl.roi)}` : 'ROI unavailable'}
                     >
                       {pnl ? formatPct(pnl.roi) : ''}
                     </span>

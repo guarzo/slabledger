@@ -140,7 +140,10 @@ export default function InventoryHeader({
               </span>
             </>
           )}
-          {isFiltering && (
+          {/* Filter-tab summary. Search has its own dedicated summary line
+              below the filter pills, so this fragment only renders for
+              non-search filter narrowing — the two are mutually exclusive. */}
+          {isFiltering && !debouncedSearch && (
             <>
               <span className="text-[var(--text-muted)]">·</span>
               <span className="text-[var(--text-subtle)] tabular-nums">
