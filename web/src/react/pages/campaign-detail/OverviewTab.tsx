@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import PokeballLoader from '../../PokeballLoader';
-import { formatCents, formatPct } from '../../utils/formatters';
+import { formatCents, formatDollarsWhole, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import CardShell from '../../ui/CardShell';
 import { saleChannelLabels } from '../../utils/campaignConstants';
@@ -108,7 +108,7 @@ export default function OverviewTab({
       <div className="flex flex-wrap gap-x-6 gap-y-2 px-1 text-sm text-[var(--text-muted)]">
         <span><span className="text-[var(--text)] font-medium tabular-nums">{saleCount}</span> sold</span>
         <span><span className="text-[var(--text)] font-medium tabular-nums">{unsoldCount}</span> unsold</span>
-        <span>Daily cap <span className="text-[var(--text)] font-medium tabular-nums">{formatCents(dailySpendCapCents)}</span></span>
+        <span>Daily cap <span className="text-[var(--text)] font-medium tabular-nums">{formatDollarsWhole(dailySpendCapCents)}</span></span>
       </div>
 
       {/* Analytics section */}

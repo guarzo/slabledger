@@ -166,13 +166,13 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               <input type="checkbox" aria-label="Select all visible cards" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
                 onChange={toggleAll} className="rounded accent-[var(--brand-500)]" />
             </div>
-            <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0 max-w-[320px]" />
-            <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '64px' }} />
-            <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '100px' }} />
-            <SortableHeader label="List / Rec" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '180px' }} />
-            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '80px' }} />
-            <SortableHeader label="Status" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '120px' }} />
-            <div className="glass-table-th flex-shrink-0 text-left print-hide-actions ml-2 pl-3" style={{ minWidth: '200px' }}>Actions</div>
+            <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-[260px]" />
+            <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center flex-shrink-0" style={{ width: '56px' }} />
+            <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right flex-shrink-0" style={{ width: '96px' }} />
+            <SortableHeader label="List / Rec" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right flex-shrink-0" style={{ width: '168px' }} />
+            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col flex-shrink-0" style={{ width: '88px' }} />
+            <SortableHeader label="Status" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col flex-shrink-0" style={{ width: '112px' }} />
+            <div className="glass-table-th flex-shrink-0 text-left print-hide-actions ml-2 pl-3" style={{ width: '220px' }}>Actions</div>
           </div>
           {/* Rows */}
           {filteredAndSortedItems.length === 0 && (
@@ -180,7 +180,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
             </div>
           )}
-          <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
+          <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto overflow-x-auto scrollbar-dark">
             <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
               {rowVirtualizer.getVirtualItems().map(virtualRow => {
                 const item = filteredAndSortedItems[virtualRow.index];

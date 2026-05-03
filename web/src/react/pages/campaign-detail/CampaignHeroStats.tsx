@@ -95,6 +95,7 @@ export default function CampaignHeroStats({
         <HeroStat
           testId="stat-value-sell-through"
           label="Sell-Through"
+          labelTitle="Percent of cards purchased that have been sold."
           value={hasPurchases ? `${sellThroughPct}%` : DASH}
         />
         <HeroStat
@@ -105,6 +106,7 @@ export default function CampaignHeroStats({
         <HeroStat
           testId="stat-value-avg-days"
           label="Avg Days to Sell"
+          labelTitle="Average number of days between PSA receipt and sale."
           value={hasSales && avgDaysToSell !== null ? avgDaysToSell.toFixed(1) : DASH}
         />
       </div>
@@ -115,11 +117,13 @@ export default function CampaignHeroStats({
 function HeroStat({
   testId,
   label,
+  labelTitle,
   value,
   tone,
 }: {
   testId: string;
   label: string;
+  labelTitle?: string;
   value: string;
   tone?: 'success' | 'problem' | 'atRisk' | 'waiting';
 }) {
@@ -131,7 +135,17 @@ function HeroStat({
   };
   return (
     <div className={styles.stat}>
-      <div className={styles.statLabel}>{label}</div>
+      {labelTitle ? (
+        <abbr
+          className={styles.statLabel}
+          title={labelTitle}
+          style={{ textDecoration: 'none', cursor: 'help', display: 'block' }}
+        >
+          {label}
+        </abbr>
+      ) : (
+        <div className={styles.statLabel}>{label}</div>
+      )}
       <div data-testid={testId} className={clsx(styles.statValue, tone && TONE_CLASS[tone])}>
         {value}
       </div>

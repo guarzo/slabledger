@@ -50,6 +50,19 @@ export function formatCents(cents: number | null | undefined): string {
 }
 
 /**
+ * Format cents as a whole-dollar USD currency string (no cents).
+ * Use for policy/cap values where cents are not meaningful (e.g., "Daily cap $5,000").
+ */
+export function formatDollarsWhole(cents: number | null | undefined): string {
+  return ((cents ?? 0) / 100).toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
+/**
  * Convert cents to a plain dollar string without currency symbol (e.g., "250.00").
  * Use for editable price fields where the "$" is rendered separately.
  */

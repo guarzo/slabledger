@@ -57,6 +57,7 @@ const PAGES = [
   { name: 'campaign-detail', path: () => `/campaigns/${firstCampaignId || 'unknown'}` },
   { name: 'inventory', path: '/inventory', filterTab: 'Needs Attention' },
   { name: 'inventory-expanded', path: '/inventory', filterTab: 'Needs Attention', expandRow: true, desktopOnly: true },
+  { name: 'sell-sheet', path: '/sell-sheet' },
   { name: 'reprice', path: '/reprice' },
   { name: 'scan', path: '/scan' },
   { name: 'admin-users', path: '/admin' },
