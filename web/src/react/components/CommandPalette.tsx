@@ -94,12 +94,15 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
             <input
               ref={inputRef}
               type="text"
+              role="combobox"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder="Jump to a page…"
               className="flex-1 bg-transparent text-[var(--text)] placeholder-[var(--text-subtle)] text-base outline-none"
               aria-autocomplete="list"
+              aria-haspopup="listbox"
+              aria-expanded={results.length > 0}
               aria-controls="command-palette-results"
               aria-activedescendant={results[activeIndex] ? `cmd-item-${activeIndex}` : undefined}
             />

@@ -193,7 +193,7 @@ function MobileDrawer({ currentPath, onNavigate, isAdmin }: { currentPath: strin
   }
 
   return (
-    <nav className="flex flex-col gap-1 px-4 py-3" aria-label="Main navigation">
+    <nav className="flex flex-col gap-1 px-4 py-3" role="navigation" aria-label="Main navigation">
       {sections.map((section) => (
         <div key={section.key} className="mb-2 last:mb-0">
           <div className="text-2xs uppercase tracking-wider text-[var(--text-subtle)] font-semibold px-3 py-1">
@@ -242,10 +242,19 @@ export default function Header() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenuOpen(false);
       const isPaletteShortcut = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
-      if (isPaletteShortcut) {
-        e.preventDefault();
-        setPaletteOpen((prev) => !prev);
+      if (!isPaletteShortcut) return;
+      // Don't hijack ⌘K when the user is typing in an input, textarea, or
+      // contenteditable surface — the palette is a global navigation aid,
+      // not an editor escape.
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
       }
+      e.preventDefault();
+      // Open-only — match PaletteButton's onOpen behavior. Esc and outside-
+      // click already handle close, so the shortcut never needs to toggle.
+      setPaletteOpen(true);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);

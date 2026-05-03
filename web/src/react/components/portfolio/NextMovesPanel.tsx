@@ -28,14 +28,39 @@ const toneClass: Record<Tone, string> = {
 };
 
 export default function NextMovesPanel() {
-  const { data: capital } = useCapitalSummary();
-  const { data: inventory } = useGlobalInventory();
+  const capitalQuery = useCapitalSummary();
+  const inventoryQuery = useGlobalInventory();
   const liquidation = useLiquidationPreview(DEFAULT_DISCOUNT_WITH_COMPS, DEFAULT_DISCOUNT_NO_COMPS);
 
+  const capital = capitalQuery.data;
+  const inventory = inventoryQuery.data;
+
+  // Aggregate loading/error/timestamps across all three signal sources. A
+  // panel that claims "All clear" while one of these is still fetching or
+  // errored would mislead the operator.
+  const isInitialLoading =
+    (liquidation.isLoading && !liquidation.data) ||
+    (capitalQuery.isLoading && !capitalQuery.data) ||
+    (inventoryQuery.isLoading && !inventoryQuery.data);
+  const isError = liquidation.isError || capitalQuery.isError || inventoryQuery.isError;
+  const isAnyFetching = liquidation.isFetching || capitalQuery.isFetching || inventoryQuery.isFetching;
+  const allTimestamps = [
+    liquidation.dataUpdatedAt,
+    capitalQuery.dataUpdatedAt,
+    inventoryQuery.dataUpdatedAt,
+  ].filter((ts): ts is number => typeof ts === 'number' && ts > 0);
+  const latestUpdatedAt = allTimestamps.length > 0 ? Math.max(...allTimestamps) : 0;
+
   const lastReviewedAt = useMemo(() => {
-    const ts = liquidation.dataUpdatedAt || Date.now();
+    const ts = latestUpdatedAt || Date.now();
     return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }, [liquidation.dataUpdatedAt]);
+  }, [latestUpdatedAt]);
+
+  const refetchAll = () => {
+    void liquidation.refetch();
+    void capitalQuery.refetch();
+    void inventoryQuery.refetch();
+  };
 
   const moves = useMemo<MoveRow[]>(() => {
     const out: MoveRow[] = [];
@@ -84,8 +109,6 @@ export default function NextMovesPanel() {
     return out.slice(0, 3);
   }, [capital, inventory, liquidation.data]);
 
-  const isLoading = liquidation.isLoading && !liquidation.data;
-
   return (
     <section
       aria-labelledby="next-moves-heading"
@@ -106,7 +129,7 @@ export default function NextMovesPanel() {
         </Link>
       </div>
 
-      {isLoading ? (
+      {isInitialLoading ? (
         <ul className="divide-y divide-[rgba(255,255,255,0.03)]">
           {[0, 1, 2].map((i) => (
             <li key={i} className="flex items-center justify-between py-2 text-sm">
@@ -114,6 +137,19 @@ export default function NextMovesPanel() {
             </li>
           ))}
         </ul>
+      ) : isError ? (
+        <div className="flex items-baseline gap-2 py-1 text-sm">
+          <span className="text-[var(--danger)]" aria-hidden="true">▸</span>
+          <span className="text-[var(--text)]">Couldn't load all signals</span>
+          <button
+            type="button"
+            onClick={refetchAll}
+            disabled={isAnyFetching}
+            className="ml-auto text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors focus-ring rounded-sm disabled:opacity-50"
+          >
+            {isAnyFetching ? 'Retrying…' : 'Retry ›'}
+          </button>
+        </div>
       ) : moves.length === 0 ? (
         <div className="flex items-baseline gap-2 py-1 text-sm">
           <span className="text-[var(--success)]" aria-hidden="true">●</span>
@@ -121,11 +157,11 @@ export default function NextMovesPanel() {
           <span className="text-[var(--text-subtle)]">· last reviewed {lastReviewedAt}</span>
           <button
             type="button"
-            onClick={() => liquidation.refetch()}
-            disabled={liquidation.isFetching}
+            onClick={refetchAll}
+            disabled={isAnyFetching}
             className="ml-auto text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors focus-ring rounded-sm disabled:opacity-50"
           >
-            {liquidation.isFetching ? 'Refreshing…' : 'Refresh ›'}
+            {isAnyFetching ? 'Refreshing…' : 'Refresh ›'}
           </button>
         </div>
       ) : (
