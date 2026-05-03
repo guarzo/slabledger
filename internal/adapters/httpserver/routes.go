@@ -108,7 +108,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 
 	// Global sell sheet & inventory endpoints
 	mux.Handle("GET /api/sell-sheet", authRoute(rt.campaignsHandler.HandleGlobalSellSheet))
-	mux.Handle("POST /api/portfolio/sell-sheet", authRoute(rt.campaignsHandler.HandleSelectedSellSheet))
 	mux.Handle("GET /api/inventory", authRoute(rt.campaignsHandler.HandleGlobalInventory))
 	mux.HandleFunc("/sell-sheet", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/inventory", rt.spaHandler.HandleIndex)
@@ -146,7 +145,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/campaigns/{id}/fill-rate", authRoute(rt.campaignsHandler.HandleFillRate))
 	mux.Handle("GET /api/campaigns/{id}/days-to-sell", authRoute(rt.campaignsHandler.HandleDaysToSell))
 	mux.Handle("GET /api/campaigns/{id}/inventory", authRoute(rt.campaignsHandler.HandleInventory))
-	mux.Handle("POST /api/campaigns/{id}/sell-sheet", authRoute(rt.campaignsHandler.HandleSellSheet))
 	mux.Handle("GET /api/campaigns/{id}/tuning", authRoute(rt.campaignsHandler.HandleTuning))
 	mux.Handle("GET /api/campaigns/{id}/crack-candidates", authRoute(rt.campaignsHandler.HandleCrackCandidates))
 	mux.Handle("GET /api/campaigns/{id}/expected-values", authRoute(rt.campaignsHandler.HandleExpectedValues))
@@ -351,7 +349,6 @@ var TrackedEndpoints = []string{
 	"/api/portfolio/weekly-review",
 	"/api/portfolio/weekly-history",
 	"/api/campaigns/{id}/tuning",
-	"/api/campaigns/{id}/sell-sheet",
 	"/api/insights/overview",
 }
 
