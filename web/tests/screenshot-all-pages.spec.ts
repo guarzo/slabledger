@@ -93,7 +93,9 @@ async function screenshotPage(
   try {
     await page.waitForSelector('#main-content', { timeout: 10000 });
     await page.waitForFunction(() => {
-      const loaders = document.querySelectorAll('[data-testid="pokeball-loader"]');
+      const loaders = document.querySelectorAll(
+        '[data-testid="pokeball-loader"], [data-testid="opportunities-skeleton"]',
+      );
       if (loaders.length > 0) return false;
       const main = document.querySelector('#main-content');
       return main && main.textContent && main.textContent.trim().length > 30;

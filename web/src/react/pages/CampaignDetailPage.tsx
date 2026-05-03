@@ -59,10 +59,7 @@ export default function CampaignDetailPage() {
 
   return (
     <div className="max-w-[1600px] mx-auto px-4">
-      <Breadcrumb items={[
-        { label: 'Campaigns', href: '/campaigns' },
-        { label: campaign.name },
-      ]} />
+      <Breadcrumb items={[{ label: 'Campaigns', href: '/campaigns' }]} />
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[var(--text)] leading-tight">{campaign.name}</h1>
