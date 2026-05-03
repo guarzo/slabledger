@@ -57,7 +57,6 @@ type ServerDependencies struct {
 	DHPriceSyncService        domainDHPricing.Service          // optional: async DH price re-sync on reviewed-price edits
 	ExportService             domainExport.Service             // optional: sell sheet and eBay export
 	FinanceService            domainFinance.Service            // optional: finance operations
-	SellSheetItemsHandler     *handlers.SellSheetItemsHandler  // Sell sheet persistence; nil = disabled
 	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
 	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
 	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
@@ -216,7 +215,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		PSAExchangeHandler:        deps.PSAExchangeHandler,
 		DHHandler:                 deps.DHHandler,
 		DHReconcileHandler:        deps.DHReconcileHandler,
-		SellSheetItemsHandler:     deps.SellSheetItemsHandler,
 		CardCatalogHandler:        deps.CardCatalogHandler,
 		NichesHandler:             deps.NichesHandler,
 		CampaignSignalsHandler:    deps.CampaignSignalsHandler,

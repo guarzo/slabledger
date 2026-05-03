@@ -14,9 +14,7 @@ type CrackCandidateProvider func(ctx context.Context) map[string]bool
 // Service handles sell sheet generation.
 type Service interface {
 	// Sell sheet
-	GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*inventory.SellSheet, error)
 	GenerateGlobalSellSheet(ctx context.Context) (*inventory.SellSheet, error)
-	GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*inventory.SellSheet, error)
 }
 
 // service is the concrete implementation of Service.

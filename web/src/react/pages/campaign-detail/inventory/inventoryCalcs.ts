@@ -171,7 +171,6 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
 
 export type FilterTab =
   | 'needs_attention'
-  | 'sell_sheet'
   | 'all'
   | 'awaiting_intake'
   | 'pending_dh_match'
@@ -225,14 +224,13 @@ export function filterAndSortItems(
     debouncedSearch: string;
     showAll: boolean;
     filterTab: FilterTab;
-    sellSheetHas: (id: string) => boolean;
     sortKey: SortKey;
     sortDir: SortDir;
     evMap: Map<string, ExpectedValue>;
     pinnedIds?: ReadonlySet<string>;
   },
 ): AgingItem[] {
-  const { debouncedSearch, showAll, filterTab, sellSheetHas, sortKey, sortDir, evMap } = opts;
+  const { debouncedSearch, showAll, filterTab, sortKey, sortDir, evMap } = opts;
 
   if (opts.pinnedIds && opts.pinnedIds.size > 0) {
     const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
@@ -248,9 +246,7 @@ export function filterAndSortItems(
       (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
     );
   } else if (!showAll) {
-    if (filterTab === 'sell_sheet') {
-      result = result.filter(i => sellSheetHas(i.purchase.id) && !!i.purchase.receivedAt);
-    } else if (filterTab === 'in_hand') {
+    if (filterTab === 'in_hand') {
       // Legacy alias: treat as `all`.
       // result stays as-is
     } else if (filterTab !== 'all') {

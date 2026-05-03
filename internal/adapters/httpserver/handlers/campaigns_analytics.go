@@ -131,42 +131,6 @@ func (h *CampaignsHandler) HandleInventory(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, result)
 }
 
-// HandleSellSheet handles POST /api/campaigns/{id}/sell-sheet.
-func (h *CampaignsHandler) HandleSellSheet(w http.ResponseWriter, r *http.Request) {
-	if h.exportService == nil {
-		writeError(w, http.StatusServiceUnavailable, "Export service not available")
-		return
-	}
-
-	id, ok := pathID(w, r, "id", "Campaign ID")
-	if !ok {
-		return
-	}
-
-	var req struct {
-		PurchaseIDs []string `json:"purchaseIds"`
-	}
-	if !decodeBody(w, r, &req) {
-		return
-	}
-	if len(req.PurchaseIDs) == 0 {
-		writeError(w, http.StatusBadRequest, "At least one purchase ID is required")
-		return
-	}
-
-	sheet, err := h.exportService.GenerateSellSheet(r.Context(), id, req.PurchaseIDs)
-	if err != nil {
-		if inventory.IsCampaignNotFound(err) {
-			writeError(w, http.StatusNotFound, "Campaign not found")
-			return
-		}
-		h.logger.Error(r.Context(), "sell sheet generation failed", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	writeJSON(w, http.StatusOK, sheet)
-}
-
 // HandleGlobalInventory handles GET /api/inventory.
 func (h *CampaignsHandler) HandleGlobalInventory(w http.ResponseWriter, r *http.Request) {
 	result, ok := serviceCall(w, r.Context(), h.logger, "failed to get global inventory", func() (*inventory.InventoryResult, error) {
@@ -187,38 +151,6 @@ func (h *CampaignsHandler) HandleGlobalSellSheet(w http.ResponseWriter, r *http.
 
 	sheet, ok := serviceCall(w, r.Context(), h.logger, "global sell sheet generation failed", func() (*inventory.SellSheet, error) {
 		return h.exportService.GenerateGlobalSellSheet(r.Context())
-	})
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, sheet)
-}
-
-// HandleSelectedSellSheet handles POST /api/portfolio/sell-sheet.
-func (h *CampaignsHandler) HandleSelectedSellSheet(w http.ResponseWriter, r *http.Request) {
-	if h.exportService == nil {
-		writeError(w, http.StatusServiceUnavailable, "Export service not available")
-		return
-	}
-
-	var req struct {
-		PurchaseIDs []string `json:"purchaseIds"`
-	}
-	if !decodeBody(w, r, &req) {
-		return
-	}
-	if len(req.PurchaseIDs) == 0 {
-		writeError(w, http.StatusBadRequest, "At least one purchase ID is required")
-		return
-	}
-	const maxSelectedSellSheetItems = 5000
-	if len(req.PurchaseIDs) > maxSelectedSellSheetItems {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("Too many purchase IDs (max %d)", maxSelectedSellSheetItems))
-		return
-	}
-
-	sheet, ok := serviceCall(w, r.Context(), h.logger, "selected sell sheet generation failed", func() (*inventory.SellSheet, error) {
-		return h.exportService.GenerateSelectedSellSheet(r.Context(), req.PurchaseIDs)
 	})
 	if !ok {
 		return

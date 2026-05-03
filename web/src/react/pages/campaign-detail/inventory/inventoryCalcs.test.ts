@@ -147,7 +147,6 @@ describe('inventoryCalcs', () => {
         debouncedSearch: '',
         showAll: false,
         filterTab: 'in_hand',
-        sellSheetHas: () => false,
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
@@ -167,7 +166,6 @@ describe('inventoryCalcs', () => {
         debouncedSearch: '',
         showAll: false,
         filterTab: 'awaiting_intake',
-        sellSheetHas: () => false,
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
@@ -187,7 +185,6 @@ describe('inventoryCalcs', () => {
         debouncedSearch: '',
         showAll: false,
         filterTab: 'in_hand',
-        sellSheetHas: () => false,
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
@@ -206,7 +203,6 @@ describe('inventoryCalcs', () => {
         debouncedSearch: '',
         showAll: false,
         filterTab: 'all',
-        sellSheetHas: () => false,
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
@@ -225,7 +221,6 @@ describe('inventoryCalcs', () => {
         debouncedSearch: '',
         showAll: true,
         filterTab: 'in_hand',
-        sellSheetHas: () => false,
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
@@ -244,7 +239,6 @@ describe('inventoryCalcs', () => {
         debouncedSearch: 'Charizard',
         showAll: false,
         filterTab: 'in_hand',
-        sellSheetHas: () => false,
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
@@ -252,30 +246,6 @@ describe('inventoryCalcs', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].purchase.cardName).toBe('Charizard');
-    });
-
-    // Users can pre-add a cert to their sell sheet before it arrives, but
-    // the sell-sheet view (and any printed sheet) should hide it until the
-    // cert is physically received.
-    it('excludes non-on-hand items from sell_sheet filter', () => {
-      const items = [
-        makeItem({ purchase: { id: '1', receivedAt: '2026-04-08T00:00:00Z' } }),
-        makeItem({ purchase: { id: '2', receivedAt: undefined } }),
-      ];
-      const sellSheetIds = new Set(['1', '2']);
-
-      const result = filterAndSortItems(items, {
-        debouncedSearch: '',
-        showAll: false,
-        filterTab: 'sell_sheet',
-        sellSheetHas: (id) => sellSheetIds.has(id),
-        sortKey: 'days',
-        sortDir: 'desc',
-        evMap: new Map(),
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].purchase.id).toBe('1');
     });
   });
 

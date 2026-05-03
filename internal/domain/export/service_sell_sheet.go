@@ -26,6 +26,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 		CardNumber:     purchase.CardNumber,
 		Grade:          purchase.GradeValue,
 		Grader:         purchase.Grader,
+		CardYear:       purchase.CardYear,
 		Population:     purchase.Population,
 		BuyCostCents:   purchase.BuyCostCents,
 		CostBasisCents: costBasis,
@@ -114,51 +115,6 @@ func recommendChannel(grade float64, mkt *inventory.MarketSnapshot, signals *inv
 	return inventory.SaleChannelEbay, "eBay"
 }
 
-func (s *service) GenerateSellSheet(ctx context.Context, campaignID string, purchaseIDs []string) (*inventory.SellSheet, error) {
-	campaign, err := s.repo.GetCampaign(ctx, campaignID)
-	if err != nil {
-		return nil, fmt.Errorf("campaign lookup: %w", err)
-	}
-
-	// Batch fetch all purchases in one query instead of N separate calls.
-	purchaseMap, err := s.repo.GetPurchasesByIDs(ctx, purchaseIDs)
-	if err != nil {
-		return nil, fmt.Errorf("batch purchase lookup: %w", err)
-	}
-
-	crackSet := s.buildCrackCandidateSet(ctx)
-
-	sheet := &inventory.SellSheet{
-		GeneratedAt:  time.Now().Format(time.RFC3339),
-		CampaignName: campaign.Name,
-	}
-
-	for _, pid := range purchaseIDs {
-		purchase, ok := purchaseMap[pid]
-		if !ok || purchase.CampaignID != campaignID {
-			sheet.Totals.SkippedItems++
-			continue
-		}
-		if purchase.ReceivedAt == nil {
-			sheet.Totals.SkippedItems++
-			continue
-		}
-
-		item, ok := s.enrichSellSheetItem(ctx, purchase, "", inventory.EffectiveFeePct(campaign), crackSet)
-		if !ok {
-			sheet.Totals.SkippedItems++
-			continue
-		}
-		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
-		sheet.Items = append(sheet.Items, item)
-		sheet.Totals.TotalCostBasis += item.CostBasisCents
-		sheet.Totals.ItemCount++
-	}
-
-	sheet.Totals.TotalProjectedProfit = sheet.Totals.TotalExpectedRevenue - sheet.Totals.TotalCostBasis
-	return sheet, nil
-}
-
 func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*inventory.SellSheet, error) {
 	purchases, err := s.repo.ListAllUnsoldPurchases(ctx)
 	if err != nil {
@@ -178,35 +134,6 @@ func (s *service) GenerateGlobalSellSheet(ctx context.Context) (*inventory.SellS
 	}
 
 	sheet, err := s.buildCrossCampaignSellSheet(ctx, ptrs, "All Inventory")
-	if err != nil {
-		return nil, err
-	}
-	sheet.Totals.SkippedItems += skipped
-	return sheet, nil
-}
-
-func (s *service) GenerateSelectedSellSheet(ctx context.Context, purchaseIDs []string) (*inventory.SellSheet, error) {
-	purchaseMap, err := s.repo.GetPurchasesByIDs(ctx, purchaseIDs)
-	if err != nil {
-		return nil, fmt.Errorf("batch purchase lookup: %w", err)
-	}
-
-	var ptrs []*inventory.Purchase
-	skipped := 0
-	for _, pid := range purchaseIDs {
-		purchase, ok := purchaseMap[pid]
-		if !ok {
-			skipped++
-			continue
-		}
-		if purchase.ReceivedAt == nil {
-			skipped++
-			continue
-		}
-		ptrs = append(ptrs, purchase)
-	}
-
-	sheet, err := s.buildCrossCampaignSellSheet(ctx, ptrs, "Selected Inventory")
 	if err != nil {
 		return nil, err
 	}
@@ -242,11 +169,11 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		} else {
 			feePct = inventory.EffectiveFeePct(&inventory.Campaign{})
 		}
-		item, ok := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
-		if !ok {
-			sheet.Totals.SkippedItems++
-			continue
-		}
+		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
+		// Always include in-hand inventory rows — even ones with no price
+		// snapshot. The vendor at a card show still needs to see the card;
+		// a missing price just means an empty CL column with PriceLookupError
+		// preserved for diagnostics. Skipping silently dropped real inventory.
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents

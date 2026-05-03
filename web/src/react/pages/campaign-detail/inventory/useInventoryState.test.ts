@@ -22,10 +22,6 @@ vi.mock('../../../contexts/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
 }));
 
-vi.mock('../../../hooks/useSellSheet', () => ({
-  useSellSheet: () => ({ add: vi.fn(), remove: vi.fn(), has: vi.fn().mockReturnValue(false), clear: vi.fn(), count: 0, isLoading: false, items: [] }),
-}));
-
 vi.mock('../../../queries/useCampaignQueries', () => ({
   useExpectedValues: () => ({ data: {}, isLoading: false }),
 }));

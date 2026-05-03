@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { useToast } from '../../../contexts/ToastContext';
-import { useSellSheet } from '../../../hooks/useSellSheet';
 import { queryKeys } from '../../../queries/queryKeys';
 import { useExpectedValues } from '../../../queries/useCampaignQueries';
 import { api } from '../../../../js/api';
@@ -18,14 +17,11 @@ import { usePricingActions } from './usePricingActions';
 export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const sellSheet = useSellSheet();
-  const { has: sellSheetHas } = sellSheet;
   const { data: evPortfolio } = useExpectedValues(campaignId ?? '');
   const selection = useInventorySelection();
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isPrinting, setIsPrinting] = useState(false);
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const userTabChosenRef = useRef(false);
   const [showAll, setShowAll] = useState(false);
@@ -113,16 +109,6 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     mobileScrollRef.current?.scrollTo({ top: 0 });
   }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handlePrint = useCallback(() => {
-    setIsPrinting(true);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        window.print();
-        setIsPrinting(false);
-      });
-    });
-  }, []);
-
   // Build EV lookup map
   const showEV = !!campaignId && evPortfolio && evPortfolio.items?.length > 0 && evPortfolio.minDataPoints >= 30;
   const evMap = useMemo(() => {
@@ -134,28 +120,17 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     return map;
   }, [showEV, evPortfolio]);
 
-  const pageSellSheetCount = useMemo(() => {
-    let count = 0;
-    for (const item of items) {
-      if (sellSheetHas(item.purchase.id) && !!item.purchase.receivedAt) count++;
-    }
-    return count;
-  }, [items, sellSheetHas]);
-
-  const sellSheetActive = filterTab === 'sell_sheet' && !showAll && !debouncedSearch.trim();
-
   const filteredAndSortedItems = useMemo(
     () => filterAndSortItems(items, {
       debouncedSearch,
       showAll,
       filterTab,
-      sellSheetHas,
       sortKey,
       sortDir,
       evMap,
       pinnedIds: selection.pinnedIds,
     }),
-    [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, sellSheetHas, selection.pinnedIds],
+    [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, selection.pinnedIds],
   );
 
   const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
@@ -227,11 +202,11 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     flagTarget: pricingActions.flagTarget, setFlagTarget: pricingActions.setFlagTarget,
     flagSubmitting: pricingActions.flagSubmitting,
     fixMatchTarget: dhActions.fixMatchTarget, setFixMatchTarget: dhActions.setFixMatchTarget,
-    sortKey, sortDir, searchQuery, setSearchQuery, isPrinting,
+    sortKey, sortDir, searchQuery, setSearchQuery,
     filterTab, setFilterTab: chooseFilterTab,
     showAll, setShowAll, debouncedSearch,
     reviewStats, tabCounts, showEV: !!showEV, evPortfolio, evMap,
-    pageSellSheetCount, sellSheetActive, filteredAndSortedItems,
+    filteredAndSortedItems,
     totalCost, totalMarket, totalPL, fullInventoryTotals,
     handleSort, handleReviewed,
     handleResolveFlag: pricingActions.handleResolveFlag,
@@ -241,7 +216,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     dhListingInFlight: dhActions.dhListingInFlight, dhListedOptimistic: dhActions.dhListedOptimistic,
     handleBulkListOnDH: dhActions.handleBulkListOnDH,
     handleFlagSubmit: pricingActions.handleFlagSubmit,
-    handlePrint, handleDelete,
+    handleDelete,
     toggleSelect: selection.toggleSelect, toggleAll, toggleExpand: selection.toggleExpand,
     openSaleModal, closeSaleModal,
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
@@ -252,6 +227,6 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     handleSetPrice: pricingActions.handleSetPrice, handlePriceSaved: pricingActions.handlePriceSaved,
     handleInlinePriceSave: pricingActions.handleInlinePriceSave, handleHintSaved: pricingActions.handleHintSaved,
     pinnedIds: selection.pinnedIds, handleDeselectMissingCL: selection.handleDeselectMissingCL, handleHighlightMissingCL: selection.handleHighlightMissingCL,
-    sellSheet, toast,
+    toast,
   };
 }

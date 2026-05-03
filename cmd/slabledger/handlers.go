@@ -52,7 +52,6 @@ type handlerInputs struct {
 	FinanceService     finance.Service
 	ExportService      export.Service
 	PurchaseStore      *postgres.PurchaseStore
-	SellSheetStore     *postgres.SellSheetStore
 	CardIDMappingRepo  *postgres.CardIDMappingRepository
 	IntelRepo          *postgres.MarketIntelligenceRepository
 	TrajectoryRepo     *postgres.CardPriceTrajectoryRepository
@@ -204,9 +203,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		logger.Info(ctx, "DH handler initialized")
 	}
 
-	// Sell sheet items handler
-	sellSheetItemsHandler := handlers.NewSellSheetItemsHandler(in.SellSheetStore, logger)
-
 	// Niches handler (DH niche-opportunity leaderboard) and campaign-signals handler.
 	// Both share the same demand.Service instance. Requires the DH demand repo;
 	// coverage lookup runs against the campaigns DB.
@@ -319,7 +315,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		PSAExchangeHandler:        psaExchangeHandler,
 		DHHandler:                 dhHandler,
 		DHReconcileHandler:        dhReconcileHandler,
-		SellSheetItemsHandler:     sellSheetItemsHandler,
 		CardCatalogHandler:        cardCatalogHandler,
 		NichesHandler:             nichesHandler,
 		CampaignSignalsHandler:    campaignSignalsHandler,
