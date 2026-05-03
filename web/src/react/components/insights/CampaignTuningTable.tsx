@@ -61,7 +61,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
                 key={row.campaignId}
                 to={`/campaigns/${row.campaignId}`}
                 data-severity={row.status.toLowerCase()}
-                className="block rounded-xl border border-l-2 border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2.5 hover:bg-[var(--surface-2)]/30"
+                className="block rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] px-3 py-2.5 hover:bg-[var(--surface-2)]/30"
               >
                 <div className="flex items-baseline justify-between gap-2 mb-2">
                   <span className="text-sm font-semibold text-[var(--text)] truncate min-w-0">{row.campaignName}</span>
@@ -116,7 +116,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
               key={row.campaignId}
               to={`/campaigns/${row.campaignId}`}
               data-severity={row.status.toLowerCase()}
-              className={`${tableStyles.grid} pl-3 pr-3 py-2.5 border-t border-l-2 border-[var(--surface-2)] text-sm items-center hover:bg-[var(--surface-2)]/30`}
+              className={`${tableStyles.grid} pl-3 pr-3 py-2.5 border-t border-[var(--surface-2)] text-sm items-center hover:bg-[var(--surface-2)]/30`}
             >
               <div className="font-semibold">{row.campaignName}</div>
               {columns.map(c => {

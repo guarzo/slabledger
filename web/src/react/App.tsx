@@ -11,6 +11,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { UserPreferencesProvider } from './contexts/UserPreferencesContext';
 import { ToastProvider } from './contexts/ToastContext';
 import Header from './components/Header';
+import KeyboardShortcuts from './components/KeyboardShortcuts';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import PokeballLoader from './PokeballLoader';
@@ -39,6 +40,7 @@ function AppContent() {
   return (
       <ToastProvider>
         {!isLoginPage && <Header />}
+        {!isLoginPage && <KeyboardShortcuts />}
         <main
           id="main-content"
           className="min-h-screen bg-[var(--bg)] py-8"
