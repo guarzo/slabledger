@@ -220,75 +220,7 @@ func TestHandleCampaignPNL_ServiceError(t *testing.T) {
 	decodeErrorResponse(t, rec)
 }
 
-// --- HandleSellSheet ---
-
-func TestHandleSellSheet_Success(t *testing.T) {
-	expSvc := &mocks.MockExportService{
-		GenerateSellSheetFn: func(_ context.Context, _ string, pids []string) (*inventory.SellSheet, error) {
-			return &inventory.SellSheet{CampaignName: "Test", Items: make([]inventory.SellSheetItem, len(pids))}, nil
-		},
-	}
-	h := newTestHandlerWithServices(&mocks.MockInventoryService{}, &mocks.MockFinanceService{}, expSvc)
-
-	body := `{"purchaseIds":["p1","p2"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/sell-sheet", bytes.NewBufferString(body))
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleSellSheet(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleSellSheet_EmptyPurchaseIDs(t *testing.T) {
-	h := newTestHandler(&mocks.MockInventoryService{})
-
-	body := `{"purchaseIds":[]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/sell-sheet", bytes.NewBufferString(body))
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleSellSheet(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleSellSheet_CampaignNotFound(t *testing.T) {
-	expSvc := &mocks.MockExportService{
-		GenerateSellSheetFn: func(_ context.Context, _ string, _ []string) (*inventory.SellSheet, error) {
-			return nil, fmt.Errorf("campaign lookup: %w", inventory.ErrCampaignNotFound)
-		},
-	}
-	h := newTestHandlerWithServices(&mocks.MockInventoryService{}, &mocks.MockFinanceService{}, expSvc)
-
-	body := `{"purchaseIds":["p1"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/sell-sheet", bytes.NewBufferString(body))
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleSellSheet(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleSellSheet_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockInventoryService{})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/sell-sheet", bytes.NewBufferString("{bad"))
-	req.SetPathValue("id", "c1")
-	rec := httptest.NewRecorder()
-	h.HandleSellSheet(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
+// --- HandleSellSheet removed ---
 
 // --- HandleTuning ---
 
@@ -477,70 +409,6 @@ func TestHandlePNLByChannel_NilReturnsEmptyArray(t *testing.T) {
 	}
 }
 
-// --- HandleSelectedSellSheet ---
-
-func TestHandleSelectedSellSheet_Success(t *testing.T) {
-	expSvc := &mocks.MockExportService{
-		GenerateSelectedSellSheetFn: func(_ context.Context, pids []string) (*inventory.SellSheet, error) {
-			return &inventory.SellSheet{CampaignName: "All Inventory", Items: make([]inventory.SellSheetItem, len(pids))}, nil
-		},
-	}
-	h := newTestHandlerWithServices(&mocks.MockInventoryService{}, &mocks.MockFinanceService{}, expSvc)
-
-	body := `{"purchaseIds":["p1","p2","p3"]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleSelectedSellSheet(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleSelectedSellSheet_EmptyIDs(t *testing.T) {
-	h := newTestHandler(&mocks.MockInventoryService{})
-
-	body := `{"purchaseIds":[]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBufferString(body))
-	rec := httptest.NewRecorder()
-	h.HandleSelectedSellSheet(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleSelectedSellSheet_InvalidBody(t *testing.T) {
-	h := newTestHandler(&mocks.MockInventoryService{})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBufferString("{bad"))
-	rec := httptest.NewRecorder()
-	h.HandleSelectedSellSheet(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-	decodeErrorResponse(t, rec)
-}
-
-func TestHandleSelectedSellSheet_TooManyIDs(t *testing.T) {
-	h := newTestHandler(&mocks.MockInventoryService{})
-
-	ids := make([]string, 5001)
-	for i := range ids {
-		ids[i] = fmt.Sprintf("id-%d", i)
-	}
-	body, _ := json.Marshal(map[string]any{"purchaseIds": ids})
-	req := httptest.NewRequest(http.MethodPost, "/api/portfolio/sell-sheet", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-	h.HandleSelectedSellSheet(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", rec.Code)
-	}
-}
-
 // --- HandleGlobalInventory ---
 
 func TestHandleGlobalInventory(t *testing.T) {
@@ -653,7 +521,7 @@ func TestHandleGlobalSellSheet(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newTestHandlerWithServices(&mocks.MockInventoryService{}, &mocks.MockFinanceService{}, tc.setupExpSvc())
-			req := httptest.NewRequest(http.MethodPost, "/api/sell-sheet", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/sell-sheet", nil)
 			rec := httptest.NewRecorder()
 			h.HandleGlobalSellSheet(rec, req)
 

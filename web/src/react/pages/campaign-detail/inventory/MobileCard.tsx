@@ -23,7 +23,6 @@ interface MobileCardProps {
   onSetPrice?: () => void;
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
-  onRemoveFromSellSheet?: () => void;
   onUnmatchDH?: () => void;
   onRetryDHMatch?: () => void;
   onDismiss?: () => void;
@@ -32,15 +31,14 @@ interface MobileCardProps {
   dhListedOverride?: boolean;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
-  isOnSellSheet?: boolean;
 }
 
 export default function MobileCard({
   item, selected, onToggle, onRecordSale,
   onFixPricing, onFixDHMatch, onSetPrice, onDelete,
-  onListOnDH, onRemoveFromSellSheet, onUnmatchDH, onRetryDHMatch,
+  onListOnDH, onUnmatchDH, onRetryDHMatch,
   onDismiss, onUndismiss, dhListingLoading, dhListedOverride,
-  ev, showCampaignColumn, isOnSellSheet,
+  ev, showCampaignColumn,
 }: MobileCardProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
@@ -63,10 +61,9 @@ export default function MobileCard({
     onListOnDH,
     onDismiss,
     onUndismiss,
-    onRemoveFromSellSheet,
     onDelete,
   };
-  const flags = { dhListingLoading, isOnSellSheet };
+  const flags = { dhListingLoading };
   const primary = resolveContextualPrimary(item, handlers, flags);
   const fallbackPrimary = { key: 'sell', label: ACTION_LABELS.sell, onSelect: onRecordSale };
   const overflow = resolveOverflowActions(item, handlers, flags, primary);
@@ -94,7 +91,6 @@ export default function MobileCard({
           <div>
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
-              {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
               <TruncatedCardName name={item.purchase.cardName} className="text-[var(--text)] font-medium" />
               {item.purchase.cardName && item.purchase.setName && (
                 <MarketplaceLinks

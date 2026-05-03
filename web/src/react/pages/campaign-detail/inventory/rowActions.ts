@@ -12,7 +12,6 @@ export const ACTION_LABELS = {
   retryDHMatch: 'Retry DH Match',
   listOnDH: 'List on DH',
   dismiss: 'Dismiss from DH',
-  removeFromSellSheet: 'Remove from Sell Sheet',
   restore: 'Restore to DH',
   delete: 'Delete',
 } as const;
@@ -27,13 +26,11 @@ export interface RowActionHandlers {
   onListOnDH?: (purchaseId: string) => void;
   onDismiss?: () => void;
   onUndismiss?: () => void;
-  onRemoveFromSellSheet?: () => void;
   onDelete?: () => void;
 }
 
 export interface RowActionFlags {
   dhListingLoading?: boolean;
-  isOnSellSheet?: boolean;
 }
 
 export interface ResolvedAction {
@@ -82,7 +79,7 @@ export function resolveContextualPrimary(
 export function resolveOverflowActions(
   item: AgingItem,
   handlers: RowActionHandlers,
-  flags: RowActionFlags,
+  _flags: RowActionFlags,
   primary: ResolvedAction | null,
 ): ResolvedAction[] {
   const intent = deriveActionIntent(item);
@@ -114,13 +111,6 @@ export function resolveOverflowActions(
   if (showDismiss && handlers.onDismiss) {
     // Dismiss is reversible (Restore brings it back), so no confirm.
     out.push({ key: 'dismiss', label: ACTION_LABELS.dismiss, onSelect: handlers.onDismiss });
-  }
-  if (flags.isOnSellSheet && handlers.onRemoveFromSellSheet) {
-    out.push({
-      key: 'removeFromSellSheet',
-      label: ACTION_LABELS.removeFromSellSheet,
-      onSelect: handlers.onRemoveFromSellSheet,
-    });
   }
   if (handlers.onDelete) {
     out.push({

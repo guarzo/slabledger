@@ -58,7 +58,6 @@ interface DesktopRowProps {
   onDelete?: () => void;
   onListOnDH?: (purchaseId: string) => void;
   onInlinePriceSave?: (purchaseId: string, priceCents: number) => Promise<void>;
-  onRemoveFromSellSheet?: () => void;
   onDismiss?: () => void;
   onUndismiss?: () => void;
   onUnmatchDH?: () => void;
@@ -66,15 +65,14 @@ interface DesktopRowProps {
   dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   showCampaignColumn?: boolean;
-  isOnSellSheet?: boolean;
 }
 
 export default function DesktopRow({
   item, selected, onToggle, onExpand, onRecordSale,
   onFixPricing, onFixDHMatch, onSetPrice, onDelete,
-  onListOnDH, onInlinePriceSave, onRemoveFromSellSheet,
+  onListOnDH, onInlinePriceSave,
   onDismiss, onUndismiss, onUnmatchDH, onRetryDHMatch,
-  dhListingLoading, dhListedOverride, showCampaignColumn, isOnSellSheet,
+  dhListingLoading, dhListedOverride, showCampaignColumn,
 }: DesktopRowProps) {
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
@@ -137,10 +135,9 @@ export default function DesktopRow({
     onListOnDH,
     onDismiss,
     onUndismiss,
-    onRemoveFromSellSheet,
     onDelete,
   };
-  const flags = { dhListingLoading, isOnSellSheet };
+  const flags = { dhListingLoading };
   const primary = resolveContextualPrimary(item, handlers, flags);
   const fallbackPrimary = { key: 'sell', label: ACTION_LABELS.sell, onSelect: onRecordSale };
   const overflow = resolveOverflowActions(item, handlers, flags, primary);
@@ -188,7 +185,6 @@ export default function DesktopRow({
           })()}
           <span className="text-[var(--text)] truncate flex items-center gap-1 min-w-0">
             {hotSeller && <span className="text-[var(--warning)] mr-1" title="High demand">★</span>}
-            {isOnSellSheet && <span className="text-gray-400 mr-1 text-xs" title="On sell sheet">&#9864;</span>}
             <TruncatedCardName name={item.purchase.cardName} className="text-[var(--text)] font-medium" />
           </span>
           {item.priceAnomaly && (
