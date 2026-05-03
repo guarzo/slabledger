@@ -3,7 +3,7 @@ import CampaignHeroStats from './CampaignHeroStats';
 import heroStyles from '../../components/portfolio/HeroStatsBar.module.css';
 
 describe('CampaignHeroStats', () => {
-  it('renders all stats with values', () => {
+  it('compresses to Total Spent + Cards Bought when purchases exist but no sales yet', () => {
     render(
       <CampaignHeroStats
         totalSpentCents={358596}
@@ -18,10 +18,15 @@ describe('CampaignHeroStats', () => {
     );
     expect(screen.getByText('Total Spent')).toBeInTheDocument();
     expect(screen.getByText('$3,585.96')).toBeInTheDocument();
-    expect(screen.getByText('Net Profit')).toBeInTheDocument();
-    expect(screen.getByText('ROI')).toBeInTheDocument();
-    // ROI shows em-dash when no sales yet (purchaseCount > 0, saleCount === 0)
-    expect(screen.getByTestId('stat-value-roi')).toHaveTextContent('—');
+    expect(screen.getByText('Cards Bought')).toBeInTheDocument();
+    expect(screen.getByTestId('stat-value-cards-bought')).toHaveTextContent('5');
+    expect(screen.getByText('Awaiting first sale')).toBeInTheDocument();
+    // Dashed placeholder stats are suppressed in the no-sales path.
+    expect(screen.queryByText('Net Profit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
+    expect(screen.queryByText('ROI')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sell-Through')).not.toBeInTheDocument();
+    expect(screen.queryByText('Avg Days to Sell')).not.toBeInTheDocument();
   });
 
   it('shows em-dash for derived metrics when no purchase activity', () => {
