@@ -3,7 +3,8 @@ import type { AgingItem, EVPortfolio } from '../../../../types/campaigns';
 import type { TabCounts, FilterTab } from './inventoryCalcs';
 import { formatCents, formatPct } from '../../../utils/formatters';
 import { formatPL } from './utils';
-import ReviewSummaryBar from './ReviewSummaryBar';
+import { Button } from '../../../ui';
+import { useMediaQuery } from '../../../hooks/useMediaQuery';
 import CrackCandidatesBanner from './CrackCandidatesBanner';
 import BulkSelectionMissingCLWarning from './BulkSelectionMissingCLWarning';
 
@@ -42,6 +43,7 @@ export default function InventoryHeader({
   campaignId,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const missingCLIds = useMemo(() => {
     if (selected.size === 0) return [];
     return items.filter(i => selected.has(i.purchase.id) && !i.purchase.clValueCents).map(i => i.purchase.id);
@@ -77,54 +79,89 @@ export default function InventoryHeader({
     return `${base} ${sizing} ${stateClass}`;
   };
 
+  // Headline P/L gets a larger, bolder treatment; supporting metrics sit below.
+  const plPositive = totalPL >= 0;
+  const plPctSuffix = totalCost > 0
+    ? ` (${plPositive ? '+' : ''}${formatPct(totalPL / totalCost)})`
+    : '';
+
+  const showNeedsHeadline = !showAll
+    && !debouncedSearch?.trim()
+    && filterTab !== 'needs_attention'
+    && tabCounts.needs_attention > 0;
+
   return (
     <>
-      {/* Compact one-line breadcrumb of inventory totals */}
-      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm sell-sheet-no-print">
-        <span className="text-[var(--text)] font-semibold tabular-nums">
-          {filteredCount} cards
-        </span>
-        <span className="text-[var(--text-muted)]">·</span>
-        <span className="text-[var(--text-muted)] tabular-nums">
-          Cost <span className="text-[var(--text)] font-medium">{formatCents(totalCost)}</span>
-        </span>
-        {totalMarket > 0 && (
-          <>
-            <span className="text-[var(--text-muted)]">·</span>
-            <span className="text-[var(--text-muted)] tabular-nums">
-              Market <span className="text-[var(--text)] font-medium">{formatCents(totalMarket)}</span>
-            </span>
-            <span className="text-[var(--text-muted)]">·</span>
+      {/* Totals — P/L is the headline when we have market data; otherwise show cards + cost */}
+      <div className="mb-4 sell-sheet-no-print">
+        {totalMarket > 0 ? (
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span
-              className={`tabular-nums font-semibold ${totalPL >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
-              aria-label={`Unrealized ${totalPL >= 0 ? 'gain' : 'loss'} ${formatPL(totalPL)}`}
+              className={`text-2xl font-bold tabular-nums tracking-tight ${plPositive ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
+              aria-label={`Unrealized ${plPositive ? 'gain' : 'loss'} ${formatPL(totalPL)}`}
             >
-              {formatPL(totalPL)} unrealized
-              {totalCost > 0 && (
-                <span className="ml-1 opacity-80">
-                  ({totalPL >= 0 ? '+' : ''}{formatPct(totalPL / totalCost)})
-                </span>
-              )}
+              {formatPL(totalPL)}
+              <span className="text-base opacity-80">{plPctSuffix}</span>
             </span>
-          </>
+            <span className="text-sm text-[var(--text-muted)]">unrealized</span>
+          </div>
+        ) : (
+          <div className="text-2xl font-bold tabular-nums tracking-tight text-[var(--text)]">
+            {filteredCount} {filteredCount === 1 ? 'card' : 'cards'}
+          </div>
         )}
-        {showEV && evPortfolio && (
-          <>
-            <span className="text-[var(--text-muted)]">·</span>
-            <span className="text-[var(--text-muted)] tabular-nums">
-              EV <span className={`font-medium ${evPortfolio.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}>{formatPL(evPortfolio.totalEvCents)}</span>
-            </span>
-          </>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+          {totalMarket > 0 && (
+            <>
+              <span className="text-[var(--text-muted)] tabular-nums">
+                {filteredCount} {filteredCount === 1 ? 'card' : 'cards'}
+              </span>
+              <span className="text-[var(--text-muted)]">·</span>
+            </>
+          )}
+          <span className="text-[var(--text-muted)] tabular-nums">
+            Cost <span className="text-[var(--text)]">{formatCents(totalCost)}</span>
+          </span>
+          {totalMarket > 0 && (
+            <>
+              <span className="text-[var(--text-muted)]">·</span>
+              <span className="text-[var(--text-muted)] tabular-nums">
+                Market <span className="text-[var(--text)]">{formatCents(totalMarket)}</span>
+              </span>
+            </>
+          )}
+          {showEV && evPortfolio && (
+            <>
+              <span className="text-[var(--text-muted)]">·</span>
+              <span className="text-[var(--text-muted)] tabular-nums">
+                EV <span className={evPortfolio.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}>{formatPL(evPortfolio.totalEvCents)}</span>
+              </span>
+            </>
+          )}
+        </div>
+        {(filterTab !== 'all' || debouncedSearch?.trim()) && filteredCount !== items.length && (
+          <div className="mt-1 text-xs text-[var(--text-subtle)] tabular-nums">
+            All {items.length} cards · Cost {formatCents(fullInventoryTotals.totalCost)}
+            {fullInventoryTotals.totalMarket > 0 && (
+              <> · Market {formatCents(fullInventoryTotals.totalMarket)}</>
+            )}
+          </div>
         )}
       </div>
 
-      {(filterTab !== 'all' || debouncedSearch?.trim()) && filteredCount !== items.length && (
-        <div className="mb-4 -mt-3 text-xs text-[var(--text-subtle)] tabular-nums sell-sheet-no-print">
-          All {items.length} cards · Cost {formatCents(fullInventoryTotals.totalCost)}
-          {fullInventoryTotals.totalMarket > 0 && (
-            <> · Market {formatCents(fullInventoryTotals.totalMarket)}</>
-          )}
-        </div>
+      {/* Needs Attention call-to-action: only when there's something to do and the user isn't already there */}
+      {showNeedsHeadline && (
+        <button
+          type="button"
+          onClick={() => setFilterTab('needs_attention')}
+          className="mb-4 w-full flex items-center justify-between gap-3 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-2.5 text-left hover:bg-[var(--warning)]/15 transition-colors sell-sheet-no-print"
+        >
+          <span className="text-sm text-[var(--text)]">
+            <span className="font-semibold tabular-nums">{tabCounts.needs_attention}</span>{' '}
+            {tabCounts.needs_attention === 1 ? 'card needs' : 'cards need'} attention
+          </span>
+          <span className="text-xs text-[var(--text-muted)]">Review →</span>
+        </button>
       )}
 
       <BulkSelectionMissingCLWarning
@@ -137,45 +174,51 @@ export default function InventoryHeader({
       {/* Crack Candidates Banner */}
       {campaignId && <div className="sell-sheet-no-print"><CrackCandidatesBanner campaignId={campaignId} /></div>}
 
-      {/* Review Summary Bar */}
-      <div className="mb-4 sell-sheet-no-print">
-        <ReviewSummaryBar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          showAll={showAll}
-          onToggleShowAll={() => setShowAll(prev => !prev)}
-        />
-      </div>
-
-      {/* Filter tabs */}
-      {!showAll && (
-        <div className="flex flex-col gap-2 mb-3 sell-sheet-no-print">
-          <div className="flex flex-wrap items-center gap-2">
-            {primary.map(tab => {
+      {/* Filter pills + inline search/Show All — replaces the heavy ReviewSummaryBar panel */}
+      <div className="flex flex-col gap-2 mb-3 sell-sheet-no-print">
+        <div className="flex flex-wrap items-center gap-2">
+          {!showAll && primary.map(tab => {
+            const isActive = filterTab === tab.key;
+            return (
+              <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} aria-pressed={isActive} className={pillClass(isActive, 'primary')}>
+                {tab.label}
+                <span className={countClass(isActive, 'primary')}>{tab.count}</span>
+              </button>
+            );
+          })}
+          <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : 'ml-auto'}`}>
+            <input
+              type="text"
+              aria-label="Search cards"
+              placeholder="Search cards…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className={`${isMobile ? 'flex-1' : 'w-48'} px-3 py-1.5 text-sm rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]`}
+            />
+            <Button
+              variant={showAll ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setShowAll(prev => !prev)}
+              title={showAll ? 'Return to filter tabs' : 'Show every card, ignoring filter tabs'}
+            >
+              {showAll ? 'Use Filters' : 'Show All'}
+            </Button>
+          </div>
+        </div>
+        {!showAll && secondary.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
+            {secondary.map(tab => {
               const isActive = filterTab === tab.key;
               return (
-                <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'primary')}>
+                <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} aria-pressed={isActive} className={pillClass(isActive, 'secondary')}>
                   {tab.label}
-                  <span className={countClass(isActive, 'primary')}>{tab.count}</span>
+                  <span className={countClass(isActive, 'secondary')}>{tab.count}</span>
                 </button>
               );
             })}
           </div>
-          {secondary.length > 0 && (
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
-              {secondary.map(tab => {
-                const isActive = filterTab === tab.key;
-                return (
-                  <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'secondary')}>
-                    {tab.label}
-                    <span className={countClass(isActive, 'secondary')}>{tab.count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {debouncedSearch && (
         <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1 sell-sheet-no-print">

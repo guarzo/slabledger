@@ -5,13 +5,15 @@ import { mostRecentSale, formatShipDate } from './utils';
 interface SellPriceHeroProps {
   item: AgingItem;
   costBasisCents: number;
+  /** When true, render as flat typography without card chrome (used inside expanded row). */
+  flat?: boolean;
 }
 
 function clampPct(v: number): number {
   return Math.max(0, Math.min(100, v));
 }
 
-export default function SellPriceHero({ item, costBasisCents }: SellPriceHeroProps) {
+export default function SellPriceHero({ item, costBasisCents, flat = false }: SellPriceHeroProps) {
   const recent = mostRecentSale(item);
   const cs = item.compSummary;
   const trendPct = cs ? Math.round(cs.trend90d * 100) : 0;
@@ -40,8 +42,12 @@ export default function SellPriceHero({ item, costBasisCents }: SellPriceHeroPro
     }
   }
 
+  const containerClass = flat
+    ? ''
+    : 'mb-4 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[var(--surface-1)] px-5 py-4';
+
   return (
-    <div className="mb-4 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[var(--surface-1)] px-5 py-4">
+    <div className={containerClass}>
       <div className="flex items-start justify-between gap-6 flex-wrap">
         {/* Left: Most recent sale headline */}
         <div className="min-w-0">
