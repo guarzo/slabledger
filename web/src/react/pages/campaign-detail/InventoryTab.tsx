@@ -79,7 +79,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   // Track the list's distance from the top of the document so the window
   // virtualizer accounts for everything rendered above it (header, totals,
-  // filter pills) when computing virtual row offsets.
+  // filter pills, banners) when computing virtual row offsets. Re-measure
+  // on window resize AND when DOM elements above the list change size
+  // (e.g. banners appearing/disappearing) — those don't fire window resize.
   useLayoutEffect(() => {
     const el = listParentRef.current;
     if (!el) return;
@@ -89,7 +91,18 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     };
     update();
     window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
+    // Observe the list's parent so when sibling content above resizes
+    // (e.g. SellSheetActions, NeedsAttention banner, BulkSelection warning),
+    // we recompute the offset.
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined' && el.parentElement) {
+      resizeObserver = new ResizeObserver(() => update());
+      resizeObserver.observe(el.parentElement);
+    }
+    return () => {
+      window.removeEventListener('resize', update);
+      resizeObserver?.disconnect();
+    };
   }, []);
 
   const rowVirtualizer = useWindowVirtualizer({
