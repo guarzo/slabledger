@@ -120,6 +120,7 @@ export default function HeroStatsBar({
           <div className={styles.subCluster}>
             <Stat
               label="Wks to Cover"
+              labelTitle="Weeks needed to fully recover the outstanding capital at the current 30-day recovery pace."
               caption="at current pace"
               value={capital.outstandingCents === 0 && capital.recoveryRate30dCents > 0
                 ? '0'
@@ -131,7 +132,13 @@ export default function HeroStatsBar({
             />
             {capital.recoveryRate30dCents > 0 && (
               <div className={styles.stat}>
-                <div className={styles.statLabel}>30d Recovery</div>
+                <abbr
+                  className={styles.statLabel}
+                  title="Total revenue recovered (sales) in the trailing 30 days."
+                  style={{ textDecoration: 'none', cursor: 'help', display: 'block' }}
+                >
+                  30d Recovery
+                </abbr>
                 <div className={styles.statCaption}>trailing 30d</div>
                 <div className={styles.statValue}>
                   {formatCents(capital.recoveryRate30dCents)}
@@ -210,8 +217,9 @@ const TONE_CLASS: Record<string, string> = {
   problem: styles.tProblem,
 };
 
-function Stat({ label, caption, value, tone, delta }: {
+function Stat({ label, labelTitle, caption, value, tone, delta }: {
   label: string;
+  labelTitle?: string;
   caption?: string;
   value: string;
   tone?: 'warn' | 'neg' | 'muted' | 'success' | 'waiting' | 'atRisk' | 'problem';
@@ -219,7 +227,17 @@ function Stat({ label, caption, value, tone, delta }: {
 }) {
   return (
     <div className={styles.stat}>
-      <div className={styles.statLabel}>{label}</div>
+      {labelTitle ? (
+        <abbr
+          className={styles.statLabel}
+          title={labelTitle}
+          style={{ textDecoration: 'none', cursor: 'help', display: 'block' }}
+        >
+          {label}
+        </abbr>
+      ) : (
+        <div className={styles.statLabel}>{label}</div>
+      )}
       {caption && <div className={styles.statCaption}>{caption}</div>}
       <div className={clsx(styles.statValue, tone && TONE_CLASS[tone])}>
         {value}
