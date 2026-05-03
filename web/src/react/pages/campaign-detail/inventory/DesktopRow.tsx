@@ -163,7 +163,7 @@ export default function DesktopRow({
       </div>
 
       {/* Card */}
-      <div className="glass-table-td flex-1 min-w-0 max-w-[320px]" title={item.purchase.cardName}>
+      <div className="glass-table-td flex-1 min-w-[260px]" title={item.purchase.cardName}>
         <div className="flex items-center gap-1.5 min-w-0">
           {item.purchase.frontImageUrl && (
             <img
@@ -209,17 +209,17 @@ export default function DesktopRow({
       </div>
 
       {/* Grade */}
-      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '64px' }}>
+      <div className="glass-table-td flex-shrink-0 text-center" style={{ width: '56px' }}>
         <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
       </div>
 
       {/* Cost */}
-      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text-muted)] tabular-nums" style={{ width: '100px' }}>
+      <div className="glass-table-td flex-shrink-0 text-right text-[var(--text-muted)] tabular-nums" style={{ width: '96px' }}>
         {formatCents(cb)}
       </div>
 
       {/* Price (with sync dot inline) */}
-      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '180px' }}>
+      <div className="glass-table-td flex-shrink-0 text-right" style={{ width: '168px' }}>
         <div className="flex flex-col items-end gap-[1px]">
           <div className="flex items-center gap-1.5 justify-end">
             <span
@@ -275,7 +275,7 @@ export default function DesktopRow({
       </div>
 
       {/* P/L */}
-      <div className="glass-table-td flex-shrink-0 text-right tabular-nums print-hide-col" style={{ width: '80px' }}>
+      <div className="glass-table-td flex-shrink-0 text-right tabular-nums print-hide-col" style={{ width: '88px' }}>
         {pl != null ? (
           <span className={`text-xs font-medium px-2 py-[3px] rounded-md ${
             pl > 0 ? 'bg-[var(--success-bg)] text-[var(--success)]' :
@@ -288,7 +288,7 @@ export default function DesktopRow({
       </div>
 
       {/* Status: in-hand label + DH badge (signals zone, end) */}
-      <div className="glass-table-td flex-shrink-0 print-hide-col" style={{ width: '120px' }}>
+      <div className="glass-table-td flex-shrink-0 print-hide-col" style={{ width: '112px' }}>
         <div className="flex flex-col gap-0.5 items-center">
           <span className={`text-[11px] tabular-nums ${daysColor}`} title={inHandTitle}>
             {inHandLabel}
@@ -317,7 +317,7 @@ export default function DesktopRow({
       </div>
 
       {/* Actions zone — separated from signals by border + spacing */}
-      <div className="glass-table-td flex-shrink-0 print-hide-actions ml-2 pl-3 border-l border-white/[0.14]" style={{ minWidth: '200px' }}>
+      <div className="glass-table-td flex-shrink-0 print-hide-actions ml-2 pl-3 border-l border-white/[0.14]" style={{ width: '220px' }}>
         <RowActions primary={primary} fallbackPrimary={fallbackPrimary} overflow={overflow} variant="desktop" />
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
-import { formatCents, formatPct, formatPriceRange } from '../../utils/formatters';
+import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
@@ -95,11 +95,15 @@ export default function CampaignsTab({
             <div className="flex-1 min-w-0">Campaign</div>
             <div className="flex items-center gap-4 flex-shrink-0">
               <div className="hidden sm:flex items-center gap-3">
-                <span className="tabular-nums text-right" style={{ minWidth: '5rem' }}>P&amp;L</span>
-                <span className="tabular-nums text-right" style={{ minWidth: '3rem' }}>ROI</span>
+                <span className="tabular-nums text-right" style={{ minWidth: '5rem' }}>
+                  <abbr title="Net Profit and Loss across all sales for this campaign." style={{ textDecoration: 'none', cursor: 'help' }}>P&amp;L</abbr>
+                </span>
+                <span className="tabular-nums text-right" style={{ minWidth: '3rem' }}>
+                  <abbr title="Return on Investment: net profit divided by total spent." style={{ textDecoration: 'none', cursor: 'help' }}>ROI</abbr>
+                </span>
               </div>
-              <span className="hidden md:inline" style={{ minWidth: '5.25rem' }}>Sell-through</span>
-              <span className="hidden lg:inline" style={{ minWidth: '8.5rem' }}>Cap · Buy%</span>
+              <abbr className="hidden md:inline" style={{ minWidth: '5.25rem', textDecoration: 'none', cursor: 'help' }} title="Percent of cards in this campaign that have been sold.">Sell-through</abbr>
+              <abbr className="hidden lg:inline" style={{ minWidth: '8.5rem', textDecoration: 'none', cursor: 'help' }} title="Daily spend cap and the percent of CL value paid on incoming buys (Buy%). Suppressed for closed campaigns.">Cap · Buy%</abbr>
               <span className="w-4" aria-hidden="true" />
             </div>
           </div>
@@ -214,7 +218,7 @@ export default function CampaignsTab({
                     className="hidden lg:inline tabular-nums text-right"
                     style={{ minWidth: '8.5rem' }}
                   >
-                    {isClosed ? '' : `${formatCents(c.dailySpendCapCents)}/d · ${formatPct(c.buyTermsCLPct)}`}
+                    {isClosed ? '' : `${formatDollarsWhole(c.dailySpendCapCents)}/d · ${formatPct(c.buyTermsCLPct)}`}
                   </span>
 
                   {/* Chevron */}
