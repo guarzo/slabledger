@@ -233,7 +233,8 @@ export default function RepricePage() {
 
       {items.length > 0 && (
         <>
-          <div className="glass-table">
+          <div className="glass-table overflow-x-auto md:overflow-x-visible scrollbar-dark">
+            <div className="min-w-[760px] md:min-w-0">
             <div className="glass-table-header flex items-center sticky top-0 z-10">
               <div className="glass-table-th flex-shrink-0 !px-1" style={{ width: '28px' }}>
                 <input
@@ -253,7 +254,7 @@ export default function RepricePage() {
               <div className="glass-table-th flex-shrink-0 text-center" style={{ width: '56px' }}></div>
             </div>
 
-            <div ref={tableRef} className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
+            <div ref={tableRef} className="max-h-[600px] overflow-y-auto scrollbar-dark">
               {items.map((item, index) => {
                 const isSelected = selected.has(item.purchaseId);
                 const currentFinal = getFinalPrice(item);
@@ -357,6 +358,7 @@ export default function RepricePage() {
                   </div>
                 );
               })}
+            </div>
             </div>
           </div>
         </>

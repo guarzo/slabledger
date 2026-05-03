@@ -29,8 +29,9 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
     totalUnsold,
     recentFailures,
   } = diag;
-  const listedRatio = totalUnsold > 0 ? listedCards / totalUnsold : null;
-  const listedColor = listedRatio === null ? undefined : listedRatio >= 0.80 ? 'var(--success)' : listedRatio >= 0.50 ? 'var(--warning)' : 'var(--danger)';
+  const listableCards = listedCards + readyToListCards;
+  const listedRatio = listableCards > 0 ? listedCards / listableCards : null;
+  const listedColor = listedRatio !== null && listedRatio >= 0.80 ? 'var(--success)' : undefined;
 
   return (
     <div className="space-y-6">
@@ -50,7 +51,7 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
               <SummaryCard label="Inventory Cards" value={totalUnsold} />
-              <SummaryCard label="Listed" value={`${listedCards} / ${totalUnsold}`} color={listedColor} />
+              <SummaryCard label="Listed" value={`${listedCards} / ${listableCards}`} color={listedColor} />
               <SummaryCard label="Ready to List" value={readyToListCards} color={readyToListCards > 0 ? 'var(--warning)' : undefined} />
               <SummaryCard label="Unmatched" value={unmatchedCards} color={unmatchedCards > 0 ? 'var(--danger)' : undefined} />
               <SummaryCard label="Matching" value={matchingCards} color={matchingCards > 0 ? 'var(--text-muted)' : undefined} />
