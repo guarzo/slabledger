@@ -130,33 +130,40 @@ export default function SellSheetPage() {
   ];
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       <header className="mb-6">
         <h1 className="page-title">Sell Sheet</h1>
         <div className="text-sm text-[var(--text-muted)] mt-1">
           All Inventory · {slices.totalItemCount} cards in hand ·{' '}
           {dollars(slices.totalAskCents)} total ask
         </div>
+        <p className="text-xs text-[var(--text-muted)] mt-2 max-w-2xl leading-relaxed">
+          Pick a slice and print. Each preset filters the same inventory by era, grade, or price band — useful for in-person buyers who only care about one segment.
+        </p>
       </header>
 
-      <ul className="divide-y border rounded">
+      <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {order.map((id) => {
           const s = slices[id];
+          const empty = s.itemCount === 0;
           return (
-            <li key={id} className="flex items-center justify-between p-4">
-              <div>
-                <div className="font-medium">{s.label}</div>
-                <div className="text-sm text-[var(--text-muted)]">
-                  {s.itemCount} · {dollars(s.totalAskCents)}
+            <li
+              key={id}
+              className={`flex items-start justify-between gap-3 p-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] ${empty ? 'opacity-50' : ''}`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-[var(--text)]">{s.label}</div>
+                <div className="text-sm text-[var(--text-muted)] tabular-nums">
+                  {s.itemCount} {s.itemCount === 1 ? 'card' : 'cards'} · {dollars(s.totalAskCents)}
                 </div>
-                <div className="text-xs text-[var(--text-muted)] mt-0.5">
+                <div className="text-xs text-[var(--text-muted)] mt-1">
                   {s.description}
                 </div>
               </div>
               <button
                 onClick={() => setActiveSliceId(id)}
-                className="px-4 py-1.5 rounded bg-[var(--brand-500)] text-white disabled:opacity-50"
-                disabled={s.itemCount === 0}
+                className="px-4 py-1.5 rounded bg-[var(--brand-500)] text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                disabled={empty}
               >
                 Print
               </button>
