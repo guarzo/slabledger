@@ -1138,3 +1138,54 @@ PR 6 (this): single-threaded screenshot regeneration + cross-PR cohesion sweep.
 
 `structural-effort-close` — closing entry for a multi-PR structural effort. The effort hit the bar set during brainstorming: every spec acceptance criterion has a corresponding diff visible on `main`.
 
+
+---
+
+## Iteration 22 — 2026-05-03 (post-closing friction sweep)
+
+### Cycle variant
+
+`triage` — first review pass since the iter-21 6-PR effort closed. Three findings flagged from the freshly regenerated screenshots; all three shipped in one PR.
+
+### Fixed this cycle
+
+- ✅ **Insights "All campaigns healthy" banner contradicted the Action rows below it** (🔴 trust) — `web/src/react/pages/InsightsPage.tsx`. A user opening the Insights page saw a green dot saying "All campaigns healthy · no actions or signals right now" while the Campaign Tuning table directly below showed five rows with red severity strips, red campaign names, and red Action pills (EX/e‑Reader Era, Modern, Modern PSA 10, Vintage Core, Vintage Low Grade). Fix: tightened the `fullyHealthy` predicate to also require every campaign row to have status `OK` — and decoupled the DoNow/HealthSignals branch so they only render when their own data has content. When campaigns have non-OK status but actions/signals are clear, the page now goes straight from header to the tuning table (no misleading banner, no empty placeholder sections).
+- ✅ **Mobile reprice table collapsed at 390px, header read "CARDGR" and the card name was clipped** (🔴 layout) — `web/src/react/pages/reprice/RepricePage.tsx`. Fixed-width pixel cells in flex layout (28+1fr+48+56+320+56+100+56) summed to ~664px and squeezed the Card column to near-zero on mobile, making "Card" and "Gr" headers visually touch and rendering rows nameless. Fix: wrapped the header + body in a single `overflow-x-auto md:overflow-x-visible` container with `min-w-[760px] md:min-w-0` on the inner content; dropped the body's `overflow-x-hidden` since the wrapper handles it. Mobile users now horizontally scroll a properly-sized table; desktop is unchanged.
+- ✅ **Admin Pricing "Listed N / 130" rendered danger‑red when N was a normal pipeline state, not a problem** (🟡 over‑coloring) — `web/src/react/pages/admin/PricingCoverageTab.tsx`. The threshold `listedCards / totalUnsold < 0.50` painted Listed red whenever inventory was bottlenecked in earlier pipeline stages (Awaiting Receipt, Ready to List), double‑signaling the same actionable backlog that the Ready‑to‑List warning tile already announces. Fix: switched the denominator to `listedCards + readyToListCards` (the meaningful "fraction of listable cards actually listed") and dropped the warning/danger tiers — Listed only goes green at ≥80%, otherwise it stays neutral. Coloring belongs to the stage that holds the cards (Ready to List, Unmatched, etc.), not to Listed.
+
+### User-visible impact
+
+*"An operator opening Insights no longer sees the green 'All campaigns healthy' banner contradicted by five red Action rows directly underneath: when any campaign needs tuning, the banner is suppressed and the operator goes straight to the actionable table. On mobile, the Reprice table is now horizontally scrollable instead of a collapsed 'CARDGR' header with nameless rows. On Admin Pricing, the Listed tile no longer screams danger over a normal pipeline state — Ready to List is the one place the operator's queue surfaces."*
+
+### Findings this cycle
+
+- 1 🔴 trust (Insights banner contradiction) shipped.
+- 1 🔴 layout (mobile reprice collapse) shipped.
+- 1 🟡 over‑coloring (admin pricing Listed) shipped.
+
+### Deferred / intentional (carried forward)
+
+- Inventory + inventory-expanded screenshots still capture the empty `Needs Attention 0` state because the harness forces that filter (iter-5 epic, unresolved).
+- `mobile/admin-users.png` and `mobile/admin-stats.png` are byte‑identical (harness writes the same capture to two filenames). Out of `web/src/` skill scope; logged.
+- `/opportunities` desktop captures mid‑skeleton; either harness needs a longer wait or the page genuinely takes >2s on demo data.
+- Login `POWERED BY` + Card Yeti mark below the sign‑in button is washed out to near‑invisible (🟢 polish).
+- Campaign-detail breadcrumb echoes the H1 (🟢 polish).
+
+### Epics (carried forward)
+
+- Screenshot harness parity with real product defaults (iter‑5).
+- Mobile admin harness duplicate‑capture bug (new this cycle).
+
+### Recurring
+
+- (none)
+
+### Design conventions ratified this cycle
+
+- **Reassurance banners ("healthy", "all clear", "no issues") must agree with the actionable surfaces directly below them.** A green banner above a red table is a trust violation: the user reads the banner first, registers it as truth, then has to mentally retract that when scanning the table. Banner predicates must include every signal the page surfaces, not just a subset. Extends iter‑5 ("drill‑in callouts must navigate") and iter‑6 ("zero‑activity neutral coloring") into a stronger rule about cross‑section consistency.
+- **Don't double‑signal pipeline state.** When two related tiles describe the same actionable backlog from opposite sides ("Listed 7 / 130" + "Ready to List 62"), color only the one that names the action the operator can take. Coloring both reads as "two problems" instead of one. The Listed tile's color now reflects only "is the listable pipeline drained" (green at ≥80%), not "is some other stage holding cards back."
+- **Mobile-first tables that must keep desktop column widths get horizontal scroll, not column hiding.** When a table is fundamentally desktop‑first (Reprice has keyboard shortcuts, tiny touch targets) but mobile users may still hit it, wrap header + body in one horizontal scroll container with a `min-w` floor — preserves all columns, all rows have content, no hidden affordances. Cleaner than `hidden md:table-cell` per‑column.
+
+### Outstanding 🔴
+
+- (none)
