@@ -23,6 +23,7 @@ describe('CampaignHeroStats', () => {
     expect(screen.getByText('Awaiting first sale')).toBeInTheDocument();
     // Dashed placeholder stats are suppressed in the no-sales path.
     expect(screen.queryByText('Net Profit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Revenue')).not.toBeInTheDocument();
     expect(screen.queryByText('ROI')).not.toBeInTheDocument();
     expect(screen.queryByText('Sell-Through')).not.toBeInTheDocument();
     expect(screen.queryByText('Avg Days to Sell')).not.toBeInTheDocument();

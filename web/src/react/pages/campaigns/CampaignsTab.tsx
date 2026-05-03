@@ -143,28 +143,37 @@ export default function CampaignsTab({
                   <FilterSummary c={c} />
                 </div>
 
-                {/* Right: inline stats */}
+                {/* Right: inline stats. The P&L and Sell-through wrappers
+                    render unconditionally so columns stay aligned with the
+                    header even when pnl hasn't loaded for a given campaign. */}
                 <div className="flex items-center gap-4 flex-shrink-0 text-xs text-[var(--text-muted)]">
                   {/* P&L + ROI */}
-                  {pnl && (
-                    <div className="hidden sm:flex items-center gap-3">
-                      <span
-                        className={`font-medium tabular-nums text-right ${profitColor}`}
-                        style={{ minWidth: '5rem' }}
-                      >
-                        {formatCents(pnl.netProfitCents)}
-                      </span>
-                      <span
-                        className={`font-medium tabular-nums text-right ${profitColor}`}
-                        style={{ minWidth: '3rem' }}
-                      >
-                        {formatPct(pnl.roi)}
-                      </span>
-                    </div>
-                  )}
+                  <div className="hidden sm:flex items-center gap-3">
+                    <span
+                      className={`font-medium tabular-nums text-right ${pnl ? profitColor : ''}`}
+                      style={{ minWidth: '5rem' }}
+                    >
+                      {pnl ? formatCents(pnl.netProfitCents) : ''}
+                    </span>
+                    <span
+                      className={`font-medium tabular-nums text-right ${pnl ? profitColor : ''}`}
+                      style={{ minWidth: '3rem' }}
+                    >
+                      {pnl ? formatPct(pnl.roi) : ''}
+                    </span>
+                  </div>
 
                   {/* Sell-through with mini bar (sell-through % + visible color bar) */}
-                  {pnl && (() => {
+                  {(() => {
+                    if (!pnl) {
+                      return (
+                        <div
+                          className="hidden md:flex items-center gap-2"
+                          style={{ minWidth: '5.25rem' }}
+                          aria-hidden="true"
+                        />
+                      );
+                    }
                     const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
                     const pctText = formatPct(st);
                     return (

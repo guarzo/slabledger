@@ -13,7 +13,6 @@ export interface InventoryHeaderProps {
   filteredCount: number;
   totalCost: number;
   totalMarket: number;
-  totalPL: number;
   fullInventoryTotals: { totalCost: number; totalMarket: number; totalPL: number };
   showEV: boolean;
   evPortfolio: EVPortfolio | null | undefined;

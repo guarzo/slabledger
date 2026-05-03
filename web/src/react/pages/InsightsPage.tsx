@@ -78,6 +78,7 @@ export default function InsightsPage() {
               <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] px-4 py-3 flex items-center gap-2 text-sm">
                 <span className="text-[var(--success)]" aria-hidden="true">●</span>
                 <span className="text-[var(--text)]">All campaigns healthy</span>
+                <span className="text-[var(--text-muted)]" aria-hidden="true">·</span>
                 <span className="text-[var(--text-muted)]">no actions or signals right now</span>
               </div>
             ) : (
