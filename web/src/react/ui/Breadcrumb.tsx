@@ -20,7 +20,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
               {i > 0 && (
                 <span className="text-[var(--text-muted)]" aria-hidden="true">/</span>
               )}
-              {item.href && !isLast ? (
+              {item.href ? (
                 <Link
                   to={item.href}
                   className="text-[var(--text-muted)] hover:text-[var(--text)] hover:underline transition-colors"

@@ -17,7 +17,7 @@ describe('OpportunitiesTableSkeleton', () => {
   it('exposes a polite live region announcing the loading state', () => {
     render(<OpportunitiesTableSkeleton />);
     const status = screen.getByRole('status');
-    expect(status).toHaveTextContent(/loading/i);
+    expect(status).toHaveTextContent(/fetching psa-exchange listings/i);
     expect(status).toHaveAttribute('aria-live', 'polite');
   });
 
