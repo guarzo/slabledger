@@ -3,13 +3,15 @@
  *
  * - `?` opens a cheatsheet overlay.
  * - `g` then a single key navigates: `d` dashboard, `c` campaigns, `i` inventory,
- *   `n` insights, `t` tools (scan), `s` sell sheet.
- * - `Cmd/Ctrl-K` opens a stub command palette (placeholder for future search).
+ *   `n` insights, `t` tools (scan), `s` sell sheet, `v` invoices.
+ *
+ * `Cmd/Ctrl-K` is intentionally NOT handled here — Header owns the real
+ * CommandPalette. The cheatsheet still lists ⌘K so users know it exists.
  *
  * All bindings ignore presses while focus is in an editable surface (input,
  * textarea, contenteditable) so typing into forms isn't hijacked.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const NAV_BINDINGS: Array<{ key: string; path: string; label: string }> = [
@@ -33,26 +35,25 @@ function isEditable(target: EventTarget | null): boolean {
 export default function KeyboardShortcuts() {
   const navigate = useNavigate();
   const [showHelp, setShowHelp] = useState(false);
-  const [showPalette, setShowPalette] = useState(false);
   const [gPending, setGPending] = useState(false);
+  const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearGTimer = useCallback(() => {
+    if (gTimerRef.current) {
+      clearTimeout(gTimerRef.current);
+      gTimerRef.current = null;
+    }
+  }, []);
 
   const closeAll = useCallback(() => {
     setShowHelp(false);
-    setShowPalette(false);
     setGPending(false);
-  }, []);
+    clearGTimer();
+  }, [clearGTimer]);
 
   useEffect(() => {
-    let gTimer: ReturnType<typeof setTimeout> | null = null;
-
     function onKey(e: KeyboardEvent) {
-      // Cmd/Ctrl-K — palette stub. Allow even in inputs.
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setShowPalette((v) => !v);
-        setShowHelp(false);
-        return;
-      }
+      // ⌘K is owned by Header (real CommandPalette); don't double-toggle here.
 
       if (e.key === 'Escape') {
         closeAll();
@@ -71,7 +72,7 @@ export default function KeyboardShortcuts() {
       if (gPending) {
         const match = NAV_BINDINGS.find((b) => b.key === e.key.toLowerCase());
         setGPending(false);
-        if (gTimer) clearTimeout(gTimer);
+        clearGTimer();
         if (match) {
           e.preventDefault();
           navigate(match.path);
@@ -81,18 +82,24 @@ export default function KeyboardShortcuts() {
 
       if (e.key === 'g') {
         setGPending(true);
-        gTimer = setTimeout(() => setGPending(false), 1200);
+        clearGTimer();
+        gTimerRef.current = setTimeout(() => {
+          setGPending(false);
+          gTimerRef.current = null;
+        }, 1200);
       }
     }
 
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
-      if (gTimer) clearTimeout(gTimer);
     };
-  }, [gPending, navigate, closeAll]);
+  }, [gPending, navigate, closeAll, clearGTimer]);
 
-  if (!showHelp && !showPalette && !gPending) return null;
+  // Clear any pending g-timer on unmount.
+  useEffect(() => clearGTimer, [clearGTimer]);
+
+  if (!showHelp && !gPending) return null;
 
   return (
     <>
@@ -104,15 +111,6 @@ export default function KeyboardShortcuts() {
         >
           g…
         </div>
-      )}
-
-      {showPalette && (
-        <Overlay onClose={closeAll} title="Command palette">
-          <p className="text-sm text-[var(--text-muted)]">
-            Search is not wired up yet. Use <Kbd>?</Kbd> for keyboard shortcuts or
-            <Kbd>g</Kbd> then a nav key.
-          </p>
-        </Overlay>
       )}
 
       {showHelp && (

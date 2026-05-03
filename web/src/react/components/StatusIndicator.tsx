@@ -111,7 +111,7 @@ export default function StatusIndicator() {
       >
         <span className={`w-2.5 h-2.5 rounded-full ${healthColors[health]}`} />
         {health !== 'healthy' && (
-          <span className={`absolute w-2.5 h-2.5 rounded-full ${healthColors[health]} animate-ping opacity-75`} />
+          <span className={`absolute w-2.5 h-2.5 rounded-full ${healthColors[health]} motion-safe:animate-ping motion-reduce:animate-none opacity-75`} />
         )}
       </button>
 
