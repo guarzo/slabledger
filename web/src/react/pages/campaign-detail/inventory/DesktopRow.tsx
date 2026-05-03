@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
 import { GradeBadge } from '../../../ui';
@@ -82,6 +83,30 @@ export default function DesktopRow({
   const recommendedCents = item.recommendedPriceCents ?? bestPrice(item);
   const pl = unrealizedPL(cb, item);
 
+  // Transient flash after a successful inline price save. Pure UI state — does
+  // not touch the store. The CSS rule on data-just-saved drives the animation.
+  const [justSaved, setJustSaved] = useState(false);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerSaveFlash = () => {
+    setJustSaved(true);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setJustSaved(false), 1100);
+  };
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
+  const acceptRecommendation = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onInlinePriceSave || recommendedCents <= 0 || recommendedCents === listCents) return;
+    try {
+      await onInlinePriceSave(item.purchase.id, recommendedCents);
+      triggerSaveFlash();
+    } catch {
+      // toast handled upstream
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('input,button,a,select,textarea,[role="button"],[role="checkbox"]')) return;
@@ -134,6 +159,7 @@ export default function DesktopRow({
       tabIndex={0}
       onClick={onExpand}
       onKeyDown={handleKeyDown}
+      data-just-saved={justSaved || undefined}
     >
       <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }} onClick={e => e.stopPropagation()}>
         <input type="checkbox" checked={selected} onChange={onToggle} onKeyDown={e => e.stopPropagation()} className="rounded accent-[var(--brand-500)]" />
@@ -221,6 +247,7 @@ export default function DesktopRow({
                 currentCents={listCents}
                 costBasisCents={cb}
                 onSave={onInlinePriceSave}
+                onSaveComplete={triggerSaveFlash}
               />
             ) : (
               <span className="tabular-nums text-[var(--text)]">
@@ -229,12 +256,24 @@ export default function DesktopRow({
             )}
           </div>
           {recommendedCents > 0 && recommendedCents !== listCents && (
-            <span
-              className="text-[10px] text-[var(--text-muted)] tabular-nums leading-none cursor-help"
-              title={referencePricesTooltip(item)}
-            >
-              rec {formatCents(recommendedCents)}
-            </span>
+            onInlinePriceSave ? (
+              <button
+                type="button"
+                onClick={acceptRecommendation}
+                className="text-[10px] tabular-nums leading-none text-[var(--text-muted)] hover:text-[var(--brand-300)] transition-colors inline-flex items-center gap-0.5"
+                title={`Click to accept recommended price (${referencePricesTooltip(item)})`}
+              >
+                <span aria-hidden="true">→</span>
+                rec {formatCents(recommendedCents)}
+              </button>
+            ) : (
+              <span
+                className="text-[10px] text-[var(--text-muted)] tabular-nums leading-none cursor-help"
+                title={referencePricesTooltip(item)}
+              >
+                rec {formatCents(recommendedCents)}
+              </span>
+            )
           )}
         </div>
       </div>
