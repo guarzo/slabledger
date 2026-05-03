@@ -48,21 +48,20 @@ function PerformerList({ title, items, titleColorClass, itemColorClass }: {
   );
 }
 
-function MetricTile({ title, current, previous, isCents, className, muted }: {
+function MetricInline({ title, current, previous, isCents, muted }: {
   title: string;
   current: number;
   previous: number;
   isCents?: boolean;
-  className?: string;
   muted?: boolean;
 }) {
   return (
-    <CardShell variant="data" padding="sm" className={`text-center ${className ?? ''}`}>
-      <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">{title}</div>
-      <div className="text-sm font-semibold">
+    <div className="flex items-baseline gap-2 min-w-0">
+      <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-medium">{title}</span>
+      <span className="text-sm font-semibold tabular-nums">
         <DeltaIndicator current={current} previous={previous} isCents={isCents} muted={muted} />
-      </div>
-    </CardShell>
+      </span>
+    </div>
   );
 }
 
@@ -105,12 +104,12 @@ export default function WeeklyReviewSection({ data }: { data: WeeklyReviewSummar
       />
       {open && (
         <div className="mt-3 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <MetricTile title="Purchases" current={data.purchasesThisWeek} previous={data.purchasesLastWeek} muted={inProgress} />
-            <MetricTile title="Spend" current={data.spendThisWeekCents} previous={data.spendLastWeekCents} isCents muted={inProgress} />
-            <MetricTile title="Sales" current={data.salesThisWeek} previous={data.salesLastWeek} muted={inProgress} />
-            <MetricTile title="Revenue" current={data.revenueThisWeekCents} previous={data.revenueLastWeekCents} isCents muted={inProgress} />
-            <MetricTile title="Profit" current={data.profitThisWeekCents} previous={data.profitLastWeekCents} isCents className="col-span-2 sm:col-span-1" muted={inProgress} />
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-3 py-2 border-y border-[rgba(255,255,255,0.06)]">
+            <MetricInline title="Purchases" current={data.purchasesThisWeek} previous={data.purchasesLastWeek} muted={inProgress} />
+            <MetricInline title="Spend" current={data.spendThisWeekCents} previous={data.spendLastWeekCents} isCents muted={inProgress} />
+            <MetricInline title="Sales" current={data.salesThisWeek} previous={data.salesLastWeek} muted={inProgress} />
+            <MetricInline title="Revenue" current={data.revenueThisWeekCents} previous={data.revenueLastWeekCents} isCents muted={inProgress} />
+            <MetricInline title="Profit" current={data.profitThisWeekCents} previous={data.profitLastWeekCents} isCents muted={inProgress} />
           </div>
 
           {((data.topPerformers?.length ?? 0) > 0 || (data.bottomPerformers?.length ?? 0) > 0) && (

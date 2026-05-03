@@ -58,7 +58,7 @@ export default function CampaignDetailPage() {
   const tabs = campaignTabs;
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
+    <div className="max-w-[1600px] mx-auto px-4">
       <Breadcrumb items={[
         { label: 'Campaigns', href: '/campaigns' },
         { label: campaign.name },

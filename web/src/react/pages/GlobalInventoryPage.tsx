@@ -9,7 +9,7 @@ export default function GlobalInventoryPage() {
 
   if (isError) {
     return (
-      <div className="max-w-6xl mx-auto px-4 text-center py-16">
+      <div className="max-w-[1600px] mx-auto px-4 text-center py-16">
         <p className="text-[var(--danger)] mb-4">{error instanceof Error ? error.message : 'Failed to load inventory'}</p>
         <button
           type="button"
@@ -24,7 +24,7 @@ export default function GlobalInventoryPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
+    <div className="max-w-[1600px] mx-auto px-4">
       <div className="print:hidden">
         <div className="flex items-baseline justify-between mb-6 gap-3 flex-wrap">
           <div className="flex items-baseline gap-3 flex-wrap">
