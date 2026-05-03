@@ -71,9 +71,10 @@ export default function InsightsPage() {
       )}
 
       {data && (() => {
-        const hasActionsOrSignals = data.actions.length > 0 || !isSignalsClear(data.signals);
+        const hasActions = data.actions.length > 0;
+        const hasSignals = !isSignalsClear(data.signals);
         const allCampaignsOK = data.campaigns.every(c => c.status === 'OK');
-        const fullyHealthy = !hasActionsOrSignals && allCampaignsOK;
+        const fullyHealthy = !hasActions && !hasSignals && allCampaignsOK;
         return (
           <>
             {fullyHealthy && (
@@ -84,15 +85,15 @@ export default function InsightsPage() {
                 <span className="text-[var(--text-muted)]">no actions or signals right now</span>
               </div>
             )}
-            {hasActionsOrSignals && (
-              <>
-                <SectionErrorBoundary sectionName="Do now">
-                  <DoNowSection actions={data.actions} />
-                </SectionErrorBoundary>
-                <SectionErrorBoundary sectionName="Health signals">
-                  <HealthSignalsTiles signals={data.signals} />
-                </SectionErrorBoundary>
-              </>
+            {hasActions && (
+              <SectionErrorBoundary sectionName="Do now">
+                <DoNowSection actions={data.actions} />
+              </SectionErrorBoundary>
+            )}
+            {hasSignals && (
+              <SectionErrorBoundary sectionName="Health signals">
+                <HealthSignalsTiles signals={data.signals} />
+              </SectionErrorBoundary>
             )}
             <SectionErrorBoundary sectionName="Campaign tuning">
               <CampaignTuningTable rows={data.campaigns} />
