@@ -85,10 +85,13 @@ export default function InventoryHeader({
   const universePlPctSuffix = universe.totalCost > 0
     ? ` (${universePlPositive ? '+' : ''}${formatPct(universe.totalPL / universe.totalCost)})`
     : '';
-  const isFiltering = (filterTab !== 'all' || !!debouncedSearch?.trim()) && filteredCount !== items.length;
+  // Normalized search flag — whitespace-only queries shouldn't count as
+  // an active search anywhere downstream.
+  const hasSearch = !!debouncedSearch?.trim();
+  const isFiltering = (filterTab !== 'all' || hasSearch) && filteredCount !== items.length;
 
   const showNeedsHeadline = !showAll
-    && !debouncedSearch?.trim()
+    && !hasSearch
     && filterTab !== 'needs_attention'
     && tabCounts.needs_attention > 0;
 
@@ -143,7 +146,7 @@ export default function InventoryHeader({
           {/* Filter-tab summary. Search has its own dedicated summary line
               below the filter pills, so this fragment only renders for
               non-search filter narrowing — the two are mutually exclusive. */}
-          {isFiltering && !debouncedSearch && (
+          {isFiltering && !hasSearch && (
             <>
               <span className="text-[var(--text-muted)]">·</span>
               <span className="text-[var(--text-subtle)] tabular-nums">
@@ -226,7 +229,7 @@ export default function InventoryHeader({
         )}
       </div>
 
-      {debouncedSearch && (
+      {hasSearch && (
         <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1 sell-sheet-no-print">
           {filteredCount} of {items.length} cards
         </div>
