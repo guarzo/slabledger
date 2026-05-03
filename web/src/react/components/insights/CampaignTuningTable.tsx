@@ -24,11 +24,11 @@ function sortByUrgency(rows: TuningRow[]): TuningRow[] {
   });
 }
 
-const columns: Array<{ key: TuningColumn; label: string }> = [
-  { key: 'buyPct', label: 'Buy %' },
-  { key: 'characters', label: 'Characters' },
-  { key: 'years', label: 'Years' },
-  { key: 'spendCap', label: 'Spend cap' },
+const columns: Array<{ key: TuningColumn; label: string; description: string }> = [
+  { key: 'buyPct',     label: 'Buy %',      description: 'Buy threshold relative to CardLadder. Higher = more selective on purchases.' },
+  { key: 'characters', label: 'Characters', description: 'Inclusion list size and breadth. Recommendation reflects whether the list is too narrow or wide given fill rate.' },
+  { key: 'years',      label: 'Years',      description: 'Year range targeted. Recommendation reflects whether the range is too narrow or wide given fill rate.' },
+  { key: 'spendCap',   label: 'Spend cap',  description: 'Daily spend ceiling. Recommendation reflects whether the cap is constraining or oversized for current sell-through.' },
 ];
 
 export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
@@ -73,7 +73,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
                     const cell = row.cells[c.key];
                     return (
                       <div key={c.key} className="flex items-center justify-between gap-2">
-                        <dt className="text-[var(--text-muted)] uppercase tracking-wider text-[10px]">{c.label}</dt>
+                        <dt className="text-[var(--text-muted)] uppercase tracking-wider text-[10px]" title={c.description}>{c.label}</dt>
                         <dd className="min-w-0">
                           {cell ? (
                             <RecommendationBadge label={cell.recommendation} severity={cell.severity} />
@@ -100,7 +100,13 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
         <div className={`${tableStyles.grid} pl-4 pr-3 py-2 bg-[var(--surface-2)]/40 text-[10px] uppercase tracking-wider font-semibold text-[var(--text-muted)]`}>
           <div>Campaign</div>
           {columns.map(c => (
-            <div key={c.key}>{c.label}</div>
+            <abbr
+              key={c.key}
+              title={c.description}
+              style={{ textDecoration: 'none', cursor: 'help' }}
+            >
+              {c.label}
+            </abbr>
           ))}
           <div className="w-16 text-right">Status</div>
         </div>
