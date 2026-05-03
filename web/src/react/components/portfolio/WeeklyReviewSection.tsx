@@ -84,6 +84,7 @@ export default function WeeklyReviewSection({ data }: { data: WeeklyReviewSummar
     };
     const start = new Date(data.weekStart + 'T12:00:00');
     const end = new Date(data.weekEnd + 'T12:00:00');
+    end.setHours(23, 59, 59, 999);
     const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const now = new Date(nowMs);
     const inProg = now >= start && now < end;
