@@ -92,6 +92,7 @@ export interface SellSheetItem {
   grade: number;
   grader?: string;
   cardYear?: string;
+  psaShipDate?: string;
   population?: number;
   buyCostCents: number;
   costBasisCents: number;

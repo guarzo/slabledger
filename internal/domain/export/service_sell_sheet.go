@@ -169,11 +169,11 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		} else {
 			feePct = inventory.EffectiveFeePct(&inventory.Campaign{})
 		}
-		item, ok := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
-		if !ok {
-			sheet.Totals.SkippedItems++
-			continue
-		}
+		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
+		// Always include in-hand inventory rows — even ones with no price
+		// snapshot. The vendor at a card show still needs to see the card;
+		// a missing price just means an empty CL column with PriceLookupError
+		// preserved for diagnostics. Skipping silently dropped real inventory.
 		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
 		sheet.Items = append(sheet.Items, item)
 		sheet.Totals.TotalCostBasis += item.CostBasisCents

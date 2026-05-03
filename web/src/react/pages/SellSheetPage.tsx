@@ -45,8 +45,23 @@ interface PrintViewProps {
 
 function PrintView({ slice, onBack }: PrintViewProps) {
   useEffect(() => {
-    const t = setTimeout(() => window.print(), 100);
-    return () => clearTimeout(t);
+    // Wait for two animation frames so the browser has actually painted
+    // every SellSheetPrintRow (including its barcode SVG, which renders
+    // in the row's own useEffect on the first frame) before opening the
+    // print dialog. A fixed timeout races with row rendering.
+    let outerRaf = 0;
+    let innerRaf = 0;
+    let cancelled = false;
+    outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        if (!cancelled) window.print();
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(outerRaf);
+      cancelAnimationFrame(innerRaf);
+    };
   }, []);
 
   return (

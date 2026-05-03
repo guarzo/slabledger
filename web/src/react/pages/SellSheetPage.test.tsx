@@ -77,13 +77,16 @@ describe('SellSheetPage', () => {
 
   it('shows print view when a non-empty slice Print button is clicked', () => {
     const printSpy = vi.spyOn(window, 'print').mockImplementation(() => undefined);
-    renderPage();
+    const { unmount } = renderPage();
     const psa10Row = screen.getByText('PSA 10s').closest('li');
     expect(psa10Row).not.toBeNull();
     const printBtn = psa10Row!.querySelector('button')!;
     expect(printBtn).not.toBeDisabled();
     fireEvent.click(printBtn);
     expect(screen.getByTestId('sell-sheet-print-view')).toBeInTheDocument();
+    // Unmount before restoring the spy so any pending rAF that fires
+    // window.print() hits the mock, not the real (jsdom-unsupported) function.
+    unmount();
     printSpy.mockRestore();
   });
 });

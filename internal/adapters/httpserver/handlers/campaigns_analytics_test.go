@@ -521,7 +521,7 @@ func TestHandleGlobalSellSheet(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newTestHandlerWithServices(&mocks.MockInventoryService{}, &mocks.MockFinanceService{}, tc.setupExpSvc())
-			req := httptest.NewRequest(http.MethodPost, "/api/sell-sheet", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/sell-sheet", nil)
 			rec := httptest.NewRecorder()
 			h.HandleGlobalSellSheet(rec, req)
 
