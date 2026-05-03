@@ -5,6 +5,8 @@ import InventoryTab from './campaign-detail/InventoryTab';
 export default function GlobalInventoryPage() {
   const { data: items = [], warnings, isLoading, isError, error, refetch, isFetching } = useGlobalInventory();
 
+  const inHand = items.filter(i => !!i.purchase.receivedAt).length;
+
   if (isError) {
     return (
       <div className="max-w-6xl mx-auto px-4 text-center py-16">
@@ -25,8 +27,16 @@ export default function GlobalInventoryPage() {
     <div className="max-w-6xl mx-auto px-4">
       <div className="print:hidden">
         <Breadcrumb items={[{ label: 'Inventory' }]} />
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Inventory</h1>
+        <div className="flex items-baseline justify-between mb-6 gap-3 flex-wrap">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Inventory</h1>
+            {!isLoading && items.length > 0 && (
+              <span className="text-sm text-[var(--text-muted)] tabular-nums">
+                {items.length} {items.length === 1 ? 'card' : 'cards'}
+                {inHand > 0 && <> · {inHand} in hand</>}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer, useWindowVirtualizer } from '@tanstack/react-virtual';
 import { useMemo } from 'react';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
@@ -54,7 +54,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const isMobile = useMediaQuery('(max-width: 768px)');
   const state = useInventoryState(items, campaignId);
   const {
-    scrollContainerRef, mobileScrollRef,
+    scrollContainerRef: _scrollContainerRef, mobileScrollRef,
     selected, setSelected, expandedId,
     saleModalOpen, saleModalItems,
     hintTarget, setHintTarget, priceTarget, setPriceTarget,
@@ -74,9 +74,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
   } = state;
 
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useWindowVirtualizer({
     count: filteredAndSortedItems.length,
-    getScrollElement: () => scrollContainerRef.current,
     // Expanded rows have variable height; measureElement handles actual sizing.
     estimateSize: () => 64,
     overscan: 10,
@@ -247,31 +246,27 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         </div>
       ) : (
         <div className="glass-table">
-          {/* Sticky header */}
+          {/* Sticky header — sticks against the page scroll now that the inner scroll is gone */}
           <div className="glass-table-header flex items-center sticky top-0 z-10" style={{ paddingLeft: '3px' }}>
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}>
               <input type="checkbox" aria-label="Select all visible cards" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
                 onChange={toggleAll} className="rounded accent-[var(--brand-500)]" />
             </div>
-            <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0" />
-            <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '72px' }} />
+            <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0 max-w-[320px]" />
+            <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '64px' }} />
             <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
-            <SortableHeader label="List / Rec" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '140px' }} />
-            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
-            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}></div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '64px' }}>DH</div>
-            <div aria-hidden="true" className="glass-table-th flex-shrink-0 !p-0 print-hide-actions" style={{ width: '1px' }}></div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '64px' }}>Sell</div>
-            <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
+            <SortableHeader label="List / Rec" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '180px' }} />
+            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '80px' }} />
+            <SortableHeader label="Status" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '120px' }} />
+            <div className="glass-table-th flex-shrink-0 text-left print-hide-actions ml-2 pl-3" style={{ minWidth: '200px' }}>Actions</div>
           </div>
-          {/* Rows */}
+          {/* Rows — virtualizes against window scroll, no inner overflow container */}
           {filteredAndSortedItems.length === 0 && (
             <div className="py-10 text-center text-[var(--text-muted)] text-sm">
               {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
             </div>
           )}
-          <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto overflow-x-hidden scrollbar-dark">
+          <div className="overflow-x-hidden">
             <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
               {rowVirtualizer.getVirtualItems().map(virtualRow => {
                 const item = filteredAndSortedItems[virtualRow.index];
