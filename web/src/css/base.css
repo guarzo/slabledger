@@ -22,6 +22,16 @@
   }
 }
 
+@utility page-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-size: clamp(1.625rem, 1.4rem + 1vw, 2rem);
+  line-height: 1.1;
+  color: var(--text);
+  font-feature-settings: "ss01", "ss02";
+}
+
 @utility scrollbar-dark {
   scrollbar-width: thin;
   scrollbar-color: var(--surface-3) var(--surface-0);

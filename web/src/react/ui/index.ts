@@ -55,7 +55,7 @@ export { TrendArrow } from './TrendArrow';
 
 // Status & Recommendations
 export { StatusPill } from './StatusPill';
-export type { StatusTone } from './StatusPill';
+export type { StatusTone, StatusSize } from './StatusPill';
 export { RecommendationBadge } from './RecommendationBadge';
 export type { RecTier, RecSeverity } from './RecommendationBadge';
 

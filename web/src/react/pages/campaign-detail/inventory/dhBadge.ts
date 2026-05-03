@@ -1,3 +1,5 @@
+import type { StatusTone } from '../../../ui/StatusPill';
+
 export type DHBadgeLabel =
   | 'sold'
   | 'listed'
@@ -37,16 +39,21 @@ export function dhBadgeFor(
   }
 }
 
-export const DH_BADGE_COLORS: Record<DHBadgeLabel, string> = {
-  sold: 'bg-[var(--surface-1)] text-[var(--text-muted)]',
-  listed: 'bg-[rgba(34,211,153,0.1)] text-[#34d399]',
-  'in stock': 'bg-[rgba(99,102,241,0.1)] text-[#818cf8]',
-  shipped: 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
-  held: 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
-  'no DH match': 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
-  dismissed: 'bg-[rgba(248,113,113,0.1)] text-[#f87171]',
-  'matching DH': 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
-  'awaiting intake': 'bg-[var(--surface-2)] text-[var(--text-muted)]',
-  pushed: 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]',
-  unenrolled: 'bg-[var(--surface-2)] text-[var(--text-muted)]',
+/**
+ * Tones for the shared StatusPill component.
+ * Mapping: terminal states (sold) → neutral; positive (listed/in stock) → success/brand;
+ * pipeline (shipped/matching/pushed) → warning; problems (held/no match/dismissed) → danger.
+ */
+export const DH_BADGE_TONES: Record<DHBadgeLabel, StatusTone> = {
+  sold: 'neutral',
+  listed: 'success',
+  'in stock': 'brand',
+  shipped: 'warning',
+  held: 'danger',
+  'no DH match': 'danger',
+  dismissed: 'danger',
+  'matching DH': 'warning',
+  'awaiting intake': 'neutral',
+  pushed: 'warning',
+  unenrolled: 'neutral',
 };

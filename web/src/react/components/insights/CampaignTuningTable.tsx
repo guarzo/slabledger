@@ -1,16 +1,17 @@
 import { Link } from 'react-router-dom';
 import { RecommendationBadge } from '../../ui/RecommendationBadge';
+import { StatusPill, type StatusTone } from '../../ui/StatusPill';
 import SectionEyebrow from '../../ui/SectionEyebrow';
 import EmptyState from '../../ui/EmptyState';
 import type { Status, TuningColumn, TuningRow } from '../../../types/insights';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import tableStyles from './CampaignTuningTable.module.css';
 
-const STATUS_META: Record<Status, { label: string; badge: string }> = {
-  Act:  { label: 'Action', badge: 'bg-[var(--danger)]/15 text-[var(--danger)]' },
-  Kill: { label: 'Kill',   badge: 'bg-[var(--danger)]/25 text-[var(--danger)] font-bold' },
-  Tune: { label: 'Tune',   badge: 'bg-[var(--warning)]/15 text-[var(--warning)]' },
-  OK:   { label: 'OK',     badge: 'bg-[var(--success)]/15 text-[var(--success)]' },
+const STATUS_META: Record<Status, { label: string; tone: StatusTone }> = {
+  Act:  { label: 'Action', tone: 'danger' },
+  Kill: { label: 'Kill',   tone: 'danger' },
+  Tune: { label: 'Tune',   tone: 'warning' },
+  OK:   { label: 'OK',     tone: 'success' },
 };
 
 const STATUS_ORDER: Record<Status, number> = { Act: 0, Kill: 1, Tune: 2, OK: 3 };
@@ -64,9 +65,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
               >
                 <div className="flex items-baseline justify-between gap-2 mb-2">
                   <span className="text-sm font-semibold text-[var(--text)] truncate min-w-0">{row.campaignName}</span>
-                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${meta.badge} whitespace-nowrap`}>
-                    {meta.label}
-                  </span>
+                  <StatusPill tone={meta.tone} size="xs">{meta.label}</StatusPill>
                 </div>
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                   {columns.map((c) => {
@@ -132,9 +131,7 @@ export default function CampaignTuningTable({ rows }: { rows: TuningRow[] }) {
                 );
               })}
               <div className="w-16 text-right">
-                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${meta.badge}`}>
-                  {meta.label}
-                </span>
+                <StatusPill tone={meta.tone} size="xs">{meta.label}</StatusPill>
               </div>
             </Link>
           );
