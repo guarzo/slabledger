@@ -55,12 +55,18 @@ const PAGES = [
   { name: 'opportunities', path: '/opportunities/psa-exchange' },
   { name: 'campaigns', path: '/campaigns' },
   { name: 'campaign-detail', path: () => `/campaigns/${firstCampaignId || 'unknown'}` },
-  { name: 'inventory', path: '/inventory', filterTab: 'Needs Attention' },
-  { name: 'inventory-expanded', path: '/inventory', filterTab: 'Needs Attention', expandRow: true, desktopOnly: true },
+  // No forced filter — let useInventoryState's smart default render the populated state
+  // (falls through to 'all' when Needs Attention is 0). The previous forced click on
+  // 'Needs Attention' produced an empty 'No cards in this view' capture for both the
+  // base inventory and the inventory-expanded screenshots.
+  { name: 'inventory', path: '/inventory' },
+  { name: 'inventory-expanded', path: '/inventory', expandRow: true, desktopOnly: true },
   { name: 'sell-sheet', path: '/sell-sheet' },
   { name: 'reprice', path: '/reprice' },
   { name: 'scan', path: '/scan' },
-  { name: 'admin-users', path: '/admin' },
+  // Explicit Users tab — without this the page captured the default Stats tab,
+  // making admin-users.png byte-identical to admin-stats.png on mobile.
+  { name: 'admin-users', path: '/admin', tabLabel: 'Users' },
   { name: 'admin-pricing', path: '/admin', tabLabel: 'Pricing' },
   { name: 'admin-stats', path: '/admin', tabLabel: 'Stats' },
   { name: 'admin-integrations', path: '/admin', tabLabel: 'Integrations' },
