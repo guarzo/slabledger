@@ -5,11 +5,9 @@ import { formatCents, formatPct } from '../../../utils/formatters';
 import { formatPL } from './utils';
 import ReviewSummaryBar from './ReviewSummaryBar';
 import CrackCandidatesBanner from './CrackCandidatesBanner';
-import { SellSheetActions } from '../SellSheetView';
 import BulkSelectionMissingCLWarning from './BulkSelectionMissingCLWarning';
 
 export interface InventoryHeaderProps {
-  isMobile: boolean;
   items: AgingItem[];
   filteredCount: number;
   totalCost: number;
@@ -25,34 +23,23 @@ export interface InventoryHeaderProps {
   filterTab: FilterTab;
   setFilterTab: (tab: FilterTab) => void;
   tabCounts: TabCounts;
-  pageSellSheetCount: number;
   debouncedSearch: string;
-  sellSheetActive: boolean;
   selected: ReadonlySet<string>;
   campaignId?: string;
-  isPrinting: boolean;
-  onAddToSellSheet: (ids: string[]) => void;
-  onRemoveFromSellSheet: (ids: string[]) => void;
-  onRecordSale: (items: AgingItem[]) => void;
-  onBulkListOnDH: (ids: string[]) => void;
-  onClearSelected: () => void;
-  onPrint: () => void;
   onDeselectMissingCL: (purchaseIds: string[]) => void;
   onHighlightMissingCL: (purchaseIds: string[]) => void;
 }
 
 export default function InventoryHeader({
-  isMobile, items, filteredCount,
+  items, filteredCount,
   totalCost, totalMarket, totalPL,
   fullInventoryTotals,
   showEV, evPortfolio,
   searchQuery, setSearchQuery,
   showAll, setShowAll, filterTab, setFilterTab,
-  tabCounts, pageSellSheetCount, debouncedSearch,
-  sellSheetActive, selected,
-  campaignId, isPrinting,
-  onAddToSellSheet, onRemoveFromSellSheet,
-  onRecordSale, onBulkListOnDH, onClearSelected, onPrint,
+  tabCounts, debouncedSearch,
+  selected,
+  campaignId,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
   const missingCLIds = useMemo(() => {
@@ -63,8 +50,7 @@ export default function InventoryHeader({
   const primary = useMemo(() => [
     { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
     { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
-    { key: 'sell_sheet' as const, label: 'Sell Sheet', count: pageSellSheetCount, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts, pageSellSheetCount]);
+  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
   const secondary = useMemo(() => [
     { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
     { key: 'dh_listed' as const, label: 'DH Listed', count: tabCounts.dh_listed, alwaysShow: false },
@@ -73,8 +59,6 @@ export default function InventoryHeader({
     { key: 'skipped' as const, label: 'Skipped on DH Listing', count: tabCounts.skipped, alwaysShow: false },
     { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
   ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
-
-  if (isMobile && sellSheetActive) return null;
 
   const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
     const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums';
@@ -150,22 +134,6 @@ export default function InventoryHeader({
         onHighlight={onHighlightMissingCL}
       />
 
-      {selected.size > 0 || (sellSheetActive && pageSellSheetCount > 0) ? (
-        <SellSheetActions
-          selected={selected}
-          sellSheetActive={sellSheetActive}
-          items={items}
-          onAddToSellSheet={onAddToSellSheet}
-          onRemoveFromSellSheet={onRemoveFromSellSheet}
-          onRecordSale={onRecordSale}
-          onBulkListOnDH={onBulkListOnDH}
-          onClearSelected={onClearSelected}
-          isPrinting={isPrinting}
-          pageSellSheetCount={pageSellSheetCount}
-          onPrint={onPrint}
-        />
-      ) : null}
-
       {/* Crack Candidates Banner */}
       {campaignId && <div className="sell-sheet-no-print"><CrackCandidatesBanner campaignId={campaignId} /></div>}
 
@@ -215,12 +183,6 @@ export default function InventoryHeader({
         </div>
       )}
 
-      {sellSheetActive && filteredCount === 0 && (
-        <div className="text-center py-12">
-          <div className="text-[var(--text-muted)] text-sm">No items on your sell sheet.</div>
-          <div className="text-[var(--text-muted)] text-xs mt-1">Select items from any tab and click &ldquo;Add to Sell Sheet&rdquo;.</div>
-        </div>
-      )}
     </>
   );
 }
