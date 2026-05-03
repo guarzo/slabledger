@@ -53,7 +53,15 @@ export default function KeyboardShortcuts() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Skip if another handler already consumed this event.
+      if (e.defaultPrevented) return;
+
       // ⌘K is owned by Header (real CommandPalette); don't double-toggle here.
+
+      // While the cheatsheet is open it owns the keyboard — Escape closes it
+      // (the Overlay handles that locally and stopPropagation's), and we don't
+      // want `?` to re-toggle or `g`+key to navigate from a modal.
+      if (showHelp) return;
 
       if (e.key === 'Escape') {
         closeAll();
@@ -94,7 +102,7 @@ export default function KeyboardShortcuts() {
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [gPending, navigate, closeAll, clearGTimer]);
+  }, [gPending, showHelp, navigate, closeAll, clearGTimer]);
 
   // Clear any pending g-timer on unmount.
   useEffect(() => clearGTimer, [clearGTimer]);
