@@ -26,6 +26,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 		CardNumber:     purchase.CardNumber,
 		Grade:          purchase.GradeValue,
 		Grader:         purchase.Grader,
+		CardYear:       purchase.CardYear,
 		Population:     purchase.Population,
 		BuyCostCents:   purchase.BuyCostCents,
 		CostBasisCents: costBasis,
