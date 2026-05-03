@@ -1,34 +1,35 @@
 /**
  * Header Component
  *
- * Sticky header with logo, navigation, and user dropdown menu.
+ * Sticky header with three-zone top chrome (home / browse / do) plus
+ * a global ⌘K command palette and the user menu.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { DropdownMenu } from 'radix-ui';
-import Navigation from './Navigation';
 import StatusIndicator from './StatusIndicator';
+import CommandPalette from './CommandPalette';
+import {
+  NAV_ITEMS,
+  isRouteActive,
+  navItemsForGroup,
+  navItemsForZone,
+  pageLabelForPath,
+  primaryItemForGroup,
+  type NavItem,
+} from './navConfig';
 import { useAuth } from '../contexts/AuthContext';
 import CardShell from '../ui/CardShell';
 import logoSrc from '../../assets/logo.png';
 
-const NAV_LABELS: { path: string; label: string }[] = [
-  { path: '/', label: 'Dashboard' },
-  { path: '/inventory', label: 'Inventory' },
-  { path: '/campaigns', label: 'Campaigns' },
-  { path: '/insights', label: 'Insights' },
-  { path: '/scan', label: 'Scan' },
-  { path: '/reprice', label: 'Reprice' },
-  { path: '/invoices', label: 'Invoices' },
-  { path: '/admin', label: 'Admin' },
-];
+const browseDirectClass =
+  'relative inline-flex items-center px-3.5 py-2 text-sm rounded-md transition-colors duration-200 border focus-ring whitespace-nowrap';
+const browseActiveClass = 'text-white font-semibold bg-[var(--brand-500)]/15 border-[var(--brand-500)]/20';
+const browseInactiveClass = 'text-[var(--text-muted)] font-medium hover:text-[var(--text)] hover:bg-[var(--surface-2)]/10 border-transparent';
 
-function pageLabelFor(pathname: string): string {
-  // Longest-prefix match wins so /campaigns/123 picks "Campaigns".
-  const match = NAV_LABELS
-    .filter((item) => item.path === '/' ? pathname === '/' : pathname === item.path || pathname.startsWith(item.path + '/'))
-    .sort((a, b) => b.path.length - a.path.length)[0];
-  return match?.label ?? 'Menu';
+function isMac(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 }
 
 function UserInitial({ name }: { name: string }) {
@@ -40,25 +41,224 @@ function UserInitial({ name }: { name: string }) {
   );
 }
 
+function ChevronDown({ className = '' }: { className?: string }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" className={className}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function BrowseDirect({ item, currentPath }: { item: NavItem; currentPath: string }) {
+  const active = isRouteActive(item.path, currentPath);
+  return (
+    <Link
+      to={item.path}
+      className={`${browseDirectClass} ${active ? browseActiveClass : browseInactiveClass}`}
+      aria-current={active ? 'page' : undefined}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
+function ReportsDropdown({ currentPath }: { currentPath: string }) {
+  const items = navItemsForGroup('reports');
+  const anyActive = items.some((it) => isRouteActive(it.path, currentPath));
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className={`${browseDirectClass} ${anyActive ? browseActiveClass : browseInactiveClass} gap-1.5`}
+          aria-label="Reports menu"
+        >
+          Reports
+          <ChevronDown />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="start"
+          sideOffset={6}
+          className="min-w-[220px] py-1 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-[var(--radius-md)] shadow-[var(--shadow-2)] z-50 data-[state=open]:animate-[fadeIn_150ms_ease-out]"
+        >
+          {items.map((item) => (
+            <DropdownMenu.Item key={item.path} asChild>
+              <Link
+                to={item.path}
+                className="flex flex-col gap-0.5 px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]/60 data-[highlighted]:bg-[var(--surface-2)]/60 outline-none cursor-default focus-ring rounded-sm mx-1"
+              >
+                <span className="font-medium">{item.label}</span>
+                {item.description && (
+                  <span className="text-2xs text-[var(--text-subtle)]">{item.description}</span>
+                )}
+              </Link>
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function ScanSplitButton({ currentPath }: { currentPath: string }) {
+  const items = navItemsForGroup('scan');
+  const primary = primaryItemForGroup('scan');
+  const anyActive = items.some((it) => isRouteActive(it.path, currentPath));
+  if (!primary) return null;
+
+  const activeFill =
+    'text-white font-semibold bg-[var(--brand-500)]/20 border-[var(--brand-500)]/40 shadow-[var(--shadow-1)]';
+  const restingFill =
+    'text-[var(--text)] font-medium bg-[var(--surface-2)]/60 border-[var(--surface-3)] hover:bg-[var(--surface-2)]';
+  const sharedSegment = 'inline-flex items-center px-3 py-2 text-sm border focus-ring whitespace-nowrap transition-colors';
+
+  return (
+    <div className="inline-flex rounded-md overflow-hidden">
+      <Link
+        to={primary.path}
+        aria-current={isRouteActive(primary.path, currentPath) ? 'page' : undefined}
+        className={`${sharedSegment} ${anyActive ? activeFill : restingFill} border-r-0 rounded-l-md`}
+      >
+        {primary.label}
+      </Link>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label="More do-zone actions"
+            className={`${sharedSegment} ${anyActive ? activeFill : restingFill} rounded-r-md px-2`}
+          >
+            <ChevronDown />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            align="end"
+            sideOffset={6}
+            className="min-w-[220px] py-1 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-[var(--radius-md)] shadow-[var(--shadow-2)] z-50 data-[state=open]:animate-[fadeIn_150ms_ease-out]"
+          >
+            {items.map((item) => (
+              <DropdownMenu.Item key={item.path} asChild>
+                <Link
+                  to={item.path}
+                  className="flex flex-col gap-0.5 px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]/60 data-[highlighted]:bg-[var(--surface-2)]/60 outline-none cursor-default focus-ring rounded-sm mx-1"
+                >
+                  <span className="font-medium">{item.label}</span>
+                  {item.description && (
+                    <span className="text-2xs text-[var(--text-subtle)]">{item.description}</span>
+                  )}
+                </Link>
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
+  );
+}
+
+function PaletteButton({ onOpen }: { onOpen: () => void }) {
+  const shortcut = isMac() ? '⌘K' : 'Ctrl K';
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="Open command palette"
+      className="hidden md:inline-flex items-center gap-2 px-2.5 py-1.5 text-xs text-[var(--text-muted)] bg-[var(--surface-2)]/40 hover:bg-[var(--surface-2)]/70 hover:text-[var(--text)] border border-[var(--surface-3)] rounded-md transition-colors focus-ring"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+      <span className="font-mono uppercase tracking-wider text-2xs">{shortcut}</span>
+    </button>
+  );
+}
+
+function MobileDrawer({ currentPath, onNavigate, isAdmin }: { currentPath: string; onNavigate: () => void; isAdmin: boolean }) {
+  const sections: { key: string; heading: string; items: NavItem[] }[] = [
+    { key: 'home', heading: 'Home', items: navItemsForZone('home') },
+    {
+      key: 'browse',
+      heading: 'Browse',
+      items: [...navItemsForZone('browse'), ...navItemsForGroup('reports')],
+    },
+    { key: 'do', heading: 'Do', items: navItemsForGroup('scan') },
+  ];
+  const hidden = NAV_ITEMS.filter((it) => it.zone === 'hidden' && (!it.adminOnly || isAdmin));
+  if (hidden.length > 0) {
+    sections.push({ key: 'more', heading: 'More', items: hidden });
+  }
+
+  return (
+    <nav className="flex flex-col gap-1 px-4 py-3" role="navigation" aria-label="Main navigation">
+      {sections.map((section) => (
+        <div key={section.key} className="mb-2 last:mb-0">
+          <div className="text-2xs uppercase tracking-wider text-[var(--text-subtle)] font-semibold px-3 py-1">
+            {section.heading}
+          </div>
+          {section.items.map((item) => {
+            const active = isRouteActive(item.path, currentPath);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={onNavigate}
+                className={`flex items-center px-3.5 py-2.5 text-sm rounded-md transition-colors duration-200 border focus-ring ${
+                  active ? browseActiveClass : browseInactiveClass
+                }`}
+                aria-current={active ? 'page' : undefined}
+              >
+                {item.label}
+                {item.description && (
+                  <span className="ml-3 text-2xs text-[var(--text-subtle)]">{item.description}</span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
 export default function Header() {
   const { user, loading, logout } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const location = useLocation();
-  const currentPageLabel = pageLabelFor(location.pathname);
+  const currentPageLabel = pageLabelForPath(location.pathname);
 
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+      const isPaletteShortcut = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
+      if (!isPaletteShortcut) return;
+      // Don't hijack ⌘K when the user is typing in an input, textarea, or
+      // contenteditable surface — the palette is a global navigation aid,
+      // not an editor escape.
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+      }
+      e.preventDefault();
+      // Open-only — match PaletteButton's onOpen behavior. Esc and outside-
+      // click already handle close, so the shortcut never needs to toggle.
+      setPaletteOpen(true);
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [menuOpen]);
+  }, []);
 
   useEffect(() => {
     setAvatarError(false);
@@ -70,6 +270,9 @@ export default function Header() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const homeItem = navItemsForZone('home')[0];
+  const browseItems = navItemsForZone('browse');
 
   return (
     <header
@@ -83,12 +286,9 @@ export default function Header() {
       `}
       role="banner"
     >
-      <div className="flex items-center justify-between gap-6 px-6 py-2.5 max-w-[1920px] mx-auto">
-        {/* Logo Section */}
-        <Link
-          to="/"
-          className="flex items-center gap-2 group relative"
-        >
+      <div className="flex items-center justify-between gap-4 px-6 py-2.5 max-w-[1920px] mx-auto">
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-2 group relative">
           <img
             src={logoSrc}
             alt="SlabLedger"
@@ -101,7 +301,7 @@ export default function Header() {
           </div>
         </Link>
 
-        {/* Hamburger button - mobile only */}
+        {/* Hamburger — mobile only */}
         <button
           type="button"
           className="md:hidden flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-[var(--radius-md)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]/60 transition-colors focus-ring"
@@ -126,16 +326,28 @@ export default function Header() {
           </span>
         </button>
 
-        {/* Navigation - Centered, desktop only */}
-        <div className="hidden md:flex flex-1 justify-center max-w-4xl min-w-0">
-          <Navigation />
-        </div>
+        {/* Three-zone navigation — desktop only */}
+        <nav
+          className="hidden md:flex flex-1 items-center justify-center gap-2 min-w-0"
+          role="navigation"
+          aria-label="Main navigation"
+        >
+          {homeItem && <BrowseDirect item={homeItem} currentPath={location.pathname} />}
+          <span className="w-px h-5 bg-[rgba(255,255,255,0.08)] mx-1" aria-hidden="true" />
+          {browseItems.map((item) => (
+            <BrowseDirect key={item.path} item={item} currentPath={location.pathname} />
+          ))}
+          <ReportsDropdown currentPath={location.pathname} />
+          <span className="w-px h-5 bg-[rgba(255,255,255,0.08)] mx-1" aria-hidden="true" />
+          <ScanSplitButton currentPath={location.pathname} />
+        </nav>
 
-        {/* Right Actions */}
-         <div className="flex gap-3 items-center">
+        {/* Right cluster */}
+        <div className="flex gap-2 items-center">
+          <PaletteButton onOpen={() => setPaletteOpen(true)} />
           <StatusIndicator />
           {loading ? (
-            <span className="text-xs text-[var(--text-muted)]">...</span>
+            <span className="text-xs text-[var(--text-muted)]">…</span>
           ) : user ? (
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
@@ -157,9 +369,7 @@ export default function Header() {
                   <span className="hidden md:block text-sm text-[var(--text-muted)] max-w-[100px] truncate">
                     {user.username}
                   </span>
-                  <svg className="w-3.5 h-3.5 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <ChevronDown className="text-[var(--text-muted)]" />
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
@@ -205,9 +415,15 @@ export default function Header() {
           radius="sm"
           className="md:hidden !rounded-none border-x-0 border-b-0"
         >
-          <Navigation mobile onNavigate={closeMenu} />
+          <MobileDrawer
+            currentPath={location.pathname}
+            onNavigate={closeMenu}
+            isAdmin={!!user?.is_admin}
+          />
         </CardShell>
       )}
-     </header>
-   );
- }
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+    </header>
+  );
+}
