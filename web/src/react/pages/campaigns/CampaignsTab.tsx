@@ -184,6 +184,15 @@ export default function CampaignsTab({
                     }
                     const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
                     const pctText = formatPct(st);
+                    // Sell-through alone doesn't reflect campaign health — a fast-
+                    // moving losing campaign would otherwise read as "all green."
+                    // Tint by sell-through, then demote one tier on a loss so the
+                    // bar matches the P/L signal next to it.
+                    const baseTier = st >= 0.5 ? 'success' : st >= 0.10 ? 'warning' : 'danger';
+                    const tier = isProfit
+                      ? baseTier
+                      : baseTier === 'success' ? 'warning' : 'danger';
+                    const barColor = `var(--${tier})`;
                     return (
                       <div
                         className="hidden md:flex items-center gap-2"
@@ -205,7 +214,7 @@ export default function CampaignsTab({
                             className="h-full rounded-full transition-[width] duration-300"
                             style={{
                               width: `${st * 100}%`,
-                              background: st >= 0.5 ? 'var(--success)' : st >= 0.10 ? 'var(--warning)' : 'var(--danger)',
+                              background: barColor,
                             }}
                           />
                         </div>

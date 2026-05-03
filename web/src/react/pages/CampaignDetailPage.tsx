@@ -62,7 +62,7 @@ export default function CampaignDetailPage() {
       <Breadcrumb items={[{ label: 'Campaigns', href: '/campaigns' }]} />
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[var(--text)] leading-tight">{campaign.name}</h1>
+        <h1 className="page-title">{campaign.name}</h1>
         <p className="text-xs text-[var(--text-muted)] font-mono mt-1 tabular-nums">
           {campaign.sport} · {campaign.yearRange} · PSA {campaign.gradeRange}
         </p>

@@ -177,7 +177,7 @@ export default function RepricePage() {
         { label: 'Reprice' },
       ]} />
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Reprice</h1>
+        <h1 className="page-title">Reprice</h1>
         <span className="text-xs text-[var(--text-muted)] hidden md:inline" aria-hidden>
           Press <kbd className="px-1.5 py-0.5 rounded bg-[var(--surface-2)] font-mono text-[10px]">?</kbd> for shortcuts
         </span>

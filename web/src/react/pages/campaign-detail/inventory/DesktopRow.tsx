@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
-import { GradeBadge } from '../../../ui';
+import { GradeBadge, StatusPill } from '../../../ui';
 import MarketplaceLinks from './MarketplaceLinks';
 import TruncatedCardName from '../../../ui/TruncatedCardName';
 import {
@@ -12,7 +12,7 @@ import {
   syncDotProps, hasCanonicalPriceSignal,
 } from './utils';
 import { wasUnlistedFromDH } from './inventoryCalcs';
-import { dhBadgeFor, DH_BADGE_COLORS } from './dhBadge';
+import { dhBadgeFor, DH_BADGE_TONES } from './dhBadge';
 import InlinePriceEdit from './InlinePriceEdit';
 import RowActions from './RowActions';
 import { resolveContextualPrimary, resolveOverflowActions, ACTION_LABELS } from './rowActions';
@@ -294,23 +294,28 @@ export default function DesktopRow({
             {inHandLabel}
           </span>
           {wasUnlistedFromDH(item) && (
-            <span
-              className="text-[9px] font-medium px-1 py-0.5 rounded bg-[var(--warning)]/15 text-[var(--warning)] leading-none"
+            <StatusPill
+              tone="warning"
+              size="xs"
               title="Item was removed from DH — will be re-pushed + listed"
             >
               Re-list
-            </span>
+            </StatusPill>
           )}
           {(() => {
             if (dhListedOverride) {
-              return <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS.listed}`} title={DH_BADGE_TITLES['listed']}>listed</span>;
+              return (
+                <StatusPill tone={DH_BADGE_TONES.listed} size="xs" title={DH_BADGE_TITLES['listed']}>
+                  listed
+                </StatusPill>
+              );
             }
             const badge = dhBadgeFor(item.purchase.dhPushStatus, item.purchase.dhStatus, item.purchase.receivedAt, item.purchase.psaShipDate);
             if (badge === 'unenrolled') return null;
             return (
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${DH_BADGE_COLORS[badge]}`} title={DH_BADGE_TITLES[badge] ?? badge}>
+              <StatusPill tone={DH_BADGE_TONES[badge]} size="xs" title={DH_BADGE_TITLES[badge] ?? badge}>
                 {badge}
-              </span>
+              </StatusPill>
             );
           })()}
         </div>

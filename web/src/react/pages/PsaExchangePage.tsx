@@ -77,7 +77,7 @@ export default function PsaExchangePage() {
       <Breadcrumb items={[{ label: 'Opportunities' }, { label: 'PSA-Exchange' }]} />
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">PSA-Exchange Opportunities</h1>
+          <h1 className="page-title">PSA-Exchange Opportunities</h1>
           <p className="text-sm text-[var(--text-muted)]">
             Pokemon listings ranked by tiered offer × velocity. Read-only; make offers on PSA-Exchange.
           </p>

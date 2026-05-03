@@ -28,7 +28,7 @@ export default function GlobalInventoryPage() {
       <div className="print:hidden">
         <div className="flex items-baseline justify-between mb-6 gap-3 flex-wrap">
           <div className="flex items-baseline gap-3 flex-wrap">
-            <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Inventory</h1>
+            <h1 className="page-title">Inventory</h1>
             {!isLoading && items.length > 0 && (
               <span className="text-sm text-[var(--text-muted)] tabular-nums">
                 {items.length} {items.length === 1 ? 'card' : 'cards'}

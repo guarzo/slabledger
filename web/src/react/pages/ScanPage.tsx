@@ -7,7 +7,7 @@ export default function ScanPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Scan</h1>
+        <h1 className="page-title">Scan</h1>
         <p className="text-sm text-[var(--text-muted)]">Scan, match, and assign</p>
       </div>
 

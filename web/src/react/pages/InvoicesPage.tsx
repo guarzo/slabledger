@@ -236,7 +236,7 @@ export default function InvoicesPage() {
           <span className="mx-1.5">/</span>
           <span className="text-[var(--text)]">Invoices</span>
         </nav>
-        <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Invoices</h1>
+        <h1 className="page-title">Invoices</h1>
         <p className="mt-1 text-sm text-[var(--text-muted)]">
           PSA grading invoices and their payment status.
         </p>
