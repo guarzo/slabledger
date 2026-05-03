@@ -26,8 +26,6 @@ declare module './client' {
 
     // Sell sheet
     generateGlobalSellSheet(): Promise<SellSheet>;
-    generateSellSheet(campaignId: string, purchaseIds: string[]): Promise<SellSheet>;
-    generateSelectedSellSheet(purchaseIds: string[]): Promise<SellSheet>;
 
     // Price override & AI suggestion
     setPriceOverride(purchaseId: string, priceCents: number, source: string): Promise<void>;
@@ -46,12 +44,6 @@ declare module './client' {
 
     // Price hints
     savePriceHint(hint: PriceHint): Promise<{ status: string }>;
-
-    // Sell sheet item persistence
-    getSellSheetItems(): Promise<{ purchaseIds: string[] }>;
-    addSellSheetItems(purchaseIds: string[]): Promise<void>;
-    removeSellSheetItems(purchaseIds: string[]): Promise<void>;
-    clearSellSheetItems(): Promise<void>;
   }
 }
 
@@ -86,15 +78,7 @@ proto.quickAddPurchase = async function (this: APIClient, campaignId: string, re
 };
 
 proto.generateGlobalSellSheet = async function (this: APIClient): Promise<SellSheet> {
-  return this.post<SellSheet>('/sell-sheet', {});
-};
-
-proto.generateSellSheet = async function (this: APIClient, campaignId: string, purchaseIds: string[]): Promise<SellSheet> {
-  return this.post<SellSheet>(`/campaigns/${campaignId}/sell-sheet`, { purchaseIds });
-};
-
-proto.generateSelectedSellSheet = async function (this: APIClient, purchaseIds: string[]): Promise<SellSheet> {
-  return this.post<SellSheet>('/portfolio/sell-sheet', { purchaseIds });
+  return this.get<SellSheet>('/sell-sheet');
 };
 
 proto.setPriceOverride = async function (this: APIClient, purchaseId: string, priceCents: number, source: string): Promise<void> {
@@ -155,30 +139,4 @@ proto.createBulkSales = async function (this: APIClient, campaignId: string, sal
 
 proto.savePriceHint = async function (this: APIClient, hint: PriceHint): Promise<{ status: string }> {
   return this.post<{ status: string }>('/price-hints', hint);
-};
-
-// --- Sell sheet item persistence ---
-
-proto.getSellSheetItems = async function (this: APIClient): Promise<{ purchaseIds: string[] }> {
-  return this.get<{ purchaseIds: string[] }>('/sell-sheet/items');
-};
-
-proto.addSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/sell-sheet/items`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ purchaseIds }),
-    },
-  );
-  await this.expectNoContent(response);
-};
-
-proto.removeSellSheetItems = async function (this: APIClient, purchaseIds: string[]): Promise<void> {
-  await this.deleteResource('/sell-sheet/items', { body: { purchaseIds } });
-};
-
-proto.clearSellSheetItems = async function (this: APIClient): Promise<void> {
-  await this.deleteResource('/sell-sheet/items/all');
 };
