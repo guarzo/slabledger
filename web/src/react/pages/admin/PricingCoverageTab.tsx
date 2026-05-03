@@ -29,8 +29,9 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
     totalUnsold,
     recentFailures,
   } = diag;
-  const listedRatio = totalUnsold > 0 ? listedCards / totalUnsold : null;
-  const listedColor = listedRatio === null ? undefined : listedRatio >= 0.80 ? 'var(--success)' : listedRatio >= 0.50 ? 'var(--warning)' : 'var(--danger)';
+  const listableCards = listedCards + readyToListCards;
+  const listedRatio = listableCards > 0 ? listedCards / listableCards : null;
+  const listedColor = listedRatio !== null && listedRatio >= 0.80 ? 'var(--success)' : undefined;
 
   return (
     <div className="space-y-6">

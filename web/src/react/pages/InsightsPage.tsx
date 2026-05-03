@@ -71,17 +71,20 @@ export default function InsightsPage() {
       )}
 
       {data && (() => {
-        const fullyHealthy = data.actions.length === 0 && isSignalsClear(data.signals);
+        const hasActionsOrSignals = data.actions.length > 0 || !isSignalsClear(data.signals);
+        const allCampaignsOK = data.campaigns.every(c => c.status === 'OK');
+        const fullyHealthy = !hasActionsOrSignals && allCampaignsOK;
         return (
           <>
-            {fullyHealthy ? (
+            {fullyHealthy && (
               <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] px-4 py-3 flex items-center gap-2 text-sm">
                 <span className="text-[var(--success)]" aria-hidden="true">●</span>
                 <span className="text-[var(--text)]">All campaigns healthy</span>
                 <span className="text-[var(--text-muted)]" aria-hidden="true">·</span>
                 <span className="text-[var(--text-muted)]">no actions or signals right now</span>
               </div>
-            ) : (
+            )}
+            {hasActionsOrSignals && (
               <>
                 <SectionErrorBoundary sectionName="Do now">
                   <DoNowSection actions={data.actions} />
