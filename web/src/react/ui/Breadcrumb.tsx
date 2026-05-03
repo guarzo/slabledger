@@ -24,7 +24,6 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
                 <Link
                   to={item.href}
                   className="text-[var(--text-muted)] hover:text-[var(--text)] hover:underline transition-colors"
-                  aria-current={isLast ? 'page' : undefined}
                 >
                   {item.label}
                 </Link>
