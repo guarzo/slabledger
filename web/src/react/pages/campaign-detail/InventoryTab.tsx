@@ -167,17 +167,13 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               <input type="checkbox" aria-label="Select all visible cards" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
                 onChange={toggleAll} className="rounded accent-[var(--brand-500)]" />
             </div>
-            <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0" />
-            <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '72px' }} />
-            <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '72px' }} />
-            <SortableHeader label="List / Rec" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '140px' }} />
-            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '72px' }} />
-            <SortableHeader label="Days" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '40px' }} />
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-col" style={{ width: '20px' }}></div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '64px' }}>DH</div>
-            <div aria-hidden="true" className="glass-table-th flex-shrink-0 !p-0 print-hide-actions" style={{ width: '1px' }}></div>
-            <div className="glass-table-th flex-shrink-0 text-center print-hide-actions" style={{ width: '64px' }}>Sell</div>
-            <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}></div>
+            <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-0 max-w-[320px]" />
+            <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center" style={{ width: '64px' }} />
+            <SortableHeader label="Cost" sortKey="cost" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '100px' }} />
+            <SortableHeader label="List / Rec" sortKey="market" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right" style={{ width: '180px' }} />
+            <SortableHeader label="P/L" sortKey="pl" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-right print-hide-col" style={{ width: '80px' }} />
+            <SortableHeader label="Status" sortKey="days" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center print-hide-col" style={{ width: '120px' }} />
+            <div className="glass-table-th flex-shrink-0 text-left print-hide-actions ml-2 pl-3" style={{ minWidth: '200px' }}>Actions</div>
           </div>
           {/* Rows */}
           {filteredAndSortedItems.length === 0 && (

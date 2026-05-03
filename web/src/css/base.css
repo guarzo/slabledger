@@ -122,6 +122,17 @@
 .glass-vrow[data-selected="true"]:hover {
   background-color: var(--table-row-selected-hover);
 }
+
+/* Inline-save flash: applied to the DesktopRow container after a successful
+   inline price commit. Brief, non-intrusive — confirms the save without a
+   toast race condition. */
+@keyframes inventory-save-flash {
+  0%   { background-color: var(--success-bg, rgba(34, 197, 94, 0.18)); }
+  100% { background-color: transparent; }
+}
+[data-just-saved="true"] {
+  animation: inventory-save-flash 1000ms ease-out;
+}
 .glass-vrow[data-belowcost="true"] {
   background-color: var(--danger-tint);
 }

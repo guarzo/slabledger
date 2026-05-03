@@ -101,11 +101,13 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }
 
-  // Reset scroll + collapse expanded row on sort/filter change
+  // Reset scroll + collapse expanded row on sort/filter change.
+  // Desktop now uses window scroll (the inner max-h container was removed); mobile
+  // keeps its inner scroll container for the per-card list.
   useEffect(() => {
     selection.setExpandedId(null);
     selection.setPinnedIds(prev => prev.size > 0 ? new Set() : prev);
-    scrollContainerRef.current?.scrollTo({ top: 0 });
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
     mobileScrollRef.current?.scrollTo({ top: 0 });
   }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]); // eslint-disable-line react-hooks/exhaustive-deps
 
