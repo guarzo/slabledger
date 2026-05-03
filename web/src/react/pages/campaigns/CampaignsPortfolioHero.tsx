@@ -43,11 +43,17 @@ export default function CampaignsPortfolioHero({ campaignCount, pnlMap }: Campai
   const recoveryPct = totalSpent > 0 ? Math.max(0, Math.min(100, (totalRevenue / totalSpent) * 100)) : 0;
 
   const negative = roi < 0;
+  // Mirror HeroStatsBar's magnitude scale so both ROI values size consistently.
+  const magnitude =
+    Math.abs(roi) >= 0.5 ? 'huge'
+    : Math.abs(roi) >= 0.2 ? 'big'
+    : 'normal';
 
   return (
     <section
       className={styles.hero}
       data-tone={negative ? 'neg' : 'pos'}
+      data-mag={magnitude}
       aria-label="Campaigns portfolio summary"
     >
       <div className={styles.roiBlock}>

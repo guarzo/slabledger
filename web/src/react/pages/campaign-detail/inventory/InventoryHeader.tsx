@@ -190,7 +190,7 @@ export default function InventoryHeader({
             <input
               type="text"
               aria-label="Search cards"
-              placeholder="Search cards…"
+              placeholder="Search by cert, card, or set…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className={`${isMobile ? 'flex-1' : 'w-48'} px-3 py-1.5 text-sm rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]`}
