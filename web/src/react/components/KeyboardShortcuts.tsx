@@ -131,6 +131,57 @@ export default function KeyboardShortcuts() {
 }
 
 function Overlay({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    // Move focus into the dialog. Prefer the first focusable child; fall back
+    // to the container itself (made focusable via tabIndex={-1}).
+    const node = containerRef.current;
+    if (node) {
+      const focusable = node.querySelector<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (focusable ?? node).focus();
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !containerRef.current) return;
+      const focusables = containerRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (active === first || !containerRef.current.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last || !containerRef.current.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      previouslyFocused?.focus?.();
+    };
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-black/60"
@@ -140,7 +191,9 @@ function Overlay({ children, onClose, title }: { children: React.ReactNode; onCl
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-5 shadow-xl"
+        ref={containerRef}
+        tabIndex={-1}
+        className="w-full max-w-lg rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-5 shadow-xl outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-baseline justify-between mb-3">
