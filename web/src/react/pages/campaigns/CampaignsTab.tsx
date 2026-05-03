@@ -1,21 +1,23 @@
 import { Link } from 'react-router-dom';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
-import { EmptyState, Button } from '../../ui';
+import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
 import type { UseFormReturn } from '../../hooks/useForm';
 import { phaseHexColors } from '../../utils/campaignConstants';
 
+const PHASE_TONES: Record<Phase, StatusTone> = {
+  active: 'success',
+  pending: 'warning',
+  closed: 'neutral',
+};
+
 function PhaseBadge({ phase }: { phase: Phase }) {
-  const color = phaseHexColors[phase];
   return (
-    <span
-      className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full tracking-wider"
-      style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}
-    >
+    <StatusPill tone={PHASE_TONES[phase]} size="xs" className="uppercase">
       {phase}
-    </span>
+    </StatusPill>
   );
 }
 

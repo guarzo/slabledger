@@ -30,6 +30,26 @@
   line-height: 1.1;
   color: var(--text);
   font-feature-settings: "ss01", "ss02";
+  /* Ledger-rule: a hairline directly under the title with a short accent
+     stripe centered below it. Gives every page a "chapter mark" feel
+     without adding markup, since the rule width tracks the title text. */
+  display: inline-block;
+  padding-bottom: 8px;
+  background-image:
+    linear-gradient(to right, var(--surface-3), var(--surface-3)),
+    linear-gradient(to right, var(--brand-500), var(--brand-400));
+  background-position: 0 100%, 0 calc(100% - 3px);
+  background-size: 100% 1px, 28px 1px;
+  background-repeat: no-repeat;
+}
+
+@utility ledger-eyebrow {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.875rem;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
 }
 
 @utility scrollbar-dark {
