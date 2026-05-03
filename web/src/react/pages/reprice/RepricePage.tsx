@@ -204,13 +204,28 @@ export default function RepricePage() {
       )}
 
       <CardShell variant="elevated">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4">
-          Reprice Preview
-        </h2>
+        <div className="mb-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Reprice Preview
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            Suggested price = CardLadder value minus a discount. Tune both knobs, then accept rows below.
+          </p>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-6 lg:gap-8 items-start">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <DiscountSlider label="With comps" value={discountWithComps} onChange={setDiscountWithComps} />
-            <DiscountSlider label="Without comps" value={discountNoComps} onChange={setDiscountNoComps} />
+            <DiscountSlider
+              label="With recent comps"
+              hint="When we have sales data — small discount, enough to clear."
+              value={discountWithComps}
+              onChange={setDiscountWithComps}
+            />
+            <DiscountSlider
+              label="Without comps"
+              hint="No recent sales — drop deeper as a buffer for unknown demand."
+              value={discountNoComps}
+              onChange={setDiscountNoComps}
+            />
           </div>
           {summary && (
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:min-w-[180px] lg:border-l lg:border-white/5 lg:pl-6">
@@ -400,13 +415,30 @@ export default function RepricePage() {
   );
 }
 
-function DiscountSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function DiscountSlider({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
   const id = `discount-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between text-xs">
-        <label htmlFor={id} className="font-medium text-[var(--text-muted)]">{label}</label>
-        <span className="tabular-nums font-semibold text-[var(--text)]">{value.toFixed(1)}% below CL</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <label htmlFor={id} className="text-xs font-medium text-[var(--text)]">{label}</label>
+          {hint && (
+            <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{hint}</p>
+          )}
+        </div>
+        <span className="tabular-nums font-semibold text-[var(--brand-400)] text-lg leading-none whitespace-nowrap">
+          −{value.toFixed(1)}%
+        </span>
       </div>
       <input
         id={id}
@@ -417,11 +449,11 @@ function DiscountSlider({ label, value, onChange }: { label: string; value: numb
         value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
         className={sliderStyles.slider}
-        aria-label={`${label} below CL: ${value.toFixed(1)}%`}
+        aria-label={`${label} below CardLadder: ${value.toFixed(1)}%`}
       />
-      <div className="flex justify-between text-[10px] text-[var(--text-muted)] tabular-nums">
-        <span>0%</span>
-        <span>25%</span>
+      <div className="flex justify-between text-[10px] uppercase tracking-wider text-[var(--text-subtle)]">
+        <span>List at CL</span>
+        <span>−25% (max)</span>
       </div>
     </div>
   );
