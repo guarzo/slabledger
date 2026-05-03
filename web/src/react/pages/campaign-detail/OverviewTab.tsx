@@ -116,6 +116,19 @@ export default function OverviewTab({
         <div className="py-8 text-center"><PokeballLoader /></div>
       ) : (
         <>
+          {/* No-sales hint — without it the overview tab ends on the chips
+              line above with 60–80% empty viewport, reading as a 404. */}
+          {saleCount === 0 && (
+            <CardShell variant="data" padding="md">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                What appears here next
+              </h3>
+              <p className="text-sm text-[var(--text-muted)] mt-2 leading-relaxed max-w-2xl">
+                Record a sale and this tab fills in with channel-by-channel P&L (eBay, in-person, website), days-to-sell distribution, and actual fill rate against the campaign target. Until then, check <span className="text-[var(--text)]">Transactions</span> for purchases and <span className="text-[var(--text)]">Tuning</span> to adjust buy terms.
+              </p>
+            </CardShell>
+          )}
+
 
 
           {channelPnl.length > 0 && (

@@ -113,6 +113,36 @@
   }
 }
 
+/* Mobile density — pack KPI tiles tighter so all six fit without
+   a half-empty trailing row. Two-up grid replaces the wide row-gap
+   layout that made WKS TO COVER read as floating alone. */
+@media (max-width: 640px) {
+  .hero {
+    gap: 16px 0;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+  .clusterGroup {
+    width: 100%;
+    flex-direction: column;
+  }
+  .subCluster {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 16px;
+    row-gap: 14px;
+    padding: 0;
+  }
+  .subCluster + .subCluster {
+    margin-top: 14px;
+    padding-top: 14px;
+  }
+  .stat { min-width: 0; }
+  .statValue { font-size: 16px; }
+  .alerts { width: 100%; margin-left: 0; }
+}
+
 /* Micro-context caption beneath a stat label (e.g. "all-time", "trailing 30d"). */
 .statCaption {
   font-size: 9px;

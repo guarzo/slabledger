@@ -100,8 +100,11 @@ export default function PsaExchangePage() {
 
       {error && (
         <CardShell>
-          <div className="p-4 space-y-2">
+          <div className="p-5 space-y-3">
             <p className="text-sm text-[var(--danger)]">Failed to load PSA-Exchange opportunities.</p>
+            <p className="text-xs text-[var(--text-muted)] leading-relaxed max-w-xl">
+              When this loads, you'll see a ranked table of Pokemon listings on PSA-Exchange — each row scored by tiered offer × velocity, with the top decile highlighted. Common causes: PSA-Exchange token missing or expired (configure in Admin → Integrations), or PSA-Exchange API is rate-limiting.
+            </p>
             <Button onClick={() => refetch()}>Retry</Button>
           </div>
         </CardShell>
