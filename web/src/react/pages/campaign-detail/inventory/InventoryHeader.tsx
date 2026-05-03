@@ -128,7 +128,7 @@ export default function InventoryHeader({
           {totalMarket > 0 && (
             <>
               <span className="text-[var(--text-muted)] tabular-nums">
-                {filteredCount} cards
+                {filteredCount} {filteredCount === 1 ? 'card' : 'cards'}
               </span>
               <span className="text-[var(--text-muted)]">·</span>
             </>
@@ -210,7 +210,7 @@ export default function InventoryHeader({
           {!showAll && primary.map(tab => {
             const isActive = filterTab === tab.key;
             return (
-              <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'primary')}>
+              <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} aria-pressed={isActive} className={pillClass(isActive, 'primary')}>
                 {tab.label}
                 <span className={countClass(isActive, 'primary')}>{tab.count}</span>
               </button>
@@ -239,7 +239,7 @@ export default function InventoryHeader({
             {secondary.map(tab => {
               const isActive = filterTab === tab.key;
               return (
-                <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} className={pillClass(isActive, 'secondary')}>
+                <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} aria-pressed={isActive} className={pillClass(isActive, 'secondary')}>
                   {tab.label}
                   <span className={countClass(isActive, 'secondary')}>{tab.count}</span>
                 </button>

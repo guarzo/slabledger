@@ -1,5 +1,5 @@
 import { useVirtualizer, useWindowVirtualizer } from '@tanstack/react-virtual';
-import { useMemo } from 'react';
+import { useMemo, useRef, useLayoutEffect, useState } from 'react';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
 import PokeballLoader from '../../PokeballLoader';
@@ -74,11 +74,30 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
   } = state;
 
+  const listParentRef = useRef<HTMLDivElement | null>(null);
+  const [listScrollMargin, setListScrollMargin] = useState(0);
+
+  // Track the list's distance from the top of the document so the window
+  // virtualizer accounts for everything rendered above it (header, totals,
+  // filter pills) when computing virtual row offsets.
+  useLayoutEffect(() => {
+    const el = listParentRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setListScrollMargin(rect.top + window.scrollY);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   const rowVirtualizer = useWindowVirtualizer({
     count: filteredAndSortedItems.length,
     // Expanded rows have variable height; measureElement handles actual sizing.
     estimateSize: () => 64,
     overscan: 10,
+    scrollMargin: listScrollMargin,
   });
 
   const mobileVirtualizer = useVirtualizer({
@@ -266,7 +285,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
               {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
             </div>
           )}
-          <div className="overflow-x-hidden">
+          <div ref={listParentRef} className="overflow-x-hidden">
             <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
               {rowVirtualizer.getVirtualItems().map(virtualRow => {
                 const item = filteredAndSortedItems[virtualRow.index];
@@ -287,7 +306,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       top: 0,
                       left: 0,
                       width: '100%',
-                      transform: `translateY(${virtualRow.start}px)`,
+                      transform: `translateY(${virtualRow.start - rowVirtualizer.options.scrollMargin}px)`,
                     }}>
                     <div className="text-sm">
                       <DesktopRow
