@@ -33,7 +33,7 @@ export interface InventoryHeaderProps {
 
 export default function InventoryHeader({
   items, filteredCount,
-  totalCost, totalMarket, totalPL,
+  totalCost, totalMarket,
   fullInventoryTotals,
   showEV, evPortfolio,
   searchQuery, setSearchQuery,
@@ -79,11 +79,14 @@ export default function InventoryHeader({
     return `${base} ${sizing} ${stateClass}`;
   };
 
-  // Headline P/L gets a larger, bolder treatment; supporting metrics sit below.
-  const plPositive = totalPL >= 0;
-  const plPctSuffix = totalCost > 0
-    ? ` (${plPositive ? '+' : ''}${formatPct(totalPL / totalCost)})`
+  // Hero always reflects the universe — never the filter result. A filter chip
+  // returning 0 must not zero out the page-level totals.
+  const universe = fullInventoryTotals;
+  const universePlPositive = universe.totalPL >= 0;
+  const universePlPctSuffix = universe.totalCost > 0
+    ? ` (${universePlPositive ? '+' : ''}${formatPct(universe.totalPL / universe.totalCost)})`
     : '';
+  const isFiltering = (filterTab !== 'all' || !!debouncedSearch?.trim()) && filteredCount !== items.length;
 
   const showNeedsHeadline = !showAll
     && !debouncedSearch?.trim()
@@ -92,41 +95,41 @@ export default function InventoryHeader({
 
   return (
     <>
-      {/* Totals — P/L is the headline when we have market data; otherwise show cards + cost */}
+      {/* Universe totals — always reflect the full inventory, never the filter result. */}
       <div className="mb-4 sell-sheet-no-print">
-        {totalMarket > 0 ? (
+        {universe.totalMarket > 0 ? (
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span
-              className={`text-2xl font-bold tabular-nums tracking-tight ${plPositive ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
-              aria-label={`Unrealized ${plPositive ? 'gain' : 'loss'} ${formatPL(totalPL)}`}
+              className={`text-2xl font-bold tabular-nums tracking-tight ${universePlPositive ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
+              aria-label={`Unrealized ${universePlPositive ? 'gain' : 'loss'} ${formatPL(universe.totalPL)}`}
             >
-              {formatPL(totalPL)}
-              <span className="text-base opacity-80">{plPctSuffix}</span>
+              {formatPL(universe.totalPL)}
+              <span className="text-base opacity-80">{universePlPctSuffix}</span>
             </span>
             <span className="text-sm text-[var(--text-muted)]">unrealized</span>
           </div>
         ) : (
           <div className="text-2xl font-bold tabular-nums tracking-tight text-[var(--text)]">
-            {filteredCount} {filteredCount === 1 ? 'card' : 'cards'}
+            {items.length} {items.length === 1 ? 'card' : 'cards'}
           </div>
         )}
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-          {totalMarket > 0 && (
+          {universe.totalMarket > 0 && (
             <>
               <span className="text-[var(--text-muted)] tabular-nums">
-                {filteredCount} {filteredCount === 1 ? 'card' : 'cards'}
+                {items.length} {items.length === 1 ? 'card' : 'cards'}
               </span>
               <span className="text-[var(--text-muted)]">·</span>
             </>
           )}
           <span className="text-[var(--text-muted)] tabular-nums">
-            Cost <span className="text-[var(--text)]">{formatCents(totalCost)}</span>
+            Cost <span className="text-[var(--text)]">{formatCents(universe.totalCost)}</span>
           </span>
-          {totalMarket > 0 && (
+          {universe.totalMarket > 0 && (
             <>
               <span className="text-[var(--text-muted)]">·</span>
               <span className="text-[var(--text-muted)] tabular-nums">
-                Market <span className="text-[var(--text)]">{formatCents(totalMarket)}</span>
+                Market <span className="text-[var(--text)]">{formatCents(universe.totalMarket)}</span>
               </span>
             </>
           )}
@@ -138,15 +141,16 @@ export default function InventoryHeader({
               </span>
             </>
           )}
+          {isFiltering && (
+            <>
+              <span className="text-[var(--text-muted)]">·</span>
+              <span className="text-[var(--text-subtle)] tabular-nums">
+                Showing {filteredCount}
+                {totalMarket > 0 && <> · Cost {formatCents(totalCost)}</>}
+              </span>
+            </>
+          )}
         </div>
-        {(filterTab !== 'all' || debouncedSearch?.trim()) && filteredCount !== items.length && (
-          <div className="mt-1 text-xs text-[var(--text-subtle)] tabular-nums">
-            All {items.length} cards · Cost {formatCents(fullInventoryTotals.totalCost)}
-            {fullInventoryTotals.totalMarket > 0 && (
-              <> · Market {formatCents(fullInventoryTotals.totalMarket)}</>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Needs Attention call-to-action: only when there's something to do and the user isn't already there */}
