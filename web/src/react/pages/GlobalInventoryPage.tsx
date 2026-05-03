@@ -1,5 +1,5 @@
 import { useGlobalInventory } from '../queries/useCampaignQueries';
-import { Breadcrumb, SectionErrorBoundary } from '../ui';
+import { SectionErrorBoundary } from '../ui';
 import InventoryTab from './campaign-detail/InventoryTab';
 
 export default function GlobalInventoryPage() {
@@ -26,7 +26,6 @@ export default function GlobalInventoryPage() {
   return (
     <div className="max-w-6xl mx-auto px-4">
       <div className="print:hidden">
-        <Breadcrumb items={[{ label: 'Inventory' }]} />
         <div className="flex items-baseline justify-between mb-6 gap-3 flex-wrap">
           <div className="flex items-baseline gap-3 flex-wrap">
             <h1 className="text-[22px] font-bold text-[var(--text)] tracking-tight">Inventory</h1>

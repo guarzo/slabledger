@@ -88,6 +88,21 @@ export default function CampaignsTab({
         />
       ) : (
         <div className="flex flex-col gap-1">
+          {/* Column headers — match responsive breakpoints of the row cells below.
+              Aligns with each row's right cluster so columns scan vertically. */}
+          <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 text-2xs uppercase tracking-wider font-semibold text-[var(--text-subtle)]" aria-hidden="true">
+            <div className="w-[3px] flex-shrink-0" />
+            <div className="flex-1 min-w-0">Campaign</div>
+            <div className="flex items-center gap-4 flex-shrink-0">
+              <div className="hidden sm:flex items-center gap-3">
+                <span className="tabular-nums text-right" style={{ minWidth: '5rem' }}>P&amp;L</span>
+                <span className="tabular-nums text-right" style={{ minWidth: '3rem' }}>ROI</span>
+              </div>
+              <span className="hidden md:inline" style={{ minWidth: '5.25rem' }}>Sell-through</span>
+              <span className="hidden lg:inline" style={{ minWidth: '8.5rem' }}>Cap · Buy%</span>
+              <span className="w-4" aria-hidden="true" />
+            </div>
+          </div>
           {campaigns.map(c => {
             const pnl = pnlMap[c.id];
             const isClosed = c.phase === 'closed';
@@ -128,27 +143,47 @@ export default function CampaignsTab({
                   <FilterSummary c={c} />
                 </div>
 
-                {/* Right: inline stats */}
+                {/* Right: inline stats. The P&L and Sell-through wrappers
+                    render unconditionally so columns stay aligned with the
+                    header even when pnl hasn't loaded for a given campaign. */}
                 <div className="flex items-center gap-4 flex-shrink-0 text-xs text-[var(--text-muted)]">
-                  {/* P&L */}
-                  {pnl && (
-                    <div className="hidden sm:flex items-center gap-3">
-                      <span className={`font-medium tabular-nums ${profitColor}`}>
-                        {formatCents(pnl.netProfitCents)}
-                      </span>
-                      <span className={`font-medium tabular-nums ${profitColor}`}>
-                        {formatPct(pnl.roi)}
-                      </span>
-                    </div>
-                  )}
+                  {/* P&L + ROI. The visual column header is aria-hidden, so
+                      each value carries its own metric label for screen
+                      readers via aria-label. */}
+                  <div className="hidden sm:flex items-center gap-3">
+                    <span
+                      className={`font-medium tabular-nums text-right ${pnl ? profitColor : ''}`}
+                      style={{ minWidth: '5rem' }}
+                      aria-label={pnl ? `Net profit ${formatCents(pnl.netProfitCents)}` : 'Net profit unavailable'}
+                    >
+                      {pnl ? formatCents(pnl.netProfitCents) : ''}
+                    </span>
+                    <span
+                      className={`font-medium tabular-nums text-right ${pnl ? profitColor : ''}`}
+                      style={{ minWidth: '3rem' }}
+                      aria-label={pnl ? `ROI ${formatPct(pnl.roi)}` : 'ROI unavailable'}
+                    >
+                      {pnl ? formatPct(pnl.roi) : ''}
+                    </span>
+                  </div>
 
                   {/* Sell-through with mini bar (sell-through % + visible color bar) */}
-                  {pnl && (() => {
+                  {(() => {
+                    if (!pnl) {
+                      return (
+                        <div
+                          className="hidden md:flex items-center gap-2"
+                          style={{ minWidth: '5.25rem' }}
+                          aria-hidden="true"
+                        />
+                      );
+                    }
                     const st = Math.max(0, Math.min(pnl.sellThroughPct ?? 0, 1));
                     const pctText = formatPct(st);
                     return (
                       <div
                         className="hidden md:flex items-center gap-2"
+                        style={{ minWidth: '5.25rem' }}
                         role="group"
                         aria-label={`Sell-through ${pctText}, ${pnl.totalSold} of ${pnl.totalPurchases} sold`}
                       >
@@ -174,9 +209,12 @@ export default function CampaignsTab({
                     );
                   })()}
 
-                  {/* Buy terms */}
-                  <span className="hidden lg:inline tabular-nums">
-                    {formatCents(c.dailySpendCapCents)}/d @ {formatPct(c.buyTermsCLPct)}
+                  {/* Cap · Buy% — suppressed on closed campaigns (not actively buying) */}
+                  <span
+                    className="hidden lg:inline tabular-nums text-right"
+                    style={{ minWidth: '8.5rem' }}
+                  >
+                    {isClosed ? '' : `${formatCents(c.dailySpendCapCents)}/d · ${formatPct(c.buyTermsCLPct)}`}
                   </span>
 
                   {/* Chevron */}
