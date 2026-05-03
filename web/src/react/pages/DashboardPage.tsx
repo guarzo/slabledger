@@ -7,6 +7,7 @@ import {
   useGlobalInventory,
 } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
+import NextMovesPanel from '../components/portfolio/NextMovesPanel';
 import InvoiceReadinessPanel from '../components/portfolio/InvoiceReadinessPanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import TopPerformersSection from '../components/portfolio/TopPerformersSection';
@@ -53,6 +54,11 @@ export default function DashboardPage() {
         pendingListingsCount={inventoryCounts.pendingListings}
         hideInvoiceChip
       />
+
+      {/* Next Moves — what to act on today */}
+      <SectionErrorBoundary sectionName="Next Moves">
+        <NextMovesPanel />
+      </SectionErrorBoundary>
 
       {/* Invoice Readiness */}
       {capitalData && (
