@@ -64,7 +64,7 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
         : dhHealth.success_rate < 0.95
           ? 'warning'
           : 'healthy';
-  const dhMetric = dhHealth ? `${(dhHealth.success_rate * 100).toFixed(1)}% API` : '—';
+  const dhMetric = !dh ? 'Unknown' : (dhHealth ? `${(dhHealth.success_rate * 100).toFixed(1)}% API` : 'Not configured');
   const dhDetail = dhHealth ? `${dhHealth.total_calls.toLocaleString()} calls · ${dhHealth.failures} failures` : undefined;
 
   const clStatus: TileStatus = !cl ? 'unknown' : (cl.configured ? 'healthy' : 'unconfigured');
