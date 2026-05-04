@@ -56,7 +56,10 @@ export function deriveCampaignRecommendations(rows: TuningRow[]): Action[] {
         severity: dom.cell.severity,
         title: row.campaignName,
         detail: `${COLUMN_LABEL[dom.column]} — ${dom.cell.recommendation}`,
-        link: { path: `/campaigns/${row.campaignId}` },
+        // Encode the path segment defensively. Campaign IDs are UUID-like
+        // today so this is a no-op in practice, but encoding shields the
+        // generated URL from any future ID containing /, ?, or #.
+        link: { path: `/campaigns/${encodeURIComponent(row.campaignId)}` },
       };
       return action;
     })
