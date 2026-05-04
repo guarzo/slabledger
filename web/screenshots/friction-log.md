@@ -1189,3 +1189,62 @@ PR 6 (this): single-threaded screenshot regeneration + cross-PR cohesion sweep.
 ### Outstanding 🔴
 
 - (none)
+
+
+---
+
+## Iteration 23 — 2026-05-04 (Slab Terminal — Phase 1 foundation)
+
+### Cycle variant
+
+`identity` — first cycle of the multi-phase Slab Terminal redesign. Spec at `docs/plans/2026-05-04-slab-terminal-redesign.md`. Premise: 22 prior iterations cleared every 🔴 friction finding, but the product still reads as generic dark-mode SaaS. Phase 1 ships the foundation moves (typography + colour discipline + container language) without redesigning any single page.
+
+### Fixed this cycle
+
+- ✅ **Money is now in JetBrains Mono** — `web/src/index.html`, `web/src/css/tokens.css`, `web/src/css/base.css`. The product's primary content is monetary figures, but every $ amount was rendering in `ui-sans-serif`, which made hero numbers feel like data and not like value. Added `--font-numeric` token + `.num` utility, then auto-applied JetBrains Mono to every existing `.tabular-nums` site so the 60+ surfaces in the codebase converted in one rule. Hero ROI, P&L cells, invoice totals, sell-sheet asks, reprice triplets — all now in mono. Regression: clean.
+- ✅ **Slab-frame utility added** — `web/src/css/base.css`. New `.slab-frame` utility echoes the PSA holder's flange (thin double-line inset). Not yet placed; reserved for Phase 2 (dashboard ROI hero, expanded reprice panel, campaign-detail empty hero). Establishes the canonical "this region matters" container for the redesign.
+- ✅ **Inventory row stripes removed** — `web/src/css/base.css:174-182`. The 2px solid coloured left-border on every inventory row was redundant with the coloured P&L cell and read as bolted-on chrome that detached the table from the page rhythm. Per the user: *"the green/red row indicators on the inventory table aren't really effective, and make the table look like it's not part of the page."* Fix: P&L cell colour is now the sole signal-carrier. `data-pl` preserved as a hook for tests/analytics but renders nothing visual. Below-cost rows still carry the subtle `--danger-tint` row-tint. Regression: clean — inventory now reads as a coherent table on the page rather than a separate component with bolted-on indicators.
+- ✅ **Sell button colour discipline** — `web/src/react/pages/campaign-detail/inventory/RowActions.tsx:20`. `loudVariant` was `primary ? 'primary' : 'success'`, which meant every fallback Sell button rendered as bright success-green. At scale (every inventory row carries one) the green wallpaper competed with the green P&L cells and stripped any visual hierarchy — every row was loud, nothing led. Fix: `loudVariant = 'primary'` always. Brand-indigo for actions, emerald reserved for *realized money* signals (positive P&L, completed sales). Regression: clean.
+- ✅ **Opportunities page chrome aligned with the rest of the app** — `web/src/react/pages/PsaExchangePage.tsx`. Per user: *"the opportunities page looks quite different than the others."* Three causes: (1) page root used `p-6 space-y-4` while every other page uses `max-w-Xxxx mx-auto px-4 space-y-6`; (2) the error state was wrapped in `<CardShell>` which painted a heavier outline than the page's other cards, making the error look louder than the data; (3) the "Open Pokemon catalog" anchor used raw Tailwind `bg-[var(--brand-500)] text-white` styling that doesn't match any Button variant. Fix: switched root to `max-w-6xl mx-auto px-4 space-y-6` (matches Insights), dropped the `<CardShell>` wrap on the error block (now an inline `surface-1` panel), restyled the catalog anchor as a bordered surface chip, switched Retry from primary to secondary so it doesn't outshout the data card. Regression: clean — page now reads as part of the same product.
+- ✅ **Login Card Yeti mark legibility** — `web/src/css/LoginPage.css`. The Card Yeti business logo PNG has a white background; on the dark login surface that white field read as a glaring rectangle that washed the entire mark out, and the iter-22 friction log flagged it as 🟢 polish. Fix: `mix-blend-mode: screen` drops the white field to near-zero while keeping the icy blue gradient + highlights bright; `filter: brightness(1.1) contrast(1.05)` compensates for screen-blend's slight darkening on already-dark pixels; bumped `max-height` 40px → 48px and tightened the "POWERED BY" letter-spacing. Regression: clean.
+
+### User-visible impact
+
+*"After Phase 1, every monetary figure in SlabLedger renders in JetBrains Mono with tabular figures — column money lines up cleanly, hero numbers feel like value rather than data, and the typography starts to differentiate the product from generic dark-mode SaaS. The inventory table no longer carries red/green stripe borders that competed with the P&L cells; the table reads as part of the page instead of a separate component. Sell buttons are brand-indigo so emerald can be reserved for realized-money signals. The Opportunities page now sits in the same column as Insights/Admin instead of bleeding edge-to-edge with different chrome. The Card Yeti mark on the login page is finally legible."*
+
+### Findings this cycle
+
+- 0 🔴.
+- 6 🟡 shipped (typography, slab-frame, inventory stripes, sell-button colour, opportunities chrome, login mark).
+- Foundation work — none of these is a single-page redesign; all are system-level moves that propagate to every surface that uses the affected primitive.
+
+### Deferred / intentional (Phase 2 / Phase 3)
+
+- Dashboard hero, Inventory page hero, Insights page redesigns — Phase 2 work (per the spec).
+- Campaign-detail empty hero, reprice slider differentiation, scan onboarding strip, sell-sheet preset previews, admin integrations pulse, campaigns phase grouping — Phase 3 work.
+- Reprice page hero "13" red number remains in Fraunces; Phase 2 will revisit hero scale.
+
+### Epics (carried forward)
+
+- Screenshot harness parity with real product defaults (iter‑5).
+- Mobile admin harness duplicate‑capture bug (iter-22).
+
+### Recurring
+
+- (none)
+
+### Design conventions ratified this cycle
+
+- **Money gets its own face.** Every monetary figure (cents, dollars, percent, deltas) renders in `--font-numeric` (JetBrains Mono) with `font-variant-numeric: tabular-nums`. The product's primary content is numbers; sans-serif body text bury them. Auto-applied to all `tabular-nums` sites so the convention is enforced by class alone.
+- **`--success` is reserved for *realized-money* signals.** Action buttons use `--brand` (variant `primary`), not `--success`. Adding success to a high-frequency action button creates wallpaper-effect green that drowns the P&L cells it should be highlighting. Extends iter-2's "danger reserved for genuinely destructive actions" rule into the success palette.
+- **Page-level error states do not need a `<CardShell>` wrapper.** A plain `surface-1` panel reads as "inline message" while CardShell reads as "another card" and visually competes with the page's real cards. Use CardShell for *content* surfaces, not for *meta* surfaces (errors, banners, loading states).
+- **Row-level pass/fail signals live in the data cell, not on the row edge.** When a table column already carries a coloured signal (P&L, status, severity), do not duplicate that signal as a row-edge stripe — it reads as bolted-on chrome and detaches the table from the page. The cell colour + an optional whole-row tint is enough. The `data-severity` stripes on Insights rows remain *because Insights is severity-driven and the row IS the action*; Inventory rows carry many signals, so the column owns the colour.
+
+### Outstanding 🔴
+
+- (none — Phase 1 ships clean)
+
+### Cycle classification
+
+`structural-effort-open` — opening cycle of a multi-phase identity effort, parallels iter-21's `structural-effort-close` but in the other direction. Six bounded foundation moves shipped; none is a page redesign, all are system-level changes that propagate. UI_CLEAN counters are paused for the duration of the multi-phase effort (Phase 2 + Phase 3).
+

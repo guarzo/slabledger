@@ -73,12 +73,12 @@ export default function PsaExchangePage() {
   const visibleCount = groups ? groups.length : sorted.length;
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="max-w-6xl mx-auto px-4 space-y-6">
       <Breadcrumb items={[{ label: 'Opportunities' }, { label: 'PSA-Exchange' }]} />
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="page-title">PSA-Exchange Opportunities</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-[var(--text-muted)] mt-1">
             Pokemon listings ranked by tiered offer × velocity. Read-only; make offers on PSA-Exchange.
           </p>
         </div>
@@ -87,9 +87,10 @@ export default function PsaExchangePage() {
             href={data.categoryUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 px-3 py-2 rounded-md bg-[var(--brand-500)] text-white text-sm hover:bg-[var(--brand-600)]"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[var(--surface-3)] bg-[var(--surface-1)] text-sm text-[var(--text)] hover:bg-[var(--surface-2)] hover:border-[var(--brand-500)] transition-colors"
           >
-            Open Pokemon catalog ↗
+            Open Pokemon catalog
+            <span aria-hidden="true">↗</span>
           </a>
         ) : !isLoading && !error ? (
           <span className="text-xs text-[var(--text-muted)]">PSA-Exchange token not configured</span>
@@ -99,30 +100,26 @@ export default function PsaExchangePage() {
       {isLoading && <OpportunitiesTableSkeleton />}
 
       {error && (
-        <CardShell>
-          <div className="p-5 space-y-3">
-            <p className="text-sm text-[var(--danger)]">Failed to load PSA-Exchange opportunities.</p>
-            <p className="text-xs text-[var(--text-muted)] leading-relaxed max-w-xl">
-              When this loads, you'll see a ranked table of Pokemon listings on PSA-Exchange — each row scored by tiered offer × velocity, with the top decile highlighted. Common causes: PSA-Exchange token missing or expired (configure in Admin → Integrations), or PSA-Exchange API is rate-limiting.
-            </p>
-            <Button onClick={() => refetch()}>Retry</Button>
-          </div>
-        </CardShell>
+        <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)] p-5 space-y-3">
+          <p className="text-sm text-[var(--danger)]">Failed to load PSA-Exchange opportunities.</p>
+          <p className="text-xs text-[var(--text-muted)] leading-relaxed max-w-xl">
+            When this loads, you'll see a ranked table of Pokemon listings on PSA-Exchange — each row scored by tiered offer × velocity, with the top decile highlighted. Common causes: PSA-Exchange token missing or expired (configure in Admin → Integrations), or PSA-Exchange API is rate-limiting.
+          </p>
+          <Button variant="secondary" onClick={() => refetch()}>Retry</Button>
+        </div>
       )}
 
       {data && !isLoading && !error && (
         <>
-          <CardShell>
-            <div className="p-3">
-              <Toolbar
-                quickView={quickView}
-                onQuickViewChange={handleQuickView}
-                filters={filters}
-                onFiltersChange={setFilters}
-                groupDuplicates={groupDuplicates}
-                onGroupDuplicatesChange={setGroupDuplicates}
-              />
-            </div>
+          <CardShell padding="sm">
+            <Toolbar
+              quickView={quickView}
+              onQuickViewChange={handleQuickView}
+              filters={filters}
+              onFiltersChange={setFilters}
+              groupDuplicates={groupDuplicates}
+              onGroupDuplicatesChange={setGroupDuplicates}
+            />
           </CardShell>
 
           <div className="text-xs text-[var(--text-muted)]">
@@ -130,7 +127,7 @@ export default function PsaExchangePage() {
             {data.enrichmentErrors > 0 && ` · ${data.enrichmentErrors} enrichment errors`}
           </div>
 
-          <CardShell>
+          <CardShell padding="none">
             <OpportunitiesTable
               rows={sorted}
               groups={groups}

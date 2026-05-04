@@ -22,6 +22,42 @@
   }
 }
 
+/* Tabular numeric face — money, percent, serials, IDs.
+   Money is the product, so dollar amounts get their own face: JetBrains Mono
+   with tabular figures so columns line up cleanly. Use this on hero numbers,
+   table money cells, percent deltas, and cert/serial strings. Do NOT use on
+   labels or sentences — body copy stays in --font-sans. */
+@utility num {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Auto-apply the numeric face to every existing tabular-nums site.
+   The codebase already conventionally tags monetary cells with Tailwind's
+   tabular-nums utility, so we piggyback on that to sweep all 60+ surfaces
+   in one rule rather than editing each component individually. */
+.tabular-nums {
+  font-family: var(--font-numeric);
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Slab frame — echoes the PSA holder's flange.
+   A thin double-line outline that signals "this number/region matters."
+   Stay disciplined: hero metrics only, never on every card. */
+@utility slab-frame {
+  position: relative;
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  /* Outer hairline + inset double via box-shadow so we don't fight Tailwind's
+     border utility on consumer components. */
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 0 0 4px var(--surface-1),
+    inset 0 0 0 5px rgba(255, 255, 255, 0.04);
+  padding: var(--space-5) var(--space-6);
+}
+
 @utility page-title {
   font-family: var(--font-display);
   font-weight: 500;
@@ -170,15 +206,16 @@
   box-shadow: inset 2px 0 0 var(--brand-500);
 }
 
-/* P/L status indicators */
-.glass-vrow[data-pl="positive"] {
-  border-left: 2px solid var(--success);
-}
-.glass-vrow[data-pl="negative"] {
-  border-left: 2px solid var(--danger);
-}
+/* P/L status indicators
+   The signal lives entirely in the P&L cell color and (for below-cost rows)
+   the subtle row tint. The previous 2px solid colored left-border on every
+   row read as bolted-on chrome that detached the table from the page rhythm.
+   data-pl is preserved as a hook for analytics + tests, but renders nothing
+   visual; rows still carry data-belowcost="true" for the danger-tint above. */
+.glass-vrow[data-pl="positive"],
+.glass-vrow[data-pl="negative"],
 .glass-vrow[data-pl="neutral"] {
-  border-left: 2px solid transparent;
+  border-left: 0;
 }
 
 /* Severity strip colors (Insights: DoNow, CampaignTuning) */
