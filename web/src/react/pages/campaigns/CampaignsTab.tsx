@@ -1,3 +1,4 @@
+import { Fragment, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
@@ -12,6 +13,15 @@ const PHASE_TONES: Record<Phase, StatusTone> = {
   pending: 'warning',
   closed: 'neutral',
 };
+
+const PHASE_LABELS: Record<Phase, string> = {
+  active: 'Active',
+  pending: 'Pending',
+  closed: 'Closed',
+};
+
+/** Phase order on the page. Matches the parent's sortCampaigns(). */
+const PHASE_ORDER: Phase[] = ['active', 'pending', 'closed'];
 
 function PhaseBadge({ phase }: { phase: Phase }) {
   return (
@@ -55,6 +65,23 @@ export default function CampaignsTab({
   onToggleCreate: () => void;
 }) {
   const isFiltered = phaseFilter !== 'all';
+
+  // Compute the indices in the (already-sorted) campaign list where the phase
+  // changes. We render a section eyebrow before the first row of each phase
+  // when no filter is active, so the operator gets a quick "10 active · 2
+  // pending" structural read without losing the existing column alignment.
+  const phaseSections = useMemo(() => {
+    if (isFiltered) return null;
+    const sections: Array<{ phase: Phase; startIdx: number; count: number }> = [];
+    for (const phase of PHASE_ORDER) {
+      const startIdx = campaigns.findIndex(c => c.phase === phase);
+      if (startIdx === -1) continue;
+      const count = campaigns.filter(c => c.phase === phase).length;
+      sections.push({ phase, startIdx, count });
+    }
+    return sections;
+  }, [campaigns, isFiltered]);
+
   return (
     <>
       {showCreate && (
@@ -109,15 +136,29 @@ export default function CampaignsTab({
               <span className="w-4" aria-hidden="true" />
             </div>
           </div>
-          {campaigns.map(c => {
+          {campaigns.map((c, idx) => {
             const pnl = pnlMap[c.id];
             const isClosed = c.phase === 'closed';
             const isProfit = pnl ? pnl.netProfitCents >= 0 : true;
             const profitColor = isProfit ? 'text-[var(--success)]' : 'text-[var(--danger)]';
+            const sectionHeader = phaseSections?.find(s => s.startIdx === idx);
 
             return (
-              <Link
-                key={c.id}
+              <Fragment key={c.id}>
+                {sectionHeader && (
+                  <div
+                    className={`flex items-baseline gap-2 px-3 ${idx === 0 ? 'pt-1 pb-1' : 'pt-4 pb-1'}`}
+                    aria-hidden="true"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand-400)]">
+                      {PHASE_LABELS[sectionHeader.phase]}
+                    </span>
+                    <span className="text-[10px] font-medium tabular-nums text-[var(--text-subtle)]">
+                      {sectionHeader.count}
+                    </span>
+                  </div>
+                )}
+                <Link
                 to={`/campaigns/${c.id}`}
                 className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] hover:border-[var(--brand-500)]/50 hover:bg-[var(--surface-0)] hover:-translate-y-0.5 hover:shadow-sm focus-ring transition-[color,border-color,background-color,transform,box-shadow] ${isClosed ? 'opacity-50' : ''}`}
               >
@@ -248,6 +289,7 @@ export default function CampaignsTab({
                   </svg>
                 </div>
               </Link>
+              </Fragment>
             );
           })}
         </div>
