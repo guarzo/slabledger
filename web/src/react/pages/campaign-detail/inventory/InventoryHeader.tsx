@@ -97,63 +97,70 @@ export default function InventoryHeader({
 
   return (
     <>
-      {/* Universe totals — always reflect the full inventory, never the filter result. */}
-      <div className="mb-4 sell-sheet-no-print">
+      {/* Universe totals — always reflect the full inventory, never the filter result.
+          Mirrors the dashboard's Slab Terminal hero treatment: an editorial-display
+          headline (Fraunces) with the supporting stats demoted to a tabular mono
+          strip, plus a small cost-vs-market bar that visualizes where the unrealized
+          delta sits without needing historical data. */}
+      <div className="mb-5 sell-sheet-no-print">
         {universe.totalMarket > 0 ? (
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span
-              className={`text-2xl font-bold tabular-nums tracking-tight ${universePlPositive ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
-              aria-label={`Unrealized ${universePlPositive ? 'gain' : 'loss'} ${formatPL(universe.totalPL)}`}
-            >
-              {formatPL(universe.totalPL)}
-              <span className="text-base opacity-80">{universePlPctSuffix}</span>
-            </span>
-            <span className="text-sm text-[var(--text-muted)]">unrealized</span>
-          </div>
+          <>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand-400)] mb-1">
+              Unrealized P&amp;L
+            </div>
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+              <span
+                className={`tabular-nums leading-[0.95] tracking-[-0.035em] ${universePlPositive ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}`}
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'clamp(40px, 6vw, 72px)',
+                  fontWeight: 500,
+                  fontFeatureSettings: '"ss01", "ss02", "tnum" 1, "lnum" 1',
+                }}
+                aria-label={`Unrealized ${universePlPositive ? 'gain' : 'loss'} ${formatPL(universe.totalPL)}`}
+              >
+                {formatPL(universe.totalPL)}
+                <span className="ml-2 text-[0.42em] opacity-80 align-baseline">{universePlPctSuffix}</span>
+              </span>
+              {/* Cost-vs-market bar: cost is the anchor, market sits to the left
+                  (loss) or right (gain) by an amount proportional to the delta.
+                  Capped visually at ±60% of cost so giant outliers don't break
+                  the scale. */}
+              <CostVsMarketBar
+                costCents={universe.totalCost}
+                marketCents={universe.totalMarket}
+                positive={universePlPositive}
+              />
+            </div>
+          </>
         ) : (
           <div className="text-2xl font-bold tabular-nums tracking-tight text-[var(--text)]">
             {items.length} {items.length === 1 ? 'card' : 'cards'}
           </div>
         )}
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
           {universe.totalMarket > 0 && (
             <>
-              <span className="text-[var(--text-muted)] tabular-nums">
-                {items.length} {items.length === 1 ? 'card' : 'cards'}
-              </span>
-              <span className="text-[var(--text-muted)]">·</span>
-            </>
-          )}
-          <span className="text-[var(--text-muted)] tabular-nums">
-            Cost <span className="text-[var(--text)]">{formatCents(universe.totalCost)}</span>
-          </span>
-          {universe.totalMarket > 0 && (
-            <>
-              <span className="text-[var(--text-muted)]">·</span>
-              <span className="text-[var(--text-muted)] tabular-nums">
-                Market <span className="text-[var(--text)]">{formatCents(universe.totalMarket)}</span>
-              </span>
+              <StatStrip label="Cards" value={`${items.length}`} />
+              <StatStrip label="Cost" value={formatCents(universe.totalCost)} />
+              <StatStrip label="Market" value={formatCents(universe.totalMarket)} />
             </>
           )}
           {showEV && evPortfolio && (
-            <>
-              <span className="text-[var(--text-muted)]">·</span>
-              <span className="text-[var(--text-muted)] tabular-nums">
-                EV <span className={evPortfolio.totalEvCents >= 0 ? 'text-[var(--success)]' : 'text-[var(--state-problem)]'}>{formatPL(evPortfolio.totalEvCents)}</span>
-              </span>
-            </>
+            <StatStrip
+              label="EV"
+              value={formatPL(evPortfolio.totalEvCents)}
+              tone={evPortfolio.totalEvCents >= 0 ? 'success' : 'problem'}
+            />
           )}
           {/* Filter-tab summary. Search has its own dedicated summary line
               below the filter pills, so this fragment only renders for
               non-search filter narrowing — the two are mutually exclusive. */}
           {isFiltering && !hasSearch && (
-            <>
-              <span className="text-[var(--text-muted)]">·</span>
-              <span className="text-[var(--text-subtle)] tabular-nums">
-                Showing {filteredCount}
-                {totalMarket > 0 && <> · Cost {formatCents(totalCost)}</>}
-              </span>
-            </>
+            <span className="text-[var(--text-subtle)] tabular-nums">
+              Showing {filteredCount}
+              {totalMarket > 0 && <> · Cost {formatCents(totalCost)}</>}
+            </span>
           )}
         </div>
       </div>
@@ -236,5 +243,57 @@ export default function InventoryHeader({
       )}
 
     </>
+  );
+}
+
+/** Single label/value cell in the demoted stat strip beneath the hero. */
+function StatStrip({ label, value, tone }: { label: string; value: string; tone?: 'success' | 'problem' }) {
+  const valueColor = tone === 'success'
+    ? 'text-[var(--success)]'
+    : tone === 'problem'
+      ? 'text-[var(--state-problem)]'
+      : 'text-[var(--text)]';
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-[var(--text-muted)]">{label}</span>
+      <span className={`tabular-nums ${valueColor}`}>{value}</span>
+    </span>
+  );
+}
+
+/** Cost-vs-market diverging bar.
+    The cost basis is the anchor at the centre; the market value extends a
+    coloured fill to the right (gain) or left (loss) proportional to the
+    unrealized delta. Capped at ±60% of cost so a single 10x outlier doesn't
+    flatten the scale for everyone else. Uses a single inline SVG so the bar
+    composes with the page's existing CSS without bringing in a chart lib. */
+function CostVsMarketBar({ costCents, marketCents, positive }: {
+  costCents: number;
+  marketCents: number;
+  positive: boolean;
+}) {
+  if (costCents <= 0) return null;
+  const delta = marketCents - costCents;
+  const ratio = Math.max(-0.6, Math.min(0.6, delta / costCents));
+  const halfWidth = 80; // px each side of the anchor
+  const fillWidth = Math.abs(ratio / 0.6) * halfWidth;
+  const fillX = ratio >= 0 ? halfWidth : halfWidth - fillWidth;
+  const fillColor = positive ? 'var(--success)' : 'var(--state-problem)';
+  return (
+    <svg
+      width={halfWidth * 2}
+      height={20}
+      viewBox={`0 0 ${halfWidth * 2} 20`}
+      role="img"
+      aria-label={`Market value ${positive ? 'above' : 'below'} cost basis`}
+      className="shrink-0"
+    >
+      {/* Track */}
+      <rect x={0} y={9} width={halfWidth * 2} height={2} fill="rgba(255,255,255,0.06)" rx={1} />
+      {/* Delta fill */}
+      <rect x={fillX} y={7} width={fillWidth} height={6} fill={fillColor} opacity={0.55} rx={1} />
+      {/* Cost anchor — small notch at the centre */}
+      <rect x={halfWidth - 1} y={3} width={2} height={14} fill="var(--text-muted)" rx={1} />
+    </svg>
   );
 }

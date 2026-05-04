@@ -58,6 +58,18 @@
   padding: var(--space-5) var(--space-6);
 }
 
+/* Slab frame, small — for inventory row thumbnails. Drops the padding
+   (we don't want to consume the image), keeps just the dual hairline
+   so the card image reads as a tiny slab rather than a generic image
+   tile. Pair with bg-[var(--surface-2)] on the wrapper for the "card
+   well" feel when no image is loaded. */
+@utility slab-frame-sm {
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
 @utility page-title {
   font-family: var(--font-display);
   font-weight: 500;
