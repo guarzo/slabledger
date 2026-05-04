@@ -73,7 +73,7 @@ export default function PsaExchangePage() {
   const visibleCount = groups ? groups.length : sorted.length;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 space-y-6">
+    <div className="max-w-[1400px] mx-auto px-4 space-y-6">
       <Breadcrumb items={[{ label: 'Opportunities' }, { label: 'PSA-Exchange' }]} />
       <header className="flex items-start justify-between gap-4">
         <div>
