@@ -55,7 +55,7 @@ export default function CampaignHeroStats({
             />
           </div>
         </section>
-        <p className="italic text-sm text-[var(--text-muted)] mt-2">
+        <p className="ledger-eyebrow mt-2">
           Awaiting first sale
         </p>
       </>
