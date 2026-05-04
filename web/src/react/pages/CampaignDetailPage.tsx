@@ -88,6 +88,7 @@ export default function CampaignDetailPage() {
               unsoldCount={unsoldPurchases.length}
               dailySpendCapCents={campaign.dailySpendCapCents}
               expectedFillRate={campaign.expectedFillRate}
+              onSwitchTab={setTab}
             />
           </SectionErrorBoundary>
         </Tabs.Content>
