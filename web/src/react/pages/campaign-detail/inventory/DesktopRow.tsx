@@ -169,7 +169,7 @@ export default function DesktopRow({
             <img
               src={item.purchase.frontImageUrl}
               alt=""
-              className="w-8 h-11 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+              className="w-9 h-[52px] object-cover slab-frame-sm shrink-0 bg-[var(--surface-2)]"
               loading="lazy"
             />
           )}

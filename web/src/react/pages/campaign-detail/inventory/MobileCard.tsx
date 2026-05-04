@@ -84,7 +84,7 @@ export default function MobileCard({
             <img
               src={item.purchase.frontImageUrl}
               alt=""
-              className="w-10 h-14 object-cover rounded shrink-0 bg-[var(--surface-2)]"
+              className="w-11 h-[60px] object-cover slab-frame-sm shrink-0 bg-[var(--surface-2)]"
               loading="lazy"
             />
           )}
