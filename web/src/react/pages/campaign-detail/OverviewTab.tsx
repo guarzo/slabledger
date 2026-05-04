@@ -3,9 +3,11 @@ import PokeballLoader from '../../PokeballLoader';
 import { formatCents, formatDollarsWhole, formatPct } from '../../utils/formatters';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import CardShell from '../../ui/CardShell';
+import Button from '../../ui/Button';
 import { saleChannelLabels } from '../../utils/campaignConstants';
 import { useCampaignPNL, useChannelPNL, useFillRate, useDaysToSell } from '../../queries/useCampaignQueries';
 import type { ChannelPNL } from '../../../types/campaigns';
+import type { CampaignTabId } from '../../utils/campaignConstants';
 import CampaignHeroStats from './CampaignHeroStats';
 
 function ChannelMobileCard({ ch }: { ch: ChannelPNL }) {
@@ -53,11 +55,16 @@ interface OverviewTabProps {
   unsoldCount: number;
   dailySpendCapCents: number;
   expectedFillRate?: number;
+  /** Optional tab switcher — when provided, the no-sales placeholder
+      renders one-click CTAs that take the operator straight to the
+      Transactions / Tuning tabs instead of asking them to navigate. */
+  onSwitchTab?: (tab: CampaignTabId) => void;
 }
 
 export default function OverviewTab({
   campaignId, totalSpent, totalRevenue, totalProfit, sellThrough,
   purchaseCount, saleCount, unsoldCount, dailySpendCapCents, expectedFillRate,
+  onSwitchTab,
 }: OverviewTabProps) {
   const { data: pnl, isLoading: pnlLoading } = useCampaignPNL(campaignId);
   const { data: channelPnl = [], isLoading: channelLoading } = useChannelPNL(campaignId);
@@ -116,17 +123,46 @@ export default function OverviewTab({
         <div className="py-8 text-center"><PokeballLoader /></div>
       ) : (
         <>
-          {/* No-sales hint — without it the overview tab ends on the chips
-              line above with 60–80% empty viewport, reading as a 404. */}
+          {/* No-sales placeholder — slab-framed so the empty state reads as
+              a deliberate "next steps" callout rather than a 404 on the
+              page. CTAs switch tabs in-place when onSwitchTab is wired,
+              otherwise the inline references degrade gracefully to text. */}
           {saleCount === 0 && (
-            <CardShell variant="data" padding="md">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                What appears here next
+            <div className="slab-frame max-w-2xl">
+              <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand-400)] mb-1">
+                What's next
               </h3>
-              <p className="text-sm text-[var(--text-muted)] mt-2 leading-relaxed max-w-2xl">
-                Record a sale and this tab fills in with channel-by-channel P&L (eBay, in-person, website), days-to-sell distribution, and actual fill rate against the campaign target. Until then, check <span className="text-[var(--text)]">Transactions</span> for purchases and <span className="text-[var(--text)]">Tuning</span> to adjust buy terms.
+              <p
+                className="text-[var(--text)] mb-4 leading-tight"
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 500,
+                  fontSize: 'clamp(20px, 2.4vw, 28px)',
+                }}
+              >
+                Awaiting first sale
               </p>
-            </CardShell>
+              <p className="text-sm text-[var(--text-muted)] leading-relaxed mb-4">
+                Record a sale and this tab fills in with channel-by-channel P&amp;L (eBay,
+                in-person, website), days-to-sell distribution, and actual fill rate
+                against the campaign target.
+              </p>
+              {onSwitchTab ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="primary" size="sm" onClick={() => onSwitchTab('transactions')}>
+                    Record sale →
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => onSwitchTab('tuning')}>
+                    Tune buy terms
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--text-muted)]">
+                  Check <span className="text-[var(--text)]">Transactions</span> for purchases
+                  and <span className="text-[var(--text)]">Tuning</span> to adjust buy terms.
+                </p>
+              )}
+            </div>
           )}
 
 
