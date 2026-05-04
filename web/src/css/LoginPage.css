@@ -81,24 +81,33 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: var(--space-2);
   margin-top: var(--space-5);
   padding-top: var(--space-4);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 .login-powered-by-label {
   font-size: var(--font-size-2xs);
-  color: var(--text-muted);
-  font-weight: var(--font-weight-medium);
+  color: var(--text-subtle);
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
 }
 
+/* Card Yeti logo is a dark-blue mark on a white background. On the dark
+   login surface, the white field reads as a glaring rectangle that washes
+   the entire mark out. mix-blend-mode: screen drops the white to near-zero
+   while keeping the icy blues + highlights bright. The brightness lift
+   compensates for the slight darkening that screen-blend introduces on
+   already-dark pixels. */
 .login-powered-by-img {
-  max-height: 40px;
+  max-height: 48px;
   width: auto;
   display: block;
+  mix-blend-mode: screen;
+  filter: brightness(1.1) contrast(1.05);
+  opacity: 0.95;
 }
 
 /* Sign-in card — layout only; chrome (bg/blur/border/radius/padding) owned by CardShell variant="glass" */

@@ -263,6 +263,9 @@
   /* Display face — characterful refined serif for page-level H1s. Optical
      sizing tuned for large display use; kept off body/UI text. */
   --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  /* Numeric face — tabular monospace for money/percent/serial figures.
+     Money is the product, so dollar amounts get their own face. */
+  --font-numeric: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, "Roboto Mono", Consolas, monospace;
 
   /* ===================================
      RIPPLE EFFECT COLORS

@@ -16,8 +16,12 @@ export default function RowActions({ primary, fallbackPrimary, overflow, variant
   const loud = primary ?? fallbackPrimary;
   const [pendingConfirm, setPendingConfirm] = useState<ResolvedAction | null>(null);
 
-  // Loud button is brand-tinted when contextual, neutral primary when fallback Sell.
-  const loudVariant = primary ? 'primary' : 'success';
+  // Loud action is always brand-tinted. Previously the fallback Sell rendered
+  // as success-green, but at scale (every inventory row carries one) the green
+  // wallpaper competed with the green P&L cells and stripped the page of any
+  // visual hierarchy — every row was loud and nothing led. Brand-indigo for
+  // every primary keeps emerald reserved for *realized money* signals.
+  const loudVariant = 'primary';
 
   const sizeClass = variant === 'mobile' ? 'min-w-[64px]' : '';
 
