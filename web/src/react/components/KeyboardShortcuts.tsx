@@ -24,6 +24,14 @@ const NAV_BINDINGS: Array<{ key: string; path: string; label: string }> = [
   { key: 'v', path: '/invoices', label: 'Invoices' },
 ];
 
+function isMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  // Prefer modern userAgentData when available; fall back to platform/userAgent.
+  const uaData = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData;
+  const platform = uaData?.platform || navigator.platform || navigator.userAgent || '';
+  return /mac|iphone|ipad|ipod/i.test(platform);
+}
+
 function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
@@ -126,7 +134,7 @@ export default function KeyboardShortcuts() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <ShortcutRow keys={['?']} label="Toggle this cheatsheet" />
             <ShortcutRow keys={['Esc']} label="Close overlay" />
-            <ShortcutRow keys={['⌘', 'K']} label="Command palette" />
+            <ShortcutRow keys={isMacPlatform() ? ['⌘', 'K'] : ['Ctrl', 'K']} label="Command palette" />
             <ShortcutRow keys={['/']} label="Focus search (page-local)" />
             {NAV_BINDINGS.map((b) => (
               <ShortcutRow key={b.key} keys={['g', b.key]} label={b.label} />

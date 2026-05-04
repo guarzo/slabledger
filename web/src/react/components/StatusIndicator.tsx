@@ -79,7 +79,10 @@ export default function StatusIndicator() {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOpen(false);
+      }
     }
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
