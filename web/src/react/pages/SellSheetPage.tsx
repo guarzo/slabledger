@@ -142,31 +142,69 @@ export default function SellSheetPage() {
         </p>
       </header>
 
-      <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {order.map((id) => {
           const s = slices[id];
           const empty = s.itemCount === 0;
           return (
             <li
               key={id}
-              className={`flex items-start justify-between gap-3 p-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] ${empty ? 'opacity-50' : ''}`}
+              className={`flex flex-col gap-3 p-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)] ${empty ? 'opacity-50' : ''}`}
             >
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-[var(--text)]">{s.label}</div>
-                <div className="text-sm text-[var(--text-muted)] tabular-nums">
-                  {s.itemCount} {s.itemCount === 1 ? 'card' : 'cards'} · {dollars(s.totalAskCents)}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand-400)] mb-0.5">
+                    {s.label}
+                  </div>
+                  {/* Total ask as the tile hero — in mono so the seven tiles
+                      vertically column-align across the grid. */}
+                  <div className="text-2xl font-semibold tabular-nums text-[var(--text)] leading-none">
+                    {dollars(s.totalAskCents)}
+                  </div>
+                  <div className="text-xs text-[var(--text-muted)] tabular-nums mt-1">
+                    {s.itemCount} {s.itemCount === 1 ? 'card' : 'cards'} · {s.description}
+                  </div>
                 </div>
-                <div className="text-xs text-[var(--text-muted)] mt-1">
-                  {s.description}
-                </div>
+                <button
+                  onClick={() => setActiveSliceId(id)}
+                  className="px-4 py-1.5 rounded bg-[var(--brand-600)] text-white text-sm hover:bg-[var(--brand-700)] disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 transition-colors"
+                  disabled={empty}
+                >
+                  Print
+                </button>
               </div>
-              <button
-                onClick={() => setActiveSliceId(id)}
-                className="px-4 py-1.5 rounded bg-[var(--brand-500)] text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                disabled={empty}
-              >
-                Print
-              </button>
+              {/* Top 3 items by target ask — gives the operator a sniff test
+                  for the slice contents without printing. Items are already
+                  pre-sorted by the slice-builder (psa10 high-to-low, others
+                  by set), so we sort here for consistency across slices. */}
+              {!empty && (
+                <ul className="border-t border-[var(--surface-2)]/60 pt-2 space-y-1">
+                  {[...s.items]
+                    .sort((a, b) => b.targetSellPrice - a.targetSellPrice)
+                    .slice(0, 3)
+                    .map((item) => (
+                      <li
+                        key={item.certNumber}
+                        className="flex items-baseline justify-between gap-2 text-xs"
+                      >
+                        <span className="text-[var(--text)] truncate" title={item.cardName}>
+                          <span className="text-[var(--text-muted)] mr-1.5 tabular-nums">
+                            {item.grader ?? 'PSA'} {item.grade}
+                          </span>
+                          {item.cardName}
+                        </span>
+                        <span className="text-[var(--text-muted)] tabular-nums whitespace-nowrap">
+                          {dollars(item.targetSellPrice)}
+                        </span>
+                      </li>
+                    ))}
+                  {s.itemCount > 3 && (
+                    <li className="text-[10px] text-[var(--text-subtle)] tabular-nums pt-0.5">
+                      + {s.itemCount - 3} more
+                    </li>
+                  )}
+                </ul>
+              )}
             </li>
           );
         })}
