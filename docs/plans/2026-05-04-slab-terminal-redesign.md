@@ -1,9 +1,21 @@
 # SlabLedger — Slab Terminal Redesign
 
 **Date:** 2026-05-04
-**Branch:** `ui/slab-terminal`
 **Author:** Daisy + Claude
-**Status:** Phase 1 in progress
+**Status:** ✅ **Complete** (Phases 1–3 shipped). Three sparkline placements deferred — see [docs/specs/2026-05-04-sparkline-api-requirements.md](../specs/2026-05-04-sparkline-api-requirements.md).
+
+## Final shipping summary
+
+| Phase | PR | What landed |
+|---|---|---|
+| 1 — Foundation | [#357](https://github.com/guarzo/slabledger/pull/357) | JetBrains Mono on every monetary cell, `.slab-frame` utility, inventory row-stripes removed, Sell button colour discipline, Opportunities chrome aligned, login Card Yeti mark legibility |
+| 2.1 — Dashboard hero | [#358](https://github.com/guarzo/slabledger/pull/358) | Display-scale Fraunces ROI headline, "as of HH:MM" freshness line, captain's log NEXT MOVES with bronze topmost-row underscore |
+| 2.2 — Inventory hero | [#359](https://github.com/guarzo/slabledger/pull/359) | Display-scale Fraunces unrealized headline, cost-vs-market diverging bar, slab-framed thumbnails (`.slab-frame-sm`) |
+| 2.3 — Insights | [#360](https://github.com/guarzo/slabledger/pull/360) | Advice-first recommendation cards (slab-framed), derived-from-matrix fallback, tuning matrix collapsed by default |
+| 3.1 — Input UX | [#361](https://github.com/guarzo/slabledger/pull/361) + [#362](https://github.com/guarzo/slabledger/pull/362) | Reprice slider differentiation (bronze/round vs amber/squarer), Scan onboarding-strip collapse, scanner-field cert input |
+| 3.2 — Campaign surfaces | [#363](https://github.com/guarzo/slabledger/pull/363) | Slab-framed empty hero with tab-switching CTAs, Active/Pending/Closed phase grouping |
+| Out-of-band | [#364](https://github.com/guarzo/slabledger/pull/364) | Opportunities responsive column visibility (operator friction call-out) |
+| 3.3 — Preview polish | [#365](https://github.com/guarzo/slabledger/pull/365) | Sell Sheet preset previews (hero ask + 3-line top items), Admin integration "Last call X ago" pulses + DH error banner |
 
 ---
 
@@ -37,7 +49,7 @@ Target:
 
 ## Plan
 
-### Phase 1 — Foundation (system-level, no page redesigns)
+### Phase 1 — Foundation (system-level, no page redesigns) ✅ shipped (#357)
 
 Cheapest, highest leverage. Each of these is a one-PR-or-less change.
 
@@ -57,22 +69,22 @@ Cheapest, highest leverage. Each of these is a one-PR-or-less change.
 
 The three pages that do 80% of daily work.
 
-#### Dashboard
+#### Dashboard ✅ shipped (#358)
 
 - Promote `+21.0%` to a true display-scale headline (Fraunces, ~96px desktop, ~64px mobile).
 - Demote the six adjacent KPIs to a single tabular strip beneath, in JetBrains Mono.
 - Add an "as of HH:MM · since last login +X" line under the headline.
 - "NEXT MOVES" reads like a captain's log: monospace counter (`01 02 03`) on the left, action label center, action chip right; hover reveals a one-sentence rationale; topmost item carries an animated 1px underscore.
-- Weekly Review section gets a 90-day sparkline.
+- ⏸ ~~Weekly Review section gets a 90-day sparkline.~~ **Deferred — blocked on backend.** See sparkline spec.
 
-#### Inventory
+#### Inventory ✅ shipped (#359)
 
-- Slim 60-80px chart strip above the table — unrealized P&L over the last 90 days + cost-vs-market diverging bar.
+- ⏸ ~~Slim 60-80px chart strip above the table — unrealized P&L over the last 90 days~~ + cost-vs-market diverging bar. **Chart strip deferred — blocked on backend.** Diverging bar shipped.
 - Larger card thumbnails framed in slab borders.
-- Action column compresses to one Sell + a kebab on desktop (recovers ~80px for card name on mid-width screens).
-- Expanded reprice panel restructures to a single tabular row of four large mono numbers (Cost · CL · MM · Sug) with the input + Confirm pinned right.
+- ⏭ ~~Action column compresses to one Sell + a kebab~~ — already done in friction-log iter 21; verified during review.
+- ⏭ ~~Expanded reprice panel restructures…~~ — already disciplined in friction-log iter 21; no change warranted.
 
-#### Insights
+#### Insights ✅ shipped (#360)
 
 - Lead with 3 large recommendation cards ("Tighten Modern grade range to 9+ — sell-through 79% on a $5K cap is the bottleneck"), each with a one-click action.
 - Demote the 5-column tuning matrix to a "All campaigns" expandable below.
@@ -80,14 +92,14 @@ The three pages that do 80% of daily work.
 
 ### Phase 3 — Long-tail polish
 
-| Surface | Move |
-|---|---|
-| Campaign-detail empty | Replace bare "Awaiting first sale" wedge with a slab-framed placeholder showing the next two recommended actions |
-| Reprice | Visually differentiate the two sliders (with-comps vs without-comps) — same shape, very different semantics today |
-| Scan | Collapse the 4-step strip after the first successful scan; style cert input as a real scanner field with optional scan-line during inflight |
-| Sell Sheet | Each preset shows total ask as the hero number on its tile, with count + range below and a 3-line mini-list of top items |
-| Admin / Integrations | Per-integration pulse indicator ("last call N seconds ago") + inline Test Connection; promote DH error to page-level banner when present |
-| Campaigns | Group rows by phase (Active / Pending / Closed); per-row 7-day P&L sparkline |
+| Surface | Move | PR |
+|---|---|---|
+| Campaign-detail empty | Replace bare "Awaiting first sale" wedge with a slab-framed placeholder showing the next two recommended actions | ✅ #363 |
+| Reprice | Visually differentiate the two sliders (with-comps vs without-comps) — same shape, very different semantics today | ✅ #361 |
+| Scan | Collapse the 4-step strip after the first successful scan; style cert input as a real scanner field ~~with optional scan-line during inflight~~ | ✅ #361 (scan-line deferred) |
+| Sell Sheet | Each preset shows total ask as the hero number on its tile, with count + range below and a 3-line mini-list of top items | ✅ #365 |
+| Admin / Integrations | Per-integration pulse indicator ("last call N seconds ago") ~~+ inline Test Connection~~; promote DH error to page-level banner when present | ✅ #365 (Test Connection deferred — many integrations lack a test-only endpoint, would be net-new feature scope) |
+| Campaigns | Group rows by phase (Active / Pending / Closed); ⏸ ~~per-row 7-day P&L sparkline~~ | ✅ #363 (phase grouping); sparkline deferred — blocked on backend |
 
 ## What we're explicitly skipping
 
@@ -104,11 +116,20 @@ The three pages that do 80% of daily work.
 
 ## Tracking
 
-- Friction log: `web/screenshots/friction-log.md` — append per-cycle as we land changes.
-- Screenshot regen: `make screenshots` after each phase.
-- Worktree: `.worktrees/slab-terminal` on branch `ui/slab-terminal`.
+- Friction log: `web/screenshots/friction-log.md` — appended per-cycle as we landed changes; closing entry (iteration 23) recorded after Phase 1 ship.
+- Screenshot regen: `make screenshots-quick` after each phase; final cross-PR regression sweep ran during closeout.
 
-## Open questions
+## Open questions — resolved
 
-- Should the slab-frame carry a faux serial number ("SLR-001 · Q-205X") on hero placements? Decorative but on-character. Default: no for Phase 1, revisit in Phase 3.
-- Sparkline library: install `recharts` (heavy) vs hand-rolled SVG (light). Default: hand-rolled until we need >2 chart shapes.
+- ~~Should the slab-frame carry a faux serial number ("SLR-001 · Q-205X") on hero placements?~~ **No — never adopted.** The dual-hairline treatment alone read as the slab geometry once placed; adding faux-serial would have tipped into kitsch.
+- ~~Sparkline library: install `recharts` (heavy) vs hand-rolled SVG (light).~~ **N/A — no sparklines shipped.** All three placements (Weekly Review, Inventory 90d, Campaigns 7d) deferred on backend dependency. The one chart we did ship (Inventory cost-vs-market diverging bar) was hand-rolled SVG. Library decision deferred along with the sparklines themselves.
+
+## Deferred — blocked on backend
+
+Three sparkline placements never landed because the API doesn't currently expose a daily-snapshot series per campaign or per portfolio. The frontend work for each is straightforward once the API exists. See [docs/specs/2026-05-04-sparkline-api-requirements.md](../specs/2026-05-04-sparkline-api-requirements.md) for the full breakdown:
+
+- Weekly Review sparkline (Dashboard) — needs daily P&L over the current week
+- Inventory 90-day P&L chart strip — needs daily portfolio snapshots
+- Per-campaign 7-day sparkline (Campaigns table) — needs daily P&L per campaign
+
+All three were on the original plan and are documented in their respective phase PRs as "skipped — needs backend addition."
