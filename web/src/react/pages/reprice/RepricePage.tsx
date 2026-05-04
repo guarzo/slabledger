@@ -219,12 +219,14 @@ export default function RepricePage() {
               hint="When we have sales data — small discount, enough to clear."
               value={discountWithComps}
               onChange={setDiscountWithComps}
+              tone="data"
             />
             <DiscountSlider
               label="Without comps"
               hint="No recent sales — drop deeper as a buffer for unknown demand."
               value={discountNoComps}
               onChange={setDiscountNoComps}
+              tone="guess"
             />
           </div>
           {summary && (
@@ -420,13 +422,20 @@ function DiscountSlider({
   hint,
   value,
   onChange,
+  tone = 'data',
 }: {
   label: string;
   hint?: string;
   value: number;
   onChange: (v: number) => void;
+  /** 'data' (with comps — confident trim, brand bronze) or 'guess'
+      (no comps — defensive drop, warning amber). Drives the slider
+      colour, thumb shape, and value text colour so the operator can
+      tell at a glance which knob they're touching. */
+  tone?: 'data' | 'guess';
 }) {
   const id = `discount-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  const valueColor = tone === 'guess' ? 'text-[var(--warning)]' : 'text-[var(--brand-400)]';
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
@@ -436,7 +445,7 @@ function DiscountSlider({
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{hint}</p>
           )}
         </div>
-        <span className="tabular-nums font-semibold text-[var(--brand-400)] text-lg leading-none whitespace-nowrap">
+        <span className={`tabular-nums font-semibold text-lg leading-none whitespace-nowrap ${valueColor}`}>
           −{value.toFixed(1)}%
         </span>
       </div>
@@ -448,7 +457,7 @@ function DiscountSlider({
         step={0.5}
         value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
-        className={sliderStyles.slider}
+        className={`${sliderStyles.slider} ${sliderStyles[tone]}`}
         aria-label={`${label} below CardLadder: ${value.toFixed(1)}%`}
       />
       <div className="flex justify-between text-[10px] uppercase tracking-wider text-[var(--text-subtle)]">
