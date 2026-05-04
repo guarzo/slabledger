@@ -32,7 +32,7 @@ const DH_BADGE_TITLES: Record<string, string> = {
 };
 
 const BADGE_COLORS = [
-  { bg: 'rgba(99,102,241,0.1)', text: '#818cf8' },
+  { bg: 'rgba(184,115,51,0.12)', text: '#e2b574' },
   { bg: 'rgba(168,85,247,0.1)', text: '#c084fc' },
   { bg: 'rgba(236,72,153,0.1)', text: '#f472b6' },
   { bg: 'rgba(20,184,166,0.1)', text: '#2dd4bf' },

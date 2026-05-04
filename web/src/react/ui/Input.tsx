@@ -12,7 +12,7 @@ const inputVariants = cva(
   {
     variants: {
       state: {
-        default: 'border-[var(--surface-2)] hover:border-[var(--brand-500)]/30 focus:border-[var(--brand-500)] focus:ring-[var(--brand-500)]/20 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)]',
+        default: 'border-[var(--surface-2)] hover:border-[var(--brand-500)]/30 focus:border-[var(--brand-500)] focus:ring-[var(--brand-500)]/20 focus:shadow-[0_0_0_3px_rgba(184,115,51,0.12)]',
         error: 'border-[var(--danger)] focus:border-[var(--danger)] focus:ring-[var(--danger)]/20',
         success: 'border-green-500 focus:border-green-500 focus:ring-green-500/20',
       },
