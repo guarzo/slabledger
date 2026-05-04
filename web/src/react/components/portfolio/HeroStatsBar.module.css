@@ -243,6 +243,13 @@
   .delta {
     transform: translateY(-0.3em);
   }
+  /* Keep secondary-stat chips aligned with their baseline; only the
+     headline chip floats. Without this override the mobile .delta rule
+     above re-introduces the lift that the desktop .dSmall reset
+     suppressed. */
+  .delta.dSmall {
+    transform: none;
+  }
   .clusterGroup {
     width: 100%;
     flex-direction: column;

@@ -204,12 +204,16 @@ export default function HeroStatsBar({
 /** "as of HH:MM · {delta label}" line under the ROI headline. Driven by
     the React Query dataUpdatedAt timestamp from the page so the operator
     can see at a glance that the snapshot is current; the delta label
-    (e.g. "since last login") rides along when the API supplies one. */
+    (e.g. "since last login") rides along when the API supplies one.
+    Renders nothing when no real timestamp is available — falling back to
+    the current render time would fabricate a freshness signal in
+    precisely the cases where the operator most needs it to be honest. */
 function FreshnessLine({ asOfMs, delta }: { asOfMs?: number; delta?: PortfolioDelta }) {
   const stamp = useMemo(() => {
-    const ts = asOfMs && asOfMs > 0 ? new Date(asOfMs) : new Date();
-    return ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (!asOfMs || asOfMs <= 0) return null;
+    return new Date(asOfMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }, [asOfMs]);
+  if (!stamp) return null;
   return (
     <div className={styles.freshness}>
       as of {stamp}
