@@ -62,8 +62,11 @@ export default function OpportunitiesTable({
               - Always: Image, Description, Grade, PSA Value, Target, Edge, Score
               - lg+ (1024px): Cert, Comp, Days/sale
               - xl+ (1280px): Vel/mo, Conf, Pop
-              The 'overflow-x-auto' on the wrapper still lets users scroll to
-              hidden columns if they really need them at narrow widths. */}
+              These hidden cells are removed from layout (display: none), not
+              just clipped — horizontal scroll won't reveal them. The wrapper's
+              'overflow-x-auto' covers the visible-column case where a long
+              description forces a row past the container's max-width. To see
+              every column at once, the viewport must be ≥ xl breakpoint. */}
           <tr>
             <th scope="col" aria-label="Image" className="w-12 p-2"></th>
             <SortableHeader label="Cert" sortKey="cert" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="hidden lg:table-cell" />
