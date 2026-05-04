@@ -66,9 +66,17 @@ export default function CampaignsPortfolioHero({ campaignCount, pnlMap }: Campai
         <span className={styles.statCaption}>{formatCents(totalProfit)} all-time</span>
       </div>
 
-      <div className={styles.divider} aria-hidden />
-
-      <div className={styles.cluster}>
+      {/* Phase 2.1 (PR #358) refactored HeroStatsBar.module.css to drop
+          the single .cluster + .divider classes in favour of a
+          .clusterGroup + .subCluster pair. This consumer still uses the
+          same module, so we use .subCluster directly to get the flex-wrap
+          stat row. The old vertical .divider is gone — the section's
+          border-bottom on .hero already provides the visual break.
+          Without these renames, styles.cluster + styles.divider were
+          undefined and the stats stacked vertically as plain block
+          elements with no separator — caught during the closeout
+          regression sweep. */}
+      <div className={styles.subCluster}>
         <Stat label="Campaigns" value={`${campaignCount}`} />
         <Stat label="Invested" value={formatCents(totalSpent)} />
         <Stat label="Revenue" value={formatCents(totalRevenue)} />

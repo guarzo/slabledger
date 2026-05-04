@@ -1248,3 +1248,67 @@ PR 6 (this): single-threaded screenshot regeneration + cross-PR cohesion sweep.
 
 `structural-effort-open` — opening cycle of a multi-phase identity effort, parallels iter-21's `structural-effort-close` but in the other direction. Six bounded foundation moves shipped; none is a page redesign, all are system-level changes that propagate. UI_CLEAN counters are paused for the duration of the multi-phase effort (Phase 2 + Phase 3).
 
+
+---
+
+## Iteration 24 — 2026-05-04 (Slab Terminal — closing entry, all phases shipped)
+
+### Cycle variant
+
+`structural-effort-close` — closing entry of the Slab Terminal redesign. Eight PRs landed across Phases 1–3 between iter‑23 (this morning) and now, plus one out-of-band fix for an operator‑surfaced friction (Opportunities columns) and a re-apply branch for fixes lost in a squash merge. The plan in `docs/plans/2026-05-04-slab-terminal-redesign.md` has been updated with completion status and a deferred-work pointer.
+
+### Effort summary
+
+| Phase | PR | Move |
+|---|---|---|
+| 1 — Foundation | #357 | JetBrains Mono on every monetary cell, `.slab-frame` utility, inventory row-stripes removed, Sell button colour discipline, Opportunities chrome aligned, login Card Yeti mark legibility |
+| 2.1 — Dashboard hero | #358 | Display-scale Fraunces ROI, freshness line, captain's log NEXT MOVES with bronze topmost-row underscore |
+| 2.2 — Inventory hero | #359 | Display-scale Fraunces unrealized, cost-vs-market diverging bar, slab-framed thumbnails |
+| 2.3 — Insights | #360 | Advice-first recommendation cards, derived-from-matrix fallback, tuning matrix collapsed by default |
+| 3.1 — Input UX | #361 + #362 | Reprice slider differentiation (bronze/round vs amber/squarer), Scan onboarding-strip collapse, scanner-field cert input. #362 re-applied two CodeRabbit fixes that were lost in #361's squash merge |
+| 3.2 — Campaign surfaces | #363 | Slab-framed empty hero with tab-switching CTAs, Active/Pending/Closed phase grouping |
+| Out-of-band | #364 | Opportunities responsive column visibility — operator surfaced "do we need all columns at all times" friction; resolved by viewport-tiered hide rather than just widening the container |
+| 3.3 — Preview polish | #365 | Sell Sheet preset previews (hero ask + 3-line top items), Admin integration "Last call X ago" pulses + DH error banner |
+
+### Conventions ratified across the redesign
+
+These are load-bearing rules that shaped multiple PRs and should outlive this effort:
+
+- **Money is the product — type it like the product.** Every dollar / percent / serial / cert renders in `var(--font-numeric)` (JetBrains Mono) with `font-variant-numeric: tabular-nums`. Auto-applied to `.tabular-nums` sites in `base.css` so the convention is enforced by class alone (no per-component opt-in). Hero figures override to Fraunces inline; everything else inherits the mono.
+- **Editorial-display vs data-strip typography hierarchy.** Hero metrics on landing pages (Dashboard ROI, Inventory unrealized P&L, campaign-detail empty-state title) get the Fraunces editorial treatment. Supporting metrics get the JetBrains Mono data-strip treatment. One display-scale number per page maximum — the page's job-to-be-done answer.
+- **`--success` is reserved for *realized-money* signals.** Net-positive P&L, completed sales, "all healthy" indicators. Action buttons use `--brand` (`variant="primary"`), not `--success`. Adding success to a high-frequency action (every inventory row's Sell) creates wallpaper-effect green that drowns the P&L cells.
+- **Page-level error states do not need a `<CardShell>` wrapper.** A plain `surface-1` panel reads as "inline message"; CardShell reads as "another card" and competes with real cards. CardShell is for content surfaces, not meta surfaces (errors, banners, loading states).
+- **Row-level pass/fail signals live in the data cell, not on the row edge.** When a column already carries a coloured signal (P&L, status, severity), don't duplicate as a row-edge stripe — it reads as bolted-on chrome. The `data-severity` stripes on Insights rows remain because Insights is severity-driven and the row IS the action; Inventory rows carry many signals so the column owns the colour.
+- **Don't fabricate data freshness.** A "as of HH:MM" freshness line, "Last call N ago" pulse, or any other recency indicator must derive from a real timestamp. When the timestamp is missing, render nothing — falling back to render-time or `Date.now()` lies precisely when the signal matters most.
+- **Controlled `<details>` need an `onToggle`.** A `<details open={X}>` without `onToggle` is fully-controlled, so user clicks don't persist and a refetch where the source data briefly becomes undefined would re-snap-open. Use local state initialised once after first load + an `onToggle` handler.
+- **WCAG AA: small flat brand-500 fills fail contrast.** The system primary `<Button>` is gradient `brand-500 → brand-600` which lifts average contrast above AA. A flat `bg-[var(--brand-500)]` with white text on small (12px medium) text comes in at ~3.83:1 — fails AA. Use `brand-600` flat (~5.5:1, AA-clean) for any flat brand fill on small text.
+- **Hidden cells stay hidden.** `hidden lg:table-cell` removes from layout (`display: none`); horizontal scroll won't recover them. Document this in any responsive-column comment so the next reader doesn't think `overflow-x-auto` is a fallback for hidden columns.
+- **Defense in depth on URLs and React keys.** Encode path segments via `encodeURIComponent` even when the IDs are UUID-like today. Use `key={x.id || x.cert || \`fallback-${index}\`}` fallback chains in lists where the typed key field could realistically be empty.
+
+### Deferred — blocked on backend
+
+Three sparkline placements never shipped because the API doesn't return a daily snapshot series. Documented as a follow-up spec at `docs/specs/2026-05-04-sparkline-api-requirements.md`:
+
+- Weekly Review sparkline (Dashboard) — Phase 2.1 plan item, deferred in #358
+- Inventory 90-day P&L chart strip — Phase 2.2 plan item, deferred in #359
+- Per-campaign 7-day sparkline (Campaigns table) — Phase 3.2 plan item, deferred in #363
+
+The cost-vs-market diverging bar in #359 is the one chart that did ship, because it visualises a single point-in-time delta (cost vs market) and didn't need historical data.
+
+### Findings this cycle
+
+- 1 🔴 — **CampaignsPortfolioHero secondary stat strip stacking vertically.** Caused by a cross-PR regression in my Phase 2.1 dashboard refactor (PR #358): I renamed `.cluster` → `.subCluster` (and dropped `.divider`) in `HeroStatsBar.module.css`, but `CampaignsPortfolioHero.tsx` is a sibling consumer of the same module that still referenced both classes. After the refactor `styles.cluster` + `styles.divider` were undefined and the stats fell back to default block layout (vertical stack, no separator). Caught only by a freshly regenerated cross-PR screenshot sweep — single-PR review never visited Campaigns. Fixed in the closeout PR by switching to `.subCluster` and dropping the orphaned divider div. **Convention added below.**
+- 0 🟡 — every Phase 3 finding from CodeRabbit was either applied or declined with documented reason; PR threads carry the disposition.
+
+### Convention added (cross-PR regression discipline)
+
+- **Refactoring a CSS module is a public-API change for every consumer.** When renaming or removing classes from a shared `*.module.css`, grep for every importer and update them in the same commit. The TypeScript compiler doesn't catch `styles.removedClass` → `undefined` because CSS modules type as `Record<string, string>` by default. Closeout sweeps catch the silent fallthrough; PR-level reviews don't, because the consumer page may not be visited during single-PR review.
+
+### Outstanding 🔴
+
+- (none — all blocking friction surfaces clean)
+
+### Cycle classification
+
+`structural-effort-close` — closes the Slab Terminal redesign effort. UI_CLEAN counters can resume their normal cadence on the next regular-cycle iteration. Future redesign efforts should reference the conventions above before re-litigating any of them.
+
