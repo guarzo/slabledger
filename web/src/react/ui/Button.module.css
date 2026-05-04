@@ -15,7 +15,7 @@
 }
 .btn:active { transform: translateY(1px) scale(0.99); }
 .btn:focus-visible {
-  outline: 3px solid var(--color-focus, rgba(99,102,241,0.6));
+  outline: 3px solid var(--color-focus, rgba(184,115,51,0.6));
   outline-offset: 3px;
 }
 
@@ -50,12 +50,12 @@
   color: #fff;
   border-color: rgba(255,255,255,0.12);
   box-shadow: var(--btn-top-highlight), var(--btn-bottom-edge),
-              var(--btn-glow-brand), 0 0 0 1px rgba(99,102,241,0.25);
+              var(--btn-glow-brand), 0 0 0 1px rgba(184,115,51,0.25);
 }
 .v-primary:hover {
   transform: translateY(-1px);
   box-shadow: var(--btn-top-highlight), var(--btn-bottom-edge),
-              var(--btn-glow-brand-h), 0 0 0 1px rgba(99,102,241,0.40);
+              var(--btn-glow-brand-h), 0 0 0 1px rgba(184,115,51,0.40);
 }
 
 /* ========== SUCCESS · money ledger ========== */

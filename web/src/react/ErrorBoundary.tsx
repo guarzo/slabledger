@@ -244,7 +244,7 @@ const defaultStyles: Record<string, CSSProperties> = {
     transition: 'all 0.2s',
   },
   buttonPrimary: {
-    backgroundColor: 'var(--brand-500, #5a5de8)',
+    backgroundColor: 'var(--brand-500, #b87333)',
     color: '#ffffff',
   },
   buttonSecondary: {
