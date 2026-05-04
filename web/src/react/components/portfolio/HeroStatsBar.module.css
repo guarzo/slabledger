@@ -1,88 +1,101 @@
+/* HeroStatsBar — Slab Terminal redesign.
+   The ROI percentage is the headline of the dashboard; everything else is
+   supporting data. We treat ROI as a true display-scale Fraunces number,
+   stack the secondary stats in tabular mono beneath, and keep alerts to
+   the right (or below on mobile) so they don't compete with the headline. */
+
 .hero {
-  display: flex; flex-wrap: wrap; align-items: flex-end;
-  gap: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
   padding-bottom: 24px;
   border-bottom: var(--hero-divider);
   margin-bottom: 24px;
 }
 
-.roiBlock { display: flex; flex-direction: column; gap: 6px; }
-.roiLabel {
-  font-size: 11px; font-weight: 600;
-  color: var(--brand-400);
-  text-transform: uppercase; letter-spacing: 0.12em;
+/* ── Top row: ROI + alerts ───────────────────────────────────────── */
+.headlineRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
 }
-.roiRow { display: flex; align-items: baseline; gap: 12px; }
+
+.roiBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.roiLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-400);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.roiRow {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* The headline. Fraunces at display scale; serif character pairs with
+   the mono data strip below the way a magazine pairs editorial type
+   with a data table. tabular-nums via OpenType keeps figures aligned
+   even though we're not in a monospace face. */
 .roiValue {
-  font-size: var(--hero-roi-size);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  font-family: var(--font-display);
+  font-size: clamp(56px, 8vw, 96px);
+  font-weight: 500;
+  font-feature-settings: "ss01", "ss02", "tnum" 1, "lnum" 1;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
   color: var(--success);
+  /* The hero is decorative type, not interactive — keep it from being
+     selected accidentally during a quick "show me the dashboard" demo. */
+  user-select: none;
 }
 .hero[data-tone="neg"] .roiValue {
   color: var(--danger);
 }
 
-.cluster {
-  display: flex; flex-wrap: wrap; align-items: flex-end;
-  column-gap: 32px; row-gap: 12px;
-  padding-bottom: 4px;
+/* Magnitude tiers — subtle scale lift only at the extremes; the base
+   font-size already does most of the heavy work. The huge tier earns
+   a soft glow that signals "this is real money territory." */
+.hero[data-mag="big"]  .roiValue { font-size: clamp(64px, 9vw, 112px); }
+.hero[data-mag="huge"] .roiValue {
+  font-size: clamp(72px, 10vw, 128px);
+  text-shadow: 0 0 36px rgba(52, 211, 153, 0.30);
 }
-.stat { display: flex; flex-direction: column; gap: 4px; min-width: 80px; }
-.statLabel {
-  font-size: 10px; color: var(--text-muted);
-  text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
-}
-.statValue {
-  font-size: 18px; font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  display: flex; align-items: baseline; gap: 6px;
-}
-.tWarn { color: var(--warning); }
-.tNeg  { color: var(--danger); }
-.tMuted { color: var(--text-muted); }
-.tSuccess { color: var(--success); }
-
-.divider {
-  width: 1px; align-self: stretch;
-  background: rgba(255,255,255,0.05);
-  margin: 4px 0;
+.hero[data-tone="neg"][data-mag="huge"] .roiValue {
+  text-shadow: 0 0 36px rgba(248, 113, 113, 0.30);
 }
 
-.alerts {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  align-items: center; align-self: center;
-  margin-left: auto;
+/* "as of HH:MM · since last login +X" — a quiet freshness line under the
+   headline. Establishes that the snapshot is current without asking the
+   operator to look anywhere else. Mono so the timestamp + delta align
+   tightly under the big serif number. */
+.freshness {
+  font-family: var(--font-numeric);
+  font-size: 11px;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  color: var(--text-subtle);
+  letter-spacing: 0.01em;
+  margin-top: 2px;
 }
-.alertLink { text-decoration: none; }
-.alertLink:hover { filter: brightness(1.15); }
-.alertLink:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-  border-radius: 999px;
+.freshness .freshDelta {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(255, 255, 255, 0.10);
 }
 
-/* Delta chips */
-.delta {
-  display: inline-flex; align-items: center; gap: 3px;
-  font-size: 11px; font-weight: 700;
-  padding: 2px 7px; border-radius: 999px;
-  font-variant-numeric: tabular-nums;
-}
-.dSmall { font-size: 10px; padding: 1px 5px; }
-.dPos { background: rgba(16,185,129,0.14); color: var(--success); border: 1px solid rgba(16,185,129,0.25); }
-.dNeg { background: rgba(239,68,68,0.14);  color: var(--danger);  border: 1px solid rgba(239,68,68,0.25); }
-.dMeta { font-weight: 500; opacity: 0.8; }
-
-/* ROI magnitude tiers */
-.hero[data-mag="big"]  .roiValue { font-size: calc(var(--hero-roi-size) * 1.15); }
-.hero[data-mag="huge"] .roiValue { font-size: calc(var(--hero-roi-size) * 1.30); text-shadow: 0 0 24px rgba(16,185,129,0.45); }
-.hero[data-tone="neg"][data-mag="huge"] .roiValue { text-shadow: 0 0 24px rgba(239,68,68,0.45); }
-
-/* Stat cluster broken into two visually grouped sub-rows separated by a hairline. */
+/* ── Stat strip ──────────────────────────────────────────────────── */
 .clusterGroup {
   display: flex;
   flex-wrap: wrap;
@@ -99,28 +112,143 @@
   padding: 4px 24px 4px 0;
 }
 .subCluster + .subCluster {
-  border-left: 1px solid rgba(255,255,255,0.04);
+  border-left: 1px solid rgba(255, 255, 255, 0.04);
   padding-left: 24px;
 }
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 80px;
+}
+.statLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.statCaption {
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  margin-top: -2px;
+  opacity: 0.75;
+}
+.statValue {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* Tone tokens — kept identical to the prior implementation so the
+   color discipline established in the Phase 1 audit still holds. */
+.tWarn    { color: var(--warning); }
+.tNeg     { color: var(--danger); }
+.tMuted   { color: var(--text-muted); }
+.tSuccess { color: var(--success); }
+.tWaiting { color: var(--state-waiting); }
+.tAtRisk  { color: var(--state-at-risk); }
+.tProblem { color: var(--state-problem); }
+
+/* ── Alerts (top-right of headline row) ──────────────────────────── */
+.alerts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  align-self: flex-start;
+  padding-top: 18px;
+}
+.alertLink { text-decoration: none; }
+.alertLink:hover { filter: brightness(1.15); }
+.alertLink:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+/* ── Delta chips (next to ROI + secondary stats) ─────────────────── */
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-numeric);
+  /* Lift the delta visually beside the giant ROI — center vertically
+     against the cap-height of the serif numerals. */
+  transform: translateY(-0.4em);
+}
+.dSmall {
+  font-size: 10px;
+  padding: 1px 5px;
+  transform: none;
+}
+.dPos {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.dNeg {
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.dMeta {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* ── Tablet ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .subCluster + .subCluster {
     border-left: none;
-    border-top: 1px solid rgba(255,255,255,0.04);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
     padding-left: 0;
     padding-top: 12px;
     margin-top: 12px;
     width: 100%;
   }
+  .alerts {
+    padding-top: 0;
+  }
 }
 
-/* Mobile density — pack KPI tiles tighter so all six fit without
-   a half-empty trailing row. Two-up grid replaces the wide row-gap
-   layout that made WKS TO COVER read as floating alone. */
+/* ── Mobile ──────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .hero {
-    gap: 16px 0;
+    gap: 14px;
     padding-bottom: 16px;
     margin-bottom: 16px;
+  }
+  .headlineRow {
+    gap: 12px;
+  }
+  .roiValue {
+    /* Slightly tighter than the desktop clamp so the headline doesn't
+       blow past the viewport on small phones. */
+    font-size: clamp(48px, 14vw, 64px);
+  }
+  .hero[data-mag="big"]  .roiValue { font-size: clamp(54px, 16vw, 72px); }
+  .hero[data-mag="huge"] .roiValue { font-size: clamp(60px, 18vw, 80px); }
+  .delta {
+    transform: translateY(-0.3em);
+  }
+  /* Keep secondary-stat chips aligned with their baseline; only the
+     headline chip floats. Without this override the mobile .delta rule
+     above re-introduces the lift that the desktop .dSmall reset
+     suppressed. */
+  .delta.dSmall {
+    transform: none;
   }
   .clusterGroup {
     width: 100%;
@@ -142,17 +270,3 @@
   .statValue { font-size: 16px; }
   .alerts { width: 100%; margin-left: 0; }
 }
-
-/* Micro-context caption beneath a stat label (e.g. "all-time", "trailing 30d"). */
-.statCaption {
-  font-size: 9px;
-  color: var(--text-muted);
-  letter-spacing: 0.06em;
-  margin-top: -2px;
-  opacity: 0.75;
-}
-
-/* Apply state tokens. */
-.tWaiting { color: var(--state-waiting); }
-.tAtRisk  { color: var(--state-at-risk); }
-.tProblem { color: var(--state-problem); }

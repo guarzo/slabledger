@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import type { PortfolioHealth, PortfolioDelta, CapitalSummary } from '../../../types/campaigns';
@@ -14,6 +15,9 @@ interface HeroStatsBarProps {
   needsAttentionCount?: number;
   pendingListingsCount?: number;
   hideInvoiceChip?: boolean;
+  /** ms-epoch of when the underlying data was last fetched. Drives the
+      "as of HH:MM" freshness line under the ROI headline. */
+  asOfMs?: number;
 }
 
 export default function HeroStatsBar({
@@ -22,6 +26,7 @@ export default function HeroStatsBar({
   needsAttentionCount = 0,
   pendingListingsCount = 0,
   hideInvoiceChip = false,
+  asOfMs,
 }: HeroStatsBarProps) {
   if (!health) {
     return (
@@ -71,17 +76,59 @@ export default function HeroStatsBar({
       data-mag={magnitude}
       aria-label="Portfolio summary"
     >
-      <div className={styles.roiBlock}>
-        <div className={styles.roiLabel}>Realized ROI</div>
-        <div className={styles.roiRow}>
-          <span className={styles.roiValue}>
-            {roi >= 0 ? '+' : ''}{formatPct(roi)}
-          </span>
-          {health.realizedROIDelta && <DeltaChip delta={health.realizedROIDelta} />}
+      {/* Headline row: the ROI is the dashboard's primary number; alerts
+          float top-right so they're visible without competing with the
+          serif headline below. */}
+      <div className={styles.headlineRow}>
+        <div className={styles.roiBlock}>
+          <div className={styles.roiLabel}>Realized ROI</div>
+          <div className={styles.roiRow}>
+            <span className={styles.roiValue}>
+              {roi >= 0 ? '+' : ''}{formatPct(roi)}
+            </span>
+            {health.realizedROIDelta && <DeltaChip delta={health.realizedROIDelta} />}
+          </div>
+          <FreshnessLine asOfMs={asOfMs} delta={health.realizedROIDelta} />
         </div>
-      </div>
 
-      <div className={styles.divider} aria-hidden />
+        {showAlerts && (
+          <div className={styles.alerts}>
+            {unpaidInvoiceCount > 0 && !hideInvoiceChip && (
+              <Link
+                to="/invoices"
+                className={styles.alertLink}
+                aria-label={`${unpaidInvoiceCount} unpaid invoice${unpaidInvoiceCount !== 1 ? 's' : ''}`}
+              >
+                <StatusPill tone="warning">
+                  {unpaidInvoiceCount} unpaid invoice{unpaidInvoiceCount !== 1 ? 's' : ''} →
+                </StatusPill>
+              </Link>
+            )}
+            {needsAttentionCount > 0 && (
+              <Link
+                to="/inventory"
+                className={styles.alertLink}
+                aria-label={`${needsAttentionCount} needs attention`}
+              >
+                <StatusPill tone="warning">
+                  {needsAttentionCount} needs attention →
+                </StatusPill>
+              </Link>
+            )}
+            {pendingListingsCount > 0 && (
+              <Link
+                to="/inventory"
+                className={styles.alertLink}
+                aria-label={`${pendingListingsCount} pending listing${pendingListingsCount !== 1 ? 's' : ''}`}
+              >
+                <StatusPill tone="warning">
+                  {pendingListingsCount} pending listing{pendingListingsCount !== 1 ? 's' : ''} →
+                </StatusPill>
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className={styles.clusterGroup}>
         {/* Capital row */}
@@ -150,44 +197,30 @@ export default function HeroStatsBar({
         )}
       </div>
 
-      {showAlerts && (
-        <div className={styles.alerts}>
-          {unpaidInvoiceCount > 0 && !hideInvoiceChip && (
-            <Link
-              to="/invoices"
-              className={styles.alertLink}
-              aria-label={`${unpaidInvoiceCount} unpaid invoice${unpaidInvoiceCount !== 1 ? 's' : ''}`}
-            >
-              <StatusPill tone="warning">
-                {unpaidInvoiceCount} unpaid invoice{unpaidInvoiceCount !== 1 ? 's' : ''} →
-              </StatusPill>
-            </Link>
-          )}
-          {needsAttentionCount > 0 && (
-            <Link
-              to="/inventory"
-              className={styles.alertLink}
-              aria-label={`${needsAttentionCount} needs attention`}
-            >
-              <StatusPill tone="warning">
-                {needsAttentionCount} needs attention →
-              </StatusPill>
-            </Link>
-          )}
-          {pendingListingsCount > 0 && (
-            <Link
-              to="/inventory"
-              className={styles.alertLink}
-              aria-label={`${pendingListingsCount} pending listing${pendingListingsCount !== 1 ? 's' : ''}`}
-            >
-              <StatusPill tone="warning">
-                {pendingListingsCount} pending listing{pendingListingsCount !== 1 ? 's' : ''} →
-              </StatusPill>
-            </Link>
-          )}
-        </div>
-      )}
     </section>
+  );
+}
+
+/** "as of HH:MM · {delta label}" line under the ROI headline. Driven by
+    the React Query dataUpdatedAt timestamp from the page so the operator
+    can see at a glance that the snapshot is current; the delta label
+    (e.g. "since last login") rides along when the API supplies one.
+    Renders nothing when no real timestamp is available — falling back to
+    the current render time would fabricate a freshness signal in
+    precisely the cases where the operator most needs it to be honest. */
+function FreshnessLine({ asOfMs, delta }: { asOfMs?: number; delta?: PortfolioDelta }) {
+  const stamp = useMemo(() => {
+    if (!asOfMs || asOfMs <= 0) return null;
+    return new Date(asOfMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }, [asOfMs]);
+  if (!stamp) return null;
+  return (
+    <div className={styles.freshness}>
+      as of {stamp}
+      {delta?.label && (
+        <span className={styles.freshDelta}>{delta.label}</span>
+      )}
+    </div>
   );
 }
 
