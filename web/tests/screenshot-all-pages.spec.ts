@@ -99,7 +99,11 @@ async function screenshotPage(
       if (loaders.length > 0) return false;
       const main = document.querySelector('#main-content');
       return main && main.textContent && main.textContent.trim().length > 30;
-    }, { timeout: 15000 });
+    }, { timeout: 30000 });
+    // After the skeleton clears, give React one more network-idle window so
+    // table rows hydrate before we capture. Prevents capturing a half-rendered
+    // table for slow-data pages like /opportunities.
+    await page.waitForLoadState('networkidle').catch(() => {});
   } catch {
     // Page may still be usable
   }
