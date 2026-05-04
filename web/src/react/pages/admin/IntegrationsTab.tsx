@@ -65,19 +65,31 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
 
   // Pick the most-recent activity timestamp per integration as the "last
   // call" signal. DH has multiple candidate timestamps; take the freshest.
-  const dhLastCall = [
+  // Compare numerically (ms-epoch) rather than lexically — ISO-8601 strings
+  // with consistent `Z` suffixes happen to sort right, but a mixed-format
+  // payload (e.g. one offset like +05:00 next to a Z value) would sort wrong
+  // silently. Numeric compare is honest about what "freshest" means.
+  const dhLastCall = ([
     dhStatus?.last_orders_poll_at,
     dhStatus?.intelligence_last_fetch,
     dhStatus?.suggestions_last_fetch,
   ]
     .filter((t): t is string => !!t)
-    .sort()
-    .reverse()[0];
+    .map((t) => ({ t, ms: Date.parse(t) }))
+    .filter((x) => Number.isFinite(x.ms))
+    .reduce<{ t: string; ms: number } | null>(
+      (best, x) => (best === null || x.ms > best.ms ? x : best),
+      null,
+    ))?.t;
 
   return (
     <div className="space-y-8 mt-4">
       {dhBanner && (
-        <div className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)] flex items-start gap-2">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="rounded-lg border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger)] flex items-start gap-2"
+        >
           <span aria-hidden="true">▴</span>
           <span>{dhBanner}</span>
         </div>

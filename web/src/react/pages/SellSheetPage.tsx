@@ -182,9 +182,13 @@ export default function SellSheetPage() {
                   {[...s.items]
                     .sort((a, b) => b.targetSellPrice - a.targetSellPrice)
                     .slice(0, 3)
-                    .map((item) => (
+                    .map((item, index) => (
+                      // Fallback chain because certNumber is typed non-optional
+                      // but real-world data could have an empty string or a dup
+                      // across slices that happen to share a card; index-tail
+                      // guarantees uniqueness within this preview list.
                       <li
-                        key={item.certNumber}
+                        key={item.certNumber || item.purchaseId || `preview-${index}`}
                         className="flex items-baseline justify-between gap-2 text-xs"
                       >
                         <span className="text-[var(--text)] truncate" title={item.cardName}>
