@@ -16,7 +16,7 @@
 }
 .item:hover { color: var(--text); }
 .item:focus-visible {
-  outline: 2px solid var(--color-focus, rgba(99,102,241,0.6));
+  outline: 2px solid var(--color-focus, rgba(184,115,51,0.6));
   outline-offset: -2px;
 }
 .on {

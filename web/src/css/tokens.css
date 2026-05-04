@@ -10,16 +10,18 @@
   /* ===================================
      BRAND COLORS
      =================================== */
-  --brand-50: #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-300: #a5b4fc;
-  --brand-400: #818cf8;
-  --brand-500: #5a5de8;
-  --brand-600: #4f46e5;
-  --brand-700: #4338ca;
-  --brand-800: #3730a3;
-  --brand-900: #312e81;
+  /* Bronze ledger ink — pairs with Fraunces; evokes foil-stamped almanac.
+     Floor for text/UI on dark surfaces is 500; 400 reserved for hover/lifted. */
+  --brand-50: #fdf8f1;
+  --brand-100: #f8ecd8;
+  --brand-200: #efd5a8;
+  --brand-300: #e2b574;
+  --brand-400: #d09349;
+  --brand-500: #b87333;
+  --brand-600: #9a5d28;
+  --brand-700: #7a4a20;
+  --brand-800: #5a3718;
+  --brand-900: #3d2510;
 
   /* ===================================
      POKÉMON-THEMED GRADIENTS
@@ -41,8 +43,8 @@
   /* ===================================
      PRIMARY COLORS (Button/CTA)
      =================================== */
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
+  --primary: var(--brand-500);
+  --primary-hover: var(--brand-600);
   --accent: var(--brand-400);     /* Brand interaction color for selected states and focus */
 
   /* ===================================
@@ -54,9 +56,9 @@
   /* ===================================
      FOCUS INDICATOR COLORS
      =================================== */
-  --color-focus: #60a5fa;
-  --color-focus-ring: rgba(96, 165, 250, 0.2);
-  --color-focus-ring-subtle: rgba(96, 165, 250, 0.15);
+  --color-focus: var(--brand-400);
+  --color-focus-ring: rgba(184, 115, 51, 0.25);
+  --color-focus-ring-subtle: rgba(184, 115, 51, 0.18);
 
   /* ===================================
      HEADING & PARAGRAPH COLORS
@@ -77,8 +79,8 @@
   --gradient-button-dark: linear-gradient(135deg, var(--surface-2) 0%, var(--bg) 100%);
 
   /* Login box shadows */
-  --shadow-brand-glow: 0 0 60px rgba(99, 102, 241, 0.15);
-  --shadow-brand-glow-hover: 0 0 80px rgba(99, 102, 241, 0.25);
+  --shadow-brand-glow: 0 0 60px rgba(184, 115, 51, 0.15);
+  --shadow-brand-glow-hover: 0 0 80px rgba(184, 115, 51, 0.25);
   --shadow-success-badge: 0 2px 8px rgba(16, 185, 129, 0.4);
   --shadow-card-showcase: 0 20px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1);
   --shadow-card-showcase-hover: 0 25px 50px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.15);
@@ -190,15 +192,15 @@
 
   /* Glow effects for premium cards */
   --glow-gold: 0 0 20px rgba(255, 215, 0, 0.5);
-  --glow-brand: 0 0 20px rgba(99, 102, 241, 0.4);
-  --glow-brand-soft: 0 0 20px rgba(99, 102, 241, 0.3);
-  --glow-brand-color: rgba(99, 102, 241, 0.4);
+  --glow-brand: 0 0 20px rgba(184, 115, 51, 0.4);
+  --glow-brand-soft: 0 0 20px rgba(184, 115, 51, 0.3);
+  --glow-brand-color: rgba(184, 115, 51, 0.4);
   --glow-white: rgba(255, 255, 255, 0.8);
   --glow-violet: 0 0 40px rgba(139, 92, 246, 0.5);
   /* Navigation shadows */
   --shadow-nav-inset: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-nav-active: 0 4px 16px rgba(99, 102, 241, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
-  --shadow-brand-scroll: 0 8px 32px rgba(99, 102, 241, 0.15);
+  --shadow-nav-active: 0 4px 16px rgba(184, 115, 51, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  --shadow-brand-scroll: 0 8px 32px rgba(184, 115, 51, 0.15);
 
   /* ===================================
      PRICE QUALITY INDICATORS
@@ -242,13 +244,13 @@
 
   /* Glass table tokens */
   --table-header-gradient-end: rgba(31, 41, 55, 0.85);
-  --table-header-border: rgba(99, 102, 241, 0.08);
+  --table-header-border: rgba(184, 115, 51, 0.10);
   --table-row-border: rgba(31, 41, 55, 0.3);
   --table-row-hover: rgba(31, 41, 55, 0.3);
   --table-row-stripe: rgba(11, 18, 32, 0.2);
-  --table-row-selected: rgba(99, 102, 241, 0.08);
-  --table-row-selected-hover: rgba(99, 102, 241, 0.12);
-  --table-row-expanded: rgba(99, 102, 241, 0.06);
+  --table-row-selected: rgba(184, 115, 51, 0.10);
+  --table-row-selected-hover: rgba(184, 115, 51, 0.14);
+  --table-row-expanded: rgba(184, 115, 51, 0.08);
 
   /* ===================================
      SPACING (Density Scale)
@@ -278,8 +280,8 @@
   --btn-radius-lg: 12px;
   --btn-top-highlight: inset 0 1px 0 rgba(255,255,255,0.25);
   --btn-bottom-edge: 0 1px 0 rgba(0,0,0,0.4);
-  --btn-glow-brand: 0 6px 20px -4px rgba(99,102,241,0.55);
-  --btn-glow-brand-h: 0 10px 28px -4px rgba(99,102,241,0.70);
+  --btn-glow-brand: 0 6px 20px -4px rgba(184,115,51,0.55);
+  --btn-glow-brand-h: 0 10px 28px -4px rgba(184,115,51,0.70);
   --btn-glow-success: 0 6px 18px -4px rgba(16,185,129,0.45);
   --btn-glow-gold: 0 6px 16px -2px rgba(251,191,36,0.50);
   --btn-glow-gold-h: 0 10px 24px -4px rgba(251,191,36,0.70);
@@ -324,7 +326,7 @@
   --color-confidence-low: #ef4444;       /* <0.6 */
 
   /* Badge backgrounds (with transparency) */
-  --color-badge-primary: rgba(99, 102, 241, 0.1);
+  --color-badge-primary: rgba(184, 115, 51, 0.12);
   --color-badge-success: rgba(16, 185, 129, 0.1);
   --color-badge-warning: rgba(245, 158, 11, 0.1);
   --color-badge-danger: rgba(239, 68, 68, 0.1);
@@ -332,7 +334,7 @@
   --color-badge-neutral: rgba(107, 114, 128, 0.1);
 
   /* Badge borders */
-  --color-badge-primary-border: rgba(99, 102, 241, 0.3);
+  --color-badge-primary-border: rgba(184, 115, 51, 0.3);
   --color-badge-success-border: rgba(16, 185, 129, 0.3);
   --color-badge-warning-border: rgba(245, 158, 11, 0.3);
   --color-badge-danger-border: rgba(239, 68, 68, 0.3);
@@ -411,8 +413,8 @@
   --card-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
 
   --card-premium-bg: linear-gradient(135deg, #111827 0%, #1f2937 100%);
-  --card-premium-bd: rgba(99, 102, 241, 0.30);
-  --card-premium-glow: 0 0 24px rgba(99, 102, 241, 0.35), 0 6px 16px rgba(0, 0, 0, 0.30);
+  --card-premium-bd: rgba(184, 115, 51, 0.35);
+  --card-premium-glow: 0 0 24px rgba(184, 115, 51, 0.35), 0 6px 16px rgba(0, 0, 0, 0.30);
 
   /* AI / Insights — gradient border via mask trick */
   --card-ai-bg: radial-gradient(120% 100% at 0% 0%, rgba(99, 102, 241, 0.10) 0%, transparent 60%), #111827;
