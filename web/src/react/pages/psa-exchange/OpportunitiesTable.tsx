@@ -57,19 +57,29 @@ export default function OpportunitiesTable({
     <div className="overflow-x-auto rounded-md border border-[var(--surface-2)]">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 z-10 bg-[var(--surface-1)] border-b border-[var(--surface-2)]">
+          {/* Column visibility tiers (13 columns total — viewport-aware so the
+              7 always-on essentials stay legible on narrower screens):
+              - Always: Image, Description, Grade, PSA Value, Target, Edge, Score
+              - lg+ (1024px): Cert, Comp, Days/sale
+              - xl+ (1280px): Vel/mo, Conf, Pop
+              These hidden cells are removed from layout (display: none), not
+              just clipped — horizontal scroll won't reveal them. The wrapper's
+              'overflow-x-auto' covers the visible-column case where a long
+              description forces a row past the container's max-width. To see
+              every column at once, the viewport must be ≥ xl breakpoint. */}
           <tr>
             <th scope="col" aria-label="Image" className="w-12 p-2"></th>
-            <SortableHeader label="Cert" sortKey="cert" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
+            <SortableHeader label="Cert" sortKey="cert" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="hidden lg:table-cell" />
             <SortableHeader label="Description" sortKey="description" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
             <SortableHeader label="Grade" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
             <SortableHeader label="PSA Value" sortKey="listPrice" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
             <SortableHeader label="Target" sortKey="targetOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Comp" sortKey="comp" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
+            <SortableHeader label="Comp" sortKey="comp" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden lg:table-cell" />
             <SortableHeader label="Edge" sortKey="edgeAtOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Days/sale" sortKey="daysToSell" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Vel/mo" sortKey="velocityMonth" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Conf" sortKey="confidence" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Pop" sortKey="population" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
+            <SortableHeader label="Days/sale" sortKey="daysToSell" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden lg:table-cell" />
+            <SortableHeader label="Vel/mo" sortKey="velocityMonth" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden xl:table-cell" />
+            <SortableHeader label="Conf" sortKey="confidence" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden xl:table-cell" />
+            <SortableHeader label="Pop" sortKey="population" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden xl:table-cell" />
             <SortableHeader label="Score" sortKey="score" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
           </tr>
         </thead>
@@ -119,7 +129,7 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
           )}
         </div>
       </td>
-      <td className="p-2 font-mono text-xs tabular-nums text-[var(--text-muted)]">{row.cert}</td>
+      <td className="p-2 font-mono text-xs tabular-nums text-[var(--text-muted)] hidden lg:table-cell">{row.cert}</td>
       <td className="p-2 max-w-[26rem]">
         <div className={clsx('truncate', isMember && 'text-xs text-[var(--text-muted)]')}>
           {row.description || row.name}
@@ -133,18 +143,18 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
       <td className="p-2">{grade > 0 && <GradeBadge grade={grade} />}</td>
       <td className="p-2 text-right tabular-nums">{dollar(row.listPrice)}</td>
       <td className="p-2 text-right tabular-nums">{dollar(row.targetOffer)}</td>
-      <td className="p-2 text-right tabular-nums">{dollar(row.comp)}</td>
+      <td className="p-2 text-right tabular-nums hidden lg:table-cell">{dollar(row.comp)}</td>
       <td className={clsx('p-2 text-right tabular-nums', edgeBucketClass(row.edgeAtOffer))}>
         {pct(row.edgeAtOffer)}
       </td>
-      <td className={clsx('p-2 text-right tabular-nums', daysBucketClass(days))}>{formatDays(days)}</td>
-      <td className={clsx('p-2 text-right tabular-nums', velocityBucketClass(row.velocityMonth))}>
+      <td className={clsx('p-2 text-right tabular-nums hidden lg:table-cell', daysBucketClass(days))}>{formatDays(days)}</td>
+      <td className={clsx('p-2 text-right tabular-nums hidden xl:table-cell', velocityBucketClass(row.velocityMonth))}>
         {row.velocityMonth}
       </td>
-      <td className={clsx('p-2 text-right tabular-nums', confidenceColorClass(row.confidence))}>
+      <td className={clsx('p-2 text-right tabular-nums hidden xl:table-cell', confidenceColorClass(row.confidence))}>
         {row.confidence}
       </td>
-      <td className="p-2 text-right tabular-nums text-[var(--text-muted)]">{row.population || '—'}</td>
+      <td className="p-2 text-right tabular-nums text-[var(--text-muted)] hidden xl:table-cell">{row.population || '—'}</td>
       <td
         className={clsx(
           'p-2 text-right tabular-nums',
