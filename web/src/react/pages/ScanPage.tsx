@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import CardIntakeTab from './tools/CardIntakeTab';
 import DHUnmatchedSection from './tools/DHUnmatchedSection';
 import { PendingItemsCard } from './campaigns/PendingItemsCard';
@@ -18,8 +19,20 @@ export default function ScanPage() {
   // there's any inventory, the user has been through the flow already and
   // the strip collapses to a one-line summary they can expand if they want
   // a refresher.
-  const { data: inventory } = useGlobalInventory();
-  const hasOnboarded = (inventory?.length ?? 0) > 0;
+  const { data: inventory, isLoading: inventoryLoading } = useGlobalInventory();
+
+  // Local state on the <details> element so user toggles persist and the
+  // strip doesn't snap closed during a refetch where `inventory` briefly
+  // becomes undefined. Initialised from the onboarding signal once loading
+  // completes; after that the user owns it.
+  const [isStripOpen, setIsStripOpen] = useState<boolean>(true);
+  const [hasInitialised, setHasInitialised] = useState(false);
+  useEffect(() => {
+    if (inventoryLoading || hasInitialised) return;
+    const hasOnboarded = (inventory?.length ?? 0) > 0;
+    setIsStripOpen(!hasOnboarded);
+    setHasInitialised(true);
+  }, [inventoryLoading, hasInitialised, inventory]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -31,7 +44,11 @@ export default function ScanPage() {
       {/* Open by default for first-run; collapsed for returning operators
           with the chevron-toggle pattern from the Insights page. The strip
           itself is unchanged — only its container framing differs. */}
-      <details className="group" open={!hasOnboarded}>
+      <details
+        className="group"
+        open={isStripOpen}
+        onToggle={(e) => setIsStripOpen((e.target as HTMLDetailsElement).open)}
+      >
         <summary className="cursor-pointer list-none flex items-center justify-between gap-2 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand-400)]">
             How scan works · 4 steps

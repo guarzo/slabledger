@@ -461,7 +461,7 @@ export default function CardIntakeTab() {
             <button
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 mode === 'intake'
-                  ? 'bg-[var(--brand-500)] text-white'
+                  ? 'bg-[var(--brand-600)] text-white'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
               onClick={() => handleModeSwitch('intake')}
@@ -471,7 +471,7 @@ export default function CardIntakeTab() {
             <button
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 mode === 'sale'
-                  ? 'bg-[var(--brand-500)] text-white'
+                  ? 'bg-[var(--brand-600)] text-white'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
               onClick={() => handleModeSwitch('sale')}
