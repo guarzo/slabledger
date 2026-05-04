@@ -85,6 +85,9 @@
   margin-top: var(--space-5);
   padding-top: var(--space-4);
   border-top: 1px solid rgba(255, 255, 255, 0.10);
+  /* Contain the screen-blend on the logo below so it can't escape this
+     subtree if a future ancestor introduces a backdrop. */
+  isolation: isolate;
 }
 
 .login-powered-by-label {
@@ -108,6 +111,19 @@
   mix-blend-mode: screen;
   filter: brightness(1.1) contrast(1.05);
   opacity: 0.95;
+}
+
+/* Forced-colors mode (Windows High Contrast, etc.) overrides background + text
+   to system colors. mix-blend-mode + filter compose unpredictably under that
+   override and can make the logo disappear entirely. Strip the visual treatment
+   in forced-colors mode so the raw image renders against whatever surface the
+   user's system provides. */
+@media (forced-colors: active) {
+  .login-powered-by-img {
+    mix-blend-mode: normal;
+    filter: none;
+    opacity: 1;
+  }
 }
 
 /* Sign-in card — layout only; chrome (bg/blur/border/radius/padding) owned by CardShell variant="glass" */
