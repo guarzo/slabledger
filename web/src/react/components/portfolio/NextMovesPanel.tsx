@@ -165,24 +165,28 @@ export default function NextMovesPanel() {
           </button>
         </div>
       ) : (
-        <ul className="divide-y divide-[rgba(255,255,255,0.03)]">
-          {moves.map((move) => (
-            <li key={move.key}>
+        <ol className="divide-y divide-[rgba(255,255,255,0.03)]">
+          {moves.map((move, idx) => (
+            <li key={move.key} data-topmost={idx === 0 ? 'true' : undefined} className="next-move-row">
               <Link
                 to={move.to}
-                className="group flex items-center justify-between gap-4 py-2 text-sm transition-colors hover:bg-[rgba(255,255,255,0.02)] focus-ring rounded-sm"
+                className="group grid grid-cols-[2.25rem_1fr_auto] items-baseline gap-3 py-2.5 text-sm transition-colors hover:bg-[rgba(255,255,255,0.02)] focus-ring rounded-sm"
               >
-                <span className={`flex items-baseline gap-2 ${toneClass[move.tone]}`}>
-                  <span aria-hidden="true">▸</span>
-                  <span className="text-[var(--text)]">{move.copy}</span>
+                {/* Captain's-log counter — mono so 01/02/03 align tightly
+                    with the action chip on the right. The tone-coloured
+                    triangle preserves the prior severity signal. */}
+                <span className="flex items-center gap-1.5 pl-0.5 text-[10px] text-[var(--text-subtle)] tabular-nums tracking-[0.08em]">
+                  <span className={toneClass[move.tone]} aria-hidden="true">▸</span>
+                  <span>{String(idx + 1).padStart(2, '0')}</span>
                 </span>
+                <span className="text-[var(--text)] min-w-0 truncate">{move.copy}</span>
                 <span className="text-xs text-[var(--text-muted)] group-hover:text-[var(--text)] transition-colors whitespace-nowrap">
                   {move.cta} ›
                 </span>
               </Link>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
     </section>
   );

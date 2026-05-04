@@ -15,7 +15,7 @@ import { computeInventoryMeta } from './campaign-detail/inventory/inventoryCalcs
 import { SectionErrorBoundary } from '../ui';
 
 export default function DashboardPage() {
-  const { data: healthData, isLoading: healthLoading } = usePortfolioHealth();
+  const { data: healthData, isLoading: healthLoading, dataUpdatedAt: healthUpdatedAt } = usePortfolioHealth();
   const { data: weeklyReview } = useWeeklyReview();
   const { data: capitalData } = useCapitalSummary();
   const { data: inventoryItems } = useGlobalInventory();
@@ -53,6 +53,7 @@ export default function DashboardPage() {
         needsAttentionCount={inventoryCounts.needsAttention}
         pendingListingsCount={inventoryCounts.pendingListings}
         hideInvoiceChip
+        asOfMs={healthUpdatedAt}
       />
 
       {/* Next Moves — what to act on today */}

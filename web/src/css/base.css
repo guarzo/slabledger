@@ -224,6 +224,40 @@
 [data-severity="tune"] { border-left-color: var(--warning); }
 [data-severity="ok"]   { border-left-color: var(--success); }
 
+/* NEXT MOVES — captain's log treatment.
+   The topmost row carries an animated 1px underscore that pulses gently
+   to signal "this is the first thing to act on." Stays subtle: only
+   appears on the row that's already the user's first read order, and
+   is suppressed entirely when the user prefers reduced motion. */
+.next-move-row[data-topmost="true"] > a {
+  position: relative;
+}
+.next-move-row[data-topmost="true"] > a::after {
+  content: '';
+  position: absolute;
+  left: 2.25rem;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--brand-400) 0%,
+    var(--brand-400) 30%,
+    transparent 70%
+  );
+  animation: next-move-pulse 3s ease-in-out infinite;
+}
+@keyframes next-move-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .next-move-row[data-topmost="true"] > a::after {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
 /* Expanded detail panel within virtualized rows */
 .glass-vrow-expanded {
   background: rgba(255, 255, 255, 0.015);
