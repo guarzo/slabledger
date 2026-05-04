@@ -443,18 +443,25 @@ export default function CardIntakeTab() {
           <input
             ref={inputRef}
             type="text"
+            inputMode="numeric"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Scan or type cert number..."
-            className="flex-1 rounded-lg border border-[var(--brand-500)]/60 bg-[var(--surface-1)] px-3 py-2.5 font-mono text-base text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--brand-400)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-400)]/40"
+            placeholder="Scan or type cert number…"
+            // Scanner-field styling: bigger, mono, wider letter-spacing so
+            // typed cert numbers read like a barcode reader's display. The
+            // bronze inset on focus gives the field a "live, listening"
+            // feel without being noisy.
+            className="flex-1 rounded-lg border border-[var(--brand-500)]/60 bg-[var(--surface-0)] px-4 py-3 font-mono text-lg tracking-[0.15em] text-[var(--text)] placeholder:text-[var(--text-subtle)] placeholder:tracking-normal focus:border-[var(--brand-400)] focus:bg-[var(--surface-1)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)]/30 transition-colors"
             autoFocus
+            autoComplete="off"
+            spellCheck={false}
           />
           <div className="flex overflow-hidden rounded-md border border-zinc-700">
             <button
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 mode === 'intake'
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-[var(--brand-500)] text-white'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
               onClick={() => handleModeSwitch('intake')}
@@ -464,7 +471,7 @@ export default function CardIntakeTab() {
             <button
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 mode === 'sale'
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-[var(--brand-500)] text-white'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
               onClick={() => handleModeSwitch('sale')}
