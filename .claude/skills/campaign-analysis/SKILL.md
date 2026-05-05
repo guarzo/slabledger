@@ -222,7 +222,7 @@ Rules:
 7. **Crack opportunities from `/opportunities/crack`** — when total `netGainCents` across the queue exceeds ~$1K. Capital-positive, bypasses the guardrail.
 8. **DH listing gap** — only if `dh_listing_gap` is in `operationalPriorities` from operator config; otherwise treat as informational, not a mover.
 
-**Conditional actions** — after the movers paragraph, for any mover that has an obvious lever, propose an action with sizing and confidence band (per Recommendation rules). Each action must be backed by the same 2+ endpoints that supported the mover. If the data supports 0 actions, propose 0 — don't fabricate. If it supports 5, list 5. The count is data-driven, not template-driven.
+**Conditional actions** — after the movers paragraph, for any mover that has an obvious lever, propose an action with sizing and confidence band (per Recommendation rules). Each action must be backed by the same 2+ endpoints that supported the mover. If the data supports 0 actions, propose 0 — don't fabricate. If it supports 5, list 5. The count is data-driven, not template-driven. Walk the Self-challenge rules (1.1–1.7) over every mover and action before the response goes out.
 
 When the strongest signal is a hold (WoW delta within noise band per the hold-verdict rule), state it directly: *"Hold — this week's ROI of X% is within ±10% of the Y% trailing-mean. Noise, not signal. No parameter changes indicated."* A hold week with 0 actions and interesting movers is a valid, complete opener.
 
@@ -293,7 +293,7 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 
 ## Step 4 — Follow-up playbooks
 
-Route each user follow-up to a playbook. Load `references/playbooks.md` for the full content of Playbooks A–G (tuning, liquidation, aging inventory, strategy-doc reconciliation, single-campaign deep dive, coverage gaps, DH marketplace).
+Route each user follow-up to a playbook. Load `references/playbooks.md` for the full content of Playbooks A–G (tuning, liquidation, aging inventory, strategy-doc reconciliation, single-campaign deep dive, coverage gaps, DH marketplace). Each playbook response also walks the Self-challenge rules (1.1–1.7) before going out.
 
 ## Step 5 — Strategy doc sync
 
