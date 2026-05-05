@@ -49,8 +49,8 @@ State the **capital posture** once at the top (`Healthy / Tight / Critical` from
 4. **Coverage shifts** — niches the portfolio should expand into (`/intelligence/niches` rows with high `opportunity_score` and `current_coverage = 0`) or campaigns that should narrow (`/insights.byPriceTier` drag tiers). Proposed action per row.
 5. **Cross-campaign arbitrage** — crack candidates and acquisition mispricings worth > $200 net. Capital-positive, bypass the guardrail.
 6. **Stale-suggestion note** — one line: *"Filtered N stale server suggestions (campaigns updated within last 72h)."* (or *"No stale suggestions filtered."*).
-
-Then a **prioritized list of proposed mutations** the user can approve. If the user approves any, apply them via `PUT /api/campaigns/{id}` — see Mutations. Cross-reference each recommendation against the strategy doc's design intent and flag divergences.
+7. **Default close — updated campaign list format.** Reproduce all canonical campaigns in the format spec'd below ("Output format: 'updated campaign list'"). This is the **default deliverable** for Playbook A — the operator uses it as a reviewable diff against the strategy doc. Don't replace it with prose, don't replace it with an email draft, don't trim to "only the changed ones." All canonical campaigns, every parameter, `Changed:` annotations or `No change`. Cross-reference each recommendation against the strategy doc's design intent and flag divergences. Approved changes apply via `PUT /api/campaigns/{id}` — see Mutations.
+8. **Tail option (opt-in) — *"Want a Brady email draft for these changes?"*** The Brady email is opt-in only. Do **not** auto-draft. The default close is the campaign list at item 7; the email is a follow-on artifact the operator requests if they want one.
 
 **Escalation: revocation.** If a campaign is critically underperforming (negative ROI with >20 observations, or health status "critical"), raise the possibility of revoking it entirely. Fetch `GET /api/portfolio/revocations` to check if any existing flags are pending. To create a new revocation flag: `POST /api/portfolio/revocations` with `{"segmentLabel": "...", "segmentDimension": "...", "reason": "..."}`. Then fetch the generated email via `GET /api/portfolio/revocations/{flagId}/email` for PSA notification. Only suggest revocation when tuning adjustments clearly aren't sufficient — this is a last resort, not a first response to a bad week.
 
@@ -81,11 +81,15 @@ Synthetic numbers; the goal is to show shape — verdict tier, sized impact, inl
 >
 > **Sequence:** (1) C1 inclusion narrow, (2) C7 cap raise, (3) C3 buy-term raise. Apply C1 first to reduce drag before sizing the ramps.
 >
-> Want me to draft the mutations for any of these?
+> *(Default close — updated campaign list format below — abbreviated here for brevity.)*
+>
+> Want a Brady email draft for these changes?
 
 #### Output format: "updated campaign list"
 
-When the user asks for an **updated campaign list** (or an updated parameter list, or a summary of the proposed changes), reproduce **all canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The user uses this format as a reviewable diff against the strategy doc.
+This format is the **default close for Playbook A** (item 7 in Output structure). It also fires whenever the operator explicitly asks for an updated campaign list, an updated parameter list, or a summary of the proposed changes — but the default trigger is *every* Playbook A response, not just on explicit ask.
+
+Reproduce **all canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The operator uses this format as a reviewable diff against the strategy doc.
 
 Use the canonical numbering from the config loaded at Step 0. Pull live field values from `GET /api/campaigns` so the list reflects current state, not the strategy doc's stated intent (they can disagree — that's exactly the signal Playbook D surfaces).
 

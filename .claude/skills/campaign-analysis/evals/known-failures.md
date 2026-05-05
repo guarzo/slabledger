@@ -182,6 +182,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: Playbook A defaulted to Brady email instead of campaign list
+
+- **Date:** 2026-05-04
+- **Scenario:** Operator asked for tuning recommendations. Skill produced verdicts, sized changes, and a fully-drafted Brady email. Operator pushed back: *"I don't actually need a full email draft, just the campaigns that changed."* Skill switched to the campaign-list format on the second pass.
+- **Failure:** Playbook A defaulted to drafting outbound communication the operator hadn't asked for, instead of the reviewable parameter delta they actually wanted. The "updated campaign list" format already existed in the docs but only fired when the operator named it explicitly.
+- **Corrective rule:** Playbook A's default close is the **updated campaign list format** — every canonical campaign in numeric order, with `Changed: <field> <old> → <new>` annotations or `No change`. The Brady email draft is **opt-in only**: surface as a tail option (*"Want a Brady email draft for these changes?"*), never auto-draft.
+- **Anchor:** `references/playbooks.md` — Playbook A, "Output structure" (item 7) and "Output format: updated campaign list" (subsection)
+- **Regression check:** Does Playbook A's Output structure still default-close with the updated-campaign-list format, and does it still require the Brady email draft be opt-in (tail option, not auto-draft)?
+
+---
+
 ## How to use this list
 
 When making a skill edit:
