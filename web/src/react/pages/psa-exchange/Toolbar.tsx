@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import type { Filters, QuickView } from './utils';
+import type { PsaExchangePolicy } from '../../../types/psaExchange';
 
 interface ToolbarProps {
   quickView: QuickView;
@@ -8,13 +9,8 @@ interface ToolbarProps {
   onFiltersChange: (f: Filters) => void;
   groupDuplicates: boolean;
   onGroupDuplicatesChange: (v: boolean) => void;
+  policy: PsaExchangePolicy;
 }
-
-const QUICK_VIEWS: { value: QuickView; label: string; hint: string }[] = [
-  { value: 'all', label: 'All', hint: 'Default ranking by score' },
-  { value: 'takeAtList', label: 'PSA value < target', hint: 'PSA value ≤ our target offer' },
-  { value: 'highLiquidity', label: 'High liquidity', hint: 'Velocity ≥ 5 / mo and confidence ≥ 5' },
-];
 
 const GRADE_OPTIONS = [10, 9.5, 9, 8];
 
@@ -25,7 +21,17 @@ export default function Toolbar({
   onFiltersChange,
   groupDuplicates,
   onGroupDuplicatesChange,
+  policy,
 }: ToolbarProps) {
+  const quickViews: { value: QuickView; label: string; hint: string }[] = [
+    { value: 'all', label: 'All', hint: 'Default ranking by score' },
+    { value: 'takeAtList', label: 'PSA value < target', hint: 'PSA value ≤ our target offer' },
+    {
+      value: 'highLiquidity',
+      label: 'High liquidity',
+      hint: `Velocity ≥ ${policy.highLiquidityVelocity} / mo and confidence ≥ ${policy.highLiquidityConfidence}`,
+    },
+  ];
   const setSearch = (search: string) => onFiltersChange({ ...filters, search });
   const setMinEdge = (minEdgePct: number) => onFiltersChange({ ...filters, minEdgePct });
   const toggleGrade = (g: number) => {
@@ -40,7 +46,7 @@ export default function Toolbar({
   return (
     <div className="space-y-3">
       <div role="radiogroup" aria-label="Quick view" className="flex flex-wrap items-center gap-1.5">
-        {QUICK_VIEWS.map((q) => (
+        {quickViews.map((q) => (
           <button
             key={q.value}
             type="button"

@@ -99,19 +99,26 @@ type AuthConfig struct {
 // These are read from environment variables centrally and passed to adapter
 // constructors — adapters never read env vars directly.
 type AdapterConfig struct {
-	PSAToken                 string        // PSA_ACCESS_TOKEN - PSA cert lookup (comma-separated for rotation)
-	PricingAPIKey            string        // PRICING_API_KEY - Bearer token for pricing API auth
-	GoogleOAuthEnv           string        // GOOGLE_OAUTH_ENV - controls login button visibility ("production" shows it)
-	LocalAPIToken            string        // LOCAL_API_TOKEN - dev-mode bearer bypass; empty = disabled
-	AzureAIEndpoint          string        // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
-	AzureAIKey               string        // AZURE_AI_API_KEY - Azure AI API key
-	AzureAIDeployment        string        // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
-	DHEnterpriseKey          string        // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
-	DHBaseURL                string        // DH_API_BASE_URL
-	PSAExchangeToken         string        // PSA_EXCHANGE_TOKEN - buyer access token
-	PSAExchangeBuyerCID      string        // PSA_EXCHANGE_BUYER_CID - buyer CID (reserved for v2)
-	PSAExchangeBaseURL       string        // PSA_EXCHANGE_BASE_URL - base URL (default: https://psa-exchange-catalog.com)
-	AzureAICompletionTimeout time.Duration // AZURE_AI_TIMEOUT - Completion poll fallback timeout (default: 3m)
+	PSAToken            string // PSA_ACCESS_TOKEN - PSA cert lookup (comma-separated for rotation)
+	PricingAPIKey       string // PRICING_API_KEY - Bearer token for pricing API auth
+	GoogleOAuthEnv      string // GOOGLE_OAUTH_ENV - controls login button visibility ("production" shows it)
+	LocalAPIToken       string // LOCAL_API_TOKEN - dev-mode bearer bypass; empty = disabled
+	AzureAIEndpoint     string // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
+	AzureAIKey          string // AZURE_AI_API_KEY - Azure AI API key
+	AzureAIDeployment   string // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
+	DHEnterpriseKey     string // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
+	DHBaseURL           string // DH_API_BASE_URL
+	PSAExchangeToken    string // PSA_EXCHANGE_TOKEN - buyer access token
+	PSAExchangeBuyerCID string // PSA_EXCHANGE_BUYER_CID - buyer CID (reserved for v2)
+	PSAExchangeBaseURL  string // PSA_EXCHANGE_BASE_URL - base URL (default: https://psa-exchange-catalog.com)
+	// PSA-Exchange scoring/filter levers (zero values fall back to DefaultPolicy in cmd/slabledger).
+	PSAExchangeHighLiqVelocity    int           // PSA_EXCHANGE_HIGH_LIQ_VELOCITY (default: 5)
+	PSAExchangeHighLiqConfidence  int           // PSA_EXCHANGE_HIGH_LIQ_CONFIDENCE (default: 5)
+	PSAExchangeHighLiqOfferPct    float64       // PSA_EXCHANGE_HIGH_LIQ_OFFER_PCT (default: 0.75)
+	PSAExchangeDefaultOfferPct    float64       // PSA_EXCHANGE_DEFAULT_OFFER_PCT (default: 0.65)
+	PSAExchangeMinConfidence      int           // PSA_EXCHANGE_MIN_CONFIDENCE (default: 3)
+	PSAExchangeMinQuarterVelocity int           // PSA_EXCHANGE_MIN_QUARTER_VELOCITY (default: 1)
+	AzureAICompletionTimeout      time.Duration // AZURE_AI_TIMEOUT - Completion poll fallback timeout (default: 3m)
 }
 
 // DHConfig holds DH scheduler and rate limiting settings.

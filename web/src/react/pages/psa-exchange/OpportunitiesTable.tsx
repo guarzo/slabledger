@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { clsx } from 'clsx';
+import { HoverCard } from 'radix-ui';
 import { GradeBadge } from '../../ui';
-import type { PsaExchangeOpportunity } from '../../../types/psaExchange';
+import type { PsaExchangeOpportunity, PsaExchangePolicy } from '../../../types/psaExchange';
 import SortableHeader from './SortableHeader';
 import SignalCell from './SignalCell';
 import {
@@ -19,6 +20,7 @@ interface OpportunitiesTableProps {
   sortDir: SortDir;
   onSort: (key: SortKey) => void;
   topDecileScore: number;
+  policy: PsaExchangePolicy;
 }
 
 const COLUMN_COUNT = 6;
@@ -39,6 +41,7 @@ export default function OpportunitiesTable({
   sortDir,
   onSort,
   topDecileScore,
+  policy,
 }: OpportunitiesTableProps) {
   if (rows.length === 0) {
     return (
@@ -61,7 +64,29 @@ export default function OpportunitiesTable({
             <th scope="col" aria-label="Image" className="w-12 p-2"></th>
             <SortableHeader label="Card" sortKey="description" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
             <SortableHeader label="PSA Value" sortKey="listPrice" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Target" sortKey="targetOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
+            <th
+              scope="col"
+              className="p-2 text-right text-[11px] uppercase tracking-wide font-semibold"
+              aria-sort={sortKey === 'targetOffer' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+            >
+              <span className="inline-flex items-center gap-1 justify-end">
+                <button
+                  type="button"
+                  onClick={() => onSort('targetOffer')}
+                  aria-label={`Sort by Target${sortKey === 'targetOffer' ? `, currently ${sortDir === 'asc' ? 'ascending' : 'descending'}` : ''}`}
+                  className={clsx(
+                    'inline-flex items-center gap-1 flex-row-reverse select-none cursor-pointer bg-transparent border-none p-0 font-inherit',
+                    sortKey === 'targetOffer' ? 'text-[var(--brand-400)]' : 'text-[var(--text-muted)] hover:text-[var(--brand-400)]',
+                  )}
+                >
+                  Target
+                  <span className="text-[8px] w-2" aria-hidden="true">
+                    {sortKey === 'targetOffer' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                  </span>
+                </button>
+                <TargetFormulaInfo policy={policy} />
+              </span>
+            </th>
             <SortableHeader label="Signal" sortKey="edgeAtOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
             <SortableHeader label="Score" sortKey="score" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
           </tr>
@@ -77,6 +102,46 @@ export default function OpportunitiesTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function TargetFormulaInfo({ policy }: { policy: PsaExchangePolicy }) {
+  const hi = Math.round(policy.highLiquidityOfferPct * 100);
+  const def = Math.round(policy.defaultOfferPct * 100);
+  return (
+    <HoverCard.Root openDelay={100} closeDelay={150}>
+      <HoverCard.Trigger asChild>
+        <button
+          type="button"
+          aria-label="How target is computed"
+          className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-semibold text-[var(--text-muted)] border border-[var(--surface-2)] hover:text-[var(--brand-400)] hover:border-[var(--brand-400)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]/40"
+        >
+          ?
+        </button>
+      </HoverCard.Trigger>
+      <HoverCard.Portal>
+        <HoverCard.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 w-72 p-3 rounded-md bg-[var(--surface-1)] border border-[var(--surface-2)] shadow-lg text-xs leading-relaxed space-y-2 text-[var(--text)]"
+        >
+          <div className="font-medium">Target offer = comp × tier %</div>
+          <div className="text-[var(--text-muted)]">
+            <span className="text-[var(--text)]">High liquidity:</span> {hi}% of comp
+            <span className="text-[var(--text-muted)]"> — when velocity ≥ {policy.highLiquidityVelocity}/mo and confidence ≥ {policy.highLiquidityConfidence}.</span>
+          </div>
+          <div className="text-[var(--text-muted)]">
+            <span className="text-[var(--text)]">Default:</span> {def}% of comp <span className="text-[var(--text-muted)]">— otherwise.</span>
+          </div>
+          <div className="h-px bg-[var(--surface-2)]" />
+          <div className="text-[var(--text-muted)]">
+            Listings are pre-filtered to confidence ≥ {policy.minConfidence} and quarter-velocity ≥ {policy.minQuarterVelocity}.
+            Tunable via PSA_EXCHANGE_* env vars.
+          </div>
+          <HoverCard.Arrow className="fill-[var(--surface-2)]" />
+        </HoverCard.Content>
+      </HoverCard.Portal>
+    </HoverCard.Root>
   );
 }
 
@@ -143,6 +208,8 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
             confidence={row.confidence}
             comp={row.comp}
             population={row.population}
+            tier={row.tier}
+            maxOfferPct={row.maxOfferPct}
           />
         </div>
       </td>

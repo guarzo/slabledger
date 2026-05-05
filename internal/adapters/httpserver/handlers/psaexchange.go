@@ -35,7 +35,16 @@ func (h *PSAExchangeHandler) HandleGetOpportunities(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusBadGateway, "failed to fetch PSA-Exchange opportunities")
 		return
 	}
-	writeJSON(w, http.StatusOK, toOpportunitiesResponse(res))
+	writeJSON(w, http.StatusOK, toOpportunitiesResponse(res, h.svc.Policy()))
+}
+
+type psaExchangePolicy struct {
+	HighLiquidityVelocity   int     `json:"highLiquidityVelocity"`
+	HighLiquidityConfidence int     `json:"highLiquidityConfidence"`
+	HighLiquidityOfferPct   float64 `json:"highLiquidityOfferPct"`
+	DefaultOfferPct         float64 `json:"defaultOfferPct"`
+	MinConfidence           int     `json:"minConfidence"`
+	MinQuarterVelocity      int     `json:"minQuarterVelocity"`
 }
 
 type psaExchangeRow struct {
@@ -64,15 +73,16 @@ type psaExchangeRow struct {
 }
 
 type psaExchangeResponse struct {
-	Opportunities       []psaExchangeRow `json:"opportunities"`
-	CategoryURL         string           `json:"categoryUrl"`
-	FetchedAt           time.Time        `json:"fetchedAt"`
-	TotalCatalogPokemon int              `json:"totalCatalogPokemon"`
-	AfterFilter         int              `json:"afterFilter"`
-	EnrichmentErrors    int              `json:"enrichmentErrors"`
+	Opportunities       []psaExchangeRow  `json:"opportunities"`
+	CategoryURL         string            `json:"categoryUrl"`
+	FetchedAt           time.Time         `json:"fetchedAt"`
+	TotalCatalogPokemon int               `json:"totalCatalogPokemon"`
+	AfterFilter         int               `json:"afterFilter"`
+	EnrichmentErrors    int               `json:"enrichmentErrors"`
+	Policy              psaExchangePolicy `json:"policy"`
 }
 
-func toOpportunitiesResponse(res psaexchange.OpportunitiesResult) psaExchangeResponse {
+func toOpportunitiesResponse(res psaexchange.OpportunitiesResult, p psaexchange.Policy) psaExchangeResponse {
 	rows := make([]psaExchangeRow, 0, len(res.Opportunities))
 	for _, l := range res.Opportunities {
 		rows = append(rows, psaExchangeRow{
@@ -107,6 +117,14 @@ func toOpportunitiesResponse(res psaexchange.OpportunitiesResult) psaExchangeRes
 		TotalCatalogPokemon: res.TotalCatalog,
 		AfterFilter:         res.AfterFilter,
 		EnrichmentErrors:    res.EnrichmentErrors,
+		Policy: psaExchangePolicy{
+			HighLiquidityVelocity:   p.HighLiquidityVelocity,
+			HighLiquidityConfidence: p.HighLiquidityConfidence,
+			HighLiquidityOfferPct:   p.HighLiquidityOfferPct,
+			DefaultOfferPct:         p.DefaultOfferPct,
+			MinConfidence:           p.MinConfidence,
+			MinQuarterVelocity:      p.MinQuarterVelocity,
+		},
 	}
 }
 

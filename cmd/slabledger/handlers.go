@@ -143,7 +143,29 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			pxeOpts = append(pxeOpts, psaexchangeadapter.WithBaseURL(in.Cfg.Adapters.PSAExchangeBaseURL))
 		}
 		pxeClient := psaexchangeadapter.NewClient(pxeHTTP, pxeOpts...)
-		pxeService = psaexchange.NewService(pxeClient, psaexchange.WithLogger(logger))
+		policy := psaexchange.DefaultPolicy()
+		if v := in.Cfg.Adapters.PSAExchangeHighLiqVelocity; v > 0 {
+			policy.HighLiquidityVelocity = v
+		}
+		if v := in.Cfg.Adapters.PSAExchangeHighLiqConfidence; v > 0 {
+			policy.HighLiquidityConfidence = v
+		}
+		if v := in.Cfg.Adapters.PSAExchangeHighLiqOfferPct; v > 0 {
+			policy.HighLiquidityOfferPct = v
+		}
+		if v := in.Cfg.Adapters.PSAExchangeDefaultOfferPct; v > 0 {
+			policy.DefaultOfferPct = v
+		}
+		if v := in.Cfg.Adapters.PSAExchangeMinConfidence; v > 0 {
+			policy.MinConfidence = v
+		}
+		if v := in.Cfg.Adapters.PSAExchangeMinQuarterVelocity; v > 0 {
+			policy.MinQuarterVelocity = v
+		}
+		pxeService = psaexchange.NewService(pxeClient,
+			psaexchange.WithLogger(logger),
+			psaexchange.WithPolicy(policy),
+		)
 	}
 	psaExchangeHandler := handlers.NewPSAExchangeHandler(pxeService, logger)
 
