@@ -321,8 +321,7 @@ export default function DesktopRow({
         </div>
       </div>
 
-      {/* Actions zone — separated from signals by border + spacing */}
-      <div className="glass-table-td flex-shrink-0 print-hide-actions ml-2 pl-3 border-l border-white/[0.14]" style={{ width: '220px' }}>
+      <div className="glass-table-td flex-shrink-0 print-hide-actions flex justify-end" style={{ width: '144px' }}>
         <RowActions primary={primary} fallbackPrimary={fallbackPrimary} overflow={overflow} variant="desktop" />
       </div>
     </div>
