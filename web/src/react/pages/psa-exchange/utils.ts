@@ -33,6 +33,20 @@ export const defaultFilters: Filters = {
   takeAtListOnly: false,
 };
 
+// Formatters shared by OpportunitiesTable and SignalCell.
+
+export const formatDollar = (n: number): string =>
+  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+export const formatPct = (n: number): string => `${(n * 100).toFixed(1)}%`;
+
+export function formatDays(d: number): string {
+  if (!Number.isFinite(d)) return '—';
+  if (d < 1) return '<1d';
+  if (d < 10) return `${d.toFixed(1)}d`;
+  return `${Math.round(d)}d`;
+}
+
 // Days until next sale at observed velocity. Falls back to quarterly velocity
 // when monthly is zero. Returns +Infinity when neither window has any sales.
 export function daysToSell(o: PsaExchangeOpportunity): number {
