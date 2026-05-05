@@ -171,6 +171,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: equal-weight hypotheses on Modern fill drought
+
+- **Date:** 2026-05-04
+- **Scenario:** Operator asked about Modern (C4) and Modern PSA 10 (C10) drought hypotheses. Skill listed *competition / submission shift / cycle dip* as equal alternatives. Operator pushed back: *"there is no way to prove it either way, but i would strongly suspect we're getting hit with competition, rather than a supply issue"* — picked the ranking the skill should have provided.
+- **Failure:** Skill defaulted to a flat menu of hypotheses with no ranking and no evidence-cited reasoning. Operator did the disambiguation work the skill should have done.
+- **Corrective rule:** When a campaign or segment goes dark (fill rate dropped >25% WoW, sales stalled 2+ weeks, or zero recent fills on a previously-active segment), do **not** list hypotheses as equal-weight. Walk the four canonical hypotheses (competition / supply lull / cycle dip / inclusion-list mismatch), score each by the evidence present, present in ranked order with one-line reasoning per rank, and propose a discriminating next action. Equal-weight is acceptable only when evidence genuinely doesn't separate the hypotheses — and in that case, name the discriminator the skill or operator could check next.
+- **Anchor:** `references/playbooks.md` — Recommendation rules, "Fill-drought hypothesis ranking"
+- **Regression check:** Does the Fill-drought hypothesis ranking rule still require ranked presentation with evidence-cited reasoning, the four canonical hypotheses, and a discriminating next action — banning equal-weight menus when evidence supports a ranking?
+
+---
+
 ## How to use this list
 
 When making a skill edit:

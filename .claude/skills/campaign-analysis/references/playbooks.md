@@ -14,7 +14,7 @@ Load this file when routing to any follow-up playbook (Step 4), running the stra
   - Playbook G — "How are our DH listings doing?" (marketplace)
 - [Step 5 — Strategy doc sync](#step-5--strategy-doc-sync)
 - [Step 6 — Retrospective](#step-6--retrospective)
-- [Recommendation rules](#recommendation-rules) — Sizing, Stale-suggestion filter, Confidence bands, Hold verdict, Capital guardrail, Sequencing, Popular-tier exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic, Partner-ask verification
+- [Recommendation rules](#recommendation-rules) — Sizing, Stale-suggestion filter, Confidence bands, Hold verdict, Fill-drought hypothesis ranking, Capital guardrail, Sequencing, Popular-tier exclusion, Era-fit gate, Sub-$150 modern floor, Turnover gate, Cap-diagnostic, Throttle lever selection, Partner-ask verification
 - [Data conventions](#data-conventions) — buy terms, CL-lag vs CL-lead framing, exit channels, net-proceeds math
 - [Mutations](#mutations) — write endpoints by intent
 
@@ -331,6 +331,23 @@ When signal is weak, recommend holding — explicitly — instead of synthesizin
 - Sell-through drop is < 5pp AND observation count is < 20.
 
 Say it out loud in the rule-of-thumb form: *"Hold — this week's ROI is 7%, within ±10% of the 8.2% trailing-mean. Noise, not signal. I'd keep current params."* Silence is not acceptable; the user learns *why* nothing is being changed.
+
+### Fill-drought hypothesis ranking
+
+When a campaign or segment goes dark — fill rate dropped >25% WoW, sales stalled for 2+ consecutive weeks, or a previously-active segment shows zero recent fills — do **not** list hypotheses as equal-weight alternatives. Walk the four canonical hypotheses below, score each by the evidence present, and present them in ranked order with one-line reasoning per rank.
+
+The four canonical hypotheses, each with the evidence that favors it:
+
+1. **Competition.** Favored when (a) DH or CL data shows the segment is contested, (b) recent CL trend on the segment is upward (others bidding up the anchor), (c) the segment is in the popular-tier or a known-contested niche, or (d) the operator's recent realized `avgBuyPctOfCL` on similar segments is climbing toward 100%.
+2. **Supply lull.** Favored when (a) similar segments across the operator's portfolio are also slow (same era, same grade, same character family), (b) PSA submission cycles or set-release timing predict the dip, or (c) intelligence endpoints show flat or declining population growth on the segment.
+3. **Cycle dip / submission shift.** Favored when (a) overall PSA throughput slowed (operator-wide signal across multiple campaigns), (b) the same campaign's prior years show the same dip in the same week-of-year, or (c) a known holiday / PSA event window is in play.
+4. **Inclusion-list mismatch.** Favored when (a) the Step 1a inclusion-diff is nonempty, (b) recent fills include characters not on inclusion list (recent inclusion-list edit retroactively excluded them), or (c) the segment was recently restricted (grade range tightened, characters removed).
+
+**Output shape.** State the top hypothesis first with its supporting evidence, the second-likeliest with its evidence and why it's lower-ranked, and a one-line "if it's the top one we'd see X next; if it's the second we'd see Y next" — making the next diagnostic step explicit. Don't list all four if the evidence cleanly points at one or two; rank what the evidence supports.
+
+**Evidence-poor case.** If no signal meaningfully separates the hypotheses, say so explicitly — *"competition vs supply lull both fit the data; the discriminator would be [X — e.g. checking DH velocity on the segment, or comparing prior-year same-week fills]; can you check, or would you like me to dig into [X]?"* — but never default to a flat menu when evidence supports a ranking. Equal-weight presentation is the exception, not the default.
+
+This rule was added because the skill defaulted to an equal-weight menu of competition / submission shift / cycle dip on the 5/4 Modern drought question; the operator did the ranking. The skill must move the conversation forward, not leave the operator to disambiguate.
 
 ### Capital guardrail
 
