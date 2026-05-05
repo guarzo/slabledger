@@ -333,10 +333,31 @@ Failure modes to avoid:
 - Listing `keys` of a JSON response and treating that printout as analysis.
 - Citing an endpoint's data when you didn't actually call it this session.
 
+## Business-mechanic premise gate
+
+Before running multi-step financial, capital-cycle, or operational analysis on top of a business mechanic — invoice cadence, payment windows, cycle-week effects, cap interactions across cycles, recovery-rate compositions, batch-arrival patterns — verify the mechanic is real. The user has caught the skill running detailed plans on top of mechanics it invented mid-response.
+
+**Source order:**
+
+1. Explicit text in `docs/private/CAMPAIGN_STRATEGY.md`.
+2. `/credit/invoices` schedule + `/credit/summary` cycle history (i.e. the actual invoices already on the books).
+3. **Ask the user** if neither (1) nor (2) confirms the mechanic.
+
+**Anti-patterns this gate refuses:**
+
+- "Double invoice window" / "compressed payment window" / "competing recovery windows" framing — invoice payment windows are independent unless explicitly linked. Each invoice gets its own due date; recovery dollars don't compete across cycles.
+- Inferring cycle-week effects (week-1 vs week-2 spend, "float-week" framing) from invoice dates alone, without explicit confirmation that the business operates that way.
+- Building a multi-step argument on top of a business mechanic that was introduced for the first time in your own previous paragraph.
+
+**Self-detection marker.** When you're about to write *"because X interacts with Y in this way"* about the operator's business workflow, that's a premise. Either cite the source (strategy doc page or section, API endpoint with field name, prior user statement in this session) or stop and ask. The user prefers one clarifying question over a confidently wrong plan.
+
+This rule was added because the skill claimed mid-analysis that the 5/16 invoice and the 5/29 invoice competed for one capital recovery window — a "double invoice window" math model the skill made up — and built throttle-plan sizing on top of the invented premise. The user caught it (*"i think you may have a bad assumption -- there is no double invoice window?"*). Skill response: *"You're right on both — I was making that up."*
+
 ## Recommendation rules (gist; full text in `references/playbooks.md`)
 
 | Rule | Gist |
 |------|------|
+| Premise gate | Before multi-step financial reasoning, verify the underlying business mechanic against strategy doc / `/credit/invoices` / user. See "Business-mechanic premise gate" above. |
 | Sizing | Every rec carries `est. +$X.XK/mo at current fill (Confidence: H\|M\|L)`. Use `recovery` (one-time) instead of `/mo` for liquidation/DH push. |
 | Confidence bands | H = ≥30 obs AND CV<20%. M = 10–29 OR ≥30 with CV≥20%. L = <10 obs OR <4 weeks history. |
 | Capital guardrail | Healthy: weeksToCover≤5 AND trend≠worsening. Tight: caveat ramp-ups. Critical: block ramp-ups. |

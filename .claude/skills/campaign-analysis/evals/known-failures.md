@@ -116,6 +116,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: confabulated double-invoice-window math model
+
+- **Date:** 2026-05-05
+- **Scenario:** Mid-conversation about capital throttling, the skill claimed the 5/16 and 5/29 invoices were competing for one recovery window — a "double invoice window" math model — and built detailed throttle-plan sizing (week-1 vs week-2 spend bias, cap-cut sizing, terms-cut math) on top of it.
+- **Failure:** The premise was invented mid-response, never sourced from the strategy doc or `/credit/invoices`. User caught it: *"i think you may have a bad assumption -- there is no double invoice window? regarding the structural changes, they're not changing the payment timing at this point"*. Skill response: *"You're right on both — I was making that up."* Bi-monthly invoices are independent — each gets its own 14-day window with full recovery rate between them.
+- **Corrective rule:** Before multi-step financial / capital-cycle analysis, verify the underlying business mechanic against (1) explicit strategy-doc text, (2) `/credit/invoices` + `/credit/summary` cycle history, (3) ask the user. Refuse the "double invoice window," "compressed payment window," and "cycle-week effect" framings unless one of the three sources confirms them. When about to write *"because X interacts with Y in this way"* about the operator's business workflow, that's a premise — cite the source or stop.
+- **Anchor:** `SKILL.md` — "Business-mechanic premise gate" section
+- **Regression check:** Does `SKILL.md` still carry an explicit pre-analysis gate that requires sourcing for business mechanics before multi-step financial reasoning, with the "double invoice window" framing called out as a refused anti-pattern?
+
+---
+
 ## How to use this list
 
 When making a skill edit:
