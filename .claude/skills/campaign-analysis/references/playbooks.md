@@ -560,15 +560,30 @@ Before drafting a data-ask to a third party (DH, PSA, CardLadder, etc.) based on
 2. **Partner has it, but our scheduler / seed / trigger isn't pulling it** — local bug.
 3. **Partner has it and we pulled it, but it's stored in a different field / table than we're reading** — local query bug.
 
-Ask three questions before filing a partner-ask:
+Run the following checks in order before filing a partner-ask:
 
-- Is there a scheduler or job that should be populating this field? If so, has it run recently? Check via logs, API health endpoints, or manually running the job.
-- Is the data already in a related table or field that we're not surfacing? (E.g., PSA pop lives in `market_intelligence.population` even though `dh/status` shows `intelligence_count: 0`.)
-- Does the partner's documented API already return this? If yes, the gap is our pull, not their provision.
+0. **Cross-check against `docs/private/impossible-data-asks.md`.** Match the proposed ask against the log by *substance, not exact wording* — the noun phrase should match (e.g. "competitor buy%", "competitor pricing on Partner Offers", "what other PSA buyers pay" all match the same row). If matched: don't draft the ask; surface the match inline (*"Can't draft this — logged 2026-05-05 as impossible because PSA won't share supply-side competition data. Falling back to CL movement on filling segments as a proxy per the alternative."*) and stamp today's date in the matched row's `Last revisited` column. If unmatched, proceed to the existing three-question check below.
+1. Is there a scheduler or job that should be populating this field? If so, has it run recently? Check via logs, API health endpoints, or manually running the job.
+2. Is the data already in a related table or field that we're not surfacing? (E.g., PSA pop lives in `market_intelligence.population` even though `dh/status` shows `intelligence_count: 0`.)
+3. Does the partner's documented API already return this? If yes, the gap is our pull, not their provision.
 
-Only items that clear all three checks go into the dated `docs/private/YYYY-MM-DD-<partner>-data-ask.md` draft. Items that fail any of them go into the internal-work table of the wishlist as a local-side fix.
+Only items that clear all four checks go into the dated `docs/private/YYYY-MM-DD-<partner>-data-ask.md` draft. Items that fail any of them go into the internal-work table of the wishlist as a local-side fix.
 
 This rule was added because an early DH draft included "intelligence_count: 0" and "no pop data" as DH asks. Both turned out to be local seeding bugs — the scheduler only refreshed existing rows and nothing seeded the table. Operator caught it and corrected the draft before sending.
+
+**Schema for `docs/private/impossible-data-asks.md`:**
+
+```markdown
+# Impossible Data Asks
+
+Asks that are known to be unanswerable by the named partner — logged so the skill stops repeatedly proposing them. Cross-referenced before any partner-ask draft.
+
+| Ask | Why impossible | Alternatives | Logged | Last revisited |
+|-----|----------------|--------------|--------|-----------------|
+| competitor PSA Partner Offers buy% | PSA won't share supply-side competition data — privacy / competitive-landscape reasons | watch CL movement on filling segments as a proxy for competitor pressure; track our own fill-rate-near-cap vs supply-thin via the Cap-diagnostic rule | 2026-05-05 | — |
+```
+
+**Logging an ask as newly impossible.** When a draft ask is reviewed and the user determines the partner won't answer it (privacy, competitive reasons, structural infeasibility), the skill appends a row to `docs/private/impossible-data-asks.md` with the user-supplied "Why impossible" and any alternatives discussed. Append, never overwrite. If the file is absent, create it with the header from the schema documentation above and the first row.
 
 ## Data conventions
 
