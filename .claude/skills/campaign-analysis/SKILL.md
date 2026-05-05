@@ -389,7 +389,7 @@ Rules live in `SKILL.md` (not `references/playbooks.md`) because they apply to *
 **Layered with existing rules.** The Self-challenge rules complement two pre-existing layers of discipline:
 
 - **The Business-mechanic premise gate** (top-level in `SKILL.md`) fires *before* analysis begins — it refuses to run multi-step financial reasoning on top of an unverified business mechanic (invoice cadence, cycle-week effect, etc.). The Self-challenge rules fire *during* analysis, on every claim and lever.
-- **Specific Recommendation rules** (Cap-diagnostic with cap-cut binding check, Era-fit gate, Throttle lever selection, Fill-drought hypothesis ranking, Dollar-weighted BPCL cross-check, Category vs campaign discipline, Popular-tier exclusion, etc.) fire on specific levers, segments, or claim shapes with concrete thresholds. The Self-challenge rules generalize these — when the pattern matches but no specific rule applies, 1.1–1.5 still fire.
+- **Specific Recommendation rules** (Cap-diagnostic with cap-cut binding check, Era-fit gate, Throttle lever selection, Fill-drought hypothesis ranking, Dollar-weighted BPCL cross-check, Category vs campaign discipline, Popular-tier exclusion, etc.) fire on specific levers, segments, or claim shapes with concrete thresholds. The Self-challenge rules generalize these — when the pattern matches but no specific rule applies, 1.1–1.7 still fire.
 
 When the lever or claim falls under one of those specific rules, follow the specific rule's threshold first; the Self-challenge rule fires when the underlying pattern is the same but no specific rule names it.
 
@@ -432,6 +432,30 @@ Every parsed datum in user-facing output carries one short interpretive clause. 
 ### 1.5 — Disagree with the data when the pattern says otherwise (D4)
 
 The `/tuning` and `/portfolio/suggestions` outputs are surface conclusions over lifetime data. When the underlying pattern (CL-lead vs CL-lag, cap-binding vs supply-thin, post-restriction sample vs pre-restriction noise, popular-tier excluded for edge reasons) contradicts the surface conclusion, push back on the data and state which signal you trust and why. The **Cap-diagnostic rule** (both directions — supply-thinness AND cap-cut binding) and **Popular-tier exclusion** are existing precedents for this discipline; this rule generalizes the move so it fires beyond those specific cases. Never recommend a lever just because the endpoint named it — recommend it because the pattern *and* the lever-binds check both support it.
+
+### 1.6 — Diagnose-the-gap when verification can't complete (extension of D1; ties to Capability 4)
+
+When the Verify-before-propose gate (1.1) can't finish a cross-check because the data isn't available — endpoint conflates two concepts, field is missing, sample is post-restriction-only, aggregation is mean-of-ratios with no dollar-weighted equivalent, segment is unseeded — don't just downgrade confidence and move on. Name the gap inline and propose a concrete fix, routed to the right destination by type:
+
+| Gap type | Surface | Route to |
+|----------|---------|----------|
+| **Internal / client-side** (missing endpoint field, scheduler not seeding, query reading wrong table, response shape needs splitting `realized` vs `contract`) | Inline in the response: *"Couldn't verify lever-binds for X because /tuning conflates realized buy% with contract terms — proposing a `contractBuyPct` field on the byGrade rows so this check is one-shot."* | Append to **internal-work** table in `docs/private/campaign-analysis-wishlist.md` at the moment it's encountered, not Step 6 |
+| **Partner-side** (DH or PSA endpoint missing data they could provide) | Inline + draft a question for the operator to send. Apply the Partner-ask verification rule (three-question check for local-side cause first) | Append to dated `docs/private/YYYY-MM-DD-<partner>-data-ask.md` only after the Partner-ask verification rule passes (including step 0 impossibility cross-check) |
+| **Impossible** (matches a row in `impossible-data-asks.md` by substance) | Inline: *"Can't verify segment competition pressure — that's the PSA supply-side data we logged as impossible 2026-04-14. Falling back to CL movement on filling segments as a proxy per the alternative."* Stamp `Last revisited` on the matched row. *If the impossible-asks log file is absent, this row never matches — the rule degrades to inline-surface + Partner-ask verification rule for any unmatched gap.* | No new entry; no new draft |
+
+The discipline this enforces: bad recommendations driven by data limitations should produce visible artifacts (a wishlist entry, a partner-ask draft, or a logged-and-routed impossibility) every time the limitation bites, not occasionally when the retrospective remembers. The existing Step 6 bucket-3 wishlist append still runs at session close — but inline surfacing during analysis means the gap-to-fix path is faster and the operator sees *which* analysis the gap broke.
+
+When 1.1 verification *succeeds* but turns up a fragility (e.g. cross-check passed only because of one outlier; sample is healthy but post-restriction-only and small), surface that as a confidence note inside the recommendation, not as a wishlist entry — the data isn't broken, it's just thin. Wishlist additions are reserved for gaps that would change the recommendation if closed.
+
+### 1.7 — Name the population the sample represents (selection bias)
+
+Before any aggregation across campaigns or characters, name what the sample actually is. The operator's purchase history is the operator's *behavior*, not the *market* — External campaign reflects what they bought ad-hoc, not what's available to buy. Post-restriction-only samples reflect post-restriction behavior, not the underlying segment. Popular-tier character samples reflect what survived contested bidding, not what the operator's edge could capture. State the selection in one clause whenever the population isn't "all market activity":
+
+> *"External shows Houndoom at 19% ROI, but External is the operator's catch-all — it confirms Houndoom is sellable when bought ad-hoc, not that there's untapped market demand for it."*
+
+For market-demand questions, source signal from `/intelligence/niches` and `/insights.coverageGaps`, not operator purchase history.
+
+This rule generalizes — it's not just External. Selection bias is the connective failure mode behind several already-named ones (popular-tier exclusion, post-restriction sample caveats, Step 1b currentScope filter); 1.7 makes the underlying discipline explicit so it fires when a new selection-bias trap appears.
 
 ## Data conventions
 
