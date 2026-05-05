@@ -410,6 +410,21 @@ The check:
 
 This rule was added because the skill initially recommended lowering C7's floor based on 20% multi-day utilization. The operator corrected: Crystal cards land $3K-$7K, so the $5K cap was the bottleneck, not the floor. The diagnostic check above would have caught this.
 
+**Cap-cut binding check (inverse direction).** Before proposing a cap *reduction* on any campaign, verify the cap actually binds on observed daily spend. The forward analog of the supply-thinness check above — both directions require checking how the cap binds on observed spend before the cap becomes a lever.
+
+Compute from `/campaigns/{id}/fill-rate`:
+
+- `excess = sum(max(0, spendUSD - proposedNewCap))` across the observed window.
+- `daysExceeded = count(days where spendUSD > proposedNewCap)`.
+
+**If `excess < $500` over a 14-day window OR `daysExceeded < 25%` of observed days, the cap reduction is a no-op.** Skip it or pick a binding lever (price-floor raise, terms cut, revocation, pause).
+
+**State the math inline** when surfacing or rejecting a cap-cut:
+
+> *"C8 Gold Stars cap $8K → $5K: 0 of 4 observed days exceeded $5K, max ever $1,374. $0 saved — no-op. Skipping."*
+
+This rule was added because the skill proposed cap reductions on Mid-Era (C6, $5K → $2K) and Gold Stars (C8, $8K → $5K) as part of a throttle plan. Actual binding analysis: C6 had 3 of 15 days over $2K (~$0–$1K saved over a 4-day pro-rated window); C8 had 0 of 4 days over $5K (the 4/30 raise to $8K had never bound — $0 saved). Only C10 (14 of 18 days exceeding $2K, ~$3K saved) was a real cap-cut candidate. The skill should have run the binding check before proposing C6 / C8 cuts.
+
 ### Partner-ask verification
 
 Before drafting a data-ask to a third party (DH, PSA, CardLadder, etc.) based on "this endpoint returns 0" or "this field is empty," **verify the gap isn't on our side first.** An empty response usually has three possible causes, and only one of them is a partner gap:

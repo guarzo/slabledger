@@ -127,6 +127,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: cap reductions on non-binding caps (C6 / C8 in throttle plan)
+
+- **Date:** 2026-05-05
+- **Scenario:** Skill proposed cap cuts on Mid-Era (C6, $5K → $2K) and Gold Stars (C8, $8K → $5K) as part of a week-2 throttle plan. User asked for the actual savings: C6 had 3 of 15 observed days exceeding $2K (~$0–$1K saved over a 4-day pro-rated window); C8 had 0 of 4 days exceeding $5K (the 4/30 raise to $8K had never bound). Only C10 (14 of 18 days exceeding $2K, ~$3K saved over a 4-day pro-rated window) was a real cap-cut candidate.
+- **Failure:** The Cap-diagnostic rule covered the inverse direction (low utilization ≠ supply-thin) but had no forward version — the skill proposed cap cuts without checking how observed daily spend distributed against the proposed new cap.
+- **Corrective rule:** Before proposing a cap reduction, compute `excess = sum(max(0, spendUSD - proposedNewCap))` and `daysExceeded = count(days where spendUSD > proposedNewCap)` from `/campaigns/{id}/fill-rate`. If `excess < $500` over a 14-day window OR `daysExceeded < 25%`, the reduction is a no-op — skip it or pick a binding lever (price-floor raise, terms cut, revocation, pause). State the math inline when surfacing or rejecting the cap-cut.
+- **Anchor:** `references/playbooks.md` — Recommendation rules, "Cap-diagnostic rule" → "Cap-cut binding check (inverse direction)"
+- **Regression check:** Does the Cap-diagnostic rule still cover both directions (supply-thin claim AND cap-cut proposal), with the binding-check math required inline?
+
+---
+
 ## How to use this list
 
 When making a skill edit:
