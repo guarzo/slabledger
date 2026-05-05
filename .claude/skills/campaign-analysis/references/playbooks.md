@@ -14,7 +14,7 @@ Load this file when routing to any follow-up playbook (Step 4), running the stra
   - Playbook G — "How are our DH listings doing?" (marketplace)
 - [Step 5 — Strategy doc sync](#step-5--strategy-doc-sync)
 - [Step 6 — Retrospective](#step-6--retrospective)
-- [Recommendation rules](#recommendation-rules) — Sizing, Stale-suggestion filter, Confidence bands, Hold verdict, Capital guardrail, Sequencing, Popular-tier exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic, Partner-ask verification
+- [Recommendation rules](#recommendation-rules) — Sizing, Stale-suggestion filter, Confidence bands, Hold verdict, Fill-drought hypothesis ranking, Capital guardrail, Sequencing, Popular-tier exclusion, Era-fit gate, Sub-$150 modern floor, Turnover gate, Cap-diagnostic, Throttle lever selection, Partner-ask verification
 - [Data conventions](#data-conventions) — buy terms, CL-lag vs CL-lead framing, exit channels, net-proceeds math
 - [Mutations](#mutations) — write endpoints by intent
 
@@ -44,13 +44,13 @@ Fetch in parallel (most should already be in the opener cache from Step 3):
 State the **capital posture** once at the top (`Healthy / Tight / Critical` from the guardrail rule), then:
 
 1. **Per-campaign verdict — every active campaign in canonical numeric order.** One of: `RAMP UP / TIGHTEN / HOLD / WIND DOWN / WATCH`. Each verdict carries one sentence of justification citing the metrics that drove it (e.g. `TIGHTEN — PSA 9 at 97.1% of CL on 92 fills, 32% ST, 0.2% ROI`). A `HOLD` must cite the trailing-mean from `/portfolio/weekly-history` per the hold-verdict rule. A campaign whose verdict is HOLD/WATCH still appears in the list — silence is not acceptable.
-2. **Top parameter changes ranked by sized $ impact** (with confidence band; hold-verdict rule applied; capital guardrail applied to ramp-ups). Each backed by `(campaign, grade)` data from `/tuning`, not generic suggestions. State the current value, proposed value, sample size (`n=N`), and projected impact (`Proj: +$X.XK/mo (H|M|L)`).
+2. **Top parameter changes ranked by sized $ impact** (with confidence band; hold-verdict rule applied; capital guardrail applied to ramp-ups; **Throttle-lever-selection rule applied to any spend-reduction**). Each backed by `(campaign, grade)` data from `/tuning`, not generic suggestions. State the current value, proposed value, sample size (`n=N`), and projected impact (`Proj: +$X.XK/mo (H|M|L)`). When the proposal is a spend-reduction (cap cut, terms cut, inclusion-list narrow), name **both** cap and terms options with the cap-vs-terms tradeoff per the Throttle lever selection rule — don't pick one silently.
 3. **Inclusion-list adds/trims from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` not yet covered (or undercovered). Per-campaign list of proposed adds with sized expected revenue. Also surface trims for high-`n` low-ROI characters dragging the portfolio (`soldCount ≥ 20` AND `roi < 0.05`). **Run the Era-fit gate** (Recommendation rules) on every proposed add before drafting the line — character year-of-first-release must overlap the campaign's `yearRange`. Filter `/insights.coverageGaps` rows for the open-net false-positive carve-out per the same rule.
 4. **Coverage shifts** — niches the portfolio should expand into (`/intelligence/niches` rows with high `opportunity_score` and `current_coverage = 0`) or campaigns that should narrow (`/insights.byPriceTier` drag tiers). Proposed action per row.
 5. **Cross-campaign arbitrage** — crack candidates and acquisition mispricings worth > $200 net. Capital-positive, bypass the guardrail.
 6. **Stale-suggestion note** — one line: *"Filtered N stale server suggestions (campaigns updated within last 72h)."* (or *"No stale suggestions filtered."*).
-
-Then a **prioritized list of proposed mutations** the user can approve. If the user approves any, apply them via `PUT /api/campaigns/{id}` — see Mutations. Cross-reference each recommendation against the strategy doc's design intent and flag divergences.
+7. **Default close — updated campaign list format.** Reproduce all canonical campaigns in the format spec'd below ("Output format: 'updated campaign list'"). This is the **default deliverable** for Playbook A — the operator uses it as a reviewable diff against the strategy doc. Don't replace it with prose, don't replace it with an email draft, don't trim to "only the changed ones." All canonical campaigns, every parameter, `Changed:` annotations or `No change`. Cross-reference each recommendation against the strategy doc's design intent and flag divergences. Approved changes apply via `PUT /api/campaigns/{id}` — see Mutations.
+8. **Tail option (opt-in) — *"Want a Brady email draft for these changes?"*** The Brady email is opt-in only. Do **not** auto-draft. The default close is the campaign list at item 7; the email is a follow-on artifact the operator requests if they want one.
 
 **Escalation: revocation.** If a campaign is critically underperforming (negative ROI with >20 observations, or health status "critical"), raise the possibility of revoking it entirely. Fetch `GET /api/portfolio/revocations` to check if any existing flags are pending. To create a new revocation flag: `POST /api/portfolio/revocations` with `{"segmentLabel": "...", "segmentDimension": "...", "reason": "..."}`. Then fetch the generated email via `GET /api/portfolio/revocations/{flagId}/email` for PSA notification. Only suggest revocation when tuning adjustments clearly aren't sufficient — this is a last resort, not a first response to a bad week.
 
@@ -81,11 +81,15 @@ Synthetic numbers; the goal is to show shape — verdict tier, sized impact, inl
 >
 > **Sequence:** (1) C1 inclusion narrow, (2) C7 cap raise, (3) C3 buy-term raise. Apply C1 first to reduce drag before sizing the ramps.
 >
-> Want me to draft the mutations for any of these?
+> *(Default close — updated campaign list format below — abbreviated here for brevity.)*
+>
+> Want a Brady email draft for these changes?
 
 #### Output format: "updated campaign list"
 
-When the user asks for an **updated campaign list** (or an updated parameter list, or a summary of the proposed changes), reproduce **all canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The user uses this format as a reviewable diff against the strategy doc.
+This format is the **default close for Playbook A** (item 7 in Output structure). It also fires whenever the operator explicitly asks for an updated campaign list, an updated parameter list, or a summary of the proposed changes — but the default trigger is *every* Playbook A response, not just on explicit ask.
+
+Reproduce **all canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The operator uses this format as a reviewable diff against the strategy doc.
 
 Use the canonical numbering from the config loaded at Step 0. Pull live field values from `GET /api/campaigns` so the list reflects current state, not the strategy doc's stated intent (they can disagree — that's exactly the signal Playbook D surfaces).
 
@@ -332,6 +336,23 @@ When signal is weak, recommend holding — explicitly — instead of synthesizin
 
 Say it out loud in the rule-of-thumb form: *"Hold — this week's ROI is 7%, within ±10% of the 8.2% trailing-mean. Noise, not signal. I'd keep current params."* Silence is not acceptable; the user learns *why* nothing is being changed.
 
+### Fill-drought hypothesis ranking
+
+When a campaign or segment goes dark — fill rate dropped >25% WoW, sales stalled for 2+ consecutive weeks, or a previously-active segment shows zero recent fills — do **not** list hypotheses as equal-weight alternatives. Walk the four canonical hypotheses below, score each by the evidence present, and present them in ranked order with one-line reasoning per rank.
+
+The four canonical hypotheses, each with the evidence that favors it:
+
+1. **Competition.** Favored when (a) DH or CL data shows the segment is contested, (b) recent CL trend on the segment is upward (others bidding up the anchor), (c) the segment is in the popular-tier or a known-contested niche, or (d) the operator's recent realized `avgBuyPctOfCL` on similar segments is climbing toward 100%.
+2. **Supply lull.** Favored when (a) similar segments across the operator's portfolio are also slow (same era, same grade, same character family), (b) PSA submission cycles or set-release timing predict the dip, or (c) intelligence endpoints show flat or declining population growth on the segment.
+3. **Cycle dip / submission shift.** Favored when (a) overall PSA throughput slowed (operator-wide signal across multiple campaigns), (b) the same campaign's prior years show the same dip in the same week-of-year, or (c) a known holiday / PSA event window is in play.
+4. **Inclusion-list mismatch.** Favored when (a) the Step 1a inclusion-diff is nonempty, (b) recent fills include characters not on inclusion list (recent inclusion-list edit retroactively excluded them), or (c) the segment was recently restricted (grade range tightened, characters removed).
+
+**Output shape.** State the top hypothesis first with its supporting evidence, the second-likeliest with its evidence and why it's lower-ranked, and a one-line "if it's the top one we'd see X next; if it's the second we'd see Y next" — making the next diagnostic step explicit. Don't list all four if the evidence cleanly points at one or two; rank what the evidence supports.
+
+**Evidence-poor case.** If no signal meaningfully separates the hypotheses, say so explicitly — *"competition vs supply lull both fit the data; the discriminator would be [X — e.g. checking DH velocity on the segment, or comparing prior-year same-week fills]; can you check, or would you like me to dig into [X]?"* — but never default to a flat menu when evidence supports a ranking. Equal-weight presentation is the exception, not the default.
+
+This rule was added because the skill defaulted to an equal-weight menu of competition / submission shift / cycle dip on the 5/4 Modern drought question; the operator did the ranking. The skill must move the conversation forward, not leave the operator to disambiguate.
+
 ### Capital guardrail
 
 Checked before emitting any **ramp-up** recommendation — actions that deploy more capital. Ramp-ups include: raise buy terms, raise daily spend cap, propose a new campaign, expand an inclusion list. DH push approvals are excluded (they move existing inventory, not new spend); liquidation actions are excluded (they recover capital, not deploy it).
@@ -424,6 +445,21 @@ Compute from `/campaigns/{id}/fill-rate`:
 > *"C8 Gold Stars cap $8K → $5K: 0 of 4 observed days exceeded $5K, max ever $1,374. $0 saved — no-op. Skipping."*
 
 This rule was added because the skill proposed cap reductions on Mid-Era (C6, $5K → $2K) and Gold Stars (C8, $8K → $5K) as part of a throttle plan. Actual binding analysis: C6 had 3 of 15 days over $2K (~$0–$1K saved over a 4-day pro-rated window); C8 had 0 of 4 days over $5K (the 4/30 raise to $8K had never bound — $0 saved). Only C10 (14 of 18 days exceeding $2K, ~$3K saved) was a real cap-cut candidate. The skill should have run the binding check before proposing C6 / C8 cuts.
+
+### Throttle lever selection
+
+When a recommendation reduces spending on a campaign — whether for capital pressure, invoice-cycle tightening, or pre-emptive throttle — present **both** cap reduction and buy-terms reduction as peer levers, with the tradeoff stated explicitly. Don't pick one silently.
+
+| Lever | Effect | When it's the right choice |
+|-------|--------|----------------------------|
+| **Cap reduction** | Clips spike-day exposure. Margin per fill unchanged; typical-day fills unchanged; only spike-day fills are dropped. Run the Cap-cut binding check (Cap-diagnostic rule, inverse direction) before proposing a number — a cap that doesn't bind on observed spend saves $0. | Goal is risk control or smoothing the cash burn curve. Healthy campaign you want to keep filling, just not blow up the cap on a bad day. |
+| **Terms reduction** | Shifts the entire fill distribution: reduces fill rate every day AND improves margin on residual fills. | Goal is intentional volume-kill — *not* margin recovery on a filling segment. |
+
+Default presentation: name both levers, frame the choice as risk-control (cap) vs distribution-shift (terms), and let the operator pick. Especially in invoice-cycle / capital-tightening contexts, the operator may have a directional preference (e.g. terms cut on a CL-lead segment) that the skill won't surface if it picks cap silently.
+
+**Pair with CL-lag/CL-lead discipline.** Terms cuts are appropriate as a *volume-kill* lever, not as a *margin-recovery* lever on a filling segment. A CL-lead segment (per Data conventions thresholds — `avgBuyPctOfCL ≥ 0.93 AND roi ≤ 0.05`) is a "narrow scope (year/price/confidence)" candidate, not a terms-cut candidate. The terms-as-volume-kill case is distinct from margin recovery — keep them separate in the rationale.
+
+This rule was added because the skill defaulted to cap reduction when the operator wanted terms reduction on a 99%-BPCL-vs-75%-contract campaign during invoice-cycle week 2. Cap would have left the realized BPCL gap untouched; terms shifts the distribution down so fewer high-BPCL fills land at all.
 
 ### Partner-ask verification
 
