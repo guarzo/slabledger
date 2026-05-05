@@ -45,7 +45,7 @@ State the **capital posture** once at the top (`Healthy / Tight / Critical` from
 
 1. **Per-campaign verdict — every active campaign in canonical numeric order.** One of: `RAMP UP / TIGHTEN / HOLD / WIND DOWN / WATCH`. Each verdict carries one sentence of justification citing the metrics that drove it (e.g. `TIGHTEN — PSA 9 at 97.1% of CL on 92 fills, 32% ST, 0.2% ROI`). A `HOLD` must cite the trailing-mean from `/portfolio/weekly-history` per the hold-verdict rule. A campaign whose verdict is HOLD/WATCH still appears in the list — silence is not acceptable.
 2. **Top parameter changes ranked by sized $ impact** (with confidence band; hold-verdict rule applied; capital guardrail applied to ramp-ups). Each backed by `(campaign, grade)` data from `/tuning`, not generic suggestions. State the current value, proposed value, sample size (`n=N`), and projected impact (`Proj: +$X.XK/mo (H|M|L)`).
-3. **Inclusion-list adds/trims from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` not yet covered (or undercovered). Per-campaign list of proposed adds with sized expected revenue. Also surface trims for high-`n` low-ROI characters dragging the portfolio (`soldCount ≥ 20` AND `roi < 0.05`).
+3. **Inclusion-list adds/trims from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` not yet covered (or undercovered). Per-campaign list of proposed adds with sized expected revenue. Also surface trims for high-`n` low-ROI characters dragging the portfolio (`soldCount ≥ 20` AND `roi < 0.05`). **Run the Era-fit gate** (Recommendation rules) on every proposed add before drafting the line — character year-of-first-release must overlap the campaign's `yearRange`. Filter `/insights.coverageGaps` rows for the open-net false-positive carve-out per the same rule.
 4. **Coverage shifts** — niches the portfolio should expand into (`/intelligence/niches` rows with high `opportunity_score` and `current_coverage = 0`) or campaigns that should narrow (`/insights.byPriceTier` drag tiers). Proposed action per row.
 5. **Cross-campaign arbitrage** — crack candidates and acquisition mispricings worth > $200 net. Capital-positive, bypass the guardrail.
 6. **Stale-suggestion note** — one line: *"Filtered N stale server suggestions (campaigns updated within last 72h)."* (or *"No stale suggestions filtered."*).
@@ -363,6 +363,30 @@ The assumption is these are already contested, already in your lists where they 
 **Narrow-pocket exception.** A specific `(character, grade, era)` combination from the popular tier IS recommendable if `/insights.byCharacterGrade` shows it matches the CL-lag pattern (`avgBuyPctOfCL ≤ 0.80 AND roi ≥ 0.20 AND soldCount ≥ 3`). Examples that qualify: "Gengar PSA 6" (not Gengar in general), "Mew PSA 8 vintage" (not Mew in general). State the grade + era explicitly so the add is narrow, not broad.
 
 **Positive tier to mine for edge:** 2nd-tier vintage/mid-era Pokemon the operator has explicitly flagged (Absol, Typhlosion, Feraligatr, Meganium) plus the broader "Other" character bucket from `byCharacter` — that bucket held 200 fills and 10% ROI on average in one sampled session, meaning the uncaptured long tail has signal.
+
+### Era-fit gate (inclusion-list adds)
+
+Before recommending OR executing any character add to a campaign's inclusion list, verify the character had TCG cards released within the campaign's `yearRange`. Applies to manual recommendations, echoed `/snapshot.suggestions` "Add top performers" entries, and `/insights.coverageGaps` rows. Era fit is a mandatory **pre-check**, not a post-recommendation sanity check — `/snapshot.suggestions` and `/insights.coverageGaps` sort by portfolio-wide ROI without filtering by era.
+
+**Pokemon TCG generation reference (first-card year):**
+
+| Generation | Era / Set      | First-card year |
+|------------|----------------|-----------------|
+| Gen 1      | Base Set       | 1999            |
+| Gen 2      | Neo            | 2000–2002       |
+| Gen 3      | EX-era         | 2003–2007       |
+| Gen 4      | Diamond/Pearl  | 2007            |
+| Gen 5      | Black/White    | 2011            |
+| Gen 6      | XY             | 2014            |
+| Gen 7      | Sun/Moon       | 2017+           |
+| Gen 8      | Sword/Shield   | 2020+           |
+| Gen 9      | Scarlet/Violet | 2023+           |
+
+**Open-net false-positive carve-out.** `/insights.coverageGaps` reasons of "not in any active campaign inclusion list" are misleading for open-net campaigns (no inclusion list). Open net catches every character within other parameters (year, grade, price, confidence) and does not appear in inclusion-list coverage analysis. Before treating a character as uncovered, verify against open-net campaign scope. If the character is already filling on an open-net campaign with positive ROI, the "coverage gap" is a false positive.
+
+**When the data signal seems era-mismatched** (e.g., a "vintage" coverage gap for a Gen 4+ character), trace actual fills via `GET /api/inventory` filtered to the character — check `cardYear` / `setName` to identify which era is producing the demand. Add the character to the era-matching campaign, not the campaign whose name happened to surface the signal.
+
+This rule was added because the skill recommended adding Leafeon (first card 2007) and Rayquaza (first card 2003) to Vintage Core (C1, 1999–2003) and Vintage-EX PSA 8 Precision (C11, 1999–2007) based on portfolio-wide ROI from `/snapshot.suggestions` and `/insights.coverageGaps`. PUTs were applied before the user caught the era mismatch — both characters' actual high-ROI fills were modern alt-arts already caught by C4 / C10's open-net scope.
 
 ### Sub-$150 modern floor
 

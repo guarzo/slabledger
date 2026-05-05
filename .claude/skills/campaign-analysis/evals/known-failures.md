@@ -105,6 +105,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: era-fit miss on inclusion-list adds (Leafeon/Rayquaza on C1/C11)
+
+- **Date:** 2026-05-05
+- **Scenario:** User asked for parameter updates. Skill drew character-add candidates from `/snapshot.suggestions` "Add top performers" and `/insights.coverageGaps`, both of which sort by portfolio-wide ROI without filtering by era. Recommended Leafeon (first TCG card 2007) and Rayquaza (first TCG card 2003) for Vintage Core (C1, 1999–2003) and Vintage-EX PSA 8 Precision (C11, 1999–2007). Two `PUT /api/campaigns/{id}` mutations landed before the user caught the era mismatch.
+- **Failure:** Era fit was treated as an implicit assumption. The actual high-ROI signal was modern alt-arts already caught by C4 / C10 open-net campaigns; `/insights.coverageGaps` flagged the characters as "uncovered" because open-net campaigns don't appear in inclusion-list coverage analysis.
+- **Corrective rule:** Before any inclusion-list add (manual, suggestion-echoed, or coverage-gap row), verify the character's first-TCG-card year overlaps the campaign's `yearRange` using the inline generation reference table. For open-net campaigns, treat `coverageGaps` "not in any active campaign inclusion list" reasons as misleading — verify the character isn't already filling on an open-net campaign with positive ROI before treating it as a gap. When the signal seems era-mismatched, trace actual fills via `/api/inventory` `cardYear` / `setName` before drafting.
+- **Anchor:** `references/playbooks.md` — Recommendation rules, "Era-fit gate (inclusion-list adds)"
+- **Regression check:** Does Playbook A's "Inclusion-list adds/trims" item still require the Era-fit gate before any mutation, with the open-net false-positive carve-out called out explicitly?
+
+---
+
 ## How to use this list
 
 When making a skill edit:
