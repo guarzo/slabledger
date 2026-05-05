@@ -138,6 +138,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: avgBuyPctOfCL mean-of-ratios distortion (C10 cited at 99%)
+
+- **Date:** 2026-05-05
+- **Scenario:** Skill cited `/tuning`'s `avgBuyPctOfCL` of 99% on Modern PSA 10 (C10) as the headline metric and based an action on it. User pushed back ("I haven't seen that"). Real dollar-weighted BPCL computed from `/api/inventory` was 83% (totalCost $19,247 ÷ totalCL $23,243 across 30 unsold). The 99% was inflated by ~4 Japanese S-tier outliers (Wingull S, Wattrel S, etc. — per-card ratios 175%–365% driven by CL variant mismatches between Shiny and base versions).
+- **Failure:** The data-conventions section already framed `avgBuyPctOfCL` as a CL-drift indicator vs contract terms, but did not flag the mean-of-ratios computation shape and did not require a dollar-weighted cross-check before citing high values as headline drivers.
+- **Corrective rule:** Before citing `avgBuyPctOfCL ≥ 0.90` as a headline mover or driver of an action, fetch `/api/inventory` filtered to the campaign's unsold rows and compute `dollarWeightedBPCL = sum(buyCostCents) / sum(clValueCents)`. If dollar-weighted differs from `/tuning`'s mean-of-ratios by more than ~10pp, surface BOTH numbers and identify the top 5 outlier rows by per-card ratio. Dollar-weighted is the right number for "is the campaign systematically overpaying"; outliers are a separate CL-data-quality signal.
+- **Anchor:** `SKILL.md` — API footguns block, "`avgBuyPctOfCL` is a mean of per-card ratios" bullet (cross-referenced from `references/playbooks.md` Data conventions)
+- **Regression check:** Does the API footguns block still require a dollar-weighted cross-check from `/api/inventory` before any `avgBuyPctOfCL ≥ 0.90` claim drives an action, with the outlier-identification step called out?
+
+---
+
 ## How to use this list
 
 When making a skill edit:
