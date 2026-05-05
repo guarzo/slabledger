@@ -54,6 +54,35 @@ Then a **prioritized list of proposed mutations** the user can approve. If the u
 
 **Escalation: revocation.** If a campaign is critically underperforming (negative ROI with >20 observations, or health status "critical"), raise the possibility of revoking it entirely. Fetch `GET /api/portfolio/revocations` to check if any existing flags are pending. To create a new revocation flag: `POST /api/portfolio/revocations` with `{"segmentLabel": "...", "segmentDimension": "...", "reason": "..."}`. Then fetch the generated email via `GET /api/portfolio/revocations/{flagId}/email` for PSA notification. Only suggest revocation when tuning adjustments clearly aren't sufficient — this is a last resort, not a first response to a bad week.
 
+#### Worked example
+
+Synthetic numbers; the goal is to show shape — verdict tier, sized impact, inline rule citations (CL-lead, cap-diagnostic, capital guardrail, popular-tier exclusion, stale-filter), and a closing Sequence block.
+
+> **User:** what updates should we make?
+>
+> **Assistant:**
+> Capital posture: Tight ($42K outstanding, 6.1 weeks to cover, recovery ↗).
+>
+> **Per-campaign verdicts (canonical order):**
+> - Vintage Core (C1): **TIGHTEN** — PSA 9 at 95.2% of CL on 47 fills, 28% ST, 1.1% ROI; CL-lead pattern.
+> - Vintage-EX PSA 8 Precision (C2): **HOLD** — ROI 11.3% within ±10% of 11.8% trailing-mean (n=22).
+> - EX/e-Reader Era (C3): **RAMP UP** — fill-rate pegged at 96%, ROI 18% on 31 fills (CV 14%).
+> - Crystal/HGSS (C7): **WATCH** — fill 22%; cap-diagnostic check below before any move.
+>
+> **Top changes by sized $ impact:**
+> 1. Vintage Core (C1) — narrow PSA 9 inclusion to drop Mid-Era $200–500 tier (n=23 at 0% ROI). Proj: +$1.4K/mo (M). Reason: avgBuyPctOfCL 95% vs 80% contract → CL-lead, narrow scope per Data conventions.
+> 2. Crystal/HGSS (C7) — raise daily cap $5K → $8K. Proj: +$2.1K/mo (M). Cap-diagnostic: $5K cap vs ~$2,065 mid-fill, single fill eats 40%+, cap binding on spike days, NOT supply-thin.
+> 3. EX/e-Reader Era (C3) — raise buy terms 78% → 80%. Proj: +$0.9K/mo (H). Capital guardrail: tight posture caveat — sizing assumes fill rate holds.
+>
+> **Inclusion-list adds (byCharacter, soldCount≥5, roi≥0.20, popular-tier excluded):**
+> - Add Typhlosion to Vintage Core (n=8, roi 0.34). Add Feraligatr to EX/e-Reader Era (n=6, roi 0.28).
+>
+> **Stale-suggestion note:** Filtered 2 stale server suggestions (Vintage Core updated 2026-05-04, EX/e-Reader Era updated 2026-05-03).
+>
+> **Sequence:** (1) C1 inclusion narrow, (2) C7 cap raise, (3) C3 buy-term raise. Apply C1 first to reduce drag before sizing the ramps.
+>
+> Want me to draft the mutations for any of these?
+
 #### Output format: "updated campaign list"
 
 When the user asks for an **updated campaign list** (or an updated parameter list, or a summary of the proposed changes), reproduce **all canonical campaigns** in the format below — not just the ones being changed. For each campaign, show every parameter field and annotate it with either `Changed: <field> <old> → <new>` (one line per change) or `No change`. The user uses this format as a reviewable diff against the strategy doc.
@@ -373,7 +402,7 @@ Ask three questions before filing a partner-ask:
 
 Only items that clear all three checks go into the dated `docs/private/YYYY-MM-DD-<partner>-data-ask.md` draft. Items that fail any of them go into the internal-work table of the wishlist as a local-side fix.
 
-This rule was added because the first 2026-04-17 DH draft included "intelligence_count: 0" and "no pop data" as DH asks. Both turned out to be local seeding bugs — the scheduler only refreshed existing rows and nothing seeded the table. Operator caught it and corrected the draft before sending.
+This rule was added because an early DH draft included "intelligence_count: 0" and "no pop data" as DH asks. Both turned out to be local seeding bugs — the scheduler only refreshed existing rows and nothing seeded the table. Operator caught it and corrected the draft before sending.
 
 ## Data conventions
 
