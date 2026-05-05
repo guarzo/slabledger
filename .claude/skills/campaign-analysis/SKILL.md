@@ -119,6 +119,7 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 - **`phase: "pending"` is a soft-delete marker, not "in flight" or "drift."** Card Yeti uses `pending` to retire campaigns from active fills while preserving purchase history (hard-delete would break referential integrity on past purchases). A campaign with `phase: "pending"` that the strategy doc calls "removed" is the expected state — do not flag as a mismatch.
 - **`/tuning` and `/insights` are lifetime-cumulative, not current-config-scoped.** A campaign whose grade range was tightened still shows historical fills at the now-excluded grades in `/tuning.byGrade`. Always run the Step 1b currentScope filter before drawing movers. Citing a tuning byGrade row for a grade outside the current `gradeRange` as a present-tense observation has burned multiple sessions.
 - **`avgBuyPctOfCL` is a measurement, `buyTermsCLPct` is the contract.** They are different fields on different endpoints (`/tuning` vs `/api/campaigns`) and they will routinely disagree by 5–15 points. Never present a realized buy% as if it were a contract parameter. See Step 1b rule 2 for the citation requirement.
+- **`avgBuyPctOfCL` is a mean of per-card ratios, NOT dollar-weighted.** A handful of high-ratio outliers (Japanese variants with CL data mismatches, post-purchase CL crashes, sealed-vs-singles label mismatches) can inflate the reported value by 10–25 points without the campaign being structurally over-paying. Before citing `avgBuyPctOfCL ≥ 0.90` as a headline mover or driver of an action, fetch `/api/inventory` filtered to the campaign's unsold rows and compute `dollarWeightedBPCL = sum(buyCostCents) / sum(clValueCents)`. If the dollar-weighted number differs from the `/tuning` mean-of-ratios by more than ~10 percentage points, surface BOTH numbers in the response and identify the top 5 outlier rows by per-card ratio. The dollar-weighted number is the right one for "is the campaign systematically overpaying"; the outlier rows are a separate diagnostic signal (CL data quality, variant mismatch).
 
 ## Step 3 — Fetch the initial snapshot (default entry point)
 
@@ -215,9 +216,9 @@ Rules:
 1. **Capital position changes** — in-hand capital vs next invoice, any crunch signal from the capital-crunch line math.
 2. **CL-lag / CL-lead shifts from `/tuning` and `/insights.byCharacterGrade`** — segments where `avgBuyPctOfCL` moved materially since last session or deviates sharply from contract terms. See "CL-lag vs. CL-lead framing" in Data conventions.
 3. **Sell-through or ROI movement from `/portfolio/health` + `/portfolio/weekly-history`** — campaigns with WoW delta outside the ±10% noise band of their trailing-4-week mean.
-4. **Fill-rate changes from `/campaigns/{id}/fill-rate`** — campaigns newly pegged at cap (ramp signal) or sharply below cap (supply or terms signal). Apply the Cap-diagnostic rule before interpreting low fill as supply-constrained.
+4. **Fill-rate changes from `/campaigns/{id}/fill-rate`** — campaigns newly pegged at cap (ramp signal) or sharply below cap (supply or terms signal). Apply the Cap-diagnostic rule before interpreting low fill as supply-constrained AND before proposing any cap *cut* — the same rule's cap-cut binding check refuses no-op cap reductions where observed spend never reaches the proposed new cap.
 5. **Velocity acceleration/deceleration from `/intelligence/campaign-signals`** — sharp moves (>25% acceleration or deceleration).
-6. **Character/grade segment standouts from `/insights`** — new high-ROI characters appearing, or previously strong segments deteriorating. Apply the Popular-tier exclusion (see Recommendation rules) when surfacing character-level movers.
+6. **Character/grade segment standouts from `/insights`** — new high-ROI characters appearing, or previously strong segments deteriorating. Apply the Popular-tier exclusion AND the Era-fit gate (see Recommendation rules in `references/playbooks.md`) when surfacing character-level movers — `/insights.byCharacter` and `/insights.coverageGaps` do not filter by era and credit open-net campaigns as "coverage gaps" even when those campaigns already catch the character. When a mover lands on a campaign whose name shares a category label (e.g. Modern (C4) for the Modern category), apply the category-vs-campaign discipline from Conversational guidelines item 4 before phrasing the mover as a category-level claim.
 7. **Crack opportunities from `/opportunities/crack`** — when total `netGainCents` across the queue exceeds ~$1K. Capital-positive, bypasses the guardrail.
 8. **DH listing gap** — only if `dh_listing_gap` is in `operationalPriorities` from operator config; otherwise treat as informational, not a mover.
 
@@ -309,7 +310,22 @@ Capture data gaps, partner-asks, client-side work, and lessons about the operato
 1. Lead with the most actionable finding, then details. Be direct about what's not working — don't hedge.
 2. Use specific dollar amounts and percentages, rounded to sensible precision. Caveat anything with < 10 observations so the reader knows when a number is noisy.
 3. Cross-reference findings against the strategy doc. When checking for campaign mismatches, compare the purchase era, grade, character, and price against the campaign's parameters from the doc.
-4. **Use campaign names, not bare numbers.** "C1" / "C7" / "C11" is internal jargon — the operator has to look up which is which to validate. On every first reference in a turn, write the full name with the number in parentheses: "Vintage Core (C1)", "Vintage-EX PSA 8 Precision (C11)", "EX/e-Reader Era (C3)". Subsequent references in the same paragraph can use the short form. In tables and bullet lists, prefer names over numbers in the lead column. When the user asks "what is C11?" — that's a signal you've over-relied on numbers; correct course immediately, not just for that one campaign.
+4. **Use campaign names, not bare numbers — and don't conflate a campaign with the category it lives in.** "C1" / "C7" / "C11" is internal jargon — the operator has to look up which is which to validate. On every first reference in a turn, write the full name with the number in parentheses: "Vintage Core (C1)", "Vintage-EX PSA 8 Precision (C11)", "EX/e-Reader Era (C3)". Subsequent references in the same paragraph can use the short form. In tables and bullet lists, prefer names over numbers in the lead column. When the user asks "what is C11?" — that's a signal you've over-relied on numbers; correct course immediately, not just for that one campaign.
+
+   **Category vs campaign discipline.** A category-level claim — "Modern is dark," "Vintage ramped up," "EX-era stalled" — must be backed by aggregation across **all** campaigns covering that category, not a single campaign as proxy. The category-to-campaign mapping is many-to-one in this portfolio, and the `Name (C#)` format itself can mislead the reader when a campaign shares its label with the category. Common overlaps:
+
+   - "Modern" = Modern (C4, PSA 8) **and** Modern PSA 10 (C10).
+   - "Vintage" = Vintage Core (C1) and Vintage Low Grade (C2). Vintage-EX PSA 8 Precision (C11) overlaps but extends into 2007.
+
+   `Modern (C4)` reads as if Modern equals C4 — disambiguate explicitly. Before any category-level statement, list the campaigns covering that category from the canonical numbering + strategy doc, then state the campaign-by-campaign verdict:
+
+   > *"Modern category mixed: Modern (C4, PSA 8) dark 12 days; Modern PSA 10 (C10) filling at $2.5K/d post-4/23 narrowing."*
+
+   Not:
+
+   > *"Modern (C4) has been dark 12 days."*
+
+   The first form is correct; the second is the failure pattern.
 5. End every response with a question that invites the user deeper.
 6. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
 7. Keep it conversational. Natural language, not bullet-heavy reports.
@@ -333,10 +349,31 @@ Failure modes to avoid:
 - Listing `keys` of a JSON response and treating that printout as analysis.
 - Citing an endpoint's data when you didn't actually call it this session.
 
+## Business-mechanic premise gate
+
+Before running multi-step financial, capital-cycle, or operational analysis on top of a business mechanic — invoice cadence, payment windows, cycle-week effects, cap interactions across cycles, recovery-rate compositions, batch-arrival patterns — verify the mechanic is real. The user has caught the skill running detailed plans on top of mechanics it invented mid-response.
+
+**Source order:**
+
+1. Explicit text in `docs/private/CAMPAIGN_STRATEGY.md`.
+2. `/credit/invoices` schedule + `/credit/summary` cycle history (i.e. the actual invoices already on the books).
+3. **Ask the user** if neither (1) nor (2) confirms the mechanic.
+
+**Anti-patterns this gate refuses:**
+
+- "Double invoice window" / "compressed payment window" / "competing recovery windows" framing — invoice payment windows are independent unless explicitly linked. Each invoice gets its own due date; recovery dollars don't compete across cycles.
+- Inferring cycle-week effects (week-1 vs week-2 spend, "float-week" framing) from invoice dates alone, without explicit confirmation that the business operates that way.
+- Building a multi-step argument on top of a business mechanic that was introduced for the first time in your own previous paragraph.
+
+**Self-detection marker.** When you're about to write *"because X interacts with Y in this way"* about the operator's business workflow, that's a premise. Either cite the source (strategy doc page or section, API endpoint with field name, prior user statement in this session) or stop and ask. The user prefers one clarifying question over a confidently wrong plan.
+
+This rule was added because the skill claimed mid-analysis that the 5/16 invoice and the 5/29 invoice competed for one capital recovery window — a "double invoice window" math model the skill made up — and built throttle-plan sizing on top of the invented premise. The user caught it (*"i think you may have a bad assumption -- there is no double invoice window?"*). Skill response: *"You're right on both — I was making that up."*
+
 ## Recommendation rules (gist; full text in `references/playbooks.md`)
 
 | Rule | Gist |
 |------|------|
+| Premise gate | Before multi-step financial reasoning, verify the underlying business mechanic against strategy doc / `/credit/invoices` / user. See "Business-mechanic premise gate" above. |
 | Sizing | Every rec carries `est. +$X.XK/mo at current fill (Confidence: H\|M\|L)`. Use `recovery` (one-time) instead of `/mo` for liquidation/DH push. |
 | Confidence bands | H = ≥30 obs AND CV<20%. M = 10–29 OR ≥30 with CV≥20%. L = <10 obs OR <4 weeks history. |
 | Capital guardrail | Healthy: weeksToCover≤5 AND trend≠worsening. Tight: caveat ramp-ups. Critical: block ramp-ups. |
