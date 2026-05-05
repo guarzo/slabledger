@@ -1,4 +1,5 @@
 import type { PsaExchangeOpportunity } from '../../../types/psaExchange';
+import { daysTier, velocityTier, confidenceTier } from './signalIndicators';
 
 export type SortKey =
   | 'cert'
@@ -33,6 +34,20 @@ export const defaultFilters: Filters = {
   takeAtListOnly: false,
 };
 
+// Formatters shared by OpportunitiesTable and SignalCell.
+
+export const formatDollar = (n: number): string =>
+  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+export const formatPct = (n: number): string => `${(n * 100).toFixed(1)}%`;
+
+export function formatDays(d: number): string {
+  if (!Number.isFinite(d)) return '—';
+  if (d < 1) return '<1d';
+  if (d < 10) return `${d.toFixed(1)}d`;
+  return `${Math.round(d)}d`;
+}
+
 // Days until next sale at observed velocity. Falls back to quarterly velocity
 // when monthly is zero. Returns +Infinity when neither window has any sales.
 export function daysToSell(o: PsaExchangeOpportunity): number {
@@ -48,17 +63,29 @@ export function edgeBucketClass(edge: number): string {
   return 'text-[var(--text-muted)]';
 }
 
+// Bucket helpers delegate to the tier functions in signalIndicators.ts so the
+// thresholds live in one place. Each helper maps a tier to its visual class.
+
 export function daysBucketClass(days: number): string {
-  if (!Number.isFinite(days)) return 'text-[var(--text-muted)]';
-  if (days <= 6) return 'text-[var(--success)] font-semibold';
-  if (days <= 15) return 'text-[var(--warning)]';
-  return 'text-[var(--text-muted)]';
+  switch (daysTier(days)) {
+    case 'fast':
+      return 'text-[var(--success)] font-semibold';
+    case 'medium':
+      return 'text-[var(--warning)]';
+    case 'slow':
+      return 'text-[var(--text-muted)]';
+  }
 }
 
 export function velocityBucketClass(velMonth: number): string {
-  if (velMonth >= 10) return 'text-[var(--success)] font-semibold';
-  if (velMonth >= 3) return 'text-[var(--warning)]';
-  return 'text-[var(--text-muted)]';
+  switch (velocityTier(velMonth)) {
+    case 3:
+      return 'text-[var(--success)] font-semibold';
+    case 2:
+      return 'text-[var(--warning)]';
+    case 1:
+      return 'text-[var(--text-muted)]';
+  }
 }
 
 // True if score is in the top decile of the supplied set; used to glow rows.
@@ -71,9 +98,14 @@ export function topDecileThreshold(scores: number[]): number {
 
 // Confidence color: 1-10 scale from upstream cardladder.
 export function confidenceColorClass(conf: number): string {
-  if (conf >= 7) return 'text-[var(--success)]';
-  if (conf >= 5) return 'text-[var(--warning)]';
-  return 'text-[var(--text-muted)]';
+  switch (confidenceTier(conf)) {
+    case 'high':
+      return 'text-[var(--success)]';
+    case 'medium':
+      return 'text-[var(--warning)]';
+    case 'low':
+      return 'text-[var(--text-muted)]';
+  }
 }
 
 export function applyFilters(

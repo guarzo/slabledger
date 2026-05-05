@@ -3,19 +3,16 @@ import { clsx } from 'clsx';
 import { GradeBadge } from '../../ui';
 import type { PsaExchangeOpportunity } from '../../../types/psaExchange';
 import SortableHeader from './SortableHeader';
+import SignalCell from './SignalCell';
 import {
-  confidenceColorClass,
-  daysBucketClass,
   daysToSell,
-  edgeBucketClass,
-  velocityBucketClass,
+  formatDollar,
   type OpportunityGroup,
   type SortDir,
   type SortKey,
 } from './utils';
 
 interface OpportunitiesTableProps {
-  // When `groups` is non-null, renders grouped view; otherwise renders flat rows.
   rows: PsaExchangeOpportunity[];
   groups: OpportunityGroup[] | null;
   sortKey: SortKey;
@@ -24,17 +21,15 @@ interface OpportunitiesTableProps {
   topDecileScore: number;
 }
 
-const COLUMN_COUNT = 13;
+const COLUMN_COUNT = 6;
 
-const dollar = (n: number) =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
-
-function formatDays(d: number): string {
-  if (!Number.isFinite(d)) return '—';
-  if (d < 1) return '<1d';
-  if (d < 10) return `${d.toFixed(1)}d`;
-  return `${Math.round(d)}d`;
+function deltaLabel(target: number, value: number): string {
+  if (value <= 0) return '';
+  const delta = target - value;
+  const pct = (delta / value) * 100;
+  const sign = delta >= 0 ? '+' : '−';
+  const absDelta = Math.abs(delta);
+  return `${sign}${formatDollar(absDelta)} (${sign}${Math.abs(pct).toFixed(0)}%)`;
 }
 
 export default function OpportunitiesTable({
@@ -57,29 +52,17 @@ export default function OpportunitiesTable({
     <div className="overflow-x-auto rounded-md border border-[var(--surface-2)]">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 z-10 bg-[var(--surface-1)] border-b border-[var(--surface-2)]">
-          {/* Column visibility tiers (13 columns total — viewport-aware so the
-              7 always-on essentials stay legible on narrower screens):
-              - Always: Image, Description, Grade, PSA Value, Target, Edge, Score
-              - lg+ (1024px): Cert, Comp, Days/sale
-              - xl+ (1280px): Vel/mo, Conf, Pop
-              These hidden cells are removed from layout (display: none), not
-              just clipped — horizontal scroll won't reveal them. The wrapper's
-              'overflow-x-auto' covers the visible-column case where a long
-              description forces a row past the container's max-width. To see
-              every column at once, the viewport must be ≥ xl breakpoint. */}
+          {/* Six columns shown at every breakpoint. Cert, Comp, Days/sale,
+              Vel/mo, Conf, Pop are folded into the Card cell or the Signal
+              popover (see SignalCell.tsx). Sortability for those keys is
+              dropped here; the underlying applySort() in utils.ts still
+              accepts them if invoked externally. */}
           <tr>
             <th scope="col" aria-label="Image" className="w-12 p-2"></th>
-            <SortableHeader label="Cert" sortKey="cert" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="hidden lg:table-cell" />
-            <SortableHeader label="Description" sortKey="description" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
-            <SortableHeader label="Grade" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
+            <SortableHeader label="Card" sortKey="description" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
             <SortableHeader label="PSA Value" sortKey="listPrice" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
             <SortableHeader label="Target" sortKey="targetOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Comp" sortKey="comp" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden lg:table-cell" />
-            <SortableHeader label="Edge" sortKey="edgeAtOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
-            <SortableHeader label="Days/sale" sortKey="daysToSell" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden lg:table-cell" />
-            <SortableHeader label="Vel/mo" sortKey="velocityMonth" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden xl:table-cell" />
-            <SortableHeader label="Conf" sortKey="confidence" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden xl:table-cell" />
-            <SortableHeader label="Pop" sortKey="population" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" className="hidden xl:table-cell" />
+            <SortableHeader label="Signal" sortKey="edgeAtOffer" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
             <SortableHeader label="Score" sortKey="score" currentKey={sortKey} currentDir={sortDir} onSort={onSort} align="right" />
           </tr>
         </thead>
@@ -108,6 +91,7 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
   const isTopDecile = row.score >= topDecileScore;
   const days = daysToSell(row);
   const grade = Number(row.grade) || 0;
+  const delta = deltaLabel(row.targetOffer, row.listPrice);
 
   return (
     <tr
@@ -117,44 +101,51 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
         isMember && 'bg-[var(--surface-1)]/60',
       )}
     >
-      <td
-        className={clsx(
-          'w-12 p-2',
-          isMember && 'pl-8',
-        )}
-      >
+      <td className={clsx('w-12 p-2', isMember && 'pl-8')}>
         <div className="h-12 w-9 rounded-sm overflow-hidden bg-[var(--surface-2)]/40">
           {row.frontImage && (
             <img src={row.frontImage} alt="" className="h-full w-full object-cover" loading="lazy" />
           )}
         </div>
       </td>
-      <td className="p-2 font-mono text-xs tabular-nums text-[var(--text-muted)] hidden lg:table-cell">{row.cert}</td>
-      <td className="p-2 max-w-[26rem]">
-        <div className={clsx('truncate', isMember && 'text-xs text-[var(--text-muted)]')}>
-          {row.description || row.name}
+      <td className="p-2 max-w-[36rem]">
+        <div className={clsx('flex items-center gap-2 min-w-0', isMember && 'text-xs text-[var(--text-muted)]')}>
+          <span className="truncate">{row.description || row.name}</span>
+          {grade > 0 && !isMember && <GradeBadge grade={grade} />}
         </div>
-        {row.mayTakeAtList && !isMember && (
-          <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--success)]/15 text-[var(--success)]">
-            PSA value &lt; target
-          </span>
+        <div className="mt-0.5 flex items-center gap-2 text-[11px] leading-none">
+          <span aria-label={`Cert #${row.cert}`} className="font-mono text-[var(--text-muted)] tabular-nums select-text">{row.cert}</span>
+          {row.mayTakeAtList && !isMember && (
+            <span className="px-1.5 py-0.5 rounded-md bg-[var(--success)]/15 text-[var(--success)]">
+              PSA value &lt; target
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="p-2 text-right tabular-nums">{formatDollar(row.listPrice)}</td>
+      <td className="p-2 text-right tabular-nums">
+        <div>{formatDollar(row.targetOffer)}</div>
+        {delta && (
+          <div
+            aria-label={`Target vs PSA value: ${delta}`}
+            className="text-[10px] text-[var(--text-muted)] leading-none mt-0.5"
+          >
+            {delta}
+          </div>
         )}
       </td>
-      <td className="p-2">{grade > 0 && <GradeBadge grade={grade} />}</td>
-      <td className="p-2 text-right tabular-nums">{dollar(row.listPrice)}</td>
-      <td className="p-2 text-right tabular-nums">{dollar(row.targetOffer)}</td>
-      <td className="p-2 text-right tabular-nums hidden lg:table-cell">{dollar(row.comp)}</td>
-      <td className={clsx('p-2 text-right tabular-nums', edgeBucketClass(row.edgeAtOffer))}>
-        {pct(row.edgeAtOffer)}
+      <td className="p-2">
+        <div className="flex justify-end">
+          <SignalCell
+            edgeAtOffer={row.edgeAtOffer}
+            daysToSellValue={days}
+            velocityMonth={row.velocityMonth}
+            confidence={row.confidence}
+            comp={row.comp}
+            population={row.population}
+          />
+        </div>
       </td>
-      <td className={clsx('p-2 text-right tabular-nums hidden lg:table-cell', daysBucketClass(days))}>{formatDays(days)}</td>
-      <td className={clsx('p-2 text-right tabular-nums hidden xl:table-cell', velocityBucketClass(row.velocityMonth))}>
-        {row.velocityMonth}
-      </td>
-      <td className={clsx('p-2 text-right tabular-nums hidden xl:table-cell', confidenceColorClass(row.confidence))}>
-        {row.confidence}
-      </td>
-      <td className="p-2 text-right tabular-nums text-[var(--text-muted)] hidden xl:table-cell">{row.population || '—'}</td>
       <td
         className={clsx(
           'p-2 text-right tabular-nums',
@@ -188,7 +179,7 @@ function GroupRow({ group, topDecileScore }: { group: OpportunityGroup; topDecil
               aria-expanded={expanded}
             >
               <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
-              {members.length} listings · {lowList === highList ? dollar(lowList) : `${dollar(lowList)}–${dollar(highList)}`}
+              {members.length} listings · {lowList === highList ? formatDollar(lowList) : `${formatDollar(lowList)}–${formatDollar(highList)}`}
             </button>
           </td>
         </tr>
