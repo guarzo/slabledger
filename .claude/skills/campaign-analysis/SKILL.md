@@ -382,6 +382,57 @@ This rule was added because the skill claimed mid-analysis that the 5/16 invoice
 
 Other rules (Sequencing, Popular-tier, Sub-$150 modern, Turnover, Cap-diagnostic, Partner-ask) are domain-specific — load `references/playbooks.md` when they apply.
 
+## Self-challenge rules
+
+Rules live in `SKILL.md` (not `references/playbooks.md`) because they apply to *every* output the skill produces — opener and follow-ups. Lazy-loading via references would risk the model never reading them.
+
+**Layered with existing rules.** The Self-challenge rules complement two pre-existing layers of discipline:
+
+- **The Business-mechanic premise gate** (top-level in `SKILL.md`) fires *before* analysis begins — it refuses to run multi-step financial reasoning on top of an unverified business mechanic (invoice cadence, cycle-week effect, etc.). The Self-challenge rules fire *during* analysis, on every claim and lever.
+- **Specific Recommendation rules** (Cap-diagnostic with cap-cut binding check, Era-fit gate, Throttle lever selection, Fill-drought hypothesis ranking, Dollar-weighted BPCL cross-check, Category vs campaign discipline, Popular-tier exclusion, etc.) fire on specific levers, segments, or claim shapes with concrete thresholds. The Self-challenge rules generalize these — when the pattern matches but no specific rule applies, 1.1–1.5 still fire.
+
+When the lever or claim falls under one of those specific rules, follow the specific rule's threshold first; the Self-challenge rule fires when the underlying pattern is the same but no specific rule names it.
+
+### 1.1 — Verify-before-propose gate (D1)
+
+Before any mover, action, or hypothesis-set lands, state the claim → name the cross-check that could falsify it → run it → commit or revise. Four required cross-checks by claim type:
+
+- **Category claims** (e.g. "Mid-Era is dragging") — aggregate across all campaigns in the category, not one row. Specific instance: the **Category vs campaign discipline** in Conversational guideline 4 names Modern (C4 + C10) as the canonical case.
+- **Metric citations** (e.g. "ROI 8%") — compute a second metric: dollar-weighted vs mean-of-ratios, portfolio-wide vs scope-filtered. If the two diverge, lead with the dollar-weighted figure and call out the mean-of-ratios as misleading inline. Specific instance: the **Dollar-weighted BPCL cross-check** in API footguns names the threshold (`avgBuyPctOfCL ≥ 0.90` triggers the cross-check) and the divergence rule (>10pp difference triggers both-numbers presentation).
+- **Action proposals** — sanity-check the lever binds. Specific instances: **Cap-cut binding check** (Cap-diagnostic rule, inverse direction) requires `excess ≥ $500/14d` or `daysExceeded ≥ 25%` before a cap reduction is non-no-op; **Era-fit gate** (Recommendation rules) requires character year-of-first-release within campaign `yearRange` before any inclusion-list add; **Throttle lever selection** requires both cap and terms presented as peer levers in any spend-reduction proposal.
+- **Hypothesis sets** — when listing alternative explanations for an observed pattern (drought, deceleration, anomalous metric), rank by evidence rather than presenting equal-weight. Specific instance: **Fill-drought hypothesis ranking** names the four canonical hypotheses (competition / supply lull / cycle dip / inclusion-list mismatch) and the ranking-by-evidence shape.
+
+When verification kills a draft mover/action, no need to surface the dropped one — just don't list it. When verification *modifies* (downgrades confidence, flips lever, re-ranks hypotheses), surface the modification path inline so the reasoning is auditable.
+
+### 1.2 — Anticipate-the-pushback (Capability 2)
+
+Before any claim or recommendation lands, mentally enumerate the top 2 pushbacks an analyst would raise. The recurring four observed in the source session:
+
+- *"did you actually look at the data?"*
+- *"you may have a bad assumption"*
+- *"would those changes do anything?"*
+- *"is that even possible?"*
+
+Address inline (one short clause) or downgrade confidence one band. If you can't address a pushback, drop the claim — silence beats a brittle assertion. Specific instance: the **Throttle lever selection** rule is itself an anticipate-the-pushback move — silently picking cap when the operator might prefer terms invites the *"would those changes do anything?"* pushback; presenting both levers as peers prevents it.
+
+### 1.3 — Server suggestions are inputs, not outputs (D2)
+
+`/portfolio/suggestions`, `snapshot.suggestions`, and `/tuning` recommendations operate on lifetime data and don't know about recent restrictions, scope context, or the operator's edge. Treat as one input among several. Never echo a server suggestion verbatim. Either reframe it into your own analysis ("the server flags X; the underlying pattern is actually Y, so the right move is Z"), or drop it. The stale-suggestion filter and Step 1b currentScope filter still apply on top of this rule. Specific instance: the **Era-fit gate** carve-out for echoed `/snapshot.suggestions` "Add top performers" entries — the suggestion endpoint sorts by portfolio-wide ROI without era-filtering, so blindly echoing it produced the Leafeon/Rayquaza-on-Vintage-Core failure. The Era-fit gate names the era-filter requirement; 1.3 generalizes the discipline of not echoing without reframing.
+
+### 1.4 — Describing is not analyzing (D3)
+
+Listing JSON keys, citing `avgBuyPctOfCL`, naming a sell-through %, restating a `coverageGaps` row — these are data, not analysis. An analyst adds interpretation:
+
+- *"this number is misleading because of an outlier — dollar-weighted it's 4%, not 18%"*
+- *"the segment looks strong but it's a single fill; the trailing N-week sample is empty"*
+- *"the suggestion says terms-down but the pattern is CL-lead, so narrow-scope is the actual lever"*
+
+Every parsed datum in user-facing output carries one short interpretive clause. Without it, drop the datum. Specific instance: the **Category vs campaign discipline** in Conversational guideline 4 — writing `Modern (C4) has been dark 12 days` reads as a category-level claim when the underlying datum is one-campaign-level. The discipline names the disambiguation requirement; 1.4 generalizes the move (every parsed datum needs interpretation that names what it actually is, not what it sounds like).
+
+### 1.5 — Disagree with the data when the pattern says otherwise (D4)
+
+The `/tuning` and `/portfolio/suggestions` outputs are surface conclusions over lifetime data. When the underlying pattern (CL-lead vs CL-lag, cap-binding vs supply-thin, post-restriction sample vs pre-restriction noise, popular-tier excluded for edge reasons) contradicts the surface conclusion, push back on the data and state which signal you trust and why. The **Cap-diagnostic rule** (both directions — supply-thinness AND cap-cut binding) and **Popular-tier exclusion** are existing precedents for this discipline; this rule generalizes the move so it fires beyond those specific cases. Never recommend a lever just because the endpoint named it — recommend it because the pattern *and* the lever-binds check both support it.
+
 ## Data conventions
 
 Load `references/playbooks.md` for data conventions (monetary values, buy terms, CL-lag framing, exit channels, net proceeds math).
