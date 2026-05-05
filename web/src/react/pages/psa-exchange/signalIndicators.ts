@@ -1,5 +1,6 @@
-// Thresholds mirror daysBucketClass / velocityBucketClass / confidenceColorClass
-// in utils.ts. Keep them in sync — both sets feed the same Signal cell visuals.
+// Single source of truth for the days/velocity/confidence cutoffs used by the
+// Signal cell. The bucket-class helpers in utils.ts (daysBucketClass,
+// velocityBucketClass, confidenceColorClass) delegate to these tier functions.
 
 export type DaysTier = 'fast' | 'medium' | 'slow';
 export type ConfidenceTier = 'high' | 'medium' | 'low';

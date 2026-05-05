@@ -1,6 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import userEvent from '@testing-library/user-event';
 import SignalCell from './SignalCell';
 
 const baseRow = {
@@ -25,10 +24,9 @@ describe('SignalCell', () => {
     expect(screen.getByLabelText(/confidence/i)).toBeInTheDocument();
   });
 
-  it('exposes the full numerics in the popover', async () => {
-    const user = userEvent.setup();
+  it('opens the popover on hover with full numerics', async () => {
     render(<SignalCell {...baseRow} />);
-    await user.click(screen.getByRole('button', { name: /signal details/i }));
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /signal details/i }));
     expect(await screen.findByText(/days\/sale/i)).toBeInTheDocument();
     expect(await screen.findByText(/^velocity$/i)).toBeInTheDocument();
     expect(await screen.findByText(/^confidence$/i)).toBeInTheDocument();
@@ -36,6 +34,31 @@ describe('SignalCell', () => {
     expect(await screen.findByText(/^pop$/i)).toBeInTheDocument();
     expect(await screen.findByText('$13,100')).toBeInTheDocument();
     expect(await screen.findByText('12')).toBeInTheDocument();
+  });
+
+  it('opens the popover on keyboard focus', async () => {
+    render(<SignalCell {...baseRow} />);
+    fireEvent.focus(screen.getByRole('button', { name: /signal details/i }));
+    expect(await screen.findByText(/days\/sale/i)).toBeInTheDocument();
+  });
+
+  it('closes the popover on mouse leave', async () => {
+    render(<SignalCell {...baseRow} />);
+    const trigger = screen.getByRole('button', { name: /signal details/i });
+    fireEvent.mouseEnter(trigger);
+    expect(await screen.findByText(/days\/sale/i)).toBeInTheDocument();
+    fireEvent.mouseLeave(trigger);
+    // Radix unmounts the portal content when open=false.
+    await screen.findByRole('button', { name: /signal details/i });
+    expect(screen.queryByText(/days\/sale/i)).not.toBeInTheDocument();
+  });
+
+  it('renders 0 population literally instead of falling back to em-dash', async () => {
+    render(<SignalCell {...baseRow} population={0} />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /signal details/i }));
+    const popLabel = await screen.findByText(/^pop$/i);
+    const popValue = popLabel.nextElementSibling;
+    expect(popValue).toHaveTextContent('0');
   });
 
   it('formats <1d for sub-1 days/sale', () => {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Popover } from 'radix-ui';
 import { clsx } from 'clsx';
 import {
@@ -37,13 +38,18 @@ export default function SignalCell({
   const dTier = daysTier(daysToSellValue);
   const vTier = velocityTier(velocityMonth);
   const cTier = confidenceTier(confidence);
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover.Root>
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
           type="button"
           aria-label="Signal details"
+          onMouseEnter={() => setOpen(true)}
+          onMouseLeave={() => setOpen(false)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
           className="flex flex-col items-end gap-0.5 tabular-nums hover:bg-[var(--surface-2)]/40 rounded px-1 py-0.5 transition-colors focus:outline focus:outline-2 focus:outline-[var(--brand-400)]"
         >
           <span className={clsx('text-sm', edgeBucketClass(edgeAtOffer))}>{formatPct(edgeAtOffer)}</span>
@@ -87,7 +93,7 @@ export default function SignalCell({
           </div>
           <div className="flex justify-between">
             <span className="text-[var(--text-muted)]">Pop</span>
-            <span className="tabular-nums">{population || '—'}</span>
+            <span className="tabular-nums">{population ?? '—'}</span>
           </div>
           <Popover.Arrow className="fill-[var(--surface-2)]" />
         </Popover.Content>
