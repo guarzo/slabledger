@@ -112,7 +112,7 @@ The Actions column is fixed at 220px, but its content (one ~70px primary button 
 
 ### Acceptance criteria
 
-- Actions cell + header are 104px wide with right-aligned contents.
+- Actions cell + header are 144px wide with right-aligned contents.
 - No vertical divider between Status and Actions.
 - Header case matches the rest of the row (i.e., uses the same CSS as `Card`, `Status`, `P/L`, etc.).
 - `print-hide-actions` class behavior preserved on both header and cell so print view still hides actions.
@@ -138,7 +138,7 @@ The Actions column is fixed at 220px, but its content (one ~70px primary button 
 |------|------------|
 | Hidden data (Comp, Pop, Vel/mo, Days/sale, Conf) becomes "invisible" to users who used to scan it | Hover/focus popover on Signal cell exposes all five. Document in a note in the row-detail panel if one exists. |
 | Card cell becomes too dense with Description + Grade pill + Cert chip | Hold to single line for description (truncate); keep Grade pill compact (existing `GradeBadge size="sm"`); cert chip on its own line below in muted text. |
-| 104px Actions column too tight if a future action label is long | All current actions in `ACTION_LABELS` fit in <70px; keep an eye on regressions when adding new actions. |
+| 144px Actions column too tight if a future action label is long | Current longest contextual-primary label is `Restore to DH`; sized to fit it plus dot menu plus gap. Keep an eye on regressions when adding new actions. |
 | Removing the column-tier `lg:`/`xl:` classes regresses small-viewport behavior | Test at 768px, 1024px, 1280px viewports via `make screenshots`. |
 
 ---
