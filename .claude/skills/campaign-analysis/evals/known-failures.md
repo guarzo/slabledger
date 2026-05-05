@@ -149,6 +149,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: category claim from single-campaign data (Modern category vs C4)
+
+- **Date:** 2026-05-05
+- **Scenario:** Skill wrote *"Modern (C4) has been dark 12 days"* in an opener mover — phrasing that read as if the Modern *category* was dark. Modern PSA 10 (C10) was actively filling at ~$2.5K/d at the time; modern fills had shifted to PSA 10 after C4's 4/23 grade narrowing. The "dark" claim was true for the C4 campaign but false for the Modern category.
+- **Failure:** The Conversational guideline 4 (Name (C#) format) disambiguated campaign references but did not address the category-vs-campaign overlap. Several Card Yeti campaigns share their category label with the category itself ("Modern (C4)" → Modern category, "Mid-Era (C6)" → Mid-Era category), making it easy to slip between the two.
+- **Corrective rule:** Before any category-level statement, list the campaigns covering the category from canonical numbering + strategy doc, then state the campaign-by-campaign verdict explicitly. The `Name (C#)` format itself can mislead — disambiguate when a campaign shares its label with the category.
+- **Anchor:** `SKILL.md` — Conversational guidelines item 4, "Category vs campaign discipline" subsection
+- **Regression check:** Does Conversational guideline 4 still require category claims to be backed by aggregation across all campaigns covering the category, with the Modern (C4 + C10) case explicit as the canonical example?
+
+---
+
 ## How to use this list
 
 When making a skill edit:

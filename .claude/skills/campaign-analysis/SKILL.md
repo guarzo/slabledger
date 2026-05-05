@@ -218,7 +218,7 @@ Rules:
 3. **Sell-through or ROI movement from `/portfolio/health` + `/portfolio/weekly-history`** — campaigns with WoW delta outside the ±10% noise band of their trailing-4-week mean.
 4. **Fill-rate changes from `/campaigns/{id}/fill-rate`** — campaigns newly pegged at cap (ramp signal) or sharply below cap (supply or terms signal). Apply the Cap-diagnostic rule before interpreting low fill as supply-constrained AND before proposing any cap *cut* — the same rule's cap-cut binding check refuses no-op cap reductions where observed spend never reaches the proposed new cap.
 5. **Velocity acceleration/deceleration from `/intelligence/campaign-signals`** — sharp moves (>25% acceleration or deceleration).
-6. **Character/grade segment standouts from `/insights`** — new high-ROI characters appearing, or previously strong segments deteriorating. Apply the Popular-tier exclusion AND the Era-fit gate (see Recommendation rules in `references/playbooks.md`) when surfacing character-level movers — `/insights.byCharacter` and `/insights.coverageGaps` do not filter by era and credit open-net campaigns as "coverage gaps" even when those campaigns already catch the character.
+6. **Character/grade segment standouts from `/insights`** — new high-ROI characters appearing, or previously strong segments deteriorating. Apply the Popular-tier exclusion AND the Era-fit gate (see Recommendation rules in `references/playbooks.md`) when surfacing character-level movers — `/insights.byCharacter` and `/insights.coverageGaps` do not filter by era and credit open-net campaigns as "coverage gaps" even when those campaigns already catch the character. When a mover lands on a campaign whose name shares a category label (e.g. Modern (C4) for the Modern category), apply the category-vs-campaign discipline from Conversational guidelines item 4 before phrasing the mover as a category-level claim.
 7. **Crack opportunities from `/opportunities/crack`** — when total `netGainCents` across the queue exceeds ~$1K. Capital-positive, bypasses the guardrail.
 8. **DH listing gap** — only if `dh_listing_gap` is in `operationalPriorities` from operator config; otherwise treat as informational, not a mover.
 
@@ -310,7 +310,22 @@ Capture data gaps, partner-asks, client-side work, and lessons about the operato
 1. Lead with the most actionable finding, then details. Be direct about what's not working — don't hedge.
 2. Use specific dollar amounts and percentages, rounded to sensible precision. Caveat anything with < 10 observations so the reader knows when a number is noisy.
 3. Cross-reference findings against the strategy doc. When checking for campaign mismatches, compare the purchase era, grade, character, and price against the campaign's parameters from the doc.
-4. **Use campaign names, not bare numbers.** "C1" / "C7" / "C11" is internal jargon — the operator has to look up which is which to validate. On every first reference in a turn, write the full name with the number in parentheses: "Vintage Core (C1)", "Vintage-EX PSA 8 Precision (C11)", "EX/e-Reader Era (C3)". Subsequent references in the same paragraph can use the short form. In tables and bullet lists, prefer names over numbers in the lead column. When the user asks "what is C11?" — that's a signal you've over-relied on numbers; correct course immediately, not just for that one campaign.
+4. **Use campaign names, not bare numbers — and don't conflate a campaign with the category it lives in.** "C1" / "C7" / "C11" is internal jargon — the operator has to look up which is which to validate. On every first reference in a turn, write the full name with the number in parentheses: "Vintage Core (C1)", "Vintage-EX PSA 8 Precision (C11)", "EX/e-Reader Era (C3)". Subsequent references in the same paragraph can use the short form. In tables and bullet lists, prefer names over numbers in the lead column. When the user asks "what is C11?" — that's a signal you've over-relied on numbers; correct course immediately, not just for that one campaign.
+
+   **Category vs campaign discipline.** A category-level claim — "Modern is dark," "Vintage ramped up," "EX-era stalled" — must be backed by aggregation across **all** campaigns covering that category, not a single campaign as proxy. The category-to-campaign mapping is many-to-one in this portfolio, and the `Name (C#)` format itself can mislead the reader when a campaign shares its label with the category. Common overlaps:
+
+   - "Modern" = Modern (C4, PSA 8) **and** Modern PSA 10 (C10).
+   - "Vintage" = Vintage Core (C1) and Vintage Low Grade (C2). Vintage-EX PSA 8 Precision (C11) overlaps but extends into 2007.
+
+   `Modern (C4)` reads as if Modern equals C4 — disambiguate explicitly. Before any category-level statement, list the campaigns covering that category from the canonical numbering + strategy doc, then state the campaign-by-campaign verdict:
+
+   > *"Modern category mixed: Modern (C4, PSA 8) dark 12 days; Modern PSA 10 (C10) filling at $2.5K/d post-4/23 narrowing."*
+
+   Not:
+
+   > *"Modern (C4) has been dark 12 days."*
+
+   The first form is correct; the second is the failure pattern.
 5. End every response with a question that invites the user deeper.
 6. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
 7. Keep it conversational. Natural language, not bullet-heavy reports.
