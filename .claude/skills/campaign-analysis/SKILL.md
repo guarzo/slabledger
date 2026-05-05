@@ -241,6 +241,15 @@ Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-t
 
 **Close** — targeted question referencing the strongest mover or action, not a generic menu. If actions were proposed, reference the top one. If no actions, reference the most interesting mover: *"Want me to dig into the C3 sell-through jump, look at why C7 fill rate dropped, or something else?"*
 
+**Portfolio-shape soft-flag.** After the close question, run the four Playbook H trigger conditions against the data already fetched. If any fire, append one line: *"Portfolio shape note: top 3 hold N% of profit, bottom Q quartile produced X% / N campaigns had <3 fills in 30d / N grade-or-era restrictions held >60d uncontested. Want a Playbook H pass?"* Only the firing conditions appear in the line — don't list non-firing ones. If none fire, omit the line entirely. The line is a question, not a script change — it never auto-runs Playbook H.
+
+The four conditions:
+
+1. Top-3 campaign concentration > 70% of total profit AND bottom quartile producing < 5%
+2. ≥1 campaign with 0 fills in trailing 30d (deprecation candidate)
+3. External campaign has a character/segment with `soldCount ≥ 10 AND roi ≥ 0.20` not covered by any focused campaign — *but* the soft-flag only fires when the same character also appears in `/intelligence/niches` or `/insights.coverageGaps` (apply 1.7 — External alone is not signal)
+4. ≥1 grade or era restriction held > 60 days that hasn't been re-justified this session
+
 Keep it concise — the goal is to prompt a focused follow-up, not dump a report.
 
 #### Example opening turn — clean signal with actions
@@ -260,6 +269,8 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 > **Portfolio at a glance:** Wildcard 14% / 38% ST / 47 unsold $18.2K • C7 3% / 22% ST / 61 unsold $12.6K • C3 9% / 44% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks / → • Invoices: $8.2K due 2026-04-29 • In-hand $18.2K of $26.1K, DH listed: 34 of 47.
 >
 > Walk through the Wildcard liquidation list, or dig into C7's fill-rate drop?
+>
+> Portfolio shape note: top 3 hold 78% of profit, bottom quartile produced 4%. Want a Playbook H pass?
 
 #### Example opening turn — hold week, no actions
 
