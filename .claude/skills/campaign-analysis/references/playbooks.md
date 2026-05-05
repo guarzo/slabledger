@@ -374,7 +374,7 @@ Every `/campaign-analysis` conversation must close with a short retrospective bl
 **What to capture.** Four buckets, each 1-3 bullets. Skip any bucket that's empty, don't invent filler:
 
 1. **Data gaps encountered** — endpoints that returned empty (`intelligence_count: 0`, niches empty, signals empty, etc.), fields missing from responses, hypotheses we couldn't test from current data.
-2. **DH-side asks** — things we believe DH should be populating but isn't, or new intelligence fields we'd want. These feed the next dated `docs/private/YYYY-MM-DD-dh-data-ask.md`.
+2. **DH-side asks** — things we believe DH should be populating but isn't, or new intelligence fields we'd want. These feed the next dated `docs/private/YYYY-MM-DD-dh-data-ask.md`. Before logging any item to a dated `docs/private/YYYY-MM-DD-<partner>-data-ask.md` file, run the Partner-ask verification rule's step 0 against the impossible-asks log. Drop any items that match.
 3. **Client-side work that would unblock future analyses** — new aggregations, new heuristics, migrations, etc.
 4. **Lessons about the operator's edge / thesis** — anything learned this session about how they think, what moves they respect, what corrections they pushed back on. This is the most valuable bucket and the easiest to skip — don't skip it.
 
