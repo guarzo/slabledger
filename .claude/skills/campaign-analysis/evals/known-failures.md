@@ -193,6 +193,76 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: stops at first plausible answer (D1)
+
+- **Date:** 2026-05-05
+- **Scenario:** User asked which segment was dragging Mid-Era; skill named the first byGrade row without aggregating across all Mid-Era campaigns. User pushed back: *"did you actually look at the data?"*
+- **Failure:** Skill cited the first metric / first hypothesis / first lever without checking a second source, ranking alternatives, or sanity-checking the lever binds. The same source session produced six surgical Recommendation rules covering specific cases (Cap-cut binding, Dollar-weighted BPCL, Category vs campaign, Era-fit gate, Throttle lever selection, Fill-drought hypothesis ranking); 1.1 generalizes the discipline.
+- **Corrective rule:** Verify-before-propose gate — state claim → name cross-check that could falsify it → run it → commit or revise. Four required cross-check types: category claims (aggregate across all campaigns), metric citations (dollar-weighted vs mean-of-ratios), action proposals (lever-binds sanity check), hypothesis sets (rank by evidence).
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.1
+- **Anchor (specific instances, dual-reference):** `references/playbooks.md` Cap-diagnostic rule cap-cut binding check + `SKILL.md` API footguns dollar-weighted BPCL cross-check + `SKILL.md` Conversational guideline 4 Category vs campaign discipline + `references/playbooks.md` Era-fit gate + `references/playbooks.md` Throttle lever selection + `references/playbooks.md` Fill-drought hypothesis ranking
+- **Regression check:** Does Self-challenge rule 1.1 still mandate cross-check-by-claim-type (category aggregation, dollar-weighted vs mean-of-ratios divergence, lever-binds sanity check, hypothesis ranking)? Does it still cite the six existing specific Recommendation rules above as named precedents?
+
+---
+
+## Failure: defers to server suggestions verbatim (D2)
+
+- **Date:** 2026-05-05
+- **Scenario:** `/portfolio/suggestions` surfaced "lower CL% on C1" from lifetime data; skill echoed the suggestion without noting the recent restriction had already excluded the contributing grades.
+- **Failure:** Skill echoed a server suggestion verbatim instead of treating it as one input among several. Server suggestions operate on lifetime data, don't know about recent restrictions, and lack scope context. The Era-fit gate's "echoed `/snapshot.suggestions` 'Add top performers'" carve-out names the era-filter requirement; 1.3 generalizes the discipline of not echoing without reframing.
+- **Corrective rule:** Server suggestions are inputs, not outputs. Reframe each suggestion into your own analysis or drop it. Stale-suggestion filter and Step 1b currentScope filter still apply on top.
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.3
+- **Anchor (specific instance, dual-reference):** `references/playbooks.md` Era-fit gate (echoed `/snapshot.suggestions` "Add top performers" carve-out)
+- **Regression check:** Does Self-challenge rule 1.3 still require server suggestions to be reframed or dropped, never echoed verbatim? Does it cite the Era-fit gate's echoed-suggestion carve-out as the named precedent?
+
+---
+
+## Failure: conflates describing with analyzing (D3)
+
+- **Date:** 2026-05-05
+- **Scenario:** Skill listed `byCharacter` JSON keys and cited an avgBuyPctOfCL number without explaining what the number meant for portfolio decisions. User pushed back: *"did you actually look at the data?"*
+- **Failure:** Listing JSON keys, citing field values, restating coverageGaps rows treated as analysis. Skill output was a parsed-data dump, not interpretation. The Category vs campaign discipline (Conversational guideline 4) names one specific instance — `Modern (C4) has been dark 12 days` reads as a category-level claim when the underlying datum is one-campaign-level. 1.4 generalizes the move.
+- **Corrective rule:** Every parsed datum in user-facing output carries one short interpretive clause — what the number means, why it might mislead, what the picture really is. Without the interpretation, drop the datum.
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.4
+- **Anchor (specific instance, dual-reference):** `SKILL.md` Conversational guideline 4 Category vs campaign discipline
+- **Regression check:** Does Self-challenge rule 1.4 still require an interpretive clause on every parsed datum, and cite the Category vs campaign discipline as the named precedent?
+
+---
+
+## Failure: afraid to disagree with the data when pattern says otherwise (D4)
+
+- **Date:** 2026-05-05
+- **Scenario:** `/tuning` suggested lowering CL% on a campaign whose realized buy% was high. Pattern was CL-lead (CL above market, correcting), not terms-too-high. Skill recommended the terms cut anyway, echoing the surface conclusion.
+- **Failure:** Skill recommended a lever the endpoint named without checking whether the underlying pattern supported it. The Cap-diagnostic rule (both directions) and Popular-tier exclusion are existing precedents for pushing back on a surface conclusion when the pattern says otherwise; 1.5 generalizes them.
+- **Corrective rule:** When `/tuning` or `/portfolio/suggestions` outputs a surface conclusion that contradicts the underlying pattern, push back and state which signal you trust and why. The pattern AND the lever-binds check both have to support a recommendation.
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.5
+- **Anchor (specific instances, dual-reference):** `references/playbooks.md` Cap-diagnostic rule (both directions: supply-thinness check AND cap-cut binding check) + `references/playbooks.md` Popular-tier exclusion
+- **Regression check:** Does Self-challenge rule 1.5 still generalize the Cap-diagnostic (both directions) and Popular-tier-exclusion precedents into a broader push-back-on-data discipline?
+
+---
+
+## Failure: treats existing N campaigns as fixed universe (S1)
+
+- **Date:** 2026-05-05
+- **Scenario:** User asked what bigger moves to consider. Skill optimized parameters within current structure rather than questioning the structure — never proposed deprecation, scope changes, splits, or merges.
+- **Failure:** Tactical analysis only. Skill never aggregated profit-per-deployed-dollar to identify the bottom quartile, never audited the long tail for deprecation candidates, never questioned whether existing scope cuts were the right cuts.
+- **Corrective rule:** New Playbook H — Portfolio Architecture Review. Six aggregations (concentration, profit-per-deployed-dollar, long-tail, coverage-gap demand-driven, restriction half-life, scope critique) producing sized restructure proposals. Tactical openers also gain a soft-flag pointer when any of four threshold conditions fire.
+- **SKILL.md anchor:** `references/playbooks.md` Playbook H + `SKILL.md` Step 3c soft-flag
+- **Regression check:** Does Playbook H still cover all six aggregations and produce sized restructure proposals? Does the Step 3c soft-flag fire on any of the four conditions (top-3 concentration > 70%, ≥1 campaign with 0 fills in 30d, External-confirmed coverage gap matched by demand source, restriction held > 60 days)?
+
+---
+
+## Failure: repeated proposal of impossible data asks
+
+- **Date:** 2026-05-05
+- **Scenario:** Across multiple sessions, skill proposed asking PSA for competitor buy% data even though the user had previously confirmed PSA won't share supply-side competition information.
+- **Failure:** Without persistent state about which asks the partner refuses to answer, the skill re-proposes the same impossibility every session. Wastes user attention; erodes trust in the partner-ask drafts.
+- **Corrective rule:** New `docs/private/impossible-data-asks.md` log loaded at Step 0; Partner-ask verification rule gains a step 0 fuzzy-match cross-check by substance (not wording) before the existing three-question check. Matched asks are surfaced inline with the alternatives and the matched row's `Last revisited` column gets stamped today.
+- **SKILL.md anchor:** Step 0 file-load + `references/playbooks.md` Partner-ask verification rule step 0
+- **Regression check:** Does Step 0 still load `docs/private/impossible-data-asks.md` if present? Does the Partner-ask verification rule still run a step 0 fuzzy-match cross-check before the existing three-question check, and stamp `Last revisited` on matches?
+
+---
+
 ## How to use this list
 
 When making a skill edit:
