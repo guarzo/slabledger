@@ -12,6 +12,7 @@ Load this file when routing to any follow-up playbook (Step 4), running the stra
   - Playbook E — Single-campaign deep dive
   - Playbook F — "What niches are we missing?" (coverage gaps / new campaigns)
   - Playbook G — "How are our DH listings doing?" (marketplace)
+  - Playbook H — "Review our portfolio shape" (architecture review)
 - [Step 5 — Strategy doc sync](#step-5--strategy-doc-sync)
 - [Step 6 — Retrospective](#step-6--retrospective)
 - [Recommendation rules](#recommendation-rules) — Sizing, Stale-suggestion filter, Confidence bands, Hold verdict, Fill-drought hypothesis ranking, Capital guardrail, Sequencing, Popular-tier exclusion, Era-fit gate, Sub-$150 modern floor, Turnover gate, Cap-diagnostic, Throttle lever selection, Partner-ask verification
@@ -251,6 +252,96 @@ Present:
 3. **Push queue.** Cards with `dh_push_status = "pending"` are waiting to be approved for listing. Prioritize by days-queued + projected $ recovery: `N cards, oldest queued D days, est. +$X.XK recovery (Confidence: H|M|L)`. Approve via `POST /api/dh/approve/{purchaseId}` — see Mutations.
 
 When recommending DH as a sales channel (in any playbook), note that eBay listings now flow through DH — there's no separate eBay CSV export. DH handles multi-channel distribution. DH approvals are capital-positive (they turn inventory into sales), so the capital guardrail does NOT apply.
+
+### Playbook H — "Review our portfolio shape" / portfolio architecture review
+
+Trigger phrases: *"review our portfolio shape", "what bigger moves should we consider", "what should we restructure", "are these the right campaigns", "portfolio architecture", "prune the portfolio"*.
+
+**Boundary vs Playbook A and F:**
+
+- Playbook A tunes parameters *within* fixed campaign structure.
+- Playbook F proposes *one* new campaign for *one* coverage gap.
+- Playbook H questions the entire portfolio shape and proposes merges, splits, scope changes, deprecations, AND new campaigns as a coherent restructure.
+
+Fetch in parallel (most should be in opener cache):
+
+- `GET /api/campaigns` — config (year, grade, price, inclusion, phase, `updatedAt` for restriction-age proxy)
+- `GET /api/portfolio/snapshot` — composite (health, insights, weekly-history)
+- `GET /api/campaigns/{id}/pnl` ×N — per-campaign profit + total spend (used for profit-per-deployed-dollar)
+- `GET /api/campaigns/{id}/pnl-by-channel` ×N — channel mix per campaign
+- `GET /api/portfolio/insights` — `byCharacter`, `byCharacterGrade`
+- `GET /api/portfolio/weekly-history?weeks=8` — trailing-mean baselines + fills-in-trailing-30d
+- `GET /api/intelligence/niches?window=30d&limit=20` — coverage-gap demand signal
+
+Per-campaign fetches in parallel, not sequential.
+
+**Apply Step 1b currentScope filter** before any cross-campaign aggregation. Restate the filter outcomes inline.
+
+**Approach — six aggregations, one restructure block:**
+
+1. **Concentration analysis.** Total profit across active campaigns; cumulative % held by top 3. Same for deployed capital. Output: *"Top 3 by profit: Vintage Core (C1) 38%, Vintage-EX (C2) 22%, EX/e-Reader (C3) 18% = 78%. Bottom 4 combined: 6%. Top 3 by deployed capital: C1 41%, C3 19%, C2 14% = 74%."* Apply 1.4 (describe → analyze) — interpret the spread, don't just print it.
+
+2. **Per-campaign profit-per-deployed-dollar.** `pnl.netProfitCents / pnl.totalSpendCents` for each active campaign. Rank ascending, flag the bottom quartile. Each flagged campaign gets one diagnosis line: low-volume-high-margin slot earning its capital, low-margin-high-volume slot whose footprint is justified by volume, or low-on-both deprecation candidate.
+
+3. **Long-tail audit.** Campaigns with < 3 fills in trailing 30d (compute from `weekly-history` × 4 weeks, cross-check against `inventory.createdAt`). For each: deprecation candidate, supply-thin candidate (apply Cap-diagnostic rule before concluding), or recently-launched-still-ramping (skip if `updatedAt` < 30d). Don't propose deprecation on supply-thin without checking the cap math.
+
+4. **Coverage-gap audit (market-demand-driven, not External-driven).** Source candidate segments from `/intelligence/niches` (high `opportunity_score` AND `current_coverage = 0`) and `/portfolio/insights.coverageGaps`. Apply 1.7 — operator purchase history is not a market signal. External fills can *confirm* a candidate (the operator already touched the segment and it sold), but cannot *originate* one. For each surviving candidate:
+   - Filter against existing inclusion lists across all campaigns to confirm it's genuinely uncovered
+   - Apply 1.5 popular-tier exclusion + narrow-pocket exception
+   - Size expected revenue at a proposed daily cap with a confidence band
+   - Surface as a focused inclusion-list add (cheap, fits an existing campaign), or a new focused campaign (Playbook F coupling)
+
+   When `/intelligence/niches` returns 0 rows (known intermittent state — see API footguns), surface that data gap inline per 1.6 and route to the wishlist; don't substitute External as a fallback signal.
+
+5. **Restriction half-life.** For every active campaign with a grade restriction or era restriction, check `updatedAt` from `/api/campaigns` as the proxy for when the restriction landed. Cross-reference the strategy doc's "Changes Submitted YYYY-MM-DD" sections for the actual restriction date when the API proxy is wrong. Any restriction held > 30 days gets one of three verdicts:
+   - **Still binding** — the segment the restriction excluded would still hurt portfolio ROI today (cite the dollar-weighted impact)
+   - **Loose** — the original loss pattern is no longer in the data; consider widening the scope
+   - **Indeterminate** — sample is post-restriction-only; can't tell. Apply 1.6 — surface as a fixable internal gap (e.g. "would need a `restriction_history` table to compare pre/post-restriction performance")
+
+6. **Scope critique.** For each active campaign, apply the lens *"is this cut the right cut?"* Examples to look for: a Modern campaign restricted to PSA 8 where the live data shows PSA 9–10 with a sub-$150 floor would be the better cut; a Vintage campaign whose price floor excludes a profitable mid-tier segment; a campaign that should be split into two by era; two campaigns that should be merged because their fills overlap. State the alternative cut concretely, not abstractly.
+
+**Restructure proposals (output block).** Synthesize the six aggregations into a numbered list of proposed restructures. Each item carries:
+
+- **Move type:** deprecate / scope change / split / merge / new (Playbook F coupling) / inclusion expansion
+- **Affected campaigns** by name + canonical number
+- **Sized expected impact:** `est. +$X.XK/mo at current fill (Confidence: H|M|L)` per the existing Sizing rule. Capital-positive deprecations and scope-narrowings can be sized as recovery (`est. +$X.XK recovery within N days`)
+- **Capital guardrail check:** apply the existing rule. Net-deploy moves under tight/critical posture get caveated or blocked
+- **Sequencing:** if proposals interact, end with a Sequence block per the existing rule
+
+**Self-challenge rules pass.** Walk Section 1's 1.1–1.7 over the restructure proposals before they go out. Most relevant: 1.1 verify-before-propose (does the long-tail diagnosis hold under aggregation across all campaigns in the category?), 1.5 disagree-with-data (the bottom-quartile-by-dollar may include a high-margin specialty slot the data underrates), 1.6 diagnose-the-gap (the restriction half-life check often hits indeterminate sample — surface and route).
+
+**Mutations.** Same as Playbooks A and F. Deprecation = `PUT /api/campaigns/{id}` with `phase: "pending"`. Scope change = `PUT /api/campaigns/{id}` with new fields. New campaign = `POST /api/campaigns`. Apply only on user approval; never silent.
+
+#### Worked example
+
+Synthetic numbers on a 6-campaign portfolio (placeholder names `Campaign A`–`Campaign F`, not real campaigns); the goal is to show shape — six aggregations summarized, three sized restructure proposals, sequenced.
+
+> **User:** review our portfolio shape — what bigger moves should we consider?
+>
+> **Assistant:**
+> Capital posture: Healthy ($28K outstanding, 3.4 weeks to cover, recovery ↗). Step 1b currentScope: 6 active campaigns (A–F); F was paused 2 weeks ago, treating as active for this review since it still holds inventory.
+>
+> **1. Concentration.** Top 3 by profit: A 41%, B 19%, C 16% = 76%. Bottom 3 combined: 8%. Top 3 by deployed capital: A 38%, C 21%, B 17% = 76%. Profit and capital concentrations track each other — no hidden over-deployment, but the bottom half is doing very little work.
+>
+> **2. Profit-per-deployed-dollar (ascending):** F 0.4%, E 2.1%, D 6.8%, B 18.2%, C 21.4%, A 24.7%. Bottom-quartile flag: **F** — low-on-both (negligible margin, negligible volume, deprecation candidate). E is low-volume-high-margin (specialty slot earning its small footprint, keep).
+>
+> **3. Long-tail audit.** F: 2 fills in trailing 30d, `updatedAt` = 14 weeks ago, not ramping → deprecation candidate (cap-diagnostic confirms cap is not binding; this is genuinely supply-thin AND margin-thin). D: 4 fills/30d, ramping (launched 3 weeks ago) — skip per the < 30d rule.
+>
+> **4. Coverage-gap audit.** `/intelligence/niches` surfaces "Modern PSA 9 sub-$150 era-X holos" with `opportunity_score` 0.71, `current_coverage` 0 across all 6 campaigns. External history shows 4 sold last quarter at 22% ROI — confirms the candidate, doesn't originate it (per 1.7). Popular-tier exclusion check passes (the segment is mid-character, not flagship). Sized at proposed $1K daily cap: ~+$1.6K/mo (M).
+>
+> **5. Restriction half-life.** B has held a "PSA 9–10 only" grade restriction for 47 days (per strategy doc 2026-03-19 entry). Verdict: **Still binding** — PSA 8 in B's price tier shows -3.2% dollar-weighted ROI in the post-restriction sample, widening would re-introduce drag. C has held a "$200+ floor" for 62 days, verdict: **Indeterminate** — post-restriction-only sample, surface as a fixable internal gap per 1.6 (would need `restriction_history` to compare).
+>
+> **6. Scope critique.** **Campaign B is cut wrong** — restricted to "Modern PSA 8 only," but `/insights.byCharacterGrade` shows B's PSA 8 segment averaging 3.1% ROI on n=34 while PSA 9–10 sub-$150 in the same era runs 19.4% ROI on n=18. The cut should be **PSA 9–10 with a sub-$150 floor**, not PSA 8.
+>
+> **Restructure proposals:**
+>
+> 1. **Deprecate Campaign F.** Move type: deprecate. Affected: F. Sized: est. +$3.8K recovery within 30 days (M) as inventory liquidates, ongoing capital freed ~$4K. Capital guardrail: capital-positive, no caveat. Rationale: low-on-both bottom-quartile slot; long-tail audit confirms not supply-recoverable.
+> 2. **Scope-narrow Campaign B.** Move type: scope change. Affected: B. Change: Modern PSA 8 → PSA 9–10 with sub-$150 floor. Sized: est. +$2.2K/mo at current fill (M). Capital guardrail: net-neutral (re-deploys B's existing footprint), healthy posture, no caveat. Rationale: scope critique #6.
+> 3. **Inclusion-list add to Campaign C.** Move type: inclusion expansion. Affected: C (Modern era-X holos cluster). Add: the niche segment from aggregation #4. Sized: est. +$1.6K/mo at $1K cap (M). Capital guardrail: net-deploy, but healthy posture, within sizing band. Rationale: market-demand-driven candidate, External-confirmed only.
+>
+> **Self-challenge pass:** 1.1 — long-tail on F holds across the inventory.createdAt cross-check (no off-API fills hiding). 1.5 — verified F is not a high-margin specialty being underrated by the dollar weighting. 1.6 — C's restriction half-life routed to wishlist as `restriction_history` gap.
+>
+> **Sequence:** (1) deprecate F first — frees ~$4K capital and clears the low-on-both drag before B's scope change starts costing fills during transition; (2) B scope-narrow — re-cuts existing footprint; (3) C inclusion add last — net-deploy move sized with the freed capital from (1) factored in.
 
 ## Step 5 — Strategy doc sync
 
