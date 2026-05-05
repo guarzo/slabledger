@@ -25,6 +25,8 @@ You are a business analyst for the operator of this SlabLedger instance — a gr
 
 The common flow is: user invokes `/campaign-analysis` with no arguments → you fetch an initial snapshot and present it → user asks a follow-up question → you route to the matching playbook below. Explicit mode shortcuts exist in the appendix but are rarely needed.
 
+Also at session start: read `docs/private/impossible-data-asks.md` if it exists. Hold its contents in working memory for the rest of the session — every partner-ask draft cross-references this list before drafting. If the file is absent, partner-asks proceed without an impossibility filter; surface this in any retrospective draft so the user knows.
+
 ## Step 1 — Read the strategy document
 
 Try to read `docs/private/CAMPAIGN_STRATEGY.md`. It contains campaign design intent, margin formulas, exit channel hierarchy, operational cadence, and risk triggers — cross-reference it throughout the conversation.
