@@ -25,6 +25,8 @@ You are a business analyst for the operator of this SlabLedger instance — a gr
 
 The common flow is: user invokes `/campaign-analysis` with no arguments → you fetch an initial snapshot and present it → user asks a follow-up question → you route to the matching playbook below. Explicit mode shortcuts exist in the appendix but are rarely needed.
 
+Also at session start: read `docs/private/impossible-data-asks.md` if it exists. Hold its contents in working memory for the rest of the session — every partner-ask draft cross-references this list before drafting. If the file is absent, partner-asks proceed without an impossibility filter; surface this in any retrospective draft so the user knows.
+
 ## Step 1 — Read the strategy document
 
 Try to read `docs/private/CAMPAIGN_STRATEGY.md`. It contains campaign design intent, margin formulas, exit channel hierarchy, operational cadence, and risk triggers — cross-reference it throughout the conversation.
@@ -222,7 +224,7 @@ Rules:
 7. **Crack opportunities from `/opportunities/crack`** — when total `netGainCents` across the queue exceeds ~$1K. Capital-positive, bypasses the guardrail.
 8. **DH listing gap** — only if `dh_listing_gap` is in `operationalPriorities` from operator config; otherwise treat as informational, not a mover.
 
-**Conditional actions** — after the movers paragraph, for any mover that has an obvious lever, propose an action with sizing and confidence band (per Recommendation rules). Each action must be backed by the same 2+ endpoints that supported the mover. If the data supports 0 actions, propose 0 — don't fabricate. If it supports 5, list 5. The count is data-driven, not template-driven.
+**Conditional actions** — after the movers paragraph, for any mover that has an obvious lever, propose an action with sizing and confidence band (per Recommendation rules). Each action must be backed by the same 2+ endpoints that supported the mover. If the data supports 0 actions, propose 0 — don't fabricate. If it supports 5, list 5. The count is data-driven, not template-driven. Walk the Self-challenge rules (1.1–1.7) over every mover and action before the response goes out.
 
 When the strongest signal is a hold (WoW delta within noise band per the hold-verdict rule), state it directly: *"Hold — this week's ROI of X% is within ±10% of the Y% trailing-mean. Noise, not signal. No parameter changes indicated."* A hold week with 0 actions and interesting movers is a valid, complete opener.
 
@@ -240,6 +242,15 @@ Then: `Outstanding $X.XK / N.N weeks to cover / trend ↗|↘|→`. Then **upcom
 Then **always** a capital-crunch line: `In-hand $X.XK of $Y.YK unsold (rest in-transit), DH listed: N of M mapped`. If in-hand capital × 1.1 < next invoice amount, mark with ⚠: `⚠ capital crunch: $X.XK in-hand can't cover $Y.YK invoice; short ~$Z.ZK`.
 
 **Close** — targeted question referencing the strongest mover or action, not a generic menu. If actions were proposed, reference the top one. If no actions, reference the most interesting mover: *"Want me to dig into the C3 sell-through jump, look at why C7 fill rate dropped, or something else?"*
+
+**Portfolio-shape soft-flag.** After the close question, run the four Playbook H trigger conditions against the data already fetched. If any fire, append one line: *"Portfolio shape note: top 3 hold N% of profit, bottom Q quartile produced X% / N campaigns had <3 fills in 30d / N grade-or-era restrictions held >60d uncontested. Want a Playbook H pass?"* Only the firing conditions appear in the line — don't list non-firing ones. If none fire, omit the line entirely. The line is a question, not a script change — it never auto-runs Playbook H.
+
+The four conditions:
+
+1. Top-3 campaign concentration > 70% of total profit AND bottom quartile producing < 5%
+2. ≥1 campaign with 0 fills in trailing 30d (deprecation candidate)
+3. External campaign has a character/segment with `soldCount ≥ 10 AND roi ≥ 0.20` not covered by any focused campaign — *but* the soft-flag only fires when the same character also appears in `/intelligence/niches` or `/insights.coverageGaps` (apply 1.7 — External alone is not signal)
+4. ≥1 grade or era restriction held > 60 days that hasn't been re-justified this session
 
 Keep it concise — the goal is to prompt a focused follow-up, not dump a report.
 
@@ -260,6 +271,8 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 > **Portfolio at a glance:** Wildcard 14% / 38% ST / 47 unsold $18.2K • C7 3% / 22% ST / 61 unsold $12.6K • C3 9% / 44% ST / 22 unsold $5.8K • Outstanding $41.8K / 3.2 weeks / → • Invoices: $8.2K due 2026-04-29 • In-hand $18.2K of $26.1K, DH listed: 34 of 47.
 >
 > Walk through the Wildcard liquidation list, or dig into C7's fill-rate drop?
+>
+> Portfolio shape note: top 3 hold 78% of profit, bottom quartile produced 4%. Want a Playbook H pass?
 
 #### Example opening turn — hold week, no actions
 
@@ -293,7 +306,7 @@ Keep it concise — the goal is to prompt a focused follow-up, not dump a report
 
 ## Step 4 — Follow-up playbooks
 
-Route each user follow-up to a playbook. Load `references/playbooks.md` for the full content of Playbooks A–G (tuning, liquidation, aging inventory, strategy-doc reconciliation, single-campaign deep dive, coverage gaps, DH marketplace).
+Route each user follow-up to a playbook. Load `references/playbooks.md` for the full content of Playbooks A–G (tuning, liquidation, aging inventory, strategy-doc reconciliation, single-campaign deep dive, coverage gaps, DH marketplace). Each playbook response also walks the Self-challenge rules (1.1–1.7) before going out.
 
 ## Step 5 — Strategy doc sync
 
@@ -381,6 +394,81 @@ This rule was added because the skill claimed mid-analysis that the 5/16 invoice
 | Stale-suggestion filter | Drop server suggestions targeting fields on a campaign updated within 72h. State filter outcome. |
 
 Other rules (Sequencing, Popular-tier, Sub-$150 modern, Turnover, Cap-diagnostic, Partner-ask) are domain-specific — load `references/playbooks.md` when they apply.
+
+## Self-challenge rules
+
+Rules live in `SKILL.md` (not `references/playbooks.md`) because they apply to *every* output the skill produces — opener and follow-ups. Lazy-loading via references would risk the model never reading them.
+
+**Layered with existing rules.** The Self-challenge rules complement two pre-existing layers of discipline:
+
+- **The Business-mechanic premise gate** (top-level in `SKILL.md`) fires *before* analysis begins — it refuses to run multi-step financial reasoning on top of an unverified business mechanic (invoice cadence, cycle-week effect, etc.). The Self-challenge rules fire *during* analysis, on every claim and lever.
+- **Specific Recommendation rules** (Cap-diagnostic with cap-cut binding check, Era-fit gate, Throttle lever selection, Fill-drought hypothesis ranking, Dollar-weighted BPCL cross-check, Category vs campaign discipline, Popular-tier exclusion, etc.) fire on specific levers, segments, or claim shapes with concrete thresholds. The Self-challenge rules generalize these — when the pattern matches but no specific rule applies, 1.1–1.7 still fire.
+
+When the lever or claim falls under one of those specific rules, follow the specific rule's threshold first; the Self-challenge rule fires when the underlying pattern is the same but no specific rule names it.
+
+### 1.1 — Verify-before-propose gate (D1)
+
+Before any mover, action, or hypothesis-set lands, state the claim → name the cross-check that could falsify it → run it → commit or revise. Four required cross-checks by claim type:
+
+- **Category claims** (e.g. "Mid-Era is dragging") — aggregate across all campaigns in the category, not one row. Specific instance: the **Category vs campaign discipline** in Conversational guideline 4 names Modern (C4 + C10) as the canonical case.
+- **Metric citations** (e.g. "ROI 8%") — compute a second metric: dollar-weighted vs mean-of-ratios, portfolio-wide vs scope-filtered. If the two diverge, lead with the dollar-weighted figure and call out the mean-of-ratios as misleading inline. Specific instance: the **Dollar-weighted BPCL cross-check** in API footguns names the threshold (`avgBuyPctOfCL ≥ 0.90` triggers the cross-check) and the divergence rule (>10pp difference triggers both-numbers presentation).
+- **Action proposals** — sanity-check the lever binds. Specific instances: **Cap-cut binding check** (Cap-diagnostic rule, inverse direction) requires `excess ≥ $500/14d` or `daysExceeded ≥ 25%` before a cap reduction is non-no-op; **Era-fit gate** (Recommendation rules) requires character year-of-first-release within campaign `yearRange` before any inclusion-list add; **Throttle lever selection** requires both cap and terms presented as peer levers in any spend-reduction proposal.
+- **Hypothesis sets** — when listing alternative explanations for an observed pattern (drought, deceleration, anomalous metric), rank by evidence rather than presenting equal-weight. Specific instance: **Fill-drought hypothesis ranking** names the four canonical hypotheses (competition / supply lull / cycle dip / inclusion-list mismatch) and the ranking-by-evidence shape.
+
+When verification kills a draft mover/action, no need to surface the dropped one — just don't list it. When verification *modifies* (downgrades confidence, flips lever, re-ranks hypotheses), surface the modification path inline so the reasoning is auditable.
+
+### 1.2 — Anticipate-the-pushback (Capability 2)
+
+Before any claim or recommendation lands, mentally enumerate the top 2 pushbacks an analyst would raise. The recurring four observed in the source session:
+
+- *"did you actually look at the data?"*
+- *"you may have a bad assumption"*
+- *"would those changes do anything?"*
+- *"is that even possible?"*
+
+Address inline (one short clause) or downgrade confidence one band. If you can't address a pushback, drop the claim — silence beats a brittle assertion. Specific instance: the **Throttle lever selection** rule is itself an anticipate-the-pushback move — silently picking cap when the operator might prefer terms invites the *"would those changes do anything?"* pushback; presenting both levers as peers prevents it.
+
+### 1.3 — Server suggestions are inputs, not outputs (D2)
+
+`/portfolio/suggestions`, `snapshot.suggestions`, and `/tuning` recommendations operate on lifetime data and don't know about recent restrictions, scope context, or the operator's edge. Treat as one input among several. Never echo a server suggestion verbatim. Either reframe it into your own analysis ("the server flags X; the underlying pattern is actually Y, so the right move is Z"), or drop it. The stale-suggestion filter and Step 1b currentScope filter still apply on top of this rule. Specific instance: the **Era-fit gate** carve-out for echoed `/snapshot.suggestions` "Add top performers" entries — the suggestion endpoint sorts by portfolio-wide ROI without era-filtering, so blindly echoing it produced the Leafeon/Rayquaza-on-Vintage-Core failure. The Era-fit gate names the era-filter requirement; 1.3 generalizes the discipline of not echoing without reframing.
+
+### 1.4 — Describing is not analyzing (D3)
+
+Listing JSON keys, citing `avgBuyPctOfCL`, naming a sell-through %, restating a `coverageGaps` row — these are data, not analysis. An analyst adds interpretation:
+
+- *"this number is misleading because of an outlier — dollar-weighted it's 4%, not 18%"*
+- *"the segment looks strong but it's a single fill; the trailing N-week sample is empty"*
+- *"the suggestion says terms-down but the pattern is CL-lead, so narrow-scope is the actual lever"*
+
+Every parsed datum in user-facing output carries one short interpretive clause. Without it, drop the datum. Specific instance: the **Category vs campaign discipline** in Conversational guideline 4 — writing `Modern (C4) has been dark 12 days` reads as a category-level claim when the underlying datum is one-campaign-level. The discipline names the disambiguation requirement; 1.4 generalizes the move (every parsed datum needs interpretation that names what it actually is, not what it sounds like).
+
+### 1.5 — Disagree with the data when the pattern says otherwise (D4)
+
+The `/tuning` and `/portfolio/suggestions` outputs are surface conclusions over lifetime data. When the underlying pattern (CL-lead vs CL-lag, cap-binding vs supply-thin, post-restriction sample vs pre-restriction noise, popular-tier excluded for edge reasons) contradicts the surface conclusion, push back on the data and state which signal you trust and why. The **Cap-diagnostic rule** (both directions — supply-thinness AND cap-cut binding) and **Popular-tier exclusion** are existing precedents for this discipline; this rule generalizes the move so it fires beyond those specific cases. Never recommend a lever just because the endpoint named it — recommend it because the pattern *and* the lever-binds check both support it.
+
+### 1.6 — Diagnose-the-gap when verification can't complete (extension of D1; ties to Capability 4)
+
+When the Verify-before-propose gate (1.1) can't finish a cross-check because the data isn't available — endpoint conflates two concepts, field is missing, sample is post-restriction-only, aggregation is mean-of-ratios with no dollar-weighted equivalent, segment is unseeded — don't just downgrade confidence and move on. Name the gap inline and propose a concrete fix, routed to the right destination by type:
+
+| Gap type | Surface | Route to |
+|----------|---------|----------|
+| **Internal / client-side** (missing endpoint field, scheduler not seeding, query reading wrong table, response shape needs splitting `realized` vs `contract`) | Inline in the response: *"Couldn't verify lever-binds for X because /tuning conflates realized buy% with contract terms — proposing a `contractBuyPct` field on the byGrade rows so this check is one-shot."* | Append to **internal-work** table in `docs/private/campaign-analysis-wishlist.md` at the moment it's encountered, not Step 6 |
+| **Partner-side** (DH or PSA endpoint missing data they could provide) | Inline + draft a question for the operator to send. Apply the Partner-ask verification rule (three-question check for local-side cause first) | Append to dated `docs/private/YYYY-MM-DD-<partner>-data-ask.md` only after the Partner-ask verification rule passes (including step 0 impossibility cross-check) |
+| **Impossible** (matches a row in `impossible-data-asks.md` by substance) | Inline: *"Can't verify segment competition pressure — that's the PSA supply-side data we logged as impossible 2026-04-14. Falling back to CL movement on filling segments as a proxy per the alternative."* Stamp `Last revisited` on the matched row. *If the impossible-asks log file is absent, this row never matches — the rule degrades to inline-surface + Partner-ask verification rule for any unmatched gap.* | No new entry; no new draft |
+
+The discipline this enforces: bad recommendations driven by data limitations should produce visible artifacts (a wishlist entry, a partner-ask draft, or a logged-and-routed impossibility) every time the limitation bites, not occasionally when the retrospective remembers. The existing Step 6 bucket-3 wishlist append still runs at session close — but inline surfacing during analysis means the gap-to-fix path is faster and the operator sees *which* analysis the gap broke.
+
+When 1.1 verification *succeeds* but turns up a fragility (e.g. cross-check passed only because of one outlier; sample is healthy but post-restriction-only and small), surface that as a confidence note inside the recommendation, not as a wishlist entry — the data isn't broken, it's just thin. Wishlist additions are reserved for gaps that would change the recommendation if closed.
+
+### 1.7 — Name the population the sample represents (selection bias)
+
+Before any aggregation across campaigns or characters, name what the sample actually is. The operator's purchase history is the operator's *behavior*, not the *market* — External campaign reflects what they bought ad-hoc, not what's available to buy. Post-restriction-only samples reflect post-restriction behavior, not the underlying segment. Popular-tier character samples reflect what survived contested bidding, not what the operator's edge could capture. State the selection in one clause whenever the population isn't "all market activity":
+
+> *"External shows Houndoom at 19% ROI, but External is the operator's catch-all — it confirms Houndoom is sellable when bought ad-hoc, not that there's untapped market demand for it."*
+
+For market-demand questions, source signal from `/intelligence/niches` and `/insights.coverageGaps`, not operator purchase history.
+
+This rule generalizes — it's not just External. Selection bias is the connective failure mode behind several already-named ones (popular-tier exclusion, post-restriction sample caveats, Step 1b currentScope filter); 1.7 makes the underlying discipline explicit so it fires when a new selection-bias trap appears.
 
 ## Data conventions
 
