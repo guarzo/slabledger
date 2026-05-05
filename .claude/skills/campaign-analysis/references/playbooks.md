@@ -45,7 +45,7 @@ State the **capital posture** once at the top (`Healthy / Tight / Critical` from
 
 1. **Per-campaign verdict — every active campaign in canonical numeric order.** One of: `RAMP UP / TIGHTEN / HOLD / WIND DOWN / WATCH`. Each verdict carries one sentence of justification citing the metrics that drove it (e.g. `TIGHTEN — PSA 9 at 97.1% of CL on 92 fills, 32% ST, 0.2% ROI`). A `HOLD` must cite the trailing-mean from `/portfolio/weekly-history` per the hold-verdict rule. A campaign whose verdict is HOLD/WATCH still appears in the list — silence is not acceptable.
 2. **Top parameter changes ranked by sized $ impact** (with confidence band; hold-verdict rule applied; capital guardrail applied to ramp-ups). Each backed by `(campaign, grade)` data from `/tuning`, not generic suggestions. State the current value, proposed value, sample size (`n=N`), and projected impact (`Proj: +$X.XK/mo (H|M|L)`).
-3. **Inclusion-list adds/trims from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` not yet covered (or undercovered). Per-campaign list of proposed adds with sized expected revenue. Also surface trims for high-`n` low-ROI characters dragging the portfolio (`soldCount ≥ 20` AND `roi < 0.05`).
+3. **Inclusion-list adds/trims from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` not yet covered (or undercovered). Per-campaign list of proposed adds with sized expected revenue. Also surface trims for high-`n` low-ROI characters dragging the portfolio (`soldCount ≥ 20` AND `roi < 0.05`). **Run the Era-fit gate** (Recommendation rules) on every proposed add before drafting the line — character year-of-first-release must overlap the campaign's `yearRange`. Filter `/insights.coverageGaps` rows for the open-net false-positive carve-out per the same rule.
 4. **Coverage shifts** — niches the portfolio should expand into (`/intelligence/niches` rows with high `opportunity_score` and `current_coverage = 0`) or campaigns that should narrow (`/insights.byPriceTier` drag tiers). Proposed action per row.
 5. **Cross-campaign arbitrage** — crack candidates and acquisition mispricings worth > $200 net. Capital-positive, bypass the guardrail.
 6. **Stale-suggestion note** — one line: *"Filtered N stale server suggestions (campaigns updated within last 72h)."* (or *"No stale suggestions filtered."*).
@@ -364,6 +364,30 @@ The assumption is these are already contested, already in your lists where they 
 
 **Positive tier to mine for edge:** 2nd-tier vintage/mid-era Pokemon the operator has explicitly flagged (Absol, Typhlosion, Feraligatr, Meganium) plus the broader "Other" character bucket from `byCharacter` — that bucket held 200 fills and 10% ROI on average in one sampled session, meaning the uncaptured long tail has signal.
 
+### Era-fit gate (inclusion-list adds)
+
+Before recommending OR executing any character add to a campaign's inclusion list, verify the character had TCG cards released within the campaign's `yearRange`. Applies to manual recommendations, echoed `/snapshot.suggestions` "Add top performers" entries, and `/insights.coverageGaps` rows. Era fit is a mandatory **pre-check**, not a post-recommendation sanity check — `/snapshot.suggestions` and `/insights.coverageGaps` sort by portfolio-wide ROI without filtering by era.
+
+**Pokemon TCG generation reference (first-card year):**
+
+| Generation | Era / Set      | First-card year |
+|------------|----------------|-----------------|
+| Gen 1      | Base Set       | 1999            |
+| Gen 2      | Neo            | 2000–2002       |
+| Gen 3      | EX-era         | 2003–2007       |
+| Gen 4      | Diamond/Pearl  | 2007            |
+| Gen 5      | Black/White    | 2011            |
+| Gen 6      | XY             | 2014            |
+| Gen 7      | Sun/Moon       | 2017+           |
+| Gen 8      | Sword/Shield   | 2020+           |
+| Gen 9      | Scarlet/Violet | 2023+           |
+
+**Open-net false-positive carve-out.** `/insights.coverageGaps` reasons of "not in any active campaign inclusion list" are misleading for open-net campaigns (no inclusion list). Open net catches every character within other parameters (year, grade, price, confidence) and does not appear in inclusion-list coverage analysis. Before treating a character as uncovered, verify against open-net campaign scope. If the character is already filling on an open-net campaign with positive ROI, the "coverage gap" is a false positive.
+
+**When the data signal seems era-mismatched** (e.g., a "vintage" coverage gap for a Gen 4+ character), trace actual fills via `GET /api/inventory` filtered to the character — check `cardYear` / `setName` to identify which era is producing the demand. Add the character to the era-matching campaign, not the campaign whose name happened to surface the signal.
+
+This rule was added because the skill recommended adding Leafeon (first card 2007) and Rayquaza (first card 2003) to Vintage Core (C1, 1999–2003) and Vintage-EX PSA 8 Precision (C11, 1999–2007) based on portfolio-wide ROI from `/snapshot.suggestions` and `/insights.coverageGaps`. PUTs were applied before the user caught the era mismatch — both characters' actual high-ROI fills were modern alt-arts already caught by C4 / C10's open-net scope.
+
 ### Sub-$150 modern floor
 
 Never recommend lowering floors or adding character pockets that would capture sub-$150 *modern* (2016+) supply. The combination of $3 flat PSA sourcing fee (2%+ of cost at that tier) and high price volatility on modern alt-arts makes this the structural loss zone. Sub-$150 vintage / mid-era / EX-era does NOT carry the same penalty — different price dynamics, lower volatility, same $3 fee but distributed over cleaner margin.
@@ -385,6 +409,21 @@ The check:
 3. Flag explicitly in the recommendation: *"C7 cap is $5,000 against expected per-fill cost of ~$2,065 (mid-range) — single fill of a top-of-range Crystal card consumes 75%+ of cap. Multi-day 20% utilization is consistent with 'cap eats one fill' rather than 'supply is thin.'"*
 
 This rule was added because the skill initially recommended lowering C7's floor based on 20% multi-day utilization. The operator corrected: Crystal cards land $3K-$7K, so the $5K cap was the bottleneck, not the floor. The diagnostic check above would have caught this.
+
+**Cap-cut binding check (inverse direction).** Before proposing a cap *reduction* on any campaign, verify the cap actually binds on observed daily spend. The forward analog of the supply-thinness check above — both directions require checking how the cap binds on observed spend before the cap becomes a lever.
+
+Compute from `/campaigns/{id}/fill-rate`:
+
+- `excess = sum(max(0, spendUSD - proposedNewCap))` across the observed window.
+- `daysExceeded = count(days where spendUSD > proposedNewCap)`.
+
+**If `excess < $500` over a 14-day window OR `daysExceeded < 25%` of observed days, the cap reduction is a no-op.** Skip it or pick a binding lever (price-floor raise, terms cut, revocation, pause).
+
+**State the math inline** when surfacing or rejecting a cap-cut:
+
+> *"C8 Gold Stars cap $8K → $5K: 0 of 4 observed days exceeded $5K, max ever $1,374. $0 saved — no-op. Skipping."*
+
+This rule was added because the skill proposed cap reductions on Mid-Era (C6, $5K → $2K) and Gold Stars (C8, $8K → $5K) as part of a throttle plan. Actual binding analysis: C6 had 3 of 15 days over $2K (~$0–$1K saved over a 4-day pro-rated window); C8 had 0 of 4 days over $5K (the 4/30 raise to $8K had never bound — $0 saved). Only C10 (14 of 18 days exceeding $2K, ~$3K saved) was a real cap-cut candidate. The skill should have run the binding check before proposing C6 / C8 cuts.
 
 ### Partner-ask verification
 
@@ -408,7 +447,7 @@ This rule was added because an early DH draft included "intelligence_count: 0" a
 
 - **All monetary values are in cents.** Divide by 100 and format as `$X,XXX.XX`.
 - **Buy terms** are decimals (`0.80` = 80% of CL value). These are contract terms PSA fills against at purchase moment.
-- **`avgBuyPctOfCL` is NOT your buy terms.** The tuning endpoint's `avgBuyPctOfCL` (and the equivalent field on `/insights` segments) is **realized cost ÷ current CL value** — a post-purchase ratio that includes CL drift since fill. When it's materially different from your contract terms, you're seeing CL move, not terms change. Never phrase this as "you're buying at X% of CL" — say "realized cost is X% of current CL" or "CL has drifted Y pp since purchase." Confusing these two was a real, documented failure mode of this skill.
+- **`avgBuyPctOfCL` is NOT your buy terms.** The tuning endpoint's `avgBuyPctOfCL` (and the equivalent field on `/insights` segments) is **realized cost ÷ current CL value** — a post-purchase ratio that includes CL drift since fill. When it's materially different from your contract terms, you're seeing CL move, not terms change. Never phrase this as "you're buying at X% of CL" — say "realized cost is X% of current CL" or "CL has drifted Y pp since purchase." Confusing these two was a real, documented failure mode of this skill. The field is also a **mean of per-card ratios, not dollar-weighted** — a few high-ratio outliers (Japanese variants with CL mismatches, post-purchase CL crashes) can inflate it by 10–25 points. Before citing `avgBuyPctOfCL ≥ 0.90` as a headline driver, run the dollar-weighted cross-check from `/api/inventory` per the API footguns block in `SKILL.md`.
 - **CL-lag vs. CL-lead framing.** The same `avgBuyPctOfCL` field tells two different stories depending on direction:
   - **CL-lag (edge captured):** `avgBuyPctOfCL < contract terms` → CL drifted *up* after purchase → you bought before CL caught up to market. Surface segments with `avgBuyPctOfCL ≤ 0.80 AND roi ≥ 0.20` as patterns to replicate.
   - **CL-lead (edge lost):** `avgBuyPctOfCL > contract terms` → CL drifted *down* after purchase → CL was above market, now correcting. Surface segments with `avgBuyPctOfCL ≥ 0.93 AND roi ≤ 0.05` as segments to narrow scope in (year, price, confidence), **not** as terms-cut candidates. Terms cuts reduce fill rate without fixing the root cause, which is CL unreliability on that segment.
