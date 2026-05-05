@@ -160,6 +160,39 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: throttle defaulted to cap, ignored buy-terms lever
+
+- **Date:** 2026-05-04
+- **Scenario:** Operator asked to reduce week-2-of-cycle spending. Skill proposed lowering daily caps as the lever. Operator redirected: *"so, rather than a cap — perhaps a CL % change for c10 might be the better play?"* — pointing at Modern PSA 10 (C10) which was realizing 99% BPCL against a 75% contract.
+- **Failure:** Skill picked one lever (cap) silently when two were available. Cap clips spike-day spend; terms shifts the entire fill distribution AND improves margin on residual fills. The two have distinct downside profiles and the operator needed both presented to choose.
+- **Corrective rule:** Whenever a recommendation reduces spending on a campaign, present **both** cap reduction and buy-terms reduction as peer levers, with the explicit tradeoff: cap = clip-top (risk control), terms = shift-distribution + margin (intentional volume-kill, not margin recovery on a filling segment per CL-lag/CL-lead framing). Don't pick silently.
+- **Anchor:** `references/playbooks.md` — Recommendation rules, "Throttle lever selection"
+- **Regression check:** Does the Throttle lever selection rule still require both cap and terms be presented as peer levers in any spend-reduction proposal, with the cap-vs-terms tradeoff stated explicitly?
+
+---
+
+## Failure: equal-weight hypotheses on Modern fill drought
+
+- **Date:** 2026-05-04
+- **Scenario:** Operator asked about Modern (C4) and Modern PSA 10 (C10) drought hypotheses. Skill listed *competition / submission shift / cycle dip* as equal alternatives. Operator pushed back: *"there is no way to prove it either way, but i would strongly suspect we're getting hit with competition, rather than a supply issue"* — picked the ranking the skill should have provided.
+- **Failure:** Skill defaulted to a flat menu of hypotheses with no ranking and no evidence-cited reasoning. Operator did the disambiguation work the skill should have done.
+- **Corrective rule:** When a campaign or segment goes dark (fill rate dropped >25% WoW, sales stalled 2+ weeks, or zero recent fills on a previously-active segment), do **not** list hypotheses as equal-weight. Walk the four canonical hypotheses (competition / supply lull / cycle dip / inclusion-list mismatch), score each by the evidence present, present in ranked order with one-line reasoning per rank, and propose a discriminating next action. Equal-weight is acceptable only when evidence genuinely doesn't separate the hypotheses — and in that case, name the discriminator the skill or operator could check next.
+- **Anchor:** `references/playbooks.md` — Recommendation rules, "Fill-drought hypothesis ranking"
+- **Regression check:** Does the Fill-drought hypothesis ranking rule still require ranked presentation with evidence-cited reasoning, the four canonical hypotheses, and a discriminating next action — banning equal-weight menus when evidence supports a ranking?
+
+---
+
+## Failure: Playbook A defaulted to Brady email instead of campaign list
+
+- **Date:** 2026-05-04
+- **Scenario:** Operator asked for tuning recommendations. Skill produced verdicts, sized changes, and a fully-drafted Brady email. Operator pushed back: *"I don't actually need a full email draft, just the campaigns that changed."* Skill switched to the campaign-list format on the second pass.
+- **Failure:** Playbook A defaulted to drafting outbound communication the operator hadn't asked for, instead of the reviewable parameter delta they actually wanted. The "updated campaign list" format already existed in the docs but only fired when the operator named it explicitly.
+- **Corrective rule:** Playbook A's default close is the **updated campaign list format** — every canonical campaign in numeric order, with `Changed: <field> <old> → <new>` annotations or `No change`. The Brady email draft is **opt-in only**: surface as a tail option (*"Want a Brady email draft for these changes?"*), never auto-draft.
+- **Anchor:** `references/playbooks.md` — Playbook A, "Output structure" (item 7) and "Output format: updated campaign list" (subsection)
+- **Regression check:** Does Playbook A's Output structure still default-close with the updated-campaign-list format, and does it still require the Brady email draft be opt-in (tail option, not auto-draft)?
+
+---
+
 ## How to use this list
 
 When making a skill edit:
