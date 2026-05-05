@@ -6,9 +6,11 @@
 
 **Architecture:** Markdown-only edits to four files in `.claude/skills/campaign-analysis/` plus runtime-only creation of `docs/private/impossible-data-asks.md`. No code, no automated tests. Tasks are sequenced so each commit produces a coherent skill — Self-challenge rules land first (other sections reference them), Playbook H second, Step 3c soft-flag third, impossible-asks wiring fourth, eval entries last.
 
+**Coordination with origin/main:** After two rebases, `origin/main` now carries 8 specific Recommendation rules from the same source session that motivated this spec (commits `7a8a9c28` + `c99e6669`). 7 of those 8 rules are concrete instances of patterns the new Self-challenge rules generalize. The implementation must cite each origin/main rule as a named precedent inside the corresponding Self-challenge rule (1.1, 1.2, 1.3, 1.4, 1.5), per the spec's "Coordination with origin/main rules" section. The Self-challenge rules are not redundant — they fire when the underlying pattern matches but no specific rule names it.
+
 **Tech Stack:** Markdown. Git for commits. The skill is consumed by Claude Code at runtime via the `Skill` tool.
 
-**Source spec:** `docs/specs/2026-05-05-campaign-analysis-depth-and-scope-design.md` — contains verbatim rule text and reference content. This plan references spec sections by number rather than reproducing all 313 lines; agentic workers must read the spec before each task.
+**Source spec:** `docs/specs/2026-05-05-campaign-analysis-depth-and-scope-design.md` — contains verbatim rule text and reference content. This plan references spec sections by number rather than reproducing all the content; agentic workers must read the spec before each task.
 
 **Branch:** `skill/campaign-analysis-depth-and-scope` (worktree at `.worktrees/campaign-analysis-strategic-shift/`). Single PR. Do not push without explicit user approval.
 
@@ -54,11 +56,17 @@ This gives you the exact text of rules 1.1 through 1.5 as approved during brains
 
 - [ ] **Step 3: Insert the new section into SKILL.md**
 
-Add this between `## Recommendation rules` (and its sub-content) and `## Data conventions`. The section header is `## Self-challenge rules`. Below the header, add this introduction paragraph:
+Add this between `## Recommendation rules` (and its sub-content) and `## Data conventions`. The section header is `## Self-challenge rules`. Below the header, add the spec's full intro block (including the **"Layered with existing rules"** paragraph that names the Business-mechanic premise gate as a complementary pre-analysis layer and the seven specific Recommendation rules — Cap-cut binding check, Era-fit gate, Throttle lever selection, Fill-drought hypothesis ranking, Dollar-weighted BPCL cross-check, Category vs campaign discipline, Popular-tier exclusion — as the specific instances 1.1–1.7 generalize). Read spec section 1 lines 56–66 verbatim — do not paraphrase.
 
-> Apply these rules to every output the skill produces — opener and follow-ups. Rules 1.1–1.7 are checked before any mover, action, or recommendation lands in the response. They live in `SKILL.md` (not `references/playbooks.md`) because they apply to every output and must always be in context.
+Then copy rules 1.1, 1.2, 1.3, 1.4, 1.5 verbatim from spec section 1, each as a `### N.N — <title>` subsection. Each rule includes the named-precedent references the spec spells out:
 
-Then copy rules 1.1, 1.2, 1.3, 1.4, 1.5 verbatim from spec section 1, each as a `### N.N — <title>` subsection. Do not add 1.6 or 1.7 yet — those land in Task 2.
+- **1.1** ends with the four cross-check types AND names the specific instances inline: Category vs campaign discipline (Conv guideline 4) for category claims; Dollar-weighted BPCL cross-check (API footguns) for metric citations; Cap-cut binding check + Era-fit gate + Throttle lever selection for action proposals; Fill-drought hypothesis ranking for hypothesis sets.
+- **1.2** ends with a sentence naming Throttle lever selection as a concrete instance (silently picking cap invites the *"would those changes do anything?"* pushback).
+- **1.3** ends with the Era-fit gate's `/snapshot.suggestions` carve-out as the named precedent.
+- **1.4** ends with the Category vs campaign discipline as the named precedent.
+- **1.5** explicitly cites Cap-diagnostic rule (BOTH directions — supply-thinness and cap-cut binding) and Popular-tier exclusion as precedents.
+
+Do not add 1.6 or 1.7 yet — those land in Task 2.
 
 - [ ] **Step 4: Verify the section is coherent**
 
@@ -86,6 +94,19 @@ Rules 1.1-1.5 cover D1 (stops at first plausible answer), D2 (defers
 to server suggestions), D3 (describing vs analyzing), and D4 (afraid
 to disagree with data). Lives in SKILL.md so the discipline is always
 in context, not lazy-loaded via references/.
+
+Each rule names existing specific Recommendation rules as precedents:
+1.1 cites Cap-cut binding check, Dollar-weighted BPCL, Category vs
+campaign discipline, Era-fit gate, Throttle lever selection, and
+Fill-drought hypothesis ranking. 1.2 cites Throttle lever selection.
+1.3 cites Era-fit gate's snapshot.suggestions carve-out. 1.4 cites
+Category vs campaign discipline. 1.5 cites Cap-diagnostic (both
+directions) and Popular-tier exclusion. The Self-challenge rules
+generalize these instances; the specific rules name the thresholds.
+
+Section 1 intro positions the rules as complementary to the existing
+Business-mechanic premise gate (premise gate fires before analysis;
+Self-challenge fires per claim/lever).
 
 Spec: docs/specs/2026-05-05-campaign-analysis-depth-and-scope-design.md
 
@@ -570,7 +591,7 @@ The 6 new entries land before this footer.
 
 - [ ] **Step 4: Append entry 1 — D1 stops at first plausible answer**
 
-Append before the footer:
+Append before the footer. Anchor uses dual-reference per spec section 5 (general Self-challenge rule + the existing specific Recommendation rules that 1.1 generalizes):
 
 ```markdown
 ---
@@ -579,10 +600,11 @@ Append before the footer:
 
 - **Date:** 2026-05-05
 - **Scenario:** [1-2 sentences from the source session — e.g. "User asked which segment was dragging Mid-Era; skill named the first byGrade row without aggregating across all Mid-Era campaigns. User pushed back: 'did you actually look at the data?'"]
-- **Failure:** Skill cited the first metric / first hypothesis / first lever without checking a second source, ranking alternatives, or sanity-checking the lever binds.
-- **Corrective rule:** Verify-before-propose gate — state claim → name cross-check that could falsify it → run it → commit or revise. Three required cross-check types: category claims (aggregate across all campaigns in the category), metric citations (dollar-weighted vs mean-of-ratios; portfolio-wide vs scope-filtered), action proposals (lever-binds sanity check).
-- **SKILL.md anchor:** Self-challenge rule 1.1
-- **Regression check:** Does Self-challenge rule 1.1 still mandate cross-check-by-claim-type with category aggregation, dollar-weighted vs mean-of-ratios divergence, and lever-binds sanity check?
+- **Failure:** Skill cited the first metric / first hypothesis / first lever without checking a second source, ranking alternatives, or sanity-checking the lever binds. The same source session produced six surgical Recommendation rules covering specific cases (Cap-cut binding, Dollar-weighted BPCL, Category vs campaign, Era-fit gate, Throttle lever selection, Fill-drought hypothesis ranking); 1.1 generalizes the discipline.
+- **Corrective rule:** Verify-before-propose gate — state claim → name cross-check that could falsify it → run it → commit or revise. Four required cross-check types: category claims (aggregate across all campaigns), metric citations (dollar-weighted vs mean-of-ratios), action proposals (lever-binds sanity check), hypothesis sets (rank by evidence).
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.1
+- **Anchor (specific instances, dual-reference):** `references/playbooks.md` Cap-diagnostic rule cap-cut binding check + `SKILL.md` API footguns dollar-weighted BPCL cross-check + `SKILL.md` Conversational guideline 4 Category vs campaign discipline + `references/playbooks.md` Era-fit gate + `references/playbooks.md` Throttle lever selection + `references/playbooks.md` Fill-drought hypothesis ranking
+- **Regression check:** Does Self-challenge rule 1.1 still mandate cross-check-by-claim-type (category aggregation, dollar-weighted vs mean-of-ratios divergence, lever-binds sanity check, hypothesis ranking)? Does it still cite the six existing specific Recommendation rules above as named precedents?
 ```
 
 - [ ] **Step 5: Append entry 2 — D2 defers to server suggestions**
@@ -594,10 +616,11 @@ Append before the footer:
 
 - **Date:** 2026-05-05
 - **Scenario:** [1-2 sentences — e.g. "/portfolio/suggestions surfaced 'lower CL% on C1' from lifetime data; skill echoed the suggestion without noting the recent restriction had already excluded the contributing grades."]
-- **Failure:** Skill echoed a server suggestion verbatim instead of treating it as one input among several. Server suggestions operate on lifetime data, don't know about recent restrictions, and lack scope context.
-- **Corrective rule:** Server suggestions are inputs, not outputs. Reframe each suggestion into your own analysis ("the server flags X; the underlying pattern is actually Y, so the right move is Z") or drop it. Stale-suggestion filter and Step 1b currentScope filter still apply on top.
-- **SKILL.md anchor:** Self-challenge rule 1.3
-- **Regression check:** Does Self-challenge rule 1.3 still require server suggestions to be reframed or dropped, never echoed verbatim, on top of the existing stale-suggestion filter and Step 1b currentScope filter?
+- **Failure:** Skill echoed a server suggestion verbatim instead of treating it as one input among several. Server suggestions operate on lifetime data, don't know about recent restrictions, and lack scope context. The Era-fit gate's "echoed `/snapshot.suggestions` 'Add top performers'" carve-out names the era-filter requirement; 1.3 generalizes the discipline of not echoing without reframing.
+- **Corrective rule:** Server suggestions are inputs, not outputs. Reframe each suggestion into your own analysis or drop it. Stale-suggestion filter and Step 1b currentScope filter still apply on top.
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.3
+- **Anchor (specific instance, dual-reference):** `references/playbooks.md` Era-fit gate (echoed `/snapshot.suggestions` "Add top performers" carve-out)
+- **Regression check:** Does Self-challenge rule 1.3 still require server suggestions to be reframed or dropped, never echoed verbatim? Does it cite the Era-fit gate's echoed-suggestion carve-out as the named precedent?
 ```
 
 - [ ] **Step 6: Append entry 3 — D3 describing vs analyzing**
@@ -609,10 +632,11 @@ Append before the footer:
 
 - **Date:** 2026-05-05
 - **Scenario:** [1-2 sentences — e.g. "Skill listed `byCharacter` JSON keys and cited an avgBuyPctOfCL number without explaining what the number meant for portfolio decisions. User pushed back: 'did you actually look at the data?'"]
-- **Failure:** Listing JSON keys, citing field values, restating coverageGaps rows treated as analysis. Skill output was a parsed-data dump, not interpretation.
-- **Corrective rule:** Every parsed datum in user-facing output carries one short interpretive clause — what the number means, why it might mislead, what the picture really is when corrected for outliers / sample selection / scope. Without the interpretation, drop the datum.
-- **SKILL.md anchor:** Self-challenge rule 1.4
-- **Regression check:** Does Self-challenge rule 1.4 still require an interpretive clause attached to every parsed datum in user-facing output, and drop the datum when the interpretation isn't there?
+- **Failure:** Listing JSON keys, citing field values, restating coverageGaps rows treated as analysis. Skill output was a parsed-data dump, not interpretation. The Category vs campaign discipline (Conversational guideline 4) names one specific instance — `Modern (C4) has been dark 12 days` reads as a category-level claim when the underlying datum is one-campaign-level. 1.4 generalizes the move.
+- **Corrective rule:** Every parsed datum in user-facing output carries one short interpretive clause — what the number means, why it might mislead, what the picture really is. Without the interpretation, drop the datum.
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.4
+- **Anchor (specific instance, dual-reference):** `SKILL.md` Conversational guideline 4 Category vs campaign discipline
+- **Regression check:** Does Self-challenge rule 1.4 still require an interpretive clause on every parsed datum, and cite the Category vs campaign discipline as the named precedent?
 ```
 
 - [ ] **Step 7: Append entry 4 — D4 afraid to disagree with data**
@@ -624,10 +648,11 @@ Append before the footer:
 
 - **Date:** 2026-05-05
 - **Scenario:** [1-2 sentences — e.g. "/tuning suggested lowering CL% on a campaign whose realized buy% was high. Pattern was CL-lead (CL above market, correcting), not terms-too-high. Skill recommended the terms cut anyway, echoing the surface conclusion."]
-- **Failure:** Skill recommended a lever the endpoint named without checking whether the underlying pattern supported it. CL-lead patterns require narrow-scope, not terms-down — same `avgBuyPctOfCL` field tells two different stories.
-- **Corrective rule:** When `/tuning` or `/portfolio/suggestions` outputs a surface conclusion that contradicts the underlying pattern, push back on the data and state which signal you trust and why. Never recommend a lever just because the endpoint named it — the pattern AND the lever-binds check both have to support it.
-- **SKILL.md anchor:** Self-challenge rule 1.5
-- **Regression check:** Does Self-challenge rule 1.5 still generalize the Cap-diagnostic and Popular-tier-exclusion precedents into a broader push-back-on-data discipline?
+- **Failure:** Skill recommended a lever the endpoint named without checking whether the underlying pattern supported it. The Cap-diagnostic rule (both directions) and Popular-tier exclusion are existing precedents for pushing back on a surface conclusion when the pattern says otherwise; 1.5 generalizes them.
+- **Corrective rule:** When `/tuning` or `/portfolio/suggestions` outputs a surface conclusion that contradicts the underlying pattern, push back and state which signal you trust and why. The pattern AND the lever-binds check both have to support a recommendation.
+- **Anchor (general):** `SKILL.md` Self-challenge rule 1.5
+- **Anchor (specific instances, dual-reference):** `references/playbooks.md` Cap-diagnostic rule (both directions: supply-thinness check AND cap-cut binding check) + `references/playbooks.md` Popular-tier exclusion
+- **Regression check:** Does Self-challenge rule 1.5 still generalize the Cap-diagnostic (both directions) and Popular-tier-exclusion precedents into a broader push-back-on-data discipline?
 ```
 
 - [ ] **Step 8: Append entry 5 — S1 fixed-universe scope failure**
@@ -667,7 +692,13 @@ Run:
 grep -c "^## Failure: " .claude/skills/campaign-analysis/evals/known-failures.md
 ```
 
-Expected: 14 (8 existing + 6 new).
+Expected: 22 entries (8 original + 5 from origin/main `7a8a9c28` + 3 from origin/main `c99e6669` + 6 new from this PR). Confirm via:
+
+```bash
+git -C /workspace/.worktrees/campaign-analysis-strategic-shift log --oneline -10 -- .claude/skills/campaign-analysis/evals/known-failures.md
+```
+
+Expected to show recent edits on `origin/main` plus this branch's pending commit.
 
 Also confirm the footer is still last:
 ```bash
@@ -788,7 +819,8 @@ Plan: `docs/plans/2026-05-05-campaign-analysis-depth-and-scope.md`
 
 - [ ] Re-read SKILL.md end-to-end; confirm Step 0/3c/4 pointers and Self-challenge section coherent
 - [ ] Re-read references/playbooks.md end-to-end; confirm Playbook H, Partner-ask rule update, Step 6 touch-up
-- [ ] Walk all 14 regression checks in evals/known-failures.md; each answers "yes"
+- [ ] Walk all 22 regression checks in evals/known-failures.md; each answers "yes"
+- [ ] Confirm Self-challenge rules 1.1, 1.2, 1.3, 1.4, 1.5 each cite their named precedents from origin/main
 - [ ] Run a /campaign-analysis session and verify the soft-flag fires when conditions are met
 - [ ] Run a /campaign-analysis session that hits a data gap; verify 1.6 routes correctly
 
