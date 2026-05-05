@@ -1,8 +1,8 @@
 ---
 name: campaign-analysis
-description: Analyze campaign performance — portfolio health, P&L, sell-through, aging inventory, liquidation planning, tuning recommendations, capital position, DH marketplace optimization, coverage gaps, and new campaign design. Use whenever the user asks about campaign status, which cards to liquidate, whether to adjust parameters, aging inventory, invoice coverage, strategy doc refinement, DoubleHolo listings or intelligence, what niches to expand into, AI price suggestions, or any follow-up about Pokemon card campaigns — even if they don't say "campaign-analysis" explicitly.
-argument-hint: "[optional: health | weekly | tuning | campaign <id-or-name> | gaps | dh]"
-allowed-tools: ["Bash", "Read", "Glob", "Grep", "Edit"]
+description: Analyze graded-card campaign performance — portfolio health, P&L, liquidation planning, tuning, capital position, coverage gaps, DH marketplace, and new campaign design. Use whenever the user asks about campaign status, what to liquidate, whether to tune parameters, or any follow-up about their card-resale operation — even if they don't say "campaign-analysis" explicitly.
+argument-hint: "(usually empty — conversational flow handles it; appendix has named-mode shortcuts)"
+allowed-tools: ["Bash", "Read", "Glob", "Grep", "Edit", "Write"]
 ---
 
 # Campaign Analysis
@@ -37,7 +37,7 @@ Treat the strategy doc as a claim to verify, not as ground truth. Three cases ne
 
 1. **Proposed/planned changes** (language like "considering", "planning to", "next step", "proposed"): verify against live API data (`/api/campaigns`, `/api/portfolio/snapshot`) that the change was or was NOT already applied before using any of the proposal's numbers.
 
-2. **Current-state claims about operational status** (paused, archived, removed, active): The 4/26 session reasserted the doc's "C10 paused in app" claim despite the live API showing `phase: active`, even after user pushback. The fix: treat `/api/campaigns` `phase` and presence in `/portfolio/health` as ground truth on present-tense reality, surface the doc as a cleanup candidate when they disagree, and do not re-anchor on the doc later in the same session after a correction.
+2. **Current-state claims about operational status** (paused, archived, removed, active): treat `/api/campaigns` `phase` and presence in `/portfolio/health` as ground truth on present-tense reality, surface the doc as a cleanup candidate when they disagree, and do not re-anchor on the doc later in the same session after a correction.
 
 3. **Current parameters** (buy terms via `buyTermsCLPct`, daily cap via `dailySpendCapCents`, eBay fee via `ebayFeePct`): cross-check against `/api/campaigns`. Disagreement is a Playbook D signal — surface it, don't silently resolve in either direction.
 
@@ -57,18 +57,15 @@ Treat the strategy doc as a claim to verify, not as ground truth. Three cases ne
 - **Inclusion list** — the exact character list, or `None (open net)`
 - **Exclusion markers** — characters explicitly removed and why (e.g. "Mew removed from C1 to stop Ancient Mew flood")
 
-**Inclusion-list diff.** The 4/26 session missed an 18-vs-34 character mismatch between the strategy doc and the live API because the lists were eyeballed rather than diffed. For every campaign with an inclusion list in either source, compute the symmetric diff. Any nonempty diff is a Playbook D signal — surface it in the data-quality block before drafting movers, with the specific characters listed.
+**Inclusion-list diff.** Eyeballing inclusion lists misses multi-character mismatches between the strategy doc and the live API. For every campaign with an inclusion list in either source, compute the symmetric diff. Any nonempty diff is a Playbook D signal — surface it in the data-quality block before drafting movers, with the specific characters listed.
 
 Before recommending any inclusion-list change, verify against the parsed list. Recommending "add X to campaign Y" when X is already there is a failure mode the skill must prevent.
 
-**Pending phase is soft-delete** — see API footguns. (Operator-specific; check the config file for overrides.)
+**Pending phase is soft-delete** — see API footguns.
 
 ### Step 1b — Build the current-scope filter (mandatory before any mover)
 
-The single most chronic failure mode in this skill is drawing movers from historical aggregates (`/tuning` byGrade, `/insights.byGrade`, `/insights.byCharacter`, `snapshot.suggestions`) that span the campaign's **lifetime**, when the campaign's current config excludes those segments. Past examples:
-
-- 4/30 — drafted "pull C4 Modern PSA 9 buy% from 91→85" when C4 was restricted to PSA 8 only on 4/23. Drafted "pull PSA 10 out of C3 EX/e-Reader" when C3 was already PSA 8 only on 4/23. Drafted "C1 Vintage Core PSA 8 ROI -9%" when C1 was restricted to PSA 9 only on 4/26.
-- 4/26 — eyeballed the inclusion list instead of diffing it, missing an 18-vs-34 character mismatch.
+The most chronic failure mode in this skill is drawing movers from historical aggregates (`/tuning` byGrade, `/insights.byGrade`, `/insights.byCharacter`, `snapshot.suggestions`) that span the campaign's **lifetime**, when the campaign's current config excludes those segments — restricted-grade campaigns still show pre-restriction grade rows in tuning, and inclusion-list edits don't retroactively scrub historical bullets.
 
 The mechanical fix: before any mover or recommendation references a `/tuning` row, an `/insights` row, or a `snapshot.suggestions` entry, filter that row through the **current campaign config** parsed in Step 1a.
 
@@ -82,13 +79,13 @@ The mechanical fix: before any mover or recommendation references a `/tuning` ro
 | `inclusion` | `inclusionList` tokenized lowercase, or `null` for open net | `/tuning.byCharacter`, `/insights.byCharacter`, `/insights.byCharacterGrade` (character dim) |
 | `buyTermsCLPct`, `dailySpendCapCents`, `ebayFeePct` | direct | citation reference for any realized-buy% mention |
 
-**Hard rules — no exceptions:**
+**Hard rules — no exceptions. Walk this list before drafting any mover.**
 
-1. **A historical row outside `currentScope` cannot drive a mover, action, or recommendation.** It can be cited as context ("Mid-Era's PSA 8/9 history shows -4%/-11% ROI; the 4/23 PSA-10-only restriction excluded those grades"), but never as a present-tense observation or lever.
-2. **Citing `avgBuyPctOfCL` from `/tuning` requires also citing `currentScope.buyTermsCLPct` from `/api/campaigns` in the same sentence.** This rule applies both to your own prose AND to any `snapshot.suggestions` entry you echo: a suggestion saying "Lower CL% from 75% to 70%" must be paired with the contract `buyTermsCLPct` and the realized `avgBuyPctOfCL` so the reader can see whether the suggestion is acting on a contract value or a measurement. Never write a buy% number without saying whether it's the realized measurement or the contract parameter. Realized minus contract is a *diagnostic question* (CL anchor lag, mix shift, inclusion-list drift), not a parameter recommendation.
-3. **`snapshot.suggestions` entries that target a field outside `currentScope`** (e.g. a "lower buy terms" suggestion that's actually advocating to revisit a grade no longer in the campaign) get filtered out alongside the existing 72-hour stale-suggestion filter. The suggestions endpoint operates on lifetime data and does not know about recent grade restrictions.
+1. **A historical row outside `currentScope` cannot drive a mover, action, or recommendation.** It can be cited as context (e.g. "Mid-Era's PSA 8/9 history shows -4%/-11% ROI; the PSA-10-only restriction excluded those grades"), but never as a present-tense observation or lever.
+2. **Pair every `avgBuyPctOfCL` citation with the contract `buyTermsCLPct`** from `/api/campaigns`, in the same sentence. Applies to your own prose AND any echoed `snapshot.suggestions` entry: a suggestion saying "Lower CL% from 75% to 70%" must be paired with both numbers so the reader sees whether the suggestion is acting on a contract value or a realized measurement. Never write a buy% without saying which it is. Realized-minus-contract is a *diagnostic question* (CL anchor lag, mix shift, inclusion-list drift), not a parameter recommendation.
+3. **Filter out `snapshot.suggestions` entries that target a field outside `currentScope`** (e.g. a "lower buy terms" suggestion advocating to revisit a grade no longer in the campaign), alongside the existing 72-hour stale-suggestion filter. The suggestions endpoint operates on lifetime data and does not know about recent grade restrictions.
 
-**Output expected during the opener.** When the data-quality block lists `/tuning` and `/insights` as `✓`, the next line must explicitly state which historical segments were filtered out by the current-scope gate. Example:
+**Output expected in the opener.** Whenever the data-quality block lists `/tuning` and `/insights` as `✓`, follow it with a line naming which historical segments the current-scope gate filtered out. Example:
 
     Current scope filter: C1 Vintage Core grades={9} (PSA 8/8.5/10 history filtered); C3 EX/e-Reader grades={8} (PSA 8.5/9/10 filtered); C4 Modern grades={8} (PSA 8.5/9/10 filtered); C6 Mid-Era grades={10} (PSA 8/9 filtered); C10 Modern PSA 10 grades={10} (none filtered); C11 Vintage-EX grades={8} (none filtered). Inclusion-list diffs: none.
 
@@ -120,7 +117,7 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 - **External campaign: filter from all ROI and margin calculations.** The "External" campaign has `cost basis = 0` for pre-campaign purchases. Any portfolio-wide character/grade/era ROI calculation that includes External will be inflated. This is a hard exclusion, not a caveat — filter it out everywhere.
 - **`inHandCapitalCents == 0` portfolio-wide is NOT automatically a data-pipeline gap.** It is a real and common business state: "every received card has sold; remaining unsold inventory is all PSA-side in-transit, not yet shipped." Before treating zero in-hand as broken data and working around it, **ask the user to confirm** ("Is in-hand really $0 across all campaigns — i.e. everything received has sold? Or is the in-hand/in-transit split not populating for some other reason?"). Treating real business state as a pipeline gap is a worse failure than the inverse — it leads to phantom "low sell-through" alarms when the actual sell-through on received inventory is 100%. Note: when in-hand is zero and unsold is large, sell-through percentages computed against `totalUnsold` will read low and feel alarming, but that's an artifact of in-transit denominator inflation — not a real velocity problem.
 - **`phase: "pending"` is a soft-delete marker, not "in flight" or "drift."** Card Yeti uses `pending` to retire campaigns from active fills while preserving purchase history (hard-delete would break referential integrity on past purchases). A campaign with `phase: "pending"` that the strategy doc calls "removed" is the expected state — do not flag as a mismatch.
-- **`/tuning` and `/insights` are lifetime-cumulative, not current-config-scoped.** A campaign restricted to PSA 8 on 4/23 still shows PSA 9/10 rows in `/tuning.byGrade` because those are historical fills before the restriction. Always run the Step 1b currentScope filter before drawing movers. Citing a tuning byGrade row for a grade outside the current `gradeRange` as a present-tense observation has burned three sessions (4/26 inclusion-list miss, 4/30 PSA-9-already-removed misses on C1/C3/C4).
+- **`/tuning` and `/insights` are lifetime-cumulative, not current-config-scoped.** A campaign whose grade range was tightened still shows historical fills at the now-excluded grades in `/tuning.byGrade`. Always run the Step 1b currentScope filter before drawing movers. Citing a tuning byGrade row for a grade outside the current `gradeRange` as a present-tense observation has burned multiple sessions.
 - **`avgBuyPctOfCL` is a measurement, `buyTermsCLPct` is the contract.** They are different fields on different endpoints (`/tuning` vs `/api/campaigns`) and they will routinely disagree by 5–15 points. Never present a realized buy% as if it were a contract parameter. See Step 1b rule 2 for the citation requirement.
 
 ## Step 3 — Fetch the initial snapshot (default entry point)
@@ -188,7 +185,7 @@ After the data quality audit, before writing the opener. Answer three questions 
 - Full-week to full-week comparisons only. Never compare a partial current week to a full trailing mean.
 
 **Q3 — Does credit/summary's trajectory reconcile with observed sales pace?**
-- Sources: `/credit/summary` (`weeksToCover`, `recoveryTrend`, `alertLevel`), `/portfolio/weekly-history` (is weekly revenue trending in the same direction as `recoveryTrend` claims?)
+- Sources (use 2+): `/credit/summary` (`weeksToCover`, `recoveryTrend`, `alertLevel`), `/portfolio/weekly-history` (is weekly revenue trending in the same direction as `recoveryTrend` claims?)
 - If `recoveryTrend` says `"improving"` but weekly revenue from `/weekly-history` is flat or declining over the last 3+ weeks, that's a contradiction.
 
 **Contradiction handling.** If any of the three checks produces a contradiction, the opener becomes a **contradiction report** instead of analysis:
@@ -299,7 +296,7 @@ Route each user follow-up to a playbook. Load `references/playbooks.md` for the 
 
 ## Step 5 — Strategy doc sync
 
-Strategy doc sync runs before the retrospective because the doc is the persistent state that carries across sessions — memory doesn't. The 4/23 session shipped parameter changes without updating the doc, and the next session anchored on stale numbers. If parameters changed, campaigns moved phase, or a Brady email went out this session, update the doc here.
+Strategy doc sync runs before the retrospective because the doc is the persistent state that carries across sessions — memory doesn't. Sessions have shipped parameter changes without updating the doc, leaving the next session anchored on stale numbers. If parameters changed, campaigns moved phase, or a Brady email went out this session, update the doc here.
 
 See `references/playbooks.md` for the full procedure.
 
@@ -336,9 +333,17 @@ Failure modes to avoid:
 - Listing `keys` of a JSON response and treating that printout as analysis.
 - Citing an endpoint's data when you didn't actually call it this session.
 
-## Recommendation rules
+## Recommendation rules (gist; full text in `references/playbooks.md`)
 
-Load `references/playbooks.md` for the full recommendation rules (Sizing, Stale-suggestion filter, Confidence bands, Hold verdict rule, Capital guardrail, Sequencing, Popular-tier character exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic rule, Partner-ask verification).
+| Rule | Gist |
+|------|------|
+| Sizing | Every rec carries `est. +$X.XK/mo at current fill (Confidence: H\|M\|L)`. Use `recovery` (one-time) instead of `/mo` for liquidation/DH push. |
+| Confidence bands | H = ≥30 obs AND CV<20%. M = 10–29 OR ≥30 with CV≥20%. L = <10 obs OR <4 weeks history. |
+| Capital guardrail | Healthy: weeksToCover≤5 AND trend≠worsening. Tight: caveat ramp-ups. Critical: block ramp-ups. |
+| Hold verdict | WoW within ±10% of 4-week trailing-mean → say "Hold — noise, not signal." |
+| Stale-suggestion filter | Drop server suggestions targeting fields on a campaign updated within 72h. State filter outcome. |
+
+Other rules (Sequencing, Popular-tier, Sub-$150 modern, Turnover, Cap-diagnostic, Partner-ask) are domain-specific — load `references/playbooks.md` when they apply.
 
 ## Data conventions
 
