@@ -160,6 +160,17 @@ This is not an automated runner — the skill curls live endpoints and reads a p
 
 ---
 
+## Failure: throttle defaulted to cap, ignored buy-terms lever
+
+- **Date:** 2026-05-04
+- **Scenario:** Operator asked to reduce week-2-of-cycle spending. Skill proposed lowering daily caps as the lever. Operator redirected: *"so, rather than a cap — perhaps a CL % change for c10 might be the better play?"* — pointing at Modern PSA 10 (C10) which was realizing 99% BPCL against a 75% contract.
+- **Failure:** Skill picked one lever (cap) silently when two were available. Cap clips spike-day spend; terms shifts the entire fill distribution AND improves margin on residual fills. The two have distinct downside profiles and the operator needed both presented to choose.
+- **Corrective rule:** Whenever a recommendation reduces spending on a campaign, present **both** cap reduction and buy-terms reduction as peer levers, with the explicit tradeoff: cap = clip-top (risk control), terms = shift-distribution + margin (intentional volume-kill, not margin recovery on a filling segment per CL-lag/CL-lead framing). Don't pick silently.
+- **Anchor:** `references/playbooks.md` — Recommendation rules, "Throttle lever selection"
+- **Regression check:** Does the Throttle lever selection rule still require both cap and terms be presented as peer levers in any spend-reduction proposal, with the cap-vs-terms tradeoff stated explicitly?
+
+---
+
 ## How to use this list
 
 When making a skill edit:

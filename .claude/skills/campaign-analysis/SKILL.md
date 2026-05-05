@@ -226,7 +226,7 @@ Rules:
 
 When the strongest signal is a hold (WoW delta within noise band per the hold-verdict rule), state it directly: *"Hold — this week's ROI of X% is within ±10% of the Y% trailing-mean. Noise, not signal. No parameter changes indicated."* A hold week with 0 actions and interesting movers is a valid, complete opener.
 
-For actions that ARE proposed, apply all existing Recommendation rules: Sizing, Confidence bands, Capital guardrail, Sequencing, Popular-tier exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic rule. These rules are unchanged.
+For actions that ARE proposed, apply all existing Recommendation rules: Sizing, Confidence bands, Capital guardrail, Sequencing, Popular-tier exclusion, Sub-$150 modern floor, Turnover gate, Cap-diagnostic rule, **Throttle lever selection** (when the action reduces spending — present cap and terms as peer levers, never silently). These rules are unchanged.
 
 **Portfolio at a glance** — Per-active-campaign line (excluding External — see API footguns). Format depends on the in-transit share:
 

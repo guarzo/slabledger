@@ -44,7 +44,7 @@ Fetch in parallel (most should already be in the opener cache from Step 3):
 State the **capital posture** once at the top (`Healthy / Tight / Critical` from the guardrail rule), then:
 
 1. **Per-campaign verdict — every active campaign in canonical numeric order.** One of: `RAMP UP / TIGHTEN / HOLD / WIND DOWN / WATCH`. Each verdict carries one sentence of justification citing the metrics that drove it (e.g. `TIGHTEN — PSA 9 at 97.1% of CL on 92 fills, 32% ST, 0.2% ROI`). A `HOLD` must cite the trailing-mean from `/portfolio/weekly-history` per the hold-verdict rule. A campaign whose verdict is HOLD/WATCH still appears in the list — silence is not acceptable.
-2. **Top parameter changes ranked by sized $ impact** (with confidence band; hold-verdict rule applied; capital guardrail applied to ramp-ups). Each backed by `(campaign, grade)` data from `/tuning`, not generic suggestions. State the current value, proposed value, sample size (`n=N`), and projected impact (`Proj: +$X.XK/mo (H|M|L)`).
+2. **Top parameter changes ranked by sized $ impact** (with confidence band; hold-verdict rule applied; capital guardrail applied to ramp-ups; **Throttle-lever-selection rule applied to any spend-reduction**). Each backed by `(campaign, grade)` data from `/tuning`, not generic suggestions. State the current value, proposed value, sample size (`n=N`), and projected impact (`Proj: +$X.XK/mo (H|M|L)`). When the proposal is a spend-reduction (cap cut, terms cut, inclusion-list narrow), name **both** cap and terms options with the cap-vs-terms tradeoff per the Throttle lever selection rule — don't pick one silently.
 3. **Inclusion-list adds/trims from `/insights.byCharacter`** — characters with `soldCount ≥ 5` AND `roi ≥ 0.20` not yet covered (or undercovered). Per-campaign list of proposed adds with sized expected revenue. Also surface trims for high-`n` low-ROI characters dragging the portfolio (`soldCount ≥ 20` AND `roi < 0.05`). **Run the Era-fit gate** (Recommendation rules) on every proposed add before drafting the line — character year-of-first-release must overlap the campaign's `yearRange`. Filter `/insights.coverageGaps` rows for the open-net false-positive carve-out per the same rule.
 4. **Coverage shifts** — niches the portfolio should expand into (`/intelligence/niches` rows with high `opportunity_score` and `current_coverage = 0`) or campaigns that should narrow (`/insights.byPriceTier` drag tiers). Proposed action per row.
 5. **Cross-campaign arbitrage** — crack candidates and acquisition mispricings worth > $200 net. Capital-positive, bypass the guardrail.
@@ -424,6 +424,21 @@ Compute from `/campaigns/{id}/fill-rate`:
 > *"C8 Gold Stars cap $8K → $5K: 0 of 4 observed days exceeded $5K, max ever $1,374. $0 saved — no-op. Skipping."*
 
 This rule was added because the skill proposed cap reductions on Mid-Era (C6, $5K → $2K) and Gold Stars (C8, $8K → $5K) as part of a throttle plan. Actual binding analysis: C6 had 3 of 15 days over $2K (~$0–$1K saved over a 4-day pro-rated window); C8 had 0 of 4 days over $5K (the 4/30 raise to $8K had never bound — $0 saved). Only C10 (14 of 18 days exceeding $2K, ~$3K saved) was a real cap-cut candidate. The skill should have run the binding check before proposing C6 / C8 cuts.
+
+### Throttle lever selection
+
+When a recommendation reduces spending on a campaign — whether for capital pressure, invoice-cycle tightening, or pre-emptive throttle — present **both** cap reduction and buy-terms reduction as peer levers, with the tradeoff stated explicitly. Don't pick one silently.
+
+| Lever | Effect | When it's the right choice |
+|-------|--------|----------------------------|
+| **Cap reduction** | Clips spike-day exposure. Margin per fill unchanged; typical-day fills unchanged; only spike-day fills are dropped. Run the Cap-cut binding check (Cap-diagnostic rule, inverse direction) before proposing a number — a cap that doesn't bind on observed spend saves $0. | Goal is risk control or smoothing the cash burn curve. Healthy campaign you want to keep filling, just not blow up the cap on a bad day. |
+| **Terms reduction** | Shifts the entire fill distribution: reduces fill rate every day AND improves margin on residual fills. | Goal is intentional volume-kill — *not* margin recovery on a filling segment. |
+
+Default presentation: name both levers, frame the choice as risk-control (cap) vs distribution-shift (terms), and let the operator pick. Especially in invoice-cycle / capital-tightening contexts, the operator may have a directional preference (e.g. terms cut on a CL-lead segment) that the skill won't surface if it picks cap silently.
+
+**Pair with CL-lag/CL-lead discipline.** Terms cuts are appropriate as a *volume-kill* lever, not as a *margin-recovery* lever on a filling segment. A CL-lead segment (per Data conventions thresholds — `avgBuyPctOfCL ≥ 0.93 AND roi ≤ 0.05`) is a "narrow scope (year/price/confidence)" candidate, not a terms-cut candidate. The terms-as-volume-kill case is distinct from margin recovery — keep them separate in the rationale.
+
+This rule was added because the skill defaulted to cap reduction when the operator wanted terms reduction on a 99%-BPCL-vs-75%-contract campaign during invoice-cycle week 2. Cap would have left the realized BPCL gap untouched; terms shifts the distribution down so fewer high-BPCL fills land at all.
 
 ### Partner-ask verification
 
