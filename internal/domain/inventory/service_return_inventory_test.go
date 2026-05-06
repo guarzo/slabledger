@@ -8,10 +8,12 @@ import (
 
 func TestDeleteSaleByPurchaseID(t *testing.T) {
 	tests := []struct {
-		name         string
-		seed         func(*mockRepo)
-		wantErr      bool
-		wantSaleGone bool
+		name              string
+		seed              func(*mockRepo)
+		wantErr           bool
+		wantSaleGone      bool
+		wantDHReset       bool
+		wantDHStatusAfter DHStatus
 	}{
 		{
 			name: "success deletes sale and clears flag",
@@ -29,6 +31,45 @@ func TestDeleteSaleByPurchaseID(t *testing.T) {
 				r.purchases["p1"] = &Purchase{ID: "p1", CampaignID: "c1", CertNumber: "111", Grader: "PSA"}
 			},
 			wantErr: true,
+		},
+		{
+			name: "sold-on-DH purchase has DH linkage reset so push pipeline can re-enroll it",
+			seed: func(r *mockRepo) {
+				r.purchases["p1"] = &Purchase{
+					ID:                  "p1",
+					CampaignID:          "c1",
+					CertNumber:          "111",
+					Grader:              "PSA",
+					DHInventoryID:       9999,
+					DHStatus:            DHStatusSold,
+					DHListingPriceCents: 5000,
+				}
+				r.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
+				r.purchaseSales["p1"] = true
+			},
+			wantErr:           false,
+			wantSaleGone:      true,
+			wantDHReset:       true,
+			wantDHStatusAfter: "",
+		},
+		{
+			name: "in_stock purchase is left alone (no DH reset)",
+			seed: func(r *mockRepo) {
+				r.purchases["p1"] = &Purchase{
+					ID:            "p1",
+					CampaignID:    "c1",
+					CertNumber:    "111",
+					Grader:        "PSA",
+					DHInventoryID: 1234,
+					DHStatus:      DHStatusInStock,
+				}
+				r.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
+				r.purchaseSales["p1"] = true
+			},
+			wantErr:           false,
+			wantSaleGone:      true,
+			wantDHReset:       false,
+			wantDHStatusAfter: DHStatusInStock,
 		},
 	}
 
@@ -59,8 +100,20 @@ func TestDeleteSaleByPurchaseID(t *testing.T) {
 			if repo.purchaseSales["p1"] {
 				t.Error("purchaseSales flag should have been cleared")
 			}
-			if _, ok := repo.purchases["p1"]; !ok {
-				t.Error("purchase should still exist after sale deletion")
+			p, ok := repo.purchases["p1"]
+			if !ok {
+				t.Fatal("purchase should still exist after sale deletion")
+			}
+			if p.DHStatus != tc.wantDHStatusAfter {
+				t.Errorf("dh_status: got %q, want %q", p.DHStatus, tc.wantDHStatusAfter)
+			}
+			if tc.wantDHReset {
+				if p.DHInventoryID != 0 {
+					t.Errorf("dh_inventory_id should have been reset, got %d", p.DHInventoryID)
+				}
+				if p.DHPushStatus != DHPushStatusPending {
+					t.Errorf("dh_push_status: got %q, want %q", p.DHPushStatus, DHPushStatusPending)
+				}
 			}
 		})
 	}
