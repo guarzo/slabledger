@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { usePsaExchangeOpportunities } from '../queries/usePsaExchangeQueries';
+import { usePsaExchangeOpportunities, usePsaExchangePolicy } from '../queries/usePsaExchangeQueries';
+import { useAuth } from '../contexts/AuthContext';
 import { Breadcrumb } from '../ui';
 import CardShell from '../ui/CardShell';
 import Button from '../ui/Button';
 import OpportunitiesTable from './psa-exchange/OpportunitiesTable';
 import OpportunitiesTableSkeleton from './psa-exchange/OpportunitiesTableSkeleton';
+import PolicyDrawer from './psa-exchange/PolicyDrawer';
 import Toolbar from './psa-exchange/Toolbar';
 import {
   applyFilters,
@@ -21,6 +23,10 @@ import {
 
 export default function PsaExchangePage() {
   const { data, isLoading, error, refetch } = usePsaExchangeOpportunities();
+  const { user } = useAuth();
+  const isAdmin = !!user?.is_admin;
+  const policyQuery = usePsaExchangePolicy();
+  const [policyOpen, setPolicyOpen] = useState(false);
 
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [quickView, setQuickView] = useState<QuickView>('all');
@@ -83,19 +89,35 @@ export default function PsaExchangePage() {
           </p>
         </div>
         {data?.categoryUrl ? (
-          <a
-            href={data.categoryUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[var(--surface-3)] bg-[var(--surface-1)] text-sm text-[var(--text)] hover:bg-[var(--surface-2)] hover:border-[var(--brand-500)] transition-colors"
-          >
-            Open Pokemon catalog
-            <span aria-hidden="true">↗</span>
-          </a>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                variant="secondary"
+                onClick={() => setPolicyOpen(true)}
+                disabled={!policyQuery.data}
+                title={policyQuery.data ? 'Adjust scoring & filter levers' : 'Loading policy…'}
+              >
+                Tune…
+              </Button>
+            )}
+            <a
+              href={data.categoryUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-[var(--surface-3)] bg-[var(--surface-1)] text-sm text-[var(--text)] hover:bg-[var(--surface-2)] hover:border-[var(--brand-500)] transition-colors"
+            >
+              Open Pokemon catalog
+              <span aria-hidden="true">↗</span>
+            </a>
+          </div>
         ) : !isLoading && !error ? (
           <span className="text-xs text-[var(--text-muted)]">PSA-Exchange token not configured</span>
         ) : null}
       </header>
+
+      {isAdmin && policyQuery.data && (
+        <PolicyDrawer open={policyOpen} onOpenChange={setPolicyOpen} settings={policyQuery.data} />
+      )}
 
       {isLoading && <OpportunitiesTableSkeleton />}
 

@@ -44,6 +44,11 @@ linters:
         linters:
           - errcheck
           - gocritic
+      - path: _test\.go
+        # The "if x == nil { t.Fatalf(...) }; x.Deref" pattern is safe — Fatalf
+        # calls FailNow → runtime.Goexit — but newer staticcheck versions don't
+        # model that as terminating, so SA5011 fires across our test suite.
+        text: "SA5011"
       - path: testutil/mocks/
         linters:
           - unused
