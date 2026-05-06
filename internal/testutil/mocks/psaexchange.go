@@ -85,3 +85,30 @@ func (m *MockPSAExchangeService) SetPolicy(ctx context.Context, p psaexchange.Po
 	}
 	return nil
 }
+
+// MockPSAExchangePolicyStore is a test double for psaexchange.PolicyStore.
+// Override behavior by setting GetFn / SetFn. Calls to Set are recorded in
+// SetCalls so tests can assert how many times the store was written and with
+// what payload.
+type MockPSAExchangePolicyStore struct {
+	GetFn    func(ctx context.Context) (psaexchange.Policy, bool, error)
+	SetFn    func(ctx context.Context, p psaexchange.Policy) error
+	SetCalls []psaexchange.Policy
+}
+
+var _ psaexchange.PolicyStore = (*MockPSAExchangePolicyStore)(nil)
+
+func (m *MockPSAExchangePolicyStore) Get(ctx context.Context) (psaexchange.Policy, bool, error) {
+	if m.GetFn != nil {
+		return m.GetFn(ctx)
+	}
+	return psaexchange.Policy{}, false, nil
+}
+
+func (m *MockPSAExchangePolicyStore) Set(ctx context.Context, p psaexchange.Policy) error {
+	m.SetCalls = append(m.SetCalls, p)
+	if m.SetFn != nil {
+		return m.SetFn(ctx, p)
+	}
+	return nil
+}

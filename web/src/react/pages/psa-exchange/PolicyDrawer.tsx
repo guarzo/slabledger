@@ -43,7 +43,7 @@ interface FormErrors {
 
 function validateForm(f: FormState): { policy?: PsaExchangePolicy; errors: FormErrors } {
   const errors: FormErrors = {};
-  const intField = (raw: string, lo: number, hi: number, label: string): number | undefined => {
+  const intField = (raw: string, lo: number, hi: number): number | undefined => {
     if (raw === '' || Number.isNaN(Number(raw))) {
       return undefined;
     }
@@ -54,7 +54,6 @@ function validateForm(f: FormState): { policy?: PsaExchangePolicy; errors: FormE
     if (n < lo || n > hi) {
       return undefined;
     }
-    void label;
     return n;
   };
   const pctField = (raw: string): number | undefined => {
@@ -64,17 +63,17 @@ function validateForm(f: FormState): { policy?: PsaExchangePolicy; errors: FormE
     return n / 100;
   };
 
-  const hv = intField(f.highLiquidityVelocity, 0, 1000, 'highLiquidityVelocity');
+  const hv = intField(f.highLiquidityVelocity, 0, 1000);
   if (hv === undefined) errors.highLiquidityVelocity = 'integer ≥ 0';
-  const hc = intField(f.highLiquidityConfidence, 0, 10, 'highLiquidityConfidence');
+  const hc = intField(f.highLiquidityConfidence, 0, 10);
   if (hc === undefined) errors.highLiquidityConfidence = '0–10';
   const hp = pctField(f.highLiquidityOfferPct);
   if (hp === undefined) errors.highLiquidityOfferPct = '0 < pct ≤ 100';
   const dp = pctField(f.defaultOfferPct);
   if (dp === undefined) errors.defaultOfferPct = '0 < pct ≤ 100';
-  const mc = intField(f.minConfidence, 0, 10, 'minConfidence');
+  const mc = intField(f.minConfidence, 0, 10);
   if (mc === undefined) errors.minConfidence = '0–10';
-  const mq = intField(f.minQuarterVelocity, 0, 1000, 'minQuarterVelocity');
+  const mq = intField(f.minQuarterVelocity, 0, 1000);
   if (mq === undefined) errors.minQuarterVelocity = 'integer ≥ 0';
 
   if (hp !== undefined && dp !== undefined && hp < dp) {
