@@ -208,6 +208,43 @@ func TestImportCerts_ExistingCert(t *testing.T) {
 	}
 }
 
+// TestImportCerts_DuplicateOnCreate guards the retry path: if the initial
+// batch lookup misses a cert (because a previous, still-in-flight ImportCerts
+// call hadn't committed yet) but CreatePurchase then trips the unique index,
+// the row is treated as already-existing rather than failed. This is what
+// happens when the frontend's 30s timeout aborts a long import and retries —
+// the second call must not surface ERR_DUPLICATE_CERT_NUMBER as a phantom
+// failure when the rows are already persisted.
+func TestImportCerts_DuplicateOnCreate(t *testing.T) {
+	repo := newMockRepo()
+	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+	// Simulate the race: cert is registered in the unique-index map (prior call
+	// committed), but the purchase row isn't visible to this mockRepo's batch
+	// lookup. CreatePurchase will reject the insert with ErrDuplicateCertNumber.
+	repo.certNumbers["12345678"] = true
+
+	certLookup := &mockCertLookup{
+		lookupFn: func(_ context.Context, cert string) (*CertInfo, error) {
+			return &CertInfo{CertNumber: cert, CardName: "Charizard", Grade: 10}, nil
+		},
+	}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+	result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.AlreadyExisted != 1 {
+		t.Errorf("alreadyExisted = %d, want 1", result.AlreadyExisted)
+	}
+	if result.Failed != 0 {
+		t.Errorf("failed = %d, want 0", result.Failed)
+	}
+	if len(result.Errors) != 0 {
+		t.Errorf("errors = %v, want none", result.Errors)
+	}
+}
+
 func TestImportCerts_Deduplication(t *testing.T) {
 	repo := newMockRepo()
 	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID}

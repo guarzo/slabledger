@@ -162,6 +162,16 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 		}
 
 		if createErr := s.purchases.CreatePurchase(ctx, purchase); createErr != nil {
+			// A duplicate-cert error here means a previous (likely timed-out and
+			// client-retried) call to ImportCerts already inserted this row. The
+			// batch lookup at the top of this function missed it because that
+			// previous call hadn't committed yet when this request started. Treat
+			// the row as already-existing so the retry reports success instead of
+			// confusing the operator with a phantom failure.
+			if IsDuplicateCertNumber(createErr) {
+				result.AlreadyExisted++
+				continue
+			}
 			result.Failed++
 			result.Errors = append(result.Errors, CertImportError{CertNumber: certNum, Error: createErr.Error()})
 			continue
