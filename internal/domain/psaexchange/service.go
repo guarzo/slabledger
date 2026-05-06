@@ -62,10 +62,36 @@ func WithClock(fn func() time.Time) Option {
 	return func(s *service) { s.clock = fn }
 }
 
-// WithPolicy overrides the scoring/filter policy. The zero value is rejected;
-// pass DefaultPolicy() (or a customized copy) explicitly.
+// WithPolicy merges the non-zero fields of p onto the existing policy
+// (defaulting to DefaultPolicy()), so callers can override individual levers
+// without having to re-specify the rest. Pass DefaultPolicy() with explicit
+// overrides for full control.
 func WithPolicy(p Policy) Option {
-	return func(s *service) { s.policy = p }
+	return func(s *service) {
+		base := s.policy
+		if base == (Policy{}) {
+			base = DefaultPolicy()
+		}
+		if p.HighLiquidityVelocity != 0 {
+			base.HighLiquidityVelocity = p.HighLiquidityVelocity
+		}
+		if p.HighLiquidityConfidence != 0 {
+			base.HighLiquidityConfidence = p.HighLiquidityConfidence
+		}
+		if p.HighLiquidityOfferPct != 0 {
+			base.HighLiquidityOfferPct = p.HighLiquidityOfferPct
+		}
+		if p.DefaultOfferPct != 0 {
+			base.DefaultOfferPct = p.DefaultOfferPct
+		}
+		if p.MinConfidence != 0 {
+			base.MinConfidence = p.MinConfidence
+		}
+		if p.MinQuarterVelocity != 0 {
+			base.MinQuarterVelocity = p.MinQuarterVelocity
+		}
+		s.policy = base
+	}
 }
 
 // NewService constructs a Service.

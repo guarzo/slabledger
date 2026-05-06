@@ -28,6 +28,11 @@ const CONF_GLYPH: Record<'high' | 'medium' | 'low', string> = {
   low: '?',
 };
 
+function formatOfferPct(pct: number): string {
+  const v = pct * 100;
+  return Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`;
+}
+
 function tierLabel(tier: string): string {
   if (tier === 'high_liquidity') return 'High liquidity';
   if (tier === 'default') return 'Default';
@@ -84,7 +89,7 @@ export default function SignalCell({
           </div>
           <div className="flex justify-between">
             <span className="text-[var(--text-muted)]">Offer pct</span>
-            <span className="tabular-nums">{(maxOfferPct * 100).toFixed(0)}% of comp</span>
+            <span className="tabular-nums">{formatOfferPct(maxOfferPct)} of comp</span>
           </div>
           <div className="h-px bg-[var(--surface-2)]" />
           <div className="flex justify-between">

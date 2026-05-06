@@ -105,9 +105,16 @@ export default function OpportunitiesTable({
   );
 }
 
+function formatOfferPct(pct: number): string {
+  // Preserve one decimal so a 67.5% lever doesn't display as 68%, but trim
+  // trailing zeros so the common 65% / 75% case stays clean.
+  const v = pct * 100;
+  return Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`;
+}
+
 function TargetFormulaInfo({ policy }: { policy: PsaExchangePolicy }) {
-  const hi = Math.round(policy.highLiquidityOfferPct * 100);
-  const def = Math.round(policy.defaultOfferPct * 100);
+  const hi = formatOfferPct(policy.highLiquidityOfferPct);
+  const def = formatOfferPct(policy.defaultOfferPct);
   return (
     <HoverCard.Root openDelay={100} closeDelay={150}>
       <HoverCard.Trigger asChild>
@@ -127,11 +134,11 @@ function TargetFormulaInfo({ policy }: { policy: PsaExchangePolicy }) {
         >
           <div className="font-medium">Target offer = comp × tier %</div>
           <div className="text-[var(--text-muted)]">
-            <span className="text-[var(--text)]">High liquidity:</span> {hi}% of comp
+            <span className="text-[var(--text)]">High liquidity:</span> {hi} of comp
             <span className="text-[var(--text-muted)]"> — when velocity ≥ {policy.highLiquidityVelocity}/mo and confidence ≥ {policy.highLiquidityConfidence}.</span>
           </div>
           <div className="text-[var(--text-muted)]">
-            <span className="text-[var(--text)]">Default:</span> {def}% of comp <span className="text-[var(--text-muted)]">— otherwise.</span>
+            <span className="text-[var(--text)]">Default:</span> {def} of comp <span className="text-[var(--text-muted)]">— otherwise.</span>
           </div>
           <div className="h-px bg-[var(--surface-2)]" />
           <div className="text-[var(--text-muted)]">
@@ -182,7 +189,7 @@ function DataRow({ row, topDecileScore, zebra, isMember = false }: DataRowProps)
           <span aria-label={`Cert #${row.cert}`} className="font-mono text-[var(--text-muted)] tabular-nums select-text">{row.cert}</span>
           {row.mayTakeAtList && !isMember && (
             <span className="px-1.5 py-0.5 rounded-md bg-[var(--success)]/15 text-[var(--success)]">
-              PSA value &lt; target
+              PSA value ≤ target
             </span>
           )}
         </div>

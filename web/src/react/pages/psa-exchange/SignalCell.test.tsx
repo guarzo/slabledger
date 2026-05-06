@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitForElementToBeRemoved } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import SignalCell from './SignalCell';
 
@@ -50,10 +50,11 @@ describe('SignalCell', () => {
     render(<SignalCell {...baseRow} />);
     const trigger = screen.getByRole('button', { name: /signal details/i });
     fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
-    expect(await screen.findByText(/days\/sale/i)).toBeInTheDocument();
+    const content = await screen.findByText(/days\/sale/i);
     fireEvent.pointerLeave(trigger, { pointerType: 'mouse' });
-    // Radix unmounts the portal content when open=false (after closeDelay).
-    await screen.findByRole('button', { name: /signal details/i });
+    // HoverCard.closeDelay is 150ms; the portal content should unmount after.
+    await waitForElementToBeRemoved(content);
+    expect(screen.queryByText(/days\/sale/i)).not.toBeInTheDocument();
   });
 
   it('renders 0 population literally instead of falling back to em-dash', async () => {
