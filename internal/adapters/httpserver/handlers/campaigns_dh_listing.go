@@ -131,6 +131,31 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, result)
 }
 
+// triggerDHListingByPurchaseID looks up the cert for a purchase and triggers
+// background DH listing. Used by price-commit handlers (reviewed price, price
+// override) so that committing a price for an already-pushed in_stock item
+// flips it to listed without requiring a second manual click — the price
+// commit IS the human review the listing service was waiting on.
+//
+// The downstream listing service short-circuits ineligible purchases
+// (no inventory ID, no committed price, already listed, etc.), so this is
+// safe to call after any price commit regardless of DH state.
+func (h *CampaignsHandler) triggerDHListingByPurchaseID(ctx context.Context, purchaseID string) {
+	if h.dhListingSvc == nil || purchaseID == "" {
+		return
+	}
+	p, err := h.service.GetPurchase(ctx, purchaseID)
+	if err != nil {
+		h.logger.Warn(ctx, "auto-list: failed to load purchase for DH listing trigger",
+			observability.Err(err), observability.String("purchaseId", purchaseID))
+		return
+	}
+	if p.CertNumber == "" {
+		return
+	}
+	h.triggerDHListing([]string{p.CertNumber})
+}
+
 // triggerDHListing runs in the background so it doesn't delay the HTTP response.
 func (h *CampaignsHandler) triggerDHListing(certNumbers []string) {
 	if h.dhListingSvc == nil || len(certNumbers) == 0 {
