@@ -140,10 +140,16 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 // The downstream listing service short-circuits ineligible purchases
 // (no inventory ID, no committed price, already listed, etc.), so this is
 // safe to call after any price commit regardless of DH state.
-func (h *CampaignsHandler) triggerDHListingByPurchaseID(ctx context.Context, purchaseID string) {
+//
+// The purchase lookup uses a detached context derived from h.baseCtx so a
+// client disconnect after the price commit succeeds doesn't skip the
+// auto-list. Mirrors the pattern in triggerDHListing.
+func (h *CampaignsHandler) triggerDHListingByPurchaseID(purchaseID string) {
 	if h.dhListingSvc == nil || purchaseID == "" {
 		return
 	}
+	ctx, cancel := context.WithTimeout(h.baseCtx, 30*time.Second)
+	defer cancel()
 	p, err := h.service.GetPurchase(ctx, purchaseID)
 	if err != nil {
 		h.logger.Warn(ctx, "auto-list: failed to load purchase for DH listing trigger",

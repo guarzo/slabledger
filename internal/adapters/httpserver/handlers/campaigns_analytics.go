@@ -335,7 +335,7 @@ func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http
 	// A reviewed price IS the human commit the DH listing service gates on.
 	// Trigger an auto-list so already-pushed in_stock items don't require a
 	// second manual click. The listing service no-ops for ineligible items.
-	h.triggerDHListingByPurchaseID(r.Context(), purchaseID)
+	h.triggerDHListingByPurchaseID(purchaseID)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":    true,

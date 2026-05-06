@@ -334,7 +334,7 @@ func (h *CampaignsHandler) HandleSetPriceOverride(w http.ResponseWriter, r *http
 	// service waits on. Trigger an auto-list (no-ops if not pushed yet, no
 	// price set, or already listed) so users don't need a second manual click.
 	if req.PriceCents > 0 {
-		h.triggerDHListingByPurchaseID(r.Context(), purchaseID)
+		h.triggerDHListingByPurchaseID(purchaseID)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
