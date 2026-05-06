@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,5 +115,86 @@ func TestPSAExchangeHandler_NilService(t *testing.T) {
 	h.HandleGetOpportunities(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+}
+
+func TestPSAExchangeHandler_GetPolicy(t *testing.T) {
+	active := psaexchange.DefaultPolicy()
+	active.HighLiquidityOfferPct = 0.85
+	defaults := psaexchange.DefaultPolicy()
+	svc := &mocks.MockPSAExchangeService{
+		EffectivePolicyFn: func(_ context.Context) psaexchange.Policy { return active },
+		PolicyFn:          func() psaexchange.Policy { return defaults },
+	}
+	h := handlers.NewPSAExchangeHandler(svc, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/psa-exchange/policy", nil)
+	rec := httptest.NewRecorder()
+	h.HandleGetPolicy(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got struct {
+		Active   map[string]any `json:"active"`
+		Defaults map[string]any `json:"defaults"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Active["highLiquidityOfferPct"].(float64) != 0.85 {
+		t.Fatalf("active hi pct = %v", got.Active["highLiquidityOfferPct"])
+	}
+	if got.Defaults["highLiquidityOfferPct"].(float64) != 0.75 {
+		t.Fatalf("defaults hi pct = %v", got.Defaults["highLiquidityOfferPct"])
+	}
+}
+
+func TestPSAExchangeHandler_PutPolicy_HappyPath(t *testing.T) {
+	var captured psaexchange.Policy
+	svc := &mocks.MockPSAExchangeService{
+		SetPolicyFn: func(_ context.Context, p psaexchange.Policy) error {
+			captured = p
+			return nil
+		},
+		EffectivePolicyFn: func(_ context.Context) psaexchange.Policy { return psaexchange.DefaultPolicy() },
+	}
+	h := handlers.NewPSAExchangeHandler(svc, nil)
+
+	body := `{"highLiquidityVelocity":6,"highLiquidityConfidence":5,"highLiquidityOfferPct":0.78,"defaultOfferPct":0.62,"minConfidence":3,"minQuarterVelocity":1}`
+	req := httptest.NewRequest(http.MethodPut, "/api/psa-exchange/policy", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandlePutPolicy(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if captured.HighLiquidityVelocity != 6 || captured.DefaultOfferPct != 0.62 {
+		t.Fatalf("captured = %+v", captured)
+	}
+}
+
+func TestPSAExchangeHandler_PutPolicy_ValidationError(t *testing.T) {
+	svc := &mocks.MockPSAExchangeService{
+		SetPolicyFn: func(_ context.Context, _ psaexchange.Policy) error {
+			return psaexchange.ErrInvalidPolicy
+		},
+	}
+	h := handlers.NewPSAExchangeHandler(svc, nil)
+	body := `{"highLiquidityOfferPct":0,"defaultOfferPct":0.5}`
+	req := httptest.NewRequest(http.MethodPut, "/api/psa-exchange/policy", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.HandlePutPolicy(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestPSAExchangeHandler_PutPolicy_MalformedJSON(t *testing.T) {
+	svc := &mocks.MockPSAExchangeService{}
+	h := handlers.NewPSAExchangeHandler(svc, nil)
+	req := httptest.NewRequest(http.MethodPut, "/api/psa-exchange/policy", strings.NewReader("{not json"))
+	rec := httptest.NewRecorder()
+	h.HandlePutPolicy(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 }

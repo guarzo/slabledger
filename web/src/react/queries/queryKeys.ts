@@ -54,5 +54,6 @@ export const queryKeys = {
   },
   psaExchange: {
     opportunities: ['psaExchange', 'opportunities'] as const,
+    policy: ['psaExchange', 'policy'] as const,
   },
 } as const;

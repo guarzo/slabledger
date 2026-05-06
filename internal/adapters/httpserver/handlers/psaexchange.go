@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -35,7 +37,79 @@ func (h *PSAExchangeHandler) HandleGetOpportunities(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusBadGateway, "failed to fetch PSA-Exchange opportunities")
 		return
 	}
-	writeJSON(w, http.StatusOK, toOpportunitiesResponse(res, h.svc.Policy()))
+	writeJSON(w, http.StatusOK, toOpportunitiesResponse(res, h.svc.EffectivePolicy(r.Context())))
+}
+
+// HandleGetPolicy implements GET /api/psa-exchange/policy.
+// Returns the active (effective) policy plus the seed/defaults so the UI can
+// offer a "reset to defaults" affordance.
+func (h *PSAExchangeHandler) HandleGetPolicy(w http.ResponseWriter, r *http.Request) {
+	if h.svc == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA-Exchange integration is not configured")
+		return
+	}
+	active := h.svc.EffectivePolicy(r.Context())
+	defaults := h.svc.Policy()
+	writeJSON(w, http.StatusOK, psaExchangePolicyResponse{
+		Active:   toPSAExchangePolicy(active),
+		Defaults: toPSAExchangePolicy(defaults),
+	})
+}
+
+// HandlePutPolicy implements PUT /api/psa-exchange/policy. Admin-only at the
+// router level; this handler validates the payload and persists.
+func (h *PSAExchangeHandler) HandlePutPolicy(w http.ResponseWriter, r *http.Request) {
+	if h.svc == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA-Exchange integration is not configured")
+		return
+	}
+	var body psaExchangePolicy
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	p := psaexchange.Policy{
+		HighLiquidityVelocity:   body.HighLiquidityVelocity,
+		HighLiquidityConfidence: body.HighLiquidityConfidence,
+		HighLiquidityOfferPct:   body.HighLiquidityOfferPct,
+		DefaultOfferPct:         body.DefaultOfferPct,
+		MinConfidence:           body.MinConfidence,
+		MinQuarterVelocity:      body.MinQuarterVelocity,
+	}
+	if err := h.svc.SetPolicy(r.Context(), p); err != nil {
+		switch {
+		case errors.Is(err, psaexchange.ErrInvalidPolicy):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, psaexchange.ErrPolicyStoreUnavailable):
+			writeError(w, http.StatusServiceUnavailable, "policy store is not configured")
+		default:
+			if h.logger != nil {
+				h.logger.Error(r.Context(), "psa_exchange.set_policy_failed", observability.Err(err))
+			}
+			writeError(w, http.StatusInternalServerError, "failed to persist policy")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, psaExchangePolicyResponse{
+		Active:   toPSAExchangePolicy(p),
+		Defaults: toPSAExchangePolicy(h.svc.Policy()),
+	})
+}
+
+type psaExchangePolicyResponse struct {
+	Active   psaExchangePolicy `json:"active"`
+	Defaults psaExchangePolicy `json:"defaults"`
+}
+
+func toPSAExchangePolicy(p psaexchange.Policy) psaExchangePolicy {
+	return psaExchangePolicy{
+		HighLiquidityVelocity:   p.HighLiquidityVelocity,
+		HighLiquidityConfidence: p.HighLiquidityConfidence,
+		HighLiquidityOfferPct:   p.HighLiquidityOfferPct,
+		DefaultOfferPct:         p.DefaultOfferPct,
+		MinConfidence:           p.MinConfidence,
+		MinQuarterVelocity:      p.MinQuarterVelocity,
+	}
 }
 
 type psaExchangePolicy struct {

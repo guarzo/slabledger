@@ -2,6 +2,7 @@ package psaexchange
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -20,8 +21,30 @@ const DefaultCardLadderTTL = 24 * time.Hour
 // Service is the domain entry point for PSA-Exchange opportunities.
 type Service interface {
 	Opportunities(ctx context.Context) (OpportunitiesResult, error)
+	// Policy returns the seed policy (env / DefaultPolicy) — the fallback used
+	// when no row is persisted. Use EffectivePolicy for what the next
+	// Opportunities() call will actually apply.
 	Policy() Policy
+	// EffectivePolicy returns the policy that will be applied to the next
+	// Opportunities() call: the persisted row if any, else the seed.
+	EffectivePolicy(ctx context.Context) Policy
+	// SetPolicy persists a new policy. Validates the inputs before writing.
+	// Returns ErrPolicyStoreUnavailable if no PolicyStore was configured.
+	SetPolicy(ctx context.Context, p Policy) error
 }
+
+// PolicyStore persists the active scoring/filter policy. The store always
+// represents a single logical row — Get returns (Policy, false, nil) when
+// nothing is persisted; the service falls back to the seed policy in that
+// case.
+type PolicyStore interface {
+	Get(ctx context.Context) (Policy, bool, error)
+	Set(ctx context.Context, p Policy) error
+}
+
+// ErrPolicyStoreUnavailable is returned by SetPolicy when no PolicyStore was
+// wired (e.g. test setups, integrations disabled).
+var ErrPolicyStoreUnavailable = errors.New("psaexchange: policy store unavailable")
 
 type cardLadderEntry struct {
 	cl        CardLadder
@@ -33,7 +56,14 @@ type service struct {
 	logger   observability.Logger
 	clock    func() time.Time
 	cacheTTL time.Duration
-	policy   Policy
+	policy   Policy // seed (env / DefaultPolicy) — fallback when no row is stored
+	store    PolicyStore
+
+	policyMu       sync.RWMutex
+	policyCache    Policy
+	policyCacheSet bool
+	policyCacheExp time.Time
+	policyCacheTTL time.Duration
 
 	mu    sync.Mutex
 	cache map[string]cardLadderEntry
@@ -65,7 +95,8 @@ func WithClock(fn func() time.Time) Option {
 // WithPolicy merges the non-zero fields of p onto the existing policy
 // (defaulting to DefaultPolicy()), so callers can override individual levers
 // without having to re-specify the rest. Pass DefaultPolicy() with explicit
-// overrides for full control.
+// overrides for full control. The merged result is stored as the SEED — it is
+// the fallback when no PolicyStore row exists.
 func WithPolicy(p Policy) Option {
 	return func(s *service) {
 		base := s.policy
@@ -94,14 +125,28 @@ func WithPolicy(p Policy) Option {
 	}
 }
 
+// WithPolicyStore wires a persistent store for the active policy. When set,
+// EffectivePolicy reads from the store (with a short TTL cache) and falls back
+// to the seed policy when the store has no row.
+func WithPolicyStore(s PolicyStore) Option {
+	return func(svc *service) { svc.store = s }
+}
+
+// WithPolicyCacheTTL overrides how long EffectivePolicy caches the value
+// fetched from the PolicyStore. Default: 10s.
+func WithPolicyCacheTTL(d time.Duration) Option {
+	return func(svc *service) { svc.policyCacheTTL = d }
+}
+
 // NewService constructs a Service.
 func NewService(client CatalogClient, opts ...Option) Service {
 	s := &service{
-		client:   client,
-		clock:    time.Now,
-		cacheTTL: DefaultCardLadderTTL,
-		policy:   DefaultPolicy(),
-		cache:    map[string]cardLadderEntry{},
+		client:         client,
+		clock:          time.Now,
+		cacheTTL:       DefaultCardLadderTTL,
+		policy:         DefaultPolicy(),
+		policyCacheTTL: 10 * time.Second,
+		cache:          map[string]cardLadderEntry{},
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -111,15 +156,72 @@ func NewService(client CatalogClient, opts ...Option) Service {
 	return s
 }
 
-// Policy returns the active policy. Callers (e.g. the HTTP handler) use this
-// to surface the formula in the UI without re-reading env vars.
+// Policy returns the SEED policy (env / DefaultPolicy). This is the fallback
+// when no row is persisted in the PolicyStore. Use EffectivePolicy for the
+// values that will be applied to the next Opportunities() call.
 func (s *service) Policy() Policy { return s.policy }
+
+// EffectivePolicy returns the policy that will be applied to the next
+// Opportunities() call: the row from the PolicyStore if present, else the
+// seed. Cached for policyCacheTTL to avoid hammering the DB on every page
+// load — Set invalidates the cache so admin saves take effect immediately.
+func (s *service) EffectivePolicy(ctx context.Context) Policy {
+	if s.store == nil {
+		return s.policy
+	}
+	s.policyMu.RLock()
+	if s.policyCacheSet && s.clock().Before(s.policyCacheExp) {
+		p := s.policyCache
+		s.policyMu.RUnlock()
+		return p
+	}
+	s.policyMu.RUnlock()
+	stored, ok, err := s.store.Get(ctx)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "psa_exchange.policy_store_read_failed", observability.Err(err))
+		}
+		return s.policy
+	}
+	effective := s.policy
+	if ok {
+		effective = stored
+	}
+	s.policyMu.Lock()
+	s.policyCache = effective
+	s.policyCacheSet = true
+	s.policyCacheExp = s.clock().Add(s.policyCacheTTL)
+	s.policyMu.Unlock()
+	return effective
+}
+
+// SetPolicy validates and persists a new policy, then invalidates the cache so
+// EffectivePolicy reads the new value on the next call.
+func (s *service) SetPolicy(ctx context.Context, p Policy) error {
+	if s.store == nil {
+		return ErrPolicyStoreUnavailable
+	}
+	if err := ValidatePolicy(p); err != nil {
+		return err
+	}
+	if err := s.store.Set(ctx, p); err != nil {
+		return fmt.Errorf("psaexchange: persist policy: %w", err)
+	}
+	s.policyMu.Lock()
+	s.policyCache = p
+	s.policyCacheSet = true
+	s.policyCacheExp = s.clock().Add(s.policyCacheTTL)
+	s.policyMu.Unlock()
+	return nil
+}
 
 func (s *service) Opportunities(ctx context.Context) (OpportunitiesResult, error) {
 	cat, err := s.client.FetchCatalog(ctx)
 	if err != nil {
 		return OpportunitiesResult{}, fmt.Errorf("psaexchange: fetch catalog: %w", err)
 	}
+
+	policy := s.EffectivePolicy(ctx)
 
 	var pokemon []CatalogCard
 	for _, c := range cat.Cards {
@@ -141,10 +243,10 @@ func (s *service) Opportunities(ctx context.Context) (OpportunitiesResult, error
 			}
 			continue
 		}
-		if cl.Confidence < s.policy.MinConfidence || cl.OneQuarterData.Velocity < s.policy.MinQuarterVelocity {
+		if cl.Confidence < policy.MinConfidence || cl.OneQuarterData.Velocity < policy.MinQuarterVelocity {
 			continue
 		}
-		listings = append(listings, buildListing(c, cl, s.policy))
+		listings = append(listings, buildListing(c, cl, policy))
 	}
 
 	sort.SliceStable(listings, func(i, j int) bool {

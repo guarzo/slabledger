@@ -47,8 +47,10 @@ func (m *MockCatalogClient) CategoryURL(category string) string {
 
 // MockPSAExchangeService is a test double for psaexchange.Service.
 type MockPSAExchangeService struct {
-	OpportunitiesFn func(ctx context.Context) (psaexchange.OpportunitiesResult, error)
-	PolicyFn        func() psaexchange.Policy
+	OpportunitiesFn    func(ctx context.Context) (psaexchange.OpportunitiesResult, error)
+	PolicyFn           func() psaexchange.Policy
+	EffectivePolicyFn  func(ctx context.Context) psaexchange.Policy
+	SetPolicyFn        func(ctx context.Context, p psaexchange.Policy) error
 }
 
 var _ psaexchange.Service = (*MockPSAExchangeService)(nil)
@@ -65,4 +67,21 @@ func (m *MockPSAExchangeService) Policy() psaexchange.Policy {
 		return m.PolicyFn()
 	}
 	return psaexchange.DefaultPolicy()
+}
+
+func (m *MockPSAExchangeService) EffectivePolicy(ctx context.Context) psaexchange.Policy {
+	if m.EffectivePolicyFn != nil {
+		return m.EffectivePolicyFn(ctx)
+	}
+	if m.PolicyFn != nil {
+		return m.PolicyFn()
+	}
+	return psaexchange.DefaultPolicy()
+}
+
+func (m *MockPSAExchangeService) SetPolicy(ctx context.Context, p psaexchange.Policy) error {
+	if m.SetPolicyFn != nil {
+		return m.SetPolicyFn(ctx, p)
+	}
+	return nil
 }
