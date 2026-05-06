@@ -300,6 +300,37 @@ func TestPushViaPSAImport_PSAErrorLeavesPending(t *testing.T) {
 	}
 }
 
+// TestPushViaPSAImport_DailyLimitMessageRotates covers the case where DH
+// returns a per-cert daily-limit reason without setting RateLimited=true.
+// The scheduler must still rotate to the next PSA key — otherwise pending
+// rows pile up until the daily quota resets the next UTC day.
+func TestPushViaPSAImport_DailyLimitMessageRotates(t *testing.T) {
+	importer := &rotatingPSAImporter{
+		stubPSAImporter: &stubPSAImporter{
+			responses: []*dh.PSAImportResponse{
+				{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPSAError, RateLimited: false, Error: "Daily PSA API limit reached"}}},
+				{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusMatched, DHCardID: 99, DHInventoryID: 999, Status: dh.InventoryStatusInStock}}},
+			},
+		},
+		keysLeft: 3,
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processMatchedComplete {
+		t.Fatalf("got=%v want=processMatchedComplete (daily-limit reason should rotate then succeed)", got)
+	}
+	if importer.RotateCalls != 1 {
+		t.Fatalf("expected one key rotation, got %d", importer.RotateCalls)
+	}
+	if len(importer.requests) != 2 {
+		t.Fatalf("expected 2 psa_import calls (initial + post-rotation), got %d", len(importer.requests))
+	}
+}
+
 func TestPushViaPSAImport_PartnerCardErrorLeavesPending(t *testing.T) {
 	importer := &stubPSAImporter{
 		responses: []*dh.PSAImportResponse{{
