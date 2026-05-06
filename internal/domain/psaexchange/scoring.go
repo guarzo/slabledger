@@ -1,6 +1,10 @@
 package psaexchange
 
-import "math"
+import (
+	"errors"
+	"fmt"
+	"math"
+)
 
 // Policy captures the tunable levers for tier selection, target-offer
 // computation, and the catalog filter thresholds. Defaults match the v1
@@ -31,6 +35,38 @@ func DefaultPolicy() Policy {
 		MinConfidence:           3,
 		MinQuarterVelocity:      1,
 	}
+}
+
+// ErrInvalidPolicy is returned by ValidatePolicy when a policy is rejected.
+var ErrInvalidPolicy = errors.New("psaexchange: invalid policy")
+
+// ValidatePolicy enforces the bounds the UI/API accept for a persisted policy.
+// Rules: offer percentages in (0, 1]; confidence thresholds in [0, 10];
+// velocity thresholds >= 0; high-liquidity offer pct must be >= default
+// (a high-liquidity row should not pay LESS than the default row).
+func ValidatePolicy(p Policy) error {
+	if p.HighLiquidityOfferPct <= 0 || p.HighLiquidityOfferPct > 1 {
+		return fmt.Errorf("%w: highLiquidityOfferPct must be in (0, 1], got %v", ErrInvalidPolicy, p.HighLiquidityOfferPct)
+	}
+	if p.DefaultOfferPct <= 0 || p.DefaultOfferPct > 1 {
+		return fmt.Errorf("%w: defaultOfferPct must be in (0, 1], got %v", ErrInvalidPolicy, p.DefaultOfferPct)
+	}
+	if p.HighLiquidityOfferPct < p.DefaultOfferPct {
+		return fmt.Errorf("%w: highLiquidityOfferPct (%v) must be >= defaultOfferPct (%v)", ErrInvalidPolicy, p.HighLiquidityOfferPct, p.DefaultOfferPct)
+	}
+	if p.HighLiquidityVelocity < 0 {
+		return fmt.Errorf("%w: highLiquidityVelocity must be >= 0", ErrInvalidPolicy)
+	}
+	if p.HighLiquidityConfidence < 0 || p.HighLiquidityConfidence > 10 {
+		return fmt.Errorf("%w: highLiquidityConfidence must be in [0, 10]", ErrInvalidPolicy)
+	}
+	if p.MinConfidence < 0 || p.MinConfidence > 10 {
+		return fmt.Errorf("%w: minConfidence must be in [0, 10]", ErrInvalidPolicy)
+	}
+	if p.MinQuarterVelocity < 0 {
+		return fmt.Errorf("%w: minQuarterVelocity must be >= 0", ErrInvalidPolicy)
+	}
+	return nil
 }
 
 // SelectTier returns the offer tier for a listing given its velocity and confidence.
