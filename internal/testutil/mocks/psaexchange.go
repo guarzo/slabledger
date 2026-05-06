@@ -106,9 +106,11 @@ func (m *MockPSAExchangePolicyStore) Get(ctx context.Context) (psaexchange.Polic
 }
 
 func (m *MockPSAExchangePolicyStore) Set(ctx context.Context, p psaexchange.Policy) error {
-	m.SetCalls = append(m.SetCalls, p)
 	if m.SetFn != nil {
-		return m.SetFn(ctx, p)
+		if err := m.SetFn(ctx, p); err != nil {
+			return err
+		}
 	}
+	m.SetCalls = append(m.SetCalls, p)
 	return nil
 }
