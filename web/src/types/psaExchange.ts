@@ -29,6 +29,15 @@ export interface PsaExchangeOpportunity {
   tier: string;
 }
 
+export interface PsaExchangePolicy {
+  highLiquidityVelocity: number;
+  highLiquidityConfidence: number;
+  highLiquidityOfferPct: number;
+  defaultOfferPct: number;
+  minConfidence: number;
+  minQuarterVelocity: number;
+}
+
 export interface PsaExchangeOpportunitiesResponse {
   opportunities: PsaExchangeOpportunity[];
   categoryUrl: string;
@@ -36,4 +45,5 @@ export interface PsaExchangeOpportunitiesResponse {
   totalCatalogPokemon: number;
   afterFilter: number;
   enrichmentErrors: number;
+  policy: PsaExchangePolicy;
 }

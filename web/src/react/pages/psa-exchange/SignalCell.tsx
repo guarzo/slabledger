@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Popover } from 'radix-ui';
+import { HoverCard } from 'radix-ui';
 import { clsx } from 'clsx';
 import {
   edgeBucketClass,
@@ -19,6 +18,8 @@ interface SignalCellProps {
   confidence: number;
   comp: number;
   population: number;
+  tier: string;
+  maxOfferPct: number;
 }
 
 const CONF_GLYPH: Record<'high' | 'medium' | 'low', string> = {
@@ -27,6 +28,17 @@ const CONF_GLYPH: Record<'high' | 'medium' | 'low', string> = {
   low: '?',
 };
 
+function formatOfferPct(pct: number): string {
+  const v = pct * 100;
+  return Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`;
+}
+
+function tierLabel(tier: string): string {
+  if (tier === 'high_liquidity') return 'High liquidity';
+  if (tier === 'default') return 'Default';
+  return tier || '—';
+}
+
 export default function SignalCell({
   edgeAtOffer,
   daysToSellValue,
@@ -34,22 +46,19 @@ export default function SignalCell({
   confidence,
   comp,
   population,
+  tier,
+  maxOfferPct,
 }: SignalCellProps) {
   const dTier = daysTier(daysToSellValue);
   const vTier = velocityTier(velocityMonth);
   const cTier = confidenceTier(confidence);
-  const [open, setOpen] = useState(false);
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
+    <HoverCard.Root openDelay={100} closeDelay={150}>
+      <HoverCard.Trigger asChild>
         <button
           type="button"
           aria-label="Signal details"
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
           className="flex flex-col items-end gap-0.5 tabular-nums hover:bg-[var(--surface-2)]/40 rounded px-1 py-0.5 transition-colors focus:outline focus:outline-2 focus:outline-[var(--brand-400)]"
         >
           <span className={clsx('text-sm', edgeBucketClass(edgeAtOffer))}>{formatPct(edgeAtOffer)}</span>
@@ -67,13 +76,22 @@ export default function SignalCell({
             </span>
           </span>
         </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
+      </HoverCard.Trigger>
+      <HoverCard.Portal>
+        <HoverCard.Content
           align="end"
           sideOffset={4}
-          className="z-50 w-56 p-3 rounded-md bg-[var(--surface-1)] border border-[var(--surface-2)] shadow-lg text-xs space-y-1.5"
+          className="z-50 w-60 p-3 rounded-md bg-[var(--surface-1)] border border-[var(--surface-2)] shadow-lg text-xs space-y-1.5"
         >
+          <div className="flex justify-between">
+            <span className="text-[var(--text-muted)]">Tier</span>
+            <span className="tabular-nums">{tierLabel(tier)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[var(--text-muted)]">Offer pct</span>
+            <span className="tabular-nums">{formatOfferPct(maxOfferPct)} of comp</span>
+          </div>
+          <div className="h-px bg-[var(--surface-2)]" />
           <div className="flex justify-between">
             <span className="text-[var(--text-muted)]">Days/sale</span>
             <span className={clsx('tabular-nums', daysBucketClass(daysToSellValue))}>{formatDays(daysToSellValue)}</span>
@@ -95,9 +113,9 @@ export default function SignalCell({
             <span className="text-[var(--text-muted)]">Pop</span>
             <span className="tabular-nums">{population ?? '—'}</span>
           </div>
-          <Popover.Arrow className="fill-[var(--surface-2)]" />
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+          <HoverCard.Arrow className="fill-[var(--surface-2)]" />
+        </HoverCard.Content>
+      </HoverCard.Portal>
+    </HoverCard.Root>
   );
 }
