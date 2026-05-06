@@ -330,6 +330,12 @@ func (h *CampaignsHandler) HandleSetPriceOverride(w http.ResponseWriter, r *http
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
+	// A price override is a human-committed price — same gate the DH listing
+	// service waits on. Trigger an auto-list (no-ops if not pushed yet, no
+	// price set, or already listed) so users don't need a second manual click.
+	if req.PriceCents > 0 {
+		h.triggerDHListingByPurchaseID(purchaseID)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
