@@ -875,7 +875,18 @@ func (m *mockRepo) ResetDHFieldsForRepush(_ context.Context, purchaseID string) 
 	return nil
 }
 
-func (m *mockRepo) ResetDHFieldsForRepushDueToDelete(_ context.Context, _ string) error {
+func (m *mockRepo) ResetDHFieldsForRepushDueToDelete(_ context.Context, purchaseID string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHInventoryID = 0
+	p.DHPushStatus = DHPushStatusPending
+	p.DHPushAttempts = 0
+	p.DHStatus = ""
+	p.DHListingPriceCents = 0
+	now := time.Now()
+	p.DHUnlistedDetectedAt = &now
 	return nil
 }
 

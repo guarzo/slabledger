@@ -122,6 +122,12 @@ type PurchaseRepository interface {
 	// dh_cert_status, and dh_candidates (cert resolution remains valid).
 	// Used by reconciliation when DH inventory has drifted from local state.
 	ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error
+	// ResetDHFieldsForRepushDueToDelete mirrors ResetDHFieldsForRepush and
+	// additionally stamps dh_unlisted_detected_at so the UI can badge the row.
+	// Used when DH no longer has the item (it deleted it, or we marked it sold
+	// and the local sale was later reversed) and the purchase needs to flow
+	// back through the push pipeline.
+	ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error
 	// UpdatePurchaseDHPriceSync updates dh_listing_price_cents and
 	// dh_last_synced_at in a single targeted UPDATE. Unlike
 	// UpdatePurchaseDHFields, it does not touch any other DH columns.
