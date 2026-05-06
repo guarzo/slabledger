@@ -13,12 +13,6 @@ import (
 // CategoryPokemon is the catalog category we filter on in v1.
 const CategoryPokemon = "POKEMON CARDS"
 
-// Filter thresholds for v1 (admin-configurable in v2).
-const (
-	minConfidence      = 3
-	minQuarterVelocity = 1
-)
-
 // DefaultCardLadderTTL is the default TTL for cached cardladder responses.
 // 24h is conservative because PSA-Exchange has not published rate limits.
 const DefaultCardLadderTTL = 24 * time.Hour
@@ -26,6 +20,7 @@ const DefaultCardLadderTTL = 24 * time.Hour
 // Service is the domain entry point for PSA-Exchange opportunities.
 type Service interface {
 	Opportunities(ctx context.Context) (OpportunitiesResult, error)
+	Policy() Policy
 }
 
 type cardLadderEntry struct {
@@ -38,6 +33,7 @@ type service struct {
 	logger   observability.Logger
 	clock    func() time.Time
 	cacheTTL time.Duration
+	policy   Policy
 
 	mu    sync.Mutex
 	cache map[string]cardLadderEntry
@@ -66,12 +62,45 @@ func WithClock(fn func() time.Time) Option {
 	return func(s *service) { s.clock = fn }
 }
 
+// WithPolicy merges the non-zero fields of p onto the existing policy
+// (defaulting to DefaultPolicy()), so callers can override individual levers
+// without having to re-specify the rest. Pass DefaultPolicy() with explicit
+// overrides for full control.
+func WithPolicy(p Policy) Option {
+	return func(s *service) {
+		base := s.policy
+		if base == (Policy{}) {
+			base = DefaultPolicy()
+		}
+		if p.HighLiquidityVelocity != 0 {
+			base.HighLiquidityVelocity = p.HighLiquidityVelocity
+		}
+		if p.HighLiquidityConfidence != 0 {
+			base.HighLiquidityConfidence = p.HighLiquidityConfidence
+		}
+		if p.HighLiquidityOfferPct != 0 {
+			base.HighLiquidityOfferPct = p.HighLiquidityOfferPct
+		}
+		if p.DefaultOfferPct != 0 {
+			base.DefaultOfferPct = p.DefaultOfferPct
+		}
+		if p.MinConfidence != 0 {
+			base.MinConfidence = p.MinConfidence
+		}
+		if p.MinQuarterVelocity != 0 {
+			base.MinQuarterVelocity = p.MinQuarterVelocity
+		}
+		s.policy = base
+	}
+}
+
 // NewService constructs a Service.
 func NewService(client CatalogClient, opts ...Option) Service {
 	s := &service{
 		client:   client,
 		clock:    time.Now,
 		cacheTTL: DefaultCardLadderTTL,
+		policy:   DefaultPolicy(),
 		cache:    map[string]cardLadderEntry{},
 	}
 	for _, opt := range opts {
@@ -81,6 +110,10 @@ func NewService(client CatalogClient, opts ...Option) Service {
 	}
 	return s
 }
+
+// Policy returns the active policy. Callers (e.g. the HTTP handler) use this
+// to surface the formula in the UI without re-reading env vars.
+func (s *service) Policy() Policy { return s.policy }
 
 func (s *service) Opportunities(ctx context.Context) (OpportunitiesResult, error) {
 	cat, err := s.client.FetchCatalog(ctx)
@@ -108,10 +141,10 @@ func (s *service) Opportunities(ctx context.Context) (OpportunitiesResult, error
 			}
 			continue
 		}
-		if cl.Confidence < minConfidence || cl.OneQuarterData.Velocity < minQuarterVelocity {
+		if cl.Confidence < s.policy.MinConfidence || cl.OneQuarterData.Velocity < s.policy.MinQuarterVelocity {
 			continue
 		}
-		listings = append(listings, buildListing(c, cl))
+		listings = append(listings, buildListing(c, cl, s.policy))
 	}
 
 	sort.SliceStable(listings, func(i, j int) bool {
@@ -132,10 +165,10 @@ func (s *service) Opportunities(ctx context.Context) (OpportunitiesResult, error
 }
 
 // buildListing merges catalog row + cardladder data + score into a Listing.
-func buildListing(c CatalogCard, cl CardLadder) Listing {
+func buildListing(c CatalogCard, cl CardLadder, p Policy) Listing {
 	listCents := dollarsToCents(c.Price)
 	compCents := dollarsToCents(cl.EstimatedValue)
-	score := ScoreListing(ScoreInputs{
+	score := p.Score(ScoreInputs{
 		ListPriceCents: listCents,
 		CompCents:      compCents,
 		VelocityMonth:  cl.OneMonthData.Velocity,

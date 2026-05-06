@@ -119,6 +119,7 @@ export default function PsaExchangePage() {
               onFiltersChange={setFilters}
               groupDuplicates={groupDuplicates}
               onGroupDuplicatesChange={setGroupDuplicates}
+              policy={data.policy}
             />
           </CardShell>
 
@@ -135,6 +136,7 @@ export default function PsaExchangePage() {
               sortDir={sortDir}
               onSort={handleSort}
               topDecileScore={topDecileScore}
+              policy={data.policy}
             />
           </CardShell>
         </>
