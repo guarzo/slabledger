@@ -81,7 +81,7 @@ function PrintView({ slice, onBack }: PrintViewProps) {
             {dollars(slice.totalAskCents)}
           </h1>
         </div>
-        <div className="sell-sheet-print-thead">
+        <div className="sell-sheet-print-headrow">
           <div className="sell-sheet-print-cell" data-cell="num">#</div>
           <div className="sell-sheet-print-cell" data-cell="card">Card</div>
           <div className="sell-sheet-print-cell" data-cell="grade">Grade</div>
@@ -125,6 +125,7 @@ export default function SellSheetPage() {
     'vintage',
     'highValue',
     'underOneK',
+    'under125',
     'byGrade',
     'full',
   ];

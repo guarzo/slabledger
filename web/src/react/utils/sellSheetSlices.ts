@@ -6,6 +6,7 @@ export type SliceID =
   | 'vintage'
   | 'highValue'
   | 'underOneK'
+  | 'under125'
   | 'byGrade'
   | 'full';
 
@@ -24,6 +25,7 @@ export interface SliceSet {
   vintage: SliceResult;
   highValue: SliceResult;
   underOneK: SliceResult;
+  under125: SliceResult;
   byGrade: SliceResult;
   full: SliceResult;
   totalItemCount: number;
@@ -32,6 +34,7 @@ export interface SliceSet {
 }
 
 const HIGH_VALUE_CENTS = 100000;
+const UNDER_125_CENTS = 12500;
 const ERA_CUTOFF_YEAR = 2020;
 const LEADING_YEAR_RE = /^(\d{4})/;
 
@@ -105,6 +108,11 @@ export function computeSlices(input: SellSheetItem[]): SliceSet {
     .slice()
     .sort(byPriceDesc);
 
+  const under125Items = input
+    .filter((i) => (i.targetSellPrice ?? 0) < UNDER_125_CENTS)
+    .slice()
+    .sort(byPriceDesc);
+
   const byGradeItems = input.slice().sort(byGradeThenPriceDesc);
 
   const fullItems = input.slice().sort(bySetThenNumber);
@@ -117,7 +125,8 @@ export function computeSlices(input: SellSheetItem[]): SliceSet {
     vintage: makeSlice('vintage', `Vintage (pre-${ERA_CUTOFF_YEAR})`, `Cards before ${ERA_CUTOFF_YEAR}, by set`, vintageItems),
     highValue: makeSlice('highValue', 'High-Value ($1,000+)', 'Cards asking $1,000 or more', highValueItems),
     underOneK: makeSlice('underOneK', 'Under $1,000', 'Cards asking under $1,000', underOneKItems),
-    byGrade: makeSlice('byGrade', 'By Grade (local card store)', 'Sorted grade desc, then price', byGradeItems),
+    under125: makeSlice('under125', 'Under $125', 'Cards asking under $125', under125Items),
+    byGrade: makeSlice('byGrade', 'By Grade', 'Sorted grade desc, then price', byGradeItems),
     full: makeSlice('full', 'Full List', 'Every item, by set', fullItems),
     totalItemCount: overall.itemCount,
     totalAskCents: overall.totalAskCents,

@@ -64,14 +64,15 @@ function renderPage() {
 }
 
 describe('SellSheetPage', () => {
-  it('renders all seven slice labels', () => {
+  it('renders all eight slice labels', () => {
     renderPage();
     expect(screen.getByText('PSA 10s')).toBeInTheDocument();
     expect(screen.getByText('Modern (2020+)')).toBeInTheDocument();
     expect(screen.getByText('Vintage (pre-2020)')).toBeInTheDocument();
     expect(screen.getByText('High-Value ($1,000+)')).toBeInTheDocument();
     expect(screen.getByText('Under $1,000')).toBeInTheDocument();
-    expect(screen.getByText('By Grade (local card store)')).toBeInTheDocument();
+    expect(screen.getByText('Under $125')).toBeInTheDocument();
+    expect(screen.getByText('By Grade')).toBeInTheDocument();
     expect(screen.getByText('Full List')).toBeInTheDocument();
   });
 
