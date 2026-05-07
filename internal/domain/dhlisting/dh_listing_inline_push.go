@@ -3,6 +3,7 @@ package dhlisting
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -62,7 +63,7 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		}
 		r := results[0]
 
-		if r.RateLimited {
+		if r.RateLimited || isPSARateLimitMessage(r.Error) {
 			if rotator, ok := s.psaImporter.(PSAKeyRotator); ok && rotator.RotatePSAKey() {
 				s.logger.Info(ctx, "inline dh psa_import rate-limited, rotating PSA key",
 					observability.String("cert", p.CertNumber),
@@ -158,4 +159,17 @@ func (s *dhListingService) persistInlinePSAImport(ctx context.Context, p *invent
 	})
 
 	return r.DHInventoryID
+}
+
+// isPSARateLimitMessage detects PSA rate-limit reasons in DH's per-cert
+// result.error field. DH does not always set rate_limited=true even when the
+// reason is a rate limit ("Daily PSA API limit reached" arrives with
+// resolution=psa_error and rate_limited=false), so callers must inspect the
+// message text. Mirrors dh.IsPSARateLimitMessage in the adapter; duplicated
+// here because hexagonal rules forbid the domain importing adapter packages.
+func isPSARateLimitMessage(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "psa api rate limit") ||
+		strings.Contains(lower, "daily limit reached") ||
+		strings.Contains(lower, "daily psa api limit")
 }

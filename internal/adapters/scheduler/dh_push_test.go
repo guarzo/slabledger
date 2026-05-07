@@ -227,29 +227,51 @@ func TestPushViaPSAImport_SuccessPathsPersist(t *testing.T) {
 }
 
 func TestPushViaPSAImport_RateLimitedRotatesAndRetries(t *testing.T) {
-	importer := &rotatingPSAImporter{
-		stubPSAImporter: &stubPSAImporter{
-			responses: []*dh.PSAImportResponse{
-				{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPSAError, RateLimited: true, Error: "rate limited"}}},
-				{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusMatched, DHCardID: 5, DHInventoryID: 55}}},
-			},
+	// DH signals "PSA key exhausted, rotate" two ways: the explicit
+	// RateLimited bool (per-key burst) and a free-form Error string with a
+	// daily-limit phrase (per-key daily quota, observed in prod with
+	// RateLimited=false). Both must trigger rotation and a retry.
+	tests := []struct {
+		name        string
+		firstResult dh.PSAImportResult
+	}{
+		{
+			name:        "RateLimited flag set",
+			firstResult: dh.PSAImportResult{Resolution: dh.PSAImportStatusPSAError, RateLimited: true, Error: "rate limited"},
 		},
-		keysLeft: 3,
+		{
+			name:        "daily-limit error message without flag",
+			firstResult: dh.PSAImportResult{Resolution: dh.PSAImportStatusPSAError, RateLimited: false, Error: "Daily PSA API limit reached"},
+		},
 	}
-	fields := &mocks.MockDHFieldsUpdater{}
-	status := &stubStatusUpdater{}
-	s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
 
-	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			importer := &rotatingPSAImporter{
+				stubPSAImporter: &stubPSAImporter{
+					responses: []*dh.PSAImportResponse{
+						{Success: true, Results: []dh.PSAImportResult{tc.firstResult}},
+						{Success: true, Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusMatched, DHCardID: 5, DHInventoryID: 55}}},
+					},
+				},
+				keysLeft: 3,
+			}
+			fields := &mocks.MockDHFieldsUpdater{}
+			status := &stubStatusUpdater{}
+			s := newTestDHPushScheduler(importer, fields, status, &stubCardIDSaver{}, nil)
 
-	if got != processMatchedComplete {
-		t.Fatalf("got=%v want=processMatchedComplete", got)
-	}
-	if importer.RotateCalls != 1 {
-		t.Fatalf("expected one key rotation, got %d", importer.RotateCalls)
-	}
-	if len(importer.requests) != 2 {
-		t.Fatalf("expected 2 psa_import calls, got %d", len(importer.requests))
+			got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+			if got != processMatchedComplete {
+				t.Fatalf("got=%v want=processMatchedComplete", got)
+			}
+			if importer.RotateCalls != 1 {
+				t.Fatalf("expected one key rotation, got %d", importer.RotateCalls)
+			}
+			if len(importer.requests) != 2 {
+				t.Fatalf("expected 2 psa_import calls, got %d", len(importer.requests))
+			}
+		})
 	}
 }
 

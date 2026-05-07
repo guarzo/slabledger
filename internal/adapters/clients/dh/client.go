@@ -332,9 +332,20 @@ func IsPSARateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "PSA API rate limit") ||
-		strings.Contains(msg, "daily limit reached")
+	return IsPSARateLimitMessage(err.Error())
+}
+
+// IsPSARateLimitMessage reports whether a free-form error/reason string from
+// DH indicates a PSA rate-limit condition. psa_import returns rate-limit
+// reasons in the per-cert result.error field, and DH does not always set the
+// rate_limited flag — "Daily PSA API limit reached" arrives with
+// resolution=psa_error and rate_limited=false. Callers in those paths must
+// rotate keys on these strings, not just on the boolean flag.
+func IsPSARateLimitMessage(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "psa api rate limit") ||
+		strings.Contains(lower, "daily limit reached") ||
+		strings.Contains(lower, "daily psa api limit")
 }
 
 // ErrPSAKeysExhausted is returned by UpdateInventoryWithRotation when all
