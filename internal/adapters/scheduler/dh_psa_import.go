@@ -79,7 +79,12 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 
 		result := resp.Results[0]
 
-		if result.RateLimited {
+		// DH signals PSA rate-limit two ways and we have to handle both:
+		//   1. result.RateLimited=true (per-key burst limits)
+		//   2. result.RateLimited=false but result.Error contains a phrase like
+		//      "Daily PSA API limit reached" (per-key daily quota exhausted)
+		// Both are recoverable by rotating to the next PSA key.
+		if result.RateLimited || dh.IsPSARateLimitMessage(result.Error) {
 			rotator, ok := s.psaImporter.(dh.PSAKeyRotator)
 			if ok && rotator.RotatePSAKey() {
 				s.logger.Info(ctx, "dh push: psa_import rate-limited, rotating PSA key",

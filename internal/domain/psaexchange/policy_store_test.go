@@ -93,12 +93,12 @@ func TestSetPolicy(t *testing.T) {
 	invalid.DefaultOfferPct = 0.9 // > HighLiquidityOfferPct (0.75) → tier inversion
 
 	cases := []struct {
-		name           string
-		store          *mocks.MockPSAExchangePolicyStore
-		input          psaexchange.Policy
-		wantErr        error
-		wantPersisted  int
-		wantEffective  float64 // -1 to skip post-Set EffectivePolicy assertion
+		name          string
+		store         *mocks.MockPSAExchangePolicyStore
+		input         psaexchange.Policy
+		wantErr       error
+		wantPersisted int
+		wantEffective float64 // -1 to skip post-Set EffectivePolicy assertion
 	}{
 		{
 			name:          "persists and invalidates cache",
