@@ -53,13 +53,13 @@ export default function InventorySelectionBar({
           {totalListCents > 0 && <> · {formatCents(totalListCents)} list</>}
         </span>
         <div className="flex items-center gap-2">
-          <Button variant="primary" size="sm" onClick={onRecordSale}>
+          <Button variant="primary" size="sm" onClick={onRecordSale} disabled={disabled}>
             Record sale ({count})
           </Button>
-          <Button variant="secondary" size="sm" onClick={onListOnDH}>
+          <Button variant="secondary" size="sm" onClick={onListOnDH} disabled={disabled}>
             List on DH ({count})
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClear}>
+          <Button variant="ghost" size="sm" onClick={onClear} disabled={disabled}>
             Clear
           </Button>
         </div>

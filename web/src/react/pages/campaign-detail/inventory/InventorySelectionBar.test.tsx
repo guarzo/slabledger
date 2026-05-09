@@ -127,4 +127,25 @@ describe('InventorySelectionBar', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClear).not.toHaveBeenCalled();
   });
+
+  it('does not invoke any callback when buttons are clicked while disabled', () => {
+    const onRecordSale = vi.fn();
+    const onListOnDH = vi.fn();
+    const onClear = vi.fn();
+    render(
+      <InventorySelectionBar
+        selectedItems={[makeItem('1', 5000)]}
+        onRecordSale={onRecordSale}
+        onListOnDH={onListOnDH}
+        onClear={onClear}
+        disabled
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Record sale/ }));
+    fireEvent.click(screen.getByRole('button', { name: /List on DH/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Clear$/ }));
+    expect(onRecordSale).not.toHaveBeenCalled();
+    expect(onListOnDH).not.toHaveBeenCalled();
+    expect(onClear).not.toHaveBeenCalled();
+  });
 });
