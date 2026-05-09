@@ -56,13 +56,8 @@ export default function InventorySelectionBar({
           <Button variant="primary" size="sm" onClick={onRecordSale}>
             Record sale ({count})
           </Button>
-          <Button
-            aria-label={`List on DH (${count})`}
-            variant="secondary"
-            size="sm"
-            onClick={onListOnDH}
-          >
-            Push to DH ({count})
+          <Button variant="secondary" size="sm" onClick={onListOnDH}>
+            List on DH ({count})
           </Button>
           <Button variant="ghost" size="sm" onClick={onClear}>
             Clear

@@ -76,7 +76,7 @@ describe('InventorySelectionBar', () => {
       />,
     );
     expect(screen.getByText(/2 selected/)).toBeInTheDocument();
-    expect(screen.queryByText(/list/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\$.* list$/)).not.toBeInTheDocument();
   });
 
   it('invokes the matching callback when each button is clicked', () => {
