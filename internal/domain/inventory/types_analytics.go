@@ -133,6 +133,7 @@ func ComputeCapitalSummary(raw *CapitalRawData) *CapitalSummary {
 type PurchaseFilter struct {
 	SinceDate       string // "2025-01-01" or empty for all
 	ExcludeArchived bool
+	ExcludeExternal bool
 }
 
 // PurchaseFilterOpt is a functional option for configuring PurchaseFilter.
@@ -146,6 +147,13 @@ func WithSinceDate(d string) PurchaseFilterOpt {
 // WithExcludeArchived returns an option that excludes purchases from archived inventory.
 func WithExcludeArchived() PurchaseFilterOpt {
 	return func(f *PurchaseFilter) { f.ExcludeArchived = true }
+}
+
+// WithExcludeExternal returns an option that excludes purchases from the
+// external (Shopify-imported) campaign. External purchases have no real cost
+// basis, so including them skews any profit/margin calculation.
+func WithExcludeExternal() PurchaseFilterOpt {
+	return func(f *PurchaseFilter) { f.ExcludeExternal = true }
 }
 
 // ChannelVelocity holds cross-campaign recovery velocity stats for a sale channel.

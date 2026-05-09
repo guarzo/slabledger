@@ -57,7 +57,7 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 	}
 
 	// Load all purchases with sales once to avoid N+1 queries
-	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived())
+	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
 		return nil, fmt.Errorf("all purchases with sales: %w", err)
 	}
@@ -68,6 +68,11 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 	totalSoldCostBasis := 0
 	totalSoldNetProfit := 0
 	for _, c := range allCampaigns {
+		// External (Shopify-imported) campaign has no real cost basis, so its
+		// ROI/profit numbers are meaningless and would distort portfolio totals.
+		if c.ID == inventory.ExternalCampaignID {
+			continue
+		}
 		pnl, err := s.analytics.GetCampaignPNL(ctx, c.ID)
 		if err != nil {
 			if s.logger != nil {
@@ -174,7 +179,7 @@ func (s *service) GetPortfolioChannelVelocity(ctx context.Context) ([]inventory.
 // --- Portfolio Insights ---
 
 func (s *service) GetPortfolioInsights(ctx context.Context) (*inventory.PortfolioInsights, error) {
-	data, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived())
+	data, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
 		return nil, fmt.Errorf("all purchases with sales: %w", err)
 	}
@@ -263,7 +268,7 @@ func computeInHandStatsByCampaign(data []inventory.PurchaseWithSale) map[string]
 }
 
 func (s *service) GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error) {
-	data, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived())
+	data, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
 		return nil, fmt.Errorf("all purchases with sales: %w", err)
 	}
@@ -329,7 +334,7 @@ func (s *service) GetWeeklyReviewSummary(ctx context.Context) (*inventory.Weekly
 	lastWeekEndStr := lastWeekEnd.Format("2006-01-02")
 
 	eightWeeksAgo := weekStart.AddDate(0, 0, -8*7).Format("2006-01-02")
-	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithSinceDate(eightWeeksAgo), inventory.WithExcludeArchived())
+	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithSinceDate(eightWeeksAgo), inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +466,7 @@ func (s *service) GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.
 	// Load one extra week on the trailing edge so the oldest week's "last week"
 	// comparison window has data.
 	sinceDate := currentWeekStart.AddDate(0, 0, -(weeks+1)*7).Format("2006-01-02")
-	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithSinceDate(sinceDate), inventory.WithExcludeArchived())
+	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithSinceDate(sinceDate), inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
 		return nil, err
 	}

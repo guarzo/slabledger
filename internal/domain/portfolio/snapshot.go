@@ -92,6 +92,11 @@ func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.P
 	totalSoldNetProfit := 0
 
 	for _, c := range campaigns {
+		// External (Shopify-imported) campaign has no real cost basis, so its
+		// ROI/profit numbers are meaningless and would distort portfolio totals.
+		if c.ID == inventory.ExternalCampaignID {
+			continue
+		}
 		pnl := pnlByCampaign[c.ID]
 
 		capitalAtRisk := 0
@@ -191,7 +196,7 @@ func (s *service) GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list all campaigns: %w", err)
 	}
-	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived())
+	allData, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
 		return nil, fmt.Errorf("all purchases with sales: %w", err)
 	}
