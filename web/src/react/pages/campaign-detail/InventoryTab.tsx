@@ -57,6 +57,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     [items, selected],
   );
 
+  // Keep in sync with the conditional modal renders below — every overlay
+  // that traps focus or occludes the selection bar belongs here.
   const anyModalOpen =
     saleModalOpen ||
     hintTarget != null ||
