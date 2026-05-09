@@ -240,14 +240,19 @@ func (as *AnalyticsStore) GetAllPurchasesWithSales(ctx context.Context, opts ...
 	})
 }
 
+// excludedPurchasesJoin joins campaign_sales -> campaign_purchases and excludes
+// the external (Shopify-imported) campaign. Callers bind inventory.ExternalCampaignID
+// at $1; any additional parameters must start at $2.
+const excludedPurchasesJoin = `INNER JOIN campaign_purchases p ON p.id = s.purchase_id
+		WHERE p.campaign_id <> $1`
+
 func (as *AnalyticsStore) GetPortfolioChannelVelocity(ctx context.Context) ([]inventory.ChannelVelocity, error) {
 	// External (Shopify-imported) campaign purchases have no real cost basis,
 	// so they're excluded from cross-campaign aggregates.
 	rows, err := as.db.QueryContext(ctx,
 		`SELECT s.sale_channel, COUNT(*), AVG(s.days_to_sell), SUM(s.sale_price_cents)
 		FROM campaign_sales s
-		INNER JOIN campaign_purchases p ON p.id = s.purchase_id
-		WHERE p.campaign_id <> $1
+		`+excludedPurchasesJoin+`
 		GROUP BY s.sale_channel
 		ORDER BY COUNT(*) DESC`, inventory.ExternalCampaignID)
 	if err != nil {
@@ -273,8 +278,7 @@ func (as *AnalyticsStore) GetDailyCapitalTimeSeries(ctx context.Context) ([]inve
 				UNION ALL
 				SELECT s.sale_date AS date, 0 AS spend, SUM(s.sale_price_cents) AS recovery
 				FROM campaign_sales s
-				INNER JOIN campaign_purchases p ON p.id = s.purchase_id
-				WHERE p.campaign_id <> $1
+				` + excludedPurchasesJoin + `
 				GROUP BY s.sale_date
 			) sub GROUP BY date ORDER BY date
 		)
@@ -305,8 +309,7 @@ func (as *AnalyticsStore) GetGlobalPNLByChannel(ctx context.Context) ([]inventor
 			SUM(s.net_profit_cents) AS net_profit,
 			AVG(s.days_to_sell) AS avg_days
 		FROM campaign_sales s
-		INNER JOIN campaign_purchases p ON p.id = s.purchase_id
-		WHERE p.campaign_id <> $1
+		` + excludedPurchasesJoin + `
 		GROUP BY s.sale_channel
 		ORDER BY net_profit DESC
 	`

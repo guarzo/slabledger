@@ -224,8 +224,8 @@ func (s *service) GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error) {
 	healthByCampaign := computeChannelHealthByCampaign(allData)
 	health := ComputeHealthFromData(activeCampaigns, allData, healthByCampaign)
 
-	insights := inventory.ComputePortfolioInsights(allData, channelPNL, allCampaigns)
-	suggestions := inventory.GenerateSuggestions(ctx, insights, allCampaigns, healthByCampaign)
+	insights := inventory.ComputePortfolioInsights(allData, channelPNL, filterExternalCampaign(allCampaigns))
+	suggestions := inventory.GenerateSuggestions(ctx, insights, filterExternalCampaign(allCampaigns), healthByCampaign)
 
 	// Weekly review (current week)
 	now := time.Now()

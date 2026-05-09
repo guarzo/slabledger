@@ -87,9 +87,7 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 		capitalAtRisk := 0
 		if pnl.TotalUnsold > 0 {
 			capitalAtRisk = pnl.TotalSpendCents - pnl.TotalRevenueCents + pnl.TotalFeesCents
-			if capitalAtRisk < 0 {
-				capitalAtRisk = 0
-			}
+			capitalAtRisk = max(capitalAtRisk, 0)
 		}
 
 		status := "healthy"
@@ -178,6 +176,20 @@ func (s *service) GetPortfolioChannelVelocity(ctx context.Context) ([]inventory.
 
 // --- Portfolio Insights ---
 
+// filterExternalCampaign returns campaigns with the external (Shopify-imported)
+// campaign removed. It has no real cost basis and would distort cross-campaign
+// analytics and produce nonsensical suggestions.
+func filterExternalCampaign(campaigns []inventory.Campaign) []inventory.Campaign {
+	filtered := make([]inventory.Campaign, 0, len(campaigns))
+	for _, c := range campaigns {
+		if c.ID == inventory.ExternalCampaignID {
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	return filtered
+}
+
 func (s *service) GetPortfolioInsights(ctx context.Context) (*inventory.PortfolioInsights, error) {
 	data, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
@@ -194,7 +206,7 @@ func (s *service) GetPortfolioInsights(ctx context.Context) (*inventory.Portfoli
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
 
-	return inventory.ComputePortfolioInsights(data, channelPNL, campaigns), nil
+	return inventory.ComputePortfolioInsights(data, channelPNL, filterExternalCampaign(campaigns)), nil
 }
 
 // --- Campaign Suggestions ---
@@ -282,6 +294,7 @@ func (s *service) GetCampaignSuggestions(ctx context.Context) (*inventory.Sugges
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
+	campaigns = filterExternalCampaign(campaigns)
 
 	insights := inventory.ComputePortfolioInsights(data, channelPNL, campaigns)
 	healthByCampaign := computeChannelHealthByCampaign(data)
