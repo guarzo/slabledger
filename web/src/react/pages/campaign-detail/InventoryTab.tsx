@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
@@ -18,6 +19,7 @@ import PriceOverrideDialog from '../../PriceOverrideDialog';
 import PriceFlagDialog from './inventory/PriceFlagDialog';
 import FixDHMatchDialog from './inventory/FixDHMatchDialog';
 import InventoryHeader from './inventory/InventoryHeader';
+import InventorySelectionBar from './inventory/InventorySelectionBar';
 import { ACTIONS_COLUMN_WIDTH } from './inventory/columnWidths';
 
 export interface InventoryTabProps {
@@ -42,13 +44,27 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     tabCounts, showEV, evPortfolio, evMap,
     filteredAndSortedItems,
     totalCost, totalMarket, fullInventoryTotals,
-    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleFlagSubmit, handleDelete,
+    handleSort, handleReviewed, handleResolveFlag, handleApproveDHPush, handleListOnDH, dhListingInFlight, dhListedOptimistic, handleBulkListOnDH, handleFlagSubmit, handleDelete,
     toggleSelect, toggleAll, toggleExpand,
     openSaleModal, closeSaleModal, handleFixPricing, handleFixDHMatch, handleFixDHMatchSaved, handleUnmatchDH, handleRetryDHMatch, dhRetryInFlight, handleSetPrice,
     handlePriceSaved, handleHintSaved, handleInlinePriceSave, handleDismiss, handleUndismiss,
     handleDeselectMissingCL, handleHighlightMissingCL,
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
   } = state;
+
+  const selectedItems = useMemo(
+    () => items.filter(i => selected.has(i.purchase.id)),
+    [items, selected],
+  );
+
+  // Keep in sync with the conditional modal renders below — every overlay
+  // that traps focus or occludes the selection bar belongs here.
+  const anyModalOpen =
+    saleModalOpen ||
+    hintTarget != null ||
+    priceTarget != null ||
+    flagTarget != null ||
+    fixMatchTarget != null;
 
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
@@ -303,6 +319,14 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           onSaved={handleFixDHMatchSaved}
         />
       )}
+
+      <InventorySelectionBar
+        selectedItems={selectedItems}
+        onRecordSale={() => openSaleModal(selectedItems)}
+        onListOnDH={() => handleBulkListOnDH(selectedItems.map(i => i.purchase.id))}
+        onClear={() => setSelected(new Set())}
+        disabled={anyModalOpen}
+      />
     </div>
   );
 }
