@@ -448,6 +448,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		MMClient:           mmClient,
 		DHClient:           dhClient,
 		DHEventStore:       eventStore,
+		DHStore:            campaignsInit.dhStore,
 		DHPriceSyncService: dhPriceSyncService,
 		SyncStateRepo:      syncStateRepo,
 		SchedulerResult:    schedulerResult,

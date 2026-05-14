@@ -201,5 +201,6 @@ export interface DHPushConfig {
   disagreementPctThreshold: number;
   unreviewedChangePctThreshold: number;
   unreviewedChangeMinCents: number;
+  listingsPaused: boolean;
   updatedAt: string;
 }

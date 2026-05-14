@@ -26,12 +26,12 @@ var _ inventory.DHRepository = (*DHStore)(nil)
 // GetDHPushConfig returns the DH push safety config, or defaults if none has been saved.
 func (dhs *DHStore) GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error) {
 	query := `SELECT swing_pct_threshold, swing_min_cents, disagreement_pct_threshold,
-		unreviewed_change_pct_threshold, unreviewed_change_min_cents, updated_at
+		unreviewed_change_pct_threshold, unreviewed_change_min_cents, listings_paused, updated_at
 		FROM dh_push_config WHERE id = 1`
 	var cfg inventory.DHPushConfig
 	err := dhs.db.QueryRowContext(ctx, query).Scan(
 		&cfg.SwingPctThreshold, &cfg.SwingMinCents, &cfg.DisagreementPctThreshold,
-		&cfg.UnreviewedChangePctThreshold, &cfg.UnreviewedChangeMinCents, &cfg.UpdatedAt,
+		&cfg.UnreviewedChangePctThreshold, &cfg.UnreviewedChangeMinCents, &cfg.ListingsPaused, &cfg.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		def := inventory.DefaultDHPushConfig()
@@ -51,17 +51,18 @@ func (dhs *DHStore) SaveDHPushConfig(ctx context.Context, cfg *inventory.DHPushC
 	cfg.UpdatedAt = time.Now()
 	_, err := dhs.db.ExecContext(ctx,
 		`INSERT INTO dh_push_config (id, swing_pct_threshold, swing_min_cents, disagreement_pct_threshold,
-			unreviewed_change_pct_threshold, unreviewed_change_min_cents, updated_at)
-		VALUES (1, $1, $2, $3, $4, $5, $6)
+			unreviewed_change_pct_threshold, unreviewed_change_min_cents, listings_paused, updated_at)
+		VALUES (1, $1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT(id) DO UPDATE SET
 			swing_pct_threshold = excluded.swing_pct_threshold,
 			swing_min_cents = excluded.swing_min_cents,
 			disagreement_pct_threshold = excluded.disagreement_pct_threshold,
 			unreviewed_change_pct_threshold = excluded.unreviewed_change_pct_threshold,
 			unreviewed_change_min_cents = excluded.unreviewed_change_min_cents,
+			listings_paused = excluded.listings_paused,
 			updated_at = excluded.updated_at`,
 		cfg.SwingPctThreshold, cfg.SwingMinCents, cfg.DisagreementPctThreshold,
-		cfg.UnreviewedChangePctThreshold, cfg.UnreviewedChangeMinCents, cfg.UpdatedAt,
+		cfg.UnreviewedChangePctThreshold, cfg.UnreviewedChangeMinCents, cfg.ListingsPaused, cfg.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("save dh push config: %w", err)

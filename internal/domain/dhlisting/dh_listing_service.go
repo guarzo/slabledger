@@ -24,8 +24,15 @@ type dhListingService struct {
 	pushStatusUpdater DHListingPushStatusUpdater
 	resetter          DHReconcileResetter      // optional: auto-resets stale DH inventory IDs inline
 	unlistedClearer   DHListingUnlistedClearer // optional: clears dh_unlisted_detected_at on successful list
+	configLoader      DHListingConfigLoader    // optional: when present and ListingsPaused=true, skip list transitions
 	logger            observability.Logger
 	eventRec          dhevents.Recorder // may be nil
+}
+
+// DHListingConfigLoader loads DH push config so the listing service can honor
+// the global ListingsPaused toggle.
+type DHListingConfigLoader interface {
+	GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error)
 }
 
 // DHListingPurchaseLookup retrieves purchases by cert numbers.
@@ -95,6 +102,14 @@ func WithDHListingUnlistedClearer(c DHListingUnlistedClearer) DHListingServiceOp
 	return func(s *dhListingService) { s.unlistedClearer = c }
 }
 
+// WithDHListingConfigLoader injects a loader for the DH push config so the
+// listing service can honor the global ListingsPaused toggle. When paused,
+// ListPurchases inline-matches and pushes (psa_import) as usual but skips the
+// in_stock → listed transition so items stay unlisted on DoubleHolo.
+func WithDHListingConfigLoader(l DHListingConfigLoader) DHListingServiceOption {
+	return func(s *dhListingService) { s.configLoader = l }
+}
+
 // WithEventRecorder injects a DH event recorder. Optional — if nil, no
 // events are written but listing behavior is unchanged.
 func WithEventRecorder(r dhevents.Recorder) DHListingServiceOption {
@@ -153,6 +168,22 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	if err != nil {
 		s.logger.Warn(ctx, "dh listing: batch cert lookup failed", observability.Err(err))
 		return DHListingResult{Error: err}
+	}
+
+	// Honor the global ListingsPaused toggle: skip the in_stock → listed
+	// transition (and even the inline psa_import that creates DH inventory)
+	// so nothing lands on DoubleHolo during card-show liquidation windows.
+	// Items remain pending locally and are picked up after the operator
+	// turns the toggle back off.
+	if s.configLoader != nil {
+		if cfg, cfgErr := s.configLoader.GetDHPushConfig(ctx); cfgErr != nil {
+			s.logger.Warn(ctx, "dh listing: failed to load push config; proceeding without pause check",
+				observability.Err(cfgErr))
+		} else if cfg != nil && cfg.ListingsPaused {
+			s.logger.Info(ctx, "dh listing: listings paused — skipping list transition",
+				observability.Int("certs", len(purchases)))
+			return DHListingResult{Skipped: len(purchases), Total: len(purchases)}
+		}
 	}
 
 	// Sort cert numbers for deterministic iteration order.
