@@ -96,12 +96,18 @@ export function DHPushConfigCard() {
             role="switch"
             aria-checked={form.listingsPaused}
             aria-label="Pause DH listings"
+            aria-busy={saveMutation.isPending}
+            disabled={saveMutation.isPending}
             onClick={() => {
+              if (saveMutation.isPending) return;
+              const prev = form;
               const next = { ...form, listingsPaused: !form.listingsPaused };
               setForm(next);
-              saveMutation.mutate(next);
+              saveMutation.mutate(next, {
+                onError: () => setForm(prev),
+              });
             }}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
               form.listingsPaused ? 'bg-amber-500' : 'bg-[var(--surface-3,#3a3a3a)]'
             }`}
           >

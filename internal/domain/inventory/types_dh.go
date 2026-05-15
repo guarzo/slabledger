@@ -10,11 +10,11 @@ type DHPushConfig struct {
 	UnreviewedChangePctThreshold int       `json:"unreviewedChangePctThreshold"`
 	UnreviewedChangeMinCents     int       `json:"unreviewedChangeMinCents"`
 	InitialPushValueFloorPct     int       `json:"initialPushValueFloorPct"`
-	// ListingsPaused, when true, pauses the DH list transition globally.
-	// Items still flow through psa_import (so inventory creation continues),
-	// but ListPurchases skips the in_stock → listed flip and leaves items
-	// unlisted on DoubleHolo. Used during card-show liquidation windows
-	// where local sales should not be undercut by live DH listings.
+	// ListingsPaused, when true, short-circuits ListPurchases before the
+	// inline psa_import push: nothing is sent to DoubleHolo and the
+	// in_stock → listed flip is skipped, so items remain unlisted on DH.
+	// Used during card-show liquidation windows where local sales should
+	// not be undercut by live DH listings.
 	ListingsPaused bool      `json:"listingsPaused"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }

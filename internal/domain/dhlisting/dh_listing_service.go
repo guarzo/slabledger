@@ -103,9 +103,11 @@ func WithDHListingUnlistedClearer(c DHListingUnlistedClearer) DHListingServiceOp
 }
 
 // WithDHListingConfigLoader injects a loader for the DH push config so the
-// listing service can honor the global ListingsPaused toggle. When paused,
-// ListPurchases inline-matches and pushes (psa_import) as usual but skips the
-// in_stock → listed transition so items stay unlisted on DoubleHolo.
+// listing service can honor the global ListingsPaused toggle. When
+// ListingsPaused is true, ListPurchases short-circuits up front: it skips
+// the inline psa_import push path and does not perform the in_stock → listed
+// transition, leaving items unlisted on DoubleHolo until the toggle is
+// turned off again.
 func WithDHListingConfigLoader(l DHListingConfigLoader) DHListingServiceOption {
 	return func(s *dhListingService) { s.configLoader = l }
 }
@@ -176,10 +178,15 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	// Items remain pending locally and are picked up after the operator
 	// turns the toggle back off.
 	if s.configLoader != nil {
-		if cfg, cfgErr := s.configLoader.GetDHPushConfig(ctx); cfgErr != nil {
-			s.logger.Warn(ctx, "dh listing: failed to load push config; proceeding without pause check",
+		cfg, cfgErr := s.configLoader.GetDHPushConfig(ctx)
+		if cfgErr != nil {
+			// Fail closed: if we can't confirm the pause state, treat as paused
+			// so a card-show window can't accidentally let items list on DH.
+			s.logger.Error(ctx, "dh listing: failed to load push config; failing closed (treating as paused)",
 				observability.Err(cfgErr))
-		} else if cfg != nil && cfg.ListingsPaused {
+			return DHListingResult{Skipped: len(purchases), Total: len(purchases)}
+		}
+		if cfg != nil && cfg.ListingsPaused {
 			s.logger.Info(ctx, "dh listing: listings paused — skipping list transition",
 				observability.Int("certs", len(purchases)))
 			return DHListingResult{Skipped: len(purchases), Total: len(purchases)}
