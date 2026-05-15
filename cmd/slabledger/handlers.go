@@ -67,6 +67,7 @@ type handlerInputs struct {
 	MMClient           *marketmovers.Client
 	DHClient           *dh.Client
 	DHEventStore       *postgres.DHEventStore
+	DHStore            *postgres.DHStore
 	SyncStateRepo      *postgres.SyncStateRepository
 	SchedulerResult    *scheduler.BuildResult
 	GSheetsClient      *gsheets.Client
@@ -364,6 +365,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		}
 		if in.DHEventStore != nil {
 			listingOpts = append(listingOpts, dhlisting.WithEventRecorder(in.DHEventStore))
+		}
+		if in.DHStore != nil {
+			listingOpts = append(listingOpts, dhlisting.WithDHListingConfigLoader(in.DHStore))
 		}
 		svc, err := dhlisting.NewDHListingService(
 			in.CampaignsService, in.Logger, listingOpts...,
