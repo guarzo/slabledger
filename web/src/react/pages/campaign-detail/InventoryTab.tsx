@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
@@ -72,6 +72,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     // Expanded rows have variable height; measureElement handles actual sizing.
     estimateSize: () => 64,
     overscan: 10,
+    // Cache sizes by stable purchase id so filter/sort/expand toggles don't
+    // reuse a stale size from a different row at the same index.
+    getItemKey: (index) => filteredAndSortedItems[index]?.purchase.id ?? index,
   });
 
   const mobileVirtualizer = useVirtualizer({
@@ -79,7 +82,16 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     getScrollElement: () => mobileScrollRef.current,
     estimateSize: () => 140,
     overscan: 5,
+    getItemKey: (index) => filteredAndSortedItems[index]?.purchase.id ?? index,
   });
+
+  // When a row collapses or expands, the rendered height changes but
+  // ResizeObserver/measureElement can lag, leaving subsequent rows overlapping
+  // the (now-shorter) previously-expanded row. Force a re-measure pass when
+  // the expanded row changes so cached sizes are flushed.
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [expandedId, rowVirtualizer]);
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
