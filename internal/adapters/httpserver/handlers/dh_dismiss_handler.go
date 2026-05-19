@@ -119,7 +119,21 @@ func (h *DHHandler) HandleUndismissMatch(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "push status updater not configured")
 		return
 	}
-	if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, req.PurchaseID, inventory.DHPushStatusUnmatched); err != nil {
+
+	// Route based on physical receipt: received items go back to pending so
+	// the scheduler picks them up; unreceived items clear the push status
+	// entirely (empty string) and wait for intake to re-enroll them.
+	var newStatus inventory.DHPushStatus
+	var eventType dhevents.Type
+	if p.ReceivedAt != nil {
+		newStatus = inventory.DHPushStatusPending
+		eventType = dhevents.TypeEnrolled
+	} else {
+		newStatus = ""
+		eventType = dhevents.TypeUnmatched
+	}
+
+	if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, req.PurchaseID, newStatus); err != nil {
 		h.logger.Error(ctx, "undismiss: update push status", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "failed to undismiss purchase")
 		return
@@ -128,11 +142,11 @@ func (h *DHHandler) HandleUndismissMatch(w http.ResponseWriter, r *http.Request)
 	h.recordEvent(ctx, dhevents.Event{
 		PurchaseID:     p.ID,
 		CertNumber:     p.CertNumber,
-		Type:           dhevents.TypeUnmatched,
+		Type:           eventType,
 		PrevPushStatus: inventory.DHPushStatusDismissed,
-		NewPushStatus:  inventory.DHPushStatusUnmatched,
+		NewPushStatus:  newStatus,
 		Source:         dhevents.SourceManualUI,
 	})
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "unmatched"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": string(newStatus)})
 }

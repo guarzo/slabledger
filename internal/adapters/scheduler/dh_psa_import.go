@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -45,6 +46,9 @@ type DHPushPSAImporter interface {
 //	  → DH resolved the cert but couldn't persist the partner card (usually
 //	    an invalid overrides.language / overrides.rarity). Log and leave
 //	    pending so the operator can repair overrides.
+//
+// Each non-success path also records a TypeSkipped event with the reason so
+// ops can audit why cycles are stalling.
 func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purchase) processResult {
 	item := buildPSAImportItem(p)
 
@@ -55,6 +59,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
 				observability.Err(err))
+			s.recordSkipEvent(ctx, p, "api_error: "+err.Error())
 			return processSkipped
 		}
 
@@ -67,6 +72,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
 				observability.String("batchError", resp.Error))
+			s.recordSkipEvent(ctx, p, "batch_reject: "+resp.Error)
 			return processSkipped
 		}
 
@@ -74,6 +80,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 			s.logger.Warn(ctx, "dh push: psa_import returned no results",
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber))
+			s.recordSkipEvent(ctx, p, "empty_results")
 			return processSkipped
 		}
 
@@ -97,6 +104,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
 				observability.String("psaError", result.Error))
+			s.recordSkipEvent(ctx, p, "rate_limit_exhausted: "+result.Error)
 			return processSkipped
 		}
 
@@ -112,6 +120,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
 				observability.String("psaError", result.Error))
+			s.recordSkipEvent(ctx, p, "psa_error: "+result.Error)
 			return processSkipped
 
 		case dh.PSAImportStatusPartnerCardError:
@@ -119,6 +128,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
 				observability.String("dhError", result.Error))
+			s.recordSkipEvent(ctx, p, "partner_card_error: "+result.Error)
 			return processSkipped
 
 		default:
@@ -127,6 +137,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 				observability.String("cert", p.CertNumber),
 				observability.String("resolution", result.Resolution),
 				observability.String("dhError", result.Error))
+			s.recordSkipEvent(ctx, p, "unknown_resolution: "+result.Resolution)
 			return processSkipped
 		}
 	}
@@ -134,15 +145,31 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 	s.logger.Warn(ctx, "dh push: psa_import key rotation cap reached, leaving pending",
 		observability.String("purchaseID", p.ID),
 		observability.String("cert", p.CertNumber))
+	s.recordSkipEvent(ctx, p, "key_rotation_cap")
 	return processSkipped
+}
+
+// recordSkipEvent emits a TypeSkipped event for a purchase that is staying
+// pending due to a transient error. The purchase is not moved to any new
+// status; this event exists solely so ops can audit why cycles are stalling.
+func (s *DHPushScheduler) recordSkipEvent(ctx context.Context, p inventory.Purchase, reason string) {
+	s.recordEvent(ctx, dhevents.Event{
+		PurchaseID:     p.ID,
+		CertNumber:     p.CertNumber,
+		Type:           dhevents.TypeSkipped,
+		PrevPushStatus: string(p.DHPushStatus),
+		NewPushStatus:  string(p.DHPushStatus),
+		Notes:          reason,
+		Source:         dhevents.SourceDHPush,
+	})
 }
 
 // applyPSAImportSuccess persists DH IDs + status for any successful psa_import
 // resolution (matched / unmatched_created / override_corrected / already_listed).
-// No state event is emitted from this scheduler — dh_state_events records
-// exceptional transitions (held, unmatched) here. The inline push path in the
-// dhlisting service does emit TypePushed because it runs in the user-visible
-// "List" flow where the extra audit trail is useful.
+// Emits TypeSkipped only on the missing-IDs branch; the happy path persists
+// IDs without an event. The inline push path in the dhlisting service does
+// emit TypePushed because it runs in the user-visible "List" flow where the
+// extra audit trail is useful.
 func (s *DHPushScheduler) applyPSAImportSuccess(ctx context.Context, p inventory.Purchase, result dh.PSAImportResult) processResult {
 	if result.DHCardID == 0 || result.DHInventoryID == 0 {
 		s.logger.Warn(ctx, "dh push: psa_import success missing IDs, treating as skip",
@@ -151,6 +178,7 @@ func (s *DHPushScheduler) applyPSAImportSuccess(ctx context.Context, p inventory
 			observability.String("resolution", result.Resolution),
 			observability.Int("dhCardID", result.DHCardID),
 			observability.Int("dhInventoryID", result.DHInventoryID))
+		s.recordSkipEvent(ctx, p, "success_missing_ids: "+result.Resolution)
 		return processSkipped
 	}
 
