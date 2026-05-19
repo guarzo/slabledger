@@ -46,6 +46,9 @@ type DHPushPSAImporter interface {
 //	  → DH resolved the cert but couldn't persist the partner card (usually
 //	    an invalid overrides.language / overrides.rarity). Log and leave
 //	    pending so the operator can repair overrides.
+//
+// Each non-success path also records a TypeSkipped event with the reason so
+// ops can audit why cycles are stalling.
 func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purchase) processResult {
 	item := buildPSAImportItem(p)
 
@@ -163,10 +166,10 @@ func (s *DHPushScheduler) recordSkipEvent(ctx context.Context, p inventory.Purch
 
 // applyPSAImportSuccess persists DH IDs + status for any successful psa_import
 // resolution (matched / unmatched_created / override_corrected / already_listed).
-// No state event is emitted from this scheduler — dh_state_events records
-// exceptional transitions (held, unmatched) here. The inline push path in the
-// dhlisting service does emit TypePushed because it runs in the user-visible
-// "List" flow where the extra audit trail is useful.
+// Emits TypeSkipped only on the missing-IDs branch; the happy path persists
+// IDs without an event. The inline push path in the dhlisting service does
+// emit TypePushed because it runs in the user-visible "List" flow where the
+// extra audit trail is useful.
 func (s *DHPushScheduler) applyPSAImportSuccess(ctx context.Context, p inventory.Purchase, result dh.PSAImportResult) processResult {
 	if result.DHCardID == 0 || result.DHInventoryID == 0 {
 		s.logger.Warn(ctx, "dh push: psa_import success missing IDs, treating as skip",
