@@ -53,6 +53,19 @@ type DHPushHoldSetter interface {
 	SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error
 }
 
+// DHPushRelister re-runs the list pipeline for a set of cert numbers. Used by
+// processPurchase when the reconciler has flagged a row as unlisted on DH
+// (dh_unlisted_detected_at set) and the inventory poll has re-discovered it
+// with a new dh_inventory_id but left dh_push_status='pending'. Without this,
+// the scheduler's "already has inventory ID" guard short-circuits to matched
+// and the row never re-lists.
+//
+// Minimal subset of dhlisting.Service so the scheduler doesn't depend on the
+// full Service surface — same pattern as DHPushStatusUpdater.
+type DHPushRelister interface {
+	ListPurchases(ctx context.Context, certNumbers []string) dhlisting.DHListingResult
+}
+
 // DHPushConfig controls the DH push scheduler.
 type DHPushConfig struct {
 	Enabled  bool
@@ -78,6 +91,15 @@ func WithDHPushEventRecorder(r dhevents.Recorder) DHPushOption {
 	return func(s *DHPushScheduler) { s.eventRec = r }
 }
 
+// WithDHPushRelister injects the listing service used to re-list rows that
+// the reconciler flagged as unlisted and the inventory poll re-discovered
+// (DHInventoryID set, DHUnlistedDetectedAt set, dh_push_status still pending).
+// Without it, processPurchase falls back to the legacy "flip to matched"
+// behavior — which strands those rows in_stock indefinitely.
+func WithDHPushRelister(r DHPushRelister) DHPushOption {
+	return func(s *DHPushScheduler) { s.relister = r }
+}
+
 // DHPushScheduler routes pending purchases through DH's psa_import endpoint
 // (match + inventory-create in one call) on a fixed interval.
 type DHPushScheduler struct {
@@ -89,6 +111,7 @@ type DHPushScheduler struct {
 	cardIDSaver   DHPushCardIDSaver
 	configLoader  DHPushConfigLoader
 	holdSetter    DHPushHoldSetter
+	relister      DHPushRelister
 	eventRec      dhevents.Recorder
 	logger        observability.Logger
 	config        DHPushConfig
@@ -213,6 +236,49 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 	// Guard: if a previous cycle pushed successfully (inventory ID set) but the
 	// status update failed, just fix the status rather than re-pushing.
 	if p.DHInventoryID != 0 {
+		// Auto-relist path: the reconciler flagged this row as unlisted on DH
+		// (dh_unlisted_detected_at set) and the inventory poll re-discovered it
+		// with a fresh inventory ID, but never wrote dh_push_status. Without
+		// this branch the row sits in_stock forever. Only relist when the
+		// operator has committed a listing price and the row carries a cert
+		// number; otherwise fall through to the legacy "fix status to matched"
+		// branch and wait for a price commit or cert backfill.
+		if p.DHUnlistedDetectedAt != nil && s.relister != nil && p.CertNumber != "" && dhlisting.ResolveListingPriceCents(&p) > 0 {
+			s.logger.Info(ctx, "dh push: re-listing previously-unlisted purchase via dhlisting service",
+				observability.String("purchaseID", p.ID),
+				observability.String("cert", p.CertNumber),
+				observability.Int("dhInventoryID", p.DHInventoryID))
+			result := s.relister.ListPurchases(ctx, []string{p.CertNumber})
+			if result.Error != nil {
+				s.logger.Warn(ctx, "dh push: re-list failed; next cycle will retry",
+					observability.String("purchaseID", p.ID),
+					observability.String("cert", p.CertNumber),
+					observability.Err(result.Error))
+				return processSkipped
+			}
+			// The listing service is responsible for clearing
+			// dh_unlisted_detected_at and flipping dh_push_status. If Listed=0
+			// but Synced covers the full batch, the row is already in the
+			// target state on DH (already listed + price + channels match);
+			// treat as terminal so we don't re-process it every cycle.
+			// Otherwise the row didn't transition (paused, inline-push failure,
+			// etc.) — leave it as-is and log so the no-op is diagnosable.
+			if result.Listed == 0 {
+				if result.Synced > 0 && result.Synced == result.Total {
+					return processMatched
+				}
+				s.logger.Warn(ctx, "dh push: re-list did not transition row; will retry next cycle",
+					observability.String("purchaseID", p.ID),
+					observability.String("cert", p.CertNumber),
+					observability.Int("listed", result.Listed),
+					observability.Int("synced", result.Synced),
+					observability.Int("skipped", result.Skipped),
+					observability.Int("total", result.Total))
+				return processSkipped
+			}
+			return processMatched
+		}
+
 		s.logger.Info(ctx, "dh push: purchase already has inventory ID, fixing status to matched",
 			observability.String("purchaseID", p.ID),
 			observability.Int("dhInventoryID", p.DHInventoryID))
