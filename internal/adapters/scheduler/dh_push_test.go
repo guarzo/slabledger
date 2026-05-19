@@ -132,85 +132,97 @@ func TestProcessPurchase_AlreadyPushedFixesStatus(t *testing.T) {
 	}
 }
 
-// TestProcessPurchase_UnlistedDetectedRelistsViaService reproduces the prod
-// bug fixed by this change: after the reconciler stamps dh_unlisted_detected_at
+// TestProcessPurchase_UnlistedDetected covers the auto-relist branch added to
+// fix the stuck-row bug: after the reconciler stamps dh_unlisted_detected_at
 // and the inventory poll re-discovers the cert with a new inventory ID, the
 // scheduler used to short-circuit to matched and the row would sit in_stock
-// forever. Now it should invoke ListPurchases on the relister.
-func TestProcessPurchase_UnlistedDetectedRelistsViaService(t *testing.T) {
+// forever. The relist branch only fires when a committed price is present;
+// without one it falls through to the legacy "flip to matched" behavior so
+// the operator can commit a price.
+func TestProcessPurchase_UnlistedDetected(t *testing.T) {
+	cases := []struct {
+		name               string
+		overridePriceCents int
+		listResult         dhlisting.DHListingResult
+		wantRelistCalls    int
+		wantStatusCalls    int
+		wantResult         processResult
+	}{
+		{
+			name:               "committed price → invokes relister",
+			overridePriceCents: 12500,
+			listResult:         dhlisting.DHListingResult{Listed: 1, Total: 1},
+			wantRelistCalls:    1,
+			wantStatusCalls:    0, // listing service owns the transition
+			wantResult:         processMatched,
+		},
+		{
+			name:               "no committed price → falls through to matched",
+			overridePriceCents: 0,
+			listResult:         dhlisting.DHListingResult{}, // unused: relister not called
+			wantRelistCalls:    0,
+			wantStatusCalls:    1,
+			wantResult:         processMatched,
+		},
+		{
+			name:               "already fully synced → terminal matched, no retry",
+			overridePriceCents: 12500,
+			listResult:         dhlisting.DHListingResult{Listed: 0, Synced: 1, Total: 1},
+			wantRelistCalls:    1,
+			wantStatusCalls:    0,
+			wantResult:         processMatched,
+		},
+		{
+			name:               "relister no-op (skipped) → skipped, retry next cycle",
+			overridePriceCents: 12500,
+			listResult:         dhlisting.DHListingResult{Listed: 0, Skipped: 1, Total: 1},
+			wantRelistCalls:    1,
+			wantStatusCalls:    0,
+			wantResult:         processSkipped,
+		},
+	}
+
 	now := time.Now()
-	relisted := &mocks.MockDHListingService{
-		ListPurchasesFn: func(_ context.Context, certs []string) dhlisting.DHListingResult {
-			if len(certs) != 1 || certs[0] != "9d81" {
-				t.Fatalf("expected single-cert relist call for cert=9d81, got %+v", certs)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			relistCalls := 0
+			relister := &mocks.MockDHListingService{
+				ListPurchasesFn: func(_ context.Context, certs []string) dhlisting.DHListingResult {
+					relistCalls++
+					if len(certs) != 1 || certs[0] != "9d81" {
+						t.Fatalf("expected single-cert relist call for cert=9d81, got %+v", certs)
+					}
+					return tc.listResult
+				},
 			}
-			return dhlisting.DHListingResult{Listed: 1, Total: 1}
-		},
-	}
-	status := &stubStatusUpdater{}
-	s := NewDHPushScheduler(
-		nil, status, &stubPSAImporter{}, &mocks.MockDHFieldsUpdater{}, &stubCardIDSaver{},
-		mocks.NewMockLogger(),
-		DHPushConfig{Enabled: false},
-		WithDHPushRelister(relisted),
-	)
+			status := &stubStatusUpdater{}
+			s := NewDHPushScheduler(
+				nil, status, &stubPSAImporter{}, &mocks.MockDHFieldsUpdater{}, &stubCardIDSaver{},
+				mocks.NewMockLogger(),
+				DHPushConfig{Enabled: false},
+				WithDHPushRelister(relister),
+			)
 
-	p := inventory.Purchase{
-		ID:                   "p1",
-		CertNumber:           "9d81",
-		DHInventoryID:        2294,
-		DHPushStatus:         inventory.DHPushStatusPending,
-		DHUnlistedDetectedAt: &now,
-		OverridePriceCents:   12500, // committed price > 0
-	}
-	got := s.processPurchase(context.Background(), p, inventory.DefaultDHPushConfig())
+			p := inventory.Purchase{
+				ID:                   "p1",
+				CertNumber:           "9d81",
+				DHInventoryID:        2294,
+				DHPushStatus:         inventory.DHPushStatusPending,
+				DHUnlistedDetectedAt: &now,
+				OverridePriceCents:   tc.overridePriceCents,
+			}
+			got := s.processPurchase(context.Background(), p, inventory.DefaultDHPushConfig())
 
-	if got != processMatched {
-		t.Fatalf("got=%v want=processMatched (auto-relist success)", got)
-	}
-	if len(status.Calls) != 0 {
-		t.Fatalf("expected no direct status update (listing service owns the transition), got %+v", status.Calls)
-	}
-}
-
-// TestProcessPurchase_UnlistedDetectedNoPriceFallsThrough is the negative case:
-// same shape but no committed price. The relister must NOT be called and the
-// row must flip to matched as before, so the operator can commit a price.
-func TestProcessPurchase_UnlistedDetectedNoPriceFallsThrough(t *testing.T) {
-	now := time.Now()
-	relistCalls := 0
-	relisted := &mocks.MockDHListingService{
-		ListPurchasesFn: func(_ context.Context, _ []string) dhlisting.DHListingResult {
-			relistCalls++
-			return dhlisting.DHListingResult{}
-		},
-	}
-	status := &stubStatusUpdater{}
-	s := NewDHPushScheduler(
-		nil, status, &stubPSAImporter{}, &mocks.MockDHFieldsUpdater{}, &stubCardIDSaver{},
-		mocks.NewMockLogger(),
-		DHPushConfig{Enabled: false},
-		WithDHPushRelister(relisted),
-	)
-
-	p := inventory.Purchase{
-		ID:                   "p1",
-		CertNumber:           "9d81",
-		DHInventoryID:        2294,
-		DHPushStatus:         inventory.DHPushStatusPending,
-		DHUnlistedDetectedAt: &now,
-		// no override or reviewed price set
-	}
-	got := s.processPurchase(context.Background(), p, inventory.DefaultDHPushConfig())
-
-	if got != processMatched {
-		t.Fatalf("got=%v want=processMatched (no price → legacy fallthrough)", got)
-	}
-	if relistCalls != 0 {
-		t.Fatalf("expected ListPurchases NOT called when price=0, got %d calls", relistCalls)
-	}
-	if len(status.Calls) != 1 || status.Calls[0].Status != inventory.DHPushStatusMatched {
-		t.Fatalf("expected one status update to matched, got %+v", status.Calls)
+			if got != tc.wantResult {
+				t.Fatalf("got=%v want=%v", got, tc.wantResult)
+			}
+			if relistCalls != tc.wantRelistCalls {
+				t.Fatalf("relist calls: got=%d want=%d", relistCalls, tc.wantRelistCalls)
+			}
+			if len(status.Calls) != tc.wantStatusCalls {
+				t.Fatalf("status calls: got=%d want=%d (calls=%+v)", len(status.Calls), tc.wantStatusCalls, status.Calls)
+			}
+		})
 	}
 }
 

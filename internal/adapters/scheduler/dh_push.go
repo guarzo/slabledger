@@ -240,9 +240,10 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 		// (dh_unlisted_detected_at set) and the inventory poll re-discovered it
 		// with a fresh inventory ID, but never wrote dh_push_status. Without
 		// this branch the row sits in_stock forever. Only relist when the
-		// operator has committed a listing price; otherwise fall through to the
-		// legacy "fix status to matched" branch and wait for a price commit.
-		if p.DHUnlistedDetectedAt != nil && s.relister != nil && dhlisting.ResolveListingPriceCents(&p) > 0 {
+		// operator has committed a listing price and the row carries a cert
+		// number; otherwise fall through to the legacy "fix status to matched"
+		// branch and wait for a price commit or cert backfill.
+		if p.DHUnlistedDetectedAt != nil && s.relister != nil && p.CertNumber != "" && dhlisting.ResolveListingPriceCents(&p) > 0 {
 			s.logger.Info(ctx, "dh push: re-listing previously-unlisted purchase via dhlisting service",
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
@@ -257,11 +258,15 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 			}
 			// The listing service is responsible for clearing
 			// dh_unlisted_detected_at and flipping dh_push_status. If Listed=0
-			// it means the row didn't transition (e.g. config-loader paused,
-			// inline push failure, or already-listed-with-channels-synced) —
-			// leave it as-is for the next cycle. Log the result counts so
-			// operators can diagnose why the relist no-op'd.
+			// but Synced covers the full batch, the row is already in the
+			// target state on DH (already listed + price + channels match);
+			// treat as terminal so we don't re-process it every cycle.
+			// Otherwise the row didn't transition (paused, inline-push failure,
+			// etc.) — leave it as-is and log so the no-op is diagnosable.
 			if result.Listed == 0 {
+				if result.Synced > 0 && result.Synced == result.Total {
+					return processMatched
+				}
 				s.logger.Warn(ctx, "dh push: re-list did not transition row; will retry next cycle",
 					observability.String("purchaseID", p.ID),
 					observability.String("cert", p.CertNumber),
