@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -124,6 +126,88 @@ func TestProcessPurchase_AlreadyPushedFixesStatus(t *testing.T) {
 
 	if got != processMatched {
 		t.Fatalf("got=%v want=processMatched", got)
+	}
+	if len(status.Calls) != 1 || status.Calls[0].Status != inventory.DHPushStatusMatched {
+		t.Fatalf("expected one status update to matched, got %+v", status.Calls)
+	}
+}
+
+// TestProcessPurchase_UnlistedDetectedRelistsViaService reproduces the prod
+// bug fixed by this change: after the reconciler stamps dh_unlisted_detected_at
+// and the inventory poll re-discovers the cert with a new inventory ID, the
+// scheduler used to short-circuit to matched and the row would sit in_stock
+// forever. Now it should invoke ListPurchases on the relister.
+func TestProcessPurchase_UnlistedDetectedRelistsViaService(t *testing.T) {
+	now := time.Now()
+	relisted := &mocks.MockDHListingService{
+		ListPurchasesFn: func(_ context.Context, certs []string) dhlisting.DHListingResult {
+			if len(certs) != 1 || certs[0] != "9d81" {
+				t.Fatalf("expected single-cert relist call for cert=9d81, got %+v", certs)
+			}
+			return dhlisting.DHListingResult{Listed: 1, Total: 1}
+		},
+	}
+	status := &stubStatusUpdater{}
+	s := NewDHPushScheduler(
+		nil, status, &stubPSAImporter{}, &mocks.MockDHFieldsUpdater{}, &stubCardIDSaver{},
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: false},
+		WithDHPushRelister(relisted),
+	)
+
+	p := inventory.Purchase{
+		ID:                   "p1",
+		CertNumber:           "9d81",
+		DHInventoryID:        2294,
+		DHPushStatus:         inventory.DHPushStatusPending,
+		DHUnlistedDetectedAt: &now,
+		OverridePriceCents:   12500, // committed price > 0
+	}
+	got := s.processPurchase(context.Background(), p, inventory.DefaultDHPushConfig())
+
+	if got != processMatched {
+		t.Fatalf("got=%v want=processMatched (auto-relist success)", got)
+	}
+	if len(status.Calls) != 0 {
+		t.Fatalf("expected no direct status update (listing service owns the transition), got %+v", status.Calls)
+	}
+}
+
+// TestProcessPurchase_UnlistedDetectedNoPriceFallsThrough is the negative case:
+// same shape but no committed price. The relister must NOT be called and the
+// row must flip to matched as before, so the operator can commit a price.
+func TestProcessPurchase_UnlistedDetectedNoPriceFallsThrough(t *testing.T) {
+	now := time.Now()
+	relistCalls := 0
+	relisted := &mocks.MockDHListingService{
+		ListPurchasesFn: func(_ context.Context, _ []string) dhlisting.DHListingResult {
+			relistCalls++
+			return dhlisting.DHListingResult{}
+		},
+	}
+	status := &stubStatusUpdater{}
+	s := NewDHPushScheduler(
+		nil, status, &stubPSAImporter{}, &mocks.MockDHFieldsUpdater{}, &stubCardIDSaver{},
+		mocks.NewMockLogger(),
+		DHPushConfig{Enabled: false},
+		WithDHPushRelister(relisted),
+	)
+
+	p := inventory.Purchase{
+		ID:                   "p1",
+		CertNumber:           "9d81",
+		DHInventoryID:        2294,
+		DHPushStatus:         inventory.DHPushStatusPending,
+		DHUnlistedDetectedAt: &now,
+		// no override or reviewed price set
+	}
+	got := s.processPurchase(context.Background(), p, inventory.DefaultDHPushConfig())
+
+	if got != processMatched {
+		t.Fatalf("got=%v want=processMatched (no price → legacy fallthrough)", got)
+	}
+	if relistCalls != 0 {
+		t.Fatalf("expected ListPurchases NOT called when price=0, got %d calls", relistCalls)
 	}
 	if len(status.Calls) != 1 || status.Calls[0].Status != inventory.DHPushStatusMatched {
 		t.Fatalf("expected one status update to matched, got %+v", status.Calls)
