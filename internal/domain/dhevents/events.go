@@ -26,6 +26,10 @@ const (
 	TypeDismissed      Type = "dismissed"
 	TypeUnmatched      Type = "unmatched"
 	TypeCardIDResolved Type = "card_id_resolved"
+	// TypeSkipped records a transient skip in the push scheduler — the purchase
+	// stays pending and will be retried on the next cycle. Notes carries the
+	// reason (e.g. "api_error", "partner_card_error: <DH msg>").
+	TypeSkipped Type = "skipped"
 )
 
 // Source identifies which subsystem produced an event.

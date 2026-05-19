@@ -474,3 +474,135 @@ func TestPushViaPSAImport_SuccessMissingIDsSkips(t *testing.T) {
 		t.Fatalf("expected no persistence when IDs are missing, got %+v", fields.Calls)
 	}
 }
+
+// TestPushViaPSAImport_SkipEventsEmittedOnEveryPath verifies that each skip
+// path in pushViaPSAImport (and applyPSAImportSuccess missing-IDs) emits a
+// TypeSkipped event with the expected reason prefix.
+func TestPushViaPSAImport_SkipEventsEmittedOnEveryPath(t *testing.T) {
+	p := inventory.Purchase{ID: "p1", CertNumber: "111"}
+
+	cases := []struct {
+		name           string
+		importer       DHPushPSAImporter
+		wantNotePrefix string
+	}{
+		{
+			name:           "api_error",
+			importer:       &stubPSAImporter{errs: []error{errors.New("network timeout")}},
+			wantNotePrefix: "api_error: ",
+		},
+		{
+			name:           "batch_reject",
+			importer:       &stubPSAImporter{responses: []*dh.PSAImportResponse{{Success: false, Error: "vendor profile missing"}}},
+			wantNotePrefix: "batch_reject: ",
+		},
+		{
+			name:           "empty_results",
+			importer:       &stubPSAImporter{responses: []*dh.PSAImportResponse{{Success: true}}},
+			wantNotePrefix: "empty_results",
+		},
+		{
+			name: "rate_limit_exhausted",
+			importer: &rotatingPSAImporter{
+				stubPSAImporter: &stubPSAImporter{
+					responses: []*dh.PSAImportResponse{{Success: true, Results: []dh.PSAImportResult{{RateLimited: true, Error: "rate limit"}}}},
+				},
+				keysLeft: 0,
+			},
+			wantNotePrefix: "rate_limit_exhausted: ",
+		},
+		{
+			name: "psa_error",
+			importer: &stubPSAImporter{responses: []*dh.PSAImportResponse{{
+				Success: true,
+				Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPSAError, Error: "cert not found"}},
+			}}},
+			wantNotePrefix: "psa_error: ",
+		},
+		{
+			name: "partner_card_error",
+			importer: &stubPSAImporter{responses: []*dh.PSAImportResponse{{
+				Success: true,
+				Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusPartnerCardError, Error: "unknown language"}},
+			}}},
+			wantNotePrefix: "partner_card_error: ",
+		},
+		{
+			name: "unknown_resolution",
+			importer: &stubPSAImporter{responses: []*dh.PSAImportResponse{{
+				Success: true,
+				Results: []dh.PSAImportResult{{Resolution: "weird_new_status"}},
+			}}},
+			wantNotePrefix: "unknown_resolution: ",
+		},
+		{
+			name: "success_missing_ids",
+			importer: &stubPSAImporter{responses: []*dh.PSAImportResponse{{
+				Success: true,
+				Results: []dh.PSAImportResult{{Resolution: dh.PSAImportStatusMatched, DHCardID: 0, DHInventoryID: 0}},
+			}}},
+			wantNotePrefix: "success_missing_ids: ",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			events := &stubEventRecorder{}
+			s := newTestDHPushScheduler(tc.importer, &mocks.MockDHFieldsUpdater{}, &stubStatusUpdater{}, &stubCardIDSaver{}, events)
+
+			got := s.pushViaPSAImport(context.Background(), p)
+
+			if got != processSkipped {
+				t.Fatalf("got=%v want=processSkipped", got)
+			}
+			if len(events.Events) != 1 {
+				t.Fatalf("expected 1 skip event, got %d: %+v", len(events.Events), events.Events)
+			}
+			evt := events.Events[0]
+			if evt.Type != dhevents.TypeSkipped {
+				t.Fatalf("event type: got=%q want=%q", evt.Type, dhevents.TypeSkipped)
+			}
+			if evt.Source != dhevents.SourceDHPush {
+				t.Fatalf("event source: got=%q want=%q", evt.Source, dhevents.SourceDHPush)
+			}
+			if evt.PurchaseID != p.ID {
+				t.Fatalf("event purchaseID: got=%q want=%q", evt.PurchaseID, p.ID)
+			}
+			if len(evt.Notes) < len(tc.wantNotePrefix) || evt.Notes[:len(tc.wantNotePrefix)] != tc.wantNotePrefix {
+				t.Fatalf("event notes: got=%q, want prefix %q", evt.Notes, tc.wantNotePrefix)
+			}
+		})
+	}
+}
+
+// TestPushViaPSAImport_KeyRotationCapEmitsSkipEvent verifies the
+// key_rotation_cap path (loop exhausted by repeated rate-limited responses).
+func TestPushViaPSAImport_KeyRotationCapEmitsSkipEvent(t *testing.T) {
+	// Each call returns rate-limited; rotator has 8 keys so the loop hits the cap.
+	rateLimitedResp := &dh.PSAImportResponse{
+		Success: true,
+		Results: []dh.PSAImportResult{{RateLimited: true, Error: "rate limit"}},
+	}
+	responses := make([]*dh.PSAImportResponse, psaImportMaxAttempts)
+	for i := range responses {
+		responses[i] = rateLimitedResp
+	}
+	importer := &rotatingPSAImporter{
+		stubPSAImporter: &stubPSAImporter{responses: responses},
+		keysLeft:        psaImportMaxAttempts,
+	}
+	events := &stubEventRecorder{}
+	s := newTestDHPushScheduler(importer, &mocks.MockDHFieldsUpdater{}, &stubStatusUpdater{}, &stubCardIDSaver{}, events)
+
+	got := s.pushViaPSAImport(context.Background(), inventory.Purchase{ID: "p1", CertNumber: "111"})
+
+	if got != processSkipped {
+		t.Fatalf("got=%v want=processSkipped", got)
+	}
+	if len(events.Events) != 1 {
+		t.Fatalf("expected 1 skip event, got %d", len(events.Events))
+	}
+	if events.Events[0].Notes != "key_rotation_cap" {
+		t.Fatalf("expected notes=key_rotation_cap, got %q", events.Events[0].Notes)
+	}
+}
