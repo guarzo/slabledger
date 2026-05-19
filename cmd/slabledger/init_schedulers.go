@@ -175,6 +175,38 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		} else {
 			buildDeps.DHReconciler = reconciler
 		}
+
+		// Construct DH listing service so the push scheduler can re-list rows
+		// that the reconciler flagged unlisted on DH (dh_unlisted_detected_at
+		// set) and the inventory poll re-discovered with a fresh inventory ID.
+		// Without this wiring the scheduler short-circuits to matched and the
+		// row sits in_stock forever. handlers.go builds a second instance for
+		// the HTTP path — both are stateless, so duplication is fine.
+		if deps.CampaignsService != nil {
+			listingOpts := []dhlisting.DHListingServiceOption{
+				dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryAdapter(deps.DHClient)),
+				dhlisting.WithDHListingPSAImporter(dhlistingadapter.NewPSAImporterAdapter(deps.DHClient)),
+				dhlisting.WithDHListingFieldsUpdater(deps.PurchaseStore),
+				dhlisting.WithDHListingPushStatusUpdater(deps.PurchaseStore),
+				dhlisting.WithDHListingResetter(deps.PurchaseStore),
+				dhlisting.WithDHListingUnlistedClearer(deps.PurchaseStore),
+			}
+			if deps.CardIDMappingRepo != nil {
+				listingOpts = append(listingOpts, dhlisting.WithDHListingCardIDSaver(deps.CardIDMappingRepo))
+			}
+			if deps.DHEventStore != nil {
+				listingOpts = append(listingOpts, dhlisting.WithEventRecorder(deps.DHEventStore))
+			}
+			if deps.DHStore != nil {
+				listingOpts = append(listingOpts, dhlisting.WithDHListingConfigLoader(deps.DHStore))
+			}
+			listingSvc, err := dhlisting.NewDHListingService(deps.CampaignsService, deps.Logger, listingOpts...)
+			if err != nil {
+				deps.Logger.Error(ctx, "DH listing service init for push scheduler failed; auto-relist disabled", observability.Err(err))
+			} else {
+				buildDeps.DHPushRelister = listingSvc
+			}
+		}
 	}
 	if deps.GapStore != nil {
 		buildDeps.GapStore = deps.GapStore

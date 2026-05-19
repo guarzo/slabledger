@@ -79,6 +79,7 @@ type BuildDeps struct {
 	DHPushCardIDSaver   DHPushCardIDSaver
 	DHPushConfigLoader  DHPushConfigLoader
 	DHPushHoldSetter    DHPushHoldSetter
+	DHPushRelister      DHPushRelister
 
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
@@ -403,6 +404,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		if deps.EventRecorder != nil {
 			pushOpts = append(pushOpts, WithDHPushEventRecorder(deps.EventRecorder))
+		}
+		if deps.DHPushRelister != nil {
+			pushOpts = append(pushOpts, WithDHPushRelister(deps.DHPushRelister))
 		}
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,
