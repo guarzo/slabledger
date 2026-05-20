@@ -25,7 +25,7 @@ Production base URL: `https://slabledger.dpao.la`. Bearer token in prompt or `$S
 
 ## Output format
 
-Standard fact-sheet row schema. Every row carries either a non-null caveat or explicit `null`.
+Standard fact-sheet row schema. `unit` is one of `cents | usd | weeks | pct_decimal | count | iso8601 | enum | object | null`. Every row carries either a non-null caveat or explicit `null`.
 
 ## Required metric IDs
 

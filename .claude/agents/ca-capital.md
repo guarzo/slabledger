@@ -47,7 +47,7 @@ Every row you emit MUST match this exact shape:
   "id": "capital.<metric_name>",
   "metric": "<one-line human description>",
   "value": <number | string | array | null>,
-  "unit": "cents" | "usd" | "weeks" | "percent" | "count" | "iso8601" | "enum" | null,
+  "unit": "cents | usd | weeks | pct_decimal | count | iso8601 | enum | object | null",
   "endpoint": "<exact path you hit, e.g. /api/credit/summary>",
   "jq": "<the exact jq expression you used to extract the value>",
   "as_of": "<ISO8601 timestamp when you ran the curl>",

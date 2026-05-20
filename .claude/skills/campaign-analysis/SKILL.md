@@ -123,7 +123,7 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 - **`avgBuyPctOfCL` is a measurement, `buyTermsCLPct` is the contract.** They are different fields on different endpoints (`/tuning` vs `/api/campaigns`) and they will routinely disagree by 5–15 points. Never present a realized buy% as if it were a contract parameter. See Step 1b rule 2 for the citation requirement.
 - **`avgBuyPctOfCL` is a mean of per-card ratios, NOT dollar-weighted.** A handful of high-ratio outliers (Japanese variants with CL data mismatches, post-purchase CL crashes, sealed-vs-singles label mismatches) can inflate the reported value by 10–25 points without the campaign being structurally over-paying. Before citing `avgBuyPctOfCL ≥ 0.90` as a headline mover or driver of an action, fetch `/api/inventory` filtered to the campaign's unsold rows and compute `dollarWeightedBPCL = sum(buyCostCents) / sum(clValueCents)`. If the dollar-weighted number differs from the `/tuning` mean-of-ratios by more than ~10 percentage points, surface BOTH numbers in the response and identify the top 5 outlier rows by per-card ratio. The dollar-weighted number is the right one for "is the campaign systematically overpaying"; the outlier rows are a separate diagnostic signal (CL data quality, variant mismatch).
 
-### Step 3 — Layer-1 dispatch: domain data agents in parallel
+## Step 3 — Layer-1 dispatch: domain data agents in parallel
 
 Issue **one** Agent tool message containing **five** parallel invocations.
 Each agent owns one endpoint family and returns a fact-sheet array.
@@ -151,14 +151,18 @@ Each agent MUST return an array of fact-sheet rows shaped as:
 
 ```json
 {
-  "id": "<agent>.<endpoint>.<row_key>",
+  "id": "<agent>.<group>.<row_key>",
+  "metric": "<one-line human description>",
+  "value": <number|string|array|object|null>,
+  "unit": "cents | usd | weeks | pct_decimal | count | iso8601 | enum | object | null",
   "endpoint": "/api/...",
-  "fetched_at": "<ISO8601>",
-  "value": <number|string|object>,
-  "semantics_caveat": "<inline caveat or empty>",
-  "freshness_window": "<e.g. live | 24h | weekly>"
+  "jq": "<the exact jq expression used to extract value>",
+  "as_of": "<ISO8601 timestamp of the fetch>",
+  "semantics_caveat": "<text from field-semantics.md, or null>"
 }
 ```
+
+Freshness is judged by the adversary from `as_of` + endpoint family (see Step 3c's `STALENESS_VIOLATION` thresholds); agents do not emit a separate `freshness_window` field.
 
 Do not proceed to Step 3a until all 5 agents return.
 
@@ -215,7 +219,7 @@ The adversary returns a structured redline of findings, each tagged:
 - `PHANTOM_CITATION` — `[id:...]` references a row not in fact sheets
 - `SEMANTICS_VIOLATION` — claim contradicts the row's `semantics_caveat`
 - `SINGLE_SOURCE_MASQUERADING` — "confirmed"/"trend" claim with one endpoint
-- `STALENESS_VIOLATION` — row outside its `freshness_window` used as live
+- `STALENESS_VIOLATION` — row's `as_of` is older than the freshness threshold for the claim type (see `ca-adversary.md` for the per-endpoint-family thresholds)
 
 ### Step 3d — Apply redline, strip `[id:...]`, deliver
 
@@ -227,7 +231,7 @@ For each adversary finding:
 | PHANTOM_CITATION | Drop the claim (cited row never existed) |
 | SEMANTICS_VIOLATION | Reframe per the caveat, or drop |
 | SINGLE_SOURCE_MASQUERADING | Demote framing to "current snapshot" OR add a second-endpoint cite |
-| STALENESS_VIOLATION | Re-fetch the row, or label as stale-as-of |
+| STALENESS_VIOLATION | Re-fetch the row, or label as `stale as of <as_of>` |
 
 After all findings are resolved, **strip every `[id:...]` marker** with a
 final regex pass before user-facing render:
@@ -240,7 +244,7 @@ Only the cleaned text is shown to the user.
 
 ---
 
-## Legacy Step 3 reference — direct snapshot fetch (kept for context)
+### Step 3 legacy reference — direct snapshot fetch (debug only)
 
 The endpoint-level details below describe the underlying fetches the Layer-1
 domain agents perform on the operator's behalf. They remain useful when
@@ -628,8 +632,10 @@ If the user's message matches this regex (case-insensitive), invoke
 `ca-reviewer` in addition to (not instead of) the Layer-1 pipeline:
 
 ```
-(post[- ]?mortem|retro(spective)?|review this session|what went wrong|what should we learn)
+\b(post[- ]?mortem|retro(spective)?|review (this )?session|end[- ]of[- ]session|what went wrong|what should we learn|what (should|could) (we|i) (improve|fix|learn)|how (can|should) (we|i) (improve|fix)|run (the )?reviewer)\b
 ```
+
+This regex must stay in sync with the one documented in `.claude/agents/ca-reviewer.md`. If you edit one, edit both.
 
 `ca-reviewer` classifies findings as Tier-A (auto-apply to
 `references/field-semantics.md`) or Tier-B (queue in

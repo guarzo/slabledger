@@ -32,7 +32,7 @@ Return a **JSON array** of fact-sheet rows. No prose. Each row has the schema:
   "id": "tuning.<group>[<index>]",
   "metric": "<label>",
   "value": <object>,
-  "unit": "object | pct_decimal | cents | count",
+  "unit": "cents | usd | weeks | pct_decimal | count | iso8601 | enum | object | null",
   "endpoint": "/api/...",
   "jq": "<reproducible jq expression>",
   "as_of": "<ISO8601>",

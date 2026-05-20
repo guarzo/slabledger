@@ -33,7 +33,7 @@ Return a **JSON array** of fact-sheet rows. No prose. No movers. No rewrites. Ea
   "id": "buying.<group>[<index>].<field>",
   "metric": "human-readable label",
   "value": <number | string | array | object>,
-  "unit": "cents | usd | count | pct_decimal | date | iso_datetime | enum | object",
+  "unit": "cents | usd | weeks | pct_decimal | count | iso8601 | enum | object | null",
   "endpoint": "/api/...",
   "jq": "<exact jq expression that reproduces value from the endpoint response>",
   "as_of": "<ISO8601 timestamp of the fetch>",

@@ -26,7 +26,7 @@ A single curl to `/api/portfolio/snapshot` returns all four slices. Fetch once; 
 
 ## Output format
 
-Standard fact-sheet row schema (`id`, `metric`, `value`, `unit`, `endpoint`, `jq`, `as_of`, `semantics_caveat`). Every row carries either a non-null caveat string or explicit `null` — never omit the key.
+Standard fact-sheet row schema (`id`, `metric`, `value`, `unit`, `endpoint`, `jq`, `as_of`, `semantics_caveat`). `unit` is one of `cents | usd | weeks | pct_decimal | count | iso8601 | enum | object | null`. Every row carries either a non-null caveat string or explicit `null` — never omit the key.
 
 ## Required metric IDs
 
