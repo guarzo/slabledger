@@ -1,5 +1,11 @@
 # Campaign Analysis — Playbooks and Reference Rules
 
+> **Pipeline reminder.** Every playbook follow-up runs Layer-1 → Layer-2 →
+> Layer-3 before responding. The relevant domain agents to dispatch in
+> Layer-1 are listed at the top of each playbook below. If the playbook
+> lists agents you have not invoked this turn, dispatch them before
+> drafting synthesis.
+
 Load this file when routing to any follow-up playbook (Step 4), running the strategy doc sync or retrospective (Steps 5-6), or consulting recommendation rules, data conventions, or mutations.
 
 ## Contents
@@ -24,6 +30,8 @@ Load this file when routing to any follow-up playbook (Step 4), running the stra
 Route each user follow-up to the matching playbook below. The `references/advisor-tools.md` file catalogs the server-side AI advisor tools; the advisor endpoints (`POST /api/advisor/digest`, `POST /api/advisor/liquidation-analysis`, `POST /api/advisor/campaign-analysis`) run an LLM loop over those tools and can be used as a sanity check against playbook output when time permits.
 
 ### Playbook A — "What campaign updates should we make?"
+
+**Domain agents:** ca-capital, ca-sales
 
 Trigger phrases: *"what updates should we make", "campaign tuning", "parameter adjustments", "should we change buy terms", "what should we change in our campaigns"*.
 
@@ -111,6 +119,8 @@ Every campaign in the canonical list appears in numeric order, even the ones wit
 
 ### Playbook B — "What should we liquidate to pay our invoice?"
 
+**Domain agents:** ca-sales, ca-tuning, ca-buying
+
 Trigger phrases: *"liquidate", "pay the invoice", "cover invoice", "recover capital", "cash out"*.
 
 Fetch in parallel:
@@ -137,6 +147,8 @@ Respect the strategy doc's exit-channel hierarchy. Flag any card recommended int
 
 ### Playbook C — "Should we consider price adjustments on aging inventory?"
 
+**Domain agents:** ca-sales, ca-capital
+
 Trigger phrases: *"aging inventory", "repricing", "stale listings", "cards that aren't moving", "price drift"*.
 
 Fetch in parallel:
@@ -157,6 +169,8 @@ Present a table of candidates: card, days held, current list, suggested list, su
 Repricing is a capital-positive action (faster turn on held inventory) — the capital guardrail does NOT apply.
 
 ### Playbook D — "Does the strategy doc still match reality?"
+
+**Domain agents:** ca-tuning, ca-buying
 
 Trigger phrases: *"update the strategy doc", "refine our strategy", "does the strategy still match reality", "what should we change in the doc"*.
 
@@ -189,6 +203,8 @@ Areas most likely to have drifted (check these first):
 
 ### Playbook E — Single-campaign deep dive
 
+**Domain agents:** ca-capital
+
 Triggered when the user asks *"how's Wildcard doing?"* or similar. Resolve the name against `/api/campaigns` by matching on YearRange, GradeRange, or name substring to get the UUID — campaign IDs are string UUIDs, not integers.
 
 Fetch in parallel for that UUID:
@@ -216,6 +232,8 @@ Finish with 2-3 targeted follow-up questions.
 
 ### Playbook F — "What niches are we missing?" / new campaign design
 
+**Domain agents:** ca-buying, ca-dh
+
 Trigger phrases: *"what are we missing", "should we add a campaign", "coverage gaps", "new campaign", "campaign 11"*.
 
 Fetch in parallel:
@@ -236,6 +254,8 @@ For each promising gap (that survives the capital guardrail), sketch what a new 
 Cross-reference against the strategy doc to check whether any gaps were intentionally excluded (e.g., sealed product, sports cards). If the user wants to proceed, a campaign can be created via `POST /api/campaigns` — see Mutations.
 
 ### Playbook G — "How are our DH listings doing?" / marketplace optimization
+
+**Domain agents:** ca-buying, ca-tuning, ca-dh
 
 Trigger phrases: *"DH status", "DoubleHolo", "marketplace", "listings", "what should we push to DH", "inventory alerts"*.
 
