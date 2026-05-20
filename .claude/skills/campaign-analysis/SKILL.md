@@ -123,7 +123,129 @@ Known traps that have caused wrong analysis in past sessions. This block is refe
 - **`avgBuyPctOfCL` is a measurement, `buyTermsCLPct` is the contract.** They are different fields on different endpoints (`/tuning` vs `/api/campaigns`) and they will routinely disagree by 5–15 points. Never present a realized buy% as if it were a contract parameter. See Step 1b rule 2 for the citation requirement.
 - **`avgBuyPctOfCL` is a mean of per-card ratios, NOT dollar-weighted.** A handful of high-ratio outliers (Japanese variants with CL data mismatches, post-purchase CL crashes, sealed-vs-singles label mismatches) can inflate the reported value by 10–25 points without the campaign being structurally over-paying. Before citing `avgBuyPctOfCL ≥ 0.90` as a headline mover or driver of an action, fetch `/api/inventory` filtered to the campaign's unsold rows and compute `dollarWeightedBPCL = sum(buyCostCents) / sum(clValueCents)`. If the dollar-weighted number differs from the `/tuning` mean-of-ratios by more than ~10 percentage points, surface BOTH numbers in the response and identify the top 5 outlier rows by per-card ratio. The dollar-weighted number is the right one for "is the campaign systematically overpaying"; the outlier rows are a separate diagnostic signal (CL data quality, variant mismatch).
 
-## Step 3 — Fetch the initial snapshot (default entry point)
+### Step 3 — Layer-1 dispatch: domain data agents in parallel
+
+Issue **one** Agent tool message containing **five** parallel invocations.
+Each agent owns one endpoint family and returns a fact-sheet array.
+
+| Agent | Endpoint family | Returns |
+|---|---|---|
+| `ca-capital` | `/api/finance/capital`, `/api/finance/invoices`, `/api/snapshot` (capital fields) | capital fact sheet |
+| `ca-buying`  | `/api/insights` (buy%), `/api/snapshot.weeklyReview` | buying fact sheet |
+| `ca-tuning`  | `/api/tuning/*`, `/api/insights.byGrade`, `/api/insights.byChar` | tuning fact sheet |
+| `ca-sales`   | `/api/inventory/sales`, `/api/insights.byChannel`, `/api/portfolio/aging` | sales fact sheet |
+| `ca-dh`      | `/api/dhlisting/*`, `/api/intelligence/dh` | DH fact sheet |
+
+Every invocation receives the **same payload**:
+
+```json
+{
+  "currentScope": "<from Step 1b>",
+  "operatorConfig": "<inclusion lists, caps, grade restrictions>",
+  "baseURL": "<prod or local>",
+  "authHeader": "Bearer <token>"
+}
+```
+
+Each agent MUST return an array of fact-sheet rows shaped as:
+
+```json
+{
+  "id": "<agent>.<endpoint>.<row_key>",
+  "endpoint": "/api/...",
+  "fetched_at": "<ISO8601>",
+  "value": <number|string|object>,
+  "semantics_caveat": "<inline caveat or empty>",
+  "freshness_window": "<e.g. live | 24h | weekly>"
+}
+```
+
+Do not proceed to Step 3a until all 5 agents return.
+
+### Step 3a — Data-quality audit
+
+Concatenate the five fact sheets into one array. Then emit an audit block:
+
+```
+DATA QUALITY AUDIT
+- /api/finance/capital            ✓ 12 rows, fetched 14s ago
+- /api/insights                   ✗ 0 rows (endpoint 500)
+- /api/tuning/byGrade             ✓ 8 rows, fetched 18s ago, live-CL caveat applies
+- /api/inventory/sales            ✓ 41 rows, fetched 21s ago
+- /api/dhlisting/pending          ✓ 3 rows, fetched 22s ago
+Missing rows: insights.weeklyReview (impact: cannot cite spend-this-week)
+Impact line: synthesis will avoid weekly-spend claims; will request user paste if needed.
+```
+
+If a critical row is missing, decide: proceed with caveat OR ask user. Do
+not silently substitute another endpoint.
+
+### Step 3b — Synthesis draft (main thread, hard rules)
+
+Draft the opener / answer body on the main thread. Hard rules:
+
+1. **Every number is followed by `[id:fact_sheet_row_id]`.** No exceptions.
+   Bare numbers fail Layer-2 review.
+2. **No derivation that contradicts a cited row's `semantics_caveat`.** If the
+   row says "live CL price, drifts hourly", do not present it as a stable %.
+3. **Two-source rule.** Any claim framed as "confirmed", "trend", or
+   "pattern" must cite rows from **≥2 different endpoints**. A single
+   endpoint can only support a "current snapshot" framing.
+4. **No claim outside the cited rows.** If a needed fact is absent from the
+   fact sheets, either drop the claim or loop back to Step 3 with a
+   targeted re-fetch.
+
+Output the draft in full, including all `[id:...]` markers — these are
+read by Layer-2 and stripped in Step 3d before delivery.
+
+### Step 3c — Layer-2 dispatch: ca-adversary redline
+
+Issue one `Agent` invocation of `ca-adversary` with payload:
+
+```json
+{
+  "draft": "<full Step 3b draft including [id:...] markers>",
+  "factSheets": "<concatenated array from Step 3a>"
+}
+```
+
+The adversary returns a structured redline of findings, each tagged:
+
+- `FABRICATION` — number with no `[id:...]` or pointing to a nonexistent row
+- `PHANTOM_CITATION` — `[id:...]` references a row not in fact sheets
+- `SEMANTICS_VIOLATION` — claim contradicts the row's `semantics_caveat`
+- `SINGLE_SOURCE_MASQUERADING` — "confirmed"/"trend" claim with one endpoint
+- `STALENESS_VIOLATION` — row outside its `freshness_window` used as live
+
+### Step 3d — Apply redline, strip `[id:...]`, deliver
+
+For each adversary finding:
+
+| Tag | Action |
+|---|---|
+| FABRICATION | Drop the claim or re-fetch with a Layer-1 agent and re-synthesize |
+| PHANTOM_CITATION | Drop the claim (cited row never existed) |
+| SEMANTICS_VIOLATION | Reframe per the caveat, or drop |
+| SINGLE_SOURCE_MASQUERADING | Demote framing to "current snapshot" OR add a second-endpoint cite |
+| STALENESS_VIOLATION | Re-fetch the row, or label as stale-as-of |
+
+After all findings are resolved, **strip every `[id:...]` marker** with a
+final regex pass before user-facing render:
+
+```
+s/\s*\[id:[^\]]+\]//g
+```
+
+Only the cleaned text is shown to the user.
+
+---
+
+## Legacy Step 3 reference — direct snapshot fetch (kept for context)
+
+The endpoint-level details below describe the underlying fetches the Layer-1
+domain agents perform on the operator's behalf. They remain useful when
+manually debugging an agent or running a one-off snapshot outside the
+multi-agent flow.
 
 **Mandatory in every opener** — fetch all of these in parallel, every time:
 
@@ -499,3 +621,17 @@ These are the old named modes. Most of the time they're unnecessary — the defa
 | `campaign <id-or-name>` | Run Playbook E directly; resolve a name through `/api/campaigns` if given one |
 | `gaps` | Run Playbook F directly — coverage gap analysis and new campaign design |
 | `dh` | Run Playbook G directly — DH marketplace status and intelligence |
+
+## Reviewer trigger recognition
+
+If the user's message matches this regex (case-insensitive), invoke
+`ca-reviewer` in addition to (not instead of) the Layer-1 pipeline:
+
+```
+(post[- ]?mortem|retro(spective)?|review this session|what went wrong|what should we learn)
+```
+
+`ca-reviewer` classifies findings as Tier-A (auto-apply to
+`references/field-semantics.md`) or Tier-B (queue in
+`references/improvement-queue.md`). Auto-apply only Tier-A; Tier-B requires
+operator approval.
