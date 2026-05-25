@@ -117,7 +117,7 @@ func (ca *cachedAdapter) GetMarketSnapshot(ctx context.Context, card inventory.C
 	}
 
 	// Fetch and cache
-	price, err := ca.inner.getPrice(ctx, card)
+	price, err := ca.inner.getPriceWithGrade(ctx, card, int(math.Round(grade)))
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (a *Adapter) GetMarketSnapshot(ctx context.Context, card inventory.CardIden
 	if !validGrade(grade) {
 		return nil, fmt.Errorf("unsupported grade: %g", grade)
 	}
-	price, err := a.getPrice(ctx, card)
+	price, err := a.getPriceWithGrade(ctx, card, int(math.Round(grade)))
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +352,14 @@ func (a *Adapter) buildMarketSnapshot(price *pricing.Price, grade float64) (*inv
 // handled internally by the DHPriceProvider. Callers that have a DH card ID will
 // benefit from cache hits without needing to pass the ID through this adapter layer.
 func (a *Adapter) getPrice(ctx context.Context, card inventory.CardIdentity) (*pricing.Price, error) {
-	c := pricing.CardLookup{Name: card.CardName, Number: card.CardNumber, PSAListingTitle: card.PSAListingTitle}
+	return a.getPriceWithGrade(ctx, card, 0)
+}
+
+// getPriceWithGrade is like getPrice but propagates an explicit PSA grade so
+// downstream providers (DH /recent-sales) can include the required query
+// params. Pass 0 when grade is unknown.
+func (a *Adapter) getPriceWithGrade(ctx context.Context, card inventory.CardIdentity, grade int) (*pricing.Price, error) {
+	c := pricing.CardLookup{Name: card.CardName, Number: card.CardNumber, PSAListingTitle: card.PSAListingTitle, Grade: grade}
 	price, err := a.provider.LookupCard(ctx, card.SetName, c)
 	if err != nil {
 		return nil, fmt.Errorf("price lookup for %q: %w", card.CardName, err)

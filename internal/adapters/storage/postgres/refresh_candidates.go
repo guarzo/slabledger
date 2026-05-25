@@ -26,7 +26,8 @@ func (r *RefreshCandidateRepository) GetRefreshCandidates(ctx context.Context, l
 			cp.card_name,
 			COALESCE(cp.card_number, '') AS card_number,
 			cp.set_name,
-			COALESCE(MAX(cp.psa_listing_title), '') AS psa_listing_title
+			COALESCE(MAX(cp.psa_listing_title), '') AS psa_listing_title,
+			COALESCE(MAX(cp.grade_value), 0)::int AS grade
 		FROM campaign_purchases cp
 		JOIN campaigns c ON cp.campaign_id = c.id
 		LEFT JOIN campaign_sales cs ON cp.id = cs.purchase_id
@@ -51,7 +52,7 @@ func (r *RefreshCandidateRepository) GetRefreshCandidates(ctx context.Context, l
 	candidates := make([]pricing.RefreshCandidate, 0, limit)
 	for rows.Next() {
 		var c pricing.RefreshCandidate
-		if err := rows.Scan(&c.CardName, &c.CardNumber, &c.SetName, &c.PSAListingTitle); err != nil {
+		if err := rows.Scan(&c.CardName, &c.CardNumber, &c.SetName, &c.PSAListingTitle, &c.Grade); err != nil {
 			return nil, err
 		}
 		candidates = append(candidates, c)

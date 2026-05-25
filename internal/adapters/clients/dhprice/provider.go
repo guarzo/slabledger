@@ -9,19 +9,21 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
 
 const (
-	dhConfidence = 0.90
-	providerKey  = "doubleholo"
+	dhConfidence       = 0.90
+	providerKey        = "doubleholo"
+	tombstoneThreshold = 3
 )
 
 // MarketDataClient is the subset of the DH client needed for price lookups.
 type MarketDataClient interface {
-	RecentSales(ctx context.Context, cardID int) ([]dh.RecentSale, error)
+	RecentSales(ctx context.Context, cardID int, gradingCompany string, grade int) ([]dh.RecentSale, error)
 	CardLookup(ctx context.Context, cardID int) (*dh.CardLookupResponse, error)
 }
 
@@ -49,6 +51,7 @@ var gradeKey = map[string]pricing.Grade{
 type Provider struct {
 	client     MarketDataClient
 	idResolver CardIDLookup
+	tombstones pricing.DHCardTombstoneRepo
 	logger     observability.Logger
 }
 
@@ -61,6 +64,15 @@ func WithLogger(l observability.Logger) Option {
 		return func(*Provider) {}
 	}
 	return func(p *Provider) { p.logger = l }
+}
+
+// WithTombstoneRepo wires the DH card tombstone repo so the provider can
+// short-circuit lookups for cards that have repeatedly 404'd from DH.
+func WithTombstoneRepo(r pricing.DHCardTombstoneRepo) Option {
+	if r == nil {
+		return func(*Provider) {}
+	}
+	return func(p *Provider) { p.tombstones = r }
 }
 
 // New creates a DHPriceProvider. Both client and idResolver must be non-nil for
@@ -96,8 +108,22 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 		return nil, fmt.Errorf("dhprice: invalid card ID %q for card %s/%s/%s: %w", extID, card.Name, card.Set, card.Number, err)
 	}
 
-	sales, err := p.client.RecentSales(ctx, cardID)
+	// Tombstone short-circuit (fail-open on error).
+	if p.tombstones != nil {
+		if ts, tsErr := p.tombstones.IsTombstoned(ctx, cardID); tsErr == nil && ts {
+			if p.logger != nil {
+				p.logger.Debug(ctx, "dhprice: skipping tombstoned card",
+					observability.Int("dh_card_id", cardID))
+			}
+			return nil, nil
+		}
+	}
+
+	sales, err := p.client.RecentSales(ctx, cardID, "PSA", card.Grade)
 	if err != nil {
+		if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) && p.tombstones != nil {
+			p.recordTombstone(ctx, cardID, err)
+		}
 		return nil, err
 	}
 	if len(sales) == 0 {
@@ -113,6 +139,9 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 	// Non-fatal: if the call fails we still return sales-based pricing.
 	lookup, err := p.client.CardLookup(ctx, cardID)
 	if err != nil {
+		if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) && p.tombstones != nil {
+			p.recordTombstone(ctx, cardID, err)
+		}
 		if p.logger != nil {
 			p.logger.Warn(ctx, "dhprice: CardLookup failed (non-fatal)",
 				observability.String("card", card.Name),
@@ -125,6 +154,31 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 	return price, nil
 }
 
+// recordTombstone increments the failure counter and logs at INFO instead of
+// WARN/ERROR; the threshold crossing is what the operator cares about.
+func (p *Provider) recordTombstone(ctx context.Context, cardID int, cause error) {
+	n, err := p.tombstones.RecordFailure(ctx, cardID, cause.Error())
+	if err != nil {
+		if p.logger != nil {
+			p.logger.Warn(ctx, "dhprice: tombstone record failed",
+				observability.Int("dh_card_id", cardID), observability.Err(err))
+		}
+		return
+	}
+	if p.logger == nil {
+		return
+	}
+	if n >= tombstoneThreshold {
+		p.logger.Info(ctx, "dhprice: dh card tombstoned, no further lookups",
+			observability.Int("dh_card_id", cardID),
+			observability.Int("attempts", n))
+	} else {
+		p.logger.Info(ctx, "dhprice: dh card lookup failed",
+			observability.Int("dh_card_id", cardID),
+			observability.Int("attempts", n))
+	}
+}
+
 // LookupCard delegates to GetPrice after constructing a pricing.Card.
 func (p *Provider) LookupCard(ctx context.Context, setName string, card pricing.CardLookup) (*pricing.Price, error) {
 	pc := pricing.Card{
@@ -132,6 +186,7 @@ func (p *Provider) LookupCard(ctx context.Context, setName string, card pricing.
 		Number:          card.Number,
 		Set:             setName,
 		PSAListingTitle: card.PSAListingTitle,
+		Grade:           card.Grade,
 	}
 	return p.GetPrice(ctx, pc)
 }
