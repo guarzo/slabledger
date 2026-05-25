@@ -244,6 +244,17 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 		// number; otherwise fall through to the legacy "fix status to matched"
 		// branch and wait for a price commit or cert backfill.
 		if p.DHUnlistedDetectedAt != nil && s.relister != nil && p.CertNumber != "" && dhlisting.ResolveListingPriceCents(&p) > 0 {
+			// Honor the global ListingsPaused toggle for scheduler-driven
+			// re-lists. Manual UI-initiated lists bypass this — see
+			// handlers/campaigns_dh_listing.go. During card-show liquidation
+			// windows we don't want the scheduler quietly re-listing rows
+			// the operator just unlisted on DH.
+			if pushCfg.ListingsPaused {
+				s.logger.Info(ctx, "dh push: listings paused — skipping scheduler re-list",
+					observability.String("purchaseID", p.ID),
+					observability.String("cert", p.CertNumber))
+				return processSkipped
+			}
 			s.logger.Info(ctx, "dh push: re-listing previously-unlisted purchase via dhlisting service",
 				observability.String("purchaseID", p.ID),
 				observability.String("cert", p.CertNumber),
@@ -303,6 +314,16 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 	// review never reaches psa_import.
 	if holdReason := dhlisting.EvaluateHoldTriggers(&p, pushCfg); holdReason != "" {
 		return s.setHeld(ctx, p, holdReason)
+	}
+
+	// Honor the global ListingsPaused toggle for scheduler-driven pushes
+	// so card-show liquidation windows aren't undercut by fresh DH listings.
+	// Manual UI-initiated lists bypass this in the handler.
+	if pushCfg.ListingsPaused {
+		s.logger.Info(ctx, "dh push: listings paused — skipping psa_import",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber))
+		return processSkipped
 	}
 
 	return s.pushViaPSAImport(ctx, p)
