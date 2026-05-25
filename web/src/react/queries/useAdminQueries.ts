@@ -354,3 +354,22 @@ export function useTriggerPSASyncRefresh() {
     },
   });
 }
+
+export function useDHTombstoneCount(options?: AdminQueryOptions) {
+  return useQuery({
+    queryKey: queryKeys.admin.dhTombstoneCount,
+    queryFn: () => api.getDHTombstoneCount(),
+    staleTime: 60_000,
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useClearDHTombstones() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.clearDHTombstones(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.dhTombstoneCount });
+    },
+  });
+}

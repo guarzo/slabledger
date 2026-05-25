@@ -4,12 +4,12 @@ import "time"
 
 // DHPushConfig holds admin-configurable thresholds for DH push safety gates.
 type DHPushConfig struct {
-	SwingPctThreshold            int       `json:"swingPctThreshold"`
-	SwingMinCents                int       `json:"swingMinCents"`
-	DisagreementPctThreshold     int       `json:"disagreementPctThreshold"`
-	UnreviewedChangePctThreshold int       `json:"unreviewedChangePctThreshold"`
-	UnreviewedChangeMinCents     int       `json:"unreviewedChangeMinCents"`
-	InitialPushValueFloorPct     int       `json:"initialPushValueFloorPct"`
+	SwingPctThreshold            int `json:"swingPctThreshold"`
+	SwingMinCents                int `json:"swingMinCents"`
+	DisagreementPctThreshold     int `json:"disagreementPctThreshold"`
+	UnreviewedChangePctThreshold int `json:"unreviewedChangePctThreshold"`
+	UnreviewedChangeMinCents     int `json:"unreviewedChangeMinCents"`
+	InitialPushValueFloorPct     int `json:"initialPushValueFloorPct"`
 	// ListingsPaused, when true, short-circuits ListPurchases before the
 	// inline psa_import push: nothing is sent to DoubleHolo and the
 	// in_stock → listed flip is skipped, so items remain unlisted on DH.

@@ -242,7 +242,7 @@ func TestClient_RecentSales(t *testing.T) {
 	defer server.Close()
 
 	c := newTestClient(server.URL)
-	sales, err := c.RecentSales(context.Background(), 42)
+	sales, err := c.RecentSales(context.Background(), 42, "PSA", 10)
 	if err != nil {
 		t.Fatalf("RecentSales() error = %v", err)
 	}
@@ -278,7 +278,7 @@ func TestClient_MarketDataEnterprise(t *testing.T) {
 		defer server.Close()
 
 		c := newTestClient(server.URL)
-		resp, err := c.MarketDataEnterprise(context.Background(), 42)
+		resp, err := c.MarketDataEnterprise(context.Background(), 42, 10)
 		if err != nil {
 			t.Fatalf("error = %v", err)
 		}
@@ -317,7 +317,7 @@ func TestClient_MarketDataEnterprise(t *testing.T) {
 		defer server.Close()
 
 		c := newTestClient(server.URL)
-		resp, err := c.MarketDataEnterprise(context.Background(), 42)
+		resp, err := c.MarketDataEnterprise(context.Background(), 42, 10)
 		if err != nil {
 			t.Fatalf("error = %v (expected partial success)", err)
 		}
@@ -402,7 +402,7 @@ func TestRecentSales_ValidatesSaleFields(t *testing.T) {
 		defer server.Close()
 
 		c := newTestClient(server.URL)
-		_, err := c.RecentSales(context.Background(), 42)
+		_, err := c.RecentSales(context.Background(), 42, "PSA", 10)
 		var appErr *apperrors.AppError
 		if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
 			t.Errorf("expected ProviderInvalidResponse for zero price, got: %v", err)
@@ -417,7 +417,7 @@ func TestRecentSales_ValidatesSaleFields(t *testing.T) {
 		defer server.Close()
 
 		c := newTestClient(server.URL)
-		_, err := c.RecentSales(context.Background(), 42)
+		_, err := c.RecentSales(context.Background(), 42, "PSA", 10)
 		var appErr *apperrors.AppError
 		if !errors.As(err, &appErr) || appErr.Code != apperrors.ErrCodeProviderInvalidResp {
 			t.Errorf("expected ProviderInvalidResponse for empty date, got: %v", err)
@@ -432,7 +432,7 @@ func TestRecentSales_ValidatesSaleFields(t *testing.T) {
 		defer server.Close()
 
 		c := newTestClient(server.URL)
-		sales, err := c.RecentSales(context.Background(), 42)
+		sales, err := c.RecentSales(context.Background(), 42, "PSA", 10)
 		if err != nil {
 			t.Errorf("expected no error for empty sales, got: %v", err)
 		}

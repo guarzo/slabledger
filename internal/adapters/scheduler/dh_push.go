@@ -36,6 +36,12 @@ type DHPushStatusUpdater interface {
 	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
 }
 
+// DHPushAttemptIncrementer atomically increments dh_push_attempts and returns
+// the new value. Used to auto-dismiss certs that keep hitting partner_card_error.
+type DHPushAttemptIncrementer interface {
+	IncrementDHPushAttempts(ctx context.Context, id string) (int, error)
+}
+
 // DHPushCardIDSaver persists DH card ID mappings to the card_id_mappings
 // table so other consumers of external IDs (e.g. price sync) can reuse them
 // without re-hitting psa_import.
@@ -75,6 +81,12 @@ type DHPushConfig struct {
 // DHPushOption configures optional dependencies on a DHPushScheduler.
 type DHPushOption func(*DHPushScheduler)
 
+// WithDHPushAttemptIncrementer wires the dh_push_attempts incrementer so the
+// scheduler can auto-dismiss certs that repeatedly fail partner_card_error.
+func WithDHPushAttemptIncrementer(inc DHPushAttemptIncrementer) DHPushOption {
+	return func(s *DHPushScheduler) { s.attemptInc = inc }
+}
+
 // WithDHPushConfigLoader injects a config loader for DH push safety thresholds.
 func WithDHPushConfigLoader(loader DHPushConfigLoader) DHPushOption {
 	return func(s *DHPushScheduler) { s.configLoader = loader }
@@ -106,6 +118,7 @@ type DHPushScheduler struct {
 	StopHandle
 	pendingLister DHPushPendingLister
 	statusUpdater DHPushStatusUpdater
+	attemptInc    DHPushAttemptIncrementer
 	psaImporter   DHPushPSAImporter
 	fieldsUpdater DHFieldsUpdater
 	cardIDSaver   DHPushCardIDSaver

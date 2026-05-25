@@ -124,12 +124,7 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 			return processSkipped
 
 		case dh.PSAImportStatusPartnerCardError:
-			s.logger.Warn(ctx, "dh push: psa_import partner_card_error (check overrides)",
-				observability.String("purchaseID", p.ID),
-				observability.String("cert", p.CertNumber),
-				observability.String("dhError", result.Error))
-			s.recordSkipEvent(ctx, p, "partner_card_error: "+result.Error)
-			return processSkipped
+			return s.handlePartnerCardError(ctx, p, result)
 
 		default:
 			s.logger.Warn(ctx, "dh push: psa_import unknown resolution",
@@ -146,6 +141,73 @@ func (s *DHPushScheduler) pushViaPSAImport(ctx context.Context, p inventory.Purc
 		observability.String("purchaseID", p.ID),
 		observability.String("cert", p.CertNumber))
 	s.recordSkipEvent(ctx, p, "key_rotation_cap")
+	return processSkipped
+}
+
+// partnerCardErrorDismissThreshold is the number of consecutive
+// partner_card_error responses we accept before auto-dismissing a cert. After
+// dismissal the cert lands in the "Skipped on DH Listing" UI tab; the operator
+// can restore from there (resets dh_push_attempts to 0 via SetDHPushStatus).
+const partnerCardErrorDismissThreshold = 5
+
+// handlePartnerCardError centralises the partner_card_error branch: increment
+// dh_push_attempts, auto-dismiss when threshold reached, and demote logging.
+// Without an attempt incrementer wired in, falls back to legacy WARN-and-skip
+// behavior so unit tests don't need to provide a mock.
+func (s *DHPushScheduler) handlePartnerCardError(ctx context.Context, p inventory.Purchase, result dh.PSAImportResult) processResult {
+	if s.attemptInc == nil {
+		s.logger.Warn(ctx, "dh push: psa_import partner_card_error (check overrides)",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.String("dhError", result.Error))
+		s.recordSkipEvent(ctx, p, "partner_card_error: "+result.Error)
+		return processSkipped
+	}
+
+	attempts, err := s.attemptInc.IncrementDHPushAttempts(ctx, p.ID)
+	if err != nil {
+		s.logger.Warn(ctx, "dh push: failed to increment dh_push_attempts",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.Err(err))
+		s.recordSkipEvent(ctx, p, "partner_card_error: "+result.Error)
+		return processSkipped
+	}
+
+	if attempts >= partnerCardErrorDismissThreshold {
+		if updErr := s.statusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, string(inventory.DHPushStatusDismissed)); updErr != nil {
+			s.logger.Warn(ctx, "dh push: failed to dismiss after partner_card_error threshold",
+				observability.String("purchaseID", p.ID),
+				observability.String("cert", p.CertNumber),
+				observability.Int("attempts", attempts),
+				observability.Err(updErr))
+			s.recordSkipEvent(ctx, p, "partner_card_error: "+result.Error)
+			return processSkipped
+		}
+		s.logger.Info(ctx, "dh push: auto-dismissed after partner_card_error threshold",
+			observability.String("purchaseID", p.ID),
+			observability.String("cert", p.CertNumber),
+			observability.Int("attempts", attempts),
+			observability.String("dhError", result.Error))
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID:     p.ID,
+			CertNumber:     p.CertNumber,
+			Type:           dhevents.TypeSkipped,
+			PrevPushStatus: string(p.DHPushStatus),
+			NewPushStatus:  string(inventory.DHPushStatusDismissed),
+			Notes:          "partner_card_error_dismissed: " + result.Error,
+			Source:         dhevents.SourceDHPush,
+		})
+		return processSkipped
+	}
+
+	s.logger.Info(ctx, "dh push: partner_card_error (will retry until threshold)",
+		observability.String("purchaseID", p.ID),
+		observability.String("cert", p.CertNumber),
+		observability.Int("attempts", attempts),
+		observability.Int("threshold", partnerCardErrorDismissThreshold),
+		observability.String("dhError", result.Error))
+	s.recordSkipEvent(ctx, p, "partner_card_error: "+result.Error)
 	return processSkipped
 }
 

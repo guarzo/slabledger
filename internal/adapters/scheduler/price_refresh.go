@@ -207,6 +207,7 @@ func (s *PriceRefreshScheduler) refreshBatch(ctx context.Context) {
 			Set:             card.SetName,
 			Number:          cardNumber,
 			PSAListingTitle: card.PSAListingTitle,
+			Grade:           card.Grade,
 		}
 
 		result, err := s.priceProvider.GetPrice(ctx, pc)

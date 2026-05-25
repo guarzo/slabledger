@@ -114,6 +114,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	priceProvImpl, err := initializePriceProviders(
 		ctx, logger, cardIDMappingRepo,
 		dhClient,
+		nil, // admin_analyze: no tombstone repo wired (CLI tool, short-lived)
 	)
 	if err != nil {
 		return fmt.Errorf("initialize price providers: %w", err)

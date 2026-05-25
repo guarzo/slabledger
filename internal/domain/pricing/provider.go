@@ -10,6 +10,7 @@ type CardLookup struct {
 	Name            string
 	Number          string
 	PSAListingTitle string
+	Grade           int // PSA grade (1-10); 0 means unknown
 }
 
 // PriceProvider defines what the domain needs from price sources.
@@ -38,6 +39,9 @@ type Card struct {
 	// PSAListingTitle is the raw PSA listing title (optional).
 	// Reserved for future secondary source matching when normalized queries return no candidates.
 	PSAListingTitle string
+
+	// Grade is the PSA grade (1-10); 0 means unknown / not graded.
+	Grade int
 }
 
 // GradedPrices contains prices for each grade level.
@@ -199,3 +203,26 @@ type Source string
 const (
 	SourceDH = "doubleholo" // DB provider key — do not change the string value
 )
+
+// DHCardTombstoneRepo tracks DH card IDs that have repeatedly 404'd so we can
+// stop hammering DH's lookup endpoint for IDs that no longer exist.
+//
+// Implementations MUST be safe for concurrent use.
+type DHCardTombstoneRepo interface {
+	// IsTombstoned returns true if the card has reached the tombstone threshold.
+	IsTombstoned(ctx context.Context, cardID int) (bool, error)
+
+	// RecordFailure increments the failure counter for cardID and returns the
+	// new attempt count. Callers should treat attempts >= 3 as the tombstone
+	// threshold.
+	RecordFailure(ctx context.Context, cardID int, errMsg string) (attempts int, err error)
+
+	// Clear removes the tombstone for a single card ID.
+	Clear(ctx context.Context, cardID int) error
+
+	// ClearAll removes all tombstones and returns the number removed.
+	ClearAll(ctx context.Context) (cleared int, err error)
+
+	// Count returns the number of cards currently tombstoned (attempts >= 3).
+	Count(ctx context.Context) (int, error)
+}

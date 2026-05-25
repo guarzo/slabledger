@@ -255,6 +255,11 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 		mux.Handle("POST /api/admin/dh-reconcile/trigger", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhReconcileHandler.HandleTrigger)))
 	}
 
+	if rt.dhTombstonesHandler != nil && rt.authMW != nil {
+		mux.Handle("GET /api/admin/dh-tombstones/count", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhTombstonesHandler.HandleCount)))
+		mux.Handle("POST /api/admin/dh-tombstones/clear", rt.authMW.RequireAdmin(http.HandlerFunc(rt.dhTombstonesHandler.HandleClear)))
+	}
+
 	if rt.dhHandler == nil || rt.authMW == nil {
 		if rt.dhHandler != nil {
 			rt.logger.Warn(context.Background(), "skipping DH route registration: auth middleware not configured")

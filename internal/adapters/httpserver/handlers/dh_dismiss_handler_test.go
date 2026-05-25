@@ -142,10 +142,10 @@ func TestHandleDismissMatch_StateMatrix(t *testing.T) {
 func TestHandleUndismissMatch_ReceivedAtRoutesCorrectly(t *testing.T) {
 	now := "2026-05-19T12:00:00Z"
 	cases := []struct {
-		name           string
-		receivedAt     *string
-		wantStatus     inventory.DHPushStatus
-		wantEventType  dhevents.Type
+		name          string
+		receivedAt    *string
+		wantStatus    inventory.DHPushStatus
+		wantEventType dhevents.Type
 	}{
 		{
 			name:          "received → pending + enrolled event",

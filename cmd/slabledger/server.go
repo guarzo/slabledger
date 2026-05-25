@@ -53,6 +53,7 @@ type ServerDependencies struct {
 	PSAExchangeHandler        *handlers.PSAExchangeHandler     // PSA-Exchange opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
 	DHReconcileHandler        *handlers.DHReconcileHandler     // Admin DH reconcile trigger; nil = disabled
+	DHTombstonesHandler       *handlers.DHTombstonesHandler    // Admin DH tombstones count/clear; nil = disabled
 	DHListingService          domainDHListing.Service          // optional: orchestrates DH listing after cert import
 	DHPriceSyncService        domainDHPricing.Service          // optional: async DH price re-sync on reviewed-price edits
 	ExportService             domainExport.Service             // optional: sell sheet and eBay export
@@ -215,6 +216,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		PSAExchangeHandler:        deps.PSAExchangeHandler,
 		DHHandler:                 deps.DHHandler,
 		DHReconcileHandler:        deps.DHReconcileHandler,
+		DHTombstonesHandler:       deps.DHTombstonesHandler,
 		CardCatalogHandler:        deps.CardCatalogHandler,
 		NichesHandler:             deps.NichesHandler,
 		CampaignSignalsHandler:    deps.CampaignSignalsHandler,

@@ -118,8 +118,18 @@ func (c *Client) CardLookup(ctx context.Context, cardID int) (*CardLookupRespons
 }
 
 // RecentSales returns recent sales for a card from the enterprise API.
-func (c *Client) RecentSales(ctx context.Context, cardID int) ([]RecentSale, error) {
-	fullURL := fmt.Sprintf("%s/api/v1/enterprise/cards/%d/recent-sales", c.baseURL, cardID)
+// gradingCompany and grade are required by DH (e.g. "PSA"/10); grade<=0 returns
+// a provider-invalid-request error without issuing an HTTP call.
+func (c *Client) RecentSales(ctx context.Context, cardID int, gradingCompany string, grade int) ([]RecentSale, error) {
+	if grade <= 0 {
+		return nil, apperrors.ProviderInvalidRequest(providerName,
+			fmt.Errorf("grade required for recent-sales lookup (card_id=%d)", cardID))
+	}
+	if strings.TrimSpace(gradingCompany) == "" {
+		gradingCompany = "PSA"
+	}
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/cards/%d/recent-sales?grading_company=%s&grade=%d",
+		c.baseURL, cardID, gradingCompany, grade)
 
 	var resp struct {
 		Sales []RecentSale `json:"sales"`
@@ -138,7 +148,7 @@ func (c *Client) RecentSales(ctx context.Context, cardID int) ([]RecentSale, err
 
 // MarketDataEnterprise fetches market data from enterprise endpoints and
 // assembles a MarketDataResponse compatible with existing consumer code.
-func (c *Client) MarketDataEnterprise(ctx context.Context, cardID int) (*MarketDataResponse, error) {
+func (c *Client) MarketDataEnterprise(ctx context.Context, cardID int, grade int) (*MarketDataResponse, error) {
 	lookup, err := c.CardLookup(ctx, cardID)
 	if err != nil {
 		return nil, err
@@ -162,7 +172,7 @@ func (c *Client) MarketDataEnterprise(ctx context.Context, cardID int) (*MarketD
 		resp.HasData = true
 	}
 
-	sales, err := c.RecentSales(ctx, cardID)
+	sales, err := c.RecentSales(ctx, cardID, "PSA", grade)
 	if err != nil {
 		if c.logger != nil {
 			c.logger.Warn(ctx, "dh: recent sales fetch failed, returning partial market data",
