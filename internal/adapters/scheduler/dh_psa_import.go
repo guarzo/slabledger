@@ -189,7 +189,15 @@ func (s *DHPushScheduler) handlePartnerCardError(ctx context.Context, p inventor
 			observability.String("cert", p.CertNumber),
 			observability.Int("attempts", attempts),
 			observability.String("dhError", result.Error))
-		s.recordSkipEvent(ctx, p, "partner_card_error_dismissed: "+result.Error)
+		s.recordEvent(ctx, dhevents.Event{
+			PurchaseID:     p.ID,
+			CertNumber:     p.CertNumber,
+			Type:           dhevents.TypeSkipped,
+			PrevPushStatus: string(p.DHPushStatus),
+			NewPushStatus:  string(inventory.DHPushStatusDismissed),
+			Notes:          "partner_card_error_dismissed: " + result.Error,
+			Source:         dhevents.SourceDHPush,
+		})
 		return processSkipped
 	}
 

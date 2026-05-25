@@ -77,13 +77,19 @@ func cacheKey(card inventory.CardIdentity) string {
 	)
 }
 
+// gradeCacheKey appends the rounded grade to the per-card cache key so
+// grade-scoped provider payloads do not pollute one another.
+func gradeCacheKey(card inventory.CardIdentity, grade float64) string {
+	return fmt.Sprintf("%s|g:%d", cacheKey(card), int(math.Round(grade)))
+}
+
 // GetLastSoldCents returns the last sold price in cents for a card at a given grade.
 // Uses the cache to avoid duplicate lookups for the same card.
 func (ca *cachedAdapter) GetLastSoldCents(ctx context.Context, card inventory.CardIdentity, grade float64) (int, error) {
 	if !validGrade(grade) {
 		return 0, fmt.Errorf("unsupported grade: %g", grade)
 	}
-	key := cacheKey(card)
+	key := gradeCacheKey(card, grade)
 
 	// Check cache
 	if v, ok := ca.cache.Load(key); ok {
@@ -92,7 +98,7 @@ func (ca *cachedAdapter) GetLastSoldCents(ctx context.Context, card inventory.Ca
 	}
 
 	// Fetch and cache
-	price, err := ca.inner.getPrice(ctx, card)
+	price, err := ca.inner.getPriceWithGrade(ctx, card, int(math.Round(grade)))
 	if err != nil {
 		return 0, err
 	}
@@ -108,7 +114,7 @@ func (ca *cachedAdapter) GetMarketSnapshot(ctx context.Context, card inventory.C
 	if !validGrade(grade) {
 		return nil, fmt.Errorf("unsupported grade: %g", grade)
 	}
-	key := cacheKey(card)
+	key := gradeCacheKey(card, grade)
 
 	// Check cache
 	if v, ok := ca.cache.Load(key); ok {
@@ -132,7 +138,7 @@ func (a *Adapter) GetLastSoldCents(ctx context.Context, card inventory.CardIdent
 	if !validGrade(grade) {
 		return 0, fmt.Errorf("unsupported grade: %g", grade)
 	}
-	price, err := a.getPrice(ctx, card)
+	price, err := a.getPriceWithGrade(ctx, card, int(math.Round(grade)))
 	if err != nil {
 		return 0, err
 	}
@@ -347,17 +353,12 @@ func (a *Adapter) buildMarketSnapshot(price *pricing.Price, grade float64) (*inv
 	return snap, nil
 }
 
-// getPrice fetches the price for a card from the underlying PriceProvider.
-// Strategy: looks up by card name, set, and card number — DH card ID caching is
-// handled internally by the DHPriceProvider. Callers that have a DH card ID will
-// benefit from cache hits without needing to pass the ID through this adapter layer.
-func (a *Adapter) getPrice(ctx context.Context, card inventory.CardIdentity) (*pricing.Price, error) {
-	return a.getPriceWithGrade(ctx, card, 0)
-}
-
-// getPriceWithGrade is like getPrice but propagates an explicit PSA grade so
-// downstream providers (DH /recent-sales) can include the required query
-// params. Pass 0 when grade is unknown.
+// getPriceWithGrade fetches the price for a card from the underlying
+// PriceProvider, propagating an explicit PSA grade so downstream providers
+// (DH /recent-sales) can include the required query params. Pass 0 when
+// grade is unknown. DH card ID caching is handled internally by the
+// DHPriceProvider — callers that have a DH card ID benefit from cache hits
+// without needing to pass the ID through this adapter layer.
 func (a *Adapter) getPriceWithGrade(ctx context.Context, card inventory.CardIdentity, grade int) (*pricing.Price, error) {
 	c := pricing.CardLookup{Name: card.CardName, Number: card.CardNumber, PSAListingTitle: card.PSAListingTitle, Grade: grade}
 	price, err := a.provider.LookupCard(ctx, card.SetName, c)

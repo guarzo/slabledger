@@ -828,7 +828,7 @@ func TestCachedAdapter_DifferentCardsDontCross(t *testing.T) {
 	}
 }
 
-func TestCachedAdapter_DifferentGradesCacheTogether(t *testing.T) {
+func TestCachedAdapter_DifferentGradesCachedSeparately(t *testing.T) {
 	ctx := context.Background()
 
 	callCount := 0
@@ -850,14 +850,15 @@ func TestCachedAdapter_DifferentGradesCacheTogether(t *testing.T) {
 
 	card := inventory.CardIdentity{CardName: "Charizard", SetName: "Base Set"}
 
-	// Call for different grades of the same card
+	// Each distinct grade triggers its own grade-scoped provider call;
+	// repeat lookups for the same grade hit the cache.
 	v10, _ := cached.GetLastSoldCents(ctx, card, 10)
 	v9, _ := cached.GetLastSoldCents(ctx, card, 9)
 	v8, _ := cached.GetLastSoldCents(ctx, card, 8)
 	v10_2, _ := cached.GetLastSoldCents(ctx, card, 10) // Should hit cache
 
-	if callCount != 1 {
-		t.Errorf("provider called %d times, want 1 (all grades from same card)", callCount)
+	if callCount != 3 {
+		t.Errorf("provider called %d times, want 3 (one per distinct grade, repeat is cached)", callCount)
 	}
 	if v10 != 10000 || v9 != 5000 || v8 != 2500 || v10_2 != 10000 {
 		t.Errorf("prices wrong: v10=%d, v9=%d, v8=%d, v10_2=%d", v10, v9, v8, v10_2)

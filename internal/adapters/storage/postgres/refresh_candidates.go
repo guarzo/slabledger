@@ -27,7 +27,7 @@ func (r *RefreshCandidateRepository) GetRefreshCandidates(ctx context.Context, l
 			COALESCE(cp.card_number, '') AS card_number,
 			cp.set_name,
 			COALESCE(MAX(cp.psa_listing_title), '') AS psa_listing_title,
-			COALESCE(MAX(cp.grade_value), 0)::int AS grade
+			COALESCE(cp.grade_value, 0)::int AS grade
 		FROM campaign_purchases cp
 		JOIN campaigns c ON cp.campaign_id = c.id
 		LEFT JOIN campaign_sales cs ON cp.id = cs.purchase_id
@@ -36,7 +36,7 @@ func (r *RefreshCandidateRepository) GetRefreshCandidates(ctx context.Context, l
 			AND cal.set_name = cp.set_name
 		WHERE cs.id IS NULL
 			AND c.phase != 'closed'
-		GROUP BY cp.card_name, cp.card_number, cp.set_name
+		GROUP BY cp.card_name, cp.card_number, cp.set_name, cp.grade_value
 		ORDER BY
 			MAX(cal.accessed_at) DESC NULLS LAST,
 			MAX(cp.created_at) DESC
