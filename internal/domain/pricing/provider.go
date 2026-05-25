@@ -10,6 +10,7 @@ type CardLookup struct {
 	Name            string
 	Number          string
 	PSAListingTitle string
+	Grade           int // PSA grade (1-10); 0 means unknown
 }
 
 // PriceProvider defines what the domain needs from price sources.
@@ -38,6 +39,9 @@ type Card struct {
 	// PSAListingTitle is the raw PSA listing title (optional).
 	// Reserved for future secondary source matching when normalized queries return no candidates.
 	PSAListingTitle string
+
+	// Grade is the PSA grade (1-10); 0 means unknown / not graded.
+	Grade int
 }
 
 // GradedPrices contains prices for each grade level.
