@@ -366,9 +366,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		if in.DHEventStore != nil {
 			listingOpts = append(listingOpts, dhlisting.WithEventRecorder(in.DHEventStore))
 		}
-		if in.DHStore != nil {
-			listingOpts = append(listingOpts, dhlisting.WithDHListingConfigLoader(in.DHStore))
-		}
 		svc, err := dhlisting.NewDHListingService(
 			in.CampaignsService, in.Logger, listingOpts...,
 		)
