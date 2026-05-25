@@ -76,7 +76,7 @@ func TestGetPrice_WithSales(t *testing.T) {
 
 	p := New(
 		&mocks.MockDHMarketDataClient{
-			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) { return sales, nil },
+			RecentSalesFn: func(_ context.Context, _ int, _ string, _ int) ([]dh.RecentSale, error) { return sales, nil },
 		},
 		&mocks.MockDHCardIDLookup{
 			GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "42", nil },
@@ -160,7 +160,7 @@ func TestGetPrice_AmountFallback(t *testing.T) {
 
 	p := New(
 		&mocks.MockDHMarketDataClient{
-			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) { return sales, nil },
+			RecentSalesFn: func(_ context.Context, _ int, _ string, _ int) ([]dh.RecentSale, error) { return sales, nil },
 		},
 		&mocks.MockDHCardIDLookup{
 			GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "42", nil },
@@ -206,7 +206,7 @@ func TestGetPrice_NilResult(t *testing.T) {
 		{
 			name: "only unknown grades returns nil",
 			client: &mocks.MockDHMarketDataClient{
-				RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+				RecentSalesFn: func(_ context.Context, _ int, _ string, _ int) ([]dh.RecentSale, error) {
 					return []dh.RecentSale{{GradingCompany: "XYZ", Grade: "99", Price: 999.00}}, nil
 				},
 			},
@@ -276,7 +276,7 @@ func TestGetPrice_EmptyGradesSalesReturnsNil(t *testing.T) {
 	// and since byGrade is empty, buildPrice returns nil → GetPrice returns (nil, nil)
 	p := New(
 		&mocks.MockDHMarketDataClient{
-			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+			RecentSalesFn: func(_ context.Context, _ int, _ string, _ int) ([]dh.RecentSale, error) {
 				return []dh.RecentSale{
 					{GradingCompany: "PSA", Grade: "", Price: 100.00, SoldAt: "2026-01-01", Platform: "ebay"},
 					{GradingCompany: "", Grade: "10", Price: 200.00, SoldAt: "2026-01-02", Platform: "ebay"},
@@ -337,7 +337,7 @@ func TestLookupCard(t *testing.T) {
 
 	p := New(
 		&mocks.MockDHMarketDataClient{
-			RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) { return sales, nil },
+			RecentSalesFn: func(_ context.Context, _ int, _ string, _ int) ([]dh.RecentSale, error) { return sales, nil },
 		},
 		&mocks.MockDHCardIDLookup{
 			GetExternalIDFn: func(_ context.Context, _, _, _, _ string) (string, error) { return "7", nil },
@@ -793,7 +793,7 @@ func TestApplyMarketData(t *testing.T) {
 }
 
 func TestGetPrice_CardLookup(t *testing.T) {
-	baseSalesFn := func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+	baseSalesFn := func(_ context.Context, _ int, _ string, _ int) ([]dh.RecentSale, error) {
 		return []dh.RecentSale{
 			{GradingCompany: "PSA", Grade: "10", Price: 50.00, Platform: "ebay"},
 		}, nil
@@ -912,7 +912,7 @@ func TestGetPrice_TransientClientError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			attempts := 0
 			client := &mocks.MockDHMarketDataClient{
-				RecentSalesFn: func(_ context.Context, _ int) ([]dh.RecentSale, error) {
+				RecentSalesFn: func(_ context.Context, _ int, _ string, _ int) ([]dh.RecentSale, error) {
 					attempts++
 					return nil, tc.recentSalesErr
 				},

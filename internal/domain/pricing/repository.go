@@ -94,6 +94,7 @@ type RefreshCandidate struct {
 	CardNumber      string
 	SetName         string
 	PSAListingTitle string
+	Grade           int // PSA grade (1-10); 0 means unknown / not graded
 }
 
 // RefreshCandidateProvider lists cards whose prices should be refreshed.

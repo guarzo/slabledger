@@ -50,7 +50,7 @@ func (ps *PurchaseStore) UnmatchPurchaseDH(ctx context.Context, purchaseID strin
 		     dh_status            = '',
 		     dh_last_synced_at    = '',
 		     dh_push_status       = $1,
-		     dh_push_attempts     = CASE WHEN $2 IN ('pending', 'matched') THEN 0 ELSE dh_push_attempts END,
+		     dh_push_attempts     = CASE WHEN $2 IN ('pending', 'matched', 'unmatched_created', 'override_corrected', 'already_listed') THEN 0 ELSE dh_push_attempts END,
 		     updated_at           = $3
 		 WHERE id = $4`,
 		pushStatus, pushStatus, time.Now(), purchaseID,
@@ -66,7 +66,7 @@ func (ps *PurchaseStore) UpdatePurchaseDHPushStatus(ctx context.Context, id stri
 	return ps.execAndExpectRow(ctx, "update DH push status",
 		`UPDATE campaign_purchases
 		 SET dh_push_status = $1,
-		     dh_push_attempts = CASE WHEN $2 IN ('pending', 'matched') THEN 0 ELSE dh_push_attempts END,
+		     dh_push_attempts = CASE WHEN $2 IN ('pending', 'matched', 'unmatched_created', 'override_corrected', 'already_listed') THEN 0 ELSE dh_push_attempts END,
 		     updated_at = $3
 		 WHERE id = $4`,
 		status, status, time.Now(), id,

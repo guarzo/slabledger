@@ -1,4 +1,4 @@
-import { useDHStatus, useTriggerDHReconcile } from '../../queries/useAdminQueries';
+import { useDHStatus, useTriggerDHReconcile, useDHTombstoneCount, useClearDHTombstones } from '../../queries/useAdminQueries';
 import { formatPct } from '../../utils/formatters';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
@@ -32,6 +32,8 @@ function HealthCard({ label, value, valueColor, sub }: HealthCardProps) {
 export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error, refetch } = useDHStatus({ enabled });
   const reconcileMutation = useTriggerDHReconcile();
+  const { data: tombstoneData } = useDHTombstoneCount({ enabled });
+  const clearTombstonesMutation = useClearDHTombstones();
   const toast = useToast();
 
   const handleReconcile = async () => {
@@ -50,6 +52,17 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
       toast.error('DH reconcile failed');
     }
   };
+
+  const handleClearTombstones = async () => {
+    try {
+      const result = await clearTombstonesMutation.mutateAsync();
+      toast.success(`Cleared ${result.cleared} tombstoned DH card${result.cleared === 1 ? '' : 's'}`);
+    } catch {
+      toast.error('Failed to clear DH tombstones');
+    }
+  };
+
+  const tombstoneCount = tombstoneData?.count ?? 0;
 
   if (!enabled) {
     return (
@@ -110,6 +123,23 @@ export function DHStatsPanel({ enabled = true }: { enabled?: boolean }) {
           disabled={reconcileMutation.isPending}
         >
           {reconcileMutation.isPending ? 'Syncing…' : 'Sync DH now'}
+        </Button>
+      </div>
+
+      {/* Tombstoned DH cards (404'd repeatedly) */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-[var(--text-muted)]">
+          DH card IDs suppressed after repeated 404s:{' '}
+          <span className="font-semibold tabular-nums text-[var(--text-secondary)]">{tombstoneCount}</span>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleClearTombstones}
+          loading={clearTombstonesMutation.isPending}
+          disabled={clearTombstonesMutation.isPending || tombstoneCount === 0}
+        >
+          {clearTombstonesMutation.isPending ? 'Clearing…' : 'Clear tombstones'}
         </Button>
       </div>
 

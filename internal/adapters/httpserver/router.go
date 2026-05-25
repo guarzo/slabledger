@@ -42,6 +42,7 @@ type Router struct {
 	psaExchangeHandler        *handlers.PSAExchangeHandler
 	dhHandler                 *handlers.DHHandler
 	dhReconcileHandler        *handlers.DHReconcileHandler
+	dhTombstonesHandler       *handlers.DHTombstonesHandler
 	cardCatalogHandler        *handlers.CardCatalogHandler
 	psaSyncHandler            *handlers.PSASyncHandler
 	nichesHandler             *handlers.NichesHandler
@@ -81,6 +82,7 @@ type RouterConfig struct {
 	PSAExchangeHandler        *handlers.PSAExchangeHandler     // PSA-exchange opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
 	DHReconcileHandler        *handlers.DHReconcileHandler     // Admin DH reconcile trigger; nil = disabled
+	DHTombstonesHandler       *handlers.DHTombstonesHandler    // Admin DH tombstones count/clear; nil = disabled
 	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
 	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
@@ -185,6 +187,10 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.DHReconcileHandler != nil {
 		rt.dhReconcileHandler = cfg.DHReconcileHandler
+	}
+
+	if cfg.DHTombstonesHandler != nil {
+		rt.dhTombstonesHandler = cfg.DHTombstonesHandler
 	}
 
 	if cfg.CardCatalogHandler != nil {

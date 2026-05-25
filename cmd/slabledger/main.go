@@ -211,6 +211,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Create DB tracker (API tracking, access tracking, health checks)
 	priceRepo := postgres.NewDBTracker(db)
 	refreshCandidateRepo := postgres.NewRefreshCandidateRepository(db.DB)
+	dhTombstoneStore := postgres.NewDHCardTombstoneStore(db.DB)
 
 	// Initialize authentication
 	var authService auth.Service
@@ -269,6 +270,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	priceProvImpl, err := initializePriceProviders(
 		ctx, logger, cardIDMappingRepo,
 		dhClient,
+		dhTombstoneStore,
 	)
 	if err != nil {
 		return err
@@ -406,6 +408,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHTrajectoryRepo:           trajectoryRepo,
 		DHCompCacheStore:           campaignsInit.dhCompStore,
 		DHPriceSyncService:         dhPriceSyncService,
+		DHTombstoneStore:           dhTombstoneStore,
 		GapStore:                   gapStore,
 		PSASpreadsheetID:           cfg.GoogleSheets.SpreadsheetID,
 		PSATabName:                 cfg.GoogleSheets.TabName,
@@ -454,6 +457,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SchedulerResult:    schedulerResult,
 		GSheetsClient:      gsheetsClient,
 		PendingItemsRepo:   pendingItemsRepo,
+		DHTombstoneStore:   dhTombstoneStore,
 	})
 	serverErr := startWebServer(ctx, deps)
 

@@ -6,9 +6,13 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/pricing"
 )
+
+const defaultIntelGrade = 10
 
 var _ Scheduler = (*DHIntelligenceRefreshScheduler)(nil)
 
@@ -33,6 +37,7 @@ type DHIntelligenceRefreshScheduler struct {
 	dhClient   *dh.Client
 	intelRepo  intelligence.Repository
 	seedLister IntelligenceSeedLister // optional; when nil, only the refresh pass runs
+	tombstones pricing.DHCardTombstoneRepo
 	logger     observability.Logger
 	config     DHIntelligenceRefreshConfig
 }
@@ -46,6 +51,12 @@ type IntelligenceRefreshOption func(*DHIntelligenceRefreshScheduler)
 // table stays empty.
 func WithIntelligenceSeedLister(l IntelligenceSeedLister) IntelligenceRefreshOption {
 	return func(s *DHIntelligenceRefreshScheduler) { s.seedLister = l }
+}
+
+// WithIntelligenceTombstoneRepo enables tombstoning of DH card IDs that
+// repeatedly 404 from MarketDataEnterprise so they stop being re-fetched.
+func WithIntelligenceTombstoneRepo(r pricing.DHCardTombstoneRepo) IntelligenceRefreshOption {
+	return func(s *DHIntelligenceRefreshScheduler) { s.tombstones = r }
 }
 
 // NewDHIntelligenceRefreshScheduler creates a new DH intelligence refresh scheduler.
@@ -133,8 +144,16 @@ func (s *DHIntelligenceRefreshScheduler) refresh(ctx context.Context) {
 			failed++
 			continue
 		}
-		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt)
+		if s.tombstones != nil {
+			if ts, tsErr := s.tombstones.IsTombstoned(ctx, cardIDInt); tsErr == nil && ts {
+				s.logger.Debug(ctx, "skipping tombstoned DH card",
+					observability.String("dh_card_id", entry.DHCardID))
+				continue
+			}
+		}
+		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt, defaultIntelGrade)
 		if fetchErr != nil {
+			s.recordTombstoneIfMissing(ctx, cardIDInt, fetchErr)
 			s.logger.Warn(ctx, "failed to fetch DH market data",
 				observability.String("dh_card_id", entry.DHCardID),
 				observability.Err(fetchErr))
@@ -268,8 +287,17 @@ func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) i
 	var seeded int
 	for i, c := range fetchables {
 		cardIDInt := cardIDs[i]
-		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt)
+		if s.tombstones != nil {
+			if ts, tsErr := s.tombstones.IsTombstoned(ctx, cardIDInt); tsErr == nil && ts {
+				s.logger.Debug(ctx, "skipping tombstoned DH card seed",
+					observability.String("dh_card_id", c.DHCardID))
+				budget--
+				continue
+			}
+		}
+		resp, fetchErr := s.dhClient.MarketDataEnterprise(ctx, cardIDInt, defaultIntelGrade)
 		if fetchErr != nil {
+			s.recordTombstoneIfMissing(ctx, cardIDInt, fetchErr)
 			s.logger.Warn(ctx, "failed to fetch DH market data for seed",
 				observability.String("dh_card_id", c.DHCardID),
 				observability.Err(fetchErr))
@@ -299,4 +327,25 @@ func (s *DHIntelligenceRefreshScheduler) seed(ctx context.Context, budget int) i
 			observability.Int("remaining_budget", budget))
 	}
 	return budget
+}
+
+// recordTombstoneIfMissing increments the tombstone counter for a DH card ID
+// when the failure was a not-found. Best-effort: errors are logged at DEBUG.
+func (s *DHIntelligenceRefreshScheduler) recordTombstoneIfMissing(ctx context.Context, cardID int, cause error) {
+	if s.tombstones == nil {
+		return
+	}
+	if !apperrors.HasErrorCode(cause, apperrors.ErrCodeProviderNotFound) {
+		return
+	}
+	n, err := s.tombstones.RecordFailure(ctx, cardID, cause.Error())
+	if err != nil {
+		s.logger.Debug(ctx, "tombstone record failed",
+			observability.Int("dh_card_id", cardID), observability.Err(err))
+		return
+	}
+	if n >= 3 {
+		s.logger.Info(ctx, "DH card tombstoned, no further lookups",
+			observability.Int("dh_card_id", cardID), observability.Int("attempts", n))
+	}
 }

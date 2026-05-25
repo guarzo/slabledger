@@ -45,6 +45,7 @@ export const queryKeys = {
     dhStatus: ['admin', 'dhStatus'] as const,
     dhUnmatched: ['admin', 'dhUnmatched'] as const,
     psaSyncStatus: ['admin', 'psaSyncStatus'] as const,
+    dhTombstoneCount: ['admin', 'dhTombstoneCount'] as const,
   },
   purchases: {
     psaPendingItems: ['purchases', 'psaPendingItems'] as const,

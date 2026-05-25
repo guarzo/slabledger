@@ -50,6 +50,8 @@ declare module './client' {
     getPSASyncStatus(): Promise<PSASyncStatusResponse>;
     triggerPSASyncRefresh(): Promise<{ status: string }>;
     triggerDHReconcile(): Promise<DHReconcileTriggerResult>;
+    getDHTombstoneCount(): Promise<{ count: number }>;
+    clearDHTombstones(): Promise<{ cleared: number }>;
   }
 }
 
@@ -225,4 +227,12 @@ proto.triggerPSASyncRefresh = async function (this: APIClient) {
 
 proto.triggerDHReconcile = async function (this: APIClient) {
   return this.post<DHReconcileTriggerResult>('/admin/dh-reconcile/trigger');
+};
+
+proto.getDHTombstoneCount = async function (this: APIClient) {
+  return this.get<{ count: number }>('/admin/dh-tombstones/count');
+};
+
+proto.clearDHTombstones = async function (this: APIClient) {
+  return this.post<{ cleared: number }>('/admin/dh-tombstones/clear');
 };
