@@ -80,10 +80,10 @@ type BuildDeps struct {
 	DHPushAttemptInc    DHPushAttemptIncrementer
 
 	// DH card tombstone repo (optional; suppresses repeated 404s).
-	DHTombstoneRepo pricing.DHCardTombstoneRepo
-	DHPushConfigLoader  DHPushConfigLoader
-	DHPushHoldSetter    DHPushHoldSetter
-	DHPushRelister      DHPushRelister
+	DHTombstoneRepo    pricing.DHCardTombstoneRepo
+	DHPushConfigLoader DHPushConfigLoader
+	DHPushHoldSetter   DHPushHoldSetter
+	DHPushRelister     DHPushRelister
 
 	// Scoring gap cleanup dependencies (optional)
 	GapStore scoring.GapStore
