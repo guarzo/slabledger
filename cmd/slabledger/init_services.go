@@ -32,12 +32,17 @@ func initializePriceProviders(
 	logger observability.Logger,
 	cardIDMappingRepo *postgres.CardIDMappingRepository,
 	dhClient *dh.Client,
+	tombstoneRepo pricing.DHCardTombstoneRepo,
 ) (pricing.PriceProvider, error) {
 	if dhClient == nil || !dhClient.EnterpriseAvailable() {
 		logger.Warn(ctx, "DH client not available; price provider will be inactive")
 		return dhprice.New(nil, nil), nil
 	}
-	provider := dhprice.New(dhClient, cardIDMappingRepo, dhprice.WithLogger(logger))
+	opts := []dhprice.Option{dhprice.WithLogger(logger)}
+	if tombstoneRepo != nil {
+		opts = append(opts, dhprice.WithTombstoneRepo(tombstoneRepo))
+	}
+	provider := dhprice.New(dhClient, cardIDMappingRepo, opts...)
 	logger.Info(ctx, "DH price provider initialized")
 	return provider, nil
 }

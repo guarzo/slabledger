@@ -77,6 +77,10 @@ type BuildDeps struct {
 	DHPushPendingLister DHPushPendingLister
 	DHPushStatusUpdater DHPushStatusUpdater
 	DHPushCardIDSaver   DHPushCardIDSaver
+	DHPushAttemptInc    DHPushAttemptIncrementer
+
+	// DH card tombstone repo (optional; suppresses repeated 404s).
+	DHTombstoneRepo pricing.DHCardTombstoneRepo
 	DHPushConfigLoader  DHPushConfigLoader
 	DHPushHoldSetter    DHPushHoldSetter
 	DHPushRelister      DHPushRelister
@@ -269,6 +273,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		if deps.DHIntelligenceSeedLister != nil {
 			intelOpts = append(intelOpts, WithIntelligenceSeedLister(deps.DHIntelligenceSeedLister))
 		}
+		if deps.DHTombstoneRepo != nil {
+			intelOpts = append(intelOpts, WithIntelligenceTombstoneRepo(deps.DHTombstoneRepo))
+		}
 		schedulers = append(schedulers, NewDHIntelligenceRefreshScheduler(
 			deps.DHClient, deps.DHIntelligenceRepo, deps.Logger, dhIntelConfig, intelOpts...,
 		))
@@ -407,6 +414,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		}
 		if deps.DHPushRelister != nil {
 			pushOpts = append(pushOpts, WithDHPushRelister(deps.DHPushRelister))
+		}
+		if deps.DHPushAttemptInc != nil {
+			pushOpts = append(pushOpts, WithDHPushAttemptIncrementer(deps.DHPushAttemptInc))
 		}
 		schedulers = append(schedulers, NewDHPushScheduler(
 			deps.DHPushPendingLister,

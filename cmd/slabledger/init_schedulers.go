@@ -55,6 +55,7 @@ type schedulerDeps struct {
 	DHTrajectoryRepo           *postgres.CardPriceTrajectoryRepository
 	DHCompCacheStore           *postgres.DHCompCacheStore
 	DHPriceSyncService         dhpricing.Service
+	DHTombstoneStore           *postgres.DHCardTombstoneStore
 	GapStore                   *postgres.GapStore
 	PSASheetFetcher            scheduler.SheetFetcher
 	PSASpreadsheetID           string
@@ -120,12 +121,16 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 			buildDeps.DHPushPendingLister = deps.PurchaseStore
 			buildDeps.DHPushStatusUpdater = deps.PurchaseStore
 			buildDeps.DHPushHoldSetter = deps.PurchaseStore
+			buildDeps.DHPushAttemptInc = deps.PurchaseStore
 		}
 		if deps.DHStore != nil {
 			buildDeps.DHPushConfigLoader = deps.DHStore
 		}
 		if deps.CardIDMappingRepo != nil {
 			buildDeps.DHPushCardIDSaver = deps.CardIDMappingRepo
+		}
+		if deps.DHTombstoneStore != nil {
+			buildDeps.DHTombstoneRepo = deps.DHTombstoneStore
 		}
 		if deps.CampaignsService != nil {
 			buildDeps.CampaignService = deps.CampaignsService

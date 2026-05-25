@@ -72,6 +72,7 @@ type handlerInputs struct {
 	SchedulerResult    *scheduler.BuildResult
 	GSheetsClient      *gsheets.Client
 	PendingItemsRepo   *postgres.PendingItemsRepository
+	DHTombstoneStore   *postgres.DHCardTombstoneStore
 }
 
 // handlerOutputs holds the constructed handlers that are also needed post-
@@ -313,6 +314,14 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	}
 	dhReconcileHandler := handlers.NewDHReconcileHandler(dhReconcileRunner, logger)
 
+	// DH tombstones admin handler. Nil repo → 503 on the endpoints; the route
+	// stays registered so the operator gets a meaningful response.
+	var dhTombstoneRepo pricing.DHCardTombstoneRepo
+	if in.DHTombstoneStore != nil {
+		dhTombstoneRepo = in.DHTombstoneStore
+	}
+	dhTombstonesHandler := handlers.NewDHTombstonesHandler(dhTombstoneRepo, logger)
+
 	// Assemble ServerDependencies
 	deps := ServerDependencies{
 		Config:                    in.Cfg,
@@ -339,6 +348,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		PSAExchangeHandler:        psaExchangeHandler,
 		DHHandler:                 dhHandler,
 		DHReconcileHandler:        dhReconcileHandler,
+		DHTombstonesHandler:       dhTombstonesHandler,
 		CardCatalogHandler:        cardCatalogHandler,
 		NichesHandler:             nichesHandler,
 		CampaignSignalsHandler:    campaignSignalsHandler,
