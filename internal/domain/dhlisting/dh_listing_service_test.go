@@ -686,6 +686,71 @@ func TestListPurchases_StaleInventoryID(t *testing.T) {
 	}
 }
 
+// testUpstreamError is a minimal stand-in for httpx.UpstreamError used in
+// unit tests to avoid importing the adapter package from the domain test.
+type testUpstreamError struct {
+	StatusCode int
+	Message    string
+	Op         string
+}
+
+func (e *testUpstreamError) Error() string {
+	return fmt.Sprintf("upstream %d: %s", e.StatusCode, e.Message)
+}
+
+// TestListPurchases_RecordsChannelSyncFailureInFailedCerts asserts that when
+// SyncChannels returns an upstream error, the service reverts to in_stock AND
+// records the upstream error against the cert in FailedCerts.
+func TestListPurchases_RecordsChannelSyncFailureInFailedCerts(t *testing.T) {
+	upstream := &testUpstreamError{
+		StatusCode: 422,
+		Op:         "POST /v1/enterprise/inventory/42/sync",
+		Message:    "No active channel configured for: shopify",
+	}
+
+	certNum := "CERT-1"
+	purchase := &inventory.Purchase{
+		ID:                 "purchase-sync-fail",
+		CertNumber:         certNum,
+		DHInventoryID:      42,
+		DHCardID:           7,
+		ReviewedPriceCents: 50000,
+	}
+
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	}
+
+	updateCalls := 0
+	lister := &mockInventoryListerWithRotator{
+		updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
+			updateCalls++
+			return upd.ListingPriceCents, nil
+		},
+		syncFn: func(_ context.Context, _ int, _ []string) error {
+			return upstream
+		},
+	}
+
+	svc := newTestService(t, lookup, WithDHListingLister(lister))
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Listed != 0 {
+		t.Errorf("Listed = %d, want 0 (channel sync failed)", result.Listed)
+	}
+	gotErr, ok := result.FailedCerts[certNum]
+	if !ok {
+		t.Fatalf("FailedCerts missing %q; got %v", certNum, result.FailedCerts)
+	}
+	var ue *testUpstreamError
+	if !errors.As(gotErr, &ue) {
+		t.Fatalf("FailedCerts[%q] = %v; expected to wrap *testUpstreamError", certNum, gotErr)
+	}
+	if ue.StatusCode != 422 {
+		t.Errorf("ue.StatusCode = %d, want 422", ue.StatusCode)
+	}
+}
+
 // TestListPurchases_NoOpGuard asserts the exact-match no-op short-circuit:
 // when a purchase is already DHStatusListed with DHListingPriceCents equal to
 // the resolved listing price AND has a non-empty DHChannelsJSON (evidence of
