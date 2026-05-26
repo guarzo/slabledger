@@ -55,7 +55,7 @@ func extractUpstreamMessage(body []byte, contentType string) string {
 		return ""
 	}
 	if !strings.HasPrefix(strings.ToLower(contentType), "application/json") {
-		return bodyStr
+		return sanitizeResponseBody([]byte(bodyStr), 200)
 	}
 	var probe map[string]any
 	if err := json.Unmarshal(body, &probe); err != nil {

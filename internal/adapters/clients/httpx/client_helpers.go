@@ -95,26 +95,43 @@ func (c *Client) PostJSON(ctx context.Context, url string, headers map[string]st
 	return nil
 }
 
-// handleHTTPError converts HTTP status codes to appropriate errors
-func (c *Client) handleHTTPError(ctx context.Context, statusCode int, headers http.Header, body []byte) error {
+// handleHTTPError converts HTTP status codes to appropriate errors. Each
+// returned error has an *UpstreamError in its error chain (via fmt.Errorf
+// "%w"), so callers can errors.As to extract raw status + body alongside
+// the existing semantic apperrors wrapping.
+func (c *Client) handleHTTPError(ctx context.Context, method, url string, statusCode int, headers http.Header, body []byte) error {
 	sanitized := sanitizeResponseBody(body, 200)
-
+	contentType := ""
+	if headers != nil {
+		contentType = headers.Get("Content-Type")
+	}
+	requestID := ""
+	if headers != nil {
+		requestID = headers.Get("X-Request-Id")
+	}
+	ue := &UpstreamError{
+		Provider:   c.providerName,
+		Op:         fmt.Sprintf("%s %s", method, url),
+		StatusCode: statusCode,
+		Body:       sanitized,
+		Message:    extractUpstreamMessage(body, contentType),
+		RequestID:  requestID,
+	}
 	switch statusCode {
 	case 400:
-		return apperrors.ProviderInvalidRequest(c.providerName, fmt.Errorf("HTTP 400: %s", sanitized))
+		return apperrors.ProviderInvalidRequest(c.providerName, fmt.Errorf("HTTP 400: %s: %w", sanitized, ue))
 	case 401, 403:
-		return apperrors.ProviderAuthFailed(c.providerName, fmt.Errorf("HTTP %d: %s", statusCode, sanitized))
+		return apperrors.ProviderAuthFailed(c.providerName, fmt.Errorf("HTTP %d: %s: %w", statusCode, sanitized, ue))
 	case 404:
 		if sanitized == "empty response" || sanitized == "error code: 404" {
 			sanitized = "endpoint or resource not found"
 		}
-		return apperrors.ProviderNotFound(c.providerName, sanitized)
+		return fmt.Errorf("%w: %w", apperrors.ProviderNotFound(c.providerName, sanitized), ue)
 	case 429:
 		retryAfter := ""
 		if headers != nil {
 			retryAfter = headers.Get("Retry-After")
 		}
-		// Log rate limit diagnostics to help identify upstream limits
 		if c.logger != nil {
 			fields := []observability.Field{
 				observability.String("provider", c.providerName),
@@ -129,11 +146,11 @@ func (c *Client) handleHTTPError(ctx context.Context, statusCode int, headers ht
 			}
 			c.logger.Info(ctx, "HTTP 429 rate limit response", fields...)
 		}
-		return apperrors.ProviderRateLimited(c.providerName, retryAfter)
+		return fmt.Errorf("%w: %w", apperrors.ProviderRateLimited(c.providerName, retryAfter), ue)
 	case 500, 502, 503, 504:
-		return apperrors.ProviderUnavailable(c.providerName, fmt.Errorf("HTTP %d: %s", statusCode, sanitized))
+		return apperrors.ProviderUnavailable(c.providerName, fmt.Errorf("HTTP %d: %s: %w", statusCode, sanitized, ue))
 	default:
-		return fmt.Errorf("HTTP %d: %s", statusCode, sanitized)
+		return fmt.Errorf("HTTP %d: %s: %w", statusCode, sanitized, ue)
 	}
 }
 
