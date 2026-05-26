@@ -43,11 +43,11 @@ type Service interface {
 
 // DHListingResult summarises a batch listing operation.
 type DHListingResult struct {
-	Listed      int            // items successfully set to listed + synced
-	Synced      int            // items with channels synced
-	Skipped     int            // items skipped (unenrolled, inline push failed, update/sync error, etc)
-	Total       int            // total purchases found
-	Error       error          // set when a fatal error prevented listing (e.g. DB lookup failure)
+	Listed      int              // items successfully set to listed + synced
+	Synced      int              // items with channels synced
+	Skipped     int              // items skipped (unenrolled, inline push failed, update/sync error, etc)
+	Total       int              // total purchases found
+	Error       error            // set when a fatal error prevented listing (e.g. DB lookup failure)
 	FailedCerts map[string]error // per-cert failure reasons; nil if no skip/revert recorded an error
 }
 
