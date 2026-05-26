@@ -186,19 +186,8 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantErrSubstr: "No active channel configured for: shopify",
 		},
 		{
-			name: "listing returns zero listed with stale inventory ID and 5xx upstream error → 502",
-			getPurchase: func() func(ctx context.Context, id string) (*inventory.Purchase, error) {
-				call := 0
-				return func(ctx context.Context, id string) (*inventory.Purchase, error) {
-					call++
-					if call == 1 {
-						return readyPurchase(), nil // initial validation passes
-					}
-					p := readyPurchase()
-					p.DHInventoryID = 0 // re-read shows ID was cleared
-					return p, nil
-				}
-			}(),
+			name:        "5xx upstream error in FailedCerts → 502 via dhErrorStatus",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) { return readyPurchase(), nil },
 			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
 				return dhlisting.DHListingResult{
 					Listed: 0, Total: 1,
@@ -214,6 +203,30 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			},
 			wantStatus:    http.StatusBadGateway,
 			wantErrSubstr: "status 500",
+		},
+		{
+			// Exercises the fallback re-read path: no FailedCerts entry, but
+			// the post-list re-read shows DHInventoryID still 0, so the
+			// handler returns the "no recorded upstream error" defensive
+			// fallback rather than a stale "will retry" string.
+			name: "listing returns zero listed with no FailedCerts + cleared inventory ID → 502 no-recorded-error",
+			getPurchase: func() func(ctx context.Context, id string) (*inventory.Purchase, error) {
+				call := 0
+				return func(ctx context.Context, id string) (*inventory.Purchase, error) {
+					call++
+					if call == 1 {
+						return readyPurchase(), nil // initial validation passes
+					}
+					p := readyPurchase()
+					p.DHInventoryID = 0 // re-read shows ID was cleared
+					return p, nil
+				}
+			}(),
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Listed: 0, Total: 1} // no FailedCerts
+			},
+			wantStatus:    http.StatusBadGateway,
+			wantErrSubstr: "no recorded upstream error",
 		},
 		{
 			name: "inline push left purchase unmatched → 409 with unmatched message",
