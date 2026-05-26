@@ -1,7 +1,6 @@
 package httpx
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -127,5 +126,3 @@ func TestUpstreamError_ExtractMessage_JSONWithCharset(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "foo")
 	}
 }
-
-var _ = json.Marshal // keep json import if unused above
