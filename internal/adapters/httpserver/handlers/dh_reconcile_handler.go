@@ -36,7 +36,8 @@ func (h *DHHandler) HandleReconcile(w http.ResponseWriter, r *http.Request) {
 	result, err := h.reconciler.Reconcile(r.Context())
 	if err != nil {
 		h.logger.Error(r.Context(), "dh reconcile failed", domainobs.Err(err))
-		writeError(w, http.StatusBadGateway, "reconcile failed: "+err.Error())
+		status, msg := dhErrorStatus(err)
+		writeError(w, status, "reconcile failed: "+msg)
 		return
 	}
 
@@ -79,7 +80,8 @@ func (h *DHReconcileHandler) HandleTrigger(w http.ResponseWriter, r *http.Reques
 	}
 	if err := h.runner.RunOnce(r.Context()); err != nil {
 		h.logger.Error(r.Context(), "dh reconcile trigger failed", domainobs.Err(err))
-		writeError(w, http.StatusBadGateway, "DH reconcile failed")
+		status, msg := dhErrorStatus(err)
+		writeError(w, status, msg)
 		return
 	}
 	result := h.runner.GetLastRunResult()
