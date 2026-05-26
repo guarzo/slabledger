@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -164,16 +165,28 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantErrSubstr: "not configured",
 		},
 		{
-			name:        "listing returns zero listed → 502",
+			// DH channel sync returns 422 — handler surfaces it as 422 with the upstream message.
+			name:        "DH channel sync returns 422 — handler surfaces it as 422",
 			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) { return readyPurchase(), nil },
 			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
-				return dhlisting.DHListingResult{Listed: 0, Total: 1}
+				return dhlisting.DHListingResult{
+					Listed: 0, Skipped: 1, Total: 1,
+					FailedCerts: map[string]error{
+						"CERT123": &httpx.UpstreamError{
+							Provider:   "dh",
+							Op:         "POST /v1/enterprise/inventory/42/sync",
+							StatusCode: 422,
+							Body:       `{"error":"No active channel configured for: shopify"}`,
+							Message:    "No active channel configured for: shopify",
+						},
+					},
+				}
 			},
-			wantStatus:    http.StatusBadGateway,
-			wantErrSubstr: "check server logs",
+			wantStatus:    http.StatusUnprocessableEntity,
+			wantErrSubstr: "No active channel configured for: shopify",
 		},
 		{
-			name: "listing returns zero listed with stale inventory ID → 502 reconcile hint",
+			name: "listing returns zero listed with stale inventory ID and 5xx upstream error → 502",
 			getPurchase: func() func(ctx context.Context, id string) (*inventory.Purchase, error) {
 				call := 0
 				return func(ctx context.Context, id string) (*inventory.Purchase, error) {
@@ -187,10 +200,20 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 				}
 			}(),
 			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
-				return dhlisting.DHListingResult{Listed: 0, Total: 1}
+				return dhlisting.DHListingResult{
+					Listed: 0, Total: 1,
+					FailedCerts: map[string]error{
+						"CERT123": &httpx.UpstreamError{
+							Provider:   "dh",
+							Op:         "POST /v1/foo",
+							StatusCode: 500,
+							Message:    "boom",
+						},
+					},
+				}
 			},
 			wantStatus:    http.StatusBadGateway,
-			wantErrSubstr: "will retry automatically",
+			wantErrSubstr: "status 500",
 		},
 		{
 			name: "inline push left purchase unmatched → 409 with unmatched message",
