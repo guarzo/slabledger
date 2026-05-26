@@ -101,21 +101,22 @@ func (c *Client) PostJSON(ctx context.Context, url string, headers map[string]st
 // the existing semantic apperrors wrapping.
 func (c *Client) handleHTTPError(ctx context.Context, method, url string, statusCode int, headers http.Header, body []byte) error {
 	sanitized := sanitizeResponseBody(body, 200)
-	contentType := ""
-	if headers != nil {
-		contentType = headers.Get("Content-Type")
+	// Strip any query string from the operation label so callers like
+	// cardladder, which pass api keys as `?key=…`, don't leak credentials
+	// into surfaced error messages and logs.
+	opURL := url
+	if i := strings.IndexByte(opURL, '?'); i != -1 {
+		opURL = opURL[:i]
 	}
-	requestID := ""
-	if headers != nil {
-		requestID = headers.Get("X-Request-Id")
-	}
+	// http.Response.Header is always non-nil for any response returned by
+	// the transport, so we can read it directly without nil guards.
 	ue := &UpstreamError{
 		Provider:   c.providerName,
-		Op:         fmt.Sprintf("%s %s", method, url),
+		Op:         fmt.Sprintf("%s %s", method, opURL),
 		StatusCode: statusCode,
 		Body:       sanitized,
-		Message:    extractUpstreamMessage(body, contentType),
-		RequestID:  requestID,
+		Message:    extractUpstreamMessage(body, headers.Get("Content-Type")),
+		RequestID:  headers.Get("X-Request-Id"),
 	}
 	switch statusCode {
 	case 400:
