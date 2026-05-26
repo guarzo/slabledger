@@ -89,6 +89,20 @@ func TestUpstreamError_ExtractMessage(t *testing.T) {
 			ct:   "",
 			want: "",
 		},
+		{
+			// empty error field should fall through to raw body
+			name: "json with empty error field falls through",
+			body: `{"error":""}`,
+			ct:   "application/json",
+			want: `{"error":""}`,
+		},
+		{
+			// JSON detection works even when content-type has charset suffix
+			name: "json with charset suffix",
+			body: `{"error":"foo"}`,
+			ct:   "application/json; charset=utf-8",
+			want: "foo",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -101,28 +115,33 @@ func TestUpstreamError_ExtractMessage(t *testing.T) {
 }
 
 func TestUpstreamError_ErrorsAs(t *testing.T) {
-	original := &UpstreamError{Provider: "dh", Op: "POST /v1/sync", StatusCode: 422, Message: "x"}
-	wrapped := fmt.Errorf("operation failed: %w", original)
-	var got *UpstreamError
-	if !errors.As(wrapped, &got) {
-		t.Fatal("errors.As did not find UpstreamError through wrapping")
+	tests := []struct {
+		name       string
+		wrap       func(err error) error
+		wantStatus int
+	}{
+		{
+			name:       "single fmt.Errorf wrap",
+			wrap:       func(err error) error { return fmt.Errorf("operation failed: %w", err) },
+			wantStatus: 422,
+		},
+		{
+			name:       "double wrap",
+			wrap:       func(err error) error { return fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", err)) },
+			wantStatus: 422,
+		},
 	}
-	if got.StatusCode != 422 {
-		t.Errorf("StatusCode = %d, want 422", got.StatusCode)
-	}
-}
-
-// Sanity check: extractUpstreamMessage trims and ignores nulls.
-func TestUpstreamError_ExtractMessage_IgnoresEmptyJSONField(t *testing.T) {
-	if got := extractUpstreamMessage([]byte(`{"error":""}`), "application/json"); got != `{"error":""}` {
-		t.Errorf("empty error field should fall through to raw body, got %q", got)
-	}
-}
-
-// Ensure JSON detection works even when content-type has charset suffix.
-func TestUpstreamError_ExtractMessage_JSONWithCharset(t *testing.T) {
-	body := `{"error":"foo"}`
-	if got := extractUpstreamMessage([]byte(body), "application/json; charset=utf-8"); got != "foo" {
-		t.Errorf("got %q, want %q", got, "foo")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := &UpstreamError{Provider: "dh", Op: "POST /v1/sync", StatusCode: 422, Message: "x"}
+			wrapped := tt.wrap(original)
+			var got *UpstreamError
+			if !errors.As(wrapped, &got) {
+				t.Fatal("errors.As did not find UpstreamError through wrapping")
+			}
+			if got.StatusCode != tt.wantStatus {
+				t.Errorf("StatusCode = %d, want %d", got.StatusCode, tt.wantStatus)
+			}
+		})
 	}
 }

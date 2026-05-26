@@ -23,13 +23,17 @@ import (
 func dhErrorStatus(err error) (int, string) {
 	var ue *httpx.UpstreamError
 	if errors.As(err, &ue) {
+		msg := ue.Message
+		if msg == "" {
+			msg = ue.Body
+		}
 		switch {
 		case ue.StatusCode == http.StatusUnauthorized || ue.StatusCode == http.StatusForbidden:
-			return http.StatusBadGateway, fmt.Sprintf("DH auth failed (status %d): %s", ue.StatusCode, ue.Message)
+			return http.StatusBadGateway, fmt.Sprintf("DH auth failed (status %d): %s", ue.StatusCode, msg)
 		case ue.IsClientError():
-			return ue.StatusCode, fmt.Sprintf("DH %s: %s", ue.Op, ue.Message)
+			return ue.StatusCode, fmt.Sprintf("DH %s: %s", ue.Op, msg)
 		default:
-			return http.StatusBadGateway, fmt.Sprintf("DH %s failed (status %d): %s", ue.Op, ue.StatusCode, ue.Message)
+			return http.StatusBadGateway, fmt.Sprintf("DH %s failed (status %d): %s", ue.Op, ue.StatusCode, msg)
 		}
 	}
 	return http.StatusBadGateway, err.Error()

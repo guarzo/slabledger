@@ -59,7 +59,7 @@ func extractUpstreamMessage(body []byte, contentType string) string {
 	}
 	var probe map[string]any
 	if err := json.Unmarshal(body, &probe); err != nil {
-		return bodyStr
+		return sanitizeResponseBody([]byte(bodyStr), 200)
 	}
 	if v, ok := probe["error"].(string); ok && v != "" {
 		return v
@@ -67,5 +67,5 @@ func extractUpstreamMessage(body []byte, contentType string) string {
 	if v, ok := probe["message"].(string); ok && v != "" {
 		return v
 	}
-	return bodyStr
+	return sanitizeResponseBody([]byte(bodyStr), 200)
 }

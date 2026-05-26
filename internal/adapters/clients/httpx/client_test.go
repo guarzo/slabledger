@@ -708,22 +708,41 @@ func TestClient_UpstreamErrorAttached(t *testing.T) {
 // TestClient_UpstreamError_StripsQueryString protects credentials in
 // query strings (e.g. cardladder ?key=…) from leaking into ue.Op.
 func TestClient_UpstreamError_StripsQueryString(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(422)
-		_, _ = w.Write([]byte(`{"error":"x"}`))
-	}))
-	defer srv.Close()
+	tests := []struct {
+		name         string
+		pathAndQuery string
+		wantPath     string
+		forbidden    []string
+	}{
+		{
+			name:         "key and token query params stripped",
+			pathAndQuery: "/v1/thing?key=SECRET&token=ALSO_SECRET",
+			wantPath:     "/v1/thing",
+			forbidden:    []string{"SECRET", "key=", "token="},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(422)
+				_, _ = w.Write([]byte(`{"error":"x"}`))
+			}))
+			defer srv.Close()
 
-	c := NewClient(DefaultConfig("testprov"))
-	_, err := c.Get(context.Background(), srv.URL+"/v1/thing?key=SECRET&token=ALSO_SECRET", nil, 5*time.Second)
-	var ue *UpstreamError
-	if !errors.As(err, &ue) {
-		t.Fatalf("expected UpstreamError, got %v", err)
-	}
-	if strings.Contains(ue.Op, "SECRET") || strings.Contains(ue.Op, "key=") {
-		t.Errorf("ue.Op = %q must not contain query string secrets", ue.Op)
-	}
-	if !strings.Contains(ue.Op, "/v1/thing") {
-		t.Errorf("ue.Op = %q must still contain the path", ue.Op)
+			c := NewClient(DefaultConfig("testprov"))
+			_, err := c.Get(context.Background(), srv.URL+tt.pathAndQuery, nil, 5*time.Second)
+			var ue *UpstreamError
+			if !errors.As(err, &ue) {
+				t.Fatalf("expected UpstreamError, got %v", err)
+			}
+			for _, f := range tt.forbidden {
+				if strings.Contains(ue.Op, f) {
+					t.Errorf("ue.Op = %q must not contain %q", ue.Op, f)
+				}
+			}
+			if !strings.Contains(ue.Op, tt.wantPath) {
+				t.Errorf("ue.Op = %q must still contain %q", ue.Op, tt.wantPath)
+			}
+		})
 	}
 }

@@ -702,52 +702,69 @@ func (e *testUpstreamError) Error() string {
 // SyncChannels returns an upstream error, the service reverts to in_stock AND
 // records the upstream error against the cert in FailedCerts.
 func TestListPurchases_RecordsChannelSyncFailureInFailedCerts(t *testing.T) {
-	upstream := &testUpstreamError{
-		StatusCode: 422,
-		Op:         "POST /v1/enterprise/inventory/42/sync",
-		Message:    "No active channel configured for: shopify",
-	}
-
-	certNum := "CERT-1"
-	purchase := &inventory.Purchase{
-		ID:                 "purchase-sync-fail",
-		CertNumber:         certNum,
-		DHInventoryID:      42,
-		DHCardID:           7,
-		ReviewedPriceCents: 50000,
-	}
-
-	lookup := &mockPurchaseLookup{
-		purchases: map[string]*inventory.Purchase{certNum: purchase},
-	}
-
-	updateCalls := 0
-	lister := &mockInventoryListerWithRotator{
-		updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
-			updateCalls++
-			return upd.ListingPriceCents, nil
+	tests := []struct {
+		name     string
+		upstream *testUpstreamError
+	}{
+		{
+			name: "422 channel-not-configured",
+			upstream: &testUpstreamError{
+				StatusCode: 422,
+				Op:         "POST /v1/enterprise/inventory/42/sync",
+				Message:    "No active channel configured for: shopify",
+			},
 		},
-		syncFn: func(_ context.Context, _ int, _ []string) error {
-			return upstream
+		{
+			name: "500 upstream",
+			upstream: &testUpstreamError{
+				StatusCode: 500,
+				Op:         "POST /v1/enterprise/inventory/42/sync",
+				Message:    "boom",
+			},
 		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certNum := "CERT-1"
+			purchase := &inventory.Purchase{
+				ID:                 "purchase-sync-fail",
+				CertNumber:         certNum,
+				DHInventoryID:      42,
+				DHCardID:           7,
+				ReviewedPriceCents: 50000,
+			}
 
-	svc := newTestService(t, lookup, WithDHListingLister(lister))
-	result := svc.ListPurchases(context.Background(), []string{certNum})
+			lookup := &mockPurchaseLookup{
+				purchases: map[string]*inventory.Purchase{certNum: purchase},
+			}
 
-	if result.Listed != 0 {
-		t.Errorf("Listed = %d, want 0 (channel sync failed)", result.Listed)
-	}
-	gotErr, ok := result.FailedCerts[certNum]
-	if !ok {
-		t.Fatalf("FailedCerts missing %q; got %v", certNum, result.FailedCerts)
-	}
-	var ue *testUpstreamError
-	if !errors.As(gotErr, &ue) {
-		t.Fatalf("FailedCerts[%q] = %v; expected to wrap *testUpstreamError", certNum, gotErr)
-	}
-	if ue.StatusCode != 422 {
-		t.Errorf("ue.StatusCode = %d, want 422", ue.StatusCode)
+			lister := &mockInventoryListerWithRotator{
+				updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
+					return upd.ListingPriceCents, nil
+				},
+				syncFn: func(_ context.Context, _ int, _ []string) error {
+					return tt.upstream
+				},
+			}
+
+			svc := newTestService(t, lookup, WithDHListingLister(lister))
+			result := svc.ListPurchases(context.Background(), []string{certNum})
+
+			if result.Listed != 0 {
+				t.Errorf("Listed = %d, want 0 (channel sync failed)", result.Listed)
+			}
+			gotErr, ok := result.FailedCerts[certNum]
+			if !ok {
+				t.Fatalf("FailedCerts missing %q; got %v", certNum, result.FailedCerts)
+			}
+			var ue *testUpstreamError
+			if !errors.As(gotErr, &ue) {
+				t.Fatalf("FailedCerts[%q] = %v; expected to wrap *testUpstreamError", certNum, gotErr)
+			}
+			if ue.StatusCode != tt.upstream.StatusCode {
+				t.Errorf("ue.StatusCode = %d, want %d", ue.StatusCode, tt.upstream.StatusCode)
+			}
+		})
 	}
 }
 
