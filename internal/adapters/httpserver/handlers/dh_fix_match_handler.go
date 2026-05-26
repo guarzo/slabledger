@@ -116,7 +116,8 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadGateway, pushErr.Error())
 		default:
 			h.logger.Error(ctx, "fix match: push inventory", observability.Err(pushErr))
-			writeError(w, http.StatusBadGateway, "DH API error")
+			status, msg := dhErrorStatus(pushErr)
+			writeError(w, status, msg)
 		}
 		return
 	}

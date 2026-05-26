@@ -163,6 +163,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	sort.Strings(sortedCerts)
 
 	listed, synced, skipped := 0, 0, 0
+	failedCerts := map[string]error{}
 	for _, cn := range sortedCerts {
 		p := purchases[cn]
 		// If pending DH push, do inline match + push first.
@@ -173,6 +174,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			}
 			invID := s.inlineMatchAndPush(ctx, p)
 			if invID == 0 {
+				failedCerts[cn] = errors.New("inline match/push failed")
 				skipped++
 				continue // unmatched or failed — skip listing
 			}
@@ -186,6 +188,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.String("cert", p.CertNumber),
 				observability.String("purchaseID", p.ID),
 				observability.String("dhPushStatus", string(p.DHPushStatus)))
+			failedCerts[cn] = fmt.Errorf("not enrolled in DH push pipeline (status %s)", p.DHPushStatus)
 			skipped++
 			continue
 		}
@@ -200,6 +203,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			s.logger.Warn(ctx, "dh listing: no committed price; skipping list transition",
 				observability.String("cert", p.CertNumber),
 				observability.String("purchaseID", p.ID))
+			failedCerts[cn] = errors.New("no committed price; skipped list transition")
 			skipped++
 			continue
 		}
@@ -236,6 +240,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 							observability.Err(resetErr))
 					}
 				}
+				failedCerts[cn] = err
 			} else if errors.Is(err, ErrPSAKeysExhausted) {
 				s.logger.Warn(ctx, "dh listing: PSA keys exhausted — deferring list",
 					observability.String("cert", p.CertNumber),
@@ -256,17 +261,19 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				// purchase plus every untouched one as skipped so the result
 				// invariant Listed + Synced + Skipped == Total holds.
 				return DHListingResult{
-					Listed:  listed,
-					Synced:  synced,
-					Skipped: len(purchases) - listed - synced,
-					Total:   len(purchases),
-					Error:   err,
+					Listed:      listed,
+					Synced:      synced,
+					Skipped:     len(purchases) - listed - synced,
+					Total:       len(purchases),
+					Error:       err,
+					FailedCerts: nilIfEmpty(failedCerts),
 				}
 			} else {
 				s.logger.Warn(ctx, "dh listing: status update failed",
 					observability.String("cert", p.CertNumber),
 					observability.Int("inventoryID", p.DHInventoryID),
 					observability.Err(err))
+				failedCerts[cn] = err
 			}
 			skipped++
 			continue
@@ -279,6 +286,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.String("cert", p.CertNumber),
 				observability.Int("inventoryID", p.DHInventoryID),
 				observability.Err(err))
+			failedCerts[cn] = err
 			// Revert status so the item doesn't stay "listed" without channel sync.
 			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
 				Status: inventory.DHStatusInStock,
@@ -312,6 +320,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				s.logger.Error(ctx, "dh listing: failed to marshal channels",
 					observability.String("cert", p.CertNumber),
 					observability.Err(marshalErr))
+				failedCerts[cn] = marshalErr
 				listed--
 				skipped++
 				continue
@@ -326,6 +335,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			}); persistErr != nil {
 				s.logger.Error(ctx, "dh listing: failed to persist listed status — decrementing listed count",
 					observability.String("cert", p.CertNumber), observability.Err(persistErr))
+				failedCerts[cn] = persistErr
 				listed--
 				skipped++
 				continue
@@ -370,5 +380,14 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			observability.Int("certs", len(certNumbers)))
 	}
 
-	return DHListingResult{Listed: listed, Synced: synced, Skipped: skipped, Total: len(purchases)}
+	return DHListingResult{Listed: listed, Synced: synced, Skipped: skipped, Total: len(purchases), FailedCerts: nilIfEmpty(failedCerts)}
+}
+
+// nilIfEmpty returns nil when the map is empty so FailedCerts stays nil on
+// fully-successful runs (avoids a non-nil empty map in the result).
+func nilIfEmpty(m map[string]error) map[string]error {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
