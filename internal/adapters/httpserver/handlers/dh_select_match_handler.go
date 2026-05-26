@@ -130,7 +130,8 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadGateway, pushErr.Error())
 		default:
 			h.logger.Error(ctx, "select match: push inventory", observability.Err(pushErr))
-			writeError(w, http.StatusBadGateway, "DH API error")
+			status, msg := dhErrorStatus(pushErr)
+			writeError(w, status, msg)
 		}
 		return
 	}

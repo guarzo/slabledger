@@ -80,7 +80,8 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 	importResp, importErr := h.psaImporter.PSAImport(ctx, []dh.PSAImportItem{item})
 	if importErr != nil {
 		h.logger.Error(ctx, "retry match: PSA import", observability.Err(importErr))
-		writeError(w, http.StatusBadGateway, "DH API error")
+		status, msg := dhErrorStatus(importErr)
+		writeError(w, status, msg)
 		return
 	}
 

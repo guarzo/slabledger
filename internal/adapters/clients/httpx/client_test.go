@@ -3,6 +3,7 @@ package httpx
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -650,6 +651,98 @@ func TestExtractHTMLSummary(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := extractHTMLSummary(tt.html)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestClient_UpstreamErrorAttached(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     int
+		body       string
+		ct         string
+		wantStatus int
+		wantMsg    string
+	}{
+		{name: "422 json error", status: 422, body: `{"error":"No active channel"}`, ct: "application/json", wantStatus: 422, wantMsg: "No active channel"},
+		{name: "500 plain", status: 500, body: "boom", ct: "text/plain", wantStatus: 500, wantMsg: "boom"},
+		{name: "404 json message", status: 404, body: `{"message":"gone"}`, ct: "application/json", wantStatus: 404, wantMsg: "gone"},
+		{name: "401 auth", status: 401, body: "no", ct: "text/plain", wantStatus: 401, wantMsg: "no"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.ct != "" {
+					w.Header().Set("Content-Type", tt.ct)
+				}
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			c := NewClient(DefaultConfig("testprov"))
+			_, err := c.Get(context.Background(), srv.URL+"/v1/thing", nil, 5*time.Second)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			var ue *UpstreamError
+			if !errors.As(err, &ue) {
+				t.Fatalf("expected UpstreamError in chain, got %v", err)
+			}
+			if ue.StatusCode != tt.wantStatus {
+				t.Errorf("StatusCode = %d, want %d", ue.StatusCode, tt.wantStatus)
+			}
+			if ue.Message != tt.wantMsg {
+				t.Errorf("Message = %q, want %q", ue.Message, tt.wantMsg)
+			}
+			if ue.Provider != "testprov" {
+				t.Errorf("Provider = %q, want %q", ue.Provider, "testprov")
+			}
+			if !strings.Contains(ue.Op, "/v1/thing") {
+				t.Errorf("Op = %q, want it to contain %q", ue.Op, "/v1/thing")
+			}
+		})
+	}
+}
+
+// TestClient_UpstreamError_StripsQueryString protects credentials in
+// query strings (e.g. cardladder ?key=…) from leaking into ue.Op.
+func TestClient_UpstreamError_StripsQueryString(t *testing.T) {
+	tests := []struct {
+		name         string
+		pathAndQuery string
+		wantPath     string
+		forbidden    []string
+	}{
+		{
+			name:         "key and token query params stripped",
+			pathAndQuery: "/v1/thing?key=SECRET&token=ALSO_SECRET",
+			wantPath:     "/v1/thing",
+			forbidden:    []string{"SECRET", "key=", "token="},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(422)
+				_, _ = w.Write([]byte(`{"error":"x"}`))
+			}))
+			defer srv.Close()
+
+			c := NewClient(DefaultConfig("testprov"))
+			_, err := c.Get(context.Background(), srv.URL+tt.pathAndQuery, nil, 5*time.Second)
+			var ue *UpstreamError
+			if !errors.As(err, &ue) {
+				t.Fatalf("expected UpstreamError, got %v", err)
+			}
+			for _, f := range tt.forbidden {
+				if strings.Contains(ue.Op, f) {
+					t.Errorf("ue.Op = %q must not contain %q", ue.Op, f)
+				}
+			}
+			if !strings.Contains(ue.Op, tt.wantPath) {
+				t.Errorf("ue.Op = %q must still contain %q", ue.Op, tt.wantPath)
+			}
 		})
 	}
 }

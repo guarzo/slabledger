@@ -95,10 +95,19 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 		return
 	}
 	if result.Listed == 0 {
-		// Re-read the purchase to give a specific reason for the failure.
+		// Prefer the upstream reason captured per-cert by the service.
+		if certErr, ok := result.FailedCerts[p.CertNumber]; ok && certErr != nil {
+			h.logger.Warn(r.Context(), "dh listing: per-cert failure",
+				observability.Err(certErr), observability.String("purchaseId", purchaseID))
+			status, msg := dhErrorStatus(certErr)
+			writeError(w, status, msg)
+			return
+		}
+		// No per-cert error captured. Re-read the purchase to give a specific
+		// reason based on push status.
 		updated, readErr := h.service.GetPurchase(r.Context(), purchaseID)
 		if readErr != nil {
-			writeError(w, http.StatusBadGateway, "DH listing failed — check server logs for details")
+			writeError(w, http.StatusBadGateway, "DH listing failed with no recorded upstream error")
 			return
 		}
 		if updated.DHStatus == inventory.DHStatusListed {
@@ -120,11 +129,11 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 			case inventory.DHPushStatusDismissed:
 				writeError(w, http.StatusConflict, "DH push was dismissed for this purchase")
 			default:
-				writeError(w, http.StatusBadGateway, "DH push failed — will retry automatically on next sync")
+				writeError(w, http.StatusBadGateway, "DH listing failed with no recorded upstream error")
 			}
 			return
 		}
-		writeError(w, http.StatusBadGateway, "DH listing failed — check server logs for details")
+		writeError(w, http.StatusBadGateway, "DH listing failed with no recorded upstream error")
 		return
 	}
 

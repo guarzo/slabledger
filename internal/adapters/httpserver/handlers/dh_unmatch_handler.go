@@ -71,7 +71,8 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 					observability.String("purchaseID", purchase.ID),
 					observability.Int("dhInventoryID", dhID),
 					observability.Err(derr))
-				writeError(w, http.StatusBadGateway, "failed to delete DH inventory item")
+				status, msg := dhErrorStatus(derr)
+				writeError(w, status, msg)
 				return
 			}
 			h.logger.Warn(ctx, "unmatch dh: inventory not found on DH, treating as already deleted",
