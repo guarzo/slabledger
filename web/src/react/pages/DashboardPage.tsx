@@ -80,7 +80,7 @@ export default function DashboardPage() {
       )}
 
       {/* Top Performers — campaign-level */}
-      {healthData && healthData.campaigns.length > 0 && (
+      {healthData?.campaigns && healthData.campaigns.length > 0 && (
         <div className="mb-6">
           <SectionErrorBoundary sectionName="Top Performers">
             <TopPerformersSection campaigns={healthData.campaigns} />

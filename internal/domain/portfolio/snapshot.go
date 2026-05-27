@@ -87,7 +87,7 @@ func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.P
 	}
 	inHandStats := computeInHandStatsByCampaign(allData)
 
-	health := &inventory.PortfolioHealth{}
+	health := &inventory.PortfolioHealth{Campaigns: []inventory.CampaignHealth{}}
 	totalSoldCostBasis := 0
 	totalSoldNetProfit := 0
 
