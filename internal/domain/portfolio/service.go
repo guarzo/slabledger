@@ -48,10 +48,13 @@ func NewService(
 // --- Portfolio Health ---
 
 func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioHealth, error) {
-	// Load only active (non-archived) campaigns to match purchase data below.
-	// Archived campaigns are excluded from purchase data via WithExcludeArchived(),
-	// so including them here would give them a zero channel health score.
-	allCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
+	// Load all non-archived campaigns. Paused (pending) campaigns still hold
+	// deployed capital and historical sales — filtering to active-only zeros
+	// out the dashboard whenever every campaign is paused (e.g. the May 2026
+	// invoice-cadence pause). Archived campaigns are excluded from purchase
+	// data via WithExcludeArchived() so we mirror that on the campaign side
+	// by accepting both pending and active here.
+	allCampaigns, err := s.campaigns.ListCampaigns(ctx, false)
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
