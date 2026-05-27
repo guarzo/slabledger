@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import type { PortfolioHealth, PortfolioDelta, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
-import { EmptyState, StatusPill } from '../../ui';
+import { StatusPill } from '../../ui';
 import TrendArrow from '../../ui/TrendArrow';
 import styles from './HeroStatsBar.module.css';
 
@@ -44,15 +44,25 @@ export default function HeroStatsBar({
   const hasActivity = health.totalDeployedCents > 0 || health.totalRecoveredCents > 0 || health.realizedROI !== 0;
   if (!hasActivity) {
     return (
-      <div className="mb-6">
-        <EmptyState
-          icon="📊"
-          title="Welcome to SlabLedger"
-          description="Your portfolio dashboard will come alive once you start tracking."
-          compact
-          steps={['Create a campaign', 'Import PSA purchases', 'Record sales as you go']}
-        />
-      </div>
+      <section className={styles.hero} aria-label="Portfolio summary">
+        <div className={styles.roiBlock}>
+          <div className={styles.roiLabel}>Realized ROI</div>
+          <div className={styles.roiRow}>
+            <span className={clsx(styles.roiValue, styles.tMuted)}>—</span>
+          </div>
+          <div className={styles.freshness}>
+            No deployed capital yet — start a campaign to populate this dashboard.
+          </div>
+        </div>
+        <div className={styles.emptyActions}>
+          <Link to="/campaigns" className={styles.emptyCta}>
+            Create a campaign →
+          </Link>
+          <Link to="/inventory" className={styles.emptyCtaMuted}>
+            Import PSA purchases
+          </Link>
+        </div>
+      </section>
     );
   }
 

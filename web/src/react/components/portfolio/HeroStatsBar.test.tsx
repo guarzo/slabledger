@@ -245,7 +245,8 @@ describe('HeroStatsBar', () => {
         realizedROI: 0,
       });
       renderBar(health);
-      expect(screen.getByText('Welcome to SlabLedger')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /create a campaign/i })).toHaveAttribute('href', '/campaigns');
+      expect(screen.getByRole('link', { name: /import psa/i })).toHaveAttribute('href', '/inventory');
     });
   });
 });

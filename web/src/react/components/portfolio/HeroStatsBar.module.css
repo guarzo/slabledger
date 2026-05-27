@@ -208,6 +208,36 @@
   opacity: 0.8;
 }
 
+/* ── Empty-state CTAs (no activity yet) ──────────────────────────── */
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 4px;
+}
+.emptyCta {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: var(--brand-400);
+  color: #0b0d10;
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+.emptyCta:hover { filter: brightness(1.1); }
+.emptyCtaMuted {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+  padding-bottom: 1px;
+}
+.emptyCtaMuted:hover { color: var(--text); }
+
 /* ── Tablet ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .subCluster + .subCluster {
