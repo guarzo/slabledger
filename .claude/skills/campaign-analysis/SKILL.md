@@ -9,9 +9,46 @@ allowed-tools: ["Bash", "Read", "Glob", "Grep", "Edit", "Write"]
 
 ## How to use
 
-Default invocation runs Steps 0–3 (load config, fetch snapshot, present an opener). The user's follow-up routes to one of seven playbooks in `references/playbooks.md`. Session closes with Step 5 (strategy-doc sync) and Step 6 (retrospective). Named modes (`health`, `weekly`, `tuning`, `campaign <id>`, `gaps`, `dh`) live in the appendix but are rarely used — the conversational flow covers the same ground.
+Default invocation runs Steps 0–3 (read memory + state log, load config, fetch snapshot, present an opener). The user's follow-up routes to one of seven playbooks in `references/playbooks.md`. State changes get logged inline to `campaign-state-log.md` the moment they're decided (mandatory rule below). Session closes with Step 5 (strategy-doc design-intent sync) and Step 6 (cross-session learnings). Named modes (`health`, `weekly`, `tuning`, `campaign <id>`, `gaps`, `dh`) live in the appendix but are rarely used — the conversational flow covers the same ground.
 
-## Step 0 — Load operator configuration
+## Step 0 — Read persistent memory first
+
+Before reading the operator config, the strategy doc, or anything else:
+the harness has already loaded `~/.claude/projects/-workspace/memory/MEMORY.md`
+into context at session start. Skim its entries — especially the `⚠ Hard rule`
+lines at the top and any `feedback_campaign_*` / `project_*` files it points
+at. These are corrections and project-state notes that previous sessions wrote
+down so this session would not repeat their mistakes.
+
+If MEMORY.md is missing or empty, surface that to the user: *"I don't have any
+persistent learnings loaded — anything I should know that previous sessions
+would have written down?"* and proceed.
+
+## Step 0a — Read the campaign state log
+
+Read `docs/private/campaign-state-log.md`. This is the single canonical record
+of state changes (pauses, resumes, terms/cap/inclusion edits, Brady emails) in
+reverse-chronological order. The top of the file is present-tense reality.
+
+**Precedence on present-tense state (phase, current terms, cap, inclusion):**
+live API > state log > strategy doc. The state log wins over the strategy doc
+because the doc is design intent and lags behind events; the API wins over both
+because phase flips can happen on PSA's side without the operator updating either
+file. Disagreement among any of the three is a data-quality signal to surface in
+the opener.
+
+If the state log is absent, create it from the template below before drafting
+any opener, then proceed:
+
+```
+# Campaign State Log
+
+Reverse-chronological, append-only. Top = present-tense reality.
+Each entry: date, decision, campaigns affected, parameter before/after,
+rationale, who acted (operator/skill), follow-up open questions.
+```
+
+## Step 0b — Load operator configuration
 
 Read `docs/private/campaign-analysis-config.md` (see `references/config-schema.md` for the expected shape if recreating this file). This file contains:
 - Operator identity and persona
@@ -244,64 +281,14 @@ Only the cleaned text is shown to the user.
 
 ---
 
-### Step 3 legacy reference — direct snapshot fetch (debug only)
+> **Endpoint reference.** The Layer-1 domain agents in the table above each
+> own a specific endpoint family. For the exact endpoint list, jq patterns,
+> and per-endpoint procedural rules (stale-suggestion filter, insights
+> parsing, DH listing-gap promotion), see `references/opener-endpoints.md`.
+> Read it when debugging an agent or running a one-off snapshot outside
+> the multi-agent flow.
 
-The endpoint-level details below describe the underlying fetches the Layer-1
-domain agents perform on the operator's behalf. They remain useful when
-manually debugging an agent or running a one-off snapshot outside the
-multi-agent flow.
-
-**Mandatory in every opener** — fetch all of these in parallel, every time:
-
-| Endpoint | What it provides |
-|----------|------------------|
-| `GET /api/campaigns` | Name ↔ UUID resolution; filter `phase=archived` and `kind=external` |
-| `GET /api/portfolio/snapshot` | Composite: `health`, `insights`, `weeklyReview`, `weeklyHistory` (8w), `channelVelocity`, `suggestions`, `creditSummary`, `invoices` — replaces 8 individual calls |
-| `GET /api/inventory` | Per-purchase detail. The opener uses `inHandUnsoldCount` / `inHandCapitalCents` / `inTransitUnsoldCount` / `inTransitCapitalCents` already on `snapshot.health`; fetch `/api/inventory` for per-card detail |
-| `GET /api/dh/status` | Listed vs in-inventory vs pending counts |
-| `GET /api/dh/pending` | Per-item pending-push queue with `daysQueued` and `dhConfidence` (high <24h, medium <7d, low >7d) |
-| `GET /api/intelligence/niches?window=30d&limit=20` | Coverage-gap demand signal — high `opportunity_score` + zero `current_coverage` = candidate |
-| `GET /api/intelligence/campaign-signals` | Per-campaign acceleration/deceleration. Empty body has `signals: []`, `data_quality: "empty"` |
-| `GET /api/opportunities/crack` | Slabs worth cracking — capital-positive, bypasses guardrail |
-| `GET /api/opportunities/acquisition` | Raw-to-graded mispricings — feeds Playbook F |
-| `GET /api/campaigns/{id}/tuning` ×N | Grade-level ROI, `avgBuyPctOfCL`, sample sizes — one call per active campaign with ≥10 purchases, **in parallel** |
-| `GET /api/campaigns/{id}/fill-rate` ×N | Daily spend vs cap (30-day rolling) — one call per active campaign, **in parallel** |
-
-**Per-campaign fetches must be parallel, not sequential.** `/tuning` byGrade and `/fill-rate` are the highest-resolution tuning signals in the API; the opener's movers should look there before leaning on `/portfolio/suggestions`.
-
-**Procedural rules attached to specific endpoints:**
-
-- **`snapshot.suggestions`** — apply the stale-suggestion filter (drop suggestions targeting fields on a campaign whose `updatedAt` is within 72h) before surfacing any entry. Treat the remainder as one input among several; per-campaign `/tuning` + `/insights` segmentation has higher-resolution signal.
-- **`snapshot.insights`** — extract `byCharacter` (filter `soldCount ≥ 3`, sort by `roi` desc), `byGrade`, `byPriceTier`, `byCharacterGrade` standouts, and `coverageGaps` before drafting the opener. **Apply the Step 1b currentScope filter to every campaign-attributed segment row before it can drive a mover.** Listing only response keys is not analysis.
-- **`/dh/status` listing gap** — informational by default. Promote to a mover candidate ONLY if the operator config lists `dh_listing_gap` in `operationalPriorities`.
-
-For JSON shapes and field names of every endpoint above, consult `references/api-cheatsheet.md` before writing parsing code.
-
-**Conditional fetch** (use only when warranted):
-
-- `GET /api/campaigns/{id}/projections` — only when validating a specific tuning suggestion's projected impact. The endpoint is heavy; prefer `/tuning` byGrade for sizing.
-
-### Step 3a — Data quality audit
-
-After all Step 3 fetches return, before reconciliation or drafting, audit what you got.
-
-For every endpoint fetched, check:
-1. **Did it return successfully?** If any returned 4xx/5xx or empty body, name it explicitly.
-2. **Is the data fresh enough?** Flag stale data — weekly-history with `weekEnd` more than 7 days ago, intelligence endpoints with 0 rows, campaign-signals with no data, etc.
-3. **What's missing that would improve this analysis?** Surface gaps proactively — e.g., "niches returned 0 rows, coverage-gap analysis unavailable", "no crack candidates exist or endpoint needs seeding."
-4. **Were per-campaign tuning and fill-rate fetched?** These are mandatory. If they were skipped or deferred, that is a data quality failure — go back and fetch them before proceeding.
-
-Output a compact **Data sources** block at the top of the opener:
-
-    Data sources: /portfolio/snapshot {health ✓, insights ✓, weeklyReview ✓, weeklyHistory ✓, channelVelocity ✓, suggestions ✓, creditSummary ✓, invoices ✓}, /dh/{status ✓, pending ✓}, /intelligence/{niches ✓, campaign-signals ✓}, /opportunities/{crack ✓, acquisition ✓}, /campaigns/{id}/{tuning ✓, fill-rate ✓} ×N
-    Missing/degraded: /intelligence/niches (0 rows), /opportunities/crack (404)
-    Impact: coverage-gap and crack analysis unavailable this session
-
-The **Impact** line is mandatory — it tells the user what they *can't* trust in this analysis because of data gaps, before any claims are made. If everything returned cleanly, the Impact line is: `Impact: all sources healthy, no analysis gaps.`
-
-This replaces the previous `Data sources:` one-liner from the Data integrity section. The audit version is richer — it names failures and their consequences.
-
-### Step 3b — Reconciliation gate
+### Step 3e — Reconciliation gate
 
 After the data quality audit, before writing the opener. Answer three questions from **≥2 independent endpoints each**. If sources contradict, STOP and surface the contradiction instead of drafting.
 
@@ -323,13 +310,13 @@ After the data quality audit, before writing the opener. Answer three questions 
 
 No movers, no actions, no portfolio-at-a-glance — just the contradiction and a question. Resume normal analysis only after the user resolves the contradiction or tells you which source to trust.
 
-### Step 3c — Opener structure
+### Step 3f — Opener structure
 
 Present the opener as **a data-sources block, reconciliation summary, movers, conditional actions, portfolio snapshot, and close**:
 
 **Data sources block** — output from Step 3a (the data quality audit). Always first.
 
-**Reconciliation summary (1 line)** — confirms the three Step 3b checks passed. State the answers concisely. Example: *"Buying active (14 purchases this week per weekly-history, consistent with trailing mean of 12/wk per same source + createdAt dates in inventory). Sales up 18% WoW vs 4-week mean (weekly-history + health). Credit recovery tracking (summary trend matches revenue direction)."*
+**Reconciliation summary (1 line)** — confirms the three Step 3e checks passed. State the answers concisely. Example: *"Buying active (14 purchases this week per weekly-history, consistent with trailing mean of 12/wk per same source + createdAt dates in inventory). Sales up 18% WoW vs 4-week mean (weekly-history + health). Credit recovery tracking (summary trend matches revenue direction)."*
 
 **Biggest movers (1 paragraph, factual-first)** — plain language, ordered by magnitude of change. Each mover states what changed, from what to what, and which endpoints agree.
 
@@ -436,13 +423,20 @@ Route each user follow-up to a playbook. Load `references/playbooks.md` for the 
 
 ## Step 5 — Strategy doc sync
 
-Strategy doc sync runs before the retrospective because the doc is the persistent state that carries across sessions — memory doesn't. Sessions have shipped parameter changes without updating the doc, leaving the next session anchored on stale numbers. If parameters changed, campaigns moved phase, or a Brady email went out this session, update the doc here.
+Strategy doc sync updates **design intent** in `CAMPAIGN_STRATEGY.md` when
+parameters, campaign rosters, or operational mechanics have changed enough
+that the doc no longer reflects the world we operate in. It is NOT where
+state changes get recorded — those go to `campaign-state-log.md` inline
+per Inline state persistence, in the same turn as the decision. Step 5 is
+about updating the design-intent narrative, not about catching up the log.
 
 See `references/playbooks.md` for the full procedure.
 
 ## Step 6 — Retrospective
 
-Capture data gaps, partner-asks, client-side work, and lessons about the operator's edge. See `references/playbooks.md` for the full procedure.
+Capture cross-session learnings: data gaps, partner-asks, client-side work,
+and lessons about the operator's edge. State deltas do NOT go here — they
+were logged inline. See `references/playbooks.md` for the full procedure.
 
 ## Conversational guidelines
 
@@ -468,6 +462,86 @@ Capture data gaps, partner-asks, client-side work, and lessons about the operato
 5. End every response with a question that invites the user deeper.
 6. Flag risks proactively — slow inventory, duplicate accumulations, $0 buy costs, cards gated out of their suggested channel.
 7. Keep it conversational. Natural language, not bullet-heavy reports.
+
+## Inline state persistence (mandatory, in-turn)
+
+Whenever a conversation turn produces a state-changing decision — a campaign
+pause/resume, a buy-terms change, a daily-cap edit, an inclusion-list edit,
+a Brady/PSA email being drafted, a campaign created or deprecated, a
+revocation flag raised — append an entry to `docs/private/campaign-state-log.md`
+**in the same turn as the decision**. Not at end of session. Not in a new
+`YYYY-MM-DD-<topic>.md` file.
+
+The Step 6 retrospective is for cross-session *learnings* (the four buckets),
+not state. State deltas that wait for Step 6 get lost when the session ends
+early — this is the documented failure mode that motivated the rule (every
+prior session that quietly re-paused, re-resumed, or shifted terms without
+logging it has cost the next session a re-explanation cycle from the operator).
+
+**Carve-outs.** Two cases legitimately produce a separate dated file alongside
+the state-log entry:
+
+1. **Partner-asks** — `docs/private/YYYY-MM-DD-<partner>-data-ask.md`. The
+   state log gets a one-line *"drafted ask for DH on X — see file"* pointer,
+   the dated file carries the literal ask body. Partner-asks are genuinely
+   per-session artifacts.
+2. **Emails actually sent** (Brady, PSA, LGS) — preserve the literal sent body
+   in a dated file so we know what the operator transmitted. The state log
+   carries the decision + a pointer to the email file.
+
+**Everything else** — proposed-but-not-executed changes, re-pauses, parameter
+edits, cap changes, inclusion edits — goes in `campaign-state-log.md` alone.
+One running log per the standing topic ("campaigns" is one topic), not one
+file per event.
+
+## Mutations (read before any write)
+
+Every write to the SlabLedger API follows the protocol below. No exceptions.
+
+### Verb discipline
+
+The API uses `GET / POST / PUT / DELETE`. **There is no PATCH route on
+`/api/campaigns/{id}`.** A PATCH to that path returns HTTP 200 with the
+SPA's `index.html` body — the request is silently swallowed by the frontend
+catch-all route. This has burned multiple sessions; do not reach for PATCH
+on campaigns by REST instinct.
+
+PATCH IS the correct verb for per-purchase fields (`buy-cost`,
+`price-override`, `campaign`) — see the Mutations table in
+`references/playbooks.md` for the per-intent verb mapping. The campaign
+endpoints are the exception.
+
+### Write protocol for campaigns
+
+1. `GET /api/campaigns` and extract the full campaign object by `id`.
+2. Mutate the field(s) in memory (`phase`, `buyTermsCLPct`, `inclusionList`,
+   `dailySpendCapCents`, etc.).
+3. `PUT /api/campaigns/{id}` with the **complete** record as the body.
+   Partial bodies may zero unspecified fields — don't risk it.
+4. Read back via `GET /api/campaigns/{id}` (or the bulk `/api/campaigns`)
+   and verify (a) `updatedAt` advanced and (b) the changed field has the
+   new value.
+5. Emit a one-line confirmation to the user:
+   `✓ <Campaign Name> (C#): <field> <old> → <new> (updatedAt <ISO>)`.
+   No silent success.
+6. Append the change to `docs/private/campaign-state-log.md` per Inline
+   state persistence.
+
+### SPA fall-through detector
+
+Any API write response that satisfies BOTH:
+- HTTP 200 AND
+- response body starts with `<!doctype` or contains `<div id="root"`
+
+is the SPA index, not the API. Treat as a failed mutation regardless of
+HTTP code. Diagnose: wrong verb (PATCH on no-PATCH endpoint), wrong path,
+or a typo'd ID — then retry with the correct verb/path.
+
+### Approval gate
+
+Never apply any mutation silently. Present the proposed change to the
+operator, wait for explicit approval, then execute. The PUT + read-back +
+state-log triplet is the post-approval ritual.
 
 ## Data integrity
 

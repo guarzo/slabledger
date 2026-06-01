@@ -276,6 +276,56 @@ score is still valid in isolation.
 
 ---
 
+## `inventory.items[].purchase.setName`
+
+**Data semantics.** The set/product line the card belongs to as returned by the
+pricing API. For Japanese parallel cards this field contains the string
+"JAPANESE" (e.g. "JAPANESE BASE SET"); the English variant of the same character
+will have a set name without that token.
+
+**Gotcha.** Japanese parallel detection must use `setName` (contains "JAPANESE"),
+NOT `cardName`. Using a regex on `cardName` will under-count JPN cards and
+misidentify which specific cards are outliers.
+
+**Allowed uses.**
+- Filtering or grouping by language: `.setName | test("JAPANESE"; "i")`.
+- Segmenting dollar-weighted buy-pct analysis into EN vs JPN cohorts.
+
+**Forbidden uses.**
+- Using `cardName` regex to detect Japanese parallels.
+- Treating a JPN cohort with elevated buy% as a CL-match error — CL correctly
+  matches the JPN card; the over-pays reflect real acquisition cost on JPN parallels.
+
+**Source.** `/api/inventory` → `.items[].purchase.setName`.
+
+---
+
+## `campaigns[].inclusionList` (character-keyed)
+
+**Data semantics.** A list of character names (e.g. "Charizard", "Pikachu") that
+gate which cards the PSA partner will submit for a campaign. The key is the
+character name only — there is no language, set, or variant qualifier in the
+schema.
+
+**Gotcha.** English and Japanese variants of the same character share the same
+character-name key. Whitelisting or blacklisting a character affects ALL language
+variants of that character. There is no structural lever in the inclusion list to
+restrict a campaign to English-only cards.
+
+**Allowed uses.**
+- Adding or removing a character across all its variants.
+- Reporting which characters are in or out of scope.
+
+**Forbidden uses.**
+- Proposing a "whitelist English only" inclusion-list fix — the field is
+  character-keyed; JPN Charmeleon and EN Charmeleon cannot be split by this field.
+- Treating inclusion-list changes as a JPN-parallel exclusion mechanism.
+
+**Source.** `/api/campaigns` → `[].inclusionList`; also surfaced in campaign
+config endpoints.
+
+---
+
 ## Adding new rows
 
 Tier A: the Layer-4 reviewer may append rows here whenever an in-session
