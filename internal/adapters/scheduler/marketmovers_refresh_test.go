@@ -83,6 +83,8 @@ func TestSearchByCert_MatchingTitle(t *testing.T) {
 	id, _, _, _, err := s.searchByCert(context.Background(), s.getClient(), &inventory.Purchase{
 		CertNumber: "12345678",
 		CardName:   "Charizard",
+		Grader:     "PSA",
+		GradeValue: 10,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, int64(999), id, "should return the collectible ID when title matches card name")
@@ -136,6 +138,8 @@ func TestSearchByCert_CaseInsensitive(t *testing.T) {
 	id, _, _, _, err := s.searchByCert(context.Background(), s.getClient(), &inventory.Purchase{
 		CertNumber: "87654321",
 		CardName:   "Umbreon Ex",
+		Grader:     "PSA",
+		GradeValue: 10,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, int64(42), id, "title match should be case-insensitive")
@@ -276,7 +280,7 @@ func TestSearchByNameGrade_RetriesNameOnlyAfterZeroHits(t *testing.T) {
 			return
 		}
 		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
-			{"item": map[string]any{"id": float64(99), "searchTitle": "Dragonite Holo Base Set", "collectibleType": "sports-card"}},
+			{"item": map[string]any{"id": float64(99), "searchTitle": "Dragonite Holo Base Set PSA 9", "collectibleType": "sports-card"}},
 		}))
 	}))
 	defer srv.Close()
@@ -567,6 +571,37 @@ func TestTokenMatchesTitle(t *testing.T) {
 // searchByCert and searchByNameGrade — tokenized matching integration tests
 // ---------------------------------------------------------------------------
 
+// TestSearchByCertRejectsWrongGrade is the regression test for the grade-mismatch
+// bug: MM cert search returns a PSA 10 hit for a PSA 7 purchase. The function
+// must NOT accept the result.
+func TestSearchByCertRejectsWrongGrade(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(buildMMSearchResponse(t, []map[string]any{
+			{"item": map[string]any{"id": float64(99999), "masterId": float64(1234), "searchTitle": "Umbreon EX Gold Star 2005 PSA 10", "collectibleType": "sports-card"}},
+		}))
+	}))
+	defer srv.Close()
+
+	s := newMMSchedulerWithServer(srv)
+	p := &inventory.Purchase{
+		CertNumber: "146993541",
+		CardName:   "UMBREON EX-HOLO GLD.SKY, SLV.OCEAN-1ST ED.",
+		Grader:     "PSA",
+		GradeValue: 7,
+	}
+	cid, _, _, reason, err := s.searchByCert(context.Background(), s.getClient(), p)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cid != 0 {
+		t.Fatalf("expected cid=0 (grade mismatch), got %d", cid)
+	}
+	if reason != MMReasonCertTokenMismatch {
+		t.Errorf("expected reason=%s, got %s", MMReasonCertTokenMismatch, reason)
+	}
+}
+
 func TestSearch_TokenizedMatch(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -580,6 +615,8 @@ func TestSearch_TokenizedMatch(t *testing.T) {
 			purchase: &inventory.Purchase{
 				CertNumber: "12345678",
 				CardName:   "2022 POKEMON SWORD & SHIELD BRILLIANT STARS CHARIZARD VSTAR",
+				Grader:     "PSA",
+				GradeValue: 10,
 			},
 			search: func(ctx context.Context, s *MarketMoversRefreshScheduler, p *inventory.Purchase) (int64, error) {
 				id, _, _, _, err := s.searchByCert(ctx, s.getClient(), p)
