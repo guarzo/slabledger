@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 // tokenMatchesTitle checks whether a card name and an MM SearchTitle refer to the same card
@@ -47,6 +48,12 @@ func tokenMatchesTitle(cardName, searchTitle string) bool {
 		return matched == significant
 	}
 	return matched >= 2 && float64(matched)/float64(significant) >= 0.6
+}
+
+// gradeMatchesTitle is a thin wrapper around mathutil.GradeTitleMatches kept
+// for call-site readability inside this package.
+func gradeMatchesTitle(grader string, gradeValue float64, searchTitle string) bool {
+	return mathutil.GradeTitleMatches(grader, gradeValue, searchTitle)
 }
 
 // noiseWords are common tokens in PSA listing titles that are often absent, reformatted,
