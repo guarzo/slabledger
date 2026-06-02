@@ -29,10 +29,19 @@ deleted_mappings AS (
 -- Clear MM price fields ONLY on purchases whose mapping was just deleted by
 -- this migration. The next MM refresh / on-demand price will refill them.
 -- Untouched: purchases that never had a mapping (those weren't poisoned).
+--
+-- NOTE: mm_value_updated_at is intentionally NOT set to NULL here — the
+-- column is NOT NULL on production (constraint pre-dates this migration),
+-- and the zeroed value fields are sufficient signal for the MM refresh
+-- scheduler to re-resolve these rows. Original migration attempted
+-- `mm_value_updated_at = NULL` and crashed the deploy; see 2026-06-02
+-- hotfix. This SQL was hand-run on prod via SQL editor before the
+-- corrected file was committed; the migrations table was then marked
+-- clean at v12. Fresh DBs (local, integration tests) run this corrected
+-- version directly.
 UPDATE campaign_purchases
 SET mm_value_cents = 0,
     mm_trend_pct = 0,
     mm_sales_30d = 0,
-    mm_active_low_cents = 0,
-    mm_value_updated_at = NULL
+    mm_active_low_cents = 0
 WHERE cert_number IN (SELECT slab_serial FROM deleted_mappings);
