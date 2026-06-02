@@ -489,9 +489,18 @@ func (s *MarketMoversRefreshScheduler) searchByCert(ctx context.Context, client 
 	}
 	normalizedName := normalizedCardName(p)
 	for _, r := range results.Items {
-		if tokenMatchesTitle(normalizedName, r.Item.SearchTitle) {
-			return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, "", nil
+		if !tokenMatchesTitle(normalizedName, r.Item.SearchTitle) {
+			continue
 		}
+		if !gradeMatchesTitle(p.Grader, p.GradeValue, r.Item.SearchTitle) {
+			s.logger.Info(ctx, "MM: cert search candidate rejected by grade mismatch",
+				observability.String("cert", p.CertNumber),
+				observability.String("grader", p.Grader),
+				observability.Float64("gradeValue", p.GradeValue),
+				observability.String("resultTitle", r.Item.SearchTitle))
+			continue
+		}
+		return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, "", nil
 	}
 	s.logger.Info(ctx, "MM: cert search all results rejected by token match",
 		observability.String("cert", p.CertNumber),
@@ -542,23 +551,35 @@ func (s *MarketMoversRefreshScheduler) runMMNameQuery(ctx context.Context, clien
 	}
 
 	normalizedName := normalizedCardName(p)
-	top := results.Items[0]
-	if !tokenMatchesTitle(normalizedName, top.Item.SearchTitle) {
-		s.logger.Info(ctx, "MM: name search top result rejected by token match",
+	for _, r := range results.Items {
+		if !tokenMatchesTitle(normalizedName, r.Item.SearchTitle) {
+			continue
+		}
+		if !gradeMatchesTitle(p.Grader, p.GradeValue, r.Item.SearchTitle) {
+			s.logger.Info(ctx, "MM: name search candidate rejected by grade mismatch",
+				observability.String("cert", p.CertNumber),
+				observability.String("grader", p.Grader),
+				observability.Float64("gradeValue", p.GradeValue),
+				observability.String("query", query),
+				observability.String("resultTitle", r.Item.SearchTitle))
+			continue
+		}
+		s.logger.Info(ctx, "MM: resolved collectible via name search",
 			observability.String("cert", p.CertNumber),
-			observability.String("cardName", p.CardName),
-			observability.String("normalized", normalizedName),
 			observability.String("query", query),
-			observability.String("resultTitle", top.Item.SearchTitle))
-		return 0, 0, "", MMReasonNameTokenMismatch, nil
+			observability.String("resultTitle", r.Item.SearchTitle),
+			observability.Int64("collectibleId", r.Item.ID))
+		return r.Item.ID, r.Item.MasterID, r.Item.SearchTitle, "", nil
 	}
 
-	s.logger.Info(ctx, "MM: resolved collectible via name search",
+	s.logger.Info(ctx, "MM: name search all results rejected",
 		observability.String("cert", p.CertNumber),
+		observability.String("cardName", p.CardName),
+		observability.String("normalized", normalizedName),
 		observability.String("query", query),
-		observability.String("resultTitle", top.Item.SearchTitle),
-		observability.Int64("collectibleId", top.Item.ID))
-	return top.Item.ID, top.Item.MasterID, top.Item.SearchTitle, "", nil
+		observability.String("sampleResultTitle", results.Items[0].Item.SearchTitle),
+		observability.Int("resultCount", len(results.Items)))
+	return 0, 0, "", MMReasonNameTokenMismatch, nil
 }
 
 // fetchActiveLowCents returns the lowest active Buy-It-Now price for a collectible in cents.
