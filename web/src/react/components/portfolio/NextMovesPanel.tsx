@@ -4,12 +4,8 @@ import {
   useCapitalSummary,
   useGlobalInventory,
 } from '../../queries/useCampaignQueries';
-import { useLiquidationPreview } from '../../queries/useLiquidationQueries';
 import { computeInventoryMeta } from '../../pages/campaign-detail/inventory/inventoryCalcs';
 import { formatCents } from '../../utils/formatters';
-
-const DEFAULT_DISCOUNT_WITH_COMPS = 2.5;
-const DEFAULT_DISCOUNT_NO_COMPS = 10;
 
 type Tone = 'danger' | 'warning' | 'neutral';
 
@@ -30,22 +26,19 @@ const toneClass: Record<Tone, string> = {
 export default function NextMovesPanel() {
   const capitalQuery = useCapitalSummary();
   const inventoryQuery = useGlobalInventory();
-  const liquidation = useLiquidationPreview(DEFAULT_DISCOUNT_WITH_COMPS, DEFAULT_DISCOUNT_NO_COMPS);
 
   const capital = capitalQuery.data;
   const inventory = inventoryQuery.data;
 
-  // Aggregate loading/error/timestamps across all three signal sources. A
+  // Aggregate loading/error/timestamps across all signal sources. A
   // panel that claims "All clear" while one of these is still fetching or
   // errored would mislead the operator.
   const isInitialLoading =
-    (liquidation.isLoading && !liquidation.data) ||
     (capitalQuery.isLoading && !capitalQuery.data) ||
     (inventoryQuery.isLoading && !inventoryQuery.data);
-  const isError = liquidation.isError || capitalQuery.isError || inventoryQuery.isError;
-  const isAnyFetching = liquidation.isFetching || capitalQuery.isFetching || inventoryQuery.isFetching;
+  const isError = capitalQuery.isError || inventoryQuery.isError;
+  const isAnyFetching = capitalQuery.isFetching || inventoryQuery.isFetching;
   const allTimestamps = [
-    liquidation.dataUpdatedAt,
     capitalQuery.dataUpdatedAt,
     inventoryQuery.dataUpdatedAt,
   ].filter((ts): ts is number => typeof ts === 'number' && ts > 0);
@@ -57,24 +50,12 @@ export default function NextMovesPanel() {
   }, [latestUpdatedAt]);
 
   const refetchAll = () => {
-    void liquidation.refetch();
     void capitalQuery.refetch();
     void inventoryQuery.refetch();
   };
 
   const moves = useMemo<MoveRow[]>(() => {
     const out: MoveRow[] = [];
-
-    const belowCost = liquidation.data?.items?.filter((it) => it.belowCost).length ?? 0;
-    if (belowCost > 0) {
-      out.push({
-        key: 'below-cost',
-        copy: <><strong className="font-semibold tabular-nums">{belowCost}</strong> {belowCost === 1 ? 'card' : 'cards'} below cost</>,
-        to: '/reprice',
-        cta: 'Reprice',
-        tone: 'danger',
-      });
-    }
 
     const readyToList = inventory ? computeInventoryMeta(inventory).tabCounts.ready_to_list : 0;
     if (readyToList > 0) {
@@ -107,7 +88,7 @@ export default function NextMovesPanel() {
     }
 
     return out.slice(0, 3);
-  }, [capital, inventory, liquidation.data]);
+  }, [capital, inventory]);
 
   return (
     <section

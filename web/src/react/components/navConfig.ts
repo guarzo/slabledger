@@ -52,14 +52,6 @@ export const NAV_ITEMS: NavItem[] = [
     primary: true,
   },
   {
-    path: '/reprice',
-    label: 'Reprice',
-    shortLabel: 'Reprice',
-    zone: 'do',
-    group: 'scan',
-    description: 'Suggested prices',
-  },
-  {
     path: '/sell-sheet',
     label: 'Sell Sheet',
     shortLabel: 'Sheet',
