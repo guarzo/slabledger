@@ -1,5 +1,4 @@
 import { Fragment, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
@@ -158,9 +157,8 @@ export default function CampaignsTab({
                     </span>
                   </div>
                 )}
-                <Link
-                to={`/campaigns/${c.id}`}
-                className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] hover:border-[var(--brand-500)]/50 hover:bg-[var(--surface-0)] hover:-translate-y-0.5 hover:shadow-sm focus-ring transition-[color,border-color,background-color,transform,box-shadow] ${isClosed ? 'opacity-50' : ''}`}
+                <div
+                className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] ${isClosed ? 'opacity-50' : ''}`}
               >
                 {/* Phase accent bar */}
                 <div
@@ -288,7 +286,7 @@ export default function CampaignsTab({
                     />
                   </svg>
                 </div>
-              </Link>
+              </div>
               </Fragment>
             );
           })}
