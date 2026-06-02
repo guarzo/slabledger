@@ -25,7 +25,6 @@ declare module './client' {
     listCampaigns(activeOnly?: boolean): Promise<Campaign[]>;
     deleteCampaign(id: string): Promise<void>;
     createCampaign(input: CreateCampaignInput): Promise<Campaign>;
-    getCampaign(id: string): Promise<Campaign>;
     updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign>;
   }
 }
