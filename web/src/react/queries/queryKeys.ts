@@ -1,19 +1,12 @@
 export const queryKeys = {
   campaigns: {
     all: ['campaigns'] as const,
-    detail: (id: string) => ['campaigns', id] as const,
     purchases: (id: string) => ['campaigns', id, 'purchases'] as const,
     sales: (id: string) => ['campaigns', id, 'sales'] as const,
     pnl: (id: string) => ['campaigns', id, 'pnl'] as const,
-    channelPnl: (id: string) => ['campaigns', id, 'channelPnl'] as const,
-    fillRate: (id: string, days: number) => ['campaigns', id, 'fillRate', days] as const,
-    daysToSell: (id: string) => ['campaigns', id, 'daysToSell'] as const,
     inventory: (id: string) => ['campaigns', id, 'inventory'] as const,
-    tuning: (id: string) => ['campaigns', id, 'tuning'] as const,
     crackCandidates: (id: string) => ['campaigns', id, 'crackCandidates'] as const,
     expectedValues: (id: string) => ['campaigns', id, 'expectedValues'] as const,
-    activationChecklist: (id: string) => ['campaigns', id, 'activationChecklist'] as const,
-    projections: (id: string) => ['campaigns', id, 'projections'] as const,
   },
   credit: {
     summary: ['credit', 'summary'] as const,

@@ -1,5 +1,4 @@
 import { Fragment, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
@@ -158,9 +157,8 @@ export default function CampaignsTab({
                     </span>
                   </div>
                 )}
-                <Link
-                to={`/campaigns/${c.id}`}
-                className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] hover:border-[var(--brand-500)]/50 hover:bg-[var(--surface-0)] hover:-translate-y-0.5 hover:shadow-sm focus-ring transition-[color,border-color,background-color,transform,box-shadow] ${isClosed ? 'opacity-50' : ''}`}
+                <div
+                className={`group flex items-center gap-3 px-3 py-2.5 bg-[var(--surface-1)] rounded-lg border border-[var(--surface-2)] ${isClosed ? 'opacity-50' : ''}`}
               >
                 {/* Phase accent bar */}
                 <div
@@ -272,23 +270,8 @@ export default function CampaignsTab({
                   >
                     {isClosed ? '' : `${formatDollarsWhole(c.dailySpendCapCents)}/d · ${formatPct(c.buyTermsCLPct)}`}
                   </span>
-
-                  {/* Chevron */}
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--brand-500)] transition-colors"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
                 </div>
-              </Link>
+              </div>
               </Fragment>
             );
           })}

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
-import type { Campaign, CreateCampaignInput, CreatePurchaseInput, CreateSaleInput, Purchase, Sale, Invoice } from '../../types/campaigns';
+import type { CreateCampaignInput, CreatePurchaseInput, CreateSaleInput, Purchase, Sale, Invoice } from '../../types/campaigns';
 import { queryKeys } from './queryKeys';
 import { createParamQuery, createStaticQuery } from './createQuery';
 
@@ -30,18 +30,6 @@ export function useCampaigns(activeOnly: boolean) {
   });
 }
 
-export const useCampaign = createParamQuery(
-  queryKeys.campaigns.detail, (id) => api.getCampaign(id), { staleTime: CAMPAIGN_STALE_TIME },
-);
-
-export const usePurchases = createParamQuery(
-  queryKeys.campaigns.purchases, (id) => api.listPurchases(id), { staleTime: CAMPAIGN_STALE_TIME },
-);
-
-export const useSales = createParamQuery(
-  queryKeys.campaigns.sales, (id) => api.listSales(id),
-);
-
 export const useCampaignPNL = createParamQuery(
   queryKeys.campaigns.pnl, (id) => api.getCampaignPNL(id), { staleTime: ANALYTICS_STALE_TIME },
 );
@@ -57,22 +45,6 @@ export const campaignPNLQueryOptions = (id: string) => ({
   staleTime: ANALYTICS_STALE_TIME,
 });
 
-export const useChannelPNL = createParamQuery(
-  queryKeys.campaigns.channelPnl, (id) => api.getPNLByChannel(id),
-);
-
-export function useFillRate(campaignId: string, days: number = 30) {
-  return useQuery({
-    queryKey: queryKeys.campaigns.fillRate(campaignId, days),
-    queryFn: () => api.getFillRate(campaignId, days),
-    enabled: !!campaignId,
-  });
-}
-
-export const useDaysToSell = createParamQuery(
-  queryKeys.campaigns.daysToSell, (id) => api.getDaysToSell(id),
-);
-
 export function useInventory(campaignId: string, opts?: { enabled?: boolean }) {
   const query = useQuery({
     queryKey: queryKeys.campaigns.inventory(campaignId),
@@ -82,10 +54,6 @@ export function useInventory(campaignId: string, opts?: { enabled?: boolean }) {
   });
   return { ...query, data: query.data?.items, warnings: query.data?.warnings };
 }
-
-export const useTuning = createParamQuery(
-  queryKeys.campaigns.tuning, (id) => api.getCampaignTuning(id), { staleTime: ANALYTICS_STALE_TIME },
-);
 
 // Capital & Invoice queries
 
@@ -134,14 +102,6 @@ export const useExpectedValues = createParamQuery(
   queryKeys.campaigns.expectedValues, (id) => api.getExpectedValues(id),
 );
 
-export const useActivationChecklist = createParamQuery(
-  queryKeys.campaigns.activationChecklist, (id) => api.getActivationChecklist(id),
-);
-
-export const useProjections = createParamQuery(
-  queryKeys.campaigns.projections, (id) => api.getProjections(id),
-);
-
 // Credit & Invoice mutations
 
 export function useUpdateInvoice() {
@@ -173,19 +133,6 @@ export function useImportPSA() {
 }
 
 // Mutations
-
-export function useUpdateCampaign(campaignId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Partial<Campaign>) => api.updateCampaign(campaignId, data),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(queryKeys.campaigns.detail(campaignId), updated);
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.detail(campaignId) });
-    },
-  });
-}
 
 export function useCreateCampaign() {
   const queryClient = useQueryClient();

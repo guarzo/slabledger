@@ -12,12 +12,10 @@ import { APIClient } from './client';
 declare module './client' {
   interface APIClient {
     // Purchases
-    listPurchases(campaignId: string, limit?: number, offset?: number): Promise<Purchase[]>;
     createPurchase(campaignId: string, input: CreatePurchaseInput): Promise<Purchase>;
     deletePurchase(campaignId: string, purchaseId: string): Promise<void>;
 
     // Sales
-    listSales(campaignId: string, limit?: number, offset?: number): Promise<Sale[]>;
     createSale(campaignId: string, input: CreateSaleInput): Promise<Sale>;
     deleteSale(campaignId: string, purchaseId: string): Promise<void>;
 
@@ -49,20 +47,12 @@ declare module './client' {
 
 const proto = APIClient.prototype;
 
-proto.listPurchases = async function (this: APIClient, campaignId: string, limit = 50, offset = 0): Promise<Purchase[]> {
-  return this.get<Purchase[]>(`/campaigns/${campaignId}/purchases?limit=${limit}&offset=${offset}`);
-};
-
 proto.createPurchase = async function (this: APIClient, campaignId: string, input: CreatePurchaseInput): Promise<Purchase> {
   return this.post<Purchase>(`/campaigns/${campaignId}/purchases`, input);
 };
 
 proto.deletePurchase = async function (this: APIClient, campaignId: string, purchaseId: string): Promise<void> {
   await this.deleteResource(`/campaigns/${campaignId}/purchases/${purchaseId}`);
-};
-
-proto.listSales = async function (this: APIClient, campaignId: string, limit = 50, offset = 0): Promise<Sale[]> {
-  return this.get<Sale[]>(`/campaigns/${campaignId}/sales?limit=${limit}&offset=${offset}`);
 };
 
 proto.createSale = async function (this: APIClient, campaignId: string, input: CreateSaleInput): Promise<Sale> {
