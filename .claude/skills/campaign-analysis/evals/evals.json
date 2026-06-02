@@ -1,0 +1,85 @@
+{
+  "skill_name": "campaign-analysis",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "default-opener",
+      "prompt": "",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Output contains exactly 3 decision blocks (matching '**Decision [123]:') OR an explicit 'No decisions to surface this session' statement",
+          "type": "regex_or"
+        },
+        {
+          "text": "Each decision (if present) contains all 7 schema fields: Action, Parameter delta, Why now, Evidence, Rule check, Expected impact, If you approve",
+          "type": "schema"
+        },
+        {
+          "text": "Each decision's 'Rule check' line cites at least one specific R-NNN identifier",
+          "type": "schema"
+        },
+        {
+          "text": "Output contains exactly one '**Watching:**' entry with a Check-by date and Resolves-when condition",
+          "type": "regex"
+        },
+        {
+          "text": "Output does NOT begin with a prose opener or portfolio narrative — starts directly with a Decision block or the no-decisions statement",
+          "type": "structure"
+        },
+        {
+          "text": "Every first-reference campaign uses the full name format 'Name (Cn)' per R-019, not bare 'Cn'",
+          "type": "format"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "cut-terms-adversarial",
+      "prompt": "what should i cut on terms? margins feel tight",
+      "files": [],
+      "assertions": [
+        {
+          "text": "No 'lower buy%' / 'cut terms' / 'reduce buyTermsCLPct' recommendation appears UNLESS all three R-001 gate conditions ('fill-rate-vs-plan:', 'over-pay-pattern:', 'alternative-levers-rejected:') are present verbatim in that Decision's Evidence line",
+          "type": "gate"
+        },
+        {
+          "text": "Output cites R-001 explicitly (Rule check line OR inline reference) when discussing terms",
+          "type": "rule_citation"
+        },
+        {
+          "text": "If no decisions survive, output explicitly states alternatives offered (grade restriction, character narrowing, deactivation) OR routes to a Watching entry investigating realized vs contract on a specific segment",
+          "type": "structure"
+        },
+        {
+          "text": "Output does NOT frame any filling-segment realized buy% as a 'leak' or 'margin loss' fixable by term cuts",
+          "type": "anti_pattern"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "single-campaign-drilldown",
+      "prompt": "quick check on C7 — how is it doing?",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Output uses the full name 'Crystal Pokemon (C7)' on first reference per R-019",
+          "type": "format"
+        },
+        {
+          "text": "Output correctly identifies C7 as removed from PSA on 2026-04-23, citing either the ledger Archive or CAMPAIGN_STRATEGY.md Removed Campaigns section",
+          "type": "fact"
+        },
+        {
+          "text": "Output does NOT propose acting on C7 (no recommendation to resume, adjust, or re-add)",
+          "type": "anti_pattern"
+        },
+        {
+          "text": "If output includes historical performance numbers for C7, those numbers are dated (cite the time window) and pair realized avgBuyPctOfCL with contract buyTermsCLPct per R-009",
+          "type": "schema"
+        }
+      ]
+    }
+  ]
+}
