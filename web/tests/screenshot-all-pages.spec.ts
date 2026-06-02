@@ -62,7 +62,6 @@ const PAGES = [
   { name: 'inventory', path: '/inventory' },
   { name: 'inventory-expanded', path: '/inventory', expandRow: true, desktopOnly: true },
   { name: 'sell-sheet', path: '/sell-sheet' },
-  { name: 'reprice', path: '/reprice' },
   { name: 'scan', path: '/scan' },
   // Explicit Users tab — without this the page captured the default Stats tab,
   // making admin-users.png byte-identical to admin-stats.png on mobile.
