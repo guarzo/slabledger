@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { AgingItem, EVPortfolio } from '../../../../types/campaigns';
-import type { TabCounts, FilterTab } from './inventoryCalcs';
+import type { TabCounts, FilterTab, PriceBand, PriceBandCounts } from './inventoryCalcs';
 import { formatCents, formatPct } from '../../../utils/formatters';
 import { formatPL } from './utils';
 import { Button } from '../../../ui';
@@ -23,6 +23,9 @@ export interface InventoryHeaderProps {
   filterTab: FilterTab;
   setFilterTab: (tab: FilterTab) => void;
   tabCounts: TabCounts;
+  priceBand: PriceBand;
+  setPriceBand: (b: PriceBand) => void;
+  priceBandCounts: PriceBandCounts;
   debouncedSearch: string;
   selected: ReadonlySet<string>;
   campaignId?: string;
@@ -37,7 +40,7 @@ export default function InventoryHeader({
   showEV, evPortfolio,
   searchQuery, setSearchQuery,
   showAll, setShowAll, filterTab, setFilterTab,
-  tabCounts, debouncedSearch,
+  tabCounts, priceBand, setPriceBand, priceBandCounts, debouncedSearch,
   selected,
   campaignId,
   onDeselectMissingCL, onHighlightMissingCL,
@@ -47,6 +50,14 @@ export default function InventoryHeader({
     if (selected.size === 0) return [];
     return items.filter(i => selected.has(i.purchase.id) && !i.purchase.clValueCents).map(i => i.purchase.id);
   }, [items, selected]);
+
+  const priceBands = useMemo(() => [
+    { key: 'lt50' as const, label: '<$50', count: priceBandCounts.lt50 },
+    { key: '50to100' as const, label: '$50–100', count: priceBandCounts['50to100'] },
+    { key: '100to250' as const, label: '$100–250', count: priceBandCounts['100to250'] },
+    { key: '250to500' as const, label: '$250–500', count: priceBandCounts['250to500'] },
+    { key: 'gte500' as const, label: '$500+', count: priceBandCounts.gte500 },
+  ], [priceBandCounts]);
 
   const primary = useMemo(() => [
     { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
@@ -232,6 +243,41 @@ export default function InventoryHeader({
                 </button>
               );
             })}
+          </div>
+        )}
+        {/* Price-band pill row — independent of tab/showAll/search; composes with all of them.
+            Built for in-person liquidation triage where the operator wants to surface
+            "everything in this dollar tier" fast. Bands hide at count=0 unless active.
+            The whole row is hidden when no band has any items AND no band is active,
+            so an empty/priceless inventory doesn't show a label-only row. */}
+        {(priceBands.some(b => b.count > 0) || priceBand !== 'all') && (
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
+            <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-[var(--text-muted)] mr-1">Price</span>
+            {priceBands.map(band => {
+              const isActive = priceBand === band.key;
+              if (band.count === 0 && !isActive) return null;
+              return (
+                <button
+                  key={band.key}
+                  type="button"
+                  onClick={() => setPriceBand(isActive ? 'all' : band.key)}
+                  aria-pressed={isActive}
+                  className={pillClass(isActive, 'secondary')}
+                >
+                  {band.label}
+                  <span className={countClass(isActive, 'secondary')}>{band.count}</span>
+                </button>
+              );
+            })}
+            {priceBand !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setPriceBand('all')}
+                className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] underline-offset-2 hover:underline ml-1"
+              >
+                Clear
+              </button>
+            )}
           </div>
         )}
       </div>

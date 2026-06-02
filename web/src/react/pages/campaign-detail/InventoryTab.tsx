@@ -41,6 +41,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     fixMatchTarget, setFixMatchTarget,
     sortKey, sortDir, searchQuery, setSearchQuery,
     filterTab, setFilterTab, showAll, setShowAll, debouncedSearch,
+    priceBand, setPriceBand, priceBandCounts,
     tabCounts, showEV, evPortfolio, evMap,
     filteredAndSortedItems,
     totalCost, totalMarket, fullInventoryTotals,
@@ -128,6 +129,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         filterTab={filterTab}
         setFilterTab={setFilterTab}
         tabCounts={tabCounts}
+        priceBand={priceBand}
+        setPriceBand={setPriceBand}
+        priceBandCounts={priceBandCounts}
         debouncedSearch={debouncedSearch}
         selected={selected}
         campaignId={campaignId}

@@ -23,10 +23,34 @@ export interface SummaryStats {
   totalPL: number;
 }
 
+export type PriceBand = 'all' | 'lt50' | '50to100' | '100to250' | '250to500' | 'gte500';
+
+export type PriceBandCounts = Record<Exclude<PriceBand, 'all'>, number> & { all: number };
+
 export interface InventoryMeta {
   reviewStats: ReviewStats;
   tabCounts: TabCounts;
+  priceBandCounts: PriceBandCounts;
   summary: SummaryStats;
+}
+
+/** Bucket an item by its `bestPrice` (cents) into one of the preset bands.
+    `bestPrice` is the metric the Price column shows and sorts on, so the band
+    a card lands in matches the visible Market value. Items with no price
+    (bestPrice === 0) are excluded from all band buckets. */
+export function priceBandOf(item: AgingItem): Exclude<PriceBand, 'all'> | null {
+  const cents = bestPrice(item);
+  if (cents <= 0) return null;
+  if (cents < 5000) return 'lt50';
+  if (cents < 10000) return '50to100';
+  if (cents < 25000) return '100to250';
+  if (cents < 50000) return '250to500';
+  return 'gte500';
+}
+
+export function matchesPriceBand(item: AgingItem, band: PriceBand): boolean {
+  if (band === 'all') return true;
+  return priceBandOf(item) === band;
 }
 
 export function isDHHeld(item: AgingItem): boolean {
@@ -133,6 +157,14 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
     in_hand: 0,
     all: items.length,
   };
+  const priceBandCounts: PriceBandCounts = {
+    all: items.length,
+    lt50: 0,
+    '50to100': 0,
+    '100to250': 0,
+    '250to500': 0,
+    gte500: 0,
+  };
   let totalCost = 0;
   let totalMarket = 0;
   for (const item of items) {
@@ -142,6 +174,9 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
 
     const status = getReviewStatus(item);
     if (needsAttention(item, status)) counts.needs_attention++;
+
+    const band = priceBandOf(item);
+    if (band) priceBandCounts[band]++;
 
     // Secondary-row partition: evaluate top-down, first match wins.
     if (!item.purchase.receivedAt) {
@@ -165,6 +200,7 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   return {
     reviewStats: stats,
     tabCounts: counts,
+    priceBandCounts,
     summary: { totalCost, totalMarket, totalPL: totalMarket - totalCost },
   };
 }
@@ -228,9 +264,10 @@ export function filterAndSortItems(
     sortDir: SortDir;
     evMap: Map<string, ExpectedValue>;
     pinnedIds?: ReadonlySet<string>;
+    priceBand?: PriceBand;
   },
 ): AgingItem[] {
-  const { debouncedSearch, showAll, filterTab, sortKey, sortDir, evMap } = opts;
+  const { debouncedSearch, showAll, filterTab, sortKey, sortDir, evMap, priceBand = 'all' } = opts;
 
   if (opts.pinnedIds && opts.pinnedIds.size > 0) {
     const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
@@ -263,6 +300,10 @@ export function filterAndSortItems(
         }
       });
     }
+  }
+
+  if (priceBand !== 'all') {
+    result = result.filter(i => matchesPriceBand(i, priceBand));
   }
 
   if (!showAll && !debouncedSearch.trim()) {
