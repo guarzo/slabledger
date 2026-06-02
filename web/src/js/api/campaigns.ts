@@ -50,10 +50,6 @@ proto.createCampaign = async function (this: APIClient, input: CreateCampaignInp
   return this.post<Campaign>('/campaigns', input);
 };
 
-proto.getCampaign = async function (this: APIClient, id: string): Promise<Campaign> {
-  return this.get<Campaign>(`/campaigns/${id}`);
-};
-
 proto.updateCampaign = async function (this: APIClient, id: string, data: Partial<Campaign>): Promise<Campaign> {
   return this.put<Campaign>(`/campaigns/${id}`, data);
 };
