@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 // tokenMatchesTitle checks whether a card name and an MM SearchTitle refer to the same card
@@ -47,6 +48,44 @@ func tokenMatchesTitle(cardName, searchTitle string) bool {
 		return matched == significant
 	}
 	return matched >= 2 && float64(matched)/float64(significant) >= 0.6
+}
+
+// gradeMatchesTitle returns true when the searchTitle clearly mentions the purchase's
+// (grader, gradeValue). MM's `collectibleId` is grade-specific, so accepting a
+// wrong-grade title means every downstream price (avgPrice, sales comps, lastSold)
+// will reflect a different grade — typically PSA 10, the most-traded variant.
+//
+// We require the searchTitle to contain the token `"<grader> <grade>"` (e.g. "PSA 10",
+// "BGS 9.5"). If the title contains no grade for the purchase's grader at all, we
+// return false: an unverifiable grade is treated as a mismatch because the empirical
+// failure mode is silently mapping to PSA 10.
+func gradeMatchesTitle(grader string, gradeValue float64, searchTitle string) bool {
+	g := strings.ToUpper(strings.TrimSpace(grader))
+	if g == "" {
+		g = "PSA"
+	}
+	title := strings.ToUpper(searchTitle)
+	wantGrade := strings.ToUpper(mathutil.FormatGrade(gradeValue))
+	idx := 0
+	for {
+		hit := strings.Index(title[idx:], g+" ")
+		if hit < 0 {
+			return false
+		}
+		start := idx + hit + len(g) + 1
+		end := start
+		for end < len(title) && title[end] != ' ' {
+			end++
+		}
+		token := title[start:end]
+		if token == wantGrade {
+			return true
+		}
+		idx = end
+		if idx >= len(title) {
+			return false
+		}
+	}
 }
 
 // noiseWords are common tokens in PSA listing titles that are often absent, reformatted,
