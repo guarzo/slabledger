@@ -194,7 +194,13 @@ func (s *MarketMoversRefreshScheduler) PriceSinglePurchase(ctx context.Context, 
 			observability.Err(err))
 	}
 
-	if mapping == nil {
+	if mapping == nil ||
+		(mapping.SearchTitle != "" && !gradeMatchesTitle(p.Grader, p.GradeValue, mapping.SearchTitle)) {
+		if mapping != nil {
+			s.logger.Info(ctx, "MM price: cached mapping rejected by grade mismatch, will re-resolve",
+				observability.String("cert", p.CertNumber),
+				observability.String("cachedTitle", mapping.SearchTitle))
+		}
 		cid, mid, searchTitle, reason, resolveErr := s.resolveCollectibleID(ctx, client, p)
 		if resolveErr != nil {
 			s.recordMMError(ctx, p.ID, MMReasonAPIError)
@@ -295,6 +301,15 @@ func (s *MarketMoversRefreshScheduler) runOnce(ctx context.Context) error {
 
 		// Resolve collectible ID — use cached mapping or search the API
 		mapping, hasCached := mappingByCert[p.CertNumber]
+		if hasCached && mapping.SearchTitle != "" &&
+			!gradeMatchesTitle(p.Grader, p.GradeValue, mapping.SearchTitle) {
+			s.logger.Info(ctx, "MM refresh: cached mapping rejected by grade mismatch, will re-resolve",
+				observability.String("cert", p.CertNumber),
+				observability.String("grader", p.Grader),
+				observability.Float64("gradeValue", p.GradeValue),
+				observability.String("cachedTitle", mapping.SearchTitle))
+			hasCached = false
+		}
 		if !hasCached {
 			cid, mid, searchTitle, reason, err := s.resolveCollectibleID(ctx, client, p)
 			if err != nil {
