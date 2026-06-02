@@ -9,7 +9,7 @@ import { api } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
 import type { SortKey, SortDir } from './utils';
 import { computeInventoryMeta, computeTotals, filterAndSortItems } from './inventoryCalcs';
-import type { FilterTab } from './inventoryCalcs';
+import type { FilterTab, PriceBand } from './inventoryCalcs';
 import { useInventorySelection } from './useInventorySelection';
 import { useDHActions } from './useDHActions';
 import { usePricingActions } from './usePricingActions';
@@ -23,6 +23,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
+  const [priceBand, setPriceBand] = useState<PriceBand>('all');
   const userTabChosenRef = useRef(false);
   const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -71,7 +72,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [items, selection.selected.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { reviewStats, tabCounts, summary } = useMemo(
+  const { reviewStats, tabCounts, priceBandCounts, summary } = useMemo(
     () => computeInventoryMeta(items),
     [items],
   );
@@ -109,7 +110,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     selection.setPinnedIds(prev => prev.size > 0 ? new Set() : prev);
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
     mobileScrollRef.current?.scrollTo({ top: 0 });
-  }, [sortKey, sortDir, debouncedSearch, filterTab, showAll]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sortKey, sortDir, debouncedSearch, filterTab, showAll, priceBand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build EV lookup map
   const showEV = !!campaignId && evPortfolio && evPortfolio.items?.length > 0 && evPortfolio.minDataPoints >= 30;
@@ -131,8 +132,9 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       sortDir,
       evMap,
       pinnedIds: selection.pinnedIds,
+      priceBand,
     }),
-    [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, selection.pinnedIds],
+    [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, selection.pinnedIds, priceBand],
   );
 
   const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
@@ -206,8 +208,9 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     fixMatchTarget: dhActions.fixMatchTarget, setFixMatchTarget: dhActions.setFixMatchTarget,
     sortKey, sortDir, searchQuery, setSearchQuery,
     filterTab, setFilterTab: chooseFilterTab,
+    priceBand, setPriceBand,
     showAll, setShowAll, debouncedSearch,
-    reviewStats, tabCounts, showEV: !!showEV, evPortfolio, evMap,
+    reviewStats, tabCounts, priceBandCounts, showEV: !!showEV, evPortfolio, evMap,
     filteredAndSortedItems,
     totalCost, totalMarket, totalPL, fullInventoryTotals,
     handleSort, handleReviewed,
