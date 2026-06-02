@@ -247,35 +247,39 @@ export default function InventoryHeader({
         )}
         {/* Price-band pill row — independent of tab/showAll/search; composes with all of them.
             Built for in-person liquidation triage where the operator wants to surface
-            "everything in this dollar tier" fast. Bands hide at count=0 unless active. */}
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
-          <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-[var(--text-muted)] mr-1">Price</span>
-          {priceBands.map(band => {
-            const isActive = priceBand === band.key;
-            if (band.count === 0 && !isActive) return null;
-            return (
+            "everything in this dollar tier" fast. Bands hide at count=0 unless active.
+            The whole row is hidden when no band has any items AND no band is active,
+            so an empty/priceless inventory doesn't show a label-only row. */}
+        {(priceBands.some(b => b.count > 0) || priceBand !== 'all') && (
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
+            <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-[var(--text-muted)] mr-1">Price</span>
+            {priceBands.map(band => {
+              const isActive = priceBand === band.key;
+              if (band.count === 0 && !isActive) return null;
+              return (
+                <button
+                  key={band.key}
+                  type="button"
+                  onClick={() => setPriceBand(isActive ? 'all' : band.key)}
+                  aria-pressed={isActive}
+                  className={pillClass(isActive, 'secondary')}
+                >
+                  {band.label}
+                  <span className={countClass(isActive, 'secondary')}>{band.count}</span>
+                </button>
+              );
+            })}
+            {priceBand !== 'all' && (
               <button
-                key={band.key}
                 type="button"
-                onClick={() => setPriceBand(isActive ? 'all' : band.key)}
-                aria-pressed={isActive}
-                className={pillClass(isActive, 'secondary')}
+                onClick={() => setPriceBand('all')}
+                className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] underline-offset-2 hover:underline ml-1"
               >
-                {band.label}
-                <span className={countClass(isActive, 'secondary')}>{band.count}</span>
+                Clear
               </button>
-            );
-          })}
-          {priceBand !== 'all' && (
-            <button
-              type="button"
-              onClick={() => setPriceBand('all')}
-              className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] underline-offset-2 hover:underline ml-1"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {hasSearch && (
