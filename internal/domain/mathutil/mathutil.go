@@ -3,6 +3,7 @@ package mathutil
 import (
 	"math"
 	"strconv"
+	"strings"
 )
 
 // Round2 rounds a float to 2 decimal places.
@@ -33,6 +34,43 @@ func FormatGrade(v float64) string {
 		return strconv.Itoa(int(v))
 	}
 	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// GradeTitleMatches returns true when searchTitle clearly mentions
+// "<grader> <grade>" (e.g. "PSA 10", "BGS 9.5"). Used to validate MM search
+// hits whose collectibleId is grade-specific — accepting a wrong-grade title
+// silently maps a non-10 purchase to PSA-10 priced rows.
+//
+// An empty grader defaults to "PSA". When the grader isn't mentioned in the
+// title, or is mentioned only with different grade tokens, the result is false:
+// unverifiable grade is treated as a mismatch because the empirical failure
+// mode is binding to PSA 10.
+func GradeTitleMatches(grader string, gradeValue float64, searchTitle string) bool {
+	g := strings.ToUpper(strings.TrimSpace(grader))
+	if g == "" {
+		g = "PSA"
+	}
+	title := strings.ToUpper(searchTitle)
+	wantGrade := strings.ToUpper(FormatGrade(gradeValue))
+	idx := 0
+	for {
+		hit := strings.Index(title[idx:], g+" ")
+		if hit < 0 {
+			return false
+		}
+		start := idx + hit + len(g) + 1
+		end := start
+		for end < len(title) && title[end] != ' ' {
+			end++
+		}
+		if title[start:end] == wantGrade {
+			return true
+		}
+		idx = end
+		if idx >= len(title) {
+			return false
+		}
+	}
 }
 
 // ConfidenceLabel returns a confidence string ("high", "medium", "low") based on data point count.

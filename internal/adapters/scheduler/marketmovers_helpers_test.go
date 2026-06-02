@@ -22,6 +22,8 @@ func TestGradeMatchesTitle(t *testing.T) {
 		{"no grade token in title — reject (cannot verify)", "PSA", 7, "Card With No Grade Mentioned", false},
 		{"PSA 10 in middle of title", "PSA", 10, "PSA 10 Charizard 1999", true},
 		{"case insensitive", "psa", 9, "Charizard PSA 9", true},
+		{"GradeValue 0 rejects PSA 10 title", "PSA", 0, "Charizard PSA 10", false},
+		{"GradeValue 0 empty grader rejects PSA 10 title", "", 0, "Charizard PSA 10", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

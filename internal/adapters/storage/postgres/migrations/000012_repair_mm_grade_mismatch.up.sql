@@ -20,19 +20,19 @@ WITH bad AS (
              ELSE p.grade_value::TEXT
            END ||
            '([^0-9.]|$)')
+),
+deleted_mappings AS (
+    DELETE FROM mm_card_mappings
+    WHERE slab_serial IN (SELECT slab_serial FROM bad)
+    RETURNING slab_serial
 )
-DELETE FROM mm_card_mappings WHERE slab_serial IN (SELECT slab_serial FROM bad);
-
--- Clear MM price fields on purchases whose mapping was just deleted (and on any
--- whose mapping is now missing). Next MM refresh / on-demand price will refill them.
+-- Clear MM price fields ONLY on purchases whose mapping was just deleted by
+-- this migration. The next MM refresh / on-demand price will refill them.
+-- Untouched: purchases that never had a mapping (those weren't poisoned).
 UPDATE campaign_purchases
 SET mm_value_cents = 0,
     mm_trend_pct = 0,
     mm_sales_30d = 0,
     mm_active_low_cents = 0,
     mm_value_updated_at = NULL
-WHERE cert_number IS NOT NULL
-  AND cert_number <> ''
-  AND NOT EXISTS (
-    SELECT 1 FROM mm_card_mappings m WHERE m.slab_serial = campaign_purchases.cert_number
-  );
+WHERE cert_number IN (SELECT slab_serial FROM deleted_mappings);

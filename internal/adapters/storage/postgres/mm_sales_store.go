@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -19,35 +18,10 @@ type mmMappingInfo struct {
 	gradeValue    float64
 }
 
-// gradeTitleMatch returns true if the searchTitle clearly contains
-// "<grader> <grade>". Mirrors scheduler.gradeMatchesTitle but lives here
-// to avoid the postgres package depending on scheduler.
+// gradeTitleMatch is a thin wrapper around mathutil.GradeTitleMatches kept for
+// call-site readability inside this package.
 func gradeTitleMatch(grader string, gradeValue float64, searchTitle string) bool {
-	g := strings.ToUpper(strings.TrimSpace(grader))
-	if g == "" {
-		g = "PSA"
-	}
-	title := strings.ToUpper(searchTitle)
-	wantGrade := strings.ToUpper(mathutil.FormatGrade(gradeValue))
-	idx := 0
-	for {
-		hit := strings.Index(title[idx:], g+" ")
-		if hit < 0 {
-			return false
-		}
-		start := idx + hit + len(g) + 1
-		end := start
-		for end < len(title) && title[end] != ' ' {
-			end++
-		}
-		if title[start:end] == wantGrade {
-			return true
-		}
-		idx = end
-		if idx >= len(title) {
-			return false
-		}
-	}
+	return mathutil.GradeTitleMatches(grader, gradeValue, searchTitle)
 }
 
 // MMSaleCompRecord represents a stored sales comp from MarketMovers.
