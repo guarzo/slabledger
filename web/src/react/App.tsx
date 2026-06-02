@@ -23,7 +23,6 @@ import QueryProvider from './providers/QueryProvider';
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage'));
-const CampaignDetailPage = lazy(() => import('./pages/CampaignDetailPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
 const InsightsPage = lazy(() => import('./pages/InsightsPage'));
@@ -91,13 +90,6 @@ function AppContent() {
                 <ProtectedRoute>
                   <PageTransition>
                     <CampaignsPage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
-              <Route path="/campaigns/:id" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <CampaignDetailPage />
                   </PageTransition>
                 </ProtectedRoute>
               } />

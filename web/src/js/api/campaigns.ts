@@ -25,7 +25,6 @@ declare module './client' {
     listCampaigns(activeOnly?: boolean): Promise<Campaign[]>;
     deleteCampaign(id: string): Promise<void>;
     createCampaign(input: CreateCampaignInput): Promise<Campaign>;
-    getCampaign(id: string): Promise<Campaign>;
     updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign>;
   }
 }
@@ -49,10 +48,6 @@ proto.deleteCampaign = async function (this: APIClient, id: string): Promise<voi
 
 proto.createCampaign = async function (this: APIClient, input: CreateCampaignInput): Promise<Campaign> {
   return this.post<Campaign>('/campaigns', input);
-};
-
-proto.getCampaign = async function (this: APIClient, id: string): Promise<Campaign> {
-  return this.get<Campaign>(`/campaigns/${id}`);
 };
 
 proto.updateCampaign = async function (this: APIClient, id: string, data: Partial<Campaign>): Promise<Campaign> {
