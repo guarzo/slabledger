@@ -5,10 +5,50 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
+
+type mmMappingInfo struct {
+	collectibleID int64
+	searchTitle   string
+	grader        string
+	gradeValue    float64
+}
+
+// gradeTitleMatch returns true if the searchTitle clearly contains
+// "<grader> <grade>". Mirrors scheduler.gradeMatchesTitle but lives here
+// to avoid the postgres package depending on scheduler.
+func gradeTitleMatch(grader string, gradeValue float64, searchTitle string) bool {
+	g := strings.ToUpper(strings.TrimSpace(grader))
+	if g == "" {
+		g = "PSA"
+	}
+	title := strings.ToUpper(searchTitle)
+	wantGrade := strings.ToUpper(mathutil.FormatGrade(gradeValue))
+	idx := 0
+	for {
+		hit := strings.Index(title[idx:], g+" ")
+		if hit < 0 {
+			return false
+		}
+		start := idx + hit + len(g) + 1
+		end := start
+		for end < len(title) && title[end] != ' ' {
+			end++
+		}
+		if title[start:end] == wantGrade {
+			return true
+		}
+		idx = end
+		if idx >= len(title) {
+			return false
+		}
+	}
+}
 
 // MMSaleCompRecord represents a stored sales comp from MarketMovers.
 type MMSaleCompRecord struct {
@@ -54,32 +94,18 @@ func (s *MMSalesStore) UpsertSaleComp(ctx context.Context, rec MMSaleCompRecord)
 	return nil
 }
 
-// lookupCollectibleID resolves MM collectible ID from mm_card_mappings by cert number.
-func (s *MMSalesStore) lookupCollectibleID(ctx context.Context, certNumber string) (int64, error) {
-	if certNumber == "" {
-		return 0, nil
-	}
-	var id sql.NullInt64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT mm_collectible_id FROM mm_card_mappings WHERE slab_serial = $1`, certNumber,
-	).Scan(&id)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-	return id.Int64, nil
-}
-
-// lookupCollectibleIDBatch resolves MM collectible IDs for a batch of cert numbers.
-func (s *MMSalesStore) lookupCollectibleIDBatch(ctx context.Context, certs []string) (map[string]int64, error) {
-	out := make(map[string]int64, len(certs))
+// lookupCollectibleIDBatch resolves MM collectible IDs (with grade info) for a batch of cert numbers.
+func (s *MMSalesStore) lookupCollectibleIDBatch(ctx context.Context, certs []string) (map[string]mmMappingInfo, error) {
+	out := make(map[string]mmMappingInfo, len(certs))
 	if len(certs) == 0 {
 		return out, nil
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT slab_serial, mm_collectible_id FROM mm_card_mappings WHERE slab_serial = ANY($1::text[])`,
+		`SELECT m.slab_serial, m.mm_collectible_id, COALESCE(m.mm_search_title, ''),
+		        COALESCE(p.grader, 'PSA'), COALESCE(p.grade_value, 0)
+		 FROM mm_card_mappings m
+		 JOIN campaign_purchases p ON p.cert_number = m.slab_serial
+		 WHERE m.slab_serial = ANY($1::text[])`,
 		certs)
 	if err != nil {
 		return nil, err
@@ -87,12 +113,12 @@ func (s *MMSalesStore) lookupCollectibleIDBatch(ctx context.Context, certs []str
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var cert string
-		var id int64
-		if err := rows.Scan(&cert, &id); err != nil {
+		var info mmMappingInfo
+		if err := rows.Scan(&cert, &info.collectibleID, &info.searchTitle, &info.grader, &info.gradeValue); err != nil {
 			return nil, err
 		}
-		if id > 0 {
-			out[cert] = id
+		if info.collectibleID > 0 {
+			out[cert] = info
 		}
 	}
 	return out, rows.Err()
@@ -100,11 +126,30 @@ func (s *MMSalesStore) lookupCollectibleIDBatch(ctx context.Context, certs []str
 
 // GetCompSummary returns comp analytics for one cert from MM data.
 func (s *MMSalesStore) GetCompSummary(ctx context.Context, _ string, certNumber string) (*inventory.CompSummary, error) {
-	cid, err := s.lookupCollectibleID(ctx, certNumber)
+	if certNumber == "" {
+		return nil, nil
+	}
+	var cid int64
+	var searchTitle, grader string
+	var gradeValue float64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT m.mm_collectible_id, COALESCE(m.mm_search_title, ''),
+		        COALESCE(p.grader, 'PSA'), COALESCE(p.grade_value, 0)
+		 FROM mm_card_mappings m
+		 JOIN campaign_purchases p ON p.cert_number = m.slab_serial
+		 WHERE m.slab_serial = $1`,
+		certNumber,
+	).Scan(&cid, &searchTitle, &grader, &gradeValue)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("lookup MM collectible for cert %s: %w", certNumber, err)
 	}
 	if cid == 0 {
+		return nil, nil
+	}
+	if searchTitle != "" && !gradeTitleMatch(grader, gradeValue, searchTitle) {
 		return nil, nil
 	}
 	return s.compSummaryForCollectible(ctx, cid)
@@ -123,23 +168,29 @@ func (s *MMSalesStore) GetCompSummariesByKeys(ctx context.Context, keys []invent
 			certs = append(certs, k.CertNumber)
 		}
 	}
-	certToCollectible, err := s.lookupCollectibleIDBatch(ctx, certs)
+	certToInfo, err := s.lookupCollectibleIDBatch(ctx, certs)
 	if err != nil {
 		return nil, fmt.Errorf("batch lookup MM collectibles: %w", err)
 	}
 
-	// Group keys by collectible ID to avoid duplicate queries.
+	// Defense-in-depth: drop any mapping whose stored search_title doesn't match
+	// the purchase's grade. Even with grade validation in marketmovers_refresh.go,
+	// pre-existing rows from before that change may still be wrong; the
+	// daily refresh re-resolves rejected mappings on its next run.
 	cidToKeys := make(map[int64][]inventory.CompKey)
 	var cids []int64
 	for _, k := range keys {
-		cid, ok := certToCollectible[k.CertNumber]
-		if !ok || cid == 0 {
+		info, ok := certToInfo[k.CertNumber]
+		if !ok || info.collectibleID == 0 {
 			continue
 		}
-		if _, seen := cidToKeys[cid]; !seen {
-			cids = append(cids, cid)
+		if info.searchTitle != "" && !gradeTitleMatch(info.grader, info.gradeValue, info.searchTitle) {
+			continue
 		}
-		cidToKeys[cid] = append(cidToKeys[cid], k)
+		if _, seen := cidToKeys[info.collectibleID]; !seen {
+			cids = append(cids, info.collectibleID)
+		}
+		cidToKeys[info.collectibleID] = append(cidToKeys[info.collectibleID], k)
 	}
 	if len(cids) == 0 {
 		return out, nil
