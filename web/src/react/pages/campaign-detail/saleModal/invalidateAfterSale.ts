@@ -11,9 +11,6 @@ export function invalidateAfterSale(queryClient: QueryClient, campaignIds: Itera
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.purchases(cid) });
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.pnl(cid) });
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(cid) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.channelPnl(cid) });
-    queryClient.invalidateQueries({ queryKey: ['campaigns', cid, 'fillRate'] });
-    queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.daysToSell(cid) });
   }
   queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
   queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
