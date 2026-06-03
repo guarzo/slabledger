@@ -38,8 +38,8 @@ export default function InventorySelectionBar({
   if (count === 0) return null;
 
   const containerClass = isMobile
-    ? 'fixed bottom-0 inset-x-0 z-50 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-[var(--surface-2)]/95 backdrop-blur border-t border-[var(--border-subtle)] sell-sheet-no-print'
-    : 'fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[var(--surface-2)]/95 backdrop-blur border border-[var(--border-subtle)] shadow-lg sell-sheet-no-print';
+    ? 'fixed bottom-0 inset-x-0 z-50 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-[var(--surface-2)]/95 backdrop-blur border-t border-[var(--border-subtle)]'
+    : 'fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[var(--surface-2)]/95 backdrop-blur border border-[var(--border-subtle)] shadow-lg';
 
   const layoutClass = isMobile
     ? 'flex flex-wrap items-center gap-2 justify-between'

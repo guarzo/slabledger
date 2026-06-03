@@ -29,7 +29,6 @@ const InsightsPage = lazy(() => import('./pages/InsightsPage'));
 const ScanPage = lazy(() => import('./pages/ScanPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
 const PsaExchangePage = lazy(() => import('./pages/PsaExchangePage'));
-const SellSheetPage = lazy(() => import('./pages/SellSheetPage'));
 
 function AppContent() {
   const location = useLocation();
@@ -97,14 +96,6 @@ function AppContent() {
                 <ProtectedRoute>
                   <PageTransition>
                     <GlobalInventoryPage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
-              {/* Sell Sheet */}
-              <Route path="/sell-sheet" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <SellSheetPage />
                   </PageTransition>
                 </ProtectedRoute>
               } />

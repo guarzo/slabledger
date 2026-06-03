@@ -52,15 +52,6 @@ export const NAV_ITEMS: NavItem[] = [
     primary: true,
   },
   {
-    path: '/sell-sheet',
-    label: 'Sell Sheet',
-    shortLabel: 'Sheet',
-    zone: 'do',
-    group: 'scan',
-    description: 'Print or share',
-  },
-
-  {
     path: '/invoices',
     label: 'Invoices',
     shortLabel: 'Invoices',

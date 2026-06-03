@@ -20,7 +20,6 @@ export const queryKeys = {
     suggestions: ['portfolio', 'suggestions'] as const,
     weeklyReview: ['portfolio', 'weeklyReview'] as const,
     revocations: ['portfolio', 'revocations'] as const,
-    sellSheet: ['portfolio', 'sellSheet'] as const,
     globalInventory: ['portfolio', 'globalInventory'] as const,
   },
   admin: {

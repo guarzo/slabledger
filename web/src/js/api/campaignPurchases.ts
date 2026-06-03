@@ -4,7 +4,7 @@
 
 import type {
   Purchase, Sale, CreatePurchaseInput, CreateSaleInput,
-  QuickAddRequest, SellSheet,
+  QuickAddRequest,
 } from '../../types/campaigns';
 import type { PriceHint } from '../../types/pricing';
 import { APIClient } from './client';
@@ -21,9 +21,6 @@ declare module './client' {
 
     // Quick-add
     quickAddPurchase(campaignId: string, req: QuickAddRequest): Promise<Purchase>;
-
-    // Sell sheet
-    generateGlobalSellSheet(): Promise<SellSheet>;
 
     // Price override & AI suggestion
     setPriceOverride(purchaseId: string, priceCents: number, source: string): Promise<void>;
@@ -65,10 +62,6 @@ proto.deleteSale = async function (this: APIClient, campaignId: string, purchase
 
 proto.quickAddPurchase = async function (this: APIClient, campaignId: string, req: QuickAddRequest): Promise<Purchase> {
   return this.post<Purchase>(`/campaigns/${campaignId}/purchases/quick-add`, req);
-};
-
-proto.generateGlobalSellSheet = async function (this: APIClient): Promise<SellSheet> {
-  return this.get<SellSheet>('/sell-sheet');
 };
 
 proto.setPriceOverride = async function (this: APIClient, purchaseId: string, priceCents: number, source: string): Promise<void> {

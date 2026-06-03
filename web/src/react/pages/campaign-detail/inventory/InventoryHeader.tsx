@@ -113,7 +113,7 @@ export default function InventoryHeader({
           headline (Fraunces) with the supporting stats demoted to a tabular mono
           strip, plus a small cost-vs-market bar that visualizes where the unrealized
           delta sits without needing historical data. */}
-      <div className="mb-5 sell-sheet-no-print">
+      <div className="mb-5">
         {universe.totalMarket > 0 ? (
           <>
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand-400)] mb-1">
@@ -181,7 +181,7 @@ export default function InventoryHeader({
         <button
           type="button"
           onClick={() => setFilterTab('needs_attention')}
-          className="mb-4 w-full flex items-center justify-between gap-3 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-2.5 text-left hover:bg-[var(--warning)]/15 transition-colors sell-sheet-no-print"
+          className="mb-4 w-full flex items-center justify-between gap-3 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-2.5 text-left hover:bg-[var(--warning)]/15 transition-colors"
         >
           <span className="text-sm text-[var(--text)]">
             <span className="font-semibold tabular-nums">{tabCounts.needs_attention}</span>{' '}
@@ -199,10 +199,10 @@ export default function InventoryHeader({
       />
 
       {/* Crack Candidates Banner */}
-      {campaignId && <div className="sell-sheet-no-print"><CrackCandidatesBanner campaignId={campaignId} /></div>}
+      {campaignId && <div><CrackCandidatesBanner campaignId={campaignId} /></div>}
 
       {/* Filter pills + inline search/Show All — replaces the heavy ReviewSummaryBar panel */}
-      <div className="flex flex-col gap-2 mb-3 sell-sheet-no-print">
+      <div className="flex flex-col gap-2 mb-3">
         <div className="flex flex-wrap items-center gap-2">
           {!showAll && primary.map(tab => {
             const isActive = filterTab === tab.key;
@@ -283,7 +283,7 @@ export default function InventoryHeader({
       </div>
 
       {hasSearch && (
-        <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1 sell-sheet-no-print">
+        <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1">
           {filteredCount} of {items.length} cards
         </div>
       )}

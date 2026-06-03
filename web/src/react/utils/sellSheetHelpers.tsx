@@ -1,5 +1,4 @@
 import type { MarketSnapshot } from '../../types/campaigns';
-import type { SellSheetItem } from '../../types/campaigns';
 
 /** Upper-case suffixes that should stay uppercase in Pokemon card names. */
 const UPPER_SUFFIXES = new Set(['EX', 'GX', 'VMAX', 'V', 'VSTAR']);
@@ -53,11 +52,6 @@ export function checkHotSeller(snap: MarketSnapshot | undefined, targetPriceCent
   if (!snap.lastSoldCents || snap.lastSoldCents <= 0) return false;
   if (targetPriceCents <= 0) return false;
   return snap.lastSoldCents >= targetPriceCents;
-}
-
-/** Check if a SellSheetItem is a "hot seller" based on market data. */
-export function isHotSellerFromSellSheet(item: SellSheetItem): boolean {
-  return checkHotSeller(item.currentMarket, item.targetSellPrice ?? 0);
 }
 
 /**
