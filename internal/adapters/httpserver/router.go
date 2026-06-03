@@ -33,7 +33,6 @@ type Router struct {
 	pricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	pricingAPIHandler         *handlers.PricingAPIHandler
 	advisorHandler            *handlers.AdvisorHandler
-	insightsHandler           *handlers.InsightsHandler
 	aiUsageHandler            *handlers.AIStatusHandler
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
@@ -73,7 +72,6 @@ type RouterConfig struct {
 	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
 	CampaignsRepo             handlers.CertPriceLookup         // For pricing API handler
 	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
-	InsightsHandler           *handlers.InsightsHandler        // Insights overview; nil = disabled
 	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
@@ -151,10 +149,6 @@ func NewRouter(cfg RouterConfig) *Router {
 
 	if cfg.AdvisorHandler != nil {
 		rt.advisorHandler = cfg.AdvisorHandler
-	}
-
-	if cfg.InsightsHandler != nil {
-		rt.insightsHandler = cfg.InsightsHandler
 	}
 
 	if cfg.AIStatusHandler != nil {
@@ -281,9 +275,6 @@ func (rt *Router) Setup() http.Handler {
 
 	// AI Advisor routes
 	rt.registerAdvisorRoutes(mux)
-
-	// Insights overview routes
-	rt.registerInsightsRoutes(mux)
 
 	// Arbitrage opportunities routes
 	rt.registerOpportunitiesRoutes(mux)

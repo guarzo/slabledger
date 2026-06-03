@@ -323,7 +323,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		advisortool.WithExportService(exportService),
 	}
 
-	azureAIClient, advisorService, advisorCacheRepo, err := initializeAdvisorService(
+	azureAIClient, advisorService, err := initializeAdvisorService(
 		ctx, cfg, logger, db, aiCallRepo, campaignsService,
 		[]scoringadapter.ProviderOption{
 			scoringadapter.WithTuningService(tuningSvc),
@@ -390,7 +390,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CertEnrichJob:              campaignsInit.certEnrichJob,
 		PricingEnrichJob:           campaignsInit.pricingEnrichJob,
 		AdvisorService:             advisorService,
-		AdvisorCacheRepo:           advisorCacheRepo,
 		AICallRepo:                 aiCallRepo,
 		CardLadderClient:           clClient,
 		CardLadderStore:            clStore,
@@ -442,7 +441,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SuggestionsRepo:    suggestionsRepo,
 		DemandRepo:         demandRepo,
 		AdvisorService:     advisorService,
-		AdvisorCacheRepo:   advisorCacheRepo,
 		AzureAIClient:      azureAIClient,
 		AICallRepo:         aiCallRepo,
 		CLClient:           clClient,

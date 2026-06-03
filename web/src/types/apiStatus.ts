@@ -44,15 +44,6 @@ export interface PricingDiagnosticsResponse {
   recentFailures: FailureSummary[];
 }
 
-export type AdvisorAnalysisType = 'digest' | 'liquidation';
-
-export interface CachedAnalysis {
-  status: 'empty' | 'pending' | 'running' | 'complete' | 'error';
-  content?: string;
-  errorMessage?: string;
-  updatedAt?: string;
-}
-
 export interface PriceOverrideStats {
   totalUnsold: number;
   overrideCount: number;

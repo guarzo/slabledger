@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
@@ -20,9 +19,7 @@ type AdvisorHandler struct {
 	campaignsSvc interface {
 		GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error)
 	}
-	cacheStore advisor.CacheStore // may be nil if caching is not configured
-	logger     observability.Logger
-	wg         sync.WaitGroup // tracks background analysis goroutines
+	logger observability.Logger
 }
 
 // NewAdvisorHandler creates a new advisor handler.
@@ -31,151 +28,13 @@ func NewAdvisorHandler(
 	campaignsSvc interface {
 		GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error)
 	},
-	cacheStore advisor.CacheStore,
 	logger observability.Logger,
 ) *AdvisorHandler {
 	return &AdvisorHandler{
 		service:      service,
 		campaignsSvc: campaignsSvc,
-		cacheStore:   cacheStore,
 		logger:       logger,
 	}
-}
-
-// Wait blocks until all background analysis goroutines have completed.
-// Call during graceful shutdown to avoid writing to a closed database.
-func (h *AdvisorHandler) Wait() { h.wg.Wait() }
-
-// HandleGetCached returns the cached analysis result for the given type.
-func (h *AdvisorHandler) HandleGetCached(w http.ResponseWriter, r *http.Request) {
-	if requireUser(w, r) == nil {
-		return
-	}
-	if h.cacheStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "Analysis caching not configured")
-		return
-	}
-
-	analysisType, ok := parseAnalysisType(w, r)
-	if !ok {
-		return
-	}
-
-	cached, ok := serviceCall(w, r.Context(), h.logger, "failed to get cached analysis", func() (*advisor.CachedAnalysis, error) {
-		return h.cacheStore.Get(r.Context(), analysisType)
-	})
-	if !ok {
-		return
-	}
-
-	if cached == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": string(advisor.StatusEmpty)})
-		return
-	}
-
-	resp := map[string]any{
-		"status":       string(cached.Status),
-		"content":      cached.Content,
-		"errorMessage": cached.ErrorMessage,
-	}
-	if !cached.UpdatedAt.IsZero() {
-		resp["updatedAt"] = cached.UpdatedAt.Format(time.RFC3339)
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-// HandleRefreshTrigger starts a background analysis refresh and returns immediately.
-func (h *AdvisorHandler) HandleRefreshTrigger(w http.ResponseWriter, r *http.Request) {
-	if requireUser(w, r) == nil {
-		return
-	}
-	if h.cacheStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "Analysis caching not configured")
-		return
-	}
-
-	analysisType, ok := parseAnalysisType(w, r)
-	if !ok {
-		return
-	}
-
-	// Atomically acquire the refresh lock. If already running, check for stale entries.
-	lease, acquired, err := h.cacheStore.AcquireRefresh(r.Context(), analysisType)
-	if err != nil {
-		h.logger.Error(r.Context(), "failed to acquire analysis refresh", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	if !acquired {
-		// Already running — atomically force-restart if stale (> 15 minutes).
-		staleLease, staleAcquired, staleErr := h.cacheStore.ForceAcquireStale(r.Context(), analysisType, 15*time.Minute)
-		if staleErr != nil {
-			h.logger.Error(r.Context(), "failed to check stale analysis", observability.Err(staleErr))
-			writeError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-		if !staleAcquired {
-			writeJSON(w, http.StatusOK, map[string]string{"status": string(advisor.StatusRunning)})
-			return
-		}
-		lease = staleLease
-		h.logger.Warn(r.Context(), "stale running entry detected, restarting",
-			observability.String("type", string(analysisType)),
-		)
-	}
-
-	// Run the analysis in a background goroutine with an independent context.
-	bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
-		defer cancel()
-		defer func() {
-			if rv := recover(); rv != nil {
-				h.logger.Error(bgCtx, "background analysis panicked",
-					observability.String("type", string(analysisType)),
-					observability.String("panic", fmt.Sprintf("%v", rv)),
-				)
-				if saveErr := h.cacheStore.SaveResult(bgCtx, analysisType, lease, "", fmt.Sprintf("panic: %v", rv)); saveErr != nil {
-					h.logger.Error(bgCtx, "failed to save panic result", observability.Err(saveErr))
-				}
-			}
-		}()
-
-		var content string
-		var analysisErr error
-		switch analysisType {
-		case advisor.AnalysisDigest:
-			content, analysisErr = h.service.CollectDigest(bgCtx)
-		case advisor.AnalysisLiquidation:
-			content, analysisErr = h.service.CollectLiquidation(bgCtx)
-		}
-
-		errMsg := ""
-		if analysisErr != nil {
-			errMsg = analysisErr.Error()
-			h.logger.Error(bgCtx, "background analysis failed",
-				observability.String("type", string(analysisType)),
-				observability.Err(analysisErr),
-			)
-		}
-
-		if saveErr := h.cacheStore.SaveResult(bgCtx, analysisType, lease, content, errMsg); saveErr != nil {
-			h.logger.Error(bgCtx, "failed to save analysis result", observability.Err(saveErr))
-		}
-	}()
-
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": string(advisor.StatusRunning)})
-}
-
-// parseAnalysisType extracts and validates the analysis type from the request path.
-func parseAnalysisType(w http.ResponseWriter, r *http.Request) (advisor.AnalysisType, bool) {
-	t := advisor.AnalysisType(r.PathValue("type"))
-	if t != advisor.AnalysisDigest && t != advisor.AnalysisLiquidation {
-		writeError(w, http.StatusBadRequest, "Invalid analysis type")
-		return "", false
-	}
-	return t, true
 }
 
 // HandleDigest generates a weekly intelligence digest via SSE.

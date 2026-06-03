@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, CachedAnalysis, AdvisorAnalysisType, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHRetryMatchResponse, DHPushConfig, DHReconcileResponse, DHReconcileTriggerResult } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHRetryMatchResponse, DHPushConfig, DHReconcileResponse, DHReconcileTriggerResult } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
@@ -19,8 +19,6 @@ declare module './client' {
     getAdminUsers(): Promise<AdminUser[]>;
     getAdminApiUsage(): Promise<APIUsageResponse>;
     getPricingDiagnostics(): Promise<PricingDiagnosticsResponse>;
-    getAdvisorCache(type: AdvisorAnalysisType): Promise<CachedAnalysis>;
-    refreshAdvisorCache(type: AdvisorAnalysisType): Promise<void>;
     getPriceOverrideStats(): Promise<PriceOverrideStats>;
     getAIUsage(): Promise<AIUsageResponse>;
     getBackup(): Promise<Blob>;
@@ -87,23 +85,6 @@ proto.getAdminApiUsage = async function (this: APIClient): Promise<APIUsageRespo
 
 proto.getPricingDiagnostics = async function (this: APIClient): Promise<PricingDiagnosticsResponse> {
   return this.get<PricingDiagnosticsResponse>('/admin/pricing-diagnostics');
-};
-
-proto.getAdvisorCache = async function (this: APIClient, type: AdvisorAnalysisType): Promise<CachedAnalysis> {
-  return this.get<CachedAnalysis>(`/advisor/cache/${type}`);
-};
-
-proto.refreshAdvisorCache = async function (this: APIClient, type: AdvisorAnalysisType): Promise<void> {
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/advisor/refresh/${type}`,
-    { method: 'POST' }
-  );
-  if (response.status === 202) {
-    // Server returns 202 with { "status": "running" } — consume and discard.
-    await response.text();
-    return;
-  }
-  await this.expectNoContent(response);
 };
 
 proto.getPriceOverrideStats = async function (this: APIClient): Promise<PriceOverrideStats> {

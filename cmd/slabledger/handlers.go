@@ -22,7 +22,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
-	"github.com/guarzo/slabledger/internal/domain/insights"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	liquidation "github.com/guarzo/slabledger/internal/domain/liquidation"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -58,7 +57,6 @@ type handlerInputs struct {
 	SuggestionsRepo    *postgres.DHSuggestionsRepository
 	DemandRepo         *postgres.DHDemandRepository
 	AdvisorService     advisor.Service
-	AdvisorCacheRepo   *postgres.AdvisorCacheRepository
 	AzureAIClient      advisor.LLMProvider
 	AICallRepo         *postgres.AICallRepository
 	CLClient           *cardladder.Client
@@ -278,20 +276,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Advisor handler (if advisor was initialized)
 	var advisorHandler *handlers.AdvisorHandler
 	if in.AdvisorService != nil {
-		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, in.CampaignsService, in.AdvisorCacheRepo, logger)
-	}
-
-	// Insights handler composes per-campaign tuning and portfolio-wide signals
-	// for the Insights page.
-	var insightsHandler *handlers.InsightsHandler
-	if in.CampaignStore != nil && in.TuningService != nil && in.CampaignsService != nil {
-		insightsSvc := insights.NewService(insights.Deps{
-			Campaigns: in.CampaignStore,
-			Tuning:    in.TuningService,
-			Pricing:   in.CampaignsService,
-			Logger:    logger,
-		})
-		insightsHandler = handlers.NewInsightsHandler(insightsSvc, logger)
+		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, in.CampaignsService, logger)
 	}
 
 	// AI status handler — only wire tracker when an LLM provider is configured
@@ -353,7 +338,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		NichesHandler:             nichesHandler,
 		CampaignSignalsHandler:    campaignSignalsHandler,
 		LiquidationHandler:        liquidationHandler,
-		InsightsHandler:           insightsHandler,
 	}
 	// Build DHListingService from available components.
 	// Nil-safe: only create the service if at least the lister client is available.

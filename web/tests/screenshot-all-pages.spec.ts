@@ -51,7 +51,6 @@ let firstCampaignId: string | null = null;
 const PAGES = [
   { name: 'login', path: '/login', skipAuth: true },
   { name: 'dashboard', path: '/' },
-  { name: 'insights', path: '/insights' },
   { name: 'opportunities', path: '/opportunities/psa-exchange' },
   { name: 'campaigns', path: '/campaigns' },
   { name: 'campaign-detail', path: () => `/campaigns/${firstCampaignId || 'unknown'}` },
