@@ -141,7 +141,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
       {isMobile ? (
         <div className="space-y-3">
-          <label htmlFor="select-all-mobile" className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1 sell-sheet-no-print">
+          <label htmlFor="select-all-mobile" className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1">
             <input id="select-all-mobile" type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
               onChange={toggleAll} className="rounded" />
             Select all

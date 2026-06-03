@@ -7,7 +7,7 @@ import { costBasis, bestPrice } from './utils';
 
 interface PricingActionsParams {
   toast: { success: (msg: string) => void; error: (msg: string) => void };
-  invalidateInventory: (opts?: { sellSheet?: boolean }) => void;
+  invalidateInventory: () => void;
   onReviewed: () => void;
 }
 
@@ -81,14 +81,14 @@ export function usePricingActions({ toast, invalidateInventory, onReviewed }: Pr
   }, []);
 
   const handlePriceSaved = useCallback(() => {
-    invalidateInventory({ sellSheet: true });
+    invalidateInventory();
   }, [invalidateInventory]);
 
   const handleInlinePriceSave = useCallback(async (purchaseId: string, priceCents: number) => {
     try {
       await api.setReviewedPrice(purchaseId, priceCents, 'manual');
       toast.success('Price saved');
-      invalidateInventory({ sellSheet: true });
+      invalidateInventory();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to save price'));
       throw err;

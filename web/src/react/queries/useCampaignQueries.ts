@@ -13,7 +13,6 @@ function invalidatePurchaseRelatedQueries(queryClient: QueryClient, campaignId: 
   queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.pnl(campaignId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-  queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
 }
 
 /** Default stale time for campaign data (30 seconds). */
@@ -81,10 +80,6 @@ export const useWeeklyReview = createStaticQuery(
   queryKeys.portfolio.weeklyReview, () => api.getWeeklyReview(),
 );
 
-export const useGlobalSellSheet = createStaticQuery(
-  queryKeys.portfolio.sellSheet, () => api.generateGlobalSellSheet(),
-);
-
 export function useGlobalInventory() {
   const query = useQuery({
     queryKey: queryKeys.portfolio.globalInventory,
@@ -127,7 +122,6 @@ export function useImportPSA() {
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.suggestions });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
     },
   });
 }

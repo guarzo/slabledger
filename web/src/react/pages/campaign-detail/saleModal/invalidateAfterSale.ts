@@ -13,7 +13,6 @@ export function invalidateAfterSale(queryClient: QueryClient, campaignIds: Itera
     queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(cid) });
   }
   queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-  queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
   queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
   queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.weeklyReview });
   queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.channelVelocity });

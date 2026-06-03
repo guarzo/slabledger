@@ -36,16 +36,13 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   // comp panel) visible while recording.
   const [inlineSaleId, setInlineSaleId] = useState<string | null>(null);
 
-  const invalidateInventory = useCallback((opts?: { sellSheet?: boolean }) => {
+  const invalidateInventory = useCallback(() => {
     if (campaignId) {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.inventory(campaignId) });
     } else {
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'campaigns' && query.queryKey[2] === 'inventory' });
     }
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-    if (opts?.sellSheet) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.sellSheet });
-    }
   }, [campaignId, queryClient]);
 
   const handleReviewed = useCallback(() => {
@@ -177,7 +174,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   function handleInlineSaleSuccess() {
     setInlineSaleId(null);
     selection.setExpandedId(null);
-    invalidateInventory({ sellSheet: true });
+    invalidateInventory();
   }
 
   const handleDelete = useCallback(async (item: AgingItem) => {
@@ -187,7 +184,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
       await api.deletePurchase(item.purchase.campaignId, item.purchase.id);
       toast.success(`Deleted "${name}"`);
       if (selection.expandedId === item.purchase.id) selection.setExpandedId(null);
-      invalidateInventory({ sellSheet: true });
+      invalidateInventory();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to delete purchase'));
     }
