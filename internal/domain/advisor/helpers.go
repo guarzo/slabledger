@@ -6,8 +6,7 @@ import (
 )
 
 // isLLMRefusal detects common refusal patterns from Azure content filters or
-// model safety systems. These refusals should not be cached as successful results
-// because they poison the prior context for subsequent runs.
+// model safety systems. These should not be treated as successful results.
 func isLLMRefusal(content string) bool {
 	lower := strings.ToLower(strings.TrimSpace(content))
 	refusalPatterns := []string{

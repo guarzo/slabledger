@@ -75,7 +75,7 @@ type ImageGenerator interface {
 ### 1. Advisor
 
 **Package:** `internal/domain/advisor/`  
-**Scheduler:** `internal/adapters/scheduler/advisor_refresh.go` — daily at `ADVISOR_REFRESH_HOUR` (default 04:00 UTC)
+**Invocation:** on-demand via the streaming HTTP endpoints (`/api/advisor/digest`, `/api/advisor/campaign-analysis`, `/api/advisor/liquidation-analysis`).
 
 The advisor is a multi-round tool-calling agent. Each operation runs a loop:
 

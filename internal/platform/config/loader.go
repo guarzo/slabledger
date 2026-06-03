@@ -92,15 +92,6 @@ func envDurationPositive(key string, target *time.Duration) {
 	}
 }
 
-// envDurationNonNegative reads an environment variable, parses it as a non-negative duration, and assigns it to target if valid.
-func envDurationNonNegative(key string, target *time.Duration) {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d >= 0 {
-			*target = d
-		}
-	}
-}
-
 // envBool reads an environment variable, parses it as a boolean with a default, and assigns it to target.
 func envBool(key string, target *bool, defaultVal bool) {
 	if v := os.Getenv(key); v != "" {
@@ -190,11 +181,7 @@ func FromEnv(base Config) Config {
 	envDurationPositive("SNAPSHOT_ENRICH_RETRY_INTERVAL", &cfg.SnapshotEnrich.RetryInterval)
 	envIntPositive("SNAPSHOT_ENRICH_MAX_RETRIES", &cfg.SnapshotEnrich.MaxRetries)
 
-	// Advisor refresh scheduler
-	envBool("ADVISOR_REFRESH_ENABLED", &cfg.AdvisorRefresh.Enabled, true)
-	envDurationPositive("ADVISOR_REFRESH_INTERVAL", &cfg.AdvisorRefresh.Interval)
-	envDurationNonNegative("ADVISOR_REFRESH_INITIAL_DELAY", &cfg.AdvisorRefresh.InitialDelay)
-	envIntRange("ADVISOR_REFRESH_HOUR", &cfg.AdvisorRefresh.RefreshHour, -1, 23)
+	// Advisor service
 	envIntPositive("ADVISOR_MAX_TOOL_ROUNDS", &cfg.AdvisorRefresh.MaxToolRounds)
 
 	// Card Ladder scheduler

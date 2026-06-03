@@ -124,7 +124,7 @@ See `.env.example` for the complete list with descriptions. Key groups:
 - **DH**: `DH_API_BASE_URL`, `DH_ENTERPRISE_API_KEY`
 - **AI**: `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_DEPLOYMENT`
 - **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`
-- **Schedulers**: `PRICE_REFRESH_ENABLED`, `ADVISOR_REFRESH_HOUR`
+- **Schedulers**: `PRICE_REFRESH_ENABLED`
 
 ## Pricing Pipeline
 
