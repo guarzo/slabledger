@@ -29,7 +29,7 @@ vi.mock('../../../queries/useCampaignQueries', () => ({
 vi.mock('../../../queries/queryKeys', () => ({
   queryKeys: {
     campaigns: { inventory: (id: string) => ['campaigns', id, 'inventory'] },
-    portfolio: { sellSheet: ['portfolio', 'sellSheet'] },
+    portfolio: { globalInventory: ['portfolio', 'globalInventory'] },
   },
 }));
 

@@ -62,8 +62,8 @@ export default function NextMovesPanel() {
       out.push({
         key: 'ready-to-list',
         copy: <><strong className="font-semibold tabular-nums">{readyToList}</strong> ready to push to DH</>,
-        to: '/sell-sheet',
-        cta: 'Sell Sheet',
+        to: '/inventory',
+        cta: 'Inventory',
         tone: 'neutral',
       });
     }

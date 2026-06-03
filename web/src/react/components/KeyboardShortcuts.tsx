@@ -20,7 +20,6 @@ const NAV_BINDINGS: Array<{ key: string; path: string; label: string }> = [
   { key: 'i', path: '/inventory', label: 'Inventory' },
   { key: 'n', path: '/insights', label: 'Insights' },
   { key: 't', path: '/scan', label: 'Tools' },
-  { key: 's', path: '/sell-sheet', label: 'Sell Sheet' },
   { key: 'v', path: '/invoices', label: 'Invoices' },
 ];
 
