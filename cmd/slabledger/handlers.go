@@ -276,7 +276,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Advisor handler (if advisor was initialized)
 	var advisorHandler *handlers.AdvisorHandler
 	if in.AdvisorService != nil {
-		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, in.CampaignsService, logger)
+		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, logger)
 	}
 
 	// AI status handler — only wire tracker when an LLM provider is configured

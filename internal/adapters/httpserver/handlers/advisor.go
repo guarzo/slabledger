@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,31 +8,23 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
-	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // AdvisorHandler handles AI advisor analysis endpoints.
 type AdvisorHandler struct {
-	service      advisor.Service
-	campaignsSvc interface {
-		GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error)
-	}
-	logger observability.Logger
+	service advisor.Service
+	logger  observability.Logger
 }
 
 // NewAdvisorHandler creates a new advisor handler.
 func NewAdvisorHandler(
 	service advisor.Service,
-	campaignsSvc interface {
-		GetCampaign(ctx context.Context, id string) (*inventory.Campaign, error)
-	},
 	logger observability.Logger,
 ) *AdvisorHandler {
 	return &AdvisorHandler{
-		service:      service,
-		campaignsSvc: campaignsSvc,
-		logger:       logger,
+		service: service,
+		logger:  logger,
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 
 // newAdvisorHandler creates an AdvisorHandler for testing.
 func newAdvisorHandler(svc advisor.Service) *AdvisorHandler {
-	return NewAdvisorHandler(svc, nil, mocks.NewMockLogger())
+	return NewAdvisorHandler(svc, mocks.NewMockLogger())
 }
 
 // --- HandleDigest ---
