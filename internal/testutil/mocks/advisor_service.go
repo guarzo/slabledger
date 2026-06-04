@@ -2,7 +2,6 @@ package mocks
 
 import (
 	"context"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 )
@@ -51,50 +50,4 @@ func (m *MockAdvisorService) CollectLiquidation(ctx context.Context) (string, er
 		return m.CollectLiquidationFn(ctx)
 	}
 	return "", nil
-}
-
-// MockCacheStore is a test mock for advisor.CacheStore.
-type MockCacheStore struct {
-	GetFn               func(ctx context.Context, analysisType advisor.AnalysisType) (*advisor.CachedAnalysis, error)
-	MarkRunningFn       func(ctx context.Context, analysisType advisor.AnalysisType) (string, error)
-	AcquireRefreshFn    func(ctx context.Context, analysisType advisor.AnalysisType) (string, bool, error)
-	ForceAcquireStaleFn func(ctx context.Context, analysisType advisor.AnalysisType, staleThreshold time.Duration) (string, bool, error)
-	SaveResultFn        func(ctx context.Context, analysisType advisor.AnalysisType, lease, content, errMsg string) error
-}
-
-var _ advisor.CacheStore = (*MockCacheStore)(nil)
-
-func (m *MockCacheStore) Get(ctx context.Context, analysisType advisor.AnalysisType) (*advisor.CachedAnalysis, error) {
-	if m.GetFn != nil {
-		return m.GetFn(ctx, analysisType)
-	}
-	return nil, nil
-}
-
-func (m *MockCacheStore) MarkRunning(ctx context.Context, analysisType advisor.AnalysisType) (string, error) {
-	if m.MarkRunningFn != nil {
-		return m.MarkRunningFn(ctx, analysisType)
-	}
-	return "lease-1", nil
-}
-
-func (m *MockCacheStore) AcquireRefresh(ctx context.Context, analysisType advisor.AnalysisType) (string, bool, error) {
-	if m.AcquireRefreshFn != nil {
-		return m.AcquireRefreshFn(ctx, analysisType)
-	}
-	return "lease-1", true, nil
-}
-
-func (m *MockCacheStore) ForceAcquireStale(ctx context.Context, analysisType advisor.AnalysisType, staleThreshold time.Duration) (string, bool, error) {
-	if m.ForceAcquireStaleFn != nil {
-		return m.ForceAcquireStaleFn(ctx, analysisType, staleThreshold)
-	}
-	return "", false, nil
-}
-
-func (m *MockCacheStore) SaveResult(ctx context.Context, analysisType advisor.AnalysisType, lease, content, errMsg string) error {
-	if m.SaveResultFn != nil {
-		return m.SaveResultFn(ctx, analysisType, lease, content, errMsg)
-	}
-	return nil
 }

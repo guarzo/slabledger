@@ -37,7 +37,6 @@ type schedulerDeps struct {
 	CertEnrichJob              *scheduler.CertEnrichJob    // pre-built; nil if PSA not configured
 	PricingEnrichJob           *scheduler.PricingEnrichJob // pre-built; wired into inventory service as the pricing enqueuer
 	AdvisorService             advisor.Service
-	AdvisorCacheRepo           *postgres.AdvisorCacheRepository
 	AICallRepo                 *postgres.AICallRepository
 	CardLadderClient           *cardladder.Client
 	CardLadderStore            *postgres.CardLadderStore
@@ -78,8 +77,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		InventoryLister:            &inventoryListAdapter{repo: deps.PurchaseStore},
 		SnapshotRefresher:          &snapshotRefreshAdapter{svc: deps.CampaignsService},
 		SnapshotEnrichService:      deps.CampaignsService,
-		AdvisorCollector:           deps.AdvisorService,
-		AdvisorCache:               deps.AdvisorCacheRepo,
 		AICallTracker:              deps.AICallRepo,
 		CardLadderClient:           deps.CardLadderClient,
 		CardLadderStore:            deps.CardLadderStore,

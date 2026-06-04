@@ -26,14 +26,6 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/inventory', label: 'Inventory', shortLabel: 'Inventory', zone: 'browse' },
 
   {
-    path: '/insights',
-    label: 'Insights',
-    shortLabel: 'Insights',
-    zone: 'browse',
-    group: 'reports',
-    description: 'AI signals',
-  },
-  {
     path: '/opportunities/psa-exchange',
     label: 'Opportunities',
     shortLabel: 'Opps',

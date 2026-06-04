@@ -246,13 +246,11 @@ func (c *DHPriceSyncConfig) ApplyDefaults() {
 	}
 }
 
-// AdvisorRefreshConfig controls the background AI advisor analysis scheduler.
+// AdvisorRefreshConfig configures the on-demand AI advisor service. The
+// background refresh scheduler was removed when the /insights overview was
+// retired; only the per-call tool-loop bound remains.
 type AdvisorRefreshConfig struct {
-	Enabled       bool
-	Interval      time.Duration // how often to run analysis (default: 24h)
-	InitialDelay  time.Duration // delay before first run (default: 2m)
-	RefreshHour   int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 4)
-	MaxToolRounds int           // max LLM tool-calling rounds per analysis (default: 5)
+	MaxToolRounds int // max LLM tool-calling rounds per analysis (default: 5)
 }
 
 // SnapshotEnrichConfig controls the background snapshot enrichment scheduler.
