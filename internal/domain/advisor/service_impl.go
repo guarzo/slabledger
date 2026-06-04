@@ -55,7 +55,6 @@ type service struct {
 	executor      ToolExecutor
 	logger        observability.Logger
 	tracker       AICallTracker
-	cache         CacheStore
 	scoringData   ScoringDataProvider
 	gapStore      scoring.GapStore
 	maxToolRounds int
@@ -81,8 +80,7 @@ func NewService(llm LLMProvider, executor ToolExecutor, opts ...ServiceOption) S
 var _ Service = (*service)(nil)
 
 func (s *service) GenerateDigest(ctx context.Context, stream func(StreamEvent)) error {
-	sysPrompt := digestSystemPrompt + s.priorContext(ctx, AnalysisDigest)
-	_, err := s.runAnalysis(ctx, OpDigest, sysPrompt, digestUserPrompt, stream)
+	_, err := s.runAnalysis(ctx, OpDigest, digestSystemPrompt, digestUserPrompt, stream)
 	return err
 }
 
@@ -93,8 +91,7 @@ func (s *service) AnalyzeCampaign(ctx context.Context, campaignID string, stream
 }
 
 func (s *service) AnalyzeLiquidation(ctx context.Context, stream func(StreamEvent)) error {
-	sysPrompt := liquidationSystemPrompt + s.priorContext(ctx, AnalysisLiquidation)
-	_, err := s.runAnalysis(ctx, OpLiquidation, sysPrompt, liquidationUserPrompt, stream)
+	_, err := s.runAnalysis(ctx, OpLiquidation, liquidationSystemPrompt, liquidationUserPrompt, stream)
 	return err
 }
 
@@ -106,11 +103,9 @@ func (s *service) runAnalysis(ctx context.Context, operation AIOperation, system
 }
 
 func (s *service) CollectDigest(ctx context.Context) (string, error) {
-	sysPrompt := digestSystemPrompt + s.priorContext(ctx, AnalysisDigest)
-	return s.runAnalysis(ctx, OpDigest, sysPrompt, digestUserPrompt, func(StreamEvent) {})
+	return s.runAnalysis(ctx, OpDigest, digestSystemPrompt, digestUserPrompt, func(StreamEvent) {})
 }
 
 func (s *service) CollectLiquidation(ctx context.Context) (string, error) {
-	sysPrompt := liquidationSystemPrompt + s.priorContext(ctx, AnalysisLiquidation)
-	return s.runAnalysis(ctx, OpLiquidation, sysPrompt, liquidationUserPrompt, func(StreamEvent) {})
+	return s.runAnalysis(ctx, OpLiquidation, liquidationSystemPrompt, liquidationUserPrompt, func(StreamEvent) {})
 }

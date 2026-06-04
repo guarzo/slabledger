@@ -7,7 +7,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/demand"
@@ -42,10 +41,8 @@ type BuildDeps struct {
 	// Snapshot enrichment dependencies (optional)
 	SnapshotEnrichService SnapshotEnrichService
 
-	// Advisor refresh dependencies (optional)
-	AdvisorCollector AdvisorCollector
-	AdvisorCache     advisor.CacheStore
-	AICallTracker    ai.AICallTracker
+	// AI call tracking (used by various AI-related schedulers if present).
+	AICallTracker ai.AICallTracker
 
 	// DH dependencies (optional)
 	DHClient                 *dh.Client
@@ -217,15 +214,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 			deps.SnapshotEnrichService, deps.Logger, cfg.SnapshotEnrich,
 		)
 		schedulers = append(schedulers, enrichScheduler)
-	}
-
-	// Advisor refresh scheduler (if advisor service and cache store are provided)
-	if deps.AdvisorCollector != nil && deps.AdvisorCache != nil {
-		schedulers = append(schedulers, NewAdvisorRefreshScheduler(
-			deps.AdvisorCollector, deps.AdvisorCache,
-			deps.AICallTracker,
-			deps.Logger, cfg.AdvisorRefresh,
-		))
 	}
 
 	// Card Ladder value refresh scheduler.

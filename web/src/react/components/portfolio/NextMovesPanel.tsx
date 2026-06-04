@@ -102,12 +102,6 @@ export default function NextMovesPanel() {
         >
           Next Moves
         </h2>
-        <Link
-          to="/insights"
-          className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors focus-ring rounded-sm"
-        >
-          Insights ›
-        </Link>
       </div>
 
       {isInitialLoading ? (

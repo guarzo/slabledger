@@ -3,7 +3,7 @@
  *
  * - `?` opens a cheatsheet overlay.
  * - `g` then a single key navigates: `d` dashboard, `c` campaigns, `i` inventory,
- *   `n` insights, `t` tools (scan), `s` sell sheet, `v` invoices.
+ *   `t` tools (scan), `v` invoices.
  *
  * `Cmd/Ctrl-K` is intentionally NOT handled here — Header owns the real
  * CommandPalette. The cheatsheet still lists ⌘K so users know it exists.
@@ -18,7 +18,6 @@ const NAV_BINDINGS: Array<{ key: string; path: string; label: string }> = [
   { key: 'd', path: '/', label: 'Dashboard' },
   { key: 'c', path: '/campaigns', label: 'Campaigns' },
   { key: 'i', path: '/inventory', label: 'Inventory' },
-  { key: 'n', path: '/insights', label: 'Insights' },
   { key: 't', path: '/scan', label: 'Tools' },
   { key: 'v', path: '/invoices', label: 'Invoices' },
 ];

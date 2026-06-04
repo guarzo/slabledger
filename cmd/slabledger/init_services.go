@@ -59,9 +59,9 @@ func initializeAdvisorService(
 	campaignsService inventory.Service,
 	scoringOpts []scoringadapter.ProviderOption,
 	toolOpts ...advisortool.ExecutorOption,
-) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, advisorCacheRepo *postgres.AdvisorCacheRepository, err error) {
+) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, err error) {
 	if cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 
 	client, err := azureai.NewClient(azureai.Config{
@@ -70,16 +70,14 @@ func initializeAdvisorService(
 		DeploymentName: cfg.Adapters.AzureAIDeployment,
 	}, azureai.WithLogger(logger), azureai.WithCompletionTimeout(cfg.Adapters.AzureAICompletionTimeout))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("initialize azure ai client: %w", err)
+		return nil, nil, fmt.Errorf("initialize azure ai client: %w", err)
 	}
 	llmProvider = client
 
 	toolExec := advisortool.NewCampaignToolExecutor(campaignsService, toolOpts...)
-	advisorCacheRepo = postgres.NewAdvisorCacheRepository(db.DB, logger)
 	advisorOpts := []advisor.ServiceOption{
 		advisor.WithLogger(logger),
 		advisor.WithAITracker(aiCallRepo),
-		advisor.WithCacheStore(advisorCacheRepo),
 	}
 	if cfg.AdvisorRefresh.MaxToolRounds > 0 {
 		advisorOpts = append(advisorOpts, advisor.WithMaxToolRounds(cfg.AdvisorRefresh.MaxToolRounds))
@@ -96,7 +94,7 @@ func initializeAdvisorService(
 	logger.Info(ctx, "AI advisor initialized",
 		observability.String("deployment", cfg.Adapters.AzureAIDeployment))
 
-	return llmProvider, advisorSvc, advisorCacheRepo, nil
+	return llmProvider, advisorSvc, nil
 }
 
 // initializeCardLadder creates the Card Ladder client, auth, and store.

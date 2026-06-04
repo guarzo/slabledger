@@ -198,7 +198,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 
 	// SPA routing for campaign deep links and portfolio pages
 	mux.HandleFunc("/campaigns/", rt.spaHandler.HandleIndex)
-	mux.HandleFunc("/insights", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/suggestions", rt.spaHandler.HandleIndex)
 
 	rt.logger.Info(context.Background(), "campaign routes registered")
@@ -212,21 +211,8 @@ func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/advisor/digest", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleDigest)))
 	mux.Handle("POST /api/advisor/campaign-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleCampaignAnalysis)))
 	mux.Handle("POST /api/advisor/liquidation-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleLiquidationAnalysis)))
-	mux.Handle("GET /api/advisor/cache/{type}", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleGetCached)))
-	mux.Handle("POST /api/advisor/refresh/{type}", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleRefreshTrigger)))
 	mux.HandleFunc("/advisor", rt.spaHandler.HandleIndex)
 	rt.logger.Info(context.Background(), "AI advisor routes registered")
-}
-
-// registerInsightsRoutes wires the aggregate Insights endpoint.
-func (rt *Router) registerInsightsRoutes(mux *http.ServeMux) {
-	if rt.insightsHandler == nil || rt.authMW == nil {
-		return
-	}
-	mux.Handle("GET /api/insights/overview", rt.authMW.RequireAuth(http.HandlerFunc(rt.insightsHandler.HandleOverview)))
-	rt.logger.Info(context.Background(), "insights routes registered",
-		observability.String("component", "insights"),
-		observability.String("route", "/api/insights/overview"))
 }
 
 // registerPricingAPIRoutes wires the public pricing API endpoints (bearer token auth).
@@ -348,7 +334,6 @@ var TrackedEndpoints = []string{
 	"/api/portfolio/weekly-review",
 	"/api/portfolio/weekly-history",
 	"/api/campaigns/{id}/tuning",
-	"/api/insights/overview",
 }
 
 // ApplyMiddleware wraps the router with middleware layers.

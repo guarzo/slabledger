@@ -49,12 +49,6 @@ func shutdownGracefully(
 		waitBounded(ctx, logger, "dh handler", hOut.DHHandler.Wait, dhWait)
 	}
 
-	// Wait for any in-flight background advisor analyses to finish. Bounded
-	// for the same reason — a slow LLM call can't stall process shutdown.
-	if hOut.AdvisorHandler != nil {
-		waitBounded(ctx, logger, "advisor handler", hOut.AdvisorHandler.Wait, shutdownTimeout)
-	}
-
 	// Shut down campaign service background workers
 	if campaignsService != nil {
 		campaignsService.Close()

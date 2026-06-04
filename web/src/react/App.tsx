@@ -25,7 +25,6 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
-const InsightsPage = lazy(() => import('./pages/InsightsPage'));
 const ScanPage = lazy(() => import('./pages/ScanPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
 const PsaExchangePage = lazy(() => import('./pages/PsaExchangePage'));
@@ -104,14 +103,6 @@ function AppContent() {
                 <ProtectedRoute>
                   <PageTransition>
                     <InvoicesPage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
-              {/* Insights (AI reports hub) */}
-              <Route path="/insights" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <InsightsPage />
                   </PageTransition>
                 </ProtectedRoute>
               } />

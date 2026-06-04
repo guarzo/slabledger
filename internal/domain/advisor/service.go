@@ -55,11 +55,6 @@ func WithAITracker(t AICallTracker) ServiceOption {
 	return func(s *service) { s.tracker = t }
 }
 
-// WithCacheStore enables injecting prior analysis context into prompts.
-func WithCacheStore(c CacheStore) ServiceOption {
-	return func(s *service) { s.cache = c }
-}
-
 // ScoringDataProvider gathers raw data needed by factor computers.
 type ScoringDataProvider interface {
 	CampaignData(ctx context.Context, campaignID string) (*CampaignFactorData, error)
