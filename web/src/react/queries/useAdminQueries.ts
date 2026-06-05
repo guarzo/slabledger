@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
-import type { DHFixMatchRequest, DHSelectMatchRequest } from '../../types/apiStatus';
 
 /** Options shared by all admin read queries */
 export interface AdminQueryOptions {
@@ -234,48 +233,6 @@ export function useTriggerDHBulkMatch() {
   });
 }
 
-export function useDHUnmatched(options?: AdminQueryOptions) {
-  return useQuery({
-    queryKey: queryKeys.admin.dhUnmatched,
-    queryFn: () => api.getDHUnmatched(),
-    staleTime: 60_000,
-    enabled: options?.enabled ?? true,
-  });
-}
-
-export function useFixDHMatch() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (req: DHFixMatchRequest) => api.fixDHMatch(req),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-    },
-  });
-}
-
-export function useSelectDHMatch() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (req: DHSelectMatchRequest) => api.selectDHMatch(req),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-    },
-  });
-}
-
-export function useRetryDHMatch() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (purchaseId: string) => api.retryDHMatch(purchaseId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-    },
-  });
-}
-
 export function useUnmatchDH() {
   const qc = useQueryClient();
   return useMutation({
@@ -283,39 +240,6 @@ export function useUnmatchDH() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
       qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-    },
-  });
-}
-
-export function useDismissDHMatch() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (purchaseId: string) => api.dismissDHMatch(purchaseId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-    },
-  });
-}
-
-export function useUndismissDHMatch() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (purchaseId: string) => api.undismissDHMatch(purchaseId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-    },
-  });
-}
-
-export function useReconcileDH() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.reconcileDH(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
     },
   });
 }

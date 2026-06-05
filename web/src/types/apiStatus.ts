@@ -122,14 +122,6 @@ export interface DHBulkMatchResponse {
   status: string;
 }
 
-export interface DHReconcileResponse {
-  scanned: number;
-  missingOnDH: number;
-  reset: number;
-  errors?: string[];
-  resetIds?: string[];
-}
-
 export interface DHReconcileTriggerResult {
   scanned: number;
   missingOnDH: number;
@@ -137,31 +129,6 @@ export interface DHReconcileTriggerResult {
   // Go omits zero-length slices as JSON null, so these arrive as null on a clean run.
   errors?: string[] | null;
   resetIds?: string[] | null;
-}
-
-export interface DHCandidate {
-  dh_card_id: number;
-  card_name: string;
-  set_name: string;
-  card_number: string;
-  image_url: string;
-}
-
-export interface DHUnmatchedCard {
-  purchase_id: string;
-  card_name: string;
-  set_name: string;
-  card_number: string;
-  cert_number: string;
-  grade: number;
-  cl_value_cents: number;
-  candidates?: DHCandidate[];
-}
-
-export interface DHUnmatchedResponse {
-  unmatched: DHUnmatchedCard[];
-  count: number;
-  dismissed: DHUnmatchedCard[];
 }
 
 export interface DHFixMatchRequest {
@@ -173,11 +140,6 @@ export interface DHFixMatchResponse {
   status: string;
   dhCardId: number;
   dhInventoryId: number;
-}
-
-export interface DHSelectMatchRequest {
-  purchaseId: string;
-  dhCardId: number;
 }
 
 export interface DHRetryMatchResponse {
