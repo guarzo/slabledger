@@ -233,14 +233,20 @@ export default function CardIntakeTab() {
     let stuck = 0;
     let listed = 0;
     let failed = 0;
+    let sold = 0;
     for (const r of rows) {
       if (r.listingStatus === 'listed') listed++;
-      else if (r.status === 'failed' || r.status === 'sold') failed++;
+      else if (r.status === 'failed') failed++;
+      else if (r.status === 'sold') sold++;
       else if (rowIsListable(r)) ready++;
       else if (dhPushStuck(r)) stuck++;
       else if (rowAwaitingSync(r)) syncing++;
     }
-    return { ready, syncing, stuck, listed, failed, total: rows.length };
+    // handleClearCompleted only removes listed + failed; sold rows stay so the
+    // operator can Return them. Surface that separately so the Clear button
+    // hides when only sold rows are left.
+    const clearable = listed + failed;
+    return { ready, syncing, stuck, listed, failed, sold, clearable, total: rows.length };
   }, [rows]);
 
   const resolvedCount = useMemo(() => rows.filter(r => r.status === 'resolved').length, [rows]);
@@ -273,9 +279,10 @@ export default function CardIntakeTab() {
           {batchStats.syncing > 0 && <StatDot color="var(--brand-400)" label={`${batchStats.syncing} syncing`} pulse />}
           {batchStats.stuck > 0 && <StatDot color="var(--warning)" label={`${batchStats.stuck} needs attention`} />}
           {batchStats.listed > 0 && <StatDot color="var(--success)" label={`${batchStats.listed} listed`} icon="check" />}
-          {batchStats.failed > 0 && <StatDot color="var(--danger)" label={`${batchStats.failed} failed/sold`} />}
+          {batchStats.failed > 0 && <StatDot color="var(--danger)" label={`${batchStats.failed} failed`} />}
+          {batchStats.sold > 0 && <StatDot color="var(--text-muted)" label={`${batchStats.sold} sold`} />}
           <span className="ml-auto text-[var(--text-muted)]">{batchStats.total} scanned</span>
-          {(batchStats.listed > 0 || batchStats.failed > 0) && (
+          {batchStats.clearable > 0 && (
             <button
               onClick={handleClearCompleted}
               className="text-[var(--text-muted)] hover:text-[var(--text)] underline underline-offset-2 text-[11px]"
