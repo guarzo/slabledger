@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHUnmatchedResponse, DHFixMatchRequest, DHFixMatchResponse, DHSelectMatchRequest, DHRetryMatchResponse, DHPushConfig, DHReconcileResponse, DHReconcileTriggerResult } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHFixMatchRequest, DHFixMatchResponse, DHRetryMatchResponse, DHPushConfig, DHReconcileTriggerResult } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
@@ -34,15 +34,12 @@ declare module './client' {
     syncMarketMoversCollection(): Promise<MMSyncResult>;
     getDHStatus(): Promise<DHStatusResponse>;
     triggerDHBulkMatch(): Promise<DHBulkMatchResponse>;
-    getDHUnmatched(): Promise<DHUnmatchedResponse>;
     fixDHMatch(req: DHFixMatchRequest): Promise<DHFixMatchResponse>;
-    selectDHMatch(req: DHSelectMatchRequest): Promise<DHFixMatchResponse>;
     retryDHMatch(purchaseId: string): Promise<DHRetryMatchResponse>;
     unmatchDH(purchaseId: string): Promise<{ status: string }>;
     dismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     undismissDHMatch(purchaseId: string): Promise<{ status: string }>;
     approveDHPush(purchaseId: string): Promise<{ status: string }>;
-    reconcileDH(): Promise<DHReconcileResponse>;
     getDHPushConfig(): Promise<DHPushConfig>;
     saveDHPushConfig(config: DHPushConfig): Promise<DHPushConfig>;
     getPSASyncStatus(): Promise<PSASyncStatusResponse>;
@@ -150,20 +147,12 @@ proto.triggerDHBulkMatch = async function (this: APIClient): Promise<DHBulkMatch
   return this.post<DHBulkMatchResponse>('/dh/match');
 };
 
-proto.getDHUnmatched = async function (this: APIClient): Promise<DHUnmatchedResponse> {
-  return this.get<DHUnmatchedResponse>('/dh/unmatched');
-};
-
 // Backend serializes up to 3 DH calls (push + confirm + optional delist on a
 // card swap) plus local writes, each under a 30s/retry DH client budget and a
 // 1 RPS rate limiter. The default 30s client timeout aborts successful-but-slow
 // requests mid-flight; 90s covers the realistic worst case.
 proto.fixDHMatch = async function (this: APIClient, req: DHFixMatchRequest): Promise<DHFixMatchResponse> {
   return this.post<DHFixMatchResponse>('/dh/fix-match', req, { timeoutMs: 90_000 });
-};
-
-proto.selectDHMatch = async function (this: APIClient, req: DHSelectMatchRequest): Promise<DHFixMatchResponse> {
-  return this.post<DHFixMatchResponse>('/dh/select-match', req);
 };
 
 proto.retryDHMatch = async function (this: APIClient, purchaseId: string): Promise<DHRetryMatchResponse> {
@@ -184,10 +173,6 @@ proto.undismissDHMatch = async function (this: APIClient, purchaseId: string): P
 
 proto.approveDHPush = async function (this: APIClient, purchaseId: string): Promise<{ status: string }> {
   return this.post<{ status: string }>(`/dh/approve/${encodeURIComponent(purchaseId)}`);
-};
-
-proto.reconcileDH = async function (this: APIClient): Promise<DHReconcileResponse> {
-  return this.post<DHReconcileResponse>('/dh/reconcile');
 };
 
 proto.getDHPushConfig = async function (this: APIClient): Promise<DHPushConfig> {
