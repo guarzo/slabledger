@@ -38,6 +38,9 @@ export default function CardIntakeTab() {
     if (result.status === 'existing' || result.status === 'sold') {
       updateCert(certNumber, {
         status: result.status,
+        // Sold supersedes any prior listing state: clear listingStatus so
+        // a previously-listed row isn't misclassified by batchStats.
+        ...(result.status === 'sold' ? { listingStatus: undefined } : {}),
         ...scanFieldsFromResult(result),
       });
     } else {
@@ -161,6 +164,7 @@ export default function CardIntakeTab() {
     setCerts(prev => {
       const next = new Map(prev);
       for (const [k, row] of next) {
+        if (row.status === 'sold') continue; // sold rows stay for Return action
         if (row.listingStatus === 'listed' || row.status === 'failed') {
           next.delete(k);
         }
@@ -235,9 +239,11 @@ export default function CardIntakeTab() {
     let failed = 0;
     let sold = 0;
     for (const r of rows) {
-      if (r.listingStatus === 'listed') listed++;
+      // Check sold first so a sold row that still carries a stale
+      // listingStatus is not misclassified as listed.
+      if (r.status === 'sold') sold++;
+      else if (r.listingStatus === 'listed') listed++;
       else if (r.status === 'failed') failed++;
-      else if (r.status === 'sold') sold++;
       else if (rowIsListable(r)) ready++;
       else if (dhPushStuck(r)) stuck++;
       else if (rowAwaitingSync(r)) syncing++;
