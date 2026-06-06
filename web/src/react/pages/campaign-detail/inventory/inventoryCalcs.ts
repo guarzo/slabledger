@@ -1,4 +1,4 @@
-import type { AgingItem, ReviewStats, ExpectedValue } from '../../../../types/campaigns';
+import type { AgingItem, ReviewStats } from '../../../../types/campaigns';
 import { costBasis, bestPrice, unrealizedPL, getReviewStatus, reviewUrgencySort } from './utils';
 import type { SortKey, SortDir } from './utils';
 
@@ -220,7 +220,6 @@ function sortItems(
   items: AgingItem[],
   sortKey: SortKey,
   sortDir: SortDir,
-  evMap: Map<string, ExpectedValue>,
 ): AgingItem[] {
   const dir = sortDir === 'asc' ? 1 : -1;
   return [...items].sort((a, b) => {
@@ -243,11 +242,6 @@ function sortItems(
       }
       case 'days':
         return dir * (a.daysHeld - b.daysHeld);
-      case 'ev': {
-        const ea = evMap.get(a.purchase.certNumber)?.evCents ?? -Infinity;
-        const eb = evMap.get(b.purchase.certNumber)?.evCents ?? -Infinity;
-        return dir * (ea - eb);
-      }
       default:
         return 0;
     }
@@ -261,16 +255,15 @@ export function filterAndSortItems(
     filterTab: FilterTab;
     sortKey: SortKey;
     sortDir: SortDir;
-    evMap?: Map<string, ExpectedValue>;
     pinnedIds?: ReadonlySet<string>;
     priceBand?: PriceBand;
   },
 ): AgingItem[] {
-  const { debouncedSearch, filterTab, sortKey, sortDir, evMap = new Map<string, ExpectedValue>(), priceBand = 'all' } = opts;
+  const { debouncedSearch, filterTab, sortKey, sortDir, priceBand = 'all' } = opts;
 
   if (opts.pinnedIds && opts.pinnedIds.size > 0) {
     const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
-    return sortItems(subset, sortKey, sortDir, evMap);
+    return sortItems(subset, sortKey, sortDir);
   }
   let result = items;
 
@@ -307,5 +300,5 @@ export function filterAndSortItems(
     return [...result].sort(reviewUrgencySort);
   }
 
-  return sortItems(result, sortKey, sortDir, evMap);
+  return sortItems(result, sortKey, sortDir);
 }

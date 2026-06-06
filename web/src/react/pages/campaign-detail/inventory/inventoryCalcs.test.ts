@@ -148,7 +148,6 @@ describe('inventoryCalcs', () => {
         filterTab: 'in_hand',
         sortKey: 'days',
         sortDir: 'desc',
-        evMap: new Map(),
       });
 
       expect(result).toHaveLength(3);
@@ -166,7 +165,6 @@ describe('inventoryCalcs', () => {
         filterTab: 'awaiting_intake',
         sortKey: 'days',
         sortDir: 'desc',
-        evMap: new Map(),
       });
 
       expect(result).toHaveLength(2);
@@ -184,7 +182,6 @@ describe('inventoryCalcs', () => {
         filterTab: 'in_hand',
         sortKey: 'days',
         sortDir: 'desc',
-        evMap: new Map(),
       });
 
       expect(result).toHaveLength(2);
@@ -201,7 +198,6 @@ describe('inventoryCalcs', () => {
         filterTab: 'all',
         sortKey: 'days',
         sortDir: 'desc',
-        evMap: new Map(),
       });
 
       expect(result).toHaveLength(2);
@@ -218,7 +214,6 @@ describe('inventoryCalcs', () => {
         filterTab: 'in_hand',
         sortKey: 'days',
         sortDir: 'desc',
-        evMap: new Map(),
       });
 
       expect(result).toHaveLength(1);

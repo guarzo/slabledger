@@ -851,18 +851,6 @@ Returns parameter tuning recommendations for a campaign (buy terms, fee rates, e
 
 ---
 
-### `GET /api/campaigns/{id}/crack-candidates`
-
-Auth: RequireAuth
-
-Returns cards that may be worth cracking from their slabs (raw value exceeds slabbed value net of cracking cost).
-
-**Response:** `200 OK` — Array of `CrackAnalysis`
-
-**Errors:** `404` campaign not found
-
----
-
 ### `GET /api/campaigns/{id}/expected-values`
 
 Auth: RequireAuth
@@ -2757,16 +2745,6 @@ Returns raw-to-graded arbitrage opportunities across all campaigns.
   }
 ]
 ```
-
----
-
-### `GET /api/opportunities/crack`
-
-Auth: RequireAuth
-
-Returns cross-campaign slab crack arbitrage candidates (cards where raw value exceeds slabbed value net of cracking cost).
-
-**Response:** `200 OK` — Array of `CrackAnalysis`
 
 ---
 
