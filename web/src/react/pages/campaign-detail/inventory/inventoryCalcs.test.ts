@@ -145,7 +145,6 @@ describe('inventoryCalcs', () => {
 
       const result = filterAndSortItems(items, {
         debouncedSearch: '',
-        showAll: false,
         filterTab: 'in_hand',
         sortKey: 'days',
         sortDir: 'desc',
@@ -164,7 +163,6 @@ describe('inventoryCalcs', () => {
 
       const result = filterAndSortItems(items, {
         debouncedSearch: '',
-        showAll: false,
         filterTab: 'awaiting_intake',
         sortKey: 'days',
         sortDir: 'desc',
@@ -183,7 +181,6 @@ describe('inventoryCalcs', () => {
 
       const result = filterAndSortItems(items, {
         debouncedSearch: '',
-        showAll: false,
         filterTab: 'in_hand',
         sortKey: 'days',
         sortDir: 'desc',
@@ -201,26 +198,7 @@ describe('inventoryCalcs', () => {
 
       const result = filterAndSortItems(items, {
         debouncedSearch: '',
-        showAll: false,
         filterTab: 'all',
-        sortKey: 'days',
-        sortDir: 'desc',
-        evMap: new Map(),
-      });
-
-      expect(result).toHaveLength(2);
-    });
-
-    it('returns all items when showAll is true', () => {
-      const items = [
-        makeItem({ purchase: { id: '1', receivedAt: '2026-04-08T00:00:00Z' } }),
-        makeItem({ purchase: { id: '2', receivedAt: undefined } }),
-      ];
-
-      const result = filterAndSortItems(items, {
-        debouncedSearch: '',
-        showAll: true,
-        filterTab: 'in_hand',
         sortKey: 'days',
         sortDir: 'desc',
         evMap: new Map(),
@@ -237,7 +215,6 @@ describe('inventoryCalcs', () => {
 
       const result = filterAndSortItems(items, {
         debouncedSearch: 'Charizard',
-        showAll: false,
         filterTab: 'in_hand',
         sortKey: 'days',
         sortDir: 'desc',

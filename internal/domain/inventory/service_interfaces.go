@@ -32,9 +32,6 @@ type AnalyticsService interface {
 	GetInventoryAging(ctx context.Context, campaignID string) (*InventoryResult, error)
 	GetGlobalInventoryAging(ctx context.Context) (*InventoryResult, error)
 	GetFlaggedInventory(ctx context.Context) ([]AgingItem, error)
-	// RefreshCrackCandidates refreshes the crack candidate cache. Called by the
-	// crack cache refresh scheduler; also available for on-demand refresh.
-	RefreshCrackCandidates(ctx context.Context) error
 }
 
 // ImportService handles CSV imports, cert entry, and external data ingestion.

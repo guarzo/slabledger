@@ -71,7 +71,6 @@ type InventoryResult struct {
 type InventorySignals struct {
 	ProfitCaptureDeclining bool `json:"profitCaptureDeclining,omitempty"`
 	ProfitCaptureSpike     bool `json:"profitCaptureSpike,omitempty"`
-	CrackCandidate         bool `json:"crackCandidate,omitempty"`
 	StaleListing           bool `json:"staleListing,omitempty"`
 	DeepStale              bool `json:"deepStale,omitempty"`
 	CutLoss                bool `json:"cutLoss,omitempty"`
@@ -83,7 +82,7 @@ func (s *InventorySignals) HasAnySignal() bool {
 		return false
 	}
 	return s.ProfitCaptureDeclining || s.ProfitCaptureSpike ||
-		s.CrackCandidate || s.StaleListing || s.DeepStale || s.CutLoss
+		s.StaleListing || s.DeepStale || s.CutLoss
 }
 
 // SellSheet contains data for a printable sell sheet.

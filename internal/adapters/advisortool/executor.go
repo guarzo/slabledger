@@ -282,23 +282,21 @@ func parseCampaignID(args string) (string, error) {
 //  12. get_weekly_review           — week-over-week comparison
 //  13. get_capital_timeline        — daily capital deployment chart
 //  14. get_expected_values         — EV for a single campaign
-//  15. get_deslab_candidates       — crack/deslab recommendations
-//  16. get_campaign_suggestions    — DH-sourced buy suggestions
-//  17. run_projection              — Monte Carlo cashflow projection
-//  18. get_channel_velocity        — avg days-to-sell per channel
-//  19. get_cert_lookup             — PSA cert lookup
-//  20. evaluate_purchase           — evaluate a specific purchase
-//  21. suggest_price               — AI price suggestion for one item
-//  22. get_suggestion_stats        — AI price suggestion statistics
-//  23. get_dashboard_summary       — combined dashboard view
-//  24. get_acquisition_targets     — potential acquisition targets
-//  25. get_deslab_opportunities    — DH deslab/crack opportunities
-//  26. get_market_intelligence     — market intelligence report
-//  27. get_dh_suggestions          — DH-specific suggestions
-//  28. get_inventory_alerts        — inventory alert report
-//  29. get_data_gap_report         — scoring data gap report (requires gapStore)
-//  30. get_expected_values_batch   — EV for multiple campaigns
-//  31. suggest_price_batch         — AI price suggestions in bulk
+//  15. get_campaign_suggestions    — DH-sourced buy suggestions
+//  16. run_projection              — Monte Carlo cashflow projection
+//  17. get_channel_velocity        — avg days-to-sell per channel
+//  18. get_cert_lookup             — PSA cert lookup
+//  19. evaluate_purchase           — evaluate a specific purchase
+//  20. suggest_price               — AI price suggestion for one item
+//  21. get_suggestion_stats        — AI price suggestion statistics
+//  22. get_dashboard_summary       — combined dashboard view
+//  23. get_acquisition_targets     — potential acquisition targets
+//  24. get_market_intelligence     — market intelligence report
+//  25. get_dh_suggestions          — DH-specific suggestions
+//  26. get_inventory_alerts        — inventory alert report
+//  27. get_data_gap_report         — scoring data gap report (requires gapStore)
+//  28. get_expected_values_batch   — EV for multiple campaigns
+//  29. suggest_price_batch         — AI price suggestions in bulk
 //
 // Optional tools (only useful when the relevant service is injected):
 //   - get_capital_summary: requires WithFinanceService
@@ -320,7 +318,6 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerGetWeeklyReview()
 	e.registerGetCapitalTimeline()
 	e.registerGetExpectedValues()
-	e.registerGetDeslabCandidates()
 	e.registerGetCampaignSuggestions()
 	e.registerRunProjection()
 	e.registerGetChannelVelocity()
@@ -330,7 +327,6 @@ func (e *CampaignToolExecutor) registerTools() {
 	e.registerGetSuggestionStats()
 	e.registerGetDashboardSummary()
 	e.registerGetAcquisitionTargets()
-	e.registerGetDeslabOpportunities()
 	e.registerGetMarketIntelligence()
 	e.registerGetDHSuggestions()
 	e.registerGetInventoryAlerts()

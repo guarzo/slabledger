@@ -4,7 +4,7 @@
 
 import type {
   CampaignPNL, InventoryResult,
-  CrackAnalysis, EVPortfolio,
+  EVPortfolio,
   CapitalSummary, Invoice, PortfolioHealth,
   ChannelVelocity, PortfolioInsights, SuggestionsResponse,
   RevocationFlag, WeeklyReviewSummary,
@@ -30,9 +30,6 @@ declare module './client' {
     getCampaignSuggestions(): Promise<SuggestionsResponse>;
     getWeeklyReview(): Promise<WeeklyReviewSummary>;
     listRevocationFlags(): Promise<RevocationFlag[]>;
-
-    // Crack arbitrage
-    getCrackCandidates(campaignId: string): Promise<CrackAnalysis[]>;
 
     // Expected value
     getExpectedValues(campaignId: string): Promise<EVPortfolio>;
@@ -90,11 +87,6 @@ proto.getWeeklyReview = async function (this: APIClient): Promise<WeeklyReviewSu
 
 proto.listRevocationFlags = async function (this: APIClient): Promise<RevocationFlag[]> {
   return this.get<RevocationFlag[]>('/portfolio/revocations');
-};
-
-// Crack arbitrage
-proto.getCrackCandidates = async function (this: APIClient, campaignId: string): Promise<CrackAnalysis[]> {
-  return this.get<CrackAnalysis[]>(`/campaigns/${campaignId}/crack-candidates`);
 };
 
 // Expected value

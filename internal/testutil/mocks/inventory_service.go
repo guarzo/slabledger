@@ -39,7 +39,6 @@ type MockInventoryService struct {
 	GetInventoryAgingFn         func(ctx context.Context, campaignID string) (*inventory.InventoryResult, error)
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
-	RefreshCrackCandidatesFn    func(ctx context.Context) error
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
 	ExportMMFormatGlobalFn      func(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error)
 	RefreshMMValuesGlobalFn     func(ctx context.Context, rows []inventory.MMRefreshRow) (*inventory.MMRefreshResult, error)
@@ -254,13 +253,6 @@ func (m *MockInventoryService) GetFlaggedInventory(ctx context.Context) ([]inven
 		return m.GetFlaggedInventoryFn(ctx)
 	}
 	return []inventory.AgingItem{}, nil
-}
-
-func (m *MockInventoryService) RefreshCrackCandidates(ctx context.Context) error {
-	if m.RefreshCrackCandidatesFn != nil {
-		return m.RefreshCrackCandidatesFn(ctx)
-	}
-	return nil
 }
 
 func (m *MockInventoryService) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error) {

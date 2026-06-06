@@ -231,16 +231,11 @@ type service struct {
 	dhSoldNotifier DHSoldNotifier
 
 	// disableBackgroundWorkers is a test-only flag to prevent background workers from running.
-	// When true, the crack cache worker will not start even if priceProv is set.
 	disableBackgroundWorkers bool
 
 	// wg tracks background goroutines (e.g. batchResolveCardIDs, card ID resolver).
 	// Note: cert enrichment worker is now managed by scheduler, not here.
 	wg sync.WaitGroup
-
-	// Crack candidate cache — refreshed in background, read by inventory and handler endpoints.
-	crackCacheMu  sync.RWMutex
-	crackCacheSet map[string]bool // purchaseID→true for crack candidates
 }
 
 // ServiceOption configures optional service dependencies.
@@ -284,7 +279,7 @@ func WithPricingEnqueuer(q PricingEnqueuer) ServiceOption {
 }
 
 // WithDisableBackgroundWorkers is a test-only option that prevents background workers
-// (like crack cache refresh) from starting. This prevents races with non-thread-safe mocks.
+// from starting. This prevents races with non-thread-safe mocks.
 func WithDisableBackgroundWorkers() ServiceOption {
 	return func(s *service) { s.disableBackgroundWorkers = true }
 }
@@ -375,7 +370,7 @@ func NewService(
 }
 
 // Close waits for any in-flight background goroutines (e.g. batchResolveCardIDs).
-// The crack candidate cache and cert enrichment workers are now scheduler-managed.
+// The cert enrichment worker is scheduler-managed.
 func (s *service) Close() {
 	s.wg.Wait()
 }

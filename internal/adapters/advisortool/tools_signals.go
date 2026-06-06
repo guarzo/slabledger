@@ -12,7 +12,7 @@ import (
 func (e *CampaignToolExecutor) registerGetFlaggedInventory() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_flagged_inventory",
-		Description: "Get unsold cards that have inventory signals: profit capture opportunities, stale listings, deslab candidates, or markdown flags. Includes compDigest with recent sales comp analytics when available.",
+		Description: "Get unsold cards that have inventory signals: profit capture opportunities, stale listings, or markdown flags. Includes compDigest with recent sales comp analytics when available.",
 		Parameters:  emptyObjectParams,
 	}, func(ctx context.Context, _ string) (string, error) {
 		result, err := e.svc.GetFlaggedInventory(ctx)

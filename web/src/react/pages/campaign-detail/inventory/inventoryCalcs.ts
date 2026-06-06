@@ -258,16 +258,15 @@ export function filterAndSortItems(
   items: AgingItem[],
   opts: {
     debouncedSearch: string;
-    showAll: boolean;
     filterTab: FilterTab;
     sortKey: SortKey;
     sortDir: SortDir;
-    evMap: Map<string, ExpectedValue>;
+    evMap?: Map<string, ExpectedValue>;
     pinnedIds?: ReadonlySet<string>;
     priceBand?: PriceBand;
   },
 ): AgingItem[] {
-  const { debouncedSearch, showAll, filterTab, sortKey, sortDir, evMap, priceBand = 'all' } = opts;
+  const { debouncedSearch, filterTab, sortKey, sortDir, evMap = new Map<string, ExpectedValue>(), priceBand = 'all' } = opts;
 
   if (opts.pinnedIds && opts.pinnedIds.size > 0) {
     const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
@@ -282,31 +281,29 @@ export function filterAndSortItems(
       (i.purchase.certNumber && i.purchase.certNumber.toLowerCase().includes(q)) ||
       (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
     );
-  } else if (!showAll) {
-    if (filterTab === 'in_hand') {
-      // Legacy alias: treat as `all`.
-      // result stays as-is
-    } else if (filterTab !== 'all') {
-      result = result.filter(i => {
-        switch (filterTab) {
-          case 'needs_attention': return needsAttention(i);
-          case 'awaiting_intake': return !i.purchase.receivedAt;
-          case 'pending_dh_match': return isPendingDHMatch(i);
-          case 'pending_price': return isPendingPrice(i);
-          case 'ready_to_list': return isReadyToList(i);
-          case 'dh_listed': return isDHListed(i);
-          case 'skipped': return isSkipped(i);
-          default: return false;
-        }
-      });
-    }
+  } else if (filterTab === 'in_hand') {
+    // Legacy alias: treat as `all`.
+    // result stays as-is
+  } else if (filterTab !== 'all') {
+    result = result.filter(i => {
+      switch (filterTab) {
+        case 'needs_attention': return needsAttention(i);
+        case 'awaiting_intake': return !i.purchase.receivedAt;
+        case 'pending_dh_match': return isPendingDHMatch(i);
+        case 'pending_price': return isPendingPrice(i);
+        case 'ready_to_list': return isReadyToList(i);
+        case 'dh_listed': return isDHListed(i);
+        case 'skipped': return isSkipped(i);
+        default: return false;
+      }
+    });
   }
 
   if (priceBand !== 'all') {
     result = result.filter(i => matchesPriceBand(i, priceBand));
   }
 
-  if (!showAll && !debouncedSearch.trim()) {
+  if (!debouncedSearch.trim()) {
     return [...result].sort(reviewUrgencySort);
   }
 

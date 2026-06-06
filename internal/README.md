@@ -36,7 +36,7 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │         DOMAIN (Business Logic)                 │
  │    internal/domain/                             │
  │    ├── inventory/      (campaigns, purchases)   │
- │    ├── arbitrage/      (crack candidates, EV)   │
+ │    ├── arbitrage/      (acquisition targets, EV) │
  │    ├── auth/           (authentication)         │
  │    ├── cards/          (card interfaces)        │
  │    ├── constants/      (shared constants)       │
@@ -90,7 +90,7 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 |---------|---------|
 | `auth/` | Authentication interfaces |
 | `inventory/` | Campaign tracking, purchases, sales, P&L, analytics, CSV import |
-| `arbitrage/` | Crack candidates, acquisition targets, expected value, Monte Carlo |
+| `arbitrage/` | Acquisition targets, expected value, Monte Carlo |
 | `cards/` | `CardRepository` interface for card metadata |
 | `constants/` | Shared application constants |
 | `export/` | Sell sheet generation |
@@ -558,7 +558,7 @@ Several files in this codebase exceed 500 lines of code. Before adding code to a
 
 | File | LOC | Why it's large |
 |------|-----|----------------|
-| `domain/arbitrage/service.go` | 530 | Crack, acquisition, EV, Monte Carlo computation |
+| `domain/arbitrage/service.go` | 530 | Acquisition, EV, Monte Carlo computation |
 | `domain/inventory/service_analytics.go` | ~330 | Campaign analytics computations |
 
 ---

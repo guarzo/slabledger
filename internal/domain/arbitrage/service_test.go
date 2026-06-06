@@ -8,35 +8,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-func TestGetCrackCandidates_NilPriceProvider(t *testing.T) {
-	campaignID := "camp-nil"
-	campaign := &inventory.Campaign{
-		ID:         campaignID,
-		Name:       "Test",
-		EbayFeePct: 0.1235,
-	}
-	purchase := inventory.Purchase{
-		ID:           "p-nil",
-		CampaignID:   campaignID,
-		CardName:     "Charizard",
-		GradeValue:   8.0,
-		BuyCostCents: 10000,
-	}
-
-	svc := NewService(
-		&stubCampaignRepo{campaign: campaign},
-		&stubPurchaseRepo{unsold: []inventory.Purchase{purchase}},
-		&stubAnalyticsRepo{},
-		&stubFinanceRepo{},
-	)
-
-	results, err := svc.GetCrackCandidates(context.Background(), campaignID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	_ = results
-}
-
 func TestGetExpectedValues_RepoError(t *testing.T) {
 	campaignID := "camp-err"
 	campaign := &inventory.Campaign{ID: campaignID, Name: "Test", EbayFeePct: 0.1235}
@@ -101,65 +72,6 @@ func TestEvaluatePurchase_NoHistory(t *testing.T) {
 	}
 	if ev == nil {
 		t.Fatal("expected non-nil ExpectedValue for fallback path")
-	}
-}
-
-func TestGetCrackCandidates_GradeFilter(t *testing.T) {
-	tests := []struct {
-		name       string
-		gradeValue float64
-		wantInList bool
-	}{
-		{name: "PSA 8 included", gradeValue: 8, wantInList: true},
-		{name: "PSA 8.5 included", gradeValue: 8.5, wantInList: true},
-		{name: "PSA 9 excluded", gradeValue: 9, wantInList: false},
-		{name: "PSA 9.5 excluded", gradeValue: 9.5, wantInList: false},
-		{name: "PSA 10 excluded", gradeValue: 10, wantInList: false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			campaignID := "camp1"
-			campaign := &inventory.Campaign{
-				ID:         campaignID,
-				Name:       "Test",
-				EbayFeePct: 0.1235,
-			}
-			purchase := inventory.Purchase{
-				ID:                  "p1",
-				CampaignID:          campaignID,
-				CardName:            "Charizard",
-				GradeValue:          tc.gradeValue,
-				BuyCostCents:        5000,
-				PSASourcingFeeCents: 300,
-				CLValueCents:        8000,
-			}
-
-			svc := NewService(
-				&stubCampaignRepo{campaign: campaign},
-				&stubPurchaseRepo{unsold: []inventory.Purchase{purchase}},
-				&stubAnalyticsRepo{},
-				&stubFinanceRepo{},
-				WithPriceLookup(&stubPriceProvider{rawCents: 15000, gradedCents: 10000}),
-			)
-
-			results, err := svc.GetCrackCandidates(context.Background(), campaignID)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			found := false
-			for _, r := range results {
-				if r.PurchaseID == purchase.ID {
-					found = true
-					break
-				}
-			}
-
-			if found != tc.wantInList {
-				t.Errorf("grade %g: wantInList=%v, found=%v", tc.gradeValue, tc.wantInList, found)
-			}
-		})
 	}
 }
 

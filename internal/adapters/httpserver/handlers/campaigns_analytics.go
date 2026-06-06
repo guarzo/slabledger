@@ -177,25 +177,6 @@ func (h *CampaignsHandler) HandleTuning(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, tuning)
 }
 
-// HandleCrackCandidates handles GET /api/campaigns/{id}/crack-candidates.
-func (h *CampaignsHandler) HandleCrackCandidates(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "id", "Campaign ID")
-	if !ok {
-		return
-	}
-	candidates, err := h.arbSvc.GetCrackCandidates(r.Context(), id)
-	if err != nil {
-		if inventory.IsCampaignNotFound(err) {
-			writeError(w, http.StatusNotFound, "Campaign not found")
-			return
-		}
-		h.logger.Error(r.Context(), "failed to get crack candidates", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	writeJSONList(w, http.StatusOK, candidates)
-}
-
 // HandleExpectedValues handles GET /api/campaigns/{id}/expected-values.
 func (h *CampaignsHandler) HandleExpectedValues(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "id", "Campaign ID")

@@ -1,11 +1,9 @@
 import { useMemo } from 'react';
-import type { AgingItem, EVPortfolio } from '../../../../types/campaigns';
+import type { AgingItem } from '../../../../types/campaigns';
 import type { TabCounts, FilterTab, PriceBand, PriceBandCounts } from './inventoryCalcs';
 import { formatCents, formatPct } from '../../../utils/formatters';
 import { formatPL } from './utils';
-import { Button } from '../../../ui';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
-import CrackCandidatesBanner from './CrackCandidatesBanner';
 import BulkSelectionMissingCLWarning from './BulkSelectionMissingCLWarning';
 
 export interface InventoryHeaderProps {
@@ -14,12 +12,8 @@ export interface InventoryHeaderProps {
   totalCost: number;
   totalMarket: number;
   fullInventoryTotals: { totalCost: number; totalMarket: number; totalPL: number };
-  showEV: boolean;
-  evPortfolio: EVPortfolio | null | undefined;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  showAll: boolean;
-  setShowAll: React.Dispatch<React.SetStateAction<boolean>>;
   filterTab: FilterTab;
   setFilterTab: (tab: FilterTab) => void;
   tabCounts: TabCounts;
@@ -28,7 +22,6 @@ export interface InventoryHeaderProps {
   priceBandCounts: PriceBandCounts;
   debouncedSearch: string;
   selected: ReadonlySet<string>;
-  campaignId?: string;
   onDeselectMissingCL: (purchaseIds: string[]) => void;
   onHighlightMissingCL: (purchaseIds: string[]) => void;
 }
@@ -37,12 +30,10 @@ export default function InventoryHeader({
   items, filteredCount,
   totalCost, totalMarket,
   fullInventoryTotals,
-  showEV, evPortfolio,
   searchQuery, setSearchQuery,
-  showAll, setShowAll, filterTab, setFilterTab,
+  filterTab, setFilterTab,
   tabCounts, priceBand, setPriceBand, priceBandCounts, debouncedSearch,
   selected,
-  campaignId,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -69,7 +60,6 @@ export default function InventoryHeader({
     { key: 'pending_dh_match' as const, label: 'Pending DH Match', count: tabCounts.pending_dh_match, alwaysShow: false },
     { key: 'pending_price' as const, label: 'Pending Price', count: tabCounts.pending_price, alwaysShow: false },
     { key: 'skipped' as const, label: 'Skipped on DH Listing', count: tabCounts.skipped, alwaysShow: false },
-    { key: 'awaiting_intake' as const, label: 'Awaiting Intake', count: tabCounts.awaiting_intake, alwaysShow: false },
   ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
 
   const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
@@ -101,8 +91,7 @@ export default function InventoryHeader({
   const hasSearch = !!debouncedSearch?.trim();
   const isFiltering = (filterTab !== 'all' || hasSearch) && filteredCount !== items.length;
 
-  const showNeedsHeadline = !showAll
-    && !hasSearch
+  const showNeedsHeadline = !hasSearch
     && filterTab !== 'needs_attention'
     && tabCounts.needs_attention > 0;
 
@@ -157,11 +146,10 @@ export default function InventoryHeader({
               <StatStrip label="Market" value={formatCents(universe.totalMarket)} />
             </>
           )}
-          {showEV && evPortfolio && (
+          {tabCounts.awaiting_intake > 0 && (
             <StatStrip
-              label="EV"
-              value={formatPL(evPortfolio.totalEvCents)}
-              tone={evPortfolio.totalEvCents >= 0 ? 'success' : 'problem'}
+              label="Awaiting Intake"
+              value={`${tabCounts.awaiting_intake}`}
             />
           )}
           {/* Filter-tab summary. Search has its own dedicated summary line
@@ -198,13 +186,10 @@ export default function InventoryHeader({
         onHighlight={onHighlightMissingCL}
       />
 
-      {/* Crack Candidates Banner */}
-      {campaignId && <div><CrackCandidatesBanner campaignId={campaignId} /></div>}
-
-      {/* Filter pills + inline search/Show All — replaces the heavy ReviewSummaryBar panel */}
+      {/* Filter pills + inline search — replaces the heavy ReviewSummaryBar panel */}
       <div className="flex flex-col gap-2 mb-3">
         <div className="flex flex-wrap items-center gap-2">
-          {!showAll && primary.map(tab => {
+          {primary.map(tab => {
             const isActive = filterTab === tab.key;
             return (
               <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} aria-pressed={isActive} className={pillClass(isActive, 'primary')}>
@@ -222,17 +207,9 @@ export default function InventoryHeader({
               onChange={e => setSearchQuery(e.target.value)}
               className={`${isMobile ? 'flex-1' : 'w-48'} px-3 py-1.5 text-sm rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]`}
             />
-            <Button
-              variant={showAll ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => setShowAll(prev => !prev)}
-              title={showAll ? 'Return to filter tabs' : 'Show every card, ignoring filter tabs'}
-            >
-              {showAll ? 'Use Filters' : 'Show All'}
-            </Button>
           </div>
         </div>
-        {!showAll && secondary.length > 0 && (
+        {secondary.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
             {secondary.map(tab => {
               const isActive = filterTab === tab.key;
@@ -245,7 +222,7 @@ export default function InventoryHeader({
             })}
           </div>
         )}
-        {/* Price-band pill row — independent of tab/showAll/search; composes with all of them.
+        {/* Price-band pill row — independent of tab/search; composes with all of them.
             Built for in-person liquidation triage where the operator wants to surface
             "everything in this dollar tier" fast. Bands hide at count=0 unless active.
             The whole row is hidden when no band has any items AND no band is active,
