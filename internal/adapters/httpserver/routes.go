@@ -138,7 +138,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/campaigns/{id}/days-to-sell", authRoute(rt.campaignsHandler.HandleDaysToSell))
 	mux.Handle("GET /api/campaigns/{id}/inventory", authRoute(rt.campaignsHandler.HandleInventory))
 	mux.Handle("GET /api/campaigns/{id}/tuning", authRoute(rt.campaignsHandler.HandleTuning))
-	mux.Handle("GET /api/campaigns/{id}/crack-candidates", authRoute(rt.campaignsHandler.HandleCrackCandidates))
 	mux.Handle("GET /api/campaigns/{id}/expected-values", authRoute(rt.campaignsHandler.HandleExpectedValues))
 	mux.Handle("POST /api/campaigns/{id}/evaluate-purchase", authRoute(rt.campaignsHandler.HandleEvaluatePurchase))
 	mux.Handle("GET /api/campaigns/{id}/activation-checklist", authRoute(rt.campaignsHandler.HandleActivationChecklist))
@@ -295,7 +294,6 @@ func (rt *Router) registerOpportunitiesRoutes(mux *http.ServeMux) {
 		return
 	}
 	mux.Handle("GET /api/opportunities/acquisition", rt.authMW.RequireAuth(http.HandlerFunc(rt.opportunitiesHandler.HandleGetAcquisitionTargets)))
-	mux.Handle("GET /api/opportunities/crack", rt.authMW.RequireAuth(http.HandlerFunc(rt.opportunitiesHandler.HandleGetCrackOpportunities)))
 	rt.logger.Info(context.Background(), "opportunities routes registered")
 }
 

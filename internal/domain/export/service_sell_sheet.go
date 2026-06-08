@@ -15,7 +15,7 @@ import (
 // enrichSellSheetItem builds a SellSheetItem from a purchase using stored snapshot data.
 // ebayFeePct is applied to eBay/TCGPlayer channel items to compute net revenue.
 // Returns the item and whether market data was available.
-func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Purchase, campaignName string, ebayFeePct float64, crackSet map[string]bool) (inventory.SellSheetItem, bool) {
+func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Purchase, campaignName string, ebayFeePct float64) (inventory.SellSheetItem, bool) {
 	costBasis := purchase.BuyCostCents + purchase.PSASourcingFeeCents
 	item := inventory.SellSheetItem{
 		PurchaseID:     purchase.ID,
@@ -65,8 +65,7 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 		CurrentMarket: item.CurrentMarket,
 		DaysHeld:      timeutil.DaysSince(purchase.PurchaseDate),
 	}
-	isCrack := crackSet[purchase.ID]
-	sig := inventory.ComputeInventorySignals(&agingItem, isCrack)
+	sig := inventory.ComputeInventorySignals(&agingItem)
 	if sig.HasAnySignal() {
 		item.Signals = &sig
 	}
@@ -105,7 +104,7 @@ func recommendChannel(grade float64, mkt *inventory.MarketSnapshot, signals *inv
 		return inventory.SaleChannelInPerson, "In Person"
 	}
 	if signals != nil {
-		if signals.ProfitCaptureDeclining || signals.ProfitCaptureSpike || signals.CrackCandidate {
+		if signals.ProfitCaptureDeclining || signals.ProfitCaptureSpike {
 			return inventory.SaleChannelInPerson, "In Person"
 		}
 	}
@@ -153,8 +152,6 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		campaignMap[campaignList[i].ID] = &campaignList[i]
 	}
 
-	crackSet := s.buildCrackCandidateSet(ctx)
-
 	sheet := &inventory.SellSheet{
 		GeneratedAt:  time.Now().Format(time.RFC3339),
 		CampaignName: sheetName,
@@ -169,7 +166,7 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		} else {
 			feePct = inventory.EffectiveFeePct(&inventory.Campaign{})
 		}
-		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct, crackSet)
+		item, _ := s.enrichSellSheetItem(ctx, purchase, campName, feePct)
 		// Always include in-hand inventory rows — even ones with no price
 		// snapshot. The vendor at a card show still needs to see the card;
 		// a missing price just means an empty CL column with PriceLookupError

@@ -24,7 +24,6 @@ type MockAnalyticsService struct {
 	GetInventoryAgingFn         func(ctx context.Context, campaignID string) (*inventory.InventoryResult, error)
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
-	RefreshCrackCandidatesFn    func(ctx context.Context) error
 }
 
 var _ inventory.AnalyticsService = (*MockAnalyticsService)(nil)
@@ -76,11 +75,4 @@ func (m *MockAnalyticsService) GetFlaggedInventory(ctx context.Context) ([]inven
 		return m.GetFlaggedInventoryFn(ctx)
 	}
 	return nil, nil
-}
-
-func (m *MockAnalyticsService) RefreshCrackCandidates(ctx context.Context) error {
-	if m.RefreshCrackCandidatesFn != nil {
-		return m.RefreshCrackCandidatesFn(ctx)
-	}
-	return nil
 }

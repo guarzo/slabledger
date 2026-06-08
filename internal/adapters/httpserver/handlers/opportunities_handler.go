@@ -28,14 +28,3 @@ func (h *OpportunitiesHandler) HandleGetAcquisitionTargets(w http.ResponseWriter
 	}
 	writeJSONList(w, http.StatusOK, targets)
 }
-
-// HandleGetCrackOpportunities returns cross-campaign crack arbitrage candidates.
-func (h *OpportunitiesHandler) HandleGetCrackOpportunities(w http.ResponseWriter, r *http.Request) {
-	results, ok := serviceCall(w, r.Context(), h.logger, "get crack opportunities", func() ([]arbitrage.CrackAnalysis, error) {
-		return h.svc.GetCrackOpportunities(r.Context())
-	})
-	if !ok {
-		return
-	}
-	writeJSONList(w, http.StatusOK, results)
-}

@@ -35,7 +35,7 @@ make check                                 # Full quality check (lint + architec
 internal/
   domain/           # Pure business logic (NO external deps)
     inventory/      # Core inventory: campaigns, purchases, sales (8 focused repo interfaces)
-    arbitrage/      # Crack candidates, acquisition targets, EV, Monte Carlo projection
+    arbitrage/      # Acquisition targets, EV, Monte Carlo projection
     portfolio/      # Inventory aging, price signals, portfolio health analysis
     tuning/         # Campaign parameter optimization, tuning suggestions and analytics
     finance/        # Invoices, cashflow, capital tracking, revocation flags
@@ -92,7 +92,7 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 - **Channel fees**: eBay/TCGPlayer use campaign's `ebayFeePct`; local/other = 0%
 
 ### Sibling sub-packages (flat siblings under `internal/domain/`, no cross-imports between them)
-- **arbitrage**: Crack detection, acquisition targets, expected value, Monte Carlo projection
+- **arbitrage**: Acquisition targets, expected value, Monte Carlo projection
 - **portfolio**: Inventory aging, price signals, portfolio health analysis
 - **tuning**: Campaign parameter optimization, tuning suggestions and analytics
 - **finance**: Invoices, cashflow forecasting, capital tracking, revocation flags

@@ -2,7 +2,7 @@ import type { MarketSnapshot, AgingItem, SourcePrice } from '../../../../types/c
 import { formatCents } from '../../../utils/formatters';
 import { checkHotSeller } from '../../../utils/sellSheetHelpers';
 
-export type SortKey = 'name' | 'grade' | 'cost' | 'market' | 'pl' | 'days' | 'ev';
+export type SortKey = 'name' | 'grade' | 'cost' | 'market' | 'pl' | 'days';
 export type SortDir = 'asc' | 'desc';
 
 /** Total cost basis for a purchase (buy cost + PSA sourcing fee). */

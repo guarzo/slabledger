@@ -1,4 +1,4 @@
-import type { AgingItem, ReviewStats, ExpectedValue } from '../../../../types/campaigns';
+import type { AgingItem, ReviewStats } from '../../../../types/campaigns';
 import { costBasis, bestPrice, unrealizedPL, getReviewStatus, reviewUrgencySort } from './utils';
 import type { SortKey, SortDir } from './utils';
 
@@ -220,7 +220,6 @@ function sortItems(
   items: AgingItem[],
   sortKey: SortKey,
   sortDir: SortDir,
-  evMap: Map<string, ExpectedValue>,
 ): AgingItem[] {
   const dir = sortDir === 'asc' ? 1 : -1;
   return [...items].sort((a, b) => {
@@ -243,11 +242,6 @@ function sortItems(
       }
       case 'days':
         return dir * (a.daysHeld - b.daysHeld);
-      case 'ev': {
-        const ea = evMap.get(a.purchase.certNumber)?.evCents ?? -Infinity;
-        const eb = evMap.get(b.purchase.certNumber)?.evCents ?? -Infinity;
-        return dir * (ea - eb);
-      }
       default:
         return 0;
     }
@@ -258,20 +252,18 @@ export function filterAndSortItems(
   items: AgingItem[],
   opts: {
     debouncedSearch: string;
-    showAll: boolean;
     filterTab: FilterTab;
     sortKey: SortKey;
     sortDir: SortDir;
-    evMap: Map<string, ExpectedValue>;
     pinnedIds?: ReadonlySet<string>;
     priceBand?: PriceBand;
   },
 ): AgingItem[] {
-  const { debouncedSearch, showAll, filterTab, sortKey, sortDir, evMap, priceBand = 'all' } = opts;
+  const { debouncedSearch, filterTab, sortKey, sortDir, priceBand = 'all' } = opts;
 
   if (opts.pinnedIds && opts.pinnedIds.size > 0) {
     const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
-    return sortItems(subset, sortKey, sortDir, evMap);
+    return sortItems(subset, sortKey, sortDir);
   }
   let result = items;
 
@@ -282,33 +274,31 @@ export function filterAndSortItems(
       (i.purchase.certNumber && i.purchase.certNumber.toLowerCase().includes(q)) ||
       (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
     );
-  } else if (!showAll) {
-    if (filterTab === 'in_hand') {
-      // Legacy alias: treat as `all`.
-      // result stays as-is
-    } else if (filterTab !== 'all') {
-      result = result.filter(i => {
-        switch (filterTab) {
-          case 'needs_attention': return needsAttention(i);
-          case 'awaiting_intake': return !i.purchase.receivedAt;
-          case 'pending_dh_match': return isPendingDHMatch(i);
-          case 'pending_price': return isPendingPrice(i);
-          case 'ready_to_list': return isReadyToList(i);
-          case 'dh_listed': return isDHListed(i);
-          case 'skipped': return isSkipped(i);
-          default: return false;
-        }
-      });
-    }
+  } else if (filterTab === 'in_hand') {
+    // Legacy alias: treat as `all`.
+    // result stays as-is
+  } else if (filterTab !== 'all') {
+    result = result.filter(i => {
+      switch (filterTab) {
+        case 'needs_attention': return needsAttention(i);
+        case 'awaiting_intake': return !i.purchase.receivedAt;
+        case 'pending_dh_match': return isPendingDHMatch(i);
+        case 'pending_price': return isPendingPrice(i);
+        case 'ready_to_list': return isReadyToList(i);
+        case 'dh_listed': return isDHListed(i);
+        case 'skipped': return isSkipped(i);
+        default: return false;
+      }
+    });
   }
 
   if (priceBand !== 'all') {
     result = result.filter(i => matchesPriceBand(i, priceBand));
   }
 
-  if (!showAll && !debouncedSearch.trim()) {
+  if (!debouncedSearch.trim()) {
     return [...result].sort(reviewUrgencySort);
   }
 
-  return sortItems(result, sortKey, sortDir, evMap);
+  return sortItems(result, sortKey, sortDir);
 }

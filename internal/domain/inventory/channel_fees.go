@@ -12,7 +12,7 @@ const DefaultWebsiteFeePct = 0.03
 // EffectiveFeePct returns the campaign's eBay fee percentage,
 // falling back to constants.DefaultMarketplaceFeePct when the campaign has no
 // valid fee set. A fee of 0, negative, or >= 1 (i.e. >= 100%) is treated as
-// unset, matching the validation in ComputeCrackAnalysis.
+// unset.
 func EffectiveFeePct(c *Campaign) float64 {
 	if c.EbayFeePct <= 0 || c.EbayFeePct >= 1 {
 		return constants.DefaultMarketplaceFeePct

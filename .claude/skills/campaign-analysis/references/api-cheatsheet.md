@@ -269,6 +269,6 @@ Query params: `window` (`7d` or `30d`), `limit` (1–200).
 
 Returns `{computed_at, data_quality, signals: [...]}`. When empty: `signals: []`, `data_quality: "empty"`.
 
-## /opportunities/crack and /opportunities/acquisition
+## /opportunities/acquisition
 
-Both return **flat arrays** (empty `[]` when no opportunities exist). NOT `{candidates: [...]}` or `{opportunities: [...]}`.
+Returns a **flat array** (empty `[]` when no opportunities exist). NOT `{candidates: [...]}` or `{opportunities: [...]}`.

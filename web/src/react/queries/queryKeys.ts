@@ -5,7 +5,6 @@ export const queryKeys = {
     sales: (id: string) => ['campaigns', id, 'sales'] as const,
     pnl: (id: string) => ['campaigns', id, 'pnl'] as const,
     inventory: (id: string) => ['campaigns', id, 'inventory'] as const,
-    crackCandidates: (id: string) => ['campaigns', id, 'crackCandidates'] as const,
     expectedValues: (id: string) => ['campaigns', id, 'expectedValues'] as const,
   },
   credit: {

@@ -38,9 +38,8 @@ Renders top-to-bottom:
 2. "All N cards" sub-line in `text-xs text-[var(--text-subtle)]` when filter is active (lines 137–144).
 3. `BulkSelectionMissingCLWarning` (line 146) — only on bulk select.
 4. `SellSheetActions` (line 154) — only when something is selected.
-5. `CrackCandidatesBanner` (line 170) — only when `campaignId` is set, so **never visible on `GlobalInventoryPage`**.
-6. `ReviewSummaryBar` (line 174) — heavy `bg-[var(--surface-raised)]` rounded panel hosting only a search input + "Show All" toggle.
-7. Filter pills (lines 183–210): two rows, primary `text-xs font-semibold`, secondary `text-[11px] font-medium`. Pills appear/disappear based on count > 0; only `Needs Attention` and `All` are always shown.
+5. `ReviewSummaryBar` (line 174) — heavy `bg-[var(--surface-raised)]` rounded panel hosting only a search input + "Show All" toggle.
+6. Filter pills (lines 183–210): two rows, primary `text-xs font-semibold`, secondary `text-[11px] font-medium`. Pills appear/disappear based on count > 0; only `Needs Attention` and `All` are always shown.
 
 ### 4. Desktop table header (`InventoryTab.tsx` lines 248–266)
 

@@ -89,10 +89,6 @@ export function useGlobalInventory() {
   return { ...query, data: query.data?.items, warnings: query.data?.warnings };
 }
 
-export const useCrackCandidates = createParamQuery(
-  queryKeys.campaigns.crackCandidates, (id) => api.getCrackCandidates(id),
-);
-
 export const useExpectedValues = createParamQuery(
   queryKeys.campaigns.expectedValues, (id) => api.getExpectedValues(id),
 );

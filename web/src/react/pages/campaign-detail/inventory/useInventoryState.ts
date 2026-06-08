@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
+import type { AgingItem } from '../../../../types/campaigns';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { useToast } from '../../../contexts/ToastContext';
 import { queryKeys } from '../../../queries/queryKeys';
-import { useExpectedValues } from '../../../queries/useCampaignQueries';
 import { api } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
 import type { SortKey, SortDir } from './utils';
@@ -17,7 +16,6 @@ import { usePricingActions } from './usePricingActions';
 export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { data: evPortfolio } = useExpectedValues(campaignId ?? '');
   const selection = useInventorySelection();
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -25,7 +23,6 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [priceBand, setPriceBand] = useState<PriceBand>('all');
   const userTabChosenRef = useRef(false);
-  const [showAll, setShowAll] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
@@ -107,31 +104,18 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     selection.setPinnedIds(prev => prev.size > 0 ? new Set() : prev);
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
     mobileScrollRef.current?.scrollTo({ top: 0 });
-  }, [sortKey, sortDir, debouncedSearch, filterTab, showAll, priceBand]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Build EV lookup map
-  const showEV = !!campaignId && evPortfolio && evPortfolio.items?.length > 0 && evPortfolio.minDataPoints >= 30;
-  const evMap = useMemo(() => {
-    if (!showEV) return new Map<string, ExpectedValue>();
-    const map = new Map<string, ExpectedValue>();
-    for (const ev of evPortfolio.items) {
-      map.set(ev.certNumber, ev);
-    }
-    return map;
-  }, [showEV, evPortfolio]);
+  }, [sortKey, sortDir, debouncedSearch, filterTab, priceBand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredAndSortedItems = useMemo(
     () => filterAndSortItems(items, {
       debouncedSearch,
-      showAll,
       filterTab,
       sortKey,
       sortDir,
-      evMap,
       pinnedIds: selection.pinnedIds,
       priceBand,
     }),
-    [items, debouncedSearch, sortKey, sortDir, evMap, showAll, filterTab, selection.pinnedIds, priceBand],
+    [items, debouncedSearch, sortKey, sortDir, filterTab, selection.pinnedIds, priceBand],
   );
 
   const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
@@ -206,8 +190,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     sortKey, sortDir, searchQuery, setSearchQuery,
     filterTab, setFilterTab: chooseFilterTab,
     priceBand, setPriceBand,
-    showAll, setShowAll, debouncedSearch,
-    reviewStats, tabCounts, priceBandCounts, showEV: !!showEV, evPortfolio, evMap,
+    debouncedSearch,
+    reviewStats, tabCounts, priceBandCounts,
     filteredAndSortedItems,
     totalCost, totalMarket, totalPL, fullInventoryTotals,
     handleSort, handleReviewed,
