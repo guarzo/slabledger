@@ -49,8 +49,6 @@ export default function CampaignsTab({
   showCreate,
   form,
   createMutation,
-  phaseFilter,
-  phaseFilterLabel,
   onToggleCreate,
 }: {
   campaigns: Campaign[];
@@ -59,18 +57,13 @@ export default function CampaignsTab({
   showCreate: boolean;
   form: UseFormReturn<CreateCampaignInput>;
   createMutation: { isPending: boolean };
-  phaseFilter: 'all' | Phase;
-  phaseFilterLabel: string;
   onToggleCreate: () => void;
 }) {
-  const isFiltered = phaseFilter !== 'all';
-
   // Compute the indices in the (already-sorted) campaign list where the phase
   // changes. We render a section eyebrow before the first row of each phase
-  // when no filter is active, so the operator gets a quick "10 active · 2
-  // pending" structural read without losing the existing column alignment.
+  // so the operator gets a quick "10 active · 2 pending" structural read
+  // without losing the existing column alignment.
   const phaseSections = useMemo(() => {
-    if (isFiltered) return null;
     const sections: Array<{ phase: Phase; startIdx: number; count: number }> = [];
     for (const phase of PHASE_ORDER) {
       const startIdx = campaigns.findIndex(c => c.phase === phase);
@@ -79,7 +72,7 @@ export default function CampaignsTab({
       sections.push({ phase, startIdx, count });
     }
     return sections;
-  }, [campaigns, isFiltered]);
+  }, [campaigns]);
 
   return (
     <>
@@ -110,9 +103,9 @@ export default function CampaignsTab({
       {campaigns.length === 0 ? (
         <EmptyState
           icon="📋"
-          title={isFiltered ? `No ${phaseFilterLabel.toLowerCase()} campaigns` : 'No campaigns yet'}
-          description={isFiltered ? `No campaigns are currently ${phaseFilterLabel.toLowerCase()}.` : 'Create your first campaign to start tracking purchases and sales.'}
-          action={isFiltered ? undefined : { label: '+ New Campaign', onClick: onToggleCreate }}
+          title="No campaigns yet"
+          description="Create your first campaign to start tracking purchases and sales."
+          action={{ label: '+ New Campaign', onClick: onToggleCreate }}
         />
       ) : (
         <div className="flex flex-col gap-1">

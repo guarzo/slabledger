@@ -3,8 +3,7 @@
  *
  * Lists all campaigns with P&L summary info and portfolio summary strip.
  */
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useMemo } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { reportError } from '../../js/errors';
@@ -167,41 +166,9 @@ function buildExportText(campaigns: Campaign[]): string {
   }).join('\n\n');
 }
 
-type PhaseFilter = 'all' | Phase;
-
-const phaseFilterOrder: PhaseFilter[] = ['all', 'active', 'pending', 'closed'];
-const phaseFilterLabels: Record<PhaseFilter, string> = {
-  all: 'All',
-  active: 'Active',
-  pending: 'Pending',
-  closed: 'Closed',
-};
-
 export default function CampaignsPage() {
   const [showCreate, setShowCreate] = useState(false);
-  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>('all');
-  const phaseRadioGroupRef = useRef<HTMLDivElement>(null);
-  const handlePhaseRadioKeyDown = useCallback((e: React.KeyboardEvent) => {
-    const keys = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'Home', 'End'];
-    if (!keys.includes(e.key)) return;
-    e.preventDefault();
-    const idx = phaseFilterOrder.indexOf(phaseFilter);
-    let next = idx;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      next = (idx - 1 + phaseFilterOrder.length) % phaseFilterOrder.length;
-    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      next = (idx + 1) % phaseFilterOrder.length;
-    } else if (e.key === 'Home') {
-      next = 0;
-    } else if (e.key === 'End') {
-      next = phaseFilterOrder.length - 1;
-    }
-    setPhaseFilter(phaseFilterOrder[next]);
-    const buttons = phaseRadioGroupRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
-    buttons?.[next]?.focus();
-  }, [phaseFilter]);
   const toast = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const queryClient = useQueryClient();
   const { data: allCampaigns = [], isLoading } = useCampaigns(false);
@@ -222,51 +189,6 @@ export default function CampaignsPage() {
     },
   });
 
-  // Pre-fill form from URL search params (e.g. from suggestions page)
-  useEffect(() => {
-    if (searchParams.get('create') !== '1') return;
-    const name = searchParams.get('name');
-    const inclusionList = searchParams.get('inclusionList');
-    const gradeRange = searchParams.get('gradeRange');
-    const yearRange = searchParams.get('yearRange');
-    const priceRange = searchParams.get('priceRange');
-    const buyTerms = searchParams.get('buyTermsCLPct');
-    const spendCap = searchParams.get('dailySpendCapCents');
-
-    const warnings: string[] = [];
-
-    if (name) form.handleChange('name', name);
-    if (inclusionList) form.handleChange('inclusionList', inclusionList);
-    if (gradeRange) form.handleChange('gradeRange', gradeRange);
-    if (yearRange) form.handleChange('yearRange', yearRange);
-    if (priceRange) form.handleChange('priceRange', priceRange);
-
-    if (buyTerms) {
-      const val = parseFloat(buyTerms);
-      if (isNaN(val) || val <= 0 || val > 1) {
-        warnings.push(`Invalid buy terms "${buyTerms}" \u2014 ignored`);
-      } else {
-        form.handleChange('buyTermsCLPct', val);
-      }
-    }
-    if (spendCap) {
-      const val = parseInt(spendCap, 10);
-      if (isNaN(val) || val <= 0) {
-        warnings.push(`Invalid spend cap "${spendCap}" \u2014 ignored`);
-      } else {
-        form.handleChange('dailySpendCapCents', val);
-      }
-    }
-
-    if (warnings.length > 0) {
-      toast.warning(warnings.join('. '));
-    }
-
-    setShowCreate(true);
-    setSearchParams({}, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const pnlQueries = useQueries({
     queries: allCampaigns.map(c => campaignPNLQueryOptions(c.id)),
   });
@@ -281,19 +203,12 @@ export default function CampaignsPage() {
     return map;
   }, [pnlQueries, allCampaigns]);
 
-  const campaigns = useMemo(() => {
-    const filtered = phaseFilter === 'all'
-      ? allCampaigns
-      : allCampaigns.filter(c => c.phase === phaseFilter);
-    return sortCampaigns(filtered);
-  }, [allCampaigns, phaseFilter]);
+  const campaigns = useMemo(() => sortCampaigns(allCampaigns), [allCampaigns]);
 
-  const phaseCounts = useMemo<Record<PhaseFilter, number>>(() => ({
-    all: allCampaigns.length,
-    active: allCampaigns.filter(c => c.phase === 'active').length,
-    pending: allCampaigns.filter(c => c.phase === 'pending').length,
-    closed: allCampaigns.filter(c => c.phase === 'closed').length,
-  }), [allCampaigns]);
+  const activeCampaignCount = useMemo(
+    () => allCampaigns.filter(c => c.phase === 'active').length,
+    [allCampaigns],
+  );
 
   const { data: healthData } = usePortfolioHealth();
   const healthMap = useMemo(() => {
@@ -301,8 +216,6 @@ export default function CampaignsPage() {
     healthData?.campaigns?.forEach(ch => { map[ch.campaignId] = ch.healthStatus; });
     return map;
   }, [healthData]);
-
-  const activeCampaignCount = phaseCounts.active;
 
   if (isLoading) {
     return (
@@ -421,44 +334,6 @@ export default function CampaignsPage() {
       </div>
 
       {allCampaigns.length > 0 && (
-        <div
-          ref={phaseRadioGroupRef}
-          role="radiogroup"
-          aria-label="Filter campaigns by phase"
-          className="flex flex-wrap items-center gap-2 mb-4"
-          onKeyDown={handlePhaseRadioKeyDown}
-        >
-          {phaseFilterOrder.map(filter => {
-            const isActive = phaseFilter === filter;
-            const count = phaseCounts[filter];
-            const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums text-xs px-3 py-1.5';
-            const stateClass = isActive
-              ? 'border-[var(--brand-500)] bg-[var(--brand-500)]/10 text-[var(--brand-400)] font-semibold'
-              : 'border-[var(--surface-2)] text-[var(--text-muted)] font-medium hover:text-[var(--text)] hover:border-[var(--text-muted)]';
-            const countBase = 'ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-semibold px-1 tabular-nums min-w-[22px] h-[18px]';
-            const countState = isActive
-              ? 'bg-[var(--brand-500)]/20 text-[var(--brand-300)]'
-              : 'bg-[rgba(255,255,255,0.06)] text-[var(--text-muted)]';
-            return (
-              <button
-                key={filter}
-                type="button"
-                role="radio"
-                aria-checked={isActive}
-                aria-label={`${phaseFilterLabels[filter]}, ${count}`}
-                tabIndex={isActive ? 0 : -1}
-                onClick={() => setPhaseFilter(filter)}
-                className={`${base} ${stateClass}`}
-              >
-                {phaseFilterLabels[filter]}
-                <span aria-hidden className={`${countBase} ${countState}`}>{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {allCampaigns.length > 0 && (
         <CampaignsPortfolioHero campaignCount={activeCampaignCount} pnlMap={pnlMap} />
       )}
 
@@ -470,8 +345,6 @@ export default function CampaignsPage() {
           showCreate={showCreate}
           form={form}
           createMutation={createMutation}
-          phaseFilter={phaseFilter}
-          phaseFilterLabel={phaseFilterLabels[phaseFilter]}
           onToggleCreate={() => setShowCreate(true)}
         />
       </SectionErrorBoundary>
