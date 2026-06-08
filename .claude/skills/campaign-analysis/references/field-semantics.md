@@ -46,7 +46,6 @@ mispricing signal relative to TODAY's CL, not a realized-at-purchase percentage.
 - Present-tense mispricing vs today's CL (e.g. "this card was bought for 60% of its
   current CL").
 - Per-card unrealized-edge sorting.
-- Crack-arbitrage candidate scoring.
 
 **Forbidden uses.**
 - Presenting `buyCostCents / clValueCents` as "realized buy % at time of purchase."

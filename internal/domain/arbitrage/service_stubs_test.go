@@ -211,22 +211,6 @@ func (r *stubAnalyticsRepo) GetDailyCapitalTimeSeries(_ context.Context) ([]inve
 	return nil, nil
 }
 
-type stubPriceProvider struct {
-	rawCents    int
-	gradedCents int
-}
-
-func (p *stubPriceProvider) GetLastSoldCents(_ context.Context, _ inventory.CardIdentity, grade float64) (int, error) {
-	if grade == 0 {
-		return p.rawCents, nil
-	}
-	return p.gradedCents, nil
-}
-
-func (p *stubPriceProvider) GetMarketSnapshot(_ context.Context, _ inventory.CardIdentity, _ float64) (*inventory.MarketSnapshot, error) {
-	return nil, nil
-}
-
 type stubFinanceRepo struct{}
 
 func (r *stubFinanceRepo) CreateInvoice(_ context.Context, _ *inventory.Invoice) error { return nil }

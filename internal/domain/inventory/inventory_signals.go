@@ -14,16 +14,11 @@ const (
 )
 
 // ComputeInventorySignals determines procedural flags for an unsold card.
-// isCrackCandidate should be pre-computed from arbitrage.Service.GetCrackOpportunities.
-func ComputeInventorySignals(item *AgingItem, isCrackCandidate bool) InventorySignals {
+func ComputeInventorySignals(item *AgingItem) InventorySignals {
 	var sig InventorySignals
 
 	mkt := item.CurrentMarket
 	costBasis := item.Purchase.BuyCostCents + item.Purchase.PSASourcingFeeCents
-
-	if isCrackCandidate {
-		sig.CrackCandidate = true
-	}
 
 	if item.DaysHeld > staleDays {
 		sig.StaleListing = true

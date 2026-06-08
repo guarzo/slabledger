@@ -118,10 +118,6 @@ type BuildDeps struct {
 	CertEnrichJobPrebuilt *CertEnrichJob
 	CertLookup            domainCampaigns.CertLookup
 	PurchaseRepo          domainCampaigns.PurchaseRepository
-
-	// Crack cache refresh dependencies (optional).
-	// CrackCacheService is the inventory service used by CrackCacheRefreshJob to call RefreshCrackCandidates.
-	CrackCacheService domainCampaigns.Service
 }
 
 // BuildResult holds the scheduler group and optional auxiliary references.
@@ -131,7 +127,6 @@ type BuildResult struct {
 	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
 	PSASync           *PSASyncScheduler             // nil if PSA sync is not configured
 	CertEnrichJob     *CertEnrichJob                // nil if cert lookup is not configured
-	CrackCacheJob     *CrackCacheRefreshJob         // nil if inventory service is not configured
 	DHOrdersPoll      *DHOrdersPollScheduler        // nil if DH orders poll is not configured
 	DHReconcile       *DHReconcileScheduler         // nil if DH reconciler is not configured
 }
@@ -143,7 +138,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var mmRefresh *MarketMoversRefreshScheduler
 	var psaSync *PSASyncScheduler
 	var certEnrichJob *CertEnrichJob
-	var crackCacheJob *CrackCacheRefreshJob
 	var dhReconcile *DHReconcileScheduler
 
 	// Price refresh scheduler
@@ -442,12 +436,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, certEnrichJob)
 	}
 
-	// Crack cache refresh scheduler (if inventory service is provided).
-	if deps.CrackCacheService != nil {
-		crackCacheJob = NewCrackCacheRefreshJob(deps.CrackCacheService, deps.Logger)
-		schedulers = append(schedulers, crackCacheJob)
-	}
-
 	// Market Movers value refresh scheduler.
 	// Created whenever the store and purchase interfaces are available, even if
 	// no client exists yet at startup. SetClient is called by the handler when
@@ -471,7 +459,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		MMRefresh:         mmRefresh,
 		PSASync:           psaSync,
 		CertEnrichJob:     certEnrichJob,
-		CrackCacheJob:     crackCacheJob,
 		DHOrdersPoll:      dhOrdersPoll,
 		DHReconcile:       dhReconcile,
 	}

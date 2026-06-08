@@ -20,17 +20,6 @@ func (e *CampaignToolExecutor) registerGetExpectedValues() {
 		})
 }
 
-func (e *CampaignToolExecutor) registerGetDeslabCandidates() {
-	e.registerCampaignTool("get_deslab_candidates",
-		"Get deslab arbitrage analysis: cards where removing from PSA slab and selling raw may be more profitable than selling graded. Shows graded vs deslab net, advantage, and ROI comparison.",
-		func(ctx context.Context, id string) (any, error) {
-			if e.arbSvc == nil {
-				return nil, fmt.Errorf("arbitrage service not available")
-			}
-			return e.arbSvc.GetCrackCandidates(ctx, id)
-		})
-}
-
 func (e *CampaignToolExecutor) registerGetCampaignSuggestions() {
 	e.register(ai.ToolDefinition{
 		Name:        "get_campaign_suggestions",
@@ -202,26 +191,6 @@ func (e *CampaignToolExecutor) registerGetAcquisitionTargets() {
 			return "", fmt.Errorf("arbitrage service not available")
 		}
 		result, err := e.arbSvc.GetAcquisitionTargets(ctx)
-		if err != nil {
-			return "", err
-		}
-		if len(result) > 20 {
-			result = result[:20]
-		}
-		return toJSON(result), nil
-	})
-}
-
-func (e *CampaignToolExecutor) registerGetDeslabOpportunities() {
-	e.register(ai.ToolDefinition{
-		Name:        "get_deslab_opportunities",
-		Description: "Get cross-campaign deslab arbitrage candidates: graded cards where removing from slab and selling raw is more profitable than selling graded. Shows deslab vs graded net, advantage, and ROI.",
-		Parameters:  emptyObjectParams,
-	}, func(ctx context.Context, _ string) (string, error) {
-		if e.arbSvc == nil {
-			return "", fmt.Errorf("arbitrage service not available")
-		}
-		result, err := e.arbSvc.GetCrackOpportunities(ctx)
 		if err != nil {
 			return "", err
 		}

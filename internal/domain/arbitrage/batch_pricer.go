@@ -3,9 +3,8 @@ package arbitrage
 import "context"
 
 // BatchPricer provides batch price distribution lookups for arbitrage analysis.
-// When injected via WithBatchPricer, GetCrackOpportunities and
-// GetAcquisitionTargets use batch DH API calls (2-3 HTTP requests total)
-// instead of per-card lookups (~400+ requests).
+// When injected via WithBatchPricer, GetAcquisitionTargets uses batch DH API
+// calls (2-3 HTTP requests total) instead of per-card lookups (~400+ requests).
 type BatchPricer interface {
 	// ResolveDHCardID maps a card identity to its DH card ID.
 	// Returns 0 if the card has no DH mapping.

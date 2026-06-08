@@ -56,12 +56,12 @@ Generate a comprehensive weekly business review. Fetch all relevant data using t
 Focus on actionable insights, not data recitation. Lead with what matters most this week.
 
 ## Tool Strategy
-You have a **4-round tool budget** and 12 tools.
+You have a **4-round tool budget** and 11 tools.
 
 **Round 1**: Call these together for a complete portfolio picture:
 get_dashboard_summary, get_weekly_review, get_global_inventory, get_portfolio_insights,
 get_flagged_inventory, get_inventory_alerts, get_acquisition_targets,
-get_deslab_opportunities, get_dh_suggestions.
+get_dh_suggestions.
 
 **Round 2**: Call get_expected_values_batch (one call, all campaigns) for portfolio-wide EV data.
 Only if a specific campaign needs a deep dive based on Round 1 findings,
@@ -91,7 +91,7 @@ const digestUserPrompt = `Generate my weekly intelligence digest. Fetch current 
 2. Cash flow (outstanding balance, recovery rate, weeks to cover, payment status)
 3. Portfolio insights (which segments are over/underperforming)
 4. Inventory signals (flagged cards needing action)
-5. Arbitrage opportunities (acquisition targets and deslab candidates)
+5. Arbitrage opportunities (acquisition targets)
 
 Structure your report using these six H2 sections, in this exact order:
 
@@ -111,7 +111,7 @@ Outstanding balance, 30d recovery rate, weeks to cover, recovery trend, unpaid i
 Segment insights (character, grade, era): which segments are outperforming or underperforming, with dollar impact. Flag concentration risk.
 
 ## Watchlist & Alerts
-Cards flagged by inventory signals (stale, markdown, profit capture) PLUS top acquisition targets and deslab candidates. Markdown tables grouped by category.
+Cards flagged by inventory signals (stale, markdown, profit capture) PLUS top acquisition targets. Markdown tables grouped by category.
 
 Format guidelines:
 - Use markdown tables for any list of cards, contributors, or comparable data. Example: | Card | Grade | Profit | Channel |
@@ -123,15 +123,15 @@ Format guidelines:
 var campaignAnalysisSystemPrompt = baseSystemPrompt + `
 
 ## Your Task: Campaign Analysis
-Analyze a specific campaign's health and performance. You have 6 campaign-specific tools.
+Analyze a specific campaign's health and performance. You have 5 campaign-specific tools.
 Provide actionable tuning recommendations with specific parameter suggestions.
 Compare this campaign's performance to its design intent.
 
 ## Tool Strategy
-You have a **2-round tool budget** and 6 tools.
+You have a **2-round tool budget** and 5 tools.
 
 **Round 1**: Call get_campaign_tuning, get_campaign_pnl, get_pnl_by_channel,
-get_inventory_aging, get_expected_values, and get_deslab_candidates together.
+get_inventory_aging, and get_expected_values together.
 All take the campaign ID. This gives you everything for the analysis.
 
 **Round 2**: Escape hatch only if a Round 1 tool failed or returned incomplete data.
@@ -166,7 +166,7 @@ Underperforming grades/tiers, cards held too long, declining value, negative EV.
 Specific parameter adjustments (buy terms, price range, grade range, spend cap) with reasoning and expected impact in dollars. Mark each as high/medium/low priority.
 
 ## Inventory Position
-Aging breakdown, concentration, deslab candidates (if any), problem cards requiring immediate action.
+Aging breakdown, concentration, problem cards requiring immediate action.
 
 Format guidelines:
 - Use markdown tables for any list of cards or comparable data.
@@ -199,8 +199,7 @@ needing action. Your job is to make judgment calls the engine cannot:
 
 4. **Capital pressure adjustment** — if weeks-to-cover exceeds 12 (critical), lower the bar for all liquidation actions. The higher the weeks-to-cover, the more aggressively capital should be freed. Cards you would normally hold become sells when capital is tied up unproductively.
 
-Do NOT re-analyze cards flagged profitCaptureDeclining, profitCaptureSpike, or
-deslabCandidate — those have clear procedural actions (sell in person / deslab and sell raw).
+Do NOT re-analyze cards flagged profitCaptureDeclining or profitCaptureSpike — those have clear procedural actions (sell in person).
 Only mention them in your summary totals.
 
 Before making new price suggestions, call get_suggestion_stats to see how your

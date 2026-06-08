@@ -13,13 +13,11 @@ import (
 // Example:
 //
 //	svc := &MockArbitrageService{
-//	    GetCrackCandidatesFn: func(ctx context.Context, campaignID string) ([]arbitrage.CrackAnalysis, error) {
+//	    GetAcquisitionTargetsFn: func(ctx context.Context) ([]arbitrage.AcquisitionOpportunity, error) {
 //	        return nil, nil
 //	    },
 //	}
 type MockArbitrageService struct {
-	GetCrackCandidatesFn     func(ctx context.Context, campaignID string) ([]arbitrage.CrackAnalysis, error)
-	GetCrackOpportunitiesFn  func(ctx context.Context) ([]arbitrage.CrackAnalysis, error)
 	GetAcquisitionTargetsFn  func(ctx context.Context) ([]arbitrage.AcquisitionOpportunity, error)
 	GetActivationChecklistFn func(ctx context.Context, campaignID string) (*inventory.ActivationChecklist, error)
 	GetExpectedValuesFn      func(ctx context.Context, campaignID string) (*arbitrage.EVPortfolio, error)
@@ -28,20 +26,6 @@ type MockArbitrageService struct {
 }
 
 var _ arbitrage.Service = (*MockArbitrageService)(nil)
-
-func (m *MockArbitrageService) GetCrackCandidates(ctx context.Context, campaignID string) ([]arbitrage.CrackAnalysis, error) {
-	if m.GetCrackCandidatesFn != nil {
-		return m.GetCrackCandidatesFn(ctx, campaignID)
-	}
-	return nil, nil
-}
-
-func (m *MockArbitrageService) GetCrackOpportunities(ctx context.Context) ([]arbitrage.CrackAnalysis, error) {
-	if m.GetCrackOpportunitiesFn != nil {
-		return m.GetCrackOpportunitiesFn(ctx)
-	}
-	return nil, nil
-}
 
 func (m *MockArbitrageService) GetAcquisitionTargets(ctx context.Context) ([]arbitrage.AcquisitionOpportunity, error) {
 	if m.GetAcquisitionTargetsFn != nil {

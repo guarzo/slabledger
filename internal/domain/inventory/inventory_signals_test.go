@@ -16,7 +16,6 @@ func TestComputeInventorySignals(t *testing.T) {
 	tests := []struct {
 		name     string
 		item     inventory.AgingItem
-		isCrack  bool
 		expected inventory.InventorySignals
 	}{
 		{
@@ -53,15 +52,6 @@ func TestComputeInventorySignals(t *testing.T) {
 				},
 			},
 			expected: inventory.InventorySignals{ProfitCaptureSpike: true},
-		},
-		{
-			name: "crack candidate from lookup",
-			item: inventory.AgingItem{
-				DaysHeld: 5,
-				Purchase: inventory.Purchase{BuyCostCents: 5000},
-			},
-			isCrack:  true,
-			expected: inventory.InventorySignals{CrackCandidate: true},
 		},
 		{
 			name: "stale listing — held >14 days",
@@ -137,7 +127,7 @@ func TestComputeInventorySignals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := inventory.ComputeInventorySignals(&tt.item, tt.isCrack)
+			got := inventory.ComputeInventorySignals(&tt.item)
 			if got != tt.expected {
 				t.Errorf("ComputeInventorySignals() = %+v, want %+v", got, tt.expected)
 			}

@@ -3,7 +3,6 @@ package arbitrage
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -16,11 +15,9 @@ const (
 	HighSpendCapCents = 500000 // $5,000/day
 )
 
-// Service provides arbitrage analysis: crack opportunities, acquisition targets,
-// activation checklists, expected value calculations, and Monte Carlo projections.
+// Service provides arbitrage analysis: acquisition targets, activation checklists,
+// expected value calculations, and Monte Carlo projections.
 type Service interface {
-	GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error)
-	GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error)
 	GetAcquisitionTargets(ctx context.Context) ([]AcquisitionOpportunity, error)
 	GetActivationChecklist(ctx context.Context, campaignID string) (*inventory.ActivationChecklist, error)
 	GetExpectedValues(ctx context.Context, campaignID string) (*EVPortfolio, error)
@@ -51,8 +48,7 @@ func WithPriceLookup(priceProv inventory.PriceLookup) ServiceOption {
 }
 
 // WithBatchPricer injects the batch price distribution dependency.
-// When set, GetCrackOpportunities and GetAcquisitionTargets use batch
-// DH API calls instead of per-card lookups.
+// When set, GetAcquisitionTargets uses batch DH API calls instead of per-card lookups.
 func WithBatchPricer(bp BatchPricer) ServiceOption {
 	return func(s *service) {
 		s.batchPricer = bp
@@ -107,97 +103,6 @@ func NewService(
 		opt(svc)
 	}
 	return svc
-}
-
-// GetCrackCandidates returns crack candidates for a single campaign, computed on demand.
-func (s *service) GetCrackCandidates(ctx context.Context, campaignID string) ([]CrackAnalysis, error) {
-	campaign, err := s.campaigns.GetCampaign(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-	return s.crackCandidatesForCampaign(ctx, campaign)
-}
-
-// crackCandidatesForCampaign computes crack candidates for an already-loaded campaign.
-func (s *service) crackCandidatesForCampaign(ctx context.Context, campaign *inventory.Campaign) ([]CrackAnalysis, error) {
-	if s.priceProv == nil {
-		if s.logger != nil {
-			s.logger.Info(ctx, "skipping crack candidates",
-				observability.String("reason", "price provider not configured"))
-		}
-		return []CrackAnalysis{}, nil
-	}
-
-	priceProv := s.requestScopedPriceProv()
-
-	unsold, err := s.purchases.ListUnsoldPurchases(ctx, campaign.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	ebayFee := inventory.EffectiveFeePct(campaign)
-
-	var results []CrackAnalysis
-	for _, p := range unsold {
-		// Skip PSA 9+ from crack analysis — only PSA 8 and below (including half-grades like 8.5)
-		// are candidates for cracking and resubmission.
-		if p.GradeValue >= 9 {
-			continue
-		}
-
-		card := p.ToCardIdentity()
-
-		rawCents := 0
-		gradedCents := 0
-		if v, err := priceProv.GetLastSoldCents(ctx, card, 0); err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "crack analysis: raw price lookup failed",
-					observability.String("cardName", p.CardName),
-					observability.Err(err))
-			}
-		} else {
-			rawCents = v
-		}
-		if v, err := priceProv.GetLastSoldCents(ctx, card, p.GradeValue); err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "crack analysis: graded price lookup failed",
-					observability.String("cardName", p.CardName),
-					observability.Float64("grade", p.GradeValue),
-					observability.Err(err))
-			}
-		} else {
-			gradedCents = v
-		}
-
-		if rawCents == 0 {
-			continue
-		}
-		if gradedCents == 0 {
-			gradedCents = p.CLValueCents
-		}
-
-		analysis := ComputeCrackAnalysis(
-			p.ID, campaign.ID, p.CardName, p.CertNumber, p.GradeValue,
-			p.BuyCostCents, p.PSASourcingFeeCents, rawCents, gradedCents,
-			ebayFee,
-		)
-		results = append(results, *analysis)
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].CrackAdvantage > results[j].CrackAdvantage
-	})
-
-	return results, nil
-}
-
-// GetCrackOpportunities returns cross-campaign crack opportunities, computed on demand.
-// Dispatches to the batch path when BatchPricer is injected, otherwise falls back to legacy.
-func (s *service) GetCrackOpportunities(ctx context.Context) ([]CrackAnalysis, error) {
-	if s.batchPricer != nil {
-		return s.getCrackOpportunitiesBatch(ctx)
-	}
-	return s.getCrackOpportunitiesLegacy(ctx)
 }
 
 // GetActivationChecklist builds a pre-activation readiness checklist.

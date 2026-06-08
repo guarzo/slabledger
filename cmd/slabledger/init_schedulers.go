@@ -230,11 +230,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.CertEnrichJobPrebuilt = deps.CertEnrichJob
 	}
 
-	// Wire crack cache refresh (uses inventory service for RefreshCrackCandidates).
-	if deps.CampaignsService != nil {
-		buildDeps.CrackCacheService = deps.CampaignsService
-	}
-
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 
 	// Wire the pricing-enrich job's providers now that CL/MM schedulers exist.

@@ -76,7 +76,6 @@ export interface QuickAddRequest {
 export interface InventorySignals {
   profitCaptureDeclining?: boolean;
   profitCaptureSpike?: boolean;
-  crackCandidate?: boolean;
   staleListing?: boolean;
   deepStale?: boolean;
   cutLoss?: boolean;

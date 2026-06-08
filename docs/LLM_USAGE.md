@@ -96,13 +96,13 @@ Tool results are truncated to **12 000 chars** each before being sent back to th
 
 `ADVISOR_MAX_TOOL_ROUNDS` env var overrides the default per-operation value.
 
-#### Tool registry (31 tools, defined in `internal/adapters/advisortool/`)
+#### Tool registry (28 tools, defined in `internal/adapters/advisortool/`)
 
 Each operation uses a filtered subset:
 
-**Digest (4 rounds, 11 tools):** `get_dashboard_summary`, `get_weekly_review`, `get_global_inventory`, `get_portfolio_insights`, `get_flagged_inventory`, `get_inventory_alerts`, `get_acquisition_targets`, `get_deslab_opportunities`, `get_dh_suggestions`, `get_expected_values_batch`, `get_campaign_tuning`, `get_campaign_pnl`
+**Digest (4 rounds, 11 tools):** `get_dashboard_summary`, `get_weekly_review`, `get_global_inventory`, `get_portfolio_insights`, `get_flagged_inventory`, `get_inventory_alerts`, `get_acquisition_targets`, `get_dh_suggestions`, `get_expected_values_batch`, `get_campaign_tuning`, `get_campaign_pnl`
 
-**Campaign analysis (3 rounds, 6 tools):** `get_campaign_pnl`, `get_pnl_by_channel`, `get_campaign_tuning`, `get_inventory_aging`, `get_expected_values`, `get_deslab_candidates`
+**Campaign analysis (3 rounds, 5 tools):** `get_campaign_pnl`, `get_pnl_by_channel`, `get_campaign_tuning`, `get_inventory_aging`, `get_expected_values`
 
 **Liquidation (3 rounds, 6 tools):** `get_dashboard_summary`, `get_flagged_inventory`, `get_suggestion_stats`, `get_inventory_alerts`, `get_expected_values_batch`, `suggest_price_batch`
 

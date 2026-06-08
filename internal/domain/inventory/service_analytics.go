@@ -242,7 +242,7 @@ func (s *service) GetInventoryAging(ctx context.Context, campaignID string) (*In
 
 func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult, error) {
 	start := time.Now()
-	var phasePurchases, phaseCampaigns, phaseEnrich, phaseFlags, phaseComps, phaseCracks, phaseSignals time.Duration
+	var phasePurchases, phaseCampaigns, phaseEnrich, phaseFlags, phaseComps, phaseSignals time.Duration
 
 	t0 := time.Now()
 	purchases, err := s.purchases.ListAllUnsoldPurchases(ctx)
@@ -285,13 +285,8 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult
 	phaseComps = time.Since(t0)
 
 	t0 = time.Now()
-	crackSet := s.buildCrackCandidateSet(ctx)
-	phaseCracks = time.Since(t0)
-
-	t0 = time.Now()
 	for i := range items {
-		isCrack := crackSet[items[i].Purchase.ID]
-		sig := ComputeInventorySignals(&items[i], isCrack)
+		sig := ComputeInventorySignals(&items[i])
 		if sig.HasAnySignal() {
 			items[i].Signals = &sig
 		}
@@ -307,7 +302,6 @@ func (s *service) GetGlobalInventoryAging(ctx context.Context) (*InventoryResult
 			observability.Float64("enrichMs", float64(phaseEnrich.Milliseconds())),
 			observability.Float64("openFlagsMs", float64(phaseFlags.Milliseconds())),
 			observability.Float64("compSummariesMs", float64(phaseComps.Milliseconds())),
-			observability.Float64("cracksMs", float64(phaseCracks.Milliseconds())),
 			observability.Float64("signalsMs", float64(phaseSignals.Milliseconds())),
 		)
 	}
@@ -330,40 +324,6 @@ func (s *service) GetFlaggedInventory(ctx context.Context) ([]AgingItem, error) 
 		}
 	}
 	return flagged, nil
-}
-
-// buildCrackCandidateSet returns the cached set of crack candidate purchase IDs.
-// Returns nil on cold start (before the background worker has completed its first run);
-// callers handle nil safely (Go nil-map index returns false).
-//
-// Safe: refreshCrackCandidates replaces the map atomically (never mutates in-place),
-// so callers can iterate the returned reference without holding the lock.
-func (s *service) buildCrackCandidateSet(ctx context.Context) map[string]bool {
-	s.crackCacheMu.RLock()
-	set := s.crackCacheSet
-	s.crackCacheMu.RUnlock()
-	if set == nil && s.logger != nil {
-		s.logger.Info(ctx, "crack cache not yet populated, signals will be incomplete")
-	}
-	return set
-}
-
-// refreshCrackCandidates recomputes the crack candidate set and stores it in the cache.
-// This is the ONLY code path that makes live DH API calls for crack analysis.
-// All handlers read from the cache populated here.
-func (s *service) RefreshCrackCandidates(ctx context.Context) error {
-	candidates, err := s.computeCrackOpportunitiesLive(ctx)
-	if err != nil {
-		return err
-	}
-	set := make(map[string]bool, len(candidates))
-	for _, id := range candidates {
-		set[id] = true
-	}
-	s.crackCacheMu.Lock()
-	s.crackCacheSet = set
-	s.crackCacheMu.Unlock()
-	return nil
 }
 
 // applyOpenFlags batch-loads open price flag status and sets HasOpenFlag on matching items.

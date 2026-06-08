@@ -251,25 +251,6 @@ export interface PortfolioHealth {
   totalRecoveredDelta?: PortfolioDelta;
 }
 
-// Crack Arbitrage types
-
-export interface CrackAnalysis {
-  purchaseId: string;
-  cardName: string;
-  certNumber: string;
-  grade: number;
-  buyCostCents: number;
-  costBasisCents: number;
-  rawMarketCents: number;
-  breakevenRawCents: number;
-  gradedNetCents: number;
-  crackNetCents: number;
-  crackAdvantageCents: number;
-  isCrackCandidate: boolean;
-  crackROI: number;
-  gradedROI: number;
-}
-
 // Expected Value types
 
 export interface ExpectedValue {
