@@ -303,8 +303,6 @@ func (rt *Router) registerPSAExchangeRoutes(mux *http.ServeMux) {
 		return
 	}
 	mux.Handle("GET /api/psa-exchange/opportunities", rt.authMW.RequireAuth(http.HandlerFunc(rt.psaExchangeHandler.HandleGetOpportunities)))
-	mux.Handle("GET /api/psa-exchange/policy", rt.authMW.RequireAuth(http.HandlerFunc(rt.psaExchangeHandler.HandleGetPolicy)))
-	mux.Handle("PUT /api/psa-exchange/policy", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaExchangeHandler.HandlePutPolicy)))
 	rt.logger.Info(context.Background(), "psa-exchange routes registered")
 }
 

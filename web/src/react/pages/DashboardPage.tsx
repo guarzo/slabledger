@@ -7,8 +7,6 @@ import {
   useGlobalInventory,
 } from '../queries/useCampaignQueries';
 import HeroStatsBar from '../components/portfolio/HeroStatsBar';
-import NextMovesPanel from '../components/portfolio/NextMovesPanel';
-import InvoiceReadinessPanel from '../components/portfolio/InvoiceReadinessPanel';
 import WeeklyReviewSection from '../components/portfolio/WeeklyReviewSection';
 import TopPerformersSection from '../components/portfolio/TopPerformersSection';
 import { computeInventoryMeta } from './campaign-detail/inventory/inventoryCalcs';
@@ -55,20 +53,6 @@ export default function DashboardPage() {
         hideInvoiceChip
         asOfMs={healthUpdatedAt}
       />
-
-      {/* Next Moves — what to act on today */}
-      <SectionErrorBoundary sectionName="Next Moves">
-        <NextMovesPanel />
-      </SectionErrorBoundary>
-
-      {/* Invoice Readiness */}
-      {capitalData && (
-        <div className="mb-6">
-          <SectionErrorBoundary sectionName="Invoice Readiness">
-            <InvoiceReadinessPanel capital={capitalData} />
-          </SectionErrorBoundary>
-        </div>
-      )}
 
       {/* Weekly Review */}
       {weeklyReview && (
