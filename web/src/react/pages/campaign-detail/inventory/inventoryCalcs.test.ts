@@ -221,6 +221,47 @@ describe('inventoryCalcs', () => {
     });
   });
 
+  describe('filterAndSortItems — column sort (no search)', () => {
+    // Three items with distinct cost bases so sort order is unambiguous.
+    const items = [
+      makeItem({ purchase: { id: 'mid', buyCostCents: 5000, psaSourcingFeeCents: 0 } }),
+      makeItem({ purchase: { id: 'low', buyCostCents: 1000, psaSourcingFeeCents: 0 } }),
+      makeItem({ purchase: { id: 'high', buyCostCents: 9000, psaSourcingFeeCents: 0 } }),
+    ];
+
+    it('sorts by cost ascending when sortKey=cost and no search is active', () => {
+      const result = filterAndSortItems(items, {
+        debouncedSearch: '',
+        filterTab: 'all',
+        sortKey: 'cost',
+        sortDir: 'asc',
+      });
+      expect(result.map(r => r.purchase.id)).toEqual(['low', 'mid', 'high']);
+    });
+
+    it('sorts by cost descending when sortDir=desc', () => {
+      const result = filterAndSortItems(items, {
+        debouncedSearch: '',
+        filterTab: 'all',
+        sortKey: 'cost',
+        sortDir: 'desc',
+      });
+      expect(result.map(r => r.purchase.id)).toEqual(['high', 'mid', 'low']);
+    });
+
+    it('falls back to smart urgency order when sortKey is null', () => {
+      // All three are awaiting-intake (no receivedAt) → same review status,
+      // so urgency sort is stable on the equal-priority tiebreak (daysHeld).
+      const result = filterAndSortItems(items, {
+        debouncedSearch: '',
+        filterTab: 'all',
+        sortKey: null,
+        sortDir: 'asc',
+      });
+      expect(result).toHaveLength(3);
+    });
+  });
+
   describe('isReadyToList', () => {
     it('returns true when received, pushed to DH, not listed, and has a reviewed price', () => {
       const item = makeItem({

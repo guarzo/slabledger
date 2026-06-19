@@ -252,6 +252,15 @@ function sortItems(
     `all` and the legacy `in_hand` alias apply no narrowing. This is the single
     source of truth for "what rows does the active tab+search show", shared by
     both row filtering and price-band counting. */
+/** Final row ordering: an explicit column → real column sort; `null` → the
+    smart urgency order (flagged → large_gap → no_data → needs_review →
+    reviewed, then oldest-first). Independent of search. */
+function orderItems(items: AgingItem[], sortKey: SortKey | null, sortDir: SortDir): AgingItem[] {
+  return sortKey == null
+    ? [...items].sort(reviewUrgencySort)
+    : sortItems(items, sortKey, sortDir);
+}
+
 export function applySearchAndTab(
   items: AgingItem[],
   debouncedSearch: string,
@@ -287,7 +296,7 @@ export function filterAndSortItems(
   opts: {
     debouncedSearch: string;
     filterTab: FilterTab;
-    sortKey: SortKey;
+    sortKey: SortKey | null;
     sortDir: SortDir;
     pinnedIds?: ReadonlySet<string>;
     priceBand?: PriceBand;
@@ -297,7 +306,7 @@ export function filterAndSortItems(
 
   if (opts.pinnedIds && opts.pinnedIds.size > 0) {
     const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
-    return sortItems(subset, sortKey, sortDir);
+    return orderItems(subset, sortKey, sortDir);
   }
 
   let result = applySearchAndTab(items, debouncedSearch, filterTab);
@@ -306,9 +315,5 @@ export function filterAndSortItems(
     result = result.filter(i => matchesPriceBand(i, priceBand));
   }
 
-  if (!debouncedSearch.trim()) {
-    return [...result].sort(reviewUrgencySort);
-  }
-
-  return sortItems(result, sortKey, sortDir);
+  return orderItems(result, sortKey, sortDir);
 }
