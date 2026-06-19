@@ -268,10 +268,6 @@ function sortItems(
   });
 }
 
-/** Select the base set for the current view: search wins over the tab filter;
-    `all` and the legacy `in_hand` alias apply no narrowing. This is the single
-    source of truth for "what rows does the active tab+search show", shared by
-    both row filtering and price-band counting. */
 /** Final row ordering: an explicit column → real column sort; `null` → the
     smart urgency order (flagged → large_gap → no_data → needs_review →
     reviewed, then oldest-first). Independent of search. */
@@ -281,6 +277,10 @@ function orderItems(items: AgingItem[], sortKey: SortKey | null, sortDir: SortDi
     : sortItems(items, sortKey, sortDir);
 }
 
+/** Select the base set for the current view: search wins over the tab filter;
+    `all` and the legacy `in_hand` alias apply no narrowing. This is the single
+    source of truth for "what rows does the active tab+search show", shared by
+    both row filtering and price-band counting. */
 export function applySearchAndTab(
   items: AgingItem[],
   debouncedSearch: string,

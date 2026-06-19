@@ -252,15 +252,22 @@ describe('inventoryCalcs', () => {
     });
 
     it('falls back to smart urgency order when sortKey is null', () => {
-      // All three are awaiting-intake (no receivedAt) → same review status,
-      // so urgency sort is stable on the equal-priority tiebreak (daysHeld).
-      const result = filterAndSortItems(items, {
+      // Three distinct review statuses fed in non-urgency order. Urgency sort
+      // must reorder them flagged(0) → needs_review(3) → reviewed(4), proving
+      // the null path routes through reviewUrgencySort rather than leaving the
+      // input order (or a column sort) in place.
+      const reviewed = makeItem({ purchase: { id: 'reviewed', reviewedAt: '2026-04-10T00:00:00Z' } });
+      const flagged = makeItem({ purchase: { id: 'flagged' }, hasOpenFlag: true });
+      // clValue == cost basis and no snapshot → not no_data, not large_gap → needs_review.
+      const needsReview = makeItem({ purchase: { id: 'needs', clValueCents: 5000, buyCostCents: 5000, psaSourcingFeeCents: 0 } });
+
+      const result = filterAndSortItems([reviewed, flagged, needsReview], {
         debouncedSearch: '',
         filterTab: 'all',
         sortKey: null,
         sortDir: 'asc',
       });
-      expect(result).toHaveLength(3);
+      expect(result.map(r => r.purchase.id)).toEqual(['flagged', 'needs', 'reviewed']);
     });
   });
 
