@@ -360,6 +360,13 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		if in.DHEventStore != nil {
 			listingOpts = append(listingOpts, dhlisting.WithEventRecorder(in.DHEventStore))
 		}
+		if in.DHStore != nil {
+			// Honor the admin "Pause DH Listings" toggle on the HTTP listing
+			// paths (cert import, scan-cert, reviewed-price/override auto-list,
+			// manual "List on DH"). Without this the toggle only gated the push
+			// scheduler and these paths listed regardless.
+			listingOpts = append(listingOpts, dhlisting.WithDHListingConfigLoader(in.DHStore))
+		}
 		svc, err := dhlisting.NewDHListingService(
 			in.CampaignsService, in.Logger, listingOpts...,
 		)

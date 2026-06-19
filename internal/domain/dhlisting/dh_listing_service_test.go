@@ -923,3 +923,176 @@ func TestListPurchases_NoOpGuard(t *testing.T) {
 		})
 	}
 }
+
+// mockConfigLoader returns a fixed DH push config for the listing service's
+// ListingsPaused gate. err, when set, simulates a config-load failure.
+type mockConfigLoader struct {
+	cfg  *inventory.DHPushConfig
+	err  error
+	hits int
+}
+
+func (m *mockConfigLoader) GetDHPushConfig(_ context.Context) (*inventory.DHPushConfig, error) {
+	m.hits++
+	return m.cfg, m.err
+}
+
+// TestListPurchases_ListingsPausedSkipsAllDHContact is the regression test for
+// the production bug where the admin "Pause DH Listings" toggle had no effect
+// on the import / price-commit / manual-list paths: those route through
+// ListPurchases, which never consulted the toggle (only the push scheduler did).
+//
+// When ListingsPaused is true, ListPurchases must short-circuit before any DH
+// contact: no inline psa_import, no UpdateInventoryStatus, no SyncChannels, no
+// local field writes. The purchase stays pending and is reported as skipped.
+func TestListPurchases_ListingsPausedSkipsAllDHContact(t *testing.T) {
+	certNum := "90009000"
+	// A purchase that is fully eligible to list — already pushed (inventory ID
+	// set), in_stock, with a committed reviewed price. Absent the pause gate
+	// this would list successfully, so a non-zero Listed proves the leak.
+	purchase := &inventory.Purchase{
+		ID:                 "purchase-paused-1",
+		CertNumber:         certNum,
+		DHInventoryID:      222,
+		DHCardID:           11,
+		DHStatus:           inventory.DHStatusInStock,
+		ReviewedPriceCents: 60000,
+	}
+
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	}
+	lister := &mockInventoryLister{}
+	fieldsUpdater := &mockFieldsUpdater{}
+	eventRec := &mockEventRecorder{}
+	cfgLoader := &mockConfigLoader{cfg: &inventory.DHPushConfig{ListingsPaused: true}}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingFieldsUpdater(fieldsUpdater),
+		WithEventRecorder(eventRec),
+		WithDHListingConfigLoader(cfgLoader),
+	)
+
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	// Nothing should have been listed or synced.
+	if result.Listed != 0 {
+		t.Errorf("Listed: got %d, want 0 (listings are paused)", result.Listed)
+	}
+	if result.Synced != 0 {
+		t.Errorf("Synced: got %d, want 0 (listings are paused)", result.Synced)
+	}
+	// The batch was found but skipped wholesale; the result invariant
+	// Listed+Synced+Skipped == Total must still hold.
+	if result.Total != 1 {
+		t.Errorf("Total: got %d, want 1", result.Total)
+	}
+	if result.Skipped != 1 {
+		t.Errorf("Skipped: got %d, want 1 (paused batch counts as skipped)", result.Skipped)
+	}
+	if !result.Paused {
+		t.Error("Paused: got false, want true (batch skipped because the toggle is on)")
+	}
+
+	// Critically: no DH-side calls and no local mutations may occur.
+	if lister.updateCalls != 0 {
+		t.Errorf("UpdateInventoryStatus called %d times; want 0 — paused must not touch DH", lister.updateCalls)
+	}
+	if lister.syncCalls != 0 {
+		t.Errorf("SyncChannels called %d times; want 0 — paused must not touch DH", lister.syncCalls)
+	}
+	if len(fieldsUpdater.calls) != 0 {
+		t.Errorf("UpdatePurchaseDHFields called %d times; want 0 — paused must not mutate local state", len(fieldsUpdater.calls))
+	}
+	if len(eventRec.events) != 0 {
+		t.Errorf("recorded %d events; want 0 — paused must not emit listed/channel events", len(eventRec.events))
+	}
+	if cfgLoader.hits == 0 {
+		t.Error("expected ListPurchases to load the DH push config to evaluate ListingsPaused, but it never did")
+	}
+}
+
+// TestListPurchases_NotPausedListsNormally guards the inverse: when the config
+// loader is wired but ListingsPaused is false, listing proceeds as usual.
+func TestListPurchases_NotPausedListsNormally(t *testing.T) {
+	certNum := "90019001"
+	purchase := &inventory.Purchase{
+		ID:                 "purchase-unpaused-1",
+		CertNumber:         certNum,
+		DHInventoryID:      223,
+		DHCardID:           12,
+		DHStatus:           inventory.DHStatusInStock,
+		ReviewedPriceCents: 60000,
+	}
+
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	}
+	lister := &mockInventoryLister{}
+	fieldsUpdater := &mockFieldsUpdater{}
+	cfgLoader := &mockConfigLoader{cfg: &inventory.DHPushConfig{ListingsPaused: false}}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingFieldsUpdater(fieldsUpdater),
+		WithDHListingConfigLoader(cfgLoader),
+	)
+
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Listed != 1 {
+		t.Errorf("Listed: got %d, want 1 (not paused)", result.Listed)
+	}
+	if lister.updateCalls != 1 {
+		t.Errorf("UpdateInventoryStatus called %d times; want 1 (not paused)", lister.updateCalls)
+	}
+	if result.Paused {
+		t.Error("Paused: got true, want false (config loaded cleanly with ListingsPaused=false)")
+	}
+}
+
+// TestListPurchases_ConfigLoadErrorFailsClosed asserts the fail-closed policy:
+// when the config loader errors (e.g. a transient DB blip), ListPurchases must
+// treat the batch as paused and make no DH contact, rather than listing. The
+// toggle guards card-show liquidation windows where an erroneous list is
+// irreversible, so a load error must not silently defeat it.
+func TestListPurchases_ConfigLoadErrorFailsClosed(t *testing.T) {
+	certNum := "90029002"
+	purchase := &inventory.Purchase{
+		ID:                 "purchase-cfgerr-1",
+		CertNumber:         certNum,
+		DHInventoryID:      224,
+		DHCardID:           13,
+		DHStatus:           inventory.DHStatusInStock,
+		ReviewedPriceCents: 60000,
+	}
+
+	lookup := &mockPurchaseLookup{
+		purchases: map[string]*inventory.Purchase{certNum: purchase},
+	}
+	lister := &mockInventoryLister{}
+	fieldsUpdater := &mockFieldsUpdater{}
+	cfgLoader := &mockConfigLoader{err: errors.New("connection refused")}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingFieldsUpdater(fieldsUpdater),
+		WithDHListingConfigLoader(cfgLoader),
+	)
+
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if !result.Paused {
+		t.Error("Paused: got false, want true (config load error must fail closed)")
+	}
+	if result.Listed != 0 {
+		t.Errorf("Listed: got %d, want 0 (fail closed on config error)", result.Listed)
+	}
+	if result.Skipped != 1 {
+		t.Errorf("Skipped: got %d, want 1", result.Skipped)
+	}
+	if lister.updateCalls != 0 {
+		t.Errorf("UpdateInventoryStatus called %d times; want 0 — fail closed must not touch DH", lister.updateCalls)
+	}
+}

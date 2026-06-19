@@ -199,6 +199,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 			if deps.DHEventStore != nil {
 				listingOpts = append(listingOpts, dhlisting.WithEventRecorder(deps.DHEventStore))
 			}
+			if deps.DHStore != nil {
+				// Honor the ListingsPaused toggle on the scheduler's auto-relist
+				// path too, matching the push scheduler's own gate.
+				listingOpts = append(listingOpts, dhlisting.WithDHListingConfigLoader(deps.DHStore))
+			}
 			listingSvc, err := dhlisting.NewDHListingService(deps.CampaignsService, deps.Logger, listingOpts...)
 			if err != nil {
 				deps.Logger.Error(ctx, "DH listing service init for push scheduler failed; auto-relist disabled", observability.Err(err))
