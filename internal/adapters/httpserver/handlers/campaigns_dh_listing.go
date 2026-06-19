@@ -81,6 +81,15 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 	}
 
 	result := h.dhListingSvc.ListPurchases(r.Context(), []string{p.CertNumber})
+	if result.Paused {
+		// The global "Pause DH Listings" toggle is on (or its config couldn't be
+		// loaded and we failed closed). The item was deliberately not listed —
+		// report it as a 409 so the operator sees the pause, not a DH failure.
+		h.logger.Info(r.Context(), "dh listing: skipped — listings are paused",
+			observability.String("purchaseId", purchaseID))
+		writeError(w, http.StatusConflict, "DH listings are paused — turn off the pause toggle in admin to list")
+		return
+	}
 	if result.Error != nil {
 		if errors.Is(result.Error, dhlisting.ErrPSAKeysExhausted) {
 			h.logger.Warn(r.Context(), "dh listing: PSA keys exhausted — deferring",

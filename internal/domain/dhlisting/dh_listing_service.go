@@ -24,8 +24,17 @@ type dhListingService struct {
 	pushStatusUpdater DHListingPushStatusUpdater
 	resetter          DHReconcileResetter      // optional: auto-resets stale DH inventory IDs inline
 	unlistedClearer   DHListingUnlistedClearer // optional: clears dh_unlisted_detected_at on successful list
+	configLoader      DHListingConfigLoader    // optional: gates listing on the global ListingsPaused toggle
 	logger            observability.Logger
 	eventRec          dhevents.Recorder // may be nil
+}
+
+// DHListingConfigLoader loads the DH push safety config so the listing service
+// can honor the global ListingsPaused toggle. Mirrors the push scheduler's
+// DHPushConfigLoader; defined here (not imported) so the domain service does
+// not depend on the scheduler adapter.
+type DHListingConfigLoader interface {
+	GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error)
 }
 
 // DHListingPurchaseLookup retrieves purchases by cert numbers.
@@ -101,6 +110,13 @@ func WithEventRecorder(r dhevents.Recorder) DHListingServiceOption {
 	return func(s *dhListingService) { s.eventRec = r }
 }
 
+// WithDHListingConfigLoader injects the DH push config loader so ListPurchases
+// honors the global ListingsPaused toggle. Without it, the listing service
+// lists unconditionally (the toggle only gates the push scheduler).
+func WithDHListingConfigLoader(loader DHListingConfigLoader) DHListingServiceOption {
+	return func(s *dhListingService) { s.configLoader = loader }
+}
+
 // NewDHListingService creates a new Service.
 // purchaseLookup and logger are required; all other dependencies are optional.
 func NewDHListingService(
@@ -141,6 +157,35 @@ func (s *dhListingService) recordEvent(ctx context.Context, e dhevents.Event) {
 func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []string) DHListingResult {
 	if s.lister == nil || len(certNumbers) == 0 {
 		return DHListingResult{}
+	}
+
+	// Honor the global ListingsPaused toggle. Every non-scheduler listing path
+	// (cert import, scan-cert, reviewed-price/override auto-list, the manual
+	// "List on DH" button) funnels through here, so this is the single gate
+	// that makes the admin "Pause DH Listings" switch effective for them — the
+	// push scheduler enforces the same toggle independently. When paused we
+	// short-circuit before any DH contact: no inline psa_import, no status
+	// update, no channel sync. Items are left in their current state and resume
+	// listing once the toggle is cleared; the Paused flag lets callers (e.g. the
+	// manual-list handler) report the pause distinctly instead of as a failure.
+	//
+	// Fail closed: a config-load error is treated as paused. The toggle exists
+	// for card-show liquidation windows where listing on DH would undercut live
+	// in-person sales — an irreversible action — whereas skipping merely defers
+	// listing until the next trigger or scheduler cycle. So on a transient DB
+	// error we prefer the recoverable outcome (skip) over the irreversible one.
+	if s.configLoader != nil {
+		cfg, cfgErr := s.configLoader.GetDHPushConfig(ctx)
+		switch {
+		case cfgErr != nil:
+			s.logger.Warn(ctx, "dh listing: failed to load push config; treating as paused (fail closed)",
+				observability.Err(cfgErr))
+			return DHListingResult{Skipped: len(certNumbers), Total: len(certNumbers), Paused: true}
+		case cfg != nil && cfg.ListingsPaused:
+			s.logger.Info(ctx, "dh listing: listings paused — skipping list run",
+				observability.Int("certs", len(certNumbers)))
+			return DHListingResult{Skipped: len(certNumbers), Total: len(certNumbers), Paused: true}
+		}
 	}
 
 	// Reset PSA key rotation so a previously-exhausted rotation index from a

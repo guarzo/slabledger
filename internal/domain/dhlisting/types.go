@@ -47,6 +47,7 @@ type DHListingResult struct {
 	Synced      int              // items with channels synced
 	Skipped     int              // items skipped (unenrolled, inline push failed, update/sync error, etc)
 	Total       int              // total purchases found
+	Paused      bool             // true when the whole batch was skipped because the global ListingsPaused toggle is on
 	Error       error            // set when a fatal error prevented listing (e.g. DB lookup failure)
 	FailedCerts map[string]error // per-cert failure reasons; nil if no skip/revert recorded an error
 }
