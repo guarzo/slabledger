@@ -3,7 +3,7 @@ import type { SortKey, SortDir } from './utils';
 interface SortableHeaderProps {
   label: string;
   sortKey: SortKey;
-  currentKey: SortKey;
+  currentKey: SortKey | null;
   currentDir: SortDir;
   onSort: (key: SortKey) => void;
   className?: string;
