@@ -7,7 +7,7 @@ import { queryKeys } from '../../../queries/queryKeys';
 import { api } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
 import type { SortKey, SortDir } from './utils';
-import { computeInventoryMeta, computeTotals, filterAndSortItems } from './inventoryCalcs';
+import { computeInventoryMeta, computeTotals, filterAndSortItems, applySearchAndTab, computePriceBandCounts } from './inventoryCalcs';
 import type { FilterTab, PriceBand } from './inventoryCalcs';
 import { useInventorySelection } from './useInventorySelection';
 import { useDHActions } from './useDHActions';
@@ -17,7 +17,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const selection = useInventorySelection();
-  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -66,9 +66,16 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     }
   }, [items, selection.selected.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { reviewStats, tabCounts, priceBandCounts, summary } = useMemo(
+  const { reviewStats, tabCounts, summary } = useMemo(
     () => computeInventoryMeta(items),
     [items],
+  );
+
+  // Price-band badge counts are scoped to the active tab + search so each `$`
+  // pill's number equals the rows clicking it would produce in the current view.
+  const priceBandCounts = useMemo(
+    () => computePriceBandCounts(applySearchAndTab(items, debouncedSearch, filterTab)),
+    [items, debouncedSearch, filterTab],
   );
 
   // Smart default tab: needs_attention if > 0, else all

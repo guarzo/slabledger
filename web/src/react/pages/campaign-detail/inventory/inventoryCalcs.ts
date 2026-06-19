@@ -205,6 +205,26 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   };
 }
 
+/** Count items per price band over a given base set. Pass the output of
+    `applySearchAndTab` to get counts scoped to the active tab + search, so each
+    `$` pill badge equals the rows clicking it would produce in the current view.
+    Items with no price (priceBandOf === null) count toward `all` only. */
+export function computePriceBandCounts(items: AgingItem[]): PriceBandCounts {
+  const counts: PriceBandCounts = {
+    all: items.length,
+    lt50: 0,
+    '50to100': 0,
+    '100to250': 0,
+    '250to500': 0,
+    gte500: 0,
+  };
+  for (const item of items) {
+    const band = priceBandOf(item);
+    if (band) counts[band]++;
+  }
+  return counts;
+}
+
 export type FilterTab =
   | 'needs_attention'
   | 'all'
@@ -248,12 +268,55 @@ function sortItems(
   });
 }
 
+/** Final row ordering: an explicit column → real column sort; `null` → the
+    smart urgency order (flagged → large_gap → no_data → needs_review →
+    reviewed, then oldest-first). Independent of search. */
+function orderItems(items: AgingItem[], sortKey: SortKey | null, sortDir: SortDir): AgingItem[] {
+  return sortKey === null
+    ? [...items].sort(reviewUrgencySort)
+    : sortItems(items, sortKey, sortDir);
+}
+
+/** Select the base set for the current view: search wins over the tab filter;
+    `all` and the legacy `in_hand` alias apply no narrowing. This is the single
+    source of truth for "what rows does the active tab+search show", shared by
+    both row filtering and price-band counting. */
+export function applySearchAndTab(
+  items: AgingItem[],
+  debouncedSearch: string,
+  filterTab: FilterTab,
+): AgingItem[] {
+  if (debouncedSearch.trim()) {
+    const q = debouncedSearch.toLowerCase();
+    return items.filter(i =>
+      i.purchase.cardName.toLowerCase().includes(q) ||
+      (i.purchase.certNumber && i.purchase.certNumber.toLowerCase().includes(q)) ||
+      (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
+    );
+  }
+  if (filterTab === 'in_hand' || filterTab === 'all') {
+    return items;
+  }
+  return items.filter(i => {
+    switch (filterTab) {
+      case 'needs_attention': return needsAttention(i);
+      case 'awaiting_intake': return !i.purchase.receivedAt;
+      case 'pending_dh_match': return isPendingDHMatch(i);
+      case 'pending_price': return isPendingPrice(i);
+      case 'ready_to_list': return isReadyToList(i);
+      case 'dh_listed': return isDHListed(i);
+      case 'skipped': return isSkipped(i);
+      default: return false;
+    }
+  });
+}
+
 export function filterAndSortItems(
   items: AgingItem[],
   opts: {
     debouncedSearch: string;
     filterTab: FilterTab;
-    sortKey: SortKey;
+    sortKey: SortKey | null;
     sortDir: SortDir;
     pinnedIds?: ReadonlySet<string>;
     priceBand?: PriceBand;
@@ -263,42 +326,14 @@ export function filterAndSortItems(
 
   if (opts.pinnedIds && opts.pinnedIds.size > 0) {
     const subset = items.filter(i => opts.pinnedIds!.has(i.purchase.id));
-    return sortItems(subset, sortKey, sortDir);
+    return orderItems(subset, sortKey, sortDir);
   }
-  let result = items;
 
-  if (debouncedSearch.trim()) {
-    const q = debouncedSearch.toLowerCase();
-    result = result.filter(i =>
-      i.purchase.cardName.toLowerCase().includes(q) ||
-      (i.purchase.certNumber && i.purchase.certNumber.toLowerCase().includes(q)) ||
-      (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
-    );
-  } else if (filterTab === 'in_hand') {
-    // Legacy alias: treat as `all`.
-    // result stays as-is
-  } else if (filterTab !== 'all') {
-    result = result.filter(i => {
-      switch (filterTab) {
-        case 'needs_attention': return needsAttention(i);
-        case 'awaiting_intake': return !i.purchase.receivedAt;
-        case 'pending_dh_match': return isPendingDHMatch(i);
-        case 'pending_price': return isPendingPrice(i);
-        case 'ready_to_list': return isReadyToList(i);
-        case 'dh_listed': return isDHListed(i);
-        case 'skipped': return isSkipped(i);
-        default: return false;
-      }
-    });
-  }
+  let result = applySearchAndTab(items, debouncedSearch, filterTab);
 
   if (priceBand !== 'all') {
     result = result.filter(i => matchesPriceBand(i, priceBand));
   }
 
-  if (!debouncedSearch.trim()) {
-    return [...result].sort(reviewUrgencySort);
-  }
-
-  return sortItems(result, sortKey, sortDir);
+  return orderItems(result, sortKey, sortDir);
 }
