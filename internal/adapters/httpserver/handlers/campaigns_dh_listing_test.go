@@ -301,6 +301,15 @@ func TestHandleListPurchaseOnDH(t *testing.T) {
 			wantErrSubstr: "dismissed",
 		},
 		{
+			name:        "listings paused → 409 with pause-specific message",
+			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) { return readyPurchase(), nil },
+			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
+				return dhlisting.DHListingResult{Skipped: 1, Total: 1, Paused: true}
+			},
+			wantStatus:    http.StatusConflict,
+			wantErrSubstr: "DH listings are paused",
+		},
+		{
 			name:        "PSA keys exhausted → 502 with toast-friendly message",
 			getPurchase: func(ctx context.Context, id string) (*inventory.Purchase, error) { return readyPurchase(), nil },
 			listFn: func(ctx context.Context, certs []string) dhlisting.DHListingResult {
