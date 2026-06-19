@@ -272,7 +272,7 @@ function sortItems(
     smart urgency order (flagged → large_gap → no_data → needs_review →
     reviewed, then oldest-first). Independent of search. */
 function orderItems(items: AgingItem[], sortKey: SortKey | null, sortDir: SortDir): AgingItem[] {
-  return sortKey == null
+  return sortKey === null
     ? [...items].sort(reviewUrgencySort)
     : sortItems(items, sortKey, sortDir);
 }
