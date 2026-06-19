@@ -205,6 +205,26 @@ export function computeInventoryMeta(items: AgingItem[]): InventoryMeta {
   };
 }
 
+/** Count items per price band over a given base set. Pass the output of
+    `applySearchAndTab` to get counts scoped to the active tab + search, so each
+    `$` pill badge equals the rows clicking it would produce in the current view.
+    Items with no price (priceBandOf === null) count toward `all` only. */
+export function computePriceBandCounts(items: AgingItem[]): PriceBandCounts {
+  const counts: PriceBandCounts = {
+    all: items.length,
+    lt50: 0,
+    '50to100': 0,
+    '100to250': 0,
+    '250to500': 0,
+    gte500: 0,
+  };
+  for (const item of items) {
+    const band = priceBandOf(item);
+    if (band) counts[band]++;
+  }
+  return counts;
+}
+
 export type FilterTab =
   | 'needs_attention'
   | 'all'

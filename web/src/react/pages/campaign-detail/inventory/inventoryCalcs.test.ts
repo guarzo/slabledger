@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   computeInventoryMeta,
   filterAndSortItems,
+  applySearchAndTab,
+  computePriceBandCounts,
   isReadyToList,
   needsPriceReview,
   wasUnlistedFromDH,
@@ -535,6 +537,56 @@ describe('inventoryCalcs', () => {
         meta.tabCounts.pending_price +
         meta.tabCounts.ready_to_list;
       expect(partitioned).toBe(meta.tabCounts.all);
+    });
+  });
+
+  describe('computePriceBandCounts', () => {
+    // Attach just enough compSummary to drive bestPrice() → priceBandOf().
+    function priced(id: string, lastSaleCents: number, dhStatus?: string): AgingItem {
+      const item = makeItem({ purchase: { id, dhStatus } });
+      return {
+        ...item,
+        compSummary: { lastSaleCents } as unknown as AgingItem['compSummary'],
+      };
+    }
+
+    it('buckets items by bestPrice into the preset bands', () => {
+      const items = [
+        priced('a', 4000),   // lt50
+        priced('b', 9000),   // 50to100
+        priced('c', 12000),  // 100to250
+        priced('d', 30000),  // 250to500
+        priced('e', 60000),  // gte500
+        priced('f', 70000),  // gte500
+      ];
+      const counts = computePriceBandCounts(items);
+      expect(counts.all).toBe(6);
+      expect(counts.lt50).toBe(1);
+      expect(counts['50to100']).toBe(1);
+      expect(counts['100to250']).toBe(1);
+      expect(counts['250to500']).toBe(1);
+      expect(counts.gte500).toBe(2);
+    });
+
+    it('excludes items with no price from every band', () => {
+      const items = [makeItem({ purchase: { id: 'np' } })]; // makeItem sets no compSummary/currentMarket → bestPrice 0
+      const counts = computePriceBandCounts(items);
+      expect(counts.all).toBe(1);
+      expect(counts.lt50 + counts['50to100'] + counts['100to250'] + counts['250to500'] + counts.gte500).toBe(0);
+    });
+
+    it('scopes to the active tab when fed applySearchAndTab output', () => {
+      const items = [
+        priced('listed-hi', 60000, 'listed'),     // dh_listed, gte500
+        priced('unlisted-hi', 60000, 'in stock'), // not listed, gte500
+      ];
+      const globalCounts = computePriceBandCounts(items);
+      expect(globalCounts.gte500).toBe(2);
+
+      const dhListedBase = applySearchAndTab(items, '', 'dh_listed');
+      const dhListedCounts = computePriceBandCounts(dhListedBase);
+      expect(dhListedCounts.gte500).toBe(1);
+      expect(dhListedCounts.all).toBe(1);
     });
   });
 });
