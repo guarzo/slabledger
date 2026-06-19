@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   computeInventoryMeta,
   filterAndSortItems,
+  applySearchAndTab,
+  computePriceBandCounts,
   isReadyToList,
   needsPriceReview,
   wasUnlistedFromDH,
@@ -218,6 +220,54 @@ describe('inventoryCalcs', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].purchase.cardName).toBe('Charizard');
+    });
+  });
+
+  describe('filterAndSortItems — column sort (no search)', () => {
+    // Three items with distinct cost bases so sort order is unambiguous.
+    const items = [
+      makeItem({ purchase: { id: 'mid', buyCostCents: 5000, psaSourcingFeeCents: 0 } }),
+      makeItem({ purchase: { id: 'low', buyCostCents: 1000, psaSourcingFeeCents: 0 } }),
+      makeItem({ purchase: { id: 'high', buyCostCents: 9000, psaSourcingFeeCents: 0 } }),
+    ];
+
+    it('sorts by cost ascending when sortKey=cost and no search is active', () => {
+      const result = filterAndSortItems(items, {
+        debouncedSearch: '',
+        filterTab: 'all',
+        sortKey: 'cost',
+        sortDir: 'asc',
+      });
+      expect(result.map(r => r.purchase.id)).toEqual(['low', 'mid', 'high']);
+    });
+
+    it('sorts by cost descending when sortDir=desc', () => {
+      const result = filterAndSortItems(items, {
+        debouncedSearch: '',
+        filterTab: 'all',
+        sortKey: 'cost',
+        sortDir: 'desc',
+      });
+      expect(result.map(r => r.purchase.id)).toEqual(['high', 'mid', 'low']);
+    });
+
+    it('falls back to smart urgency order when sortKey is null', () => {
+      // Three distinct review statuses fed in non-urgency order. Urgency sort
+      // must reorder them flagged(0) → needs_review(3) → reviewed(4), proving
+      // the null path routes through reviewUrgencySort rather than leaving the
+      // input order (or a column sort) in place.
+      const reviewed = makeItem({ purchase: { id: 'reviewed', reviewedAt: '2026-04-10T00:00:00Z' } });
+      const flagged = makeItem({ purchase: { id: 'flagged' }, hasOpenFlag: true });
+      // clValue == cost basis and no snapshot → not no_data, not large_gap → needs_review.
+      const needsReview = makeItem({ purchase: { id: 'needs', clValueCents: 5000, buyCostCents: 5000, psaSourcingFeeCents: 0 } });
+
+      const result = filterAndSortItems([reviewed, flagged, needsReview], {
+        debouncedSearch: '',
+        filterTab: 'all',
+        sortKey: null,
+        sortDir: 'asc',
+      });
+      expect(result.map(r => r.purchase.id)).toEqual(['flagged', 'needs', 'reviewed']);
     });
   });
 
@@ -494,6 +544,56 @@ describe('inventoryCalcs', () => {
         meta.tabCounts.pending_price +
         meta.tabCounts.ready_to_list;
       expect(partitioned).toBe(meta.tabCounts.all);
+    });
+  });
+
+  describe('computePriceBandCounts', () => {
+    // Attach just enough compSummary to drive bestPrice() → priceBandOf().
+    function priced(id: string, lastSaleCents: number, dhStatus?: string): AgingItem {
+      const item = makeItem({ purchase: { id, dhStatus } });
+      return {
+        ...item,
+        compSummary: { lastSaleCents } as unknown as AgingItem['compSummary'],
+      };
+    }
+
+    it('buckets items by bestPrice into the preset bands', () => {
+      const items = [
+        priced('a', 4000),   // lt50
+        priced('b', 9000),   // 50to100
+        priced('c', 12000),  // 100to250
+        priced('d', 30000),  // 250to500
+        priced('e', 60000),  // gte500
+        priced('f', 70000),  // gte500
+      ];
+      const counts = computePriceBandCounts(items);
+      expect(counts.all).toBe(6);
+      expect(counts.lt50).toBe(1);
+      expect(counts['50to100']).toBe(1);
+      expect(counts['100to250']).toBe(1);
+      expect(counts['250to500']).toBe(1);
+      expect(counts.gte500).toBe(2);
+    });
+
+    it('excludes items with no price from every band', () => {
+      const items = [makeItem({ purchase: { id: 'np' } })]; // makeItem sets no compSummary/currentMarket → bestPrice 0
+      const counts = computePriceBandCounts(items);
+      expect(counts.all).toBe(1);
+      expect(counts.lt50 + counts['50to100'] + counts['100to250'] + counts['250to500'] + counts.gte500).toBe(0);
+    });
+
+    it('scopes to the active tab when fed applySearchAndTab output', () => {
+      const items = [
+        priced('listed-hi', 60000, 'listed'),     // dh_listed, gte500
+        priced('unlisted-hi', 60000, 'in stock'), // not listed, gte500
+      ];
+      const globalCounts = computePriceBandCounts(items);
+      expect(globalCounts.gte500).toBe(2);
+
+      const dhListedBase = applySearchAndTab(items, '', 'dh_listed');
+      const dhListedCounts = computePriceBandCounts(dhListedBase);
+      expect(dhListedCounts.gte500).toBe(1);
+      expect(dhListedCounts.all).toBe(1);
     });
   });
 });

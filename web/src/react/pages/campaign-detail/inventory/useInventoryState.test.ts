@@ -165,6 +165,66 @@ describe('useInventoryState — handleBulkListOnDH', () => {
   });
 });
 
+describe('useInventoryState — sorting and price-band counts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMeta.current = {
+      reviewStats: { total: 0, reviewed: 0, flagged: 0, aging60d: 0 },
+      tabCounts: {
+        needs_attention: 0,
+        awaiting_intake: 0,
+        pending_dh_match: 0,
+        pending_price: 0,
+        ready_to_list: 0,
+        dh_listed: 0,
+        skipped: 0,
+        in_hand: 0,
+        all: 0,
+      },
+      summary: { totalCost: 0, totalMarket: 0, totalPL: 0 },
+    };
+  });
+
+  it('defaults sortKey to null (smart urgency order)', () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+    expect(result.current.sortKey).toBeNull();
+  });
+
+  it('handleSort sets the key ascending, then toggles to descending on repeat', () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+
+    act(() => { result.current.handleSort('cost'); });
+    expect(result.current.sortKey).toBe('cost');
+    expect(result.current.sortDir).toBe('asc');
+
+    act(() => { result.current.handleSort('cost'); });
+    expect(result.current.sortDir).toBe('desc');
+  });
+
+  it('scopes priceBandCounts.all to the active tab', async () => {
+    // One DH-listed item, one not. priceBandCounts.all should track the
+    // tab-scoped base set, not the full inventory.
+    const items = [
+      mockItem({ id: 'listed', dhStatus: 'listed' }),
+      mockItem({ id: 'unlisted', dhStatus: 'in stock' }),
+    ];
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(items, 'camp-1'), { wrapper });
+
+    // Smart default resolves to "all" (needs_attention is 0) → both items in scope.
+    await waitFor(() => {
+      expect(result.current.filterTab).toBe('all');
+    });
+    expect(result.current.priceBandCounts.all).toBe(2);
+
+    // Switching to DH Listed narrows the count to the single listed item.
+    act(() => { result.current.setFilterTab('dh_listed'); });
+    expect(result.current.priceBandCounts.all).toBe(1);
+  });
+});
+
 describe('useInventoryState — default filter tab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
