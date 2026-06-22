@@ -44,7 +44,8 @@ type SaleComp struct {
 	URL             string  `json:"url"`
 	SlabSerial      string  `json:"slabSerial"`
 	CardDescription string  `json:"cardDescription"`
-	GemRateID       string  `json:"gemRateId"`
+	ProfileID       string  `json:"profileId"` // new lookup key (psa-<n>)
+	GemRateID       string  `json:"gemRateId"` // legacy hash, retained for debug; NOT the lookup key
 	Condition       string  `json:"condition"`
 	GradingCompany  string  `json:"gradingCompany"`
 }
