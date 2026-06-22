@@ -147,8 +147,10 @@ type BuildCardResponse struct {
 }
 
 // CardEstimateRequest is the input for httpcardestimate.
+// GemRateID now carries the profileId (e.g. "psa-1813135") and serializes as
+// "profileId" — the live API ignores the old "gemRateId" key and returns null.
 type CardEstimateRequest struct {
-	GemRateID      string `json:"gemRateId"`
+	GemRateID      string `json:"profileId"`
 	GradingCompany string `json:"gradingCompany"`
 	Condition      string `json:"condition"`
 	Description    string `json:"description"`

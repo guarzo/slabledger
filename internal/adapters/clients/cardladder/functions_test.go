@@ -98,8 +98,8 @@ func TestClient_CardEstimate(t *testing.T) {
 		if !ok {
 			t.Fatalf("data is not a map: %T", req.Data)
 		}
-		if dataMap["gemRateId"] != "abc123" {
-			t.Errorf("gemRateId = %v, want abc123", dataMap["gemRateId"])
+		if dataMap["profileId"] != "psa-1813135" {
+			t.Errorf("profileId = %v, want psa-1813135", dataMap["profileId"])
 		}
 
 		json.NewEncoder(w).Encode(callableResponse[CardEstimateResponse]{ //nolint:errcheck
@@ -120,9 +120,9 @@ func TestClient_CardEstimate(t *testing.T) {
 		WithStaticToken("test-token"),
 	)
 	resp, err := client.CardEstimate(context.Background(), CardEstimateRequest{
-		GemRateID:      "abc123",
+		GemRateID:      "psa-1813135",
 		GradingCompany: "psa",
-		Condition:      "g9",
+		Condition:      "g8",
 		Description:    "Test Card",
 	})
 	if err != nil {
