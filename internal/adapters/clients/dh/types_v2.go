@@ -73,7 +73,7 @@ const (
 // CertResolveRequest is a single cert to resolve.
 type CertResolveRequest struct {
 	CertNumber string `json:"cert_number"`
-	GemRateID  string `json:"gemrate_id,omitempty"` // CL gemRateID — when set, DH uses direct card lookup (skips fuzzy matching)
+	GemRateID  string `json:"gemrate_id,omitempty"` // hint to skip fuzzy matching; now receives a CL profileId (psa-<n>) — DH falls back to cert match if it doesn't recognize it
 	CardName   string `json:"card_name,omitempty"`
 	SetName    string `json:"set_name,omitempty"`
 	CardNumber string `json:"card_number,omitempty"`
