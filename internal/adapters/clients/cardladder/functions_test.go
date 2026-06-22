@@ -184,6 +184,12 @@ func TestClient_CreateCollectionCard(t *testing.T) {
 	if doc.Fields["datePurchased"].TimestampValue == nil {
 		t.Error("datePurchased should be set")
 	}
+	if v := firestoreString(doc.Fields, "gemRateId"); v != "abc123" {
+		t.Errorf("doc gemRateId = %q, want abc123 (now the profileId)", v)
+	}
+	if v := firestoreString(doc.Fields, "condition"); v != "PSA 9" {
+		t.Errorf("doc condition = %q, want PSA 9 (display form)", v)
+	}
 }
 
 func TestClient_BuildCollectionCard_NewContract(t *testing.T) {
