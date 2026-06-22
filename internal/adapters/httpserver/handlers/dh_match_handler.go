@@ -122,6 +122,10 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []inventory.Purc
 				observability.String("existing_id", existingID))
 		}
 
+		// Note: p.GemRateID now holds a CardLadder profileId (psa-<n>), not the
+		// legacy hash DH uses for direct lookup. DH treats gemrate_id only as a
+		// fuzzy-match-skip hint and still resolves correctly by cert_number, so
+		// this degrades gracefully (loses the optimization, not the match).
 		cardName, variant := dhlisting.CleanCardNameForDH(p.CardName)
 		req := dh.CertResolveRequest{
 			CertNumber: p.CertNumber,

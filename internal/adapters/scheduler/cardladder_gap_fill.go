@@ -8,7 +8,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 const (
@@ -45,11 +44,13 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 		default:
 		}
 
-		apiCondition := cardutil.ConditionToAPIFormat(card.Condition)
-		if apiCondition == "" {
+		// card.Condition is already firestore form ("g8"); the salesarchive
+		// filter expects firestore form (live-verified: condition:g8 returns
+		// hits, condition:PSA 8 returns none), so pass it through unconverted.
+		if card.Condition == "" {
 			continue
 		}
-		resp, err := client.FetchSalesComps(ctx, card.GemRateID, apiCondition, "psa", 0, 100)
+		resp, err := client.FetchSalesComps(ctx, card.GemRateID, card.Condition, "psa", 0, 100)
 		if err != nil {
 			s.logger.Warn(ctx, "CL sales: fetch failed",
 				observability.String("gemRateId", card.GemRateID),
@@ -65,7 +66,7 @@ func (s *CardLadderRefreshScheduler) refreshSalesCompsDecoupled(ctx context.Cont
 				saleDate = saleDate[:10]
 			}
 			if err := s.salesStore.UpsertSaleComp(ctx, postgres.CLSaleCompRecord{
-				GemRateID:   comp.GemRateID,
+				GemRateID:   comp.ProfileID, // profileId, to match campaign_purchases.gem_rate_id in the comp_refresh join
 				Condition:   card.Condition,
 				ItemID:      comp.ItemID,
 				SaleDate:    saleDate,

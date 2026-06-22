@@ -51,9 +51,8 @@ func TestClient_BuildCollectionCard(t *testing.T) {
 				Number:           "SM162",
 				Player:           "Pikachu-Holo",
 				Variation:        "Promo-Tm.up Sngl.pk.blst.",
-				Condition:        "PSA 9",
-				GemRateID:        "fa48643a1a3fa08799b6913f46d1643427b5d6e8",
-				GemRateCondition: "g9",
+				GemRateID:        "psa-1813135",
+				GemRateCondition: "g8",
 				SlabSerial:       "69145695",
 				GradingCompany:   "psa",
 			},
@@ -69,8 +68,8 @@ func TestClient_BuildCollectionCard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildCollectionCard failed: %v", err)
 	}
-	if resp.GemRateID != "fa48643a1a3fa08799b6913f46d1643427b5d6e8" {
-		t.Errorf("gemRateID = %q, want fa48...", resp.GemRateID)
+	if resp.GemRateID != "psa-1813135" {
+		t.Errorf("gemRateID = %q, want psa-1813135", resp.GemRateID)
 	}
 	if resp.Player != "Pikachu-Holo" {
 		t.Errorf("player = %q, want Pikachu-Holo", resp.Player)
@@ -98,8 +97,8 @@ func TestClient_CardEstimate(t *testing.T) {
 		if !ok {
 			t.Fatalf("data is not a map: %T", req.Data)
 		}
-		if dataMap["gemRateId"] != "abc123" {
-			t.Errorf("gemRateId = %v, want abc123", dataMap["gemRateId"])
+		if dataMap["profileId"] != "psa-1813135" {
+			t.Errorf("profileId = %v, want psa-1813135", dataMap["profileId"])
 		}
 
 		json.NewEncoder(w).Encode(callableResponse[CardEstimateResponse]{ //nolint:errcheck
@@ -120,9 +119,9 @@ func TestClient_CardEstimate(t *testing.T) {
 		WithStaticToken("test-token"),
 	)
 	resp, err := client.CardEstimate(context.Background(), CardEstimateRequest{
-		GemRateID:      "abc123",
+		GemRateID:      "psa-1813135",
 		GradingCompany: "psa",
-		Condition:      "g9",
+		Condition:      "g8",
 		Description:    "Test Card",
 	})
 	if err != nil {
@@ -183,6 +182,42 @@ func TestClient_CreateCollectionCard(t *testing.T) {
 	}
 	if doc.Fields["datePurchased"].TimestampValue == nil {
 		t.Error("datePurchased should be set")
+	}
+	if v := firestoreString(doc.Fields, "gemRateId"); v != "abc123" {
+		t.Errorf("doc gemRateId = %q, want abc123 (now the profileId)", v)
+	}
+	if v := firestoreString(doc.Fields, "condition"); v != "PSA 9" {
+		t.Errorf("doc condition = %q, want PSA 9 (display form)", v)
+	}
+}
+
+func TestClient_BuildCollectionCard_NewContract(t *testing.T) {
+	// Real httpbuildcollectioncard shape as of the 2026-06 CL migration:
+	// profileId + grade present; gemRateId / gemRateCondition / condition absent.
+	raw := `{"result":{"profileId":"psa-1813135","grade":"g8","player":"Articuno-Holo",` +
+		`"set":"Pokemon Japanese Web","year":"1999","number":"17","category":"Pokemon","pop":42}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(raw)) //nolint:errcheck
+	}))
+	defer server.Close()
+
+	client := NewClient(WithFunctionsURL(server.URL), WithStaticToken("test-token"))
+	resp, err := client.BuildCollectionCard(context.Background(), "158507531", "psa")
+	if err != nil {
+		t.Fatalf("BuildCollectionCard failed: %v", err)
+	}
+	if resp.GemRateID != "psa-1813135" {
+		t.Errorf("GemRateID = %q, want psa-1813135 (from profileId)", resp.GemRateID)
+	}
+	if resp.GemRateCondition != "g8" {
+		t.Errorf("GemRateCondition = %q, want g8 (from grade)", resp.GemRateCondition)
+	}
+	if resp.Condition != "PSA 8" {
+		t.Errorf("Condition = %q, want PSA 8 (derived display form)", resp.Condition)
+	}
+	if resp.Set != "Pokemon Japanese Web" {
+		t.Errorf("Set = %q, want Pokemon Japanese Web", resp.Set)
 	}
 }
 
