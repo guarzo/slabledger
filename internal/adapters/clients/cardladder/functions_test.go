@@ -51,9 +51,8 @@ func TestClient_BuildCollectionCard(t *testing.T) {
 				Number:           "SM162",
 				Player:           "Pikachu-Holo",
 				Variation:        "Promo-Tm.up Sngl.pk.blst.",
-				Condition:        "PSA 9",
-				GemRateID:        "fa48643a1a3fa08799b6913f46d1643427b5d6e8",
-				GemRateCondition: "g9",
+				GemRateID:        "psa-1813135",
+				GemRateCondition: "g8",
 				SlabSerial:       "69145695",
 				GradingCompany:   "psa",
 			},
@@ -69,8 +68,8 @@ func TestClient_BuildCollectionCard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildCollectionCard failed: %v", err)
 	}
-	if resp.GemRateID != "fa48643a1a3fa08799b6913f46d1643427b5d6e8" {
-		t.Errorf("gemRateID = %q, want fa48...", resp.GemRateID)
+	if resp.GemRateID != "psa-1813135" {
+		t.Errorf("gemRateID = %q, want psa-1813135", resp.GemRateID)
 	}
 	if resp.Player != "Pikachu-Holo" {
 		t.Errorf("player = %q, want Pikachu-Holo", resp.Player)
