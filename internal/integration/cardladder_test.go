@@ -8,6 +8,7 @@ package integration
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,4 +196,59 @@ func TestCardLadder_CreateCollectionCard(t *testing.T) {
 
 	t.Logf("Created Firestore document: %s", docName)
 	t.Logf("Card: %s — $%.2f", input.Label, input.CurrentValue)
+}
+
+// TestCardLadder_ProfileIDContract asserts the post-2026-06 contract: the
+// identifier is a profileId (psa-<n>), Condition is derived display form,
+// estimate is positive, and salesarchive returns comps for that profileId.
+// Cert 158507531 → profileId psa-1813135, grade g8, estimate ~429 (2026-06-21).
+func TestCardLadder_ProfileIDContract(t *testing.T) {
+	client, _ := newCLClient(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	cert := os.Getenv("CL_TEST_CERT")
+	if cert == "" {
+		cert = "158507531"
+	}
+
+	build, err := client.BuildCollectionCard(ctx, cert, "psa")
+	if err != nil {
+		t.Fatalf("BuildCollectionCard: %v", err)
+	}
+	t.Logf("profileId=%q grade=%q condition=%q player=%q", build.GemRateID, build.GemRateCondition, build.Condition, build.Player)
+
+	if !strings.HasPrefix(build.GemRateID, "psa-") {
+		t.Errorf("GemRateID = %q, want a psa-<n> profileId", build.GemRateID)
+	}
+	if build.GemRateCondition == "" || !strings.HasPrefix(build.GemRateCondition, "g") {
+		t.Errorf("GemRateCondition = %q, want firestore form like g8", build.GemRateCondition)
+	}
+	if !strings.HasPrefix(build.Condition, "PSA ") {
+		t.Errorf("Condition = %q, want derived display form like PSA 8", build.Condition)
+	}
+
+	est, err := client.CardEstimate(ctx, cardladder.CardEstimateRequest{
+		GemRateID:      build.GemRateID,
+		GradingCompany: "psa",
+		Condition:      build.GemRateCondition,
+		Description:    build.Player,
+	})
+	if err != nil {
+		t.Fatalf("CardEstimate: %v", err)
+	}
+	t.Logf("estimatedValue=$%.2f", est.EstimatedValue)
+	if est.EstimatedValue <= 0 {
+		t.Errorf("EstimatedValue = %v, want > 0", est.EstimatedValue)
+	}
+
+	comps, err := client.FetchSalesComps(ctx, build.GemRateID, build.GemRateCondition, "psa", 0, 100)
+	if err != nil {
+		t.Fatalf("FetchSalesComps: %v", err)
+	}
+	t.Logf("comps totalHits=%d", comps.TotalHits)
+	if comps.TotalHits == 0 {
+		t.Errorf("FetchSalesComps TotalHits = 0, want > 0 for %s/%s", build.GemRateID, build.GemRateCondition)
+	}
 }

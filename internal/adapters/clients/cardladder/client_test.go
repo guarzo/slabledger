@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -54,9 +55,17 @@ func TestClient_FetchSalesComps(t *testing.T) {
 		if r.URL.Query().Get("index") != "salesarchive" {
 			t.Fatalf("unexpected index: %s", r.URL.Query().Get("index"))
 		}
+		filters := r.URL.Query().Get("filters")
+		if !strings.Contains(filters, "profileId:psa-1813135") {
+			t.Errorf("filters = %q, want it to contain profileId:psa-1813135", filters)
+		}
+		if strings.Contains(filters, "gemRateId:") {
+			t.Errorf("filters = %q, must not use the dead gemRateId key", filters)
+		}
 		json.NewEncoder(w).Encode(SearchResponse[SaleComp]{ //nolint:errcheck
 			Hits: []SaleComp{
-				{ItemID: "ebay-123", Price: 135, Platform: "eBay", ListingType: "Auction"},
+				{ItemID: "ebay-123", Price: 135, Platform: "eBay", ListingType: "Auction",
+					ProfileID: "psa-1813135", GemRateID: "fb123c6ac8", Condition: "g8"},
 			},
 			TotalHits: 1,
 		})
@@ -67,15 +76,18 @@ func TestClient_FetchSalesComps(t *testing.T) {
 		WithBaseURL(server.URL+"/search"),
 		WithStaticToken("test-token"),
 	)
-	comps, err := client.FetchSalesComps(context.Background(), "gemrate-abc", "g9", "psa", 0, 100)
+	comps, err := client.FetchSalesComps(context.Background(), "psa-1813135", "g8", "psa", 0, 100)
 	if err != nil {
 		t.Fatalf("FetchSalesComps failed: %v", err)
 	}
 	if len(comps.Hits) != 1 {
-		t.Errorf("got %d hits, want 1", len(comps.Hits))
+		t.Fatalf("got %d hits, want 1", len(comps.Hits))
 	}
-	if comps.Hits[0].Platform != "eBay" {
-		t.Errorf("platform = %q, want %q", comps.Hits[0].Platform, "eBay")
+	if comps.Hits[0].ProfileID != "psa-1813135" {
+		t.Errorf("ProfileID = %q, want psa-1813135", comps.Hits[0].ProfileID)
+	}
+	if comps.Hits[0].GemRateID != "fb123c6ac8" {
+		t.Errorf("GemRateID = %q, want fb123c6ac8 (legacy hash, distinct from ProfileID)", comps.Hits[0].GemRateID)
 	}
 }
 
