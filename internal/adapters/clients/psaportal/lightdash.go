@@ -73,6 +73,39 @@ func (lc *lightdashClient) tileRows(ctx context.Context, projectUUID, embedJWT, 
 	return out, nil
 }
 
+// findTileUUIDBySlug returns the dashboard tile uuid whose chartSlug matches slug.
+func (lc *lightdashClient) findTileUUIDBySlug(ctx context.Context, projectUUID, embedJWT, slug string) (string, error) {
+	url := fmt.Sprintf("%s/api/v1/embed/%s/dashboard", lc.baseURL, projectUUID)
+	headers := map[string]string{
+		"Content-Type":   "application/json",
+		embedTokenHeader: embedJWT,
+	}
+	resp, err := lc.client.Post(ctx, url, headers, []byte("{}"), 0)
+	if err != nil {
+		return "", fmt.Errorf("lightdash: POST dashboard: %w", err)
+	}
+
+	var envelope struct {
+		Results struct {
+			Tiles []struct {
+				UUID       string `json:"uuid"`
+				Properties struct {
+					ChartSlug string `json:"chartSlug"`
+				} `json:"properties"`
+			} `json:"tiles"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
+		return "", fmt.Errorf("lightdash: decode dashboard response: %w", err)
+	}
+	for _, tile := range envelope.Results.Tiles {
+		if tile.Properties.ChartSlug == slug {
+			return tile.UUID, nil
+		}
+	}
+	return "", fmt.Errorf("lightdash: tile with chartSlug %q not found in dashboard", slug)
+}
+
 // ldCell is the per-field cell shape returned by the Lightdash chart-and-results endpoint.
 type ldCell struct {
 	Value struct {
