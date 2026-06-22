@@ -122,6 +122,13 @@ type BuildCardRequest struct {
 }
 
 // BuildCardResponse is the result from httpbuildcollectioncard.
+//
+// As of the 2026-06 CardLadder migration the variant identifier is profileId
+// (e.g. "psa-1813135") and the grade arrives in firestore form via "grade"
+// (e.g. "g8"). The old gemRateId / gemRateCondition / condition fields are gone.
+// GemRateID/GemRateCondition field names are retained to avoid a wide rename;
+// GemRateID now carries the profileId. Condition (display form, "PSA 8") is
+// derived in BuildCollectionCard, not sent by the API.
 type BuildCardResponse struct {
 	Pop              int    `json:"pop"`
 	Year             string `json:"year"`
@@ -130,11 +137,11 @@ type BuildCardResponse struct {
 	Number           string `json:"number"`
 	Player           string `json:"player"`
 	Variation        string `json:"variation"`
-	Condition        string `json:"condition"`
+	Condition        string `json:"-"`
 	ImageURL         string `json:"imageUrl"`
 	ImageBackURL     string `json:"imageBackUrl"`
-	GemRateID        string `json:"gemRateId"`
-	GemRateCondition string `json:"gemRateCondition"`
+	GemRateID        string `json:"profileId"`
+	GemRateCondition string `json:"grade"`
 	SlabSerial       string `json:"slabSerial"`
 	GradingCompany   string `json:"gradingCompany"`
 }

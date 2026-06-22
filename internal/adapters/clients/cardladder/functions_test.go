@@ -186,6 +186,36 @@ func TestClient_CreateCollectionCard(t *testing.T) {
 	}
 }
 
+func TestClient_BuildCollectionCard_NewContract(t *testing.T) {
+	// Real httpbuildcollectioncard shape as of the 2026-06 CL migration:
+	// profileId + grade present; gemRateId / gemRateCondition / condition absent.
+	raw := `{"result":{"profileId":"psa-1813135","grade":"g8","player":"Articuno-Holo",` +
+		`"set":"Pokemon Japanese Web","year":"1999","number":"17","category":"Pokemon","pop":42}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(raw)) //nolint:errcheck
+	}))
+	defer server.Close()
+
+	client := NewClient(WithFunctionsURL(server.URL), WithStaticToken("test-token"))
+	resp, err := client.BuildCollectionCard(context.Background(), "158507531", "psa")
+	if err != nil {
+		t.Fatalf("BuildCollectionCard failed: %v", err)
+	}
+	if resp.GemRateID != "psa-1813135" {
+		t.Errorf("GemRateID = %q, want psa-1813135 (from profileId)", resp.GemRateID)
+	}
+	if resp.GemRateCondition != "g8" {
+		t.Errorf("GemRateCondition = %q, want g8 (from grade)", resp.GemRateCondition)
+	}
+	if resp.Condition != "PSA 8" {
+		t.Errorf("Condition = %q, want PSA 8 (derived display form)", resp.Condition)
+	}
+	if resp.Set != "Pokemon Japanese Web" {
+		t.Errorf("Set = %q, want Pokemon Japanese Web", resp.Set)
+	}
+}
+
 func TestDoCallable_MissingResult(t *testing.T) {
 	tests := []struct {
 		name     string

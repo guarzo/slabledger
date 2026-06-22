@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 const defaultFunctionsBaseURL = "https://us-central1-cardladder-71d53.cloudfunctions.net"
@@ -20,6 +21,12 @@ func (c *Client) BuildCollectionCard(ctx context.Context, cert, grader string) (
 	}, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("build collection card for cert %s: %w", cert, err)
+	}
+	// The API returns grade in firestore form ("g8"); derive the display form
+	// ("PSA 8") that cl_condition and the card label require. Centralizing this
+	// here keeps every downstream consumer (refresh, push) unchanged.
+	if resp.Result.GemRateCondition != "" {
+		resp.Result.Condition = cardutil.ConditionToAPIFormat(resp.Result.GemRateCondition)
 	}
 	return &resp.Result, nil
 }
