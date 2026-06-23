@@ -118,12 +118,12 @@ func isCloudflareChallenge(resp *httpx.Response) bool {
 
 // parseEmbedURL splits "https://host/embed/{projectUUID}#{jwt}".
 func parseEmbedURL(u string) (projectUUID, jwt string, err error) {
-	hash := strings.IndexByte(u, '#')
-	if hash < 0 {
+	base, token, found := strings.Cut(u, "#")
+	if !found {
 		return "", "", fmt.Errorf("psaportal: embed url missing token: %q", u)
 	}
-	jwt = u[hash+1:]
-	base := strings.TrimRight(u[:hash], "/")
+	jwt = token
+	base = strings.TrimRight(base, "/")
 	seg := strings.Split(base, "/")
 	projectUUID = seg[len(seg)-1]
 	if projectUUID == "" || jwt == "" {
