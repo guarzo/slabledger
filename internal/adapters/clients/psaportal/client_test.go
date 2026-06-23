@@ -9,7 +9,7 @@ import (
 
 type stubTokens struct{ tok string }
 
-func (s stubTokens) accessToken(ctx context.Context) (string, error) { return s.tok, nil }
+func (s stubTokens) AccessToken(ctx context.Context) (string, error) { return s.tok, nil }
 
 func TestClient_FetchRows(t *testing.T) {
 	var srv *httptest.Server

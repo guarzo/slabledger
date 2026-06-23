@@ -7,12 +7,27 @@ Stytch Connected-Apps OAuth.
 - `grant_types_supported` includes `refresh_token`
 - `jwks_uri` = `https://auth.collectors.com/P2xjgYJ0Yv0TEWIKhBaivYmYlqcQ/.well-known/jwks.json`
 
-**OPEN:** `grant_type=refresh_token` returns `400 E074130 "Invalid client id"` for both
-`P2xjgYJ0Yv0TEWIKhBaivYmYlqcQ` and the base64 `cid`/`azp` literal. The real registered
-Stytch Connected-App `client_id` is NOT derivable from the JWT claims. Need to capture the
-actual refresh/login token request the browser makes (DevTools → Network, the POST to
-`oauth2/v1/apps/token`) to read its `client_id` (and whether a `client_secret`/PKCE is used).
-Interim: the access token works directly for ~24h (see Finding 3).
+**CONCLUSION: backend OAuth refresh is NOT possible without a Collectors-held secret.**
+This is a **confidential client** (provider: Descope, fronted by collectors.com OAuth).
+- Real `client_id` = `UDJ4amdZSjBZdjBURVdJS2hCYWl2WW1ZbHFjUTpUUEEzN0Z6QndZZU9lREsxUUN1d25FZEE2V2hDTVU=`
+  (decodes to `P2xjgYJ0Yv0TEWIKhBaivYmYlqcQ:TPA37FzBwYeOeDK1QCuwnEdA6WhCMU`), captured from the
+  `authorize` URL the browser uses.
+- `POST oauth2/v1/apps/token` `grant_type=refresh_token` results:
+  - client_id = short app id → `400 E074130 Invalid client id`
+  - client_id = full blob, no secret → `400 E011002 "missing secret"`
+  - client_id = app id + client_secret=`TPA37…` (body or Basic) → `400 Invalid client id`
+  → `TPA37…` is part of the client identifier, not the secret; the real `client_secret`
+  lives on Collectors' servers (the `app.collectors.com/handlebrandtokenredirect` callback).
+- psacard.com does NOT auto-refresh: `GET analytics/__data.json` with only the `refreshToken`
+  cookie returns `{"type":"redirect","location":"app.collectors.com/signin..."}` (bounces to SSO).
+
+**Therefore fresh access tokens require ONE of:**
+1. a real API credential (client_secret / machine token) from Collectors/PSA — true hands-off;
+2. a headless browser replaying the full Collectors SSO to harvest a fresh `accessToken` cookie;
+3. periodic manual capture of a fresh `accessToken` (valid ~24h) pasted into the app — interim.
+
+The entire DATA pipeline (Findings 2 + 3) is built and works given any valid access token;
+only the token-feed mechanism is open.
 
 ## Finding 2 — Lightdash embed ✅ RESOLVED
 

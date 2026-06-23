@@ -10,9 +10,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// tokenProvider yields a valid PSA access token (implemented later by the OAuth token manager).
-type tokenProvider interface {
-	accessToken(ctx context.Context) (string, error)
+// TokenProvider yields a valid PSA access token.
+type TokenProvider interface {
+	AccessToken(ctx context.Context) (string, error)
 }
 
 // Config configures a portal Client; empty URL fields fall back to production defaults.
@@ -23,14 +23,14 @@ type Config struct {
 
 // Client pulls per-cert purchase rows from the PSA portal.
 type Client struct {
-	tokens       tokenProvider
+	tokens       TokenProvider
 	http         *httpx.Client
 	ld           *lightdashClient
 	analyticsURL string
 }
 
 // New builds a Client. tp supplies access tokens.
-func New(tp tokenProvider, cfg Config) *Client {
+func New(tp TokenProvider, cfg Config) *Client {
 	if cfg.PSABaseURL == "" {
 		cfg.PSABaseURL = defaultPSABaseURL
 	}
@@ -49,7 +49,7 @@ func New(tp tokenProvider, cfg Config) *Client {
 
 // FetchRows walks the full portal chain and returns mapped purchase rows.
 func (c *Client) FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error) {
-	token, err := c.tokens.accessToken(ctx)
+	token, err := c.tokens.AccessToken(ctx)
 	if err != nil {
 		return nil, err
 	}
