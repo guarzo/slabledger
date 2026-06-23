@@ -15,16 +15,15 @@ import (
 func TestPSASyncScheduler_Tick(t *testing.T) {
 	tests := []struct {
 		name               string
-		fetcherFn          func(ctx context.Context, spreadsheetID, sheetName string) ([][]string, error)
+		providerFn         func(ctx context.Context) ([]inventory.PSAExportRow, error)
 		importerFn         func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
 		wantImporterCalled bool
 	}{
 		{
 			name: "success",
-			fetcherFn: func(_ context.Context, _, _ string) ([][]string, error) {
-				return [][]string{
-					{"Cert Number", "Listing Title", "Grade", "Price Paid"},
-					{"12345678", "2023 Pokemon Charizard PSA 10", "10", "$125.00"},
+			providerFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
+				return []inventory.PSAExportRow{
+					{CertNumber: "12345678", Grade: 10, PricePaid: 125.00},
 				}, nil
 			},
 			importerFn: func(_ context.Context, _ []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
@@ -34,18 +33,15 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 		},
 		{
 			name: "fetch error",
-			fetcherFn: func(_ context.Context, _, _ string) ([][]string, error) {
+			providerFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
 				return nil, errors.New("network error")
 			},
 			wantImporterCalled: false,
 		},
 		{
-			name: "parse error",
-			fetcherFn: func(_ context.Context, _, _ string) ([][]string, error) {
-				return [][]string{
-					{"random", "columns", "here"},
-					{"data", "rows", "no cert"},
-				}, nil
+			name: "empty rows",
+			providerFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
+				return []inventory.PSAExportRow{}, nil
 			},
 			wantImporterCalled: false,
 		},
@@ -53,7 +49,7 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fetcher := &mocks.MockSheetFetcher{ReadSheetFn: tt.fetcherFn}
+			provider := &mocks.PSARowProviderMock{FetchRowsFn: tt.providerFn}
 
 			importerCalled := false
 			importer := &mocks.MockImportService{
@@ -67,10 +63,9 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 			}
 
 			s := NewPSASyncScheduler(
-				fetcher, importer,
+				provider, nil, importer,
 				observability.NewNoopLogger(),
 				config.PSASyncConfig{Enabled: true, Interval: 24 * time.Hour, SyncHour: -1},
-				"spreadsheet-id", "Sheet1",
 			)
 
 			s.runOnce(context.Background()) //nolint:errcheck
@@ -83,11 +78,13 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 }
 
 func TestPSASyncScheduler_Start_Disabled(t *testing.T) {
+	provider := &mocks.PSARowProviderMock{
+		FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) { return nil, nil },
+	}
 	s := NewPSASyncScheduler(
-		&mocks.MockSheetFetcher{}, &mocks.MockImportService{},
+		provider, nil, &mocks.MockImportService{},
 		observability.NewNoopLogger(),
 		config.PSASyncConfig{Enabled: false},
-		"id", "tab",
 	)
 	// Start should return immediately when disabled
 	done := make(chan struct{})
@@ -104,15 +101,16 @@ func TestPSASyncScheduler_Start_Disabled(t *testing.T) {
 }
 
 func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
-	s := NewPSASyncScheduler(
-		&mocks.MockSheetFetcher{
-			ReadSheetFn: func(ctx context.Context, sid, sn string) ([][]string, error) {
-				return [][]string{
-					{"Cert Number", "Listing Title", "Grade", "Price Paid", "Date", "Vault Status", "Invoice Date", "Image URLs", "Purchase Source", "Category", "Was Refunded"},
-					{"12345", "2023 Pokemon Charizard #1", "10", "15.00", "2026-01-01", "In Vault", "", "", "", "Pokemon", "No"},
-				}, nil
-			},
+	provider := &mocks.PSARowProviderMock{
+		FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
+			return []inventory.PSAExportRow{
+				{CertNumber: "12345", Grade: 10, PricePaid: 15.00},
+			}, nil
 		},
+	}
+	s := NewPSASyncScheduler(
+		provider,
+		nil,
 		&mocks.MockImportService{
 			ImportPSAExportGlobalFn: func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
 				return &inventory.PSAImportResult{
@@ -123,7 +121,6 @@ func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
 		},
 		mocks.NewMockLogger(),
 		config.PSASyncConfig{Enabled: true, SyncHour: -1},
-		"sheet-id", "Sheet1",
 	)
 
 	// Before any run, stats should be nil

@@ -25,25 +25,36 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 	h.importPSARows(w, r, rows, "CSV", "global PSA import failed")
 }
 
-// HandleSyncPSASheets handles POST /api/purchases/sync-psa-sheets.
-// Fetches PSA data from a configured Google Sheet and runs the standard import.
+// HandleSyncPSAPortal handles POST /api/purchases/sync-psa-sheets.
+// Fetches PSA data from the PSA portal via the stored access token and runs the standard import.
 func (h *CampaignsHandler) HandleSyncPSASheets(w http.ResponseWriter, r *http.Request) {
-	if h.sheetFetcher == nil || h.sheetsSpreadsheet == "" {
-		writeError(w, http.StatusServiceUnavailable, "Google Sheets sync not configured")
+	if h.rowProvider == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA portal sync not configured")
 		return
 	}
 
 	fetchCtx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 
-	rows, err := h.sheetFetcher.ReadSheet(fetchCtx, h.sheetsSpreadsheet, h.sheetsTab)
+	psaRows, err := h.rowProvider.FetchRows(fetchCtx)
 	if err != nil {
-		h.logger.Error(r.Context(), "failed to fetch Google Sheet", observability.Err(err))
-		writeError(w, http.StatusBadGateway, "Failed to fetch Google Sheet")
+		h.logger.Error(r.Context(), "failed to fetch PSA rows from portal", observability.Err(err))
+		writeError(w, http.StatusBadGateway, "Failed to fetch PSA portal data")
+		return
+	}
+	if len(psaRows) == 0 {
+		writeError(w, http.StatusBadRequest, "No PSA rows returned from portal")
 		return
 	}
 
-	h.importPSARows(w, r, rows, "sheet", "PSA sheets sync failed")
+	result, ok := serviceCall(w, r.Context(), h.logger, "PSA portal sync failed", func() (*inventory.PSAImportResult, error) {
+		return h.service.ImportPSAExportGlobal(r.Context(), psaRows)
+	})
+	if !ok {
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 // importPSARows parses raw CSV rows as PSA export data, imports them, and

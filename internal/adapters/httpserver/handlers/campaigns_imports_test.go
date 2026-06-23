@@ -489,7 +489,7 @@ func TestHandleSyncPSASheets(t *testing.T) {
 		{
 			name: "not configured",
 			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
-				return newTestHandler(svc) // no WithSheetFetcher
+				return newTestHandler(svc) // no WithPSARowProvider
 			},
 			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
 			wantCode: http.StatusServiceUnavailable,
@@ -497,15 +497,14 @@ func TestHandleSyncPSASheets(t *testing.T) {
 		{
 			name: "success",
 			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
-				fetcher := &mocks.MockSheetFetcher{
-					ReadSheetFn: func(_ context.Context, _, _ string) ([][]string, error) {
-						return [][]string{
-							{"cert number", "listing title", "grade"},
-							{"12345678", "Charizard PSA 9", "9"},
+				provider := &mocks.PSARowProviderMock{
+					FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
+						return []inventory.PSAExportRow{
+							{CertNumber: "12345678", Grade: 9, PricePaid: 0},
 						}, nil
 					},
 				}
-				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
+				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithPSARowProvider(provider))
 			},
 			setupSvc: func() *mocks.MockInventoryService {
 				return &mocks.MockInventoryService{
@@ -527,14 +526,14 @@ func TestHandleSyncPSASheets(t *testing.T) {
 			},
 		},
 		{
-			name: "sheet fetch error",
+			name: "portal fetch error",
 			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
-				fetcher := &mocks.MockSheetFetcher{
-					ReadSheetFn: func(_ context.Context, _, _ string) ([][]string, error) {
-						return nil, fmt.Errorf("google sheets API error")
+				provider := &mocks.PSARowProviderMock{
+					FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
+						return nil, fmt.Errorf("portal API error")
 					},
 				}
-				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithSheetFetcher(fetcher, "sheet-id", "Sheet1"))
+				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithPSARowProvider(provider))
 			},
 			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
 			wantCode: http.StatusBadGateway,

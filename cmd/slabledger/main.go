@@ -25,7 +25,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
-	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
+	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -347,15 +347,19 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
 
-	// Initialize Google Sheets client for PSA sync (nil if not configured)
-	var gsheetsClient *gsheets.Client
-	if cfg.GoogleSheets.CredentialsJSON != "" {
-		var err error
-		gsheetsClient, err = gsheets.New(cfg.GoogleSheets.CredentialsJSON, logger)
-		if err != nil {
-			logger.Error(ctx, "failed to initialize Google Sheets client", observability.Err(err))
+	// Initialize PSA portal client and token harvester (nil if not configured).
+	// The binary must run from the repo root so web/scripts/harvest-psa-token.mjs resolves.
+	var portalClient *psaportal.Client
+	var portalHarvester *psaportal.Harvester
+	if cfg.PSAPortal.Enabled && cfg.Auth.EncryptionKey != "" {
+		portalEnc, portalEncErr := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
+		if portalEncErr != nil {
+			logger.Warn(ctx, "PSA portal encryptor init failed; portal sync disabled", observability.Err(portalEncErr))
 		} else {
-			logger.Info(ctx, "Google Sheets client initialized")
+			tokenStore := postgres.NewPSAPortalTokenStore(db.DB, portalEnc)
+			portalClient = psaportal.New(psaportal.NewStoredTokenProvider(tokenStore), psaportal.Config{})
+			portalHarvester = psaportal.NewHarvester(tokenStore, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
+			logger.Info(ctx, "PSA portal client initialized")
 		}
 	}
 
@@ -409,11 +413,10 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHPriceSyncService:         dhPriceSyncService,
 		DHTombstoneStore:           dhTombstoneStore,
 		GapStore:                   gapStore,
-		PSASpreadsheetID:           cfg.GoogleSheets.SpreadsheetID,
-		PSATabName:                 cfg.GoogleSheets.TabName,
 	}
-	if gsheetsClient != nil {
-		sDeps.PSASheetFetcher = gsheetsClient
+	if portalClient != nil {
+		sDeps.PSARowProvider = portalClient
+		sDeps.PSATokenRefresher = portalHarvester
 	}
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
@@ -453,7 +456,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHPriceSyncService: dhPriceSyncService,
 		SyncStateRepo:      syncStateRepo,
 		SchedulerResult:    schedulerResult,
-		GSheetsClient:      gsheetsClient,
+		PSAPortalClient:    portalClient,
 		PendingItemsRepo:   pendingItemsRepo,
 		DHTombstoneStore:   dhTombstoneStore,
 	})

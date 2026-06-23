@@ -107,10 +107,9 @@ type BuildDeps struct {
 	MMValueUpdater   MMValueUpdater
 
 	// PSA sync dependencies (optional)
-	PSASheetFetcher  SheetFetcher
-	PSAImporter      PSAImporter
-	PSASpreadsheetID string
-	PSATabName       string
+	PSARowProvider    RowProvider
+	PSATokenRefresher TokenRefresher
+	PSAImporter       PSAImporter
 
 	// Cert enrichment dependencies (optional).
 	// If CertEnrichJobPrebuilt is set, it is used directly (skipping creation from CertLookup/PurchaseRepo).
@@ -412,12 +411,11 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		))
 	}
 
-	// PSA Google Sheets sync scheduler (if fetcher and importer are provided)
-	if deps.PSASheetFetcher != nil && deps.PSAImporter != nil && deps.PSASpreadsheetID != "" {
+	// PSA portal sync scheduler (if provider and importer are provided)
+	if deps.PSARowProvider != nil && deps.PSAImporter != nil {
 		psaSync = NewPSASyncScheduler(
-			deps.PSASheetFetcher, deps.PSAImporter,
+			deps.PSARowProvider, deps.PSATokenRefresher, deps.PSAImporter,
 			deps.Logger, cfg.PSASync,
-			deps.PSASpreadsheetID, deps.PSATabName,
 		)
 		schedulers = append(schedulers, psaSync)
 	}

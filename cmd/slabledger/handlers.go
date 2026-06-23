@@ -6,10 +6,10 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
-	"github.com/guarzo/slabledger/internal/adapters/clients/gsheets"
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	psaexchangeadapter "github.com/guarzo/slabledger/internal/adapters/clients/psaexchange"
+	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -68,7 +68,7 @@ type handlerInputs struct {
 	DHStore            *postgres.DHStore
 	SyncStateRepo      *postgres.SyncStateRepository
 	SchedulerResult    *scheduler.BuildResult
-	GSheetsClient      *gsheets.Client
+	PSAPortalClient    *psaportal.Client
 	PendingItemsRepo   *postgres.PendingItemsRepository
 	DHTombstoneStore   *postgres.DHCardTombstoneStore
 }
@@ -114,12 +114,11 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			svc = in.CampaignsService
 		}
 		psaSyncHandler = handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
-			PendingRepo:   in.PendingItemsRepo,
-			Refresher:     refresher,
-			Service:       svc,
-			SpreadsheetID: in.Cfg.GoogleSheets.SpreadsheetID,
-			Interval:      in.Cfg.PSASync.Interval.String(),
-			Logger:        logger,
+			PendingRepo: in.PendingItemsRepo,
+			Refresher:   refresher,
+			Service:     svc,
+			Interval:    in.Cfg.PSASync.Interval.String(),
+			Logger:      logger,
 		})
 	}
 
@@ -382,11 +381,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	deps.FinanceService = in.FinanceService
 	deps.DHPriceSyncService = in.DHPriceSyncService
 
-	// Wire Google Sheets for PSA sync (if client + spreadsheet configured)
-	if in.GSheetsClient != nil && in.Cfg.GoogleSheets.SpreadsheetID != "" {
-		deps.SheetFetcher = in.GSheetsClient
-		deps.SheetsSpreadsheetID = in.Cfg.GoogleSheets.SpreadsheetID
-		deps.SheetsTabName = in.Cfg.GoogleSheets.TabName
+	// Wire PSA portal client for manual sync endpoint (if configured)
+	if in.PSAPortalClient != nil {
+		deps.PSARowProvider = in.PSAPortalClient
 	}
 
 	out := handlerOutputs{
