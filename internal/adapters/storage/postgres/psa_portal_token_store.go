@@ -24,6 +24,7 @@ func NewPSAPortalTokenStore(db *sql.DB, enc *crypto.AESEncryptor) *PSAPortalToke
 }
 
 var _ psaportal.TokenStore = (*PSAPortalTokenStore)(nil)
+var _ psaportal.TokenRepository = (*PSAPortalTokenStore)(nil)
 
 // CurrentToken returns the stored token (decrypted) and its expiry.
 // No row yet → ("", zero time, nil).
