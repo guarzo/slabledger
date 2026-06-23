@@ -12,8 +12,12 @@
 //   PSA_PORTAL_PASSWORD  (required)
 //   PSA_PORTAL_START_URL (optional, default the buyer campaign manager home)
 //   PSA_HARVEST_DEBUG_DIR(optional, default /tmp)
+//   PSA_PORTAL_CHROME_PATH    (optional) absolute path to an installed chrome/chromium binary
+//   PSA_PORTAL_CHROME_CHANNEL (optional) branded channel, e.g. "chrome" or "msedge" (no download)
 //
 // Run:  node web/scripts/harvest-psa-token.mjs   (from repo root, after `npm --prefix web ci`)
+// If Playwright's browser download fails, set PSA_PORTAL_CHROME_CHANNEL=chrome (uses installed
+// Google Chrome) or PSA_PORTAL_CHROME_PATH=/path/to/chromium — no Playwright download needed.
 
 import { chromium } from '@playwright/test';
 
@@ -71,7 +75,18 @@ async function dumpDebug(page, label) {
   }
 }
 
-const browser = await chromium.launch({ headless: true });
+// Browser selection. Playwright's bundled-browser download is unreliable in some
+// environments, so allow pointing at an already-installed Chrome/Chromium:
+//   PSA_PORTAL_CHROME_PATH    — absolute path to a chrome/chromium binary (executablePath)
+//   PSA_PORTAL_CHROME_CHANNEL — branded channel, e.g. "chrome" or "msedge" (no download)
+// If neither is set, Playwright uses its bundled Chromium (requires `playwright install`).
+const launchOpts = { headless: true };
+if (process.env.PSA_PORTAL_CHROME_PATH) {
+  launchOpts.executablePath = process.env.PSA_PORTAL_CHROME_PATH;
+} else if (process.env.PSA_PORTAL_CHROME_CHANNEL) {
+  launchOpts.channel = process.env.PSA_PORTAL_CHROME_CHANNEL;
+}
+const browser = await chromium.launch(launchOpts);
 const context = await browser.newContext({ userAgent: UA });
 const page = await context.newPage();
 
