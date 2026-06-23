@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
@@ -23,8 +22,10 @@ func NewPSAPortalTokenStore(db *sql.DB, enc *crypto.AESEncryptor) *PSAPortalToke
 	return &PSAPortalTokenStore{db: db, enc: enc}
 }
 
-var _ psaportal.TokenStore = (*PSAPortalTokenStore)(nil)
-var _ psaportal.TokenRepository = (*PSAPortalTokenStore)(nil)
+// PSAPortalTokenStore structurally satisfies psaportal.TokenStore and
+// psaportal.TokenRepository; that coupling is enforced at wiring time in
+// cmd/slabledger (where both are passed to NewStoredTokenProvider/NewHarvester),
+// so this storage adapter avoids importing the client adapter (hexagonal rule).
 
 // CurrentToken returns the stored token (decrypted) and its expiry.
 // No row yet → ("", zero time, nil).
