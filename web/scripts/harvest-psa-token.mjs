@@ -97,6 +97,8 @@ try {
 
   // --- Email step ---
   const emailField = await firstVisible(page, [
+    '#email',
+    'input[name="email"]',
     (p) => p.getByLabel(/email/i),
     'input[type="email"]',
     'input[name*="email" i]',
@@ -124,8 +126,9 @@ try {
   await passwordField.fill(PASSWORD);
 
   // --- Submit ---
+  // Collectors' password step uses a Vaadin button labelled "Verify" (no type=submit).
   const submit = await firstVisible(page, [
-    (p) => p.getByRole('button', { name: /sign in|log ?in|continue|submit/i }),
+    (p) => p.getByRole('button', { name: /verify|sign ?in|log ?in|continue|submit/i }),
     'button[type="submit"]',
   ]);
   if (!submit) {
