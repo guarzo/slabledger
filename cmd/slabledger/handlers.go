@@ -165,7 +165,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		pxeService = psaexchange.NewService(pxeClient,
 			psaexchange.WithLogger(logger),
 			psaexchange.WithPolicy(policy),
-			psaexchange.WithPolicyStore(postgres.NewPSAExchangePolicyStore(in.DB.DB)),
 		)
 	}
 	psaExchangeHandler := handlers.NewPSAExchangeHandler(pxeService, logger)
