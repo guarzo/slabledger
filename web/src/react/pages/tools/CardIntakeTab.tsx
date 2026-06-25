@@ -3,7 +3,7 @@ import { api, isAPIError } from '../../../js/api';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult } from '../../../types/campaigns';
 import FixDHMatchDialog from '../campaign-detail/inventory/FixDHMatchDialog';
 import type { CertRow } from './cardIntakeTypes';
-import { rowIsListable, rowAwaitingSync, dhPushStuck, scanFieldsFromResult } from './cardIntakeTypes';
+import { rowIsListable, rowAwaitingSync, dhPushStuck, scanFieldsFromResult, importErrorStatus } from './cardIntakeTypes';
 import { loadQueue, saveQueue } from './cardIntakeStorage';
 import { CertRowItem, StatDot } from './CardIntakeRow';
 import { useCardIntakePolling } from './useCardIntakePolling';
@@ -174,8 +174,10 @@ export default function CardIntakeTab() {
   };
 
   const handleImportNew = async () => {
+    // Re-collect both freshly-resolved rows and rows staged for retry after a
+    // previous transient PSA failure.
     const resolvedCerts = Array.from(certs.values())
-      .filter(c => c.status === 'resolved')
+      .filter(c => c.status === 'resolved' || c.status === 'retry')
       .map(c => c.certNumber);
 
     if (resolvedCerts.length === 0) return;
@@ -195,25 +197,40 @@ export default function CardIntakeTab() {
     try {
       const result: CertImportResult = await api.importCerts(resolvedCerts);
 
-      const failedSet = new Set(result.errors.map(e => e.certNumber));
+      // Partition per-cert errors: transient (PSA down / quota) failures are
+      // staged as 'retry' so the operator can re-import them with one click;
+      // permanent failures (cert not found) become terminal 'failed'.
+      const errorByCert = new Map(result.errors.map(e => [e.certNumber, e]));
+      // Count retryable certs OUTSIDE the state updater — React 18 Strict Mode
+      // invokes updaters twice in dev, which would double a counter mutated
+      // inside one.
+      const retryCount = result.errors.filter(e => importErrorStatus(e) === 'retry').length;
       setCerts(prev => {
         const next = new Map(prev);
         for (const cn of resolvedCerts) {
           const row = next.get(cn);
           if (!row) continue;
-          if (failedSet.has(cn)) {
-            const errMsg = result.errors.find(e => e.certNumber === cn)?.error ?? 'Import failed';
-            next.set(cn, { ...row, status: 'failed', error: errMsg });
+          const err = errorByCert.get(cn);
+          if (err) {
+            next.set(cn, { ...row, status: importErrorStatus(err), error: err.error || 'Import failed' });
           } else {
             next.set(cn, { ...row, status: 'imported' });
           }
         }
         return next;
       });
+      if (retryCount > 0) {
+        setImportError(
+          `PSA was temporarily unavailable, so ${retryCount} cert${retryCount > 1 ? 's' : ''} couldn't be imported yet. ` +
+          `They're staged and ready — click "Import" again to retry. Nothing was lost.`
+        );
+      }
       for (const cn of resolvedCerts) {
-        if (!failedSet.has(cn)) void pollCert(cn);
+        if (!errorByCert.has(cn)) void pollCert(cn);
       }
     } catch (err) {
+      // Whole-batch failure (network error / 500): nothing was processed, so
+      // return every row to 'resolved' — it's all still importable.
       setImportError(err instanceof Error ? err.message : 'Import failed');
       setCerts(prev => {
         const next = new Map(prev);
@@ -237,6 +254,7 @@ export default function CardIntakeTab() {
     let stuck = 0;
     let listed = 0;
     let failed = 0;
+    let retry = 0;
     let sold = 0;
     for (const r of rows) {
       // Check sold first so a sold row that still carries a stale
@@ -244,18 +262,23 @@ export default function CardIntakeTab() {
       if (r.status === 'sold') sold++;
       else if (r.listingStatus === 'listed') listed++;
       else if (r.status === 'failed') failed++;
+      else if (r.status === 'retry') retry++;
       else if (rowIsListable(r)) ready++;
       else if (dhPushStuck(r)) stuck++;
       else if (rowAwaitingSync(r)) syncing++;
     }
     // handleClearCompleted only removes listed + failed; sold rows stay so the
-    // operator can Return them. Surface that separately so the Clear button
-    // hides when only sold rows are left.
+    // operator can Return them, and retry rows stay so they can be re-imported.
+    // Surface clearable separately so the Clear button hides when only
+    // sold/retry rows are left.
     const clearable = listed + failed;
-    return { ready, syncing, stuck, listed, failed, sold, clearable, total: rows.length };
+    return { ready, syncing, stuck, listed, failed, retry, sold, clearable, total: rows.length };
   }, [rows]);
 
-  const resolvedCount = useMemo(() => rows.filter(r => r.status === 'resolved').length, [rows]);
+  const resolvedCount = useMemo(
+    () => rows.filter(r => r.status === 'resolved' || r.status === 'retry').length,
+    [rows],
+  );
   const displayRows = useMemo(() => [...rows].reverse(), [rows]);
 
   return (
@@ -286,13 +309,14 @@ export default function CardIntakeTab() {
           {batchStats.stuck > 0 && <StatDot color="var(--warning)" label={`${batchStats.stuck} needs attention`} />}
           {batchStats.listed > 0 && <StatDot color="var(--success)" label={`${batchStats.listed} listed`} icon="check" />}
           {batchStats.failed > 0 && <StatDot color="var(--danger)" label={`${batchStats.failed} failed`} />}
+          {batchStats.retry > 0 && <StatDot color="var(--warning)" label={`${batchStats.retry} will retry`} pulse />}
           {batchStats.sold > 0 && <StatDot color="var(--text-muted)" label={`${batchStats.sold} sold`} />}
           <span className="ml-auto text-[var(--text-muted)]">{batchStats.total} scanned</span>
           {batchStats.clearable > 0 && (
             <button
               onClick={handleClearCompleted}
               className="text-[var(--text-muted)] hover:text-[var(--text)] underline underline-offset-2 text-[11px]"
-              title="Remove listed + failed rows (sold rows are kept)"
+              title="Remove listed + failed rows (sold and retry rows are kept)"
             >
               Clear completed
             </button>
@@ -317,11 +341,18 @@ export default function CardIntakeTab() {
         </div>
       )}
 
-      {/* Import error */}
+      {/* Import status — amber when items are staged to retry (recoverable),
+          red when the whole batch failed with nothing staged. */}
       {importError && (
-        <div className="rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-3 text-sm text-[var(--danger)]">
-          {importError}
-        </div>
+        batchStats.retry > 0 ? (
+          <div className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-3 text-sm text-[var(--warning)]">
+            {importError}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-3 text-sm text-[var(--danger)]">
+            {importError}
+          </div>
+        )
       )}
 
       {/* Staging area */}
@@ -329,14 +360,16 @@ export default function CardIntakeTab() {
         <div className="rounded-lg border border-dashed border-[var(--brand-500)]/50 bg-[var(--brand-500)]/5 p-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-400)]">
-              {resolvedCount} new cert{resolvedCount > 1 ? 's' : ''} staged
+              {batchStats.retry > 0
+                ? `${resolvedCount} cert${resolvedCount > 1 ? 's' : ''} staged (${batchStats.retry} to retry)`
+                : `${resolvedCount} new cert${resolvedCount > 1 ? 's' : ''} staged`}
             </span>
             <button
               onClick={handleImportNew}
               disabled={importLoading}
               className="rounded-lg bg-[var(--brand-500)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-600)] disabled:opacity-50 transition-colors"
             >
-              {importLoading ? 'Importing…' : `Import ${resolvedCount} New`}
+              {importLoading ? 'Importing…' : batchStats.retry > 0 ? `Import ${resolvedCount}` : `Import ${resolvedCount} New`}
             </button>
           </div>
         </div>

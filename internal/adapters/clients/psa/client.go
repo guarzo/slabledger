@@ -166,7 +166,11 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 			if elapsed < minRequestSpacing {
 				select {
 				case <-ctx.Done():
-					return nil, ctx.Err()
+					// Wrap the bare context error so callers can classify it as
+					// a transient timeout (retryable) rather than an opaque
+					// failure. A naked ctx.Err() is context.Canceled/
+					// DeadlineExceeded, which carries no provider error code.
+					return nil, apperrors.ProviderTimeout("PSA", ctx.Err())
 				case <-time.After(minRequestSpacing - elapsed):
 				}
 			}

@@ -26,6 +26,12 @@ type CertImportSoldItem struct {
 type CertImportError struct {
 	CertNumber string `json:"certNumber"`
 	Error      string `json:"error"`
+	// Retryable is true when the failure was transient (PSA API down, daily
+	// quota exhausted, request timeout, circuit open) rather than a permanent
+	// rejection (cert genuinely not found, malformed response). The intake UI
+	// uses this to stage transient failures for re-import instead of marking
+	// them terminally failed.
+	Retryable bool `json:"retryable,omitempty"`
 }
 
 // ScanCertRequest is the input for POST /api/purchases/scan-cert.
