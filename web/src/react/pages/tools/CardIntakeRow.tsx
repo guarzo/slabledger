@@ -194,8 +194,8 @@ export function CertRowItem({
             <span className="text-xs text-[var(--danger)] truncate">{row.error}</span>
           )}
           {row.status === 'retry' && (
-            <span className="text-xs text-[var(--warning)] truncate">
-              PSA unavailable — staged to retry
+            <span className="text-xs text-[var(--warning)] truncate" title={row.error}>
+              {row.error ? `Staged to retry — ${row.error}` : 'Staged to retry'}
             </span>
           )}
           {(row.status === 'existing' || row.status === 'returned') && (

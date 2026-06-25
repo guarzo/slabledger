@@ -14,11 +14,18 @@ import (
 )
 
 // transientImportErrorCodes are provider failure modes that are expected to
-// resolve on their own: the PSA API was unreachable, the daily call quota was
-// exhausted, the request timed out, or the circuit breaker is open. A cert that
-// fails for one of these reasons should be retried, not discarded — unlike a
-// genuine "cert not found" or a malformed response, which will fail identically
-// on every retry.
+// resolve on their own: the PSA API was unreachable (provider-unavailable or
+// network-unavailable), the daily call quota was exhausted (rate-limit), the
+// request timed out (provider- or network-timeout), or the circuit breaker is
+// open. A cert that fails for one of these reasons should be retried, not
+// discarded — unlike a genuine "cert not found" or a malformed response, which
+// will fail identically on every retry.
+//
+// This list intentionally diverges from resilience.isRetryableError, which
+// treats circuit-open and rate-limit as NON-retryable (an automatic backoff
+// loop must not hammer a tripped breaker or a throttled key). Here the retry is
+// MANUAL — we only stage the cert so the operator can re-import later — so
+// circuit-open and rate-limit are includable. Don't "dedupe" the two lists.
 var transientImportErrorCodes = []apperrors.ErrorCode{
 	apperrors.ErrCodeProviderUnavailable,
 	apperrors.ErrCodeProviderRateLimit,
@@ -372,6 +379,11 @@ func (s *service) ScanCerts(ctx context.Context, certNumbers []string) (*ScanCer
 
 		result, err := s.ScanCert(ctx, cert)
 		if err != nil {
+			// Retryable is intentionally left unset here: the cert-intake
+			// polling loop that consumes ScanCerts doesn't surface a retry
+			// affordance (a failed scan just stays in its prior row state and
+			// is re-polled on the next tick), so classification would be dead
+			// data. Only the ImportCerts path feeds the retry UI.
 			out.Errors = append(out.Errors, CertImportError{CertNumber: cert, Error: err.Error()})
 			continue
 		}

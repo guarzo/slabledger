@@ -12,7 +12,10 @@ export default function CardIntakeTab() {
   const [input, setInput] = useState('');
   const [certs, setCerts] = useState<Map<string, CertRow>>(() => loadQueue());
   const [importLoading, setImportLoading] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
+  // Banner severity is pinned to the message at the time it is set, not derived
+  // from live state — otherwise dismissing retry rows would flip an amber
+  // "staged to retry" notice to red after the fact.
+  const [importNotice, setImportNotice] = useState<{ text: string; kind: 'warn' | 'error' } | null>(null);
   const [highlightedCert, setHighlightedCert] = useState<string | null>(null);
   const [fixMatchTarget, setFixMatchTarget] = useState<CertRow | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -175,15 +178,20 @@ export default function CardIntakeTab() {
 
   const handleImportNew = async () => {
     // Re-collect both freshly-resolved rows and rows staged for retry after a
-    // previous transient PSA failure.
-    const resolvedCerts = Array.from(certs.values())
-      .filter(c => c.status === 'resolved' || c.status === 'retry')
-      .map(c => c.certNumber);
+    // previous transient failure.
+    const staged = Array.from(certs.values())
+      .filter(c => c.status === 'resolved' || c.status === 'retry');
+    const resolvedCerts = staged.map(c => c.certNumber);
 
     if (resolvedCerts.length === 0) return;
 
+    // Remember each cert's pre-import status so a whole-batch failure can
+    // restore it exactly — a 'retry' row must come back as 'retry', not be
+    // downgraded to 'resolved' and lose its amber signal.
+    const priorStatus = new Map(staged.map(c => [c.certNumber, c.status]));
+
     setImportLoading(true);
-    setImportError(null);
+    setImportNotice(null);
 
     setCerts(prev => {
       const next = new Map(prev);
@@ -197,9 +205,11 @@ export default function CardIntakeTab() {
     try {
       const result: CertImportResult = await api.importCerts(resolvedCerts);
 
-      // Partition per-cert errors: transient (PSA down / quota) failures are
-      // staged as 'retry' so the operator can re-import them with one click;
-      // permanent failures (cert not found) become terminal 'failed'.
+      // Partition per-cert errors: transient failures (provider down / quota /
+      // a retryable DB write) are staged as 'retry' so the operator can
+      // re-import them with one click; permanent failures (cert not found)
+      // become terminal 'failed'. Each row keeps its own error message so the
+      // actual reason is visible on the row — see CertRowItem.
       const errorByCert = new Map(result.errors.map(e => [e.certNumber, e]));
       // Count retryable certs OUTSIDE the state updater — React 18 Strict Mode
       // invokes updaters twice in dev, which would double a counter mutated
@@ -220,23 +230,27 @@ export default function CardIntakeTab() {
         return next;
       });
       if (retryCount > 0) {
-        setImportError(
-          `PSA was temporarily unavailable, so ${retryCount} cert${retryCount > 1 ? 's' : ''} couldn't be imported yet. ` +
-          `They're staged and ready — click "Import" again to retry. Nothing was lost.`
-        );
+        setImportNotice({
+          kind: 'warn',
+          text: `${retryCount} cert${retryCount > 1 ? 's' : ''} couldn't be imported yet and ${retryCount > 1 ? 'are' : 'is'} staged to retry — ` +
+            `see each row for the reason, then click "Import" again. Nothing was lost.`,
+        });
       }
       for (const cn of resolvedCerts) {
         if (!errorByCert.has(cn)) void pollCert(cn);
       }
     } catch (err) {
-      // Whole-batch failure (network error / 500): nothing was processed, so
-      // return every row to 'resolved' — it's all still importable.
-      setImportError(err instanceof Error ? err.message : 'Import failed');
+      // Whole-batch throw (5xx, or a network error). Nothing was durably
+      // committed on this path — ImportCerts' only error returns precede the
+      // per-cert write loop — and re-import is idempotent regardless, so
+      // restore each row to its pre-import status (NOT a blanket 'resolved',
+      // which would erase the retry signal on rows that were already 'retry').
+      setImportNotice({ kind: 'error', text: err instanceof Error ? err.message : 'Import failed' });
       setCerts(prev => {
         const next = new Map(prev);
         for (const cn of resolvedCerts) {
           const row = next.get(cn);
-          if (row) next.set(cn, { ...row, status: 'resolved' });
+          if (row) next.set(cn, { ...row, status: priorStatus.get(cn) ?? 'resolved' });
         }
         return next;
       });
@@ -341,16 +355,17 @@ export default function CardIntakeTab() {
         </div>
       )}
 
-      {/* Import status — amber when items are staged to retry (recoverable),
-          red when the whole batch failed with nothing staged. */}
-      {importError && (
-        batchStats.retry > 0 ? (
+      {/* Import status — severity is pinned to the message (amber for a
+          recoverable "staged to retry" notice, red for a whole-batch failure),
+          so it doesn't flip if retry rows are dismissed afterward. */}
+      {importNotice && (
+        importNotice.kind === 'warn' ? (
           <div className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-3 text-sm text-[var(--warning)]">
-            {importError}
+            {importNotice.text}
           </div>
         ) : (
           <div className="rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-3 text-sm text-[var(--danger)]">
-            {importError}
+            {importNotice.text}
           </div>
         )
       )}
