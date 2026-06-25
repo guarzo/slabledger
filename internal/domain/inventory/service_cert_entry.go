@@ -8,9 +8,46 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
+
+// transientImportErrorCodes are provider failure modes that are expected to
+// resolve on their own: the PSA API was unreachable, the daily call quota was
+// exhausted, the request timed out, or the circuit breaker is open. A cert that
+// fails for one of these reasons should be retried, not discarded — unlike a
+// genuine "cert not found" or a malformed response, which will fail identically
+// on every retry.
+var transientImportErrorCodes = []apperrors.ErrorCode{
+	apperrors.ErrCodeProviderUnavailable,
+	apperrors.ErrCodeProviderRateLimit,
+	apperrors.ErrCodeProviderTimeout,
+	apperrors.ErrCodeProviderCircuitOpen,
+	apperrors.ErrCodeNetworkUnavailable,
+	apperrors.ErrCodeNetworkTimeout,
+}
+
+// isRetryableImportError reports whether a per-cert import failure was caused by
+// a transient provider/network condition (see transientImportErrorCodes). It
+// walks the wrapped error chain, so it works on errors the PSA adapter has
+// wrapped with fmt.Errorf("...%w", err).
+//
+// A bare context.Canceled/DeadlineExceeded (e.g. a request deadline firing mid
+// import) is also treated as transient: it carries no AppError code but is, by
+// definition, a "try again" condition. Defense-in-depth — adapters should wrap
+// context errors in ProviderTimeout, but we don't rely on every one doing so.
+func isRetryableImportError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	for _, code := range transientImportErrorCodes {
+		if apperrors.HasErrorCode(err, code) {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error) {
 	// Deduplicate and clean input
@@ -75,6 +112,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 				result.Errors = append(result.Errors, CertImportError{
 					CertNumber: certNum,
 					Error:      fmt.Sprintf("exists but failed to flag for export: %v", flagErr),
+					Retryable:  true, // DB write failure — transient, safe to retry
 				})
 				continue
 			}
@@ -111,7 +149,11 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 		info, certErr := s.certLookup.LookupCert(ctx, certNum)
 		if certErr != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, CertImportError{CertNumber: certNum, Error: certErr.Error()})
+			result.Errors = append(result.Errors, CertImportError{
+				CertNumber: certNum,
+				Error:      certErr.Error(),
+				Retryable:  isRetryableImportError(certErr),
+			})
 			continue
 		}
 		if info == nil {
@@ -173,7 +215,11 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 				continue
 			}
 			result.Failed++
-			result.Errors = append(result.Errors, CertImportError{CertNumber: certNum, Error: createErr.Error()})
+			result.Errors = append(result.Errors, CertImportError{
+				CertNumber: certNum,
+				Error:      createErr.Error(),
+				Retryable:  true, // DB write failure — transient, safe to retry
+			})
 			continue
 		}
 

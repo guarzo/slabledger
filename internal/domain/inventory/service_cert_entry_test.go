@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 // dbLikePurchaseRepo wraps mockRepo so Get* methods return a shallow copy of
@@ -60,6 +61,57 @@ func (m *mockCertLookup) LookupImages(ctx context.Context, certNumber string) (s
 		return m.lookupImagesFn(ctx, certNumber)
 	}
 	return "", "", nil
+}
+
+// TestImportCerts_ClassifiesTransientFailures guards the production incident
+// where a PSA outage / daily-quota exhaustion produced per-cert "failed" errors
+// that were indistinguishable from a genuinely-missing cert. A transient
+// provider failure must be marked Retryable so the intake UI can stage it for
+// re-import instead of discarding it; a real not-found must not be.
+func TestImportCerts_ClassifiesTransientFailures(t *testing.T) {
+	tests := []struct {
+		name          string
+		lookupErr     error
+		wantRetryable bool
+	}{
+		{name: "rate limited is retryable", lookupErr: apperrors.ProviderRateLimited("PSA", ""), wantRetryable: true},
+		{name: "provider unavailable is retryable", lookupErr: apperrors.ProviderUnavailable("PSA", errors.New("connection refused")), wantRetryable: true},
+		{name: "provider timeout is retryable", lookupErr: apperrors.ProviderTimeout("PSA", errors.New("deadline exceeded")), wantRetryable: true},
+		{name: "circuit open is retryable", lookupErr: apperrors.ProviderCircuitOpen("PSA"), wantRetryable: true},
+		{name: "not found is permanent", lookupErr: apperrors.ProviderNotFound("PSA", "cert 12345678"), wantRetryable: false},
+		{name: "invalid response is permanent", lookupErr: apperrors.ProviderInvalidResponse("PSA", errors.New("bad json")), wantRetryable: false},
+		{name: "context deadline exceeded is retryable", lookupErr: context.DeadlineExceeded, wantRetryable: true},
+		{name: "context canceled is retryable", lookupErr: context.Canceled, wantRetryable: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+			certLookup := &mockCertLookup{
+				lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+					// Wrap like the real PSA adapter does (fmt.Errorf("...%w", err))
+					// to prove classification walks the error chain.
+					return nil, fmt.Errorf("PSA cert lookup 12345678: %w", tc.lookupErr)
+				},
+			}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+			result, err := svc.ImportCerts(context.Background(), []string{"12345678"})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Failed != 1 {
+				t.Fatalf("failed = %d, want 1", result.Failed)
+			}
+			if len(result.Errors) != 1 {
+				t.Fatalf("errors length = %d, want 1", len(result.Errors))
+			}
+			if got := result.Errors[0].Retryable; got != tc.wantRetryable {
+				t.Errorf("Retryable = %v, want %v (err: %v)", got, tc.wantRetryable, tc.lookupErr)
+			}
+		})
+	}
 }
 
 func TestImportCerts_NewCert(t *testing.T) {
