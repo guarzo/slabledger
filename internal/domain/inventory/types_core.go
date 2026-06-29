@@ -25,6 +25,44 @@ const (
 	DHStatusSold    DHStatus = "sold"
 )
 
+// NormalizeDHStatus guards the dh_status column against undocumented values DH
+// has returned and we used to persist verbatim (e.g. "skipped"). It returns the
+// status unchanged when it is one of DH's known inventory states, and ""
+// otherwise. Persisting "" keeps the row out of the price-sync PATCH path
+// (which only accepts in_stock/listed) instead of letting a bogus status 422 on
+// every tick. Callers that need a concrete default (e.g. a fresh push) handle
+// the "" case themselves.
+func NormalizeDHStatus(status string) string {
+	switch status {
+	case DHStatusInStock, DHStatusListed, DHStatusSold:
+		return status
+	default:
+		return ""
+	}
+}
+
+// DHStatusForPush maps a raw status from a DH push/import response to the value
+// to persist in dh_status. It encodes the single rule every DH push site needs:
+//   - a recognized inventory status (in_stock/listed/sold) passes through;
+//   - an empty status (DH said nothing — a brand-new push) defaults to in_stock;
+//   - a non-empty but unrecognized value (e.g. DH's psa_import "skipped" =
+//     "cert already on DH, existing inventory left untouched") drops to "".
+//     Guessing in_stock for that case would let the price-sync PATCH overwrite
+//     — and delist — a real "listed" item; the price-sync guard keeps "" rows
+//     out of the PATCH path entirely. The "" is later reconciled to DH's
+//     authoritative status by the DH reconciler's full-snapshot sweep (the
+//     checkpoint-gated inventory poll can't, since it never re-fetches an
+//     unchanged item).
+func DHStatusForPush(raw string) DHStatus {
+	if s := NormalizeDHStatus(raw); s != "" {
+		return s
+	}
+	if raw == "" {
+		return DHStatusInStock
+	}
+	return ""
+}
+
 // DHPushStatus represents the DH inventory push pipeline status.
 type DHPushStatus = string
 

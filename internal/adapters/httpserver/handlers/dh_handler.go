@@ -355,7 +355,7 @@ func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Pu
 					CertStatus:        dh.CertStatusMatched,
 					ListingPriceCents: result.AssignedPriceCents,
 					ChannelsJSON:      dh.MarshalChannels(result.Channels),
-					DHStatus:          inventory.DHStatus(result.Status),
+					DHStatus:          inventory.DHStatusForPush(result.Status),
 				}); err != nil {
 					return 0, fmt.Errorf("%w: %v", errDHPersistFailed, err)
 				}

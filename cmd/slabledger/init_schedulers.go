@@ -162,6 +162,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// so the daily drift scan's absence doesn't go unnoticed.
 	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.PurchaseStore != nil {
 		var reconcileOpts []dhlisting.ReconcilerOption
+		reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileStatusRepairer(deps.PurchaseStore))
 		if deps.DHEventStore != nil {
 			reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileEventRecorder(deps.DHEventStore))
 		}

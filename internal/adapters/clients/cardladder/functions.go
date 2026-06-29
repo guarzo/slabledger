@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
@@ -102,7 +103,17 @@ func checkCallableError(body []byte, functionName string) error {
 		} `json:"error"`
 	}
 	if json.Unmarshal(body, &callableErr) == nil && callableErr.Error.Message != "" {
-		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
+		detail := fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
+		// CL's daily quota surfaces as a Firebase RESOURCE_EXHAUSTED envelope
+		// (HTTP 200 body, message "Daily request limit reached"). Classify it as
+		// a rate limit, not generic unavailability: rate-limit errors are
+		// non-retryable (retrying burns more quota) and let callers detect the
+		// quota wall and stop the cycle instead of hammering through every
+		// remaining card.
+		if callableErr.Error.Status == "RESOURCE_EXHAUSTED" || strings.Contains(callableErr.Error.Message, "Daily request limit") {
+			return apperrors.ProviderRateLimited("CardLadder", "")
+		}
+		return apperrors.ProviderUnavailable("CardLadder", detail)
 	}
 	return nil
 }

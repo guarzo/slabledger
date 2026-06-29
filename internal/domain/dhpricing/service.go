@@ -98,6 +98,20 @@ func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) Sync
 	res.OldListingCents = p.DHListingPriceCents
 
 	status := string(p.DHStatus)
+	// DH's PATCH /inventory/:id only accepts in_stock or listed. A drifted row
+	// carrying any other status (sold, empty, or an undocumented value DH once
+	// returned and we persisted — e.g. "skipped") would 422 on every tick, and
+	// because the failed PATCH never updates the local price the row stays
+	// "drifted" and is retried forever. Skip it instead of looping.
+	if status != inventory.DHStatusInStock && status != inventory.DHStatusListed {
+		s.logger.Warn(ctx, "dh price sync: skipping non-listable status",
+			observability.String("purchaseID", p.ID),
+			observability.Int("dhInventoryID", p.DHInventoryID),
+			observability.String("dhStatus", status))
+		res.Outcome = OutcomeSkippedBadStatus
+		return res
+	}
+
 	newDHPrice, err := s.updater.UpdateInventoryStatus(ctx, p.DHInventoryID, dhlisting.DHInventoryStatusUpdate{
 		Status:            status,
 		ListingPriceCents: reviewed,
@@ -165,6 +179,7 @@ func (s *service) SyncDriftedPurchases(ctx context.Context) SyncBatchResult {
 		observability.Int("total", result.Total),
 		observability.Int("synced", result.ByOutcome[OutcomeSynced]),
 		observability.Int("errors", result.ByOutcome[OutcomeError]),
-		observability.Int("stale", result.ByOutcome[OutcomeStaleInventoryID]))
+		observability.Int("stale", result.ByOutcome[OutcomeStaleInventoryID]),
+		observability.Int("badStatus", result.ByOutcome[OutcomeSkippedBadStatus]))
 	return result
 }
