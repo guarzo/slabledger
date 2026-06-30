@@ -244,16 +244,15 @@ func (s *DHPushScheduler) applyPSAImportSuccess(ctx context.Context, p inventory
 		return processSkipped
 	}
 
-	dhStatus := result.Status
-	if dhStatus == "" {
-		dhStatus = dh.InventoryStatusInStock
-	}
+	// Map DH's psa_import status to the value to persist; see
+	// inventory.DHStatusForPush for why "skipped" must not become in_stock.
+	dhStatus := inventory.DHStatusForPush(result.Status)
 
 	update := inventory.DHFieldsUpdate{
 		CardID:      result.DHCardID,
 		InventoryID: result.DHInventoryID,
 		CertStatus:  dh.CertStatusMatched,
-		DHStatus:    inventory.DHStatus(dhStatus),
+		DHStatus:    dhStatus,
 	}
 	if updateErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, update); updateErr != nil {
 		s.logger.Warn(ctx, "dh push: failed to update DH fields after psa_import",

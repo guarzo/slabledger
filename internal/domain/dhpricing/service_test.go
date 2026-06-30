@@ -129,6 +129,21 @@ func TestSyncPurchasePrice(t *testing.T) {
 			wantOutcome: OutcomeSkippedNoDrift,
 		},
 		{
+			name:        "drifted but status is skipped → skip, never PATCH (the 422 loop)",
+			purchase:    baseP(func(p *inventory.Purchase) { p.DHStatus = "skipped" }),
+			wantOutcome: OutcomeSkippedBadStatus,
+		},
+		{
+			name:        "drifted but status is sold → skip, never PATCH",
+			purchase:    baseP(func(p *inventory.Purchase) { p.DHStatus = inventory.DHStatusSold }),
+			wantOutcome: OutcomeSkippedBadStatus,
+		},
+		{
+			name:        "drifted but status is empty → skip, never PATCH",
+			purchase:    baseP(func(p *inventory.Purchase) { p.DHStatus = "" }),
+			wantOutcome: OutcomeSkippedBadStatus,
+		},
+		{
 			name:            "drift present → patch DH + persist",
 			purchase:        baseP(nil),
 			wantOutcome:     OutcomeSynced,

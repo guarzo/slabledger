@@ -16,6 +16,7 @@ const (
 	CLReasonCertResolveFailed = "cert_resolve_failed" // BuildCollectionCard returned no gemRateID/condition.
 	CLReasonNoValue           = "no_value"            // Resolved to gemRateID but catalog had no value.
 	CLReasonAPIError          = "api_error"           // Transient CL API error during cert resolution.
+	CLReasonQuotaExhausted    = "quota_exhausted"     // CL daily request quota hit; this card was skipped, not attempted.
 )
 
 // recordCLError persists a failure reason (or clears it when reason=="") on a

@@ -20,6 +20,7 @@ const (
 	OutcomeSkippedNoInventory  Outcome = "skipped_no_inventory"
 	OutcomeSkippedZeroReviewed Outcome = "skipped_zero_reviewed"
 	OutcomeSkippedNoDrift      Outcome = "skipped_no_drift"
+	OutcomeSkippedBadStatus    Outcome = "skipped_bad_status"
 	OutcomeStaleInventoryID    Outcome = "stale_inventory_id"
 	OutcomeError               Outcome = "error"
 )
