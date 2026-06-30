@@ -341,6 +341,26 @@ func TestReconcile_RepairsStatusDrift(t *testing.T) {
 			},
 			wantRepairs: map[string]string{},
 		},
+		{
+			// Boundary: DH snapshot reports sold but the purchase is unsold
+			// (came from ListAllUnsoldPurchases). "sold" is owned by the orders
+			// poll — adopting it here would mark a row sold with no sale behind
+			// it. Must be a no-op; the orders poll resolves the disagreement.
+			name:     "DH sold is not adopted onto an in_stock purchase",
+			snapshot: map[int]string{101: inventory.DHStatusSold},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: inventory.DHStatusInStock},
+			},
+			wantRepairs: map[string]string{},
+		},
+		{
+			name:     "DH sold is not adopted onto an empty-status purchase",
+			snapshot: map[int]string{101: inventory.DHStatusSold},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: ""},
+			},
+			wantRepairs: map[string]string{},
+		},
 	}
 
 	for _, tc := range tests {

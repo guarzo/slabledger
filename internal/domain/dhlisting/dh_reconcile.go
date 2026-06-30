@@ -150,17 +150,28 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 			// we deliberately persisted as "" (an undocumented psa_import status
 			// like "skipped"): the checkpoint-gated inventory poll never
 			// re-fetches an unchanged item, but this full sweep always sees it.
-			// Only adopt real inventory statuses, and never overwrite a local
-			// "sold" (owned by the orders poll, which also creates the sale row).
+			// Repair only between the listable statuses (in_stock/listed), in
+			// both directions:
+			//   - never ADOPT "sold" from the snapshot — "sold" is owned by the
+			//     orders poll, which also writes the campaign_sales row; stamping
+			//     it here would mark an unsold purchase sold with no sale behind
+			//     it (the same boundary dh_inventory_poll guards). These rows
+			//     come from ListAllUnsoldPurchases, so a snapshot "sold" is a
+			//     transient disagreement the orders poll resolves.
+			//   - never OVERWRITE a local "sold" — a recorded sale outranks a
+			//     stale DH listing that hasn't been retired yet.
 			if s.repairer != nil {
-				normalized := inventory.NormalizeDHStatus(dhStatus)
-				if normalized != "" && normalized != string(p.DHStatus) && string(p.DHStatus) != inventory.DHStatusSold {
-					if err := s.repairer.UpdatePurchaseDHStatus(ctx, p.ID, normalized); err != nil {
+				target := inventory.NormalizeDHStatus(dhStatus)
+				local := string(p.DHStatus)
+				targetListable := target == inventory.DHStatusInStock || target == inventory.DHStatusListed
+				localRepairable := local != inventory.DHStatusSold
+				if targetListable && localRepairable && target != local {
+					if err := s.repairer.UpdatePurchaseDHStatus(ctx, p.ID, target); err != nil {
 						s.logger.Warn(ctx, "dh reconcile: status repair failed",
 							observability.String("purchaseID", p.ID),
 							observability.Int("dhInventoryID", p.DHInventoryID),
-							observability.String("from", string(p.DHStatus)),
-							observability.String("to", normalized),
+							observability.String("from", local),
+							observability.String("to", target),
 							observability.Err(err))
 					} else {
 						result.StatusRepaired++
