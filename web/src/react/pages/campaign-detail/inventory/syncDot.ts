@@ -21,7 +21,7 @@ export interface SyncDotInput {
   /** Does MM currently have a usable value on the row? */
   hasMMValue?: boolean;
   /** Current CL error/status tag, if any. */
-  clLastError?: 'no_value' | 'catalog_fallback' | 'api_error' | 'no_image_match' | 'no_cert_match';
+  clLastError?: 'no_value' | 'catalog_fallback' | 'api_error' | 'quota_exhausted' | 'no_image_match' | 'no_cert_match';
 }
 
 /** Returns color + tooltip for the per-row sync freshness dot.
@@ -79,6 +79,7 @@ function clLine(ts: string | undefined, hasValue: boolean | undefined, lastError
   if (lastError === 'no_value') return `CL · matched, no value · ${age}`;
   if (lastError === 'catalog_fallback') return `CL · catalog fallback · ${age}`;
   if (lastError === 'api_error') return `CL · api error · ${age}`;
+  if (lastError === 'quota_exhausted') return `CL · quota hit, skipped · ${age}`;
   if (lastError === 'no_image_match') return `CL · no image match · ${age}`;
   if (lastError === 'no_cert_match') return `CL · no cert match · ${age}`;
   if (hasValue) return `CL · ✓ · ${age}`;

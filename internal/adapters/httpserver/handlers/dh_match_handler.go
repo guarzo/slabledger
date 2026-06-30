@@ -338,7 +338,7 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []inventory.P
 				CertStatus:        dh.CertStatusMatched,
 				ListingPriceCents: r.AssignedPriceCents,
 				ChannelsJSON:      dh.MarshalChannels(r.Channels),
-				DHStatus:          inventory.DHStatus(r.Status),
+				DHStatus:          inventory.DHStatusForPush(r.Status),
 			}); err != nil {
 				h.logger.Warn(ctx, "push to DH: failed to persist inventory ID",
 					observability.String("cert", r.CertNumber),

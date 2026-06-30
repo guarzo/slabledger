@@ -14,21 +14,26 @@ import (
 )
 
 type stubSnapshotFetcher struct {
-	ids map[int]struct{}
+	inv map[int]string
 	err error
 }
 
-func (s stubSnapshotFetcher) FetchAllInventoryIDs(_ context.Context) (map[int]struct{}, error) {
+func (s stubSnapshotFetcher) FetchAllInventory(_ context.Context) (map[int]string, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-	return s.ids, nil
+	return s.inv, nil
 }
 
-func idSet(ids ...int) map[int]struct{} {
-	m := make(map[int]struct{}, len(ids))
+// idSet builds a snapshot whose every inventory ID reports DH status "listed".
+// The existing reconcile/event tests only care about ID membership, and the
+// test purchases carry DHStatus "listed", so this matching status means the
+// status-repair path stays a no-op for those cases. Status-repair behavior is
+// exercised explicitly in TestReconcile_RepairsStatusDrift.
+func idSet(ids ...int) map[int]string {
+	m := make(map[int]string, len(ids))
 	for _, id := range ids {
-		m[id] = struct{}{}
+		m[id] = inventory.DHStatusListed
 	}
 	return m
 }
@@ -36,7 +41,7 @@ func idSet(ids ...int) map[int]struct{} {
 func TestReconcile(t *testing.T) {
 	tests := []struct {
 		name            string
-		snapshot        map[int]struct{}
+		snapshot        map[int]string
 		snapshotErr     error
 		purchases       []inventory.Purchase
 		resetErrForIDs  map[string]error
@@ -118,7 +123,7 @@ func TestReconcile(t *testing.T) {
 				},
 			}
 			recon, err := dhlisting.NewReconciler(
-				stubSnapshotFetcher{ids: tc.snapshot, err: tc.snapshotErr},
+				stubSnapshotFetcher{inv: tc.snapshot, err: tc.snapshotErr},
 				repo,
 				repo,
 				mocks.NewMockLogger(),
@@ -177,7 +182,7 @@ func TestReconcile(t *testing.T) {
 func TestReconcile_EmitsUnlistedEvent(t *testing.T) {
 	cases := []struct {
 		name       string
-		snapshot   map[int]struct{}
+		snapshot   map[int]string
 		purchases  []inventory.Purchase
 		recordErr  error // when set, MockEventRecorder.Record returns this
 		wantEvents []dhevents.Event
@@ -240,7 +245,7 @@ func TestReconcile_EmitsUnlistedEvent(t *testing.T) {
 				RecordFn: func(_ context.Context, _ dhevents.Event) error { return tc.recordErr },
 			}
 			recon, err := dhlisting.NewReconciler(
-				stubSnapshotFetcher{ids: tc.snapshot},
+				stubSnapshotFetcher{inv: tc.snapshot},
 				repo, repo,
 				mocks.NewMockLogger(),
 				dhlisting.WithReconcileEventRecorder(rec),
@@ -279,5 +284,155 @@ func TestNewReconciler_rejectsMissingDeps(t *testing.T) {
 	}
 	if _, err := dhlisting.NewReconciler(fetcher, repo, repo, nil); err == nil {
 		t.Fatal("expected error when logger is nil")
+	}
+}
+
+// TestReconcile_RepairsStatusDrift verifies the durable backfill for rows we
+// deliberately persisted with a non-authoritative dh_status (notably the "" we
+// store for an undocumented psa_import status like "skipped", which the
+// checkpoint-gated inventory poll never re-fetches for an unchanged item). The
+// reconciler's full sweep corrects local dh_status from DH's snapshot, but
+// never overwrites a local "sold" and never adopts a non-inventory snapshot
+// value.
+func TestReconcile_RepairsStatusDrift(t *testing.T) {
+	tests := []struct {
+		name        string
+		snapshot    map[int]string
+		purchases   []inventory.Purchase
+		wantRepairs map[string]string // purchaseID -> new status
+	}{
+		{
+			name:     "empty local status backfilled from DH listed",
+			snapshot: map[int]string{101: inventory.DHStatusListed},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: ""},
+			},
+			wantRepairs: map[string]string{"p1": inventory.DHStatusListed},
+		},
+		{
+			name:     "stale in_stock corrected to DH listed",
+			snapshot: map[int]string{101: inventory.DHStatusListed},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: inventory.DHStatusInStock},
+			},
+			wantRepairs: map[string]string{"p1": inventory.DHStatusListed},
+		},
+		{
+			name:     "matching status is a no-op",
+			snapshot: map[int]string{101: inventory.DHStatusListed},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: inventory.DHStatusListed},
+			},
+			wantRepairs: map[string]string{},
+		},
+		{
+			name:     "local sold is never overwritten",
+			snapshot: map[int]string{101: inventory.DHStatusListed},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: inventory.DHStatusSold},
+			},
+			wantRepairs: map[string]string{},
+		},
+		{
+			name:     "non-inventory snapshot value is not adopted",
+			snapshot: map[int]string{101: "skipped"},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: ""},
+			},
+			wantRepairs: map[string]string{},
+		},
+		{
+			// Boundary: DH snapshot reports sold but the purchase is unsold
+			// (came from ListAllUnsoldPurchases). "sold" is owned by the orders
+			// poll — adopting it here would mark a row sold with no sale behind
+			// it. Must be a no-op; the orders poll resolves the disagreement.
+			name:     "DH sold is not adopted onto an in_stock purchase",
+			snapshot: map[int]string{101: inventory.DHStatusSold},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: inventory.DHStatusInStock},
+			},
+			wantRepairs: map[string]string{},
+		},
+		{
+			name:     "DH sold is not adopted onto an empty-status purchase",
+			snapshot: map[int]string{101: inventory.DHStatusSold},
+			purchases: []inventory.Purchase{
+				{ID: "p1", DHInventoryID: 101, DHStatus: ""},
+			},
+			wantRepairs: map[string]string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			purchases := tc.purchases
+			gotRepairs := map[string]string{}
+			repo := &mocks.PurchaseRepositoryMock{
+				ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
+					return purchases, nil
+				},
+				UpdatePurchaseDHStatusFn: func(_ context.Context, id, status string) error {
+					gotRepairs[id] = status
+					return nil
+				},
+			}
+			recon, err := dhlisting.NewReconciler(
+				stubSnapshotFetcher{inv: tc.snapshot},
+				repo,
+				repo,
+				mocks.NewMockLogger(),
+				dhlisting.WithReconcileStatusRepairer(repo),
+			)
+			if err != nil {
+				t.Fatalf("NewReconciler: %v", err)
+			}
+
+			got, err := recon.Reconcile(context.Background())
+			if err != nil {
+				t.Fatalf("Reconcile: %v", err)
+			}
+			if got.StatusRepaired != len(tc.wantRepairs) {
+				t.Errorf("StatusRepaired = %d, want %d", got.StatusRepaired, len(tc.wantRepairs))
+			}
+			if len(gotRepairs) != len(tc.wantRepairs) {
+				t.Fatalf("repairs = %v, want %v", gotRepairs, tc.wantRepairs)
+			}
+			for id, want := range tc.wantRepairs {
+				if gotRepairs[id] != want {
+					t.Errorf("repair[%s] = %q, want %q", id, gotRepairs[id], want)
+				}
+			}
+		})
+	}
+}
+
+// TestReconcile_StatusRepairNoopWithoutRepairer verifies the repairer is
+// optional: with no DHStatusRepairer wired, a status mismatch is left alone
+// (and the reconciler still does its missing-on-DH job).
+func TestReconcile_StatusRepairNoopWithoutRepairer(t *testing.T) {
+	repo := &mocks.PurchaseRepositoryMock{
+		ListAllUnsoldPurchasesFn: func(_ context.Context) ([]inventory.Purchase, error) {
+			return []inventory.Purchase{{ID: "p1", DHInventoryID: 101, DHStatus: ""}}, nil
+		},
+		UpdatePurchaseDHStatusFn: func(_ context.Context, _, _ string) error {
+			t.Fatal("UpdatePurchaseDHStatus must not be called without a repairer wired")
+			return nil
+		},
+	}
+	recon, err := dhlisting.NewReconciler(
+		stubSnapshotFetcher{inv: map[int]string{101: inventory.DHStatusListed}},
+		repo,
+		repo,
+		mocks.NewMockLogger(),
+	)
+	if err != nil {
+		t.Fatalf("NewReconciler: %v", err)
+	}
+	got, err := recon.Reconcile(context.Background())
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got.StatusRepaired != 0 {
+		t.Errorf("StatusRepaired = %d, want 0", got.StatusRepaired)
 	}
 }

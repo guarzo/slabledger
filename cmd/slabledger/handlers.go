@@ -173,6 +173,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var dhHandler *handlers.DHHandler
 	if in.DHClient != nil && in.DHClient.EnterpriseAvailable() {
 		var reconcileOpts []dhlisting.ReconcilerOption
+		reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileStatusRepairer(in.PurchaseStore))
 		if in.DHEventStore != nil {
 			reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileEventRecorder(in.DHEventStore))
 		}

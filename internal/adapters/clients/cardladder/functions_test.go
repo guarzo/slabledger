@@ -138,6 +138,38 @@ func TestClient_CardEstimate(t *testing.T) {
 	}
 }
 
+func TestClient_CardEstimate_QuotaExhaustedIsRateLimited(t *testing.T) {
+	// CL signals a daily-quota wall as a Firebase RESOURCE_EXHAUSTED envelope
+	// delivered with HTTP 200. The client must surface it as a non-retryable
+	// rate-limit error so the refresh scheduler can detect the wall and stop
+	// the cycle (rather than hammering through every remaining card).
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"error":{"message":"Daily request limit reached. Please try again tomorrow.","status":"RESOURCE_EXHAUSTED"}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithFunctionsURL(server.URL),
+		WithStaticToken("test-token"),
+	)
+	_, err := client.CardEstimate(context.Background(), CardEstimateRequest{
+		GemRateID: "abc123", GradingCompany: "psa", Condition: "g9",
+	})
+	if err == nil {
+		t.Fatal("expected an error on RESOURCE_EXHAUSTED")
+	}
+	if !apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
+		t.Errorf("error = %v, want ErrCodeProviderRateLimit", err)
+	}
+	// Non-retryable: the client should not have retried the callable.
+	if calls != 1 {
+		t.Errorf("server received %d calls, want 1 (rate-limit must not retry)", calls)
+	}
+}
+
 func TestClient_CreateCollectionCard(t *testing.T) {
 	// defaultFirestoreBaseURL is a const and can't be overridden with httptest,
 	// so we test buildCardDocument directly instead of the full HTTP flow.
@@ -260,6 +292,50 @@ func TestDoCallable_MissingResult(t *testing.T) {
 			}
 			if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
 				t.Errorf("error code = %q, want %q", appErr.Code, apperrors.ErrCodeProviderInvalidResp)
+			}
+		})
+	}
+}
+
+func TestCheckCallableError(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantNil  bool
+		wantCode apperrors.ErrorCode
+	}{
+		{
+			name:    "no error envelope → nil",
+			body:    `{"result": {"value": 1}}`,
+			wantNil: true,
+		},
+		{
+			name:     "RESOURCE_EXHAUSTED status → rate limited (non-retryable)",
+			body:     `{"error":{"message":"Daily request limit reached. Please try again tomorrow.","status":"RESOURCE_EXHAUSTED"}}`,
+			wantCode: apperrors.ErrCodeProviderRateLimit,
+		},
+		{
+			name:     "daily-limit message without status → rate limited",
+			body:     `{"error":{"message":"Daily request limit reached.","status":""}}`,
+			wantCode: apperrors.ErrCodeProviderRateLimit,
+		},
+		{
+			name:     "other callable error → unavailable",
+			body:     `{"error":{"message":"internal","status":"INTERNAL"}}`,
+			wantCode: apperrors.ErrCodeProviderUnavailable,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkCallableError([]byte(tc.body), "httpcardestimate")
+			if tc.wantNil {
+				if err != nil {
+					t.Fatalf("expected nil, got %v", err)
+				}
+				return
+			}
+			if !apperrors.HasErrorCode(err, tc.wantCode) {
+				t.Errorf("error = %v, want code %q", err, tc.wantCode)
 			}
 		})
 	}
