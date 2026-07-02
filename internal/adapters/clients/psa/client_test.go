@@ -361,6 +361,47 @@ func TestDoRequest_SingleToken429NoRotation(t *testing.T) {
 	}
 }
 
+// TestDoRequest_PreservesRetryAfter proves a 429's Retry-After header survives
+// from the httpx layer through doRequest into the returned AppError's
+// reset_time context, rather than being flattened into an empty
+// ProviderRateLimited. Covers both real-429 return paths: single-token (no
+// rotation) and multi-token (loop exhausted after all tokens 429).
+func TestDoRequest_PreservesRetryAfter(t *testing.T) {
+	tests := []struct {
+		name   string
+		tokens []string
+	}{
+		{name: "single token, no rotation", tokens: nil},
+		{name: "multi token, all 429", tokens: []string{"token-a", "token-b"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Retry-After", "86115")
+				w.WriteHeader(http.StatusTooManyRequests)
+			}))
+			defer server.Close()
+
+			c := newTestClient(t, server.URL, tc.tokens...)
+			_, err := c.GetCert(context.Background(), "12345678")
+			if err == nil {
+				t.Fatal("expected rate-limit error")
+			}
+			if !apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
+				t.Fatalf("expected ErrCodeProviderRateLimit in chain, got %v", err)
+			}
+			var appErr *apperrors.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("expected AppError in chain, got %T: %v", err, err)
+			}
+			got, _ := appErr.Context["reset_time"].(string)
+			if got != "86115" {
+				t.Errorf("reset_time = %q, want %q", got, "86115")
+			}
+		})
+	}
+}
+
 // --- doRequest: daily call limit ---
 
 func TestDoRequest_DailyCallLimitEnforced(t *testing.T) {

@@ -147,6 +147,12 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 
 	maxAttempts := len(c.tokens)
 
+	// Capture the most recent 429 error from httpx — it carries the parsed
+	// Retry-After header in its reset_time context. On a multi-token client
+	// every attempt 429s and the loop exhausts, so we return this at the end
+	// rather than a fresh empty ProviderRateLimited.
+	var lastRateLimitErr error
+
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		token := c.currentToken()
 		calls := c.dailyCounts.add(token)
@@ -186,6 +192,10 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 		if err != nil {
 			// 429: rotate to the next token and retry rather than giving up immediately.
 			if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+				// httpx's error carries the Retry-After header in its
+				// reset_time context; keep it so callers (and a future paced
+				// retry) can read the reset window.
+				lastRateLimitErr = err
 				if c.rotateToken() {
 					c.logger.Info(ctx, "PSA "+opName+": rate limited, retrying with backup key",
 						observability.String("cert", certNumber))
@@ -193,7 +203,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 				}
 				c.logger.Warn(ctx, "PSA "+opName+": rate limited, no backup keys available",
 					observability.String("cert", certNumber))
-				return nil, apperrors.ProviderRateLimited("PSA", "")
+				return nil, err
 			}
 			c.logger.Info(ctx, "PSA "+opName+": request failed",
 				observability.String("cert", certNumber),
@@ -204,6 +214,9 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 		return resp, nil
 	}
 
+	if lastRateLimitErr != nil {
+		return nil, lastRateLimitErr
+	}
 	return nil, apperrors.ProviderRateLimited("PSA", "")
 }
 
