@@ -389,6 +389,10 @@ type Sale struct {
 	// Crack slab tracking — indicates the card was cracked from its slab and sold raw
 	WasCracked bool `json:"wasCracked,omitempty"`
 
+	// ForcedLiquidation indicates this sale was driven by invoice timing pressure
+	// (heuristic: forced channel within 6 days before an invoice due date; operator-overridable).
+	ForcedLiquidation bool `json:"forcedLiquidation"`
+
 	// Market snapshot at time of sale (best-effort, may be zero)
 	MarketSnapshotData
 }

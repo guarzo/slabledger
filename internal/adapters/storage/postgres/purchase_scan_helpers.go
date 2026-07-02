@@ -56,7 +56,7 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
-	was_cracked, order_id`
+	was_cracked, order_id, forced_liquidation`
 
 // scanner abstracts *sql.Row and *sql.Rows so scanPurchase works with both.
 type scanner interface {
@@ -72,7 +72,7 @@ func scanSale(s scanner) (inventory.Sale, error) {
 		&sale.LastSoldCents, &sale.LowestListCents, &sale.ConservativeCents, &sale.MedianCents,
 		&sale.ActiveListings, &sale.SalesLast30d, &sale.Trend30d, &sale.SnapshotDate, &sale.SnapshotJSON,
 		&sale.OriginalListPriceCents, &sale.PriceReductions, &sale.DaysListed, &sale.SoldAtAskingPrice,
-		&sale.WasCracked, &sale.OrderID,
+		&sale.WasCracked, &sale.OrderID, &sale.ForcedLiquidation,
 	)
 	return sale, err
 }
