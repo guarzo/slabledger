@@ -49,6 +49,17 @@ func isRetryableImportError(err error) bool {
 	return false
 }
 
+// isPSAUnavailableError reports whether an error indicates PSA itself is
+// unreachable batch-wide (circuit breaker open or rate-limited), as opposed to
+// a failure specific to one cert (not-found, a single timeout). When true, the
+// import loop stops issuing lookups for the remaining certs and queues them for
+// retry instead — hammering an open breaker only produces instant
+// ERR_PROV_CIRCUIT_OPEN noise and delays recovery.
+func isPSAUnavailableError(err error) bool {
+	return apperrors.HasErrorCode(err, apperrors.ErrCodeProviderCircuitOpen) ||
+		apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit)
+}
+
 func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error) {
 	// Deduplicate and clean input
 	seen := make(map[string]bool, len(certNumbers))
@@ -87,6 +98,11 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 	if err != nil {
 		return nil, fmt.Errorf("batch sale lookup: %w", err)
 	}
+
+	// Once PSA signals it is unavailable batch-wide (breaker open or rate
+	// limited), stop issuing lookups for the remaining certs — they would only
+	// produce instant circuit-open failures. Queue them for retry instead.
+	psaUnavailable := false
 
 	for _, certNum := range cleaned {
 		if existing, ok := existingMap[certNum]; ok {
@@ -146,6 +162,18 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 			continue
 		}
 
+		// PSA already signalled batch-wide unavailability earlier in this
+		// import — do not issue another doomed lookup; queue this cert.
+		if psaUnavailable {
+			result.Failed++
+			result.Errors = append(result.Errors, CertImportError{
+				CertNumber: certNum,
+				Error:      "PSA temporarily unavailable — queued for retry",
+				Retryable:  true,
+			})
+			continue
+		}
+
 		info, certErr := s.certLookup.LookupCert(ctx, certNum)
 		if certErr != nil {
 			result.Failed++
@@ -154,6 +182,12 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 				Error:      certErr.Error(),
 				Retryable:  isRetryableImportError(certErr),
 			})
+			// A breaker-open / rate-limit error means PSA is down for the whole
+			// batch, not just this cert — latch it so remaining certs are
+			// queued instead of hammering the open breaker.
+			if isPSAUnavailableError(certErr) {
+				psaUnavailable = true
+			}
 			continue
 		}
 		if info == nil {
