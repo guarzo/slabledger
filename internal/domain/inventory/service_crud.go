@@ -109,6 +109,12 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 		purchase.PSASourcingFeeCents, sa.SaleFeeCents,
 	)
 
+	invoices, invErr := s.finance.ListInvoices(ctx)
+	if invErr != nil {
+		invoices = nil // heuristic degrades to false; never block a sale on invoice lookup
+	}
+	sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)
+
 	// Best-effort: capture market snapshot at time of sale
 	s.captureMarketSnapshot(ctx, sa, purchase.ToCardIdentity(), purchase.GradeValue, purchase.CLValueCents)
 
@@ -159,6 +165,11 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 		return nil, fmt.Errorf("load purchases: %w", err)
 	}
 
+	bulkInvoices, invErr := s.finance.ListInvoices(ctx)
+	if invErr != nil {
+		bulkInvoices = nil // heuristic degrades to false; never block a sale on invoice lookup
+	}
+
 	result := &BulkSaleResult{}
 	for _, item := range items {
 		purchase, ok := purchasesByID[item.PurchaseID]
@@ -206,6 +217,7 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 		}
 
 		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
+		sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, bulkInvoices)
 
 		now := time.Now()
 		sa.CreatedAt = now

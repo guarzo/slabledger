@@ -122,6 +122,11 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 		campaignMap[allCampaigns[i].ID] = &allCampaigns[i]
 	}
 
+	invoices, invErr := s.finance.ListInvoices(ctx)
+	if invErr != nil {
+		invoices = nil // heuristic degrades to false; never block a sale on invoice lookup
+	}
+
 	for _, item := range items {
 		purchase, ok := purchaseMap[item.PurchaseID]
 		if !ok {
@@ -178,6 +183,7 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 		}
 
 		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
+		sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)
 
 		now := time.Now()
 		sa.CreatedAt = now

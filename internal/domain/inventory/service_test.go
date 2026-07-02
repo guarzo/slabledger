@@ -942,3 +942,59 @@ func TestService_CreateSale_WasCracked(t *testing.T) {
 		t.Error("expected WasCracked to be true after CreateSale")
 	}
 }
+
+func TestService_CreateSale_SetsForcedLiquidation(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	// Seed an invoice due 2026-06-20
+	repo.Invoices["inv1"] = &inventory.Invoice{ID: "inv1", DueDate: "2026-06-20"}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+	p := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Charizard", CertNumber: "FL-CERT-1",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-05-01",
+	}
+	if err := svc.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("setup CreatePurchase: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		channel  inventory.SaleChannel
+		saleDate string
+		want     bool
+	}{
+		{"inperson within 6d of due", inventory.SaleChannelInPerson, "2026-06-16", true},
+		{"inperson outside window", inventory.SaleChannelInPerson, "2026-06-13", false},
+		{"ebay inside window not forced", inventory.SaleChannelEbay, "2026-06-16", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use a fresh cert number for each sub-test so CreatePurchase doesn't hit duplicate
+			localP := &inventory.Purchase{
+				CampaignID: c.ID, CardName: "Charizard", CertNumber: "FL-" + tt.name,
+				GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-05-01",
+			}
+			if err := svc.CreatePurchase(ctx, localP); err != nil {
+				t.Fatalf("setup CreatePurchase: %v", err)
+			}
+			s := &inventory.Sale{
+				PurchaseID:     localP.ID,
+				SaleChannel:    tt.channel,
+				SalePriceCents: 70000,
+				SaleDate:       tt.saleDate,
+			}
+			if err := svc.CreateSale(ctx, s, c, localP); err != nil {
+				t.Fatalf("CreateSale: %v", err)
+			}
+			if s.ForcedLiquidation != tt.want {
+				t.Errorf("ForcedLiquidation = %v, want %v", s.ForcedLiquidation, tt.want)
+			}
+		})
+	}
+}

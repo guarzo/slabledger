@@ -239,3 +239,74 @@ func TestConfirmOrdersSales_SkipsDHStatusForNonInventoriedItems(t *testing.T) {
 		t.Errorf("purchase DHStatus: got %q, want %q (should not have changed)", p.DHStatus, DHStatusListed)
 	}
 }
+
+func TestConfirmOrdersSales_SetsForcedLiquidation(t *testing.T) {
+	repo := newMockRepo()
+	// Seed an invoice due 2026-06-20
+	repo.invoices["inv1"] = &Invoice{ID: "inv1", DueDate: "2026-06-20"}
+
+	repo.campaigns["camp-1"] = &Campaign{ID: "camp-1", Name: "Test", EbayFeePct: 0.1235}
+	repo.purchases["purch-1"] = &Purchase{
+		ID:           "purch-1",
+		CampaignID:   "camp-1",
+		CertNumber:   "FL100",
+		CardName:     "Charizard",
+		BuyCostCents: 10000,
+		GradeValue:   9,
+		PurchaseDate: "2026-05-01",
+	}
+	repo.purchases["purch-2"] = &Purchase{
+		ID:           "purch-2",
+		CampaignID:   "camp-1",
+		CertNumber:   "FL200",
+		CardName:     "Pikachu",
+		BuyCostCents: 10000,
+		GradeValue:   9,
+		PurchaseDate: "2026-05-01",
+	}
+
+	var idCounter int
+	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+		idCounter++
+		return fmt.Sprintf("fl-sale-%d", idCounter)
+	}))
+	defer svc.Close()
+
+	items := []OrdersConfirmItem{
+		// inperson within 6 days of 2026-06-20 → forced
+		{PurchaseID: "purch-1", SaleChannel: SaleChannelInPerson, SalePriceCents: 20000, SaleDate: "2026-06-16"},
+		// ebay in same window → not forced
+		{PurchaseID: "purch-2", SaleChannel: SaleChannelEbay, SalePriceCents: 20000, SaleDate: "2026-06-16"},
+	}
+
+	result, err := svc.ConfirmOrdersSales(context.Background(), items)
+	if err != nil {
+		t.Fatalf("ConfirmOrdersSales: %v", err)
+	}
+	if result.Created != 2 {
+		t.Fatalf("expected 2 created, got %d (errors: %v)", result.Created, result.Errors)
+	}
+
+	var sale1, sale2 *Sale
+	for _, s := range repo.sales {
+		switch s.PurchaseID {
+		case "purch-1":
+			sale1 = s
+		case "purch-2":
+			sale2 = s
+		}
+	}
+
+	if sale1 == nil {
+		t.Fatal("sale for purch-1 not found")
+	}
+	if !sale1.ForcedLiquidation {
+		t.Errorf("purch-1 ForcedLiquidation = false, want true")
+	}
+	if sale2 == nil {
+		t.Fatal("sale for purch-2 not found")
+	}
+	if sale2.ForcedLiquidation {
+		t.Errorf("purch-2 ForcedLiquidation = true, want false")
+	}
+}
