@@ -297,6 +297,45 @@ func TestImportCerts_DuplicateOnCreate(t *testing.T) {
 	}
 }
 
+// TestImportCerts_StopsCallingPSAAfterBreakerOpens guards the bulk-import
+// incident: once PSA's circuit breaker opens mid-batch, every remaining cert
+// would otherwise issue a doomed lookup that fails instantly with
+// ERR_PROV_CIRCUIT_OPEN. The loop must latch "PSA unavailable" on the first
+// such error and queue the rest for retry without calling PSA again.
+func TestImportCerts_StopsCallingPSAAfterBreakerOpens(t *testing.T) {
+	repo := newMockRepo()
+	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+
+	var calls int
+	certLookup := &mockCertLookup{
+		lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+			calls++
+			return nil, apperrors.ProviderCircuitOpen("PSA")
+		},
+	}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+	certs := []string{"1", "2", "3", "4", "5"}
+	result, err := svc.ImportCerts(context.Background(), certs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("LookupCert called %d times, want 1 (stop after breaker opens)", calls)
+	}
+	if result.Failed != len(certs) {
+		t.Errorf("Failed = %d, want %d", result.Failed, len(certs))
+	}
+	if len(result.Errors) != len(certs) {
+		t.Fatalf("Errors length = %d, want %d", len(result.Errors), len(certs))
+	}
+	for i, e := range result.Errors {
+		if !e.Retryable {
+			t.Errorf("Errors[%d] (cert %q) Retryable = false, want true", i, e.CertNumber)
+		}
+	}
+}
+
 func TestImportCerts_Deduplication(t *testing.T) {
 	repo := newMockRepo()
 	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID}
