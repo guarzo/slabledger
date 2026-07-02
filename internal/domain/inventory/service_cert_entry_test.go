@@ -297,42 +297,62 @@ func TestImportCerts_DuplicateOnCreate(t *testing.T) {
 	}
 }
 
-// TestImportCerts_StopsCallingPSAAfterBreakerOpens guards the bulk-import
-// incident: once PSA's circuit breaker opens mid-batch, every remaining cert
-// would otherwise issue a doomed lookup that fails instantly with
-// ERR_PROV_CIRCUIT_OPEN. The loop must latch "PSA unavailable" on the first
-// such error and queue the rest for retry without calling PSA again.
-func TestImportCerts_StopsCallingPSAAfterBreakerOpens(t *testing.T) {
-	repo := newMockRepo()
-	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
-
-	var calls int
-	certLookup := &mockCertLookup{
-		lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
-			calls++
-			return nil, apperrors.ProviderCircuitOpen("PSA")
-		},
-	}
-	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
-
+// TestImportCerts_BatchLatchOnPSAUnavailable guards two properties of the
+// batch-wide "PSA unavailable" latch: a breaker-open or rate-limit error stops
+// further lookups and queues the rest as retryable (calls == 1), while a
+// permanent per-cert failure (not-found) must NOT latch — every cert is still
+// looked up (calls == len(certs)) and none is marked retryable. The negative
+// case is the important one: it pins isPSAUnavailableError to exactly the
+// batch-wide codes, so a future broadening that latched on a single bad cert
+// (silently queuing the rest of a large batch) would fail here.
+func TestImportCerts_BatchLatchOnPSAUnavailable(t *testing.T) {
 	certs := []string{"1", "2", "3", "4", "5"}
-	result, err := svc.ImportCerts(context.Background(), certs)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name          string
+		lookupErr     error
+		wantCalls     int
+		wantRetryable bool
+	}{
+		{name: "circuit open latches the batch", lookupErr: apperrors.ProviderCircuitOpen("PSA"), wantCalls: 1, wantRetryable: true},
+		{name: "rate limit latches the batch", lookupErr: apperrors.ProviderRateLimited("PSA", ""), wantCalls: 1, wantRetryable: true},
+		{name: "not found does not latch the batch", lookupErr: apperrors.ProviderNotFound("PSA", "cert"), wantCalls: len(certs), wantRetryable: false},
 	}
-	if calls != 1 {
-		t.Errorf("LookupCert called %d times, want 1 (stop after breaker opens)", calls)
-	}
-	if result.Failed != len(certs) {
-		t.Errorf("Failed = %d, want %d", result.Failed, len(certs))
-	}
-	if len(result.Errors) != len(certs) {
-		t.Fatalf("Errors length = %d, want %d", len(result.Errors), len(certs))
-	}
-	for i, e := range result.Errors {
-		if !e.Retryable {
-			t.Errorf("Errors[%d] (cert %q) Retryable = false, want true", i, e.CertNumber)
-		}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+
+			var calls int
+			certLookup := &mockCertLookup{
+				lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+					calls++
+					return nil, tc.lookupErr
+				},
+			}
+			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+			result, err := svc.ImportCerts(context.Background(), certs)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if calls != tc.wantCalls {
+				t.Errorf("LookupCert called %d times, want %d", calls, tc.wantCalls)
+			}
+			// Every cert ends up failed regardless of latch (the latch only
+			// changes whether PSA was called, not the per-cert outcome count).
+			if result.Failed != len(certs) {
+				t.Errorf("Failed = %d, want %d", result.Failed, len(certs))
+			}
+			if len(result.Errors) != len(certs) {
+				t.Fatalf("Errors length = %d, want %d", len(result.Errors), len(certs))
+			}
+			for i, e := range result.Errors {
+				if e.Retryable != tc.wantRetryable {
+					t.Errorf("Errors[%d] (cert %q) Retryable = %v, want %v", i, e.CertNumber, e.Retryable, tc.wantRetryable)
+				}
+			}
+		})
 	}
 }
 
