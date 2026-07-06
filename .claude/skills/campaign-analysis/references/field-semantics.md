@@ -429,8 +429,9 @@ The 2026-07 overhaul retired several data-hygiene Rules from the ledger because 
   from this system's purchase/sale records. `roi`/`netProfitCents`/`avgMarginPct`/`sellThroughPct`
   are contaminated by forced invoice-driven liquidation (see `forcedLiquidation`); `avgBuyPctOfCL`
   is contaminated by post-purchase CL drift (see `clValueCents`); eBay-share is contaminated the
-  same way as ROI. This is still a ⭐ gate in the ledger — character selection comes ONLY from
-  operator domain judgment or external CL/MM market comps, never from ranking this data.
+  same way as ROI. Character selection comes ONLY from operator domain judgment or external
+  CL/MM market comps, never from ranking this data; the character-add gate that enforces this
+  now lives in R-006.
 
 ---
 

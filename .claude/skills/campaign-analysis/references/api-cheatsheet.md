@@ -137,7 +137,7 @@ Rows are already filtered to the campaign's current grade / price / year / inclu
 
 ## /portfolio/snapshot — composite endpoint
 
-**This is the primary data source.** A single `GET /api/portfolio/snapshot` returns everything under one JSON object. The top-level keys are:
+**Composite follow-up endpoint (superseded as the session opener by /analysis).** A single `GET /api/portfolio/snapshot` returns everything under one JSON object. The top-level keys are:
 
 ```
 health, insights, weeklyReview, weeklyHistory, channelVelocity, suggestions, creditSummary, invoices
@@ -244,6 +244,7 @@ Sub-keys of `insights`:
 
 ```bash
 # byCharacter — top characters by ROI, soldCount ≥ 3
+# avgBuyPctOfCL is drift-contaminated — prefer /analysis bpclAtBuy for buy quality; see field-semantics
 jq '.insights.byCharacter | map(select(.soldCount >= 3 and .label != "Other"))
     | sort_by(-.roi) | .[]
     | {name: .label, n: .purchaseCount, sold: .soldCount, st: .sellThroughPct,
@@ -326,6 +327,7 @@ Returns tuning data with a `byGrade` array. Each grade row:
 
 ```bash
 # Margin-leak rows: avgBuyPctOfCL ≥ 0.93 with n ≥ 10
+# avgBuyPctOfCL is drift-contaminated — prefer /analysis bpclAtBuy for buy quality; see field-semantics
 jq '.byGrade[] | select(.avgBuyPctOfCL >= 0.93 and .count >= 10)
     | {grade, n: .count, st: .sellThroughPct, roi, avgBuyPctCL: .avgBuyPctOfCL}'
 ```
