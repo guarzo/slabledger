@@ -30,9 +30,9 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 	}
 
 	tests := []struct {
-		name               string
-		clValueAtPurchase  int
-		forcedLiquidation  bool
+		name              string
+		clValueAtPurchase int
+		forcedLiquidation bool
 	}{
 		{"forced=true, cl-at-buy=5000", 5000, true},
 		{"forced=false, cl-at-buy=0", 0, false},
@@ -42,17 +42,17 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &inventory.Purchase{
-				ID:                    "analytics-rt-" + time.Now().Format("150405.000000000"),
-				CampaignID:            "camp-analytics-rt",
-				CardName:              "Charizard",
-				CertNumber:            "CERT-ART-" + time.Now().Format("150405.000000000"),
-				Grader:                "PSA",
-				GradeValue:            10,
-				BuyCostCents:          4000,
-				PurchaseDate:          "2026-06-01",
+				ID:                     "analytics-rt-" + time.Now().Format("150405.000000000"),
+				CampaignID:             "camp-analytics-rt",
+				CardName:               "Charizard",
+				CertNumber:             "CERT-ART-" + time.Now().Format("150405.000000000"),
+				Grader:                 "PSA",
+				GradeValue:             10,
+				BuyCostCents:           4000,
+				PurchaseDate:           "2026-06-01",
 				CLValueAtPurchaseCents: tt.clValueAtPurchase,
-				CreatedAt:             time.Now().UTC(),
-				UpdatedAt:             time.Now().UTC(),
+				CreatedAt:              time.Now().UTC(),
+				UpdatedAt:              time.Now().UTC(),
 			}
 			if err := ps.CreatePurchase(ctx, p); err != nil {
 				t.Fatalf("create purchase: %v", err)

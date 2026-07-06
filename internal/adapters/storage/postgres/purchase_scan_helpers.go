@@ -151,15 +151,15 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 
 	if sID.Valid {
 		sale := &inventory.Sale{
-			ID:                 sID.String,
-			PurchaseID:         sPurchaseID.String,
-			SaleChannel:        inventory.SaleChannel(sSaleChannel.String),
-			SalePriceCents:     int(sSalePriceCents.Int64),
-			SaleFeeCents:       int(sSaleFeeCents.Int64),
-			SaleDate:           sSaleDate.String,
-			DaysToSell:         int(sDaysToSell.Int64),
-			NetProfitCents:     int(sNetProfitCents.Int64),
-			ForcedLiquidation:  sForcedLiquidation.Bool,
+			ID:                sID.String,
+			PurchaseID:        sPurchaseID.String,
+			SaleChannel:       inventory.SaleChannel(sSaleChannel.String),
+			SalePriceCents:    int(sSalePriceCents.Int64),
+			SaleFeeCents:      int(sSaleFeeCents.Int64),
+			SaleDate:          sSaleDate.String,
+			DaysToSell:        int(sDaysToSell.Int64),
+			NetProfitCents:    int(sNetProfitCents.Int64),
+			ForcedLiquidation: sForcedLiquidation.Bool,
 		}
 		if sCreatedAt.Valid {
 			sale.CreatedAt = sCreatedAt.Time
