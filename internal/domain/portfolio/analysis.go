@@ -24,9 +24,18 @@ func ComputeAnalysis(
 	since string,
 	now time.Time,
 ) *AnalysisResponse {
+	// Filter out external-campaign rows once so downstream functions (byCampaign
+	// grouping and computeDeltas) share the same exclusion without scattered guards.
+	filteredRows := make([]inventory.PurchaseWithSale, 0, len(rows))
+	for _, r := range rows {
+		if r.Purchase.CampaignID != inventory.ExternalCampaignID {
+			filteredRows = append(filteredRows, r)
+		}
+	}
+
 	// Group rows by campaign ID for O(1) lookup.
 	byCampaign := make(map[string][]inventory.PurchaseWithSale, len(campaigns))
-	for _, r := range rows {
+	for _, r := range filteredRows {
 		byCampaign[r.Purchase.CampaignID] = append(byCampaign[r.Purchase.CampaignID], r)
 	}
 
@@ -52,7 +61,7 @@ func ComputeAnalysis(
 		GeneratedAt: now.Format(time.RFC3339),
 		Since:       since,
 		Campaigns:   analyses,
-		Deltas:      computeDeltas(campaigns, rows, invoices, since),
+		Deltas:      computeDeltas(campaigns, filteredRows, invoices, since),
 	}
 }
 
@@ -350,11 +359,17 @@ func inScope(c inventory.Campaign, p inventory.Purchase) bool {
 // parseRange parses a campaign range string into (min, max, ok).
 // Accepted forms: "9-10" → (9, 10, true); "10" → (10, 10, true).
 // Empty or unparsable input returns (0, 0, false), meaning no constraint.
+// Reversed ranges (lo > hi) return (0, 0, false), matching inventory.ParseRange.
+// Unicode en/em/figure dashes are normalised to ASCII hyphen before parsing.
 func parseRange(s string) (float64, float64, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, 0, false
 	}
+	// Normalize Unicode dashes to ASCII hyphen (matches inventory.ParseRange behavior).
+	s = strings.ReplaceAll(s, "–", "-") // en dash
+	s = strings.ReplaceAll(s, "—", "-") // em dash
+	s = strings.ReplaceAll(s, "‒", "-") // figure dash
 	// Look for a "-" separator, skipping the first character to avoid treating
 	// a leading minus sign as a separator (all domain values are positive).
 	if idx := strings.Index(s[1:], "-"); idx >= 0 {
@@ -362,6 +377,9 @@ func parseRange(s string) (float64, float64, bool) {
 		lo, err1 := strconv.ParseFloat(strings.TrimSpace(s[:realIdx]), 64)
 		hi, err2 := strconv.ParseFloat(strings.TrimSpace(s[realIdx+1:]), 64)
 		if err1 == nil && err2 == nil {
+			if lo > hi {
+				return 0, 0, false
+			}
 			return lo, hi, true
 		}
 	}

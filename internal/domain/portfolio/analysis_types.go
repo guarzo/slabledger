@@ -12,14 +12,14 @@ type AnalysisResponse struct {
 
 // CampaignAnalysis holds all computed analytics for a single campaign.
 type CampaignAnalysis struct {
-	CampaignID     string           `json:"campaignId"`
-	CampaignName   string           `json:"campaignName"`
-	Phase          inventory.Phase  `json:"phase"`
-	BuyTermsCLPct  float64          `json:"buyTermsCLPct"`
-	BPCLAtBuy      BPCLStats        `json:"bpclAtBuy"`
-	PNL            SplitPNL         `json:"pnl"`
-	WeeklyFill     []WeeklyFill     `json:"weeklyFill"`
-	InScopeByGrade []GradeScopeRow  `json:"inScopeByGrade"`
+	CampaignID     string          `json:"campaignId"`
+	CampaignName   string          `json:"campaignName"`
+	Phase          inventory.Phase `json:"phase"`
+	BuyTermsCLPct  float64         `json:"buyTermsCLPct"`
+	BPCLAtBuy      BPCLStats       `json:"bpclAtBuy"`
+	PNL            SplitPNL        `json:"pnl"`
+	WeeklyFill     []WeeklyFill    `json:"weeklyFill"`
+	InScopeByGrade []GradeScopeRow `json:"inScopeByGrade"`
 }
 
 // BPCLStats summarises buy-price-as-a-fraction-of-CL-at-purchase metrics.
@@ -49,7 +49,7 @@ type PNLBlock struct {
 
 // WeeklyFill captures purchase volume for one ISO-week bucket within the trailing 8 weeks.
 type WeeklyFill struct {
-	WeekStart      string  `json:"weekStart"`      // Monday, YYYY-MM-DD
+	WeekStart      string  `json:"weekStart"` // Monday, YYYY-MM-DD
 	Fills          int     `json:"fills"`
 	SpendCents     int     `json:"spendCents"`
 	CapCents       int     `json:"capCents"`       // DailySpendCapCents * 7

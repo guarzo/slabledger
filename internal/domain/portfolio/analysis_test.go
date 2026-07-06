@@ -30,6 +30,10 @@ func TestParseRange(t *testing.T) {
 		{"", 0, 0, false},
 		{"junk", 0, 0, false},
 		{"50-500", 50, 500, true},
+		// Unicode en dash must parse identically to ASCII hyphen.
+		{"1999–2003", 1999, 2003, true},
+		// Reversed range must be rejected (matches inventory.ParseRange).
+		{"10-5", 0, 0, false},
 	}
 	for _, tc := range cases {
 		name := tc.input
@@ -316,7 +320,7 @@ func TestComputeAnalysisDeltas(t *testing.T) {
 	rows := []inventory.PurchaseWithSale{
 		{
 			Purchase: inventory.Purchase{CampaignID: "c1", BuyCostCents: 10000, PurchaseDate: "2026-06-26"},
-			Sale: &inventory.Sale{SalePriceCents: 12000, NetProfitCents: 2000, SaleDate: "2026-06-27"},
+			Sale:     &inventory.Sale{SalePriceCents: 12000, NetProfitCents: 2000, SaleDate: "2026-06-27"},
 		},
 		{
 			Purchase: inventory.Purchase{CampaignID: "c1", BuyCostCents: 5000, PurchaseDate: "2026-06-20"}, // before since
@@ -352,5 +356,49 @@ func TestComputeAnalysisDeltas(t *testing.T) {
 		t.Errorf("Invoices len=%d, want 1", len(d.Invoices))
 	} else if d.Invoices[0].InvoiceDate != "2026-06-30" {
 		t.Errorf("Invoices[0].InvoiceDate=%s, want 2026-06-30", d.Invoices[0].InvoiceDate)
+	}
+}
+
+// --- TestComputeAnalysisDeltasExcludesExternal ---
+
+func TestComputeAnalysisDeltasExcludesExternal(t *testing.T) {
+	// An external-campaign purchase+sale dated after `since` must NOT appear in
+	// any delta count (NewPurchases, NewPurchaseCents, NewSales, NewSaleCents).
+
+	since := "2026-06-25"
+	now := time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC)
+
+	campaigns := []inventory.Campaign{
+		{ID: "c1", Name: "Alpha", Phase: inventory.PhaseActive},
+		{ID: inventory.ExternalCampaignID, Name: "External"},
+	}
+
+	rows := []inventory.PurchaseWithSale{
+		{
+			// normal campaign row — must be counted
+			Purchase: inventory.Purchase{CampaignID: "c1", BuyCostCents: 10000, PurchaseDate: "2026-06-26"},
+			Sale:     &inventory.Sale{SalePriceCents: 12000, NetProfitCents: 2000, SaleDate: "2026-06-27"},
+		},
+		{
+			// external-campaign row dated after since — must NOT be counted
+			Purchase: inventory.Purchase{CampaignID: inventory.ExternalCampaignID, BuyCostCents: 5000, PurchaseDate: "2026-06-28"},
+			Sale:     &inventory.Sale{SalePriceCents: 6000, NetProfitCents: 1000, SaleDate: "2026-06-29"},
+		},
+	}
+
+	result := ComputeAnalysis(campaigns, rows, nil, since, now)
+	d := result.Deltas
+
+	if d.NewPurchases != 1 {
+		t.Errorf("NewPurchases=%d, want 1 (external row must be excluded)", d.NewPurchases)
+	}
+	if d.NewPurchaseCents != 10000 {
+		t.Errorf("NewPurchaseCents=%d, want 10000 (external row must be excluded)", d.NewPurchaseCents)
+	}
+	if d.NewSales != 1 {
+		t.Errorf("NewSales=%d, want 1 (external row must be excluded)", d.NewSales)
+	}
+	if d.NewSaleCents != 12000 {
+		t.Errorf("NewSaleCents=%d, want 12000 (external row must be excluded)", d.NewSaleCents)
 	}
 }
