@@ -361,7 +361,7 @@ the flag over/under-captured before drawing a conclusion.
 
 **Allowed uses.**
 - Separating discretionary sale economics from invoice-driven fire-sale drag.
-- Explaining a "bad ROI" character as forced-liquidation contamination (R-025 #1).
+- Explaining a "bad ROI" character as forced-liquidation contamination (see the R-025 contamination summary in "Retired ledger rules" below; the character-selection ban is enforced by ledger R-006).
 
 **Forbidden uses.**
 - Treating the split as exact when coverage is small.
@@ -394,7 +394,8 @@ as drift-contaminated when you do.
 **Forbidden uses.**
 - Presenting `avgBuyPctOfCL` (old endpoints) as clean buy quality.
 - Ranking characters on either figure — buy quality is identical-by-construction at
-  purchase (`terms × CL`); there is nothing to rank (R-025 #2, R-027 construction floor).
+  purchase (`terms × CL`); there is nothing to rank (see the R-025 contamination summary in
+  "Retired ledger rules" below; the ban is enforced by ledger R-006).
 
 **Source.** `/api/portfolio/analysis` → `.campaigns[].bpclAtBuy`; contrast
 `/api/campaigns/{id}/tuning` → `.byGrade[].avgBuyPctOfCL`.
