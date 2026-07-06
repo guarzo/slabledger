@@ -2,6 +2,24 @@
 
 Look-up reference for writing curls against the SlabLedger API. Read this when you need to parse a response or remember which JSON key a concept lives under.
 
+## Pagination & full-population analysis
+
+The old "endpoints silently truncate" warning is **obsolete** as of the 2026-07 overhaul. Corrected picture:
+
+- `GET /api/campaigns/{id}/sales` — `?limit` is now **honored up to 10000** (default 50). Pass `?limit=10000` for full sale history; there is no hidden 50-cap anymore.
+- `GET /api/inventory` — returns **UNSOLD-only rows BY DESIGN**. This was never a "176 cap" — the endpoint simply does not serve sold rows. Do not treat its row count as a portfolio total.
+- **Full-population sold / channel / P&L analysis:** use `GET /api/portfolio/analysis` (the `pnl` split and `inScopeByGrade` are computed server-side over the full population, External excluded). For ad-hoc cross-tabs the endpoint doesn't shape, query Postgres directly.
+
+**Postgres escape hatch** (ad-hoc full-population only):
+```bash
+# Connection string is in /workspace/.env
+DBURL=$(grep -E "^SUPABASE_DB_URL=" /workspace/.env | cut -d= -f2- | tr -d '"')
+psql "$DBURL" -c "select count(*) from campaign_sales"
+```
+Key tables: `campaign_sales` (purchase_id, sale_channel, sale_price_cents, net_profit_cents, sale_date, forced_liquidation), `campaign_purchases` (id, card_player ← clean character name, buy_cost_cents, cl_value_cents, cl_value_at_purchase_cents, card_year [text], grade_value). Join `campaign_sales.purchase_id = campaign_purchases.id`. `campaign_sales` includes External-import sales — exclude `campaign_id='external'` for standard-campaign economics.
+
+**Before computing on any of this, apply ledger R-027** — model how the field is generated. The frozen-at-purchase `cl_value_at_purchase_cents` (and the `/analysis` `bpclAtBuy` built on it) is clean buy quality; the live `cl_value_cents` and any `avgBuyPctOfCL` derived from it are CL-drift artifacts; ROI/channel-mix are forced-sale-contaminated (R-025).
+
 ## Parsing responses
 
 Pipe every curl through `python3 -c` or `jq` and project only the fields you'll cite. Never paste raw JSON into the response — large endpoints (snapshot, inventory) return multi-KB payloads that bury the signal.
@@ -23,6 +41,99 @@ jq '{purchases: [.purchasesThisWeek, .purchasesLastWeek],
      profit: [(.profitThisWeekCents/100), (.profitLastWeekCents/100)],
      topPerformers: [.topPerformers[] | {cardName, profitCents, channel, daysToSell}]}'
 ```
+
+## /portfolio/analysis — the default-session endpoint
+
+**This is the one required call for a default `/campaign-analysis` session.**
+
+```bash
+curl -s -H "Authorization: Bearer $LOCAL_API_TOKEN" \
+  "$BASE/api/portfolio/analysis?since=2026-06-22"
+```
+
+`since=YYYY-MM-DD` is the most-recent `campaign-state-log.md` date. With no prior date the endpoint returns full-history deltas capped to 90 days. **External is excluded everywhere** in this response. All money fields are cents.
+
+Top-level shape:
+
+| JSON key | Type | Notes |
+|----------|------|-------|
+| `generatedAt` | string | RFC3339 |
+| `since` | string | Echo of the `since=` param (omitted if none) |
+| `campaigns` | array | One `CampaignAnalysis` per campaign (below) |
+| `deltas` | object | `SessionDeltas` — what changed since `since` (below) |
+
+### `campaigns[]` — `CampaignAnalysis`
+
+| JSON key | Type | Notes |
+|----------|------|-------|
+| `campaignId` | string UUID | |
+| `campaignName` | string | Use on first reference (R-019) |
+| `phase` | string | `"active"`, `"paused"`, `"pending"`, `"archived"` — ground truth (R-014) |
+| `buyTermsCLPct` | float | Contract buy terms (PSA-side bid ceiling), decimal |
+| `bpclAtBuy` | object | `BPCLStats` — clean CL-at-buy buy quality (below) |
+| `pnl` | object | `SplitPNL` — discretionary vs forced (below) |
+| `weeklyFill` | array | `WeeklyFill[]` — trailing 8 Monday-bucketed weeks (below) |
+| `inScopeByGrade` | array | `GradeScopeRow[]` — server-side current-scope filter (below) |
+
+#### `bpclAtBuy` — `BPCLStats` (buy-price ÷ CL-at-purchase)
+
+| JSON key | Type | Notes |
+|----------|------|-------|
+| `n` | int | Purchases WITH a CL-at-buy snapshot (`clValueAtPurchaseCents > 0`) |
+| `total` | int | All purchases in the campaign |
+| `coveragePct` | float | `n / total * 100` — caveat thin coverage before citing |
+| `dollarWeighted` | float | `sum(buyCost) / sum(clAtBuy)` over the `n` snapshot rows — **the clean buy-quality figure** |
+| `meanDriftPct` | float | mean of `(clNow − clAtBuy) / clAtBuy * 100` over `n` — CL drift SINCE purchase, reported separately (drift is noise, not buy skill) |
+
+`dollarWeighted` is the CL-at-buy replacement for the retired contaminated `avgBuyPctOfCL`. Pair it with `buyTermsCLPct` when you cite it (hard constraint 3).
+
+#### `pnl` — `SplitPNL` (realized, split by the sale's `forcedLiquidation` flag)
+
+`pnl.discretionary` and `pnl.forced` each hold a `PNLBlock`:
+
+| JSON key | Type | Notes |
+|----------|------|-------|
+| `soldCount` | int | |
+| `revenueCents` | int | |
+| `netProfitCents` | int | |
+| `roiPct` | float | `netProfit / (revenue − netProfit) * 100`; 0 when cost basis is 0 |
+
+Forced = invoice-driven liquidation (see `forcedLiquidation` in field-semantics). Compare the two blocks to see how much "bad ROI" is really forced-sale drag, not buy quality.
+
+#### `weeklyFill[]` — `WeeklyFill` (trailing 8 weeks)
+
+| JSON key | Type | Notes |
+|----------|------|-------|
+| `weekStart` | string | Monday, YYYY-MM-DD |
+| `fills` | int | Purchase count that week |
+| `spendCents` | int | |
+| `capCents` | int | `dailySpendCapCents × 7` |
+| `utilizationPct` | float | `spend / cap * 100`; 0 when cap is 0 — **the fill-rate-vs-plan signal for the R-001 gate** |
+
+#### `inScopeByGrade[]` — `GradeScopeRow` (current-scope filtered server-side)
+
+| JSON key | Type | Notes |
+|----------|------|-------|
+| `grade` | float | PSA grade (supports half-grades) |
+| `n` | int | In-scope purchases at this grade |
+| `dollarWeightedBpclAtBuy` | float | CL-at-buy buy quality for the grade |
+| `soldCount` | int | Discretionary sales only |
+| `netProfitCents` | int | Discretionary sales only |
+
+Rows are already filtered to the campaign's current grade / price / year / inclusion scope — no manual currentScope filter needed (that ritual is retired).
+
+### `deltas` — `SessionDeltas`
+
+| JSON key | Type | Notes |
+|----------|------|-------|
+| `newPurchases` | int | Fills since `since` |
+| `newPurchaseCents` | int | |
+| `newSales` | int | |
+| `newSaleCents` | int | |
+| `campaignsUpdated` | array | Campaign **names** with `updatedAt > since` (drives the fresh-re-enable premise check) |
+| `invoices` | array | `InvoiceSummary[]` with `invoiceDate` ≥ `since` |
+
+`invoices[]`: `{invoiceDate, dueDate, totalCents, status}` (dates YYYY-MM-DD). Two entries within a 5-day window feed the twin-invoice premise check.
 
 ## /portfolio/snapshot — composite endpoint
 
