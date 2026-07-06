@@ -123,6 +123,18 @@ func (h *CampaignsHandler) HandlePortfolioHealth(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, health)
 }
 
+// HandlePortfolioAnalysis handles GET /api/portfolio/analysis?since=YYYY-MM-DD.
+func (h *CampaignsHandler) HandlePortfolioAnalysis(w http.ResponseWriter, r *http.Request) {
+	since := r.URL.Query().Get("since")
+	analysis, ok := serviceCall(w, r.Context(), h.logger, "failed to get portfolio analysis", func() (*portfolio.AnalysisResponse, error) {
+		return h.portSvc.GetAnalysis(r.Context(), since)
+	})
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, analysis)
+}
+
 // HandlePortfolioSnapshot handles GET /api/portfolio/snapshot.
 func (h *CampaignsHandler) HandlePortfolioSnapshot(w http.ResponseWriter, r *http.Request) {
 	snapshot, ok := serviceCall(w, r.Context(), h.logger, "failed to get portfolio snapshot", func() (*portfolio.PortfolioSnapshot, error) {

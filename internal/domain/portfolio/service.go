@@ -21,6 +21,7 @@ type Service interface {
 	GetWeeklyReviewSummary(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
 	GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error)
 	GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error)
+	GetAnalysis(ctx context.Context, since string) (*AnalysisResponse, error)
 }
 
 type service struct {
@@ -458,6 +459,30 @@ func computeWeekSummary(allData []inventory.PurchaseWithSale, weekStart, weekEnd
 	}
 
 	return summary
+}
+
+// --- Portfolio Analysis ---
+
+// GetAnalysis fetches all campaigns, purchases, and invoices, then delegates
+// computation to ComputeAnalysis. The since parameter is an optional "YYYY-MM-DD"
+// cutoff for the SessionDeltas block.
+func (s *service) GetAnalysis(ctx context.Context, since string) (*AnalysisResponse, error) {
+	campaigns, err := s.campaigns.ListCampaigns(ctx, false)
+	if err != nil {
+		return nil, fmt.Errorf("list campaigns: %w", err)
+	}
+
+	rows, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeExternal())
+	if err != nil {
+		return nil, fmt.Errorf("all purchases with sales: %w", err)
+	}
+
+	invoices, err := s.finance.ListInvoices(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list invoices: %w", err)
+	}
+
+	return ComputeAnalysis(campaigns, rows, invoices, since, time.Now().UTC()), nil
 }
 
 // GetWeeklyHistory returns the N most recent weeks (including the current week) in

@@ -48,7 +48,8 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_cents, s.sale_fee_cents,
 	s.sale_date, s.days_to_sell, s.net_profit_cents, s.created_at, s.updated_at,
 	s.last_sold_cents, s.lowest_list_cents, s.conservative_cents,
-	s.median_cents, s.active_listings, s.sales_last_30d, s.trend_30d, s.snapshot_date, s.snapshot_json`
+	s.median_cents, s.active_listings, s.sales_last_30d, s.trend_30d, s.snapshot_date, s.snapshot_json,
+	s.forced_liquidation`
 
 // saleColumns is the canonical column list for campaign_sales queries (no table alias).
 const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_cents,
@@ -112,25 +113,26 @@ func scanPurchase(s scanner, p *inventory.Purchase) error {
 func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 	var pws inventory.PurchaseWithSale
 	var (
-		sID             sql.NullString
-		sPurchaseID     sql.NullString
-		sSaleChannel    sql.NullString
-		sSalePriceCents sql.NullInt64
-		sSaleFeeCents   sql.NullInt64
-		sSaleDate       sql.NullString
-		sDaysToSell     sql.NullInt64
-		sNetProfitCents sql.NullInt64
-		sCreatedAt      sql.NullTime
-		sUpdatedAt      sql.NullTime
-		sLastSold       sql.NullInt64
-		sLowestList     sql.NullInt64
-		sConservative   sql.NullInt64
-		sMedian         sql.NullInt64
-		sActiveListings sql.NullInt64
-		sSalesLast30d   sql.NullInt64
-		sTrend30d       sql.NullFloat64
-		sSnapshotDate   sql.NullString
-		sSnapshotJSON   sql.NullString
+		sID                sql.NullString
+		sPurchaseID        sql.NullString
+		sSaleChannel       sql.NullString
+		sSalePriceCents    sql.NullInt64
+		sSaleFeeCents      sql.NullInt64
+		sSaleDate          sql.NullString
+		sDaysToSell        sql.NullInt64
+		sNetProfitCents    sql.NullInt64
+		sCreatedAt         sql.NullTime
+		sUpdatedAt         sql.NullTime
+		sLastSold          sql.NullInt64
+		sLowestList        sql.NullInt64
+		sConservative      sql.NullInt64
+		sMedian            sql.NullInt64
+		sActiveListings    sql.NullInt64
+		sSalesLast30d      sql.NullInt64
+		sTrend30d          sql.NullFloat64
+		sSnapshotDate      sql.NullString
+		sSnapshotJSON      sql.NullString
+		sForcedLiquidation sql.NullBool
 	)
 
 	// Build combined dest slice: purchase fields + sale fields.
@@ -140,6 +142,7 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 		&sSaleDate, &sDaysToSell, &sNetProfitCents, &sCreatedAt, &sUpdatedAt,
 		&sLastSold, &sLowestList, &sConservative, &sMedian,
 		&sActiveListings, &sSalesLast30d, &sTrend30d, &sSnapshotDate, &sSnapshotJSON,
+		&sForcedLiquidation,
 	)
 
 	if err := s.Scan(dests...); err != nil {
@@ -148,14 +151,15 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 
 	if sID.Valid {
 		sale := &inventory.Sale{
-			ID:             sID.String,
-			PurchaseID:     sPurchaseID.String,
-			SaleChannel:    inventory.SaleChannel(sSaleChannel.String),
-			SalePriceCents: int(sSalePriceCents.Int64),
-			SaleFeeCents:   int(sSaleFeeCents.Int64),
-			SaleDate:       sSaleDate.String,
-			DaysToSell:     int(sDaysToSell.Int64),
-			NetProfitCents: int(sNetProfitCents.Int64),
+			ID:                 sID.String,
+			PurchaseID:         sPurchaseID.String,
+			SaleChannel:        inventory.SaleChannel(sSaleChannel.String),
+			SalePriceCents:     int(sSalePriceCents.Int64),
+			SaleFeeCents:       int(sSaleFeeCents.Int64),
+			SaleDate:           sSaleDate.String,
+			DaysToSell:         int(sDaysToSell.Int64),
+			NetProfitCents:     int(sNetProfitCents.Int64),
+			ForcedLiquidation:  sForcedLiquidation.Bool,
 		}
 		if sCreatedAt.Valid {
 			sale.CreatedAt = sCreatedAt.Time
