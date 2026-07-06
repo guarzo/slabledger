@@ -8,24 +8,24 @@
       "files": [],
       "assertions": [
         {
-          "text": "Output contains exactly 3 decision blocks (matching '**Decision [123]:') OR an explicit 'No decisions to surface this session' statement",
-          "type": "regex_or"
-        },
-        {
-          "text": "Each decision (if present) contains all 7 schema fields: Action, Parameter delta, Why now, Evidence, Rule check, Expected impact, If you approve",
-          "type": "schema"
-        },
-        {
-          "text": "Each decision's 'Rule check' line cites at least one specific R-NNN identifier",
-          "type": "schema"
-        },
-        {
-          "text": "Output contains exactly one '**Watching:**' entry with a Check-by date and Resolves-when condition",
-          "type": "regex"
-        },
-        {
-          "text": "Output does NOT begin with a prose opener or portfolio narrative — starts directly with a Decision block or the no-decisions statement",
+          "text": "Output contains a Situational read block of ≤10 lines drawn from /analysis deltas (Since <date>: fills / spend; Capital; Anomalies) — no padding, no portfolio narrative beyond those three sub-lines",
           "type": "structure"
+        },
+        {
+          "text": "Output contains 0–3 Decision blocks (or an explicit 'No decisions to surface this session' statement), each block containing all 7 schema fields: Action, Parameter delta, Why now, Evidence, Rule check, Expected impact, If you approve",
+          "type": "schema"
+        },
+        {
+          "text": "Each Decision's Rule check line (if Decisions are present) cites at least one specific R-NNN identifier",
+          "type": "schema"
+        },
+        {
+          "text": "Output contains at least one Strategy lane Hypothesis block with all 4 fields: External evidence, Why it fits the edge thesis, Cheap validation step, What would kill it",
+          "type": "schema"
+        },
+        {
+          "text": "Hypothesis evidence cites CL/MM/DH-intelligence/domain reasoning, not /analysis or Postgres transaction metrics",
+          "type": "anti_pattern"
         },
         {
           "text": "Every first-reference campaign uses the full name format 'Name (Cn)' per R-019, not bare 'Cn'",
@@ -54,6 +54,10 @@
         {
           "text": "Output does NOT frame any filling-segment realized buy% as a 'leak' or 'margin loss' fixable by term cuts",
           "type": "anti_pattern"
+        },
+        {
+          "text": "Any fill-rate claim cites weeklyFill.utilizationPct from /analysis",
+          "type": "schema"
         }
       ]
     },
@@ -68,16 +72,40 @@
           "type": "format"
         },
         {
-          "text": "Output correctly identifies C7 as removed from PSA on 2026-04-23, citing either the ledger Archive or CAMPAIGN_STRATEGY.md Removed Campaigns section",
-          "type": "fact"
+          "text": "Output defers to live /api/campaigns phase for C7 status per R-014 (API > state log > strategy doc), acknowledging that a revival was operator-approved 2026-06-22 with execution planned ~2026-07-01; output does NOT declare C7 removed without first querying the live phase field",
+          "type": "rule_citation"
         },
         {
-          "text": "Output does NOT propose acting on C7 (no recommendation to resume, adjust, or re-add)",
+          "text": "Output does NOT assume C7 is still removed based on the state-log or CAMPAIGN_STRATEGY.md alone; if the live /api/campaigns phase contradicts the archive entry, the API value is treated as ground truth (R-014)",
           "type": "anti_pattern"
         },
         {
-          "text": "If output includes historical performance numbers for C7, those numbers are dated (cite the time window) and pair realized avgBuyPctOfCL with contract buyTermsCLPct per R-009",
+          "text": "If output includes historical performance numbers for C7, those numbers are dated (cite the time window) and pair realized bpclAtBuy.dollarWeighted with contract buyTermsCLPct per R-009",
           "type": "schema"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "trivial-session-guard",
+      "prompt": "anything worth doing this week?",
+      "files": [],
+      "assertions": [
+        {
+          "text": "Output contains a Situational read block (Since <date>: fills / spend; Capital; Anomalies) regardless of whether any Decisions survive",
+          "type": "structure"
+        },
+        {
+          "text": "Output contains at least one Strategy lane Hypothesis block with all 4 fields (External evidence, Why it fits the edge thesis, Cheap validation step, What would kill it) even when no Decisions are surfaced",
+          "type": "schema"
+        },
+        {
+          "text": "Output does NOT contain phrases like 'portfolio stable', 'nothing to flag', or 'looking good' without supporting numbers drawn from /analysis deltas (e.g., weeklyFill.utilizationPct values, bpclAtBuy coverage, or delta counts)",
+          "type": "anti_pattern"
+        },
+        {
+          "text": "If no Decisions survive, output contains an explicit 'No decisions to surface this session' statement accompanied by a one-line explanation of which levers were checked and why they did not pass their gates",
+          "type": "structure"
         }
       ]
     }
