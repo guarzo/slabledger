@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-07
 **Branch:** `fix/invoice-due-date` (worktree `.worktrees/invoice-due-date`)
-**Status:** Design — pending operator review
+**Status:** Design — approved by operator 2026-07-07
 
 ## Problem (as reported)
 
@@ -167,13 +167,15 @@ new forced-channel Sale ───────────┤
                        └─ portfolio PNL: Forced vs Discretionary split
 ```
 
-## Decisions (operator was away at design time — confirm at review gate)
+## Decisions (confirmed by operator 2026-07-07)
 
-1. **Update-branch fix: YES.** Populate `due_date` in the update branch when empty. This
-   is the durable fix; without it, rows stay stuck empty. *(Recommended; assumed.)*
-2. **Backfill: era-aware** (`+14` / `+1BD` / `+7`) rather than uniform `+7`. Only ~7 rows;
-   reporting correctness is cheap. Uniform `+7` is a one-line fallback if preferred.
-   *(Assumed; low-stakes since all rows are paid.)*
+1. **Term = +7 calendar days.** Correct `defaultPSAPaymentTermDays` from `15` to `7`.
+   *(Confirmed: "+7 is correct".)*
+2. **Update-branch fix: YES.** Populate `due_date` in the update branch when empty. This
+   is the durable fix; without it, rows stay stuck empty. *(Recommended in design; not
+   objected to at review — proceeding as designed.)*
+3. **Backfill: era-aware** (`+14` pre-2026-05-15 / `+1BD` mid-May–Jun / `+7` from 2026-07-01),
+   not uniform `+7`. *(Confirmed: "backfill era-aware is preferred".)*
 
 ## Verification plan
 
