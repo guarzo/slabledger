@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -1054,6 +1053,46 @@ func TestService_ImportPSAExportGlobal_HealsEmptyDueDate(t *testing.T) {
 	}
 }
 
+// autoDetectInvoices must NOT heal a pre-cutoff invoice's empty due date. Those
+// invoices had era-specific PSA terms (+14, then +1 business day) and are left
+// for the reviewed era-aware backfill script rather than stamped with a uniform
+// +7 during re-import.
+func TestService_ImportPSAExportGlobal_SkipsHealForPreCutoffInvoice(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup campaign: %v", err)
+	}
+	c.Phase = inventory.PhaseActive
+	if err := svc.UpdateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup activate: %v", err)
+	}
+
+	// Seed a pre-cutoff invoice with an empty due date, as the legacy rows exist
+	// in production. Total matches the imported purchase below (20000 + 300 fee).
+	if err := repo.CreateInvoice(ctx, &inventory.Invoice{
+		ID: "legacy-pre", InvoiceDate: "2026-03-15", TotalCents: 20300, DueDate: "", Status: "unpaid",
+	}); err != nil {
+		t.Fatalf("seed legacy invoice: %v", err)
+	}
+
+	// Re-import a row for that same pre-cutoff invoice date.
+	rows := []inventory.PSAExportRow{
+		{CertNumber: "PRE001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 200, Date: "2026-03-15", InvoiceDate: "2026-03-15", Category: "Pokemon"},
+	}
+	if _, err := svc.ImportPSAExportGlobal(ctx, rows); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	// The pre-cutoff invoice's due date must remain empty — left for the backfill.
+	if got := repo.Invoices["legacy-pre"].DueDate; got != "" {
+		t.Errorf("pre-cutoff DueDate = %q, want %q (must be left for the era-aware backfill)", got, "")
+	}
+}
+
 // End-to-end: a forced-channel (inperson) sale dated within 6 days before an
 // unpaid invoice's due date must persist ForcedLiquidation = true via CreateSale.
 func TestService_CreateSale_FlagsForcedLiquidation(t *testing.T) {
@@ -1061,13 +1100,18 @@ func TestService_CreateSale_FlagsForcedLiquidation(t *testing.T) {
 	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
 	ctx := context.Background()
 
-	today := time.Now()
-	saleDate := today.Format("2006-01-02")
-	dueDate := today.AddDate(0, 0, 5).Format("2006-01-02") // 5 days ahead → inside the 0..6 window
+	// Fixed reference dates so the scenario is reproducible (no clock dependency).
+	// saleDate is 5 days before dueDate — inside the 0..6 forced-liquidation window.
+	const (
+		saleDate     = "2026-07-10"
+		dueDate      = "2026-07-15" // saleDate + 5
+		invoiceDate  = "2026-07-08" // saleDate - 2
+		purchaseDate = "2026-06-10" // well before saleDate so CreateSale's date checks pass
+	)
 
-	// Unpaid invoice due in 5 days.
+	// Unpaid invoice due 5 days after the sale.
 	if err := repo.CreateInvoice(ctx, &inventory.Invoice{
-		ID: "inv-forced", InvoiceDate: today.AddDate(0, 0, -2).Format("2006-01-02"),
+		ID: "inv-forced", InvoiceDate: invoiceDate,
 		TotalCents: 100000, DueDate: dueDate, Status: "unpaid",
 	}); err != nil {
 		t.Fatalf("seed invoice: %v", err)
@@ -1081,7 +1125,7 @@ func TestService_CreateSale_FlagsForcedLiquidation(t *testing.T) {
 	// Purchase dated well before the sale so CreateSale's date checks pass.
 	p := &inventory.Purchase{
 		CampaignID: c.ID, CardName: "Charizard", CertNumber: "FORCED01",
-		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: today.AddDate(0, 0, -30).Format("2006-01-02"),
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: purchaseDate,
 	}
 	if err := svc.CreatePurchase(ctx, p); err != nil {
 		t.Fatalf("setup purchase: %v", err)
@@ -1104,7 +1148,7 @@ func TestService_CreateSale_FlagsForcedLiquidation(t *testing.T) {
 	// Control: an ebay sale on the same date must NOT be flagged.
 	p2 := &inventory.Purchase{
 		CampaignID: c.ID, CardName: "Pikachu", CertNumber: "FORCED02",
-		GradeValue: 10, BuyCostCents: 30000, PurchaseDate: today.AddDate(0, 0, -30).Format("2006-01-02"),
+		GradeValue: 10, BuyCostCents: 30000, PurchaseDate: purchaseDate,
 	}
 	if err := svc.CreatePurchase(ctx, p2); err != nil {
 		t.Fatalf("setup purchase 2: %v", err)

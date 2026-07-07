@@ -14,6 +14,14 @@ import (
 // (July 2026 portal terms: due 7 calendar days after issue).
 const defaultPSAPaymentTermDays = 7
 
+// dueDateHealCutoff is the earliest invoice date the auto-detect heal path will
+// stamp with the uniform +7 term. Invoices dated before this had era-specific
+// PSA terms (+14, then +1 business day) and are left for the reviewed era-aware
+// backfill script (scripts/backfill-invoice-due-dates-2026-07-07.sql) rather
+// than being stamped with the wrong term during a re-import. Compared
+// lexicographically against the YYYY-MM-DD InvoiceDate string.
+const dueDateHealCutoff = "2026-07-01"
+
 func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error) {
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, false)
 	if err != nil {
@@ -360,9 +368,16 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 					needsWrite = true
 				}
 				// Heal legacy rows: fill an empty due date so the forced-liquidation
-				// heuristic has data. Never overwrite a due date that is already set.
+				// heuristic has data. Never overwrite a due date that is already set,
+				// and never stamp pre-cutoff invoices — those had era-specific terms
+				// and belong to the era-aware backfill script.
 				if inv.DueDate == "" {
-					if dd := dueDateFromInvoiceDate(inv.InvoiceDate); dd != "" {
+					if inv.InvoiceDate < dueDateHealCutoff {
+						if s.logger != nil {
+							s.logger.Warn(ctx, "autoDetectInvoices: skipping due-date heal for pre-cutoff invoice; leave for era-aware backfill",
+								observability.String("invoiceDate", inv.InvoiceDate))
+						}
+					} else if dd := dueDateFromInvoiceDate(inv.InvoiceDate); dd != "" {
 						inv.DueDate = dd
 						needsWrite = true
 					}

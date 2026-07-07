@@ -33,12 +33,20 @@
 --   #    BEGIN/UPDATE/COMMIT block and re-run to apply.
 --
 -- Rollback:
---   UPDATE invoices SET due_date = '' WHERE id IN (<ids listed in the preview>);
+--   After applying, revert exactly the rows this script changed:
+--     UPDATE invoices i SET due_date = ''
+--     FROM backfill_due_date_targets t
+--     WHERE i.id = t.id;
+--   (backfill_due_date_targets is the temp table built in Step 0; it lives for
+--    the psql session, so run the rollback in the SAME session as the apply.)
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- Step 0: Preview — rows that WILL be changed and their computed due dates
+-- Step 0: Build the target set once — the ids to change and their computed due
+--   dates. The era CASE lives here only; Step 1 and the rollback reference this
+--   table so the preview, the update, and the revert can never drift.
 -- ---------------------------------------------------------------------------
+CREATE TEMP TABLE backfill_due_date_targets ON COMMIT PRESERVE ROWS AS
 SELECT
     id,
     invoice_date,
@@ -61,29 +69,24 @@ SELECT
             ELSE invoice_date::date + 7
         END, 'YYYY-MM-DD') AS computed_due_date
 FROM invoices
-WHERE due_date = ''
+WHERE due_date = '';
+
+-- Preview: rows that WILL be changed and their computed due dates.
+SELECT id, invoice_date, status, era, computed_due_date
+FROM backfill_due_date_targets
 ORDER BY invoice_date;
 
 -- ---------------------------------------------------------------------------
--- Step 1: Apply — UNCOMMENT after the Step 0 preview is reviewed
+-- Step 1: Apply — UNCOMMENT after the Step 0 preview is reviewed. Reads the
+--   computed due date straight from the target table (no recomputation here).
 -- ---------------------------------------------------------------------------
 -- BEGIN;
 --
--- UPDATE invoices
--- SET due_date = to_char(
---         CASE
---             WHEN invoice_date::date < DATE '2026-05-15'
---                 THEN invoice_date::date + 14
---             WHEN invoice_date::date <= DATE '2026-06-30'
---                 THEN invoice_date::date + CASE EXTRACT(DOW FROM invoice_date::date)
---                                               WHEN 5 THEN 3
---                                               WHEN 6 THEN 2
---                                               ELSE 1
---                                           END
---             ELSE invoice_date::date + 7
---         END, 'YYYY-MM-DD'),
+-- UPDATE invoices i
+-- SET due_date = t.computed_due_date,
 --     updated_at = now()
--- WHERE due_date = '';
+-- FROM backfill_due_date_targets t
+-- WHERE i.id = t.id;
 --
 -- COMMIT;
 
