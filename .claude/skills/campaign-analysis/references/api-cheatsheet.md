@@ -385,3 +385,20 @@ Returns `{computed_at, data_quality, signals: [...]}`. When empty: `signals: []`
 ## /opportunities/acquisition
 
 Returns a **flat array** (empty `[]` when no opportunities exist). NOT `{candidates: [...]}` or `{opportunities: [...]}`.
+
+## DH enterprise demand & AI feeds (verified live 2026-07-07)
+
+Strategy-lane external sources, called directly against DH (not via slabledger). Auth: the env key is deliberately named `DO_NOT_USE_DH_ENTERPRISE_API_KEY` — the label means **have an explicit conversation with the operator before first use in a session** (authorized precedent: 2026-07-07). Always send `-A "slabledger/1.0"` + `Authorization: Bearer <key>`.
+
+```bash
+KEY=$(grep -E "^DO_NOT_USE_DH_ENTERPRISE_API_KEY=" /workspace/.env | cut -d= -f2- | tr -d '"')
+BASE=$(grep -E "^DH_API_BASE_URL=" /workspace/.env | cut -d= -f2- | tr -d '"')
+curl -s -A "slabledger/1.0" -H "Authorization: Bearer $KEY" "$BASE/api/v1/enterprise/market/demand_signals/top_characters?limit=50"
+```
+
+- `GET /api/v1/enterprise/market/demand_signals/top_characters?limit=N` — market-wide ranked character demand (cached 1h). Rows: `character_name`, `avg_demand_score`, `card_count`, `total_views`, `total_search_clicks`, `total_wishlist_adds`. `era` query param is NOT honored (returns `era: null`).
+- `GET .../market/demand_signals/character_demand` — requires `card_ids` (per-card scoped aggregation); the by-era view goes through this, not top_characters.
+- `GET /api/v1/enterprise/daily-brief` — `ai_picks{buy,sell}`, `forecasts{raw,graded}`, `social_buzz`, `indices`, `top_mover`. ETag-cached.
+- Also live per operator's docs: `GET /cards/:id/insights` (sentiment + price_forecast), `GET /suggestions` (daily AI picks with structured_reasoning).
+
+**Caveat before citing:** demand counts are DH-marketplace-scoped and small in absolute terms (views typically <100) — treat as directional external evidence for the strategy lane (R-006-compliant character comps), never as market-wide ground truth on its own. Character keys include variants as distinct names ("Dark Charizard" ≠ "Charizard") — check inclusion-list matching behavior before assuming coverage.
