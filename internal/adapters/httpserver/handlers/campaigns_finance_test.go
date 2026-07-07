@@ -826,3 +826,86 @@ func TestHandlePortfolioSnapshot(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandlePortfolioAnalysis(t *testing.T) {
+	const sinceParam = "2026-06-25"
+
+	tests := []struct {
+		name       string
+		since      string
+		mockFn     func(ctx context.Context, since string) (*portfolio.AnalysisResponse, error)
+		wantStatus int
+		wantSince  string
+	}{
+		{
+			name:  "success - since param forwarded and generatedAt present",
+			since: sinceParam,
+			mockFn: func(_ context.Context, since string) (*portfolio.AnalysisResponse, error) {
+				return &portfolio.AnalysisResponse{
+					GeneratedAt: "2026-07-06T00:00:00Z",
+					Since:       since,
+					Campaigns:   []portfolio.CampaignAnalysis{},
+				}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantSince:  sinceParam,
+		},
+		{
+			name:  "success - no since param",
+			since: "",
+			mockFn: func(_ context.Context, since string) (*portfolio.AnalysisResponse, error) {
+				return &portfolio.AnalysisResponse{
+					GeneratedAt: "2026-07-06T00:00:00Z",
+					Since:       since,
+					Campaigns:   []portfolio.CampaignAnalysis{},
+				}, nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:  "service error returns 500",
+			since: sinceParam,
+			mockFn: func(_ context.Context, _ string) (*portfolio.AnalysisResponse, error) {
+				return nil, fmt.Errorf("service error")
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotSince string
+			portSvc := &mocks.MockPortfolioService{
+				GetAnalysisFn: func(ctx context.Context, since string) (*portfolio.AnalysisResponse, error) {
+					gotSince = since
+					return tt.mockFn(ctx, since)
+				},
+			}
+			h := newTestHandlerFull(&mocks.MockInventoryService{}, nil, portSvc, nil)
+
+			url := "/api/portfolio/analysis"
+			if tt.since != "" {
+				url += "?since=" + tt.since
+			}
+			req := httptest.NewRequest(http.MethodGet, url, nil)
+			rec := httptest.NewRecorder()
+			h.HandlePortfolioAnalysis(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if tt.wantStatus == http.StatusOK {
+				var result portfolio.AnalysisResponse
+				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if result.GeneratedAt == "" {
+					t.Error("expected non-empty generatedAt")
+				}
+				if tt.wantSince != "" && gotSince != tt.wantSince {
+					t.Errorf("expected since=%q forwarded to service, got %q", tt.wantSince, gotSince)
+				}
+			}
+		})
+	}
+}

@@ -325,6 +325,117 @@ config endpoints.
 
 ---
 
+## `purchase.clValueAtPurchaseCents` (frozen CL-at-buy)
+
+**Data semantics.** The CardLadder value stamped ONCE at the moment of purchase and
+never overwritten (unlike the live `clValueCents`). Set to `0` on rows that pre-date
+the snapshot feature or were imported without a CL value. This is the denominator behind
+`/analysis` `bpclAtBuy`.
+
+**Gotcha.** `0` means "no snapshot," not "CL was zero." Rows with `0` are excluded from
+`bpclAtBuy` aggregates; the endpoint's `coveragePct` tells you how much of the campaign
+has a snapshot. Caveat thin coverage before treating `bpclAtBuy` as portfolio-wide.
+
+**Allowed uses.**
+- As the CL-at-buy denominator for clean buy-quality ratios (`buyCost ÷ clValueAtPurchase`).
+- Distinguishing buy skill (this field) from post-purchase CL drift (`clValueCents`).
+
+**Forbidden uses.**
+- Treating a `0` as a real CL value (it is a missing-snapshot sentinel).
+- Reading `bpclAtBuy` over thin coverage as a whole-campaign figure.
+
+**Source.** `campaign_purchases.cl_value_at_purchase_cents`; aggregated into
+`/api/portfolio/analysis` → `.campaigns[].bpclAtBuy`.
+
+---
+
+## `sale.forcedLiquidation`
+
+**Data semantics.** Boolean heuristic: true when the sale went through a forced channel
+(`inperson`, `local`, `cardshow`) within ≤6 days before an invoice due date. Operator-overridable
+per sale. Drives the `pnl.discretionary` vs `pnl.forced` split in `/analysis`.
+
+**Gotcha.** A heuristic, not ground truth — it can misfire. The endpoint reports BOTH
+splits so a misflag is visible, not silent. When forced ROI looks anomalous, check whether
+the flag over/under-captured before drawing a conclusion.
+
+**Allowed uses.**
+- Separating discretionary sale economics from invoice-driven fire-sale drag.
+- Explaining a "bad ROI" character as forced-liquidation contamination (see the R-025 contamination summary in "Retired ledger rules" below; the character-selection ban is enforced by ledger R-006).
+
+**Forbidden uses.**
+- Treating the split as exact when coverage is small.
+- Ranking or excluding a character on `pnl.forced` economics — forced-sale outcomes are
+  contaminated by cash-crunch timing, not buy quality.
+
+**Source.** `campaign_sales.forced_liquidation`; aggregated into
+`/api/portfolio/analysis` → `.campaigns[].pnl.{discretionary,forced}`.
+
+---
+
+## `analysis.campaigns[].bpclAtBuy` vs the old `avgBuyPctOfCL`
+
+**Data semantics.** `bpclAtBuy.dollarWeighted` = `sum(buyCost) / sum(clValueAtPurchase)`
+over the snapshot rows — buy cost divided by CL AT THE TIME OF PURCHASE. This is the clean
+buy-quality metric the overhaul introduced. `meanDriftPct` reports CL drift since purchase
+SEPARATELY, so drift never contaminates the buy-quality number.
+
+**Gotcha.** The older endpoints' `avgBuyPctOfCL` (on `/tuning` and `/insights`) is
+`buyCost ÷ current clValueCents` and remains CL-drift-contaminated — it measures
+`terms × (CL_then / CL_now)`, not buy skill. Prefer `bpclAtBuy.dollarWeighted` from
+`/analysis`. Only reach for `avgBuyPctOfCL` if `/analysis` is unavailable, and label it
+as drift-contaminated when you do.
+
+**Allowed uses.**
+- Citing `bpclAtBuy.dollarWeighted` as realized buy quality (pair with contract
+  `buyTermsCLPct`).
+- Reading `meanDriftPct` as post-purchase market movement, not acquisition performance.
+
+**Forbidden uses.**
+- Presenting `avgBuyPctOfCL` (old endpoints) as clean buy quality.
+- Ranking characters on either figure — buy quality is identical-by-construction at
+  purchase (`terms × CL`); there is nothing to rank (see the R-025 contamination summary in
+  "Retired ledger rules" below; the ban is enforced by ledger R-006).
+
+**Source.** `/api/portfolio/analysis` → `.campaigns[].bpclAtBuy`; contrast
+`/api/campaigns/{id}/tuning` → `.byGrade[].avgBuyPctOfCL`.
+
+---
+
+## Retired ledger rules — semantic content absorbed here
+
+The 2026-07 overhaul retired several data-hygiene Rules from the ledger because the
+`/analysis` endpoint now guarantees what they policed. Their reasoning lives here:
+
+- **R-009 (realized vs contract pairing).** Never write a buy% without saying which it is.
+  Realized = `bpclAtBuy.dollarWeighted` (clean, `/analysis`) or the drift-contaminated
+  `avgBuyPctOfCL` (old endpoints). Contract = `buyTermsCLPct` = the PSA-side bid ceiling.
+  Realized > contract is a *diagnostic question* (CL drift, mix shift, JPN parallels), not a
+  parameter recommendation (still enforced as skill hard-constraint 3 and ledger R-001).
+- **R-010 (lifetime-cumulative on OLD endpoints).** `/tuning.byGrade` and
+  `/insights.byCharacterGrade` are lifetime-cumulative and show fills at now-excluded grades.
+  `/analysis` `inScopeByGrade` is already current-scope filtered server-side, so the manual
+  filter ritual is gone — but if you fall back to the old endpoints, re-apply the current
+  `gradeRange` / inclusion / `yearRange` / price filter from `/api/campaigns` yourself.
+- **R-011 (insights field names).** `/insights` segment rows use `label` (not `character`)
+  and `netProfitCents` (not `avgProfitCents`); jq projections of missing keys silently
+  return null. `/analysis` uses explicit typed fields, so this only bites on the old
+  endpoints — run `jq '.[0] | keys'` once before projecting from `/insights`.
+- **R-024 (suggestion-engine bugs).** `/snapshot.suggestions` is a server-side engine with
+  known bugs (`docs/private/2026-06-01-suggestion-engine-bugs.md`): it doesn't filter by era
+  and sorts on portfolio-wide ROI. Before echoing a suggestion, check it against Decisions the
+  operator already rejected (same campaign + lever + direction). `/analysis` does not emit
+  suggestions, so this applies only when you pull `/snapshot` in a follow-up.
+- **R-025 (contamination summary).** No character/grade-level buy-quality signal is derivable
+  from this system's purchase/sale records. `roi`/`netProfitCents`/`avgMarginPct`/`sellThroughPct`
+  are contaminated by forced invoice-driven liquidation (see `forcedLiquidation`); `avgBuyPctOfCL`
+  is contaminated by post-purchase CL drift (see `clValueCents`); eBay-share is contaminated the
+  same way as ROI. Character selection comes ONLY from operator domain judgment or external
+  CL/MM market comps, never from ranking this data; the character-add gate that enforces this
+  now lives in R-006.
+
+---
+
 ## Adding new rows
 
 Tier A: the Layer-4 reviewer may append rows here whenever an in-session

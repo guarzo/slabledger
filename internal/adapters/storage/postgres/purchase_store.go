@@ -35,6 +35,10 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 	if p.Grader == "" {
 		p.Grader = "PSA"
 	}
+	// Snapshot CL value at creation when known; set-once (never overwritten later).
+	if p.CLValueAtPurchaseCents == 0 && p.CLValueCents > 0 {
+		p.CLValueAtPurchaseCents = p.CLValueCents
+	}
 	query := `
 		INSERT INTO campaign_purchases (
 			-- identity
@@ -61,7 +65,9 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			-- DH
 			dh_card_id, dh_inventory_id, dh_cert_status, dh_listing_price_cents, dh_channels_json, dh_status, dh_push_status, dh_candidates,
 			-- gem/spec
-			gem_rate_id, psa_spec_id
+			gem_rate_id, psa_spec_id,
+			-- provenance snapshot
+			cl_value_at_purchase_cents
 		) VALUES (
 			-- identity
 			$1, $2, $3, $4, $5, $6, $7, $8,
@@ -86,7 +92,9 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			-- DH
 			$45, $46, $47, $48, $49, $50, $51, $52,
 			-- gem/spec
-			$53, $54
+			$53, $54,
+			-- provenance snapshot
+			$55
 		)
 	`
 	_, err := ps.db.ExecContext(ctx, query,
@@ -105,6 +113,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.ReviewedPriceCents, p.ReviewedAt, string(p.ReviewSource),
 		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus, p.DHCandidatesJSON,
 		p.GemRateID, p.PSASpecID,
+		p.CLValueAtPurchaseCents,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return inventory.ErrDuplicateCertNumber
@@ -252,7 +261,9 @@ func (ps *PurchaseStore) execAndExpectRow(ctx context.Context, op, query string,
 func (ps *PurchaseStore) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return ps.execAndExpectRow(ctx, "update cl value",
-		`UPDATE campaign_purchases SET cl_value_cents = $1, population = $2, cl_value_updated_at = $3, updated_at = $4 WHERE id = $5`,
+		`UPDATE campaign_purchases SET cl_value_cents = $1, population = $2, cl_value_updated_at = $3, updated_at = $4,
+		 cl_value_at_purchase_cents = CASE WHEN cl_value_at_purchase_cents = 0 AND $1::bigint > 0 THEN $1::bigint ELSE cl_value_at_purchase_cents END
+		 WHERE id = $5`,
 		clValueCents, population, now, now, id,
 	)
 }
