@@ -14,6 +14,15 @@
 --     2026-05-15 .. 2026-06-30 (inclusive)  -> +1 business day
 --     invoice_date >= 2026-07-01            -> +7 calendar days
 --
+-- SEQUENCING (important):
+--   Run this backfill BEFORE the next full-history PSA re-import. The invoice
+--   auto-detect heal path fills an empty due_date with a uniform invoice_date + 7
+--   days (not era-aware). If a full-history re-import runs first, pre-July empty
+--   rows get +7 and this script's `WHERE due_date = ''` will then skip them,
+--   leaving a wrong-era value. Impact is limited to reporting on paid historical
+--   rows (persisted forced_liquidation flags on past sales are not recomputed),
+--   but running this script first keeps the era-aware terms intact.
+--
 -- Target DB: Postgres (Supabase in prod, local Postgres in dev). Dates are TEXT
 --   in YYYY-MM-DD; cast to ::date for arithmetic, format back with to_char.
 --
@@ -79,6 +88,8 @@ ORDER BY invoice_date;
 -- COMMIT;
 
 -- ---------------------------------------------------------------------------
--- Step 2: Verify — after applying, this should return zero rows
+-- Step 2: Verify — AFTER the Step 1 apply block is uncommented and run, this
+--   returns zero. On a dry run (apply block still commented) a NONZERO count is
+--   expected — it is the set of rows the apply block WILL change.
 -- ---------------------------------------------------------------------------
 SELECT count(*) AS remaining_empty_due_dates FROM invoices WHERE due_date = '';
