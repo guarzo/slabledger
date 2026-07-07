@@ -10,8 +10,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// defaultPSAPaymentTermDays is the standard net-payment term for PSA invoices.
-const defaultPSAPaymentTermDays = 15
+// defaultPSAPaymentTermDays is the standard net-payment term for PSA invoices
+// (July 2026 portal terms: due 7 calendar days after issue).
+const defaultPSAPaymentTermDays = 7
 
 func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error) {
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, false)
@@ -300,6 +301,16 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 	}
 }
 
+// dueDateFromInvoiceDate returns invoiceDate advanced by defaultPSAPaymentTermDays
+// as a YYYY-MM-DD string, or "" if invoiceDate is empty or unparseable.
+func dueDateFromInvoiceDate(invoiceDate string) string {
+	t, err := time.Parse("2006-01-02", invoiceDate)
+	if err != nil {
+		return ""
+	}
+	return t.AddDate(0, 0, defaultPSAPaymentTermDays).Format("2006-01-02")
+}
+
 func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (int, int) {
 	// Collect all unique invoice dates touched by this import so we reconcile
 	// totals even when the CSV row has PricePaid == 0 (existing purchase may
@@ -365,15 +376,11 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 			continue
 		}
 
-		dueDate := ""
-		if t, err := time.Parse("2006-01-02", invoiceDate); err == nil {
-			dueDate = t.AddDate(0, 0, defaultPSAPaymentTermDays).Format("2006-01-02")
-		}
 		inv := &Invoice{
 			ID:          s.idGen(),
 			InvoiceDate: invoiceDate,
 			TotalCents:  totalCents,
-			DueDate:     dueDate,
+			DueDate:     dueDateFromInvoiceDate(invoiceDate),
 			Status:      "unpaid",
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
