@@ -80,7 +80,7 @@
           "type": "anti_pattern"
         },
         {
-          "text": "If output includes historical performance numbers for C7, those numbers are dated (cite the time window) and pair realized bpclAtBuy.dollarWeighted with contract buyTermsCLPct per R-009",
+          "text": "If output includes historical performance numbers for C7, those numbers are dated (cite the time window) and pair realized bpclAtBuy.dollarWeighted with contract buyTermsCLPct per R-001",
           "type": "schema"
         }
       ]
