@@ -354,8 +354,20 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 			// Update existing invoice totals if purchases changed the amount
 			// (including zeroing out when all purchases were refunded).
 			for _, inv := range existing {
+				needsWrite := false
 				if inv.TotalCents != totalCents {
 					inv.TotalCents = totalCents
+					needsWrite = true
+				}
+				// Heal legacy rows: fill an empty due date so the forced-liquidation
+				// heuristic has data. Never overwrite a due date that is already set.
+				if inv.DueDate == "" {
+					if dd := dueDateFromInvoiceDate(inv.InvoiceDate); dd != "" {
+						inv.DueDate = dd
+						needsWrite = true
+					}
+				}
+				if needsWrite {
 					inv.UpdatedAt = time.Now()
 					if err := s.finance.UpdateInvoice(ctx, inv); err != nil {
 						if s.logger != nil {
