@@ -744,3 +744,36 @@ func TestService_GetWeeklyHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestService_GetAnalysis_EmptySinceCapsDeltasTo90Days(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := newPortfolioSvc(repo)
+	ctx := context.Background()
+
+	c := &inventory.Campaign{ID: "c1", Name: "Modern", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
+	repo.Campaigns[c.ID] = c
+
+	now := time.Now().UTC()
+	old := now.AddDate(0, 0, -100).Format("2006-01-02")
+	recent := now.AddDate(0, 0, -10).Format("2006-01-02")
+	repo.GetAllPurchasesWithSalesFn = func(ctx context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
+		return []inventory.PurchaseWithSale{
+			{Purchase: inventory.Purchase{ID: "p-old", CampaignID: "c1", BuyCostCents: 1000, PurchaseDate: old}},
+			{Purchase: inventory.Purchase{ID: "p-recent", CampaignID: "c1", BuyCostCents: 2000, PurchaseDate: recent}},
+		}, nil
+	}
+
+	resp, err := svc.GetAnalysis(ctx, "")
+	if err != nil {
+		t.Fatalf("GetAnalysis: %v", err)
+	}
+	if resp.Since != "" {
+		t.Errorf("Since echo = %q, want empty", resp.Since)
+	}
+	if resp.Deltas.NewPurchases != 1 {
+		t.Errorf("NewPurchases = %d, want 1 (100-day-old purchase must be outside the 90-day cap)", resp.Deltas.NewPurchases)
+	}
+	if resp.Deltas.NewPurchaseCents != 2000 {
+		t.Errorf("NewPurchaseCents = %d, want 2000", resp.Deltas.NewPurchaseCents)
+	}
+}

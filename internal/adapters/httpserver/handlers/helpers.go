@@ -103,7 +103,7 @@ func requireUser(w http.ResponseWriter, r *http.Request) *auth.User {
 func parsePagination(r *http.Request) (limit, offset int) {
 	limit = 50
 	offset = 0
-	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 200 {
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 10000 {
 		limit = v
 	}
 	if v, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && v >= 0 {

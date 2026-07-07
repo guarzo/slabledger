@@ -21,6 +21,7 @@ type Service interface {
 	GetWeeklyReviewSummary(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
 	GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error)
 	GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error)
+	GetAnalysis(ctx context.Context, since string) (*AnalysisResponse, error)
 }
 
 type service struct {
@@ -458,6 +459,38 @@ func computeWeekSummary(allData []inventory.PurchaseWithSale, weekStart, weekEnd
 	}
 
 	return summary
+}
+
+// --- Portfolio Analysis ---
+
+// GetAnalysis fetches all campaigns, purchases, and invoices, then delegates
+// computation to ComputeAnalysis. The since parameter is an optional "YYYY-MM-DD"
+// cutoff for the SessionDeltas block.
+func (s *service) GetAnalysis(ctx context.Context, since string) (*AnalysisResponse, error) {
+	campaigns, err := s.campaigns.ListCampaigns(ctx, false)
+	if err != nil {
+		return nil, fmt.Errorf("list campaigns: %w", err)
+	}
+
+	rows, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeExternal())
+	if err != nil {
+		return nil, fmt.Errorf("all purchases with sales: %w", err)
+	}
+
+	invoices, err := s.finance.ListInvoices(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list invoices: %w", err)
+	}
+
+	now := time.Now().UTC()
+	effectiveSince := since
+	if effectiveSince == "" {
+		// No prior session date: cap full-history deltas to the trailing 90 days.
+		effectiveSince = now.AddDate(0, 0, -90).Format("2006-01-02")
+	}
+	resp := ComputeAnalysis(campaigns, rows, invoices, effectiveSince, now)
+	resp.Since = since
+	return resp, nil
 }
 
 // GetWeeklyHistory returns the N most recent weeks (including the current week) in
