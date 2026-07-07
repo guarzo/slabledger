@@ -482,7 +482,15 @@ func (s *service) GetAnalysis(ctx context.Context, since string) (*AnalysisRespo
 		return nil, fmt.Errorf("list invoices: %w", err)
 	}
 
-	return ComputeAnalysis(campaigns, rows, invoices, since, time.Now().UTC()), nil
+	now := time.Now().UTC()
+	effectiveSince := since
+	if effectiveSince == "" {
+		// No prior session date: cap full-history deltas to the trailing 90 days.
+		effectiveSince = now.AddDate(0, 0, -90).Format("2006-01-02")
+	}
+	resp := ComputeAnalysis(campaigns, rows, invoices, effectiveSince, now)
+	resp.Since = since
+	return resp, nil
 }
 
 // GetWeeklyHistory returns the N most recent weeks (including the current week) in
