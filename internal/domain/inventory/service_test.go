@@ -1093,6 +1093,47 @@ func TestService_ImportPSAExportGlobal_SkipsHealForPreCutoffInvoice(t *testing.T
 	}
 }
 
+// autoDetectInvoices must NOT stamp a due date when CREATING an invoice for a
+// pre-cutoff date (e.g. a full-history re-import into a rebuilt DB). Those had
+// era-specific PSA terms and are left empty for the era-aware backfill; only the
+// create path for cutoff-or-later dates gets the uniform +7 term.
+func TestService_ImportPSAExportGlobal_SkipsDueDateForPreCutoffCreate(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup campaign: %v", err)
+	}
+	c.Phase = inventory.PhaseActive
+	if err := svc.UpdateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup activate: %v", err)
+	}
+
+	// Import a pre-cutoff invoice date with NO pre-existing invoice → create path.
+	rows := []inventory.PSAExportRow{
+		{CertNumber: "PRECREATE001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 200, Date: "2026-03-15", InvoiceDate: "2026-03-15", Category: "Pokemon"},
+	}
+	if _, err := svc.ImportPSAExportGlobal(ctx, rows); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	// The newly-created pre-cutoff invoice must have an empty due date.
+	var found *inventory.Invoice
+	for _, inv := range repo.Invoices {
+		if inv.InvoiceDate == "2026-03-15" {
+			found = inv
+		}
+	}
+	if found == nil {
+		t.Fatal("expected an invoice for 2026-03-15 to be created")
+	}
+	if found.DueDate != "" {
+		t.Errorf("created pre-cutoff DueDate = %q, want %q (leave for era-aware backfill)", found.DueDate, "")
+	}
+}
+
 // End-to-end: a forced-channel (inperson) sale dated within 6 days before an
 // unpaid invoice's due date must persist ForcedLiquidation = true via CreateSale.
 func TestService_CreateSale_FlagsForcedLiquidation(t *testing.T) {

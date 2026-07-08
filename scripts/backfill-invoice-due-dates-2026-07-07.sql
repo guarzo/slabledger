@@ -27,7 +27,10 @@
 --   in YYYY-MM-DD; cast to ::date for arithmetic, format back with to_char.
 --
 -- Usage:
---   # DRY RUN — preview only, no writes (Step 0 runs outside any transaction):
+--   # DRY RUN — preview only, no invoice writes (Step 1 apply block stays
+--   #   commented). Note: Step 0 does create the durable backfill_due_date_targets
+--   #   staging table (needed so a later session can roll back); drop it via Step 3
+--   #   if you abandon the run without applying.
 --   psql "$DATABASE_URL" -f scripts/backfill-invoice-due-dates-2026-07-07.sql
 --   # ...review Step 0 output with the operator, THEN uncomment Step 1's
 --   #    BEGIN/UPDATE/COMMIT block and re-run to apply.
@@ -37,16 +40,21 @@
 --     UPDATE invoices i SET due_date = ''
 --     FROM backfill_due_date_targets t
 --     WHERE i.id = t.id;
---   (backfill_due_date_targets is the temp table built in Step 0; it lives for
---    the psql session, so run the rollback in the SAME session as the apply.)
+--   backfill_due_date_targets is a DURABLE table (Step 0), so the rollback works
+--   in a later psql session — not only the one that applied the change. Run the
+--   Step 3 cleanup to drop it once the rollback window has closed.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
 -- Step 0: Build the target set once — the ids to change and their computed due
 --   dates. The era CASE lives here only; Step 1 and the rollback reference this
---   table so the preview, the update, and the revert can never drift.
+--   table so the preview, the update, and the revert can never drift. A durable
+--   (non-TEMP) table is used deliberately so the ids/values survive past the
+--   psql session and remain available for a later rollback; drop it in Step 3.
+--   DROP-then-create makes re-running the preview idempotent.
 -- ---------------------------------------------------------------------------
-CREATE TEMP TABLE backfill_due_date_targets ON COMMIT PRESERVE ROWS AS
+DROP TABLE IF EXISTS backfill_due_date_targets;
+CREATE TABLE backfill_due_date_targets AS
 SELECT
     id,
     invoice_date,
@@ -96,3 +104,9 @@ ORDER BY invoice_date;
 --   expected — it is the set of rows the apply block WILL change.
 -- ---------------------------------------------------------------------------
 SELECT count(*) AS remaining_empty_due_dates FROM invoices WHERE due_date = '';
+
+-- ---------------------------------------------------------------------------
+-- Step 3: Cleanup — UNCOMMENT and run once the apply is confirmed and the
+--   rollback window has closed. Drops the durable staging table from Step 0.
+-- ---------------------------------------------------------------------------
+-- DROP TABLE IF EXISTS backfill_due_date_targets;
