@@ -3,6 +3,7 @@ package psaportal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -48,6 +49,7 @@ func (h *Harvester) EnsureFreshToken(ctx context.Context) error {
 	if err == nil && tok != "" && time.Until(exp) > h.freshFor {
 		return nil // still fresh
 	}
+	h.logger.Info(ctx, "harvesting PSA portal access token")
 	return h.harvest(ctx)
 }
 
@@ -57,6 +59,15 @@ func (h *Harvester) harvest(ctx context.Context) error {
 	cmd.Env = append(cmd.Environ(), h.env...)
 	out, err := cmd.Output()
 	if err != nil {
+		// exec.Output captures the child's stderr on ExitError — surface it so
+		// harvester failures (login/selector errors) are diagnosable from logs.
+		var stderr string
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			stderr = strings.TrimSpace(string(ee.Stderr))
+		}
+		h.logger.Error(ctx, "PSA portal token harvest failed",
+			observability.Err(err), observability.String("stderr", stderr))
 		return fmt.Errorf("psaportal: harvester exec: %w", err)
 	}
 	var res struct {
@@ -73,5 +84,10 @@ func (h *Harvester) harvest(ctx context.Context) error {
 	if res.AccessToken == "" {
 		return fmt.Errorf("psaportal: harvester returned empty token")
 	}
-	return h.repo.SaveToken(ctx, res.AccessToken, exp)
+	if err := h.repo.SaveToken(ctx, res.AccessToken, exp); err != nil {
+		return err
+	}
+	h.logger.Info(ctx, "harvested PSA portal access token",
+		observability.String("expires_at", exp.Format(time.RFC3339)))
+	return nil
 }

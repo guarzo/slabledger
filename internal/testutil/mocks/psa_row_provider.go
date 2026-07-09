@@ -12,5 +12,8 @@ type PSARowProviderMock struct {
 }
 
 func (m *PSARowProviderMock) FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error) {
-	return m.FetchRowsFn(ctx)
+	if m.FetchRowsFn != nil {
+		return m.FetchRowsFn(ctx)
+	}
+	return nil, nil
 }

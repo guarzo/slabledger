@@ -89,14 +89,16 @@ func (c *Client) fetchEmbedURL(ctx context.Context, token string) (string, error
 		"User-Agent": browserUA,
 		"Accept":     "application/json",
 	}
+	// httpx returns a non-nil resp alongside err for >=400 responses, so inspect
+	// resp on the error path (that's where a Cloudflare 403/503 challenge lands).
 	resp, err := c.http.Get(ctx, c.analyticsURL, headers, 0)
 	if err != nil {
+		if resp != nil && isCloudflareChallenge(resp) {
+			return "", fmt.Errorf("psaportal: blocked by Cloudflare (status %d): %w", resp.StatusCode, err)
+		}
 		return "", fmt.Errorf("psaportal: analytics fetch: %w", err)
 	}
 	if resp.StatusCode != 200 {
-		if isCloudflareChallenge(resp) {
-			return "", fmt.Errorf("psaportal: blocked by Cloudflare (status %d)", resp.StatusCode)
-		}
 		return "", fmt.Errorf("psaportal: analytics status %d", resp.StatusCode)
 	}
 	v, err := DecodeSvelteKitValue(resp.Body, "embedUrl")

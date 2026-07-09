@@ -285,7 +285,7 @@ type PSAPortalConfig struct {
 	Password string
 }
 
-// PSASyncConfig controls the background PSA Google Sheets sync scheduler.
+// PSASyncConfig controls the background PSA portal sync scheduler.
 type PSASyncConfig struct {
 	Enabled      bool
 	Interval     time.Duration // how often to run sync (default: 24h)
