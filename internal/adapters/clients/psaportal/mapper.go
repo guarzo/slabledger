@@ -2,6 +2,7 @@ package psaportal
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
@@ -22,8 +23,10 @@ const (
 )
 
 // mapRow converts one flattened Lightdash row into a PSAExportRow.
-// InvoiceDate is intentionally left empty: the Itemized Purchases tile has no
-// invoice-date dimension (see SPIKE_FINDINGS.md "GAP"); revisit once real rows exist.
+//
+// The tile has no invoice-date dimension. PSA invoices on a fixed cadence (the 1st
+// and 15th of each month), so InvoiceDate is derived from the buyer payment date as
+// the next 1st-or-15th on or after it (see invoiceDateFor).
 func mapRow(r map[string]string) (inventory.PSAExportRow, error) {
 	row := inventory.PSAExportRow{
 		CertNumber:     inventory.NormalizePSACert(r[colCert]),
@@ -32,6 +35,7 @@ func mapRow(r map[string]string) (inventory.PSAExportRow, error) {
 		Category:       r[colCategory],
 		Date:           normalizeDate(r[colDate]),
 		ShipDate:       normalizeDate(r[colShipDate]),
+		InvoiceDate:    invoiceDateFor(r[colDate]),
 		FrontImageURL:  r[colFrontImage],
 		BackImageURL:   r[colBackImage],
 		WasRefunded:    isTruthy(r[colRefunded]),
@@ -53,11 +57,35 @@ func mapRow(r map[string]string) (inventory.PSAExportRow, error) {
 	return row, nil
 }
 
-// normalizeDate converts the portal's date string to YYYY-MM-DD.
-// Spike saw 0 rows, so the raw format is unconfirmed; the "_day" granularity
-// dimensions are expected to already be YYYY-MM-DD, so this is a passthrough for
-// now. TODO: confirm + reformat once real rows exist.
-func normalizeDate(s string) string { return s }
+// normalizeDate keeps only the calendar date (YYYY-MM-DD). Lightdash day-granularity
+// dimensions arrive as RFC3339 (e.g. "2026-07-06T00:00:00Z"); the old sheet used
+// YYYY-MM-DD, so downstream import expects that. Unknown formats pass through.
+func normalizeDate(s string) string {
+	if len(s) >= 10 && s[4] == '-' && s[7] == '-' {
+		return s[:10]
+	}
+	return s
+}
+
+// invoiceDateFor derives the PSA invoice date from a payment date: the next 1st or
+// 15th of the month on or after the payment date. Empty/unparseable input → "".
+func invoiceDateFor(paymentDate string) string {
+	d := normalizeDate(paymentDate)
+	t, err := time.Parse("2006-01-02", d)
+	if err != nil {
+		return ""
+	}
+	var inv time.Time
+	switch day := t.Day(); {
+	case day == 1:
+		inv = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+	case day <= 15:
+		inv = time.Date(t.Year(), t.Month(), 15, 0, 0, 0, 0, time.UTC)
+	default:
+		inv = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
+	}
+	return inv.Format("2006-01-02")
+}
 
 func isTruthy(s string) bool {
 	switch s {
