@@ -12,7 +12,7 @@ import (
 
 // PSAPortalTokenStore persists the single most-recent portal access token,
 // encrypted at rest. The id column is locked to 1 by a CHECK constraint
-// (migration 000014), so the table holds at most one row.
+// (migration 000016), so the table holds at most one row.
 type PSAPortalTokenStore struct {
 	db  *sql.DB
 	enc *crypto.AESEncryptor
