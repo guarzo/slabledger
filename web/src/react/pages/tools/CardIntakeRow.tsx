@@ -46,6 +46,7 @@ const STATUS_STYLE: Record<CertStatus, {
   importing: { leftBorder: 'var(--brand-500)',  pillBg: 'rgba(90,93,232,0.15)',         pillText: 'var(--brand-400)',  label: '⟳ Importing…' },
   imported:  { leftBorder: 'var(--success)',    pillBg: 'rgba(52,211,153,0.12)',        pillText: 'var(--success)',    label: '✓ Imported' },
   failed:    { leftBorder: 'var(--danger)',     pillBg: 'rgba(248,113,113,0.12)',       pillText: 'var(--danger)',     label: '✗ Failed' },
+  retry:     { leftBorder: 'var(--warning)',    pillBg: 'rgba(251,191,36,0.12)',        pillText: 'var(--warning)',    label: '↻ Will retry' },
 };
 
 function CertStatusPill({ status }: { status: CertStatus }) {
@@ -149,7 +150,7 @@ export function CertRowItem({
     row.dhPushStatus === 'unmatched' ||
     (row.dhPushStatus === undefined && !hasDHMatch(row))
   );
-  const showDismiss = row.status === 'failed' || listed ||
+  const showDismiss = row.status === 'failed' || row.status === 'retry' || listed ||
     (inPlaceableStatus && !canList && !busy && (dhPushStuck(row) || !awaitingSync));
 
   const canExpand = row.status === 'existing' || row.status === 'sold'
@@ -191,6 +192,11 @@ export function CertRowItem({
           )}
           {row.error && row.status === 'failed' && (
             <span className="text-xs text-[var(--danger)] truncate">{row.error}</span>
+          )}
+          {row.status === 'retry' && (
+            <span className="text-xs text-[var(--warning)] truncate">
+              PSA unavailable — staged to retry
+            </span>
           )}
           {(row.status === 'existing' || row.status === 'returned') && (
             <InlinePrice market={row.market} buyCostCents={row.buyCostCents} />

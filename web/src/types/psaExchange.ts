@@ -47,8 +47,3 @@ export interface PsaExchangeOpportunitiesResponse {
   enrichmentErrors: number;
   policy: PsaExchangePolicy;
 }
-
-export interface PsaExchangePolicySettings {
-  active: PsaExchangePolicy;
-  defaults: PsaExchangePolicy;
-}

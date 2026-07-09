@@ -51,9 +51,8 @@ func TestClient_BuildCollectionCard(t *testing.T) {
 				Number:           "SM162",
 				Player:           "Pikachu-Holo",
 				Variation:        "Promo-Tm.up Sngl.pk.blst.",
-				Condition:        "PSA 9",
-				GemRateID:        "fa48643a1a3fa08799b6913f46d1643427b5d6e8",
-				GemRateCondition: "g9",
+				GemRateID:        "psa-1813135",
+				GemRateCondition: "g8",
 				SlabSerial:       "69145695",
 				GradingCompany:   "psa",
 			},
@@ -69,8 +68,8 @@ func TestClient_BuildCollectionCard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildCollectionCard failed: %v", err)
 	}
-	if resp.GemRateID != "fa48643a1a3fa08799b6913f46d1643427b5d6e8" {
-		t.Errorf("gemRateID = %q, want fa48...", resp.GemRateID)
+	if resp.GemRateID != "psa-1813135" {
+		t.Errorf("gemRateID = %q, want psa-1813135", resp.GemRateID)
 	}
 	if resp.Player != "Pikachu-Holo" {
 		t.Errorf("player = %q, want Pikachu-Holo", resp.Player)
@@ -98,8 +97,8 @@ func TestClient_CardEstimate(t *testing.T) {
 		if !ok {
 			t.Fatalf("data is not a map: %T", req.Data)
 		}
-		if dataMap["gemRateId"] != "abc123" {
-			t.Errorf("gemRateId = %v, want abc123", dataMap["gemRateId"])
+		if dataMap["profileId"] != "psa-1813135" {
+			t.Errorf("profileId = %v, want psa-1813135", dataMap["profileId"])
 		}
 
 		json.NewEncoder(w).Encode(callableResponse[CardEstimateResponse]{ //nolint:errcheck
@@ -120,9 +119,9 @@ func TestClient_CardEstimate(t *testing.T) {
 		WithStaticToken("test-token"),
 	)
 	resp, err := client.CardEstimate(context.Background(), CardEstimateRequest{
-		GemRateID:      "abc123",
+		GemRateID:      "psa-1813135",
 		GradingCompany: "psa",
-		Condition:      "g9",
+		Condition:      "g8",
 		Description:    "Test Card",
 	})
 	if err != nil {
@@ -136,6 +135,38 @@ func TestClient_CardEstimate(t *testing.T) {
 	}
 	if resp.TwoWeekData.Velocity != 37 {
 		t.Errorf("twoWeekData.velocity = %d, want 37", resp.TwoWeekData.Velocity)
+	}
+}
+
+func TestClient_CardEstimate_QuotaExhaustedIsRateLimited(t *testing.T) {
+	// CL signals a daily-quota wall as a Firebase RESOURCE_EXHAUSTED envelope
+	// delivered with HTTP 200. The client must surface it as a non-retryable
+	// rate-limit error so the refresh scheduler can detect the wall and stop
+	// the cycle (rather than hammering through every remaining card).
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"error":{"message":"Daily request limit reached. Please try again tomorrow.","status":"RESOURCE_EXHAUSTED"}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithFunctionsURL(server.URL),
+		WithStaticToken("test-token"),
+	)
+	_, err := client.CardEstimate(context.Background(), CardEstimateRequest{
+		GemRateID: "abc123", GradingCompany: "psa", Condition: "g9",
+	})
+	if err == nil {
+		t.Fatal("expected an error on RESOURCE_EXHAUSTED")
+	}
+	if !apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
+		t.Errorf("error = %v, want ErrCodeProviderRateLimit", err)
+	}
+	// Non-retryable: the client should not have retried the callable.
+	if calls != 1 {
+		t.Errorf("server received %d calls, want 1 (rate-limit must not retry)", calls)
 	}
 }
 
@@ -184,6 +215,42 @@ func TestClient_CreateCollectionCard(t *testing.T) {
 	if doc.Fields["datePurchased"].TimestampValue == nil {
 		t.Error("datePurchased should be set")
 	}
+	if v := firestoreString(doc.Fields, "gemRateId"); v != "abc123" {
+		t.Errorf("doc gemRateId = %q, want abc123 (now the profileId)", v)
+	}
+	if v := firestoreString(doc.Fields, "condition"); v != "PSA 9" {
+		t.Errorf("doc condition = %q, want PSA 9 (display form)", v)
+	}
+}
+
+func TestClient_BuildCollectionCard_NewContract(t *testing.T) {
+	// Real httpbuildcollectioncard shape as of the 2026-06 CL migration:
+	// profileId + grade present; gemRateId / gemRateCondition / condition absent.
+	raw := `{"result":{"profileId":"psa-1813135","grade":"g8","player":"Articuno-Holo",` +
+		`"set":"Pokemon Japanese Web","year":"1999","number":"17","category":"Pokemon","pop":42}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(raw)) //nolint:errcheck
+	}))
+	defer server.Close()
+
+	client := NewClient(WithFunctionsURL(server.URL), WithStaticToken("test-token"))
+	resp, err := client.BuildCollectionCard(context.Background(), "158507531", "psa")
+	if err != nil {
+		t.Fatalf("BuildCollectionCard failed: %v", err)
+	}
+	if resp.GemRateID != "psa-1813135" {
+		t.Errorf("GemRateID = %q, want psa-1813135 (from profileId)", resp.GemRateID)
+	}
+	if resp.GemRateCondition != "g8" {
+		t.Errorf("GemRateCondition = %q, want g8 (from grade)", resp.GemRateCondition)
+	}
+	if resp.Condition != "PSA 8" {
+		t.Errorf("Condition = %q, want PSA 8 (derived display form)", resp.Condition)
+	}
+	if resp.Set != "Pokemon Japanese Web" {
+		t.Errorf("Set = %q, want Pokemon Japanese Web", resp.Set)
+	}
 }
 
 func TestDoCallable_MissingResult(t *testing.T) {
@@ -225,6 +292,50 @@ func TestDoCallable_MissingResult(t *testing.T) {
 			}
 			if appErr.Code != apperrors.ErrCodeProviderInvalidResp {
 				t.Errorf("error code = %q, want %q", appErr.Code, apperrors.ErrCodeProviderInvalidResp)
+			}
+		})
+	}
+}
+
+func TestCheckCallableError(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantNil  bool
+		wantCode apperrors.ErrorCode
+	}{
+		{
+			name:    "no error envelope → nil",
+			body:    `{"result": {"value": 1}}`,
+			wantNil: true,
+		},
+		{
+			name:     "RESOURCE_EXHAUSTED status → rate limited (non-retryable)",
+			body:     `{"error":{"message":"Daily request limit reached. Please try again tomorrow.","status":"RESOURCE_EXHAUSTED"}}`,
+			wantCode: apperrors.ErrCodeProviderRateLimit,
+		},
+		{
+			name:     "daily-limit message without status → rate limited",
+			body:     `{"error":{"message":"Daily request limit reached.","status":""}}`,
+			wantCode: apperrors.ErrCodeProviderRateLimit,
+		},
+		{
+			name:     "other callable error → unavailable",
+			body:     `{"error":{"message":"internal","status":"INTERNAL"}}`,
+			wantCode: apperrors.ErrCodeProviderUnavailable,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkCallableError([]byte(tc.body), "httpcardestimate")
+			if tc.wantNil {
+				if err != nil {
+					t.Fatalf("expected nil, got %v", err)
+				}
+				return
+			}
+			if !apperrors.HasErrorCode(err, tc.wantCode) {
+				t.Errorf("error = %v, want code %q", err, tc.wantCode)
 			}
 		})
 	}

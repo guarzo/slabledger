@@ -182,6 +182,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	// Portfolio endpoints
 	mux.Handle("GET /api/portfolio/health", authRoute(rt.campaignsHandler.HandlePortfolioHealth))
 	mux.Handle("GET /api/portfolio/snapshot", authRoute(rt.campaignsHandler.HandlePortfolioSnapshot))
+	mux.Handle("GET /api/portfolio/analysis", authRoute(rt.campaignsHandler.HandlePortfolioAnalysis))
 	mux.Handle("GET /api/portfolio/channel-velocity", authRoute(rt.campaignsHandler.HandlePortfolioChannelVelocity))
 	mux.Handle("GET /api/portfolio/insights", authRoute(rt.campaignsHandler.HandlePortfolioInsights))
 	mux.Handle("GET /api/portfolio/suggestions", authRoute(rt.campaignsHandler.HandleCampaignSuggestions))
@@ -303,8 +304,6 @@ func (rt *Router) registerPSAExchangeRoutes(mux *http.ServeMux) {
 		return
 	}
 	mux.Handle("GET /api/psa-exchange/opportunities", rt.authMW.RequireAuth(http.HandlerFunc(rt.psaExchangeHandler.HandleGetOpportunities)))
-	mux.Handle("GET /api/psa-exchange/policy", rt.authMW.RequireAuth(http.HandlerFunc(rt.psaExchangeHandler.HandleGetPolicy)))
-	mux.Handle("PUT /api/psa-exchange/policy", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaExchangeHandler.HandlePutPolicy)))
 	rt.logger.Info(context.Background(), "psa-exchange routes registered")
 }
 

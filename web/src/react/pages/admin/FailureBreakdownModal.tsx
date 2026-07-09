@@ -28,6 +28,7 @@ const REASON_DESCRIPTIONS: Record<string, string> = {
   no_cert_match: 'Purchase has no cert number to fallback-match',
   no_value: 'CL collection and cards catalog both reported $0',
   catalog_fallback: 'CL collection reported $0 — priced from the CL cards catalog instead',
+  quota_exhausted: 'CL daily request quota was hit — card was skipped, not attempted',
 };
 
 export function FailureBreakdownModal({ title, report, onClose }: Props) {

@@ -121,14 +121,16 @@ func (c *Client) FetchAllCollection(ctx context.Context, collectionID string) ([
 	return all, nil
 }
 
-// FetchSalesComps fetches sales comps for a card+grade.
+// FetchSalesComps fetches sales comps for a card+grade. The first argument is
+// the profileId (the post-2026-06 CL lookup key), passed through the param
+// historically named gemRateID.
 func (c *Client) FetchSalesComps(ctx context.Context, gemRateID, condition, grader string, page, limit int) (*SearchResponse[SaleComp], error) {
 	params := url.Values{
 		"index":   {"salesarchive"},
 		"query":   {""},
 		"page":    {strconv.Itoa(page)},
 		"limit":   {strconv.Itoa(limit)},
-		"filters": {fmt.Sprintf("condition:%s|gemRateId:%s|gradingCompany:%s", condition, gemRateID, grader)},
+		"filters": {fmt.Sprintf("condition:%s|profileId:%s|gradingCompany:%s", condition, gemRateID, grader)},
 		"sort":    {"date"},
 	}
 	var resp SearchResponse[SaleComp]

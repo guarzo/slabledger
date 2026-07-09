@@ -10,12 +10,13 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// DHInventorySnapshotFetcher returns the authoritative set of DH inventory IDs
-// currently present on DoubleHolo. Implementations must paginate internally
-// and return an error on any page failure — reconciliation relies on a
-// complete snapshot to avoid resetting healthy items.
+// DHInventorySnapshotFetcher returns the authoritative DH inventory currently
+// present on DoubleHolo, keyed by inventory ID with the DH-side status as the
+// value (in_stock/listed/sold). Implementations must paginate internally and
+// return an error on any page failure — reconciliation relies on a complete
+// snapshot to avoid resetting healthy items.
 type DHInventorySnapshotFetcher interface {
-	FetchAllInventoryIDs(ctx context.Context) (map[int]struct{}, error)
+	FetchAllInventory(ctx context.Context) (map[int]string, error)
 }
 
 // DHReconcilePurchaseLister lists unsold purchases for reconciliation.
@@ -35,13 +36,24 @@ type DHReconcileResetter interface {
 	ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error
 }
 
+// DHStatusRepairer corrects a local dh_status that disagrees with DH's
+// authoritative snapshot — notably the "" we persist for an undocumented
+// psa_import status like "skipped", which the checkpoint-gated inventory poll
+// would otherwise never backfill for an unchanged item. Kept separate from
+// DHReconcileResetter so the inline listing service (which only needs reset)
+// isn't forced to implement it.
+type DHStatusRepairer interface {
+	UpdatePurchaseDHStatus(ctx context.Context, purchaseID, status string) error
+}
+
 // ReconcileResult summarises a reconciliation run.
 type ReconcileResult struct {
-	Scanned     int      `json:"scanned"`     // DH-linked unsold purchases examined (DHInventoryID != 0)
-	MissingOnDH int      `json:"missingOnDH"` // purchases whose DHInventoryID was not present on DH
-	Reset       int      `json:"reset"`       // purchases successfully flipped to pending
-	Errors      []string `json:"errors"`      // per-item reset errors (purchaseID: message)
-	ResetIDs    []string `json:"resetIds"`    // purchase IDs that were reset
+	Scanned        int      `json:"scanned"`        // DH-linked unsold purchases examined (DHInventoryID != 0)
+	MissingOnDH    int      `json:"missingOnDH"`    // purchases whose DHInventoryID was not present on DH
+	Reset          int      `json:"reset"`          // purchases successfully flipped to pending
+	StatusRepaired int      `json:"statusRepaired"` // purchases whose local dh_status was corrected from DH's snapshot
+	Errors         []string `json:"errors"`         // per-item reset errors (purchaseID: message)
+	ResetIDs       []string `json:"resetIds"`       // purchase IDs that were reset
 }
 
 // Reconciler detects drift between local DH linkage and the authoritative DH
@@ -55,6 +67,7 @@ type reconcileService struct {
 	fetcher   DHInventorySnapshotFetcher
 	purchases DHReconcilePurchaseLister
 	resetter  DHReconcileResetter
+	repairer  DHStatusRepairer  // optional: when set, repairs local dh_status drift from DH's snapshot
 	eventRec  dhevents.Recorder // optional: when set, every reset emits a TypeUnlisted event
 	logger    observability.Logger
 }
@@ -67,6 +80,13 @@ type ReconcilerOption func(*reconcileService)
 // invisible outside the logs.
 func WithReconcileEventRecorder(r dhevents.Recorder) ReconcilerOption {
 	return func(s *reconcileService) { s.eventRec = r }
+}
+
+// WithReconcileStatusRepairer enables repair of local dh_status drift against
+// DH's authoritative snapshot. Without it, the reconciler only detects
+// unlisted-on-DH items and never corrects a stale/empty local status.
+func WithReconcileStatusRepairer(r DHStatusRepairer) ReconcilerOption {
+	return func(s *reconcileService) { s.repairer = r }
 }
 
 // NewReconciler constructs a Reconciler. All positional dependencies are required.
@@ -107,7 +127,7 @@ func NewReconciler(
 // aborts the run with zero resets, so a partial snapshot never flips healthy
 // items back to pending.
 func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, error) {
-	dhIDs, err := s.fetcher.FetchAllInventoryIDs(ctx)
+	dhInv, err := s.fetcher.FetchAllInventory(ctx)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("fetch DH snapshot: %w", err)
 	}
@@ -123,7 +143,41 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 			continue
 		}
 		result.Scanned++
-		if _, ok := dhIDs[p.DHInventoryID]; ok {
+		dhStatus, onDH := dhInv[p.DHInventoryID]
+		if onDH {
+			// Healthy linkage. Repair the local dh_status if it disagrees with
+			// DH's authoritative value. This is the durable backfill for rows
+			// we deliberately persisted as "" (an undocumented psa_import status
+			// like "skipped"): the checkpoint-gated inventory poll never
+			// re-fetches an unchanged item, but this full sweep always sees it.
+			// Repair only between the listable statuses (in_stock/listed), in
+			// both directions:
+			//   - never ADOPT "sold" from the snapshot — "sold" is owned by the
+			//     orders poll, which also writes the campaign_sales row; stamping
+			//     it here would mark an unsold purchase sold with no sale behind
+			//     it (the same boundary dh_inventory_poll guards). These rows
+			//     come from ListAllUnsoldPurchases, so a snapshot "sold" is a
+			//     transient disagreement the orders poll resolves.
+			//   - never OVERWRITE a local "sold" — a recorded sale outranks a
+			//     stale DH listing that hasn't been retired yet.
+			if s.repairer != nil {
+				target := inventory.NormalizeDHStatus(dhStatus)
+				local := string(p.DHStatus)
+				targetListable := target == inventory.DHStatusInStock || target == inventory.DHStatusListed
+				localRepairable := local != inventory.DHStatusSold
+				if targetListable && localRepairable && target != local {
+					if err := s.repairer.UpdatePurchaseDHStatus(ctx, p.ID, target); err != nil {
+						s.logger.Warn(ctx, "dh reconcile: status repair failed",
+							observability.String("purchaseID", p.ID),
+							observability.Int("dhInventoryID", p.DHInventoryID),
+							observability.String("from", local),
+							observability.String("to", target),
+							observability.Err(err))
+					} else {
+						result.StatusRepaired++
+					}
+				}
+			}
 			continue
 		}
 		result.MissingOnDH++
@@ -163,8 +217,9 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 		observability.Int("scanned", result.Scanned),
 		observability.Int("missingOnDH", result.MissingOnDH),
 		observability.Int("reset", result.Reset),
+		observability.Int("statusRepaired", result.StatusRepaired),
 		observability.Int("errors", len(result.Errors)),
-		observability.Int("dhInventoryCount", len(dhIDs)))
+		observability.Int("dhInventoryCount", len(dhInv)))
 
 	return result, nil
 }

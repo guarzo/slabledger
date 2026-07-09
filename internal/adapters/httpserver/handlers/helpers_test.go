@@ -86,3 +86,24 @@ func TestServiceCallVoid_Error(t *testing.T) {
 		t.Fatalf("expected 500, got %d", w.Code)
 	}
 }
+
+func TestParsePaginationCeiling(t *testing.T) {
+	tests := []struct {
+		query     string
+		wantLimit int
+	}{
+		{"", 50},
+		{"?limit=200", 200},
+		{"?limit=5000", 5000},
+		{"?limit=10000", 10000},
+		{"?limit=10001", 50}, // over ceiling → default
+		{"?limit=0", 50},
+	}
+	for _, tt := range tests {
+		r := httptest.NewRequest(http.MethodGet, "/x"+tt.query, nil)
+		limit, _ := parsePagination(r)
+		if limit != tt.wantLimit {
+			t.Errorf("%q: limit = %d, want %d", tt.query, limit, tt.wantLimit)
+		}
+	}
+}

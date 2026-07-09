@@ -252,14 +252,14 @@ func NewInventorySnapshotAdapter(client interface {
 	return &InventorySnapshotAdapter{client: client}
 }
 
-// FetchAllInventoryIDs paginates GET /inventory with no filters and returns
-// the set of DH inventory IDs. Any page error fails the whole call so the
-// reconciler never acts on a partial snapshot. Pagination stops on the first
-// short or empty page rather than trusting Meta.TotalCount — an underreported
-// total would cause us to treat a partial snapshot as complete and
-// incorrectly reset healthy items.
-func (a *InventorySnapshotAdapter) FetchAllInventoryIDs(ctx context.Context) (map[int]struct{}, error) {
-	ids := make(map[int]struct{})
+// FetchAllInventory paginates GET /inventory with no filters and returns the
+// DH inventory keyed by inventory ID with the DH-side status as the value. Any
+// page error fails the whole call so the reconciler never acts on a partial
+// snapshot. Pagination stops on the first short or empty page rather than
+// trusting Meta.TotalCount — an underreported total would cause us to treat a
+// partial snapshot as complete and incorrectly reset healthy items.
+func (a *InventorySnapshotAdapter) FetchAllInventory(ctx context.Context) (map[int]string, error) {
+	inv := make(map[int]string)
 	for page := 1; page <= maxSnapshotPages; page++ {
 		resp, err := a.client.ListInventory(ctx, dh.InventoryFilters{
 			Page:    page,
@@ -270,11 +270,11 @@ func (a *InventorySnapshotAdapter) FetchAllInventoryIDs(ctx context.Context) (ma
 		}
 		for _, item := range resp.Items {
 			if item.DHInventoryID != 0 {
-				ids[item.DHInventoryID] = struct{}{}
+				inv[item.DHInventoryID] = item.Status
 			}
 		}
 		if len(resp.Items) < snapshotPageSize {
-			return ids, nil
+			return inv, nil
 		}
 	}
 	return nil, fmt.Errorf("DH snapshot: exceeded max pages (%d), possible API miscount", maxSnapshotPages)

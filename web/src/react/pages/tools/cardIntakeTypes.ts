@@ -1,6 +1,6 @@
 import type { MarketSnapshot } from '../../../types/campaigns';
 
-export type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'importing' | 'imported';
+export type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'retry' | 'importing' | 'imported';
 export type ListingStatus = 'setting-price' | 'listing' | 'listed' | 'list-error';
 
 export interface CertRow {
@@ -49,9 +49,16 @@ export function rowIsListable(row: CertRow): boolean {
   return !!row.purchaseId && hasDHInventory(row) && hasCLPrice(row);
 }
 
+// importErrorStatus maps a per-cert import error to its resulting terminal
+// row status: transient (retryable) failures are staged as 'retry' so the
+// operator can re-import them, permanent failures become terminal 'failed'.
+export function importErrorStatus(err: { retryable?: boolean }): Extract<CertStatus, 'retry' | 'failed'> {
+  return err.retryable ? 'retry' : 'failed';
+}
+
 export function rowAwaitingSync(row: CertRow): boolean {
   if (row.listingStatus === 'listed') return false;
-  if (row.status === 'failed' || row.status === 'sold') return false;
+  if (row.status === 'failed' || row.status === 'retry' || row.status === 'sold') return false;
   if (row.status === 'resolving') return true;
   if ((row.status === 'existing' || row.status === 'returned' || row.status === 'imported') && !rowIsListable(row)) {
     if (dhPushStuck(row)) return false;

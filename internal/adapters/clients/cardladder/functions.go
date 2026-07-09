@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 const defaultFunctionsBaseURL = "https://us-central1-cardladder-71d53.cloudfunctions.net"
@@ -20,6 +22,12 @@ func (c *Client) BuildCollectionCard(ctx context.Context, cert, grader string) (
 	}, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("build collection card for cert %s: %w", cert, err)
+	}
+	// The API returns grade in firestore form ("g8"); derive the display form
+	// ("PSA 8") that cl_condition and the card label require. Centralizing this
+	// here keeps every downstream consumer (refresh, push) unchanged.
+	if resp.Result.GemRateCondition != "" {
+		resp.Result.Condition = cardutil.ConditionToAPIFormat(resp.Result.GemRateCondition)
 	}
 	return &resp.Result, nil
 }
@@ -102,7 +110,17 @@ func checkCallableError(body []byte, functionName string) error {
 		} `json:"error"`
 	}
 	if json.Unmarshal(body, &callableErr) == nil && callableErr.Error.Message != "" {
-		return apperrors.ProviderUnavailable("CardLadder", fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status))
+		detail := fmt.Errorf("callable %s: %s (status: %s)", functionName, callableErr.Error.Message, callableErr.Error.Status)
+		// CL's daily quota surfaces as a Firebase RESOURCE_EXHAUSTED envelope
+		// (HTTP 200 body, message "Daily request limit reached"). Classify it as
+		// a rate limit, not generic unavailability: rate-limit errors are
+		// non-retryable (retrying burns more quota) and let callers detect the
+		// quota wall and stop the cycle instead of hammering through every
+		// remaining card.
+		if callableErr.Error.Status == "RESOURCE_EXHAUSTED" || strings.Contains(callableErr.Error.Message, "Daily request limit") {
+			return apperrors.ProviderRateLimited("CardLadder", "")
+		}
+		return apperrors.ProviderUnavailable("CardLadder", detail)
 	}
 	return nil
 }

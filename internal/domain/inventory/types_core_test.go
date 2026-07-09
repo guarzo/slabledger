@@ -107,3 +107,52 @@ func TestNeedsDHPush(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeDHStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "in_stock passes through", in: DHStatusInStock, want: DHStatusInStock},
+		{name: "listed passes through", in: DHStatusListed, want: DHStatusListed},
+		{name: "sold passes through", in: DHStatusSold, want: DHStatusSold},
+		{name: "undocumented skipped is rejected", in: "skipped", want: ""},
+		{name: "failed is rejected", in: "failed", want: ""},
+		{name: "empty stays empty", in: "", want: ""},
+		{name: "arbitrary garbage is rejected", in: "in-stock", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NormalizeDHStatus(tc.in); got != tc.want {
+				t.Errorf("NormalizeDHStatus(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDHStatusForPush(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want DHStatus
+	}{
+		{name: "listed passes through", in: DHStatusListed, want: DHStatusListed},
+		{name: "in_stock passes through", in: DHStatusInStock, want: DHStatusInStock},
+		{name: "sold passes through", in: DHStatusSold, want: DHStatusSold},
+		{name: "empty (new push) defaults to in_stock", in: "", want: DHStatusInStock},
+		// A non-inventory value (e.g. DH's psa_import "skipped" = already
+		// present, untouched) must NOT be guessed as in_stock — that would let
+		// the price-sync PATCH delist a real "listed" item. Drop to "" so the
+		// inventory poll backfills DH's authoritative status.
+		{name: "skipped drops to empty for poll backfill", in: "skipped", want: ""},
+		{name: "failed drops to empty", in: "failed", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DHStatusForPush(tc.in); got != tc.want {
+				t.Errorf("DHStatusForPush(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

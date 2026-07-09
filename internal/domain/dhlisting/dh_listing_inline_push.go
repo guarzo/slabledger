@@ -113,17 +113,16 @@ func (s *dhListingService) persistInlinePSAImport(ctx context.Context, p *invent
 		}
 	}
 
-	dhStatus := r.DHStatus
-	if dhStatus == "" {
-		dhStatus = string(inventory.DHStatusInStock)
-	}
+	// Map DH's psa_import status to the value to persist; see
+	// inventory.DHStatusForPush for why "skipped" must not become in_stock.
+	dhStatus := inventory.DHStatusForPush(r.DHStatus)
 
 	if s.fieldsUpdater != nil {
 		if err := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
 			CardID:      r.DHCardID,
 			InventoryID: r.DHInventoryID,
 			CertStatus:  DHCertStatusMatched,
-			DHStatus:    inventory.DHStatus(dhStatus),
+			DHStatus:    dhStatus,
 		}); err != nil {
 			s.logger.Error(ctx, "inline dh psa_import: failed to persist DH fields — returning 0 to prevent duplicate push",
 				observability.String("cert", p.CertNumber), observability.Err(err))

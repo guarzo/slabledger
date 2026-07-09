@@ -68,6 +68,12 @@ export interface ExternalImportItemResult {
 export interface CertImportError {
   certNumber: string;
   error: string;
+  /**
+   * True when the failure was transient (PSA API down, daily quota exhausted,
+   * timeout) rather than permanent (cert not found). The intake screen stages
+   * retryable failures for re-import instead of discarding them.
+   */
+  retryable?: boolean;
 }
 
 export interface CertImportResult {

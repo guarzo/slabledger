@@ -164,7 +164,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		pxeService = psaexchange.NewService(pxeClient,
 			psaexchange.WithLogger(logger),
 			psaexchange.WithPolicy(policy),
-			psaexchange.WithPolicyStore(postgres.NewPSAExchangePolicyStore(in.DB.DB)),
 		)
 	}
 	psaExchangeHandler := handlers.NewPSAExchangeHandler(pxeService, logger)
@@ -173,6 +172,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var dhHandler *handlers.DHHandler
 	if in.DHClient != nil && in.DHClient.EnterpriseAvailable() {
 		var reconcileOpts []dhlisting.ReconcilerOption
+		reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileStatusRepairer(in.PurchaseStore))
 		if in.DHEventStore != nil {
 			reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileEventRecorder(in.DHEventStore))
 		}

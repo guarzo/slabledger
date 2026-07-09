@@ -2,14 +2,13 @@ package scheduler
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/constants"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -77,6 +76,8 @@ type CLRunStats struct {
 	CertResolveFailed int       `json:"certResolveFailed"` // BuildCollectionCard errored or returned no gemRateID.
 	EstimateFailed    int       `json:"estimateFailed"`    // CardEstimate callable errored after cert resolved.
 	NoValue           int       `json:"noValue"`           // Resolved to gemRateID but CardEstimate returned no value.
+	QuotaExhausted    bool      `json:"quotaExhausted"`    // CL daily request quota was hit; remaining estimates were skipped this cycle.
+	SkippedQuota      int       `json:"skippedQuota"`      // Cards skipped (not attempted) after the quota wall was hit this cycle.
 	CardsPushed       int       `json:"cardsPushed"`       // Cards pushed to CL remote collection (UI hygiene).
 	CardsRemoved      int       `json:"cardsRemoved"`      // Sold cards removed from CL remote collection (UI hygiene).
 }
@@ -176,13 +177,15 @@ func (s *CardLadderRefreshScheduler) Start(ctx context.Context) {
 		Logger:       s.logger,
 		LogFields:    []observability.Field{observability.Int("refreshHour", s.config.RefreshHour)},
 	}, func(ctx context.Context) {
-		s.runOnce(ctx) //nolint:errcheck
+		s.runOnce(ctx, true) //nolint:errcheck
 	})
 }
 
-// RunOnce runs a single refresh cycle. Exported for manual trigger.
+// RunOnce runs a single refresh cycle. Exported for manual trigger. The manual
+// path is never gated by the already-ran-today check — an operator pressing
+// "Refresh" wants a real run even if the scheduled sweep already happened today.
 func (s *CardLadderRefreshScheduler) RunOnce(ctx context.Context) error {
-	return s.runOnce(ctx)
+	return s.runOnce(ctx, false)
 }
 
 // PriceSinglePurchase resolves and applies CL pricing for one purchase on
@@ -238,7 +241,7 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 		mappingByCert[p.CertNumber] = *m
 	}
 
-	gemRateID, condition, ok := s.resolveGemRate(ctx, client, p, mappingByCert)
+	gemRateID, condition, ok, _ := s.resolveGemRate(ctx, client, p, mappingByCert)
 	if !ok {
 		return nil // resolveGemRate already recorded the failure reason.
 	}
@@ -295,8 +298,26 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 //  4. Apply values to purchases; record per-purchase errors for the admin UI.
 //  5. Phase 2 (sales comps), Phase 4 (push to CL remote for UI hygiene),
 //     Phase 5 (remove sold cards from CL remote).
-func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
+func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) error {
 	start := time.Now()
+
+	// On the scheduler path, skip if a full refresh already completed today
+	// (UTC). The loop runs runOnce immediately on startup whenever RefreshHour
+	// has already passed today (timeUntilHour → 0), so every redeploy after
+	// 04:00 UTC would otherwise replay the entire CardEstimate sweep — the
+	// dominant driver of the daily-quota exhaustion. GetLastRunStats reads the
+	// persisted last-run across restarts (the stats store is always wired in
+	// production), so this survives process bounces. A genuine missed window
+	// (machine down at 04:00, booted later with no run today) still runs. The
+	// manual trigger passes gated=false to bypass this — an operator pressing
+	// "Refresh" wants a real run.
+	if gated {
+		if last := s.GetLastRunStats(ctx); last != nil && sameUTCDate(last.LastRunAt, start) {
+			s.logger.Info(ctx, "CL refresh: already ran today, skipping startup catch-up",
+				observability.String("lastRunAt", last.LastRunAt.UTC().Format(time.RFC3339)))
+			return nil
+		}
+	}
 
 	client := s.getClient()
 	if client == nil {
@@ -351,7 +372,17 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 			continue
 		}
 
-		gemRateID, condition, ok := s.resolveGemRate(ctx, client, p, mappingByCert)
+		gemRateID, condition, ok, quotaHit := s.resolveGemRate(ctx, client, p, mappingByCert)
+		if quotaHit {
+			// CL quota wall hit during cert resolution. Stop resolving — every
+			// further BuildCollectionCard would fail identically. Mark the run
+			// so Phase 2+3 also short-circuits its estimate calls.
+			stats.QuotaExhausted = true
+			stats.CertResolveFailed++
+			s.logger.Warn(ctx, "CL refresh: daily quota exhausted during resolve, stopping cert resolution this cycle",
+				observability.Int("resolvedSoFar", len(resolvedPurchases)))
+			break
+		}
 		if !ok {
 			stats.CertResolveFailed++
 			continue
@@ -362,19 +393,50 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		resolvedPurchases = append(resolvedPurchases, resolved{p, gemRateID, condition})
 	}
 
-	// Phase 2+3: fetch the live CardEstimate for each resolved (gemRateID,
-	// condition) pair and apply it. One callable per card — the public `cards`
-	// search index doesn't reliably surface the gemRateIDs BuildCollectionCard
-	// returns, so we hit the canonical estimate function directly.
+	// Phase 2+3: fetch the live CardEstimate for each resolved purchase and
+	// apply it. Successful and no-value estimates are cached per (gemRateID,
+	// condition) so multiple physical copies of the same card cost a single
+	// callable — the dominant fix for quota burn, since the index doesn't
+	// reliably surface these gemRateIDs and we hit the canonical estimate
+	// function directly. (A hard error is not cached, so a persistently-failing
+	// card still retries once per copy — acceptable, and lets transient errors
+	// recover.) When CL's daily quota is hit, stop making further estimate calls
+	// for this cycle (they would all fail identically) but keep applying values
+	// we already fetched this run.
+	type estimateKey struct{ gemRateID, condition string }
+	estimates := make(map[estimateKey]float64, len(resolvedPurchases))
 	for _, r := range resolvedPurchases {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		value, err := s.fetchCLEstimate(ctx, client, r.gemRateID, r.condition, r.purchase.CardName)
-		if err != nil {
-			stats.EstimateFailed++
-			s.recordCLError(ctx, r.purchase.ID, CLReasonAPIError)
-			continue
+		key := estimateKey{r.gemRateID, r.condition}
+		value, cached := estimates[key]
+		if !cached {
+			if stats.QuotaExhausted {
+				// Quota wall already hit this cycle — don't burn more calls.
+				// Tagged quota_exhausted (not api_error) so the admin /failures
+				// view doesn't read these as genuine CL failures: they were
+				// never attempted.
+				stats.SkippedQuota++
+				s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted)
+				continue
+			}
+			var err error
+			value, err = s.fetchCLEstimate(ctx, client, r.gemRateID, r.condition, r.purchase.CardName)
+			if err != nil {
+				if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
+					stats.QuotaExhausted = true
+					stats.SkippedQuota++
+					s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted)
+					s.logger.Warn(ctx, "CL refresh: daily quota exhausted, skipping remaining estimates this cycle",
+						observability.Int("updatedSoFar", stats.Updated))
+					continue
+				}
+				stats.EstimateFailed++
+				s.recordCLError(ctx, r.purchase.ID, CLReasonAPIError)
+				continue
+			}
+			estimates[key] = value
 		}
 		if value <= 0 {
 			stats.NoValue++
@@ -448,6 +510,8 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 		observability.Int("certResolveFailed", stats.CertResolveFailed),
 		observability.Int("estimateFailed", stats.EstimateFailed),
 		observability.Int("noValue", stats.NoValue),
+		observability.Bool("quotaExhausted", stats.QuotaExhausted),
+		observability.Int("skippedQuota", stats.SkippedQuota),
 		observability.Int("cardsPushed", stats.CardsPushed),
 		observability.Int("cardsRemoved", stats.CardsRemoved))
 
@@ -458,108 +522,4 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context) error {
 	s.persistStats(ctx, stats)
 
 	return nil
-}
-
-// resolveGemRate returns the (gemRateID, condition) pair for a purchase, using
-// the cached mapping when possible and calling BuildCollectionCard when not.
-// On success it persists the mapping and the purchase's gemRateID. On failure
-// it records a CLReasonAPIError tag and returns ok=false.
-func (s *CardLadderRefreshScheduler) resolveGemRate(
-	ctx context.Context,
-	client *cardladder.Client,
-	p *inventory.Purchase,
-	mappingByCert map[string]postgres.CLCardMapping,
-) (gemRateID, condition string, ok bool) {
-	// Bypass the cache when set_name is generic so BuildCollectionCard fires
-	// and the repair block below (which needs resp.Set) can run. Without this,
-	// rows with pre-existing cached mappings (typical for certs whose previous
-	// CL resolution only populated gemRateID+condition) would keep their
-	// generic set_name forever.
-	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLGemRateID != "" && m.CLCondition != "" && !constants.IsGenericSetName(p.SetName) {
-		return m.CLGemRateID, m.CLCondition, true
-	}
-
-	grader := strings.ToLower(p.Grader)
-	if grader == "" {
-		grader = "psa"
-	}
-
-	resp, err := client.BuildCollectionCard(ctx, p.CertNumber, grader)
-	if err != nil {
-		s.logger.Warn(ctx, "CL refresh: BuildCollectionCard failed",
-			observability.String("cert", p.CertNumber),
-			observability.Err(err))
-		s.recordCLError(ctx, p.ID, CLReasonAPIError)
-		return "", "", false
-	}
-	if resp.GemRateID == "" || resp.Condition == "" {
-		s.logger.Warn(ctx, "CL refresh: BuildCollectionCard returned no gemRateID or condition",
-			observability.String("cert", p.CertNumber),
-			observability.String("gemRateId", resp.GemRateID),
-			observability.String("condition", resp.Condition))
-		s.recordCLError(ctx, p.ID, CLReasonCertResolveFailed)
-		return "", "", false
-	}
-
-	if err := s.store.SaveMappingPricing(ctx, p.CertNumber, resp.GemRateID, resp.Condition); err != nil {
-		s.logger.Warn(ctx, "CL refresh: failed to save pricing mapping",
-			observability.String("cert", p.CertNumber),
-			observability.Err(err))
-		// Soft failure — we can still price this run, but the mapping won't
-		// be cached next run. Return the resolved values anyway.
-	} else {
-		mappingByCert[p.CertNumber] = postgres.CLCardMapping{
-			SlabSerial:  p.CertNumber,
-			CLGemRateID: resp.GemRateID,
-			CLCondition: resp.Condition,
-		}
-	}
-	if s.gemRateUpdater != nil {
-		if p.GemRateID == "" {
-			if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, p.ID, resp.GemRateID); err != nil {
-				s.logger.Warn(ctx, "CL refresh: failed to persist gemRateID on purchase",
-					observability.String("cert", p.CertNumber),
-					observability.Err(err))
-			} else {
-				p.GemRateID = resp.GemRateID
-			}
-		}
-		if resp.Player != "" || resp.Variation != "" || resp.Category != "" {
-			if err := s.gemRateUpdater.UpdatePurchaseCLCardMetadata(ctx, p.ID, resp.Player, resp.Variation, resp.Category); err != nil {
-				s.logger.Warn(ctx, "CL refresh: failed to persist card metadata",
-					observability.String("cert", p.CertNumber),
-					observability.Err(err))
-			}
-		}
-		// Repair set_name when PSA returned a generic value (e.g. "TCG Cards"
-		// for older certs). CL's Set field carries the real set for any cert
-		// CL can resolve, so adopt it only when the current value is generic.
-		if constants.IsGenericSetName(p.SetName) && !constants.IsGenericSetName(resp.Set) {
-			if err := s.gemRateUpdater.UpdatePurchaseSetName(ctx, p.ID, resp.Set); err != nil {
-				s.logger.Warn(ctx, "CL refresh: failed to persist set name from CL",
-					observability.String("cert", p.CertNumber),
-					observability.String("clSet", resp.Set),
-					observability.Err(err))
-			} else {
-				p.SetName = resp.Set
-			}
-		}
-	}
-	return resp.GemRateID, resp.Condition, true
-}
-
-// shouldReenrollForCLChange returns true when a CL value change should
-// trigger DH push-pipeline re-enrollment. Two qualifying cases:
-//  1. Already-pushed rows (DHInventoryID != 0) — re-enrolled so DH picks up
-//     the new price.
-//  2. Received-but-unmatched rows — re-enrolled so a fresh cert resolve is
-//     attempted with the new market value, which may push it above a floor.
-func shouldReenrollForCLChange(p *inventory.Purchase) bool {
-	if p.DHInventoryID != 0 {
-		return true
-	}
-	if p.ReceivedAt != nil && (p.DHPushStatus == inventory.DHPushStatusUnmatched || p.DHPushStatus == "") {
-		return true
-	}
-	return false
 }

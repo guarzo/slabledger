@@ -122,6 +122,10 @@ func (h *DHHandler) runBulkMatch(ctx context.Context, purchases []inventory.Purc
 				observability.String("existing_id", existingID))
 		}
 
+		// Note: p.GemRateID now holds a CardLadder profileId (psa-<n>), not the
+		// legacy hash DH uses for direct lookup. DH treats gemrate_id only as a
+		// fuzzy-match-skip hint and still resolves correctly by cert_number, so
+		// this degrades gracefully (loses the optimization, not the match).
 		cardName, variant := dhlisting.CleanCardNameForDH(p.CardName)
 		req := dh.CertResolveRequest{
 			CertNumber: p.CertNumber,
@@ -334,7 +338,7 @@ func (h *DHHandler) pushMatchedToDH(ctx context.Context, purchases []inventory.P
 				CertStatus:        dh.CertStatusMatched,
 				ListingPriceCents: r.AssignedPriceCents,
 				ChannelsJSON:      dh.MarshalChannels(r.Channels),
-				DHStatus:          inventory.DHStatus(r.Status),
+				DHStatus:          inventory.DHStatusForPush(r.Status),
 			}); err != nil {
 				h.logger.Warn(ctx, "push to DH: failed to persist inventory ID",
 					observability.String("cert", r.CertNumber),
