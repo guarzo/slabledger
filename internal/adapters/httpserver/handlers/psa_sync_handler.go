@@ -24,33 +24,30 @@ type PSASyncPurchaseCreator interface {
 
 // PSASyncHandlerConfig holds dependencies for the PSA sync handler.
 type PSASyncHandlerConfig struct {
-	PendingRepo   inventory.PendingItemRepository
-	Refresher     PSASyncRefresher       // optional
-	Service       PSASyncPurchaseCreator // optional
-	SpreadsheetID string
-	Interval      string
-	Logger        observability.Logger
+	PendingRepo inventory.PendingItemRepository
+	Refresher   PSASyncRefresher       // optional
+	Service     PSASyncPurchaseCreator // optional
+	Interval    string
+	Logger      observability.Logger
 }
 
 // PSASyncHandler serves PSA sync status and pending-item CRUD endpoints.
 type PSASyncHandler struct {
-	pendingRepo   inventory.PendingItemRepository
-	refresher     PSASyncRefresher
-	service       PSASyncPurchaseCreator
-	spreadsheetID string
-	interval      string
-	logger        observability.Logger
+	pendingRepo inventory.PendingItemRepository
+	refresher   PSASyncRefresher
+	service     PSASyncPurchaseCreator
+	interval    string
+	logger      observability.Logger
 }
 
 // NewPSASyncHandler creates a new PSASyncHandler from the given config.
 func NewPSASyncHandler(cfg PSASyncHandlerConfig) *PSASyncHandler {
 	return &PSASyncHandler{
-		pendingRepo:   cfg.PendingRepo,
-		refresher:     cfg.Refresher,
-		service:       cfg.Service,
-		spreadsheetID: cfg.SpreadsheetID,
-		interval:      cfg.Interval,
-		logger:        cfg.Logger,
+		pendingRepo: cfg.PendingRepo,
+		refresher:   cfg.Refresher,
+		service:     cfg.Service,
+		interval:    cfg.Interval,
+		logger:      cfg.Logger,
 	}
 }
 
@@ -59,10 +56,11 @@ func NewPSASyncHandler(cfg PSASyncHandlerConfig) *PSASyncHandler {
 func (h *PSASyncHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// "configured" means the PSA portal sync is wired (a scheduler/refresher exists);
+	// the daily run is separately gated by PSA_SYNC_ENABLED.
 	resp := map[string]any{
-		"configured":    h.spreadsheetID != "",
-		"spreadsheetId": h.spreadsheetID,
-		"interval":      h.interval,
+		"configured": h.refresher != nil,
+		"interval":   h.interval,
 	}
 
 	if h.refresher != nil {

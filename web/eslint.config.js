@@ -131,4 +131,16 @@ export default [
       'react-hooks/exhaustive-deps': 'off',
     },
   },
+  // Node.js scripts (e.g. the PSA token harvester) run under Node with ESM.
+  {
+    files: ['scripts/**/*.{js,mjs}'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
 ];
