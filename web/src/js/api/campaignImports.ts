@@ -76,7 +76,7 @@ proto.globalImportPSA = async function (this: APIClient, file: File): Promise<PS
   return this.uploadFile<PSAImportResult>('/purchases/import-psa', file);
 };
 
-// PSA Google Sheets sync
+// PSA portal sync (manual trigger)
 proto.syncPSASheets = async function (this: APIClient): Promise<PSAImportResult> {
   return this.post<PSAImportResult>('/purchases/sync-psa-sheets', {});
 };

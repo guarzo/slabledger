@@ -442,3 +442,7 @@ Tier A: the Layer-4 reviewer may append rows here whenever an in-session
 correction reveals a previously uncatalogued gotcha. The reviewer copies the
 five-subsection schema exactly. New rows do not require operator approval before
 landing.
+
+## CL cards-index `currentValue` is a model value, not last trade (added 2026-07-07)
+
+CL's `cards` search index `currentValue`/`marketValue` is Card Ladder's modeled valuation. On thin-comp or stale cards (old `lastSoldDate`, low `numSales`) it can diverge badly from realizable price **in either direction** — verified 2026-07-07: Jungle Flareon No Symbol Holo PSA 10 showed `currentValue` $3,923 while its actual last PSA 10 sale (salesarchive, 2025-09-14) was $1,725, >2× apart. Never treat `currentValue` on a stale card as a buyable anchor; pull the `salesarchive` index (`filters=condition:g10`-style short codes; titles mix graders — filter for "PSA") for actual dated sales before citing a market price. This is the external-data cousin of the CL-drift contamination: terms × unreliable CL = uncontrolled exposure (ledger R-006, CL-Confidence section).

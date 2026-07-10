@@ -16,23 +16,27 @@ var ErrSyncInProgress = fmt.Errorf("PSA sync already in progress")
 
 // PSASyncRunStats holds in-memory stats from the last PSA sync run.
 type PSASyncRunStats struct {
-	LastRunAt   time.Time `json:"lastRunAt"`
-	DurationMs  int64     `json:"durationMs"`
-	LastError   string    `json:"lastError,omitempty"` // non-empty if the run failed
-	Allocated   int       `json:"allocated"`
-	Updated     int       `json:"updated"`
-	Refunded    int       `json:"refunded"`
-	Unmatched   int       `json:"unmatched"`
-	Ambiguous   int       `json:"ambiguous"`
-	Skipped     int       `json:"skipped"`
-	Failed      int       `json:"failed"`
-	TotalRows   int       `json:"totalRows"`
-	ParseErrors int       `json:"parseErrors"`
+	LastRunAt  time.Time `json:"lastRunAt"`
+	DurationMs int64     `json:"durationMs"`
+	LastError  string    `json:"lastError,omitempty"` // non-empty if the run failed
+	Allocated  int       `json:"allocated"`
+	Updated    int       `json:"updated"`
+	Refunded   int       `json:"refunded"`
+	Unmatched  int       `json:"unmatched"`
+	Ambiguous  int       `json:"ambiguous"`
+	Skipped    int       `json:"skipped"`
+	Failed     int       `json:"failed"`
+	TotalRows  int       `json:"totalRows"`
 }
 
-// SheetFetcher fetches sheet data as a 2D string grid.
-type SheetFetcher interface {
-	ReadSheet(ctx context.Context, spreadsheetID, sheetName string) ([][]string, error)
+// RowProvider fetches PSA export rows from the portal.
+type RowProvider interface {
+	FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error)
+}
+
+// TokenRefresher ensures the stored access token is fresh before each fetch.
+type TokenRefresher interface {
+	EnsureFreshToken(ctx context.Context) error
 }
 
 // PSAImporter runs the PSA import pipeline.
@@ -42,41 +46,50 @@ type PSAImporter interface {
 
 var _ Scheduler = (*PSASyncScheduler)(nil)
 
-// PSASyncScheduler fetches PSA data from a Google Sheet and imports it daily.
+// PSASyncScheduler fetches PSA data from the portal and imports it daily.
 type PSASyncScheduler struct {
 	StopHandle
-	fetcher       SheetFetcher
-	importer      PSAImporter
-	logger        observability.Logger
-	config        config.PSASyncConfig
-	spreadsheetID string
-	tabName       string
-	running       sync.Mutex // ensures only one runOnce executes at a time
-	lastRunStats  *PSASyncRunStats
-	statsMu       sync.RWMutex
+	provider     RowProvider
+	refresher    TokenRefresher
+	importer     PSAImporter
+	logger       observability.Logger
+	config       config.PSASyncConfig
+	running      sync.Mutex // ensures only one runOnce executes at a time
+	lastRunStats *PSASyncRunStats
+	statsMu      sync.RWMutex
 }
 
 // NewPSASyncScheduler creates a new PSA sync scheduler.
 func NewPSASyncScheduler(
-	fetcher SheetFetcher,
+	provider RowProvider,
 	importer PSAImporter,
 	logger observability.Logger,
 	cfg config.PSASyncConfig,
-	spreadsheetID, tabName string,
+	opts ...PSASyncOption,
 ) *PSASyncScheduler {
 	cfg.ApplyDefaults()
 	if cfg.SyncHour >= 0 {
 		cfg.InitialDelay = timeUntilHour(time.Now(), cfg.SyncHour)
 	}
-	return &PSASyncScheduler{
-		StopHandle:    NewStopHandle(),
-		fetcher:       fetcher,
-		importer:      importer,
-		logger:        logger.With(context.Background(), observability.String("component", "psa-sync")),
-		config:        cfg,
-		spreadsheetID: spreadsheetID,
-		tabName:       tabName,
+	s := &PSASyncScheduler{
+		StopHandle: NewStopHandle(),
+		provider:   provider,
+		importer:   importer,
+		logger:     logger.With(context.Background(), observability.String("component", "psa-sync")),
+		config:     cfg,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// PSASyncOption configures optional PSASyncScheduler dependencies.
+type PSASyncOption func(*PSASyncScheduler)
+
+// WithPSATokenRefresher wires an optional token refresher run before each fetch.
+func WithPSATokenRefresher(r TokenRefresher) PSASyncOption {
+	return func(s *PSASyncScheduler) { s.refresher = r }
 }
 
 // Start begins the background scheduler.
@@ -87,8 +100,6 @@ func (s *PSASyncScheduler) Start(ctx context.Context) {
 	}
 
 	s.logger.Info(ctx, "PSA sync scheduler starting",
-		observability.String("spreadsheet_id", s.spreadsheetID),
-		observability.String("tab", s.tabName),
 		observability.Int("sync_hour", s.config.SyncHour))
 
 	RunLoop(ctx, LoopConfig{
@@ -131,33 +142,36 @@ func (s *PSASyncScheduler) GetLastRunStats() *PSASyncRunStats {
 
 func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
-	s.logger.Info(ctx, "running PSA Google Sheets sync")
+	s.logger.Info(ctx, "running PSA portal sync")
+
+	// Refresh the access token before fetching, if a refresher is wired. A stale
+	// token triggers a full Playwright harvest, so give it its own deadline rather
+	// than sharing the row-fetch budget.
+	if s.refresher != nil {
+		refreshCtx, refreshCancel := context.WithTimeout(ctx, 3*time.Minute)
+		if err := s.refresher.EnsureFreshToken(refreshCtx); err != nil {
+			s.logger.Warn(ctx, "token refresh failed", observability.Err(err))
+		}
+		refreshCancel()
+	}
 
 	fetchCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	rows, err := s.fetcher.ReadSheet(fetchCtx, s.spreadsheetID, s.tabName)
+	psaRows, err := s.provider.FetchRows(fetchCtx)
 	if err != nil {
-		s.logger.Error(ctx, "failed to fetch Google Sheet",
-			observability.Err(err),
-			observability.String("spreadsheet_id", s.spreadsheetID))
+		s.logger.Error(ctx, "failed to fetch PSA rows", observability.Err(err))
 		s.recordFailure(start, err)
 		return err
-	}
-
-	psaRows, parseErrors, err := inventory.ParsePSAExportRows(rows)
-	if err != nil {
-		s.logger.Error(ctx, "failed to parse PSA sheet data", observability.Err(err))
-		s.recordFailure(start, err)
-		return err
-	}
-	if len(parseErrors) > 0 {
-		s.logger.Warn(ctx, "PSA sheet parse failures — rows skipped",
-			observability.Int("skipped_rows", len(parseErrors)),
-			observability.String("spreadsheet_id", s.spreadsheetID))
 	}
 	if len(psaRows) == 0 {
-		s.logger.Warn(ctx, "no valid PSA rows found in sheet")
+		s.logger.Warn(ctx, "no PSA rows returned from portal")
+		s.statsMu.Lock()
+		s.lastRunStats = &PSASyncRunStats{
+			LastRunAt:  start,
+			DurationMs: time.Since(start).Milliseconds(),
+		}
+		s.statsMu.Unlock()
 		return nil
 	}
 
@@ -183,17 +197,16 @@ func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 
 	s.statsMu.Lock()
 	s.lastRunStats = &PSASyncRunStats{
-		LastRunAt:   start,
-		DurationMs:  time.Since(start).Milliseconds(),
-		Allocated:   result.Allocated,
-		Updated:     result.Updated,
-		Refunded:    result.Refunded,
-		Unmatched:   result.Unmatched,
-		Ambiguous:   result.Ambiguous,
-		Skipped:     result.Skipped,
-		Failed:      result.Failed,
-		TotalRows:   len(psaRows),
-		ParseErrors: len(parseErrors),
+		LastRunAt:  start,
+		DurationMs: time.Since(start).Milliseconds(),
+		Allocated:  result.Allocated,
+		Updated:    result.Updated,
+		Refunded:   result.Refunded,
+		Unmatched:  result.Unmatched,
+		Ambiguous:  result.Ambiguous,
+		Skipped:    result.Skipped,
+		Failed:     result.Failed,
+		TotalRows:  len(psaRows),
 	}
 	s.statsMu.Unlock()
 

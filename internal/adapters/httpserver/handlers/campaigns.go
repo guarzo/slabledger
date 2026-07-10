@@ -15,9 +15,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
-// SheetFetcher fetches sheet data for PSA sync.
-type SheetFetcher interface {
-	ReadSheet(ctx context.Context, spreadsheetID, sheetName string) ([][]string, error)
+// RowProvider fetches PSA export rows from the portal for manual import.
+type RowProvider interface {
+	FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error)
 }
 
 // DHPriceSyncer queues a DH price-sync for one purchase. Fire-and-forget
@@ -28,20 +28,18 @@ type DHPriceSyncer interface {
 
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
-	service           inventory.Service
-	arbSvc            arbitrage.Service
-	portSvc           portfolio.Service
-	tuningSvc         tuning.Service
-	logger            observability.Logger
-	dhListingSvc      dhlisting.Service // optional: lists cards on DH after cert import
-	dhPriceSyncer     DHPriceSyncer     // optional: async DH price re-sync on SetReviewedPrice
-	financeService    finance.Service   // optional: finance operations
-	exportService     export.Service    // optional: sell sheet and eBay export
-	baseCtx           context.Context
-	bgWG              sync.WaitGroup // tracks background goroutines (e.g. DH listing)
-	sheetFetcher      SheetFetcher   // optional: fetches PSA data from Google Sheets
-	sheetsSpreadsheet string         // spreadsheet ID for PSA sync
-	sheetsTab         string         // tab name for PSA sync
+	service        inventory.Service
+	arbSvc         arbitrage.Service
+	portSvc        portfolio.Service
+	tuningSvc      tuning.Service
+	logger         observability.Logger
+	dhListingSvc   dhlisting.Service // optional: lists cards on DH after cert import
+	dhPriceSyncer  DHPriceSyncer     // optional: async DH price re-sync on SetReviewedPrice
+	financeService finance.Service   // optional: finance operations
+	exportService  export.Service    // optional: sell sheet and eBay export
+	baseCtx        context.Context
+	bgWG           sync.WaitGroup // tracks background goroutines (e.g. DH listing)
+	rowProvider    RowProvider    // optional: fetches PSA data from the portal
 }
 
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
@@ -67,13 +65,9 @@ func WithExportService(svc export.Service) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.exportService = svc }
 }
 
-// WithSheetFetcher enables Google Sheets PSA sync.
-func WithSheetFetcher(f SheetFetcher, spreadsheetID, tabName string) CampaignsHandlerOption {
-	return func(h *CampaignsHandler) {
-		h.sheetFetcher = f
-		h.sheetsSpreadsheet = spreadsheetID
-		h.sheetsTab = tabName
-	}
+// WithPSARowProvider enables PSA portal sync for manual import.
+func WithPSARowProvider(p RowProvider) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.rowProvider = p }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.

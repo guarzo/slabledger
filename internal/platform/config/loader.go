@@ -1,11 +1,8 @@
 package config
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -239,34 +236,10 @@ func FromEnv(base Config) Config {
 	envBool("DH_PRICE_SYNC_ENABLED", &cfg.DHPriceSync.Enabled, true)
 	envDurationPositive("DH_PRICE_SYNC_INTERVAL", &cfg.DHPriceSync.Interval)
 
-	// Google Sheets credentials (JSON key is base64-encoded in .env)
-	if v := os.Getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"); v != "" {
-		v = strings.TrimSpace(v)
-		decoded, err := base64.StdEncoding.DecodeString(v)
-		if err != nil {
-			// Retry after trimming trailing non-base64 characters (e.g. stray %)
-			trimmed := strings.TrimRightFunc(v, func(r rune) bool {
-				return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') &&
-					(r < '0' || r > '9') && r != '+' && r != '/' && r != '='
-			})
-			decoded, err = base64.StdEncoding.DecodeString(trimmed)
-		}
-		if err != nil {
-			// Both standard and trimmed base64 decodes failed.
-			// Assume the value is raw JSON (e.g. credentials pasted directly rather than encoded).
-			// Warn so operators can detect an accidentally truncated or mis-encoded secret.
-			slog.Warn("GOOGLE_SHEETS_CREDENTIALS_JSON is not valid base64 — treating as raw JSON; if unexpected, check that the value is correctly base64-encoded")
-			cfg.GoogleSheets.CredentialsJSON = v
-		} else {
-			decodedStr := string(decoded)
-			if !json.Valid(decoded) {
-				slog.Warn("GOOGLE_SHEETS_CREDENTIALS_JSON decoded from base64 but is not valid JSON — credentials may be corrupt")
-			}
-			cfg.GoogleSheets.CredentialsJSON = decodedStr
-		}
-	}
-	cfg.GoogleSheets.SpreadsheetID = os.Getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
-	cfg.GoogleSheets.TabName = os.Getenv("GOOGLE_SHEETS_TAB_NAME")
+	// PSA Buyer Campaign Manager portal credentials (headless-login harvester)
+	cfg.PSAPortal.Email = os.Getenv("PSA_PORTAL_EMAIL")
+	cfg.PSAPortal.Password = os.Getenv("PSA_PORTAL_PASSWORD")
+	cfg.PSAPortal.Enabled = cfg.PSAPortal.Email != "" && cfg.PSAPortal.Password != ""
 
 	// PSA sync scheduler
 	envBool("PSA_SYNC_ENABLED", &cfg.PSASync.Enabled, false)

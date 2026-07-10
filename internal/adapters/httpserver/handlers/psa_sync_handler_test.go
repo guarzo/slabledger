@@ -42,10 +42,10 @@ func TestPSASyncHandler_HandleStatus(t *testing.T) {
 		CountPendingItemsFn: func(ctx context.Context) (int, error) { return 5, nil },
 	}
 	h := handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
-		PendingRepo:   pendingRepo,
-		SpreadsheetID: "sheet-123",
-		Interval:      "24h0m0s",
-		Logger:        mocks.NewMockLogger(),
+		PendingRepo: pendingRepo,
+		Refresher:   &mockPSASyncRefresher{}, // wired → configured=true
+		Interval:    "24h0m0s",
+		Logger:      mocks.NewMockLogger(),
 	})
 	req := httptest.NewRequest("GET", "/api/admin/psa-sync/status", nil)
 	rr := httptest.NewRecorder()

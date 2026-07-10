@@ -62,9 +62,7 @@ type ServerDependencies struct {
 	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
 	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
 	LiquidationHandler        *handlers.LiquidationHandler     // Liquidation pricing; nil = disabled
-	SheetFetcher              handlers.SheetFetcher            // optional: Google Sheets fetcher for PSA sync
-	SheetsSpreadsheetID       string                           // Google Sheets spreadsheet ID
-	SheetsTabName             string                           // Google Sheets tab name
+	PSARowProvider            handlers.RowProvider             // optional: PSA portal fetcher for manual sync
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -177,8 +175,8 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		if deps.ExportService != nil {
 			opts = append(opts, handlers.WithExportService(deps.ExportService))
 		}
-		if deps.SheetFetcher != nil && deps.SheetsSpreadsheetID != "" {
-			opts = append(opts, handlers.WithSheetFetcher(deps.SheetFetcher, deps.SheetsSpreadsheetID, deps.SheetsTabName))
+		if deps.PSARowProvider != nil {
+			opts = append(opts, handlers.WithPSARowProvider(deps.PSARowProvider))
 		}
 		campaignsHandler = handlers.NewCampaignsHandler(
 			deps.CampaignsService,

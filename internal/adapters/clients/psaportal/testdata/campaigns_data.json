@@ -1,0 +1,1 @@
+{"type":"data","nodes":[{"type":"skip"},{"type":"skip"},{"type":"data","data":[{"campaignsResponse":1},{"items":2,"pageNumber":3,"pageSize":4,"totalCount":3},[],0,50],"uses":{"search_params":["page","q","status"],"parent":1}}]}
