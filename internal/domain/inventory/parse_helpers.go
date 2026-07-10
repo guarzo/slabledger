@@ -121,6 +121,10 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 			continue // Skip empty template rows
 		}
 
+		// Collect all invalid fields for this row before skipping, so a row with
+		// multiple bad values surfaces every error in one pass.
+		rowHasError := false
+
 		var pricePaid float64
 		if pp := getField(colIdx("price paid")); pp != "" {
 			var parseErr error
@@ -131,7 +135,7 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 					Field:   "price paid",
 					Message: fmt.Sprintf("Row %d: invalid price paid %q: %v", rowNum, pp, parseErr),
 				})
-				continue
+				rowHasError = true
 			}
 		}
 
@@ -145,7 +149,7 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 					Field:   "grade",
 					Message: fmt.Sprintf("Row %d: invalid grade %q: %v", rowNum, g, parseErr),
 				})
-				continue
+				rowHasError = true
 			}
 		}
 
@@ -159,9 +163,10 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 					Field:   "date",
 					Message: fmt.Sprintf("Row %d: invalid date %q: %v", rowNum, dateStr, dateErr),
 				})
-				continue
+				rowHasError = true
+			} else {
+				purchaseDate = converted
 			}
-			purchaseDate = converted
 		}
 
 		invoiceDateStr := getField(colIdx("invoice date"))
@@ -174,9 +179,10 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 					Field:   "invoice date",
 					Message: fmt.Sprintf("Row %d: invalid invoice date %q: %v", rowNum, invoiceDateStr, dateErr),
 				})
-				continue
+				rowHasError = true
+			} else {
+				invoiceDate = converted
 			}
-			invoiceDate = converted
 		}
 
 		shipDateStr := getField(colIdx("ship date"))
@@ -189,9 +195,14 @@ func ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error
 					Field:   "ship date",
 					Message: fmt.Sprintf("Row %d: invalid ship date %q: %v", rowNum, shipDateStr, dateErr),
 				})
-				continue
+				rowHasError = true
+			} else {
+				shipDate = converted
 			}
-			shipDate = converted
+		}
+
+		if rowHasError {
+			continue
 		}
 
 		wasRefunded := false

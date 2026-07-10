@@ -8,6 +8,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // TokenProvider yields a valid PSA access token.
@@ -27,10 +28,19 @@ type Client struct {
 	http         *httpx.Client
 	ld           *lightdashClient
 	analyticsURL string
+	logger       observability.Logger
+}
+
+// Option configures optional Client dependencies.
+type Option func(*Client)
+
+// WithLogger attaches a logger (used to report skipped malformed rows).
+func WithLogger(l observability.Logger) Option {
+	return func(c *Client) { c.logger = l }
 }
 
 // New builds a Client. tp supplies access tokens.
-func New(tp TokenProvider, cfg Config) *Client {
+func New(tp TokenProvider, cfg Config, opts ...Option) *Client {
 	if cfg.PSABaseURL == "" {
 		cfg.PSABaseURL = defaultPSABaseURL
 	}
@@ -39,12 +49,17 @@ func New(tp TokenProvider, cfg Config) *Client {
 	}
 	hc := httpx.DefaultConfig("PSAPortal")
 	hc.DefaultTimeout = 30 * time.Second
-	return &Client{
+	c := &Client{
 		tokens:       tp,
 		http:         httpx.NewClient(hc),
 		ld:           newLightdashClient(cfg.LightdashBaseURL),
 		analyticsURL: cfg.PSABaseURL + analyticsPath,
+		logger:       observability.NewNoopLogger(),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // FetchRows walks the full portal chain and returns mapped purchase rows.
@@ -73,12 +88,18 @@ func (c *Client) FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error
 	for _, r := range raw {
 		m, err := mapRow(r)
 		if err != nil {
-			return nil, err
+			// One malformed Lightdash row must not abort the whole sync; log and
+			// skip it, matching the CSV import path (importPSARows).
+			c.logger.Warn(ctx, "psaportal: skipping malformed row", observability.Err(err))
+			continue
 		}
 		if m.CertNumber == "" {
 			continue
 		}
 		rows = append(rows, m)
+	}
+	if len(raw) > 0 && len(rows) == 0 {
+		return nil, fmt.Errorf("psaportal: all %d rows failed to map", len(raw))
 	}
 	return rows, nil
 }

@@ -6,102 +6,83 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// fakeTokenRepo implements TokenRepository for tests.
-type fakeTokenRepo struct {
-	currentToken     string
-	currentExpiresAt time.Time
-	currentErr       error
-	savedToken       string
-	savedExpiresAt   time.Time
-	saveErr          error
-}
-
-func (r *fakeTokenRepo) CurrentToken(_ context.Context) (string, time.Time, error) {
-	return r.currentToken, r.currentExpiresAt, r.currentErr
-}
-
-func (r *fakeTokenRepo) SaveToken(_ context.Context, token string, expiresAt time.Time) error {
-	r.savedToken = token
-	r.savedExpiresAt = expiresAt
-	return r.saveErr
-}
-
-func TestHarvester_EnsureFreshToken_SkipsWhenFresh(t *testing.T) {
-	repo := &fakeTokenRepo{
-		currentToken:     "still-valid",
-		currentExpiresAt: time.Now().Add(2 * time.Hour), // far in the future
+func TestHarvester_EnsureFreshToken(t *testing.T) {
+	tests := []struct {
+		name          string
+		currentToken  string
+		currentExpiry time.Time
+		cmdName       string
+		cmdArgs       []string
+		wantSaved     string
+		wantSavedTime bool // expect a non-zero savedExpiresAt
+		wantErr       bool
+	}{
+		{
+			name:          "skips when fresh",
+			currentToken:  "still-valid",
+			currentExpiry: time.Now().Add(2 * time.Hour),
+			cmdName:       "false", // would fail if called
+			wantSaved:     "",      // SaveToken must not be called
+		},
+		{
+			name:          "harvests when stale",
+			cmdName:       "sh",
+			cmdArgs:       []string{"-c", `printf '{"accessToken":"abc","expiresAt":"2099-01-01T00:00:00Z"}'`},
+			wantSaved:     "abc",
+			wantSavedTime: true,
+		},
+		{
+			name:          "harvests when expired",
+			currentToken:  "expired",
+			currentExpiry: time.Now().Add(-1 * time.Hour),
+			cmdName:       "sh",
+			cmdArgs:       []string{"-c", `printf '{"accessToken":"fresh","expiresAt":"2099-06-01T00:00:00Z"}'`},
+			wantSaved:     "fresh",
+			wantSavedTime: true,
+		},
+		{
+			name:    "exec error",
+			cmdName: "false", // exits with code 1
+			wantErr: true,
+		},
+		{
+			name:    "empty token",
+			cmdName: "sh",
+			cmdArgs: []string{"-c", `printf '{"accessToken":"","expiresAt":"2099-01-01T00:00:00Z"}'`},
+			wantErr: true,
+		},
 	}
-	h := NewHarvester(repo, ".", "email@test.com", "pw", observability.NewNoopLogger())
-	// Override executable to one that would fail if called
-	h.name = "false"
-	h.args = nil
 
-	if err := h.EnsureFreshToken(context.Background()); err != nil {
-		t.Fatalf("expected nil (skipped), got %v", err)
-	}
-	// SaveToken should not have been called
-	if repo.savedToken != "" {
-		t.Errorf("expected SaveToken not called, got token %q", repo.savedToken)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mocks.PSATokenRepositoryMock{
+				CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
+					return tt.currentToken, tt.currentExpiry, nil
+				},
+			}
+			h := NewHarvester(repo, ".", "email@test.com", "pw", observability.NewNoopLogger())
+			h.name = tt.cmdName
+			h.args = tt.cmdArgs
 
-func TestHarvester_EnsureFreshToken_HarvestsWhenStale(t *testing.T) {
-	repo := &fakeTokenRepo{
-		// No token stored → will harvest
-	}
-	h := NewHarvester(repo, ".", "email@test.com", "pw", observability.NewNoopLogger())
-	// Use a shell command that echoes the expected JSON
-	h.name = "sh"
-	h.args = []string{"-c", `printf '{"accessToken":"abc","expiresAt":"2099-01-01T00:00:00Z"}'`}
-
-	if err := h.EnsureFreshToken(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo.savedToken != "abc" {
-		t.Errorf("expected savedToken=%q, got %q", "abc", repo.savedToken)
-	}
-	if repo.savedExpiresAt.IsZero() {
-		t.Error("expected non-zero savedExpiresAt")
-	}
-}
-
-func TestHarvester_EnsureFreshToken_HarvestsWhenExpired(t *testing.T) {
-	repo := &fakeTokenRepo{
-		currentToken:     "expired",
-		currentExpiresAt: time.Now().Add(-1 * time.Hour), // expired
-	}
-	h := NewHarvester(repo, ".", "u", "p", observability.NewNoopLogger())
-	h.name = "sh"
-	h.args = []string{"-c", `printf '{"accessToken":"fresh","expiresAt":"2099-06-01T00:00:00Z"}'`}
-
-	if err := h.EnsureFreshToken(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo.savedToken != "fresh" {
-		t.Errorf("expected savedToken=%q, got %q", "fresh", repo.savedToken)
-	}
-}
-
-func TestHarvester_harvest_ExecError(t *testing.T) {
-	repo := &fakeTokenRepo{}
-	h := NewHarvester(repo, ".", "u", "p", observability.NewNoopLogger())
-	h.name = "false" // exits with code 1
-	h.args = nil
-
-	if err := h.EnsureFreshToken(context.Background()); err == nil {
-		t.Fatal("expected error from failing executable")
-	}
-}
-
-func TestHarvester_harvest_EmptyToken(t *testing.T) {
-	repo := &fakeTokenRepo{}
-	h := NewHarvester(repo, ".", "u", "p", observability.NewNoopLogger())
-	h.name = "sh"
-	h.args = []string{"-c", `printf '{"accessToken":"","expiresAt":"2099-01-01T00:00:00Z"}'`}
-
-	if err := h.EnsureFreshToken(context.Background()); err == nil {
-		t.Fatal("expected error for empty token")
+			err := h.EnsureFreshToken(context.Background())
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if repo.SavedToken != tt.wantSaved {
+				t.Errorf("savedToken: expected %q, got %q", tt.wantSaved, repo.SavedToken)
+			}
+			if tt.wantSavedTime && repo.SavedExpiresAt.IsZero() {
+				t.Error("expected non-zero savedExpiresAt")
+			}
+		})
 	}
 }

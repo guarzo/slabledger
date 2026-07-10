@@ -64,11 +64,14 @@ async function firstVisible(scope, candidates, timeout = 15000) {
 
 async function dumpDebug(page, label) {
   try {
-    await page.screenshot({ path: `${DEBUG_DIR}/psa-harvest-${label}.png`, fullPage: true });
+    const png = `${DEBUG_DIR}/psa-harvest-${label}.png`;
+    await page.screenshot({ path: png, fullPage: true });
     const html = await page.content();
-    await import('node:fs').then((fs) =>
-      fs.writeFileSync(`${DEBUG_DIR}/psa-harvest-${label}.html`, html),
-    );
+    await import('node:fs').then((fs) => {
+      // Restrict to owner-only — dumps can contain login-page / session state.
+      fs.chmodSync(png, 0o600);
+      fs.writeFileSync(`${DEBUG_DIR}/psa-harvest-${label}.html`, html, { mode: 0o600 });
+    });
     console.error(`harvest-psa-token: wrote debug ${DEBUG_DIR}/psa-harvest-${label}.{png,html} (url=${page.url()})`);
   } catch (e) {
     console.error('harvest-psa-token: debug dump failed:', e.message);
@@ -106,7 +109,7 @@ try {
   ]);
   if (!emailField) {
     await dumpDebug(page, 'no-email-field');
-    fail('could not find the email field on the sign-in page');
+    throw new Error('could not find the email field on the sign-in page');
   }
   await emailField.fill(EMAIL);
 
@@ -121,7 +124,7 @@ try {
   }
   if (!passwordField) {
     await dumpDebug(page, 'no-password-field');
-    fail('could not find the password field on the sign-in page');
+    throw new Error('could not find the password field on the sign-in page');
   }
   await passwordField.fill(PASSWORD);
 
@@ -133,7 +136,7 @@ try {
   ]);
   if (!submit) {
     await dumpDebug(page, 'no-submit');
-    fail('could not find the submit button on the sign-in page');
+    throw new Error('could not find the submit button on the sign-in page');
   }
   await submit.click();
 
@@ -145,19 +148,19 @@ try {
   const at = cookies.find((c) => c.name === 'accessToken');
   if (!at || !at.value) {
     await dumpDebug(page, 'no-access-cookie');
-    fail('login completed but no accessToken cookie was set');
+    throw new Error('login completed but no accessToken cookie was set');
   }
 
   const expiresAt = jwtExpiry(at.value);
   if (!expiresAt) {
     await dumpDebug(page, 'bad-jwt');
-    fail('accessToken cookie is not a decodable JWT');
+    throw new Error('accessToken cookie is not a decodable JWT');
   }
 
   process.stdout.write(JSON.stringify({ accessToken: at.value, expiresAt }) + '\n');
-  await browser.close();
 } catch (e) {
   await dumpDebug(page, 'exception');
+  fail(e.message);
+} finally {
   await browser.close();
-  fail(`unexpected error: ${e.message}`);
 }

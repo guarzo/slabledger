@@ -116,3 +116,55 @@ func TestParseCurrencyString(t *testing.T) {
 		})
 	}
 }
+
+// TestParsePSAExportRows_MultipleBadFieldsPerRow verifies a row with more than
+// one invalid field surfaces every field error (not just the first) before the
+// row is skipped, so users don't fix-and-reupload one error at a time.
+func TestParsePSAExportRows_MultipleBadFieldsPerRow(t *testing.T) {
+	records := [][]string{
+		{"cert number", "listing title", "grade", "price paid", "date"},
+		// Both grade and price paid are invalid on this one row.
+		{"12345678", "Charizard", "notagrade", "notaprice", ""},
+	}
+
+	rows, parseErrors, err := ParsePSAExportRows(records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected the malformed row to be skipped, got %d rows", len(rows))
+	}
+
+	gotFields := map[string]bool{}
+	for _, pe := range parseErrors {
+		gotFields[pe.Field] = true
+	}
+	for _, want := range []string{"price paid", "grade"} {
+		if !gotFields[want] {
+			t.Errorf("expected an error for field %q, got errors: %+v", want, parseErrors)
+		}
+	}
+}
+
+// TestParsePSAExportRows_ValidRow is a sanity check that a well-formed row maps
+// through cleanly with no parse errors.
+func TestParsePSAExportRows_ValidRow(t *testing.T) {
+	records := [][]string{
+		{"cert number", "listing title", "grade", "price paid"},
+		{"12345678", "Charizard", "10", "$125.00"},
+	}
+
+	rows, parseErrors, err := ParsePSAExportRows(records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(parseErrors) != 0 {
+		t.Fatalf("expected no parse errors, got %+v", parseErrors)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].CertNumber != "12345678" || rows[0].Grade != 10 || rows[0].PricePaid != 125.00 {
+		t.Errorf("unexpected row mapping: %+v", rows[0])
+	}
+}

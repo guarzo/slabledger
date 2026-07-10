@@ -15,10 +15,10 @@ import (
 // (migration 000016), so the table holds at most one row.
 type PSAPortalTokenStore struct {
 	db  *sql.DB
-	enc *crypto.AESEncryptor
+	enc crypto.Encryptor
 }
 
-func NewPSAPortalTokenStore(db *sql.DB, enc *crypto.AESEncryptor) *PSAPortalTokenStore {
+func NewPSAPortalTokenStore(db *sql.DB, enc crypto.Encryptor) *PSAPortalTokenStore {
 	return &PSAPortalTokenStore{db: db, enc: enc}
 }
 

@@ -9,6 +9,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -21,38 +23,45 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatalf("psa-harvest: %v", err)
+	}
+}
+
+func run() error {
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
-		log.Fatalf("psa-harvest: config: %v", err)
+		return fmt.Errorf("config: %w", err)
 	}
 	logger := telemetry.NewSlogLogger(slog.LevelInfo, "json")
 	ctx := context.Background()
 
 	switch {
 	case cfg.PSAPortal.Email == "" || cfg.PSAPortal.Password == "":
-		log.Fatal("psa-harvest: PSA_PORTAL_EMAIL and PSA_PORTAL_PASSWORD are required")
+		return errors.New("PSA_PORTAL_EMAIL and PSA_PORTAL_PASSWORD are required")
 	case cfg.Auth.EncryptionKey == "":
-		log.Fatal("psa-harvest: ENCRYPTION_KEY is required (token is encrypted at rest)")
+		return errors.New("ENCRYPTION_KEY is required (token is encrypted at rest)")
 	case cfg.Database.URL == "":
-		log.Fatal("psa-harvest: DATABASE_URL is required")
+		return errors.New("DATABASE_URL is required")
 	}
 
 	db, err := postgres.Open(cfg.Database.URL, logger)
 	if err != nil {
-		log.Fatalf("psa-harvest: db open: %v", err)
+		return fmt.Errorf("db open: %w", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	enc, err := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
 	if err != nil {
-		log.Fatalf("psa-harvest: encryptor: %v", err)
+		return fmt.Errorf("encryptor: %w", err)
 	}
 	store := postgres.NewPSAPortalTokenStore(db.DB, enc)
 
 	// workDir "." — the image's WORKDIR is where web/scripts/ lives.
 	h := psaportal.NewHarvester(store, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
 	if err := h.Harvest(ctx); err != nil {
-		log.Fatalf("psa-harvest: %v", err)
+		return err
 	}
 	logger.Info(ctx, "psa-harvest: access token refreshed")
+	return nil
 }

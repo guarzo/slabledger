@@ -63,7 +63,7 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 			}
 
 			s := NewPSASyncScheduler(
-				provider, nil, importer,
+				provider, importer,
 				observability.NewNoopLogger(),
 				config.PSASyncConfig{Enabled: true, Interval: 24 * time.Hour, SyncHour: -1},
 			)
@@ -82,7 +82,7 @@ func TestPSASyncScheduler_Start_Disabled(t *testing.T) {
 		FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) { return nil, nil },
 	}
 	s := NewPSASyncScheduler(
-		provider, nil, &mocks.MockImportService{},
+		provider, &mocks.MockImportService{},
 		observability.NewNoopLogger(),
 		config.PSASyncConfig{Enabled: false},
 	)
@@ -110,7 +110,6 @@ func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
 	}
 	s := NewPSASyncScheduler(
 		provider,
-		nil,
 		&mocks.MockImportService{
 			ImportPSAExportGlobalFn: func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
 				return &inventory.PSAImportResult{

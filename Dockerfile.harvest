@@ -30,4 +30,6 @@ COPY web/package.json web/package-lock.json ./web/
 RUN cd web && npm ci --include=dev
 COPY web/scripts ./web/scripts
 COPY --from=gobuild /out/psa-harvest ./psa-harvest
+# Run as the image's built-in non-root user so Chromium keeps its sandbox.
+USER pwuser
 ENTRYPOINT ["/app/psa-harvest"]

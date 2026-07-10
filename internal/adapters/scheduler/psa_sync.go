@@ -62,23 +62,34 @@ type PSASyncScheduler struct {
 // NewPSASyncScheduler creates a new PSA sync scheduler.
 func NewPSASyncScheduler(
 	provider RowProvider,
-	refresher TokenRefresher,
 	importer PSAImporter,
 	logger observability.Logger,
 	cfg config.PSASyncConfig,
+	opts ...PSASyncOption,
 ) *PSASyncScheduler {
 	cfg.ApplyDefaults()
 	if cfg.SyncHour >= 0 {
 		cfg.InitialDelay = timeUntilHour(time.Now(), cfg.SyncHour)
 	}
-	return &PSASyncScheduler{
+	s := &PSASyncScheduler{
 		StopHandle: NewStopHandle(),
 		provider:   provider,
-		refresher:  refresher,
 		importer:   importer,
 		logger:     logger.With(context.Background(), observability.String("component", "psa-sync")),
 		config:     cfg,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// PSASyncOption configures optional PSASyncScheduler dependencies.
+type PSASyncOption func(*PSASyncScheduler)
+
+// WithPSATokenRefresher wires an optional token refresher run before each fetch.
+func WithPSATokenRefresher(r TokenRefresher) PSASyncOption {
+	return func(s *PSASyncScheduler) { s.refresher = r }
 }
 
 // Start begins the background scheduler.
@@ -133,15 +144,19 @@ func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 	start := time.Now()
 	s.logger.Info(ctx, "running PSA portal sync")
 
-	fetchCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-
-	// Refresh the access token before fetching, if a refresher is wired.
+	// Refresh the access token before fetching, if a refresher is wired. A stale
+	// token triggers a full Playwright harvest, so give it its own deadline rather
+	// than sharing the row-fetch budget.
 	if s.refresher != nil {
-		if err := s.refresher.EnsureFreshToken(fetchCtx); err != nil {
+		refreshCtx, refreshCancel := context.WithTimeout(ctx, 3*time.Minute)
+		if err := s.refresher.EnsureFreshToken(refreshCtx); err != nil {
 			s.logger.Warn(ctx, "token refresh failed", observability.Err(err))
 		}
+		refreshCancel()
 	}
+
+	fetchCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 
 	psaRows, err := s.provider.FetchRows(fetchCtx)
 	if err != nil {
@@ -151,6 +166,12 @@ func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 	}
 	if len(psaRows) == 0 {
 		s.logger.Warn(ctx, "no PSA rows returned from portal")
+		s.statsMu.Lock()
+		s.lastRunStats = &PSASyncRunStats{
+			LastRunAt:  start,
+			DurationMs: time.Since(start).Milliseconds(),
+		}
+		s.statsMu.Unlock()
 		return nil
 	}
 

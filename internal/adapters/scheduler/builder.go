@@ -414,8 +414,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	// PSA portal sync scheduler (if provider and importer are provided)
 	if deps.PSARowProvider != nil && deps.PSAImporter != nil {
 		psaSync = NewPSASyncScheduler(
-			deps.PSARowProvider, deps.PSATokenRefresher, deps.PSAImporter,
+			deps.PSARowProvider, deps.PSAImporter,
 			deps.Logger, cfg.PSASync,
+			WithPSATokenRefresher(deps.PSATokenRefresher),
 		)
 		schedulers = append(schedulers, psaSync)
 	}

@@ -25,7 +25,7 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 	h.importPSARows(w, r, rows, "CSV", "global PSA import failed")
 }
 
-// HandleSyncPSAPortal handles POST /api/purchases/sync-psa-sheets.
+// HandleSyncPSASheets handles POST /api/purchases/sync-psa-sheets.
 // Fetches PSA data from the PSA portal via the stored access token and runs the standard import.
 func (h *CampaignsHandler) HandleSyncPSASheets(w http.ResponseWriter, r *http.Request) {
 	if h.rowProvider == nil {

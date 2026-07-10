@@ -12,6 +12,14 @@ import (
 
 const embedTokenHeader = "Lightdash-Embed-Token"
 
+// embedHeaders builds the JSON + embed-token header map for Lightdash embed calls.
+func embedHeaders(embedJWT string) map[string]string {
+	return map[string]string{
+		"Content-Type":   "application/json",
+		embedTokenHeader: embedJWT,
+	}
+}
+
 type lightdashClient struct {
 	client  *httpx.Client
 	baseURL string
@@ -43,10 +51,7 @@ func (lc *lightdashClient) tileRows(ctx context.Context, projectUUID, embedJWT, 
 		return nil, fmt.Errorf("lightdash: marshal request: %w", err)
 	}
 
-	headers := map[string]string{
-		"Content-Type":   "application/json",
-		embedTokenHeader: embedJWT,
-	}
+	headers := embedHeaders(embedJWT)
 
 	resp, err := lc.client.Post(ctx, url, headers, reqBody, 0)
 	if err != nil {
@@ -76,10 +81,7 @@ func (lc *lightdashClient) tileRows(ctx context.Context, projectUUID, embedJWT, 
 // findTileUUIDBySlug returns the dashboard tile uuid whose chartSlug matches slug.
 func (lc *lightdashClient) findTileUUIDBySlug(ctx context.Context, projectUUID, embedJWT, slug string) (string, error) {
 	url := fmt.Sprintf("%s/api/v1/embed/%s/dashboard", lc.baseURL, projectUUID)
-	headers := map[string]string{
-		"Content-Type":   "application/json",
-		embedTokenHeader: embedJWT,
-	}
+	headers := embedHeaders(embedJWT)
 	resp, err := lc.client.Post(ctx, url, headers, []byte("{}"), 0)
 	if err != nil {
 		return "", fmt.Errorf("lightdash: POST dashboard: %w", err)

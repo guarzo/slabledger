@@ -351,15 +351,19 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// The token is refreshed out-of-process by the `psa-harvest` job (it needs a
 	// browser the lean app image can't run), so no in-process harvester is wired here.
 	var portalClient *psaportal.Client
-	if cfg.Auth.EncryptionKey != "" {
-		portalEnc, portalEncErr := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
-		if portalEncErr != nil {
-			logger.Warn(ctx, "PSA portal encryptor init failed; portal sync disabled", observability.Err(portalEncErr))
-		} else {
-			tokenStore := postgres.NewPSAPortalTokenStore(db.DB, portalEnc)
-			portalClient = psaportal.New(psaportal.NewStoredTokenProvider(tokenStore), psaportal.Config{})
-			logger.Info(ctx, "PSA portal client initialized")
-		}
+	switch {
+	case !cfg.PSAPortal.Enabled:
+		// Portal sync not enabled; nothing to wire.
+	case clEncryptor == nil:
+		logger.Warn(ctx, "PSA portal enabled but ENCRYPTION_KEY is not set; portal sync disabled")
+	default:
+		// Reuse the encryptor built earlier from ENCRYPTION_KEY (same key as CL/MM).
+		tokenStore := postgres.NewPSAPortalTokenStore(db.DB, clEncryptor)
+		portalClient = psaportal.New(
+			psaportal.NewStoredTokenProvider(tokenStore), psaportal.Config{},
+			psaportal.WithLogger(logger),
+		)
+		logger.Info(ctx, "PSA portal client initialized")
 	}
 
 	// DH price re-sync service: drives both the inline goroutine on review-price

@@ -17,15 +17,45 @@ func (f fakeStore) CurrentToken(ctx context.Context) (string, time.Time, error) 
 }
 
 func TestStoredTokenProvider(t *testing.T) {
+	tests := []struct {
+		name    string
+		store   fakeStore
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "empty token",
+			store:   fakeStore{tok: ""},
+			wantErr: true,
+		},
+		{
+			name:    "expired token",
+			store:   fakeStore{tok: "x", exp: time.Now().Add(-time.Minute)},
+			wantErr: true,
+		},
+		{
+			name:  "valid token",
+			store: fakeStore{tok: "good", exp: time.Now().Add(time.Hour)},
+			want:  "good",
+		},
+	}
+
 	ctx := context.Background()
-	if _, err := NewStoredTokenProvider(fakeStore{tok: ""}).AccessToken(ctx); err == nil {
-		t.Error("expected error for empty token")
-	}
-	if _, err := NewStoredTokenProvider(fakeStore{tok: "x", exp: time.Now().Add(-time.Minute)}).AccessToken(ctx); err == nil {
-		t.Error("expected error for expired token")
-	}
-	got, err := NewStoredTokenProvider(fakeStore{tok: "good", exp: time.Now().Add(time.Hour)}).AccessToken(ctx)
-	if err != nil || got != "good" {
-		t.Fatalf("got %q err=%v", got, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewStoredTokenProvider(tt.store).AccessToken(ctx)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
