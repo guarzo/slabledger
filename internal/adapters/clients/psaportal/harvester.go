@@ -50,10 +50,13 @@ func (h *Harvester) EnsureFreshToken(ctx context.Context) error {
 		return nil // still fresh
 	}
 	h.logger.Info(ctx, "harvesting PSA portal access token")
-	return h.harvest(ctx)
+	return h.Harvest(ctx)
 }
 
-func (h *Harvester) harvest(ctx context.Context) error {
+// Harvest unconditionally runs the login script and stores a fresh token. The
+// out-of-process psa-harvest job calls this directly (every run yields a fresh
+// ~24h token); EnsureFreshToken wraps it with a staleness check for in-process use.
+func (h *Harvester) Harvest(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, h.name, h.args...)
 	cmd.Dir = h.dir
 	cmd.Env = append(cmd.Environ(), h.env...)

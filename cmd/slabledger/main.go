@@ -347,18 +347,17 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
 
-	// Initialize PSA portal client and token harvester (nil if not configured).
-	// The binary must run from the repo root so web/scripts/harvest-psa-token.mjs resolves.
+	// PSA portal client reads the harvested access token (decrypted) from Postgres.
+	// The token is refreshed out-of-process by the `psa-harvest` job (it needs a
+	// browser the lean app image can't run), so no in-process harvester is wired here.
 	var portalClient *psaportal.Client
-	var portalHarvester *psaportal.Harvester
-	if cfg.PSAPortal.Enabled && cfg.Auth.EncryptionKey != "" {
+	if cfg.Auth.EncryptionKey != "" {
 		portalEnc, portalEncErr := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
 		if portalEncErr != nil {
 			logger.Warn(ctx, "PSA portal encryptor init failed; portal sync disabled", observability.Err(portalEncErr))
 		} else {
 			tokenStore := postgres.NewPSAPortalTokenStore(db.DB, portalEnc)
 			portalClient = psaportal.New(psaportal.NewStoredTokenProvider(tokenStore), psaportal.Config{})
-			portalHarvester = psaportal.NewHarvester(tokenStore, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
 			logger.Info(ctx, "PSA portal client initialized")
 		}
 	}
@@ -416,7 +415,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	if portalClient != nil {
 		sDeps.PSARowProvider = portalClient
-		sDeps.PSATokenRefresher = portalHarvester
 	}
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 

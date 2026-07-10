@@ -1,0 +1,33 @@
+# PSA token-harvester job image.
+#
+# Logs into the PSA Buyer Campaign Manager portal with a real Chromium browser and
+# writes a fresh, encrypted access token to Postgres. Run on a schedule (~every 12h);
+# the main app image (Dockerfile) stays lean/alpine and only READS the token.
+#
+# Build:  docker build -f Dockerfile.harvest -t slabledger-psa-harvest .
+# Run:    docker run --rm \
+#           -e PSA_PORTAL_EMAIL=... -e PSA_PORTAL_PASSWORD=... \
+#           -e ENCRYPTION_KEY=... -e DATABASE_URL=... \
+#           slabledger-psa-harvest
+#
+# NOTE: keep the Playwright base tag in sync with web/package.json @playwright/test.
+
+# 1) Build the Go harvest entrypoint.
+FROM golang:1.26-alpine3.23 AS gobuild
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/psa-harvest ./cmd/psa-harvest
+
+# 2) Official Playwright image ships Node + Chromium matching @playwright/test 1.59.
+FROM mcr.microsoft.com/playwright:v1.59.1-noble
+WORKDIR /app
+# Point the npm-installed @playwright/test at the browsers baked into the base image.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# JS deps for the harvest script (@playwright/test is a devDependency).
+COPY web/package.json web/package-lock.json ./web/
+RUN cd web && npm ci --include=dev
+COPY web/scripts ./web/scripts
+COPY --from=gobuild /out/psa-harvest ./psa-harvest
+ENTRYPOINT ["/app/psa-harvest"]
