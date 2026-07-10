@@ -74,8 +74,18 @@ Create the scheduled machine (fires the harvester every hour):
 fly machine run \
   registry.fly.io/slabledger-psa-harvest:latest \
   --schedule hourly \
+  --region iad \
+  --vm-memory 1024 \
+  --vm-cpu-kind shared \
+  --vm-cpus 1 \
   -a slabledger-psa-harvest
 ```
+
+> **Pass the sizing flags explicitly.** `fly machine run` does not reliably inherit the
+> `[vm]` / `primary_region` blocks from `fly.harvest.toml` — that file is consumed by
+> `fly deploy --build-only` to *build* the image, not by `fly machine run` to *size* the
+> machine. Omit the flags and the scheduled machine gets Fly's defaults, which may be too
+> small for Chromium. The `1024`/`shared`/`1` values here mirror `fly.harvest.toml`.
 
 > Fly's `--schedule` only accepts `hourly | daily | weekly | monthly` — there is no
 > "every 12h". `hourly` is used for a wide safety margin against a failed login. Because
@@ -86,10 +96,32 @@ fly machine run \
 Inspect / re-run manually:
 
 ```bash
-fly machine list -a slabledger-psa-harvest          # see the scheduled machine + last exit
+fly machine list -a slabledger-psa-harvest          # see the scheduled machine (note its ID) + last exit
 fly logs -a slabledger-psa-harvest                  # success: "psa-harvest: token is fresh"
 fly machine run registry.fly.io/slabledger-psa-harvest:latest -a slabledger-psa-harvest  # one-off run now
 ```
+
+### Updating the harvester after a code change
+
+The scheduled machine is **unmanaged** — `fly deploy --build-only --push` rebuilds and
+pushes a new image, but it does **not** touch an already-running machine, so the hourly
+schedule would keep executing the old image indefinitely. After any harvester code change,
+rebuild the image and then point the existing machine at it:
+
+```bash
+# 1) Rebuild + push the new image.
+fly deploy -c fly.harvest.toml --build-only --push -a slabledger-psa-harvest
+
+# 2) Update the existing scheduled machine to the new image (keep the schedule).
+#    Get <machine_id> from `fly machine list -a slabledger-psa-harvest`.
+fly machine update <machine_id> \
+  --image registry.fly.io/slabledger-psa-harvest:latest \
+  --schedule hourly \
+  -a slabledger-psa-harvest
+```
+
+Re-pass `--schedule hourly` on update — it is set, not preserved implicitly. (Alternatively,
+`fly machine destroy <machine_id>` then recreate with the `fly machine run` command above.)
 
 ### Other platforms
 

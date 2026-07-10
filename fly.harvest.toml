@@ -6,8 +6,11 @@
 #
 # It is NOT a long-running server: the actual run cadence comes from a *scheduled
 # machine* created with `fly machine run --schedule hourly` (see docs/psa-harvester.md).
-# A plain `fly deploy` here just builds/pushes the image and updates secrets; the
-# scheduled machine is what fires it every hour.
+# `fly deploy` here only builds/pushes the image; it does NOT update an already-running
+# scheduled machine. The [vm]/primary_region blocks below apply to `fly deploy`, but
+# `fly machine run` does NOT reliably inherit them — pass --region/--vm-* explicitly
+# there. After a code change: rebuild, then `fly machine update <id> --image ...
+# --schedule hourly` so the hourly runs use the new image (see docs/psa-harvester.md).
 
 app = 'slabledger-psa-harvest'
 primary_region = 'iad'
