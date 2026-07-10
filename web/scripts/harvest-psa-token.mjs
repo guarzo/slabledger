@@ -160,7 +160,10 @@ try {
   process.stdout.write(JSON.stringify({ accessToken: at.value, expiresAt }) + '\n');
 } catch (e) {
   await dumpDebug(page, 'exception');
-  fail(e.message);
+  // Don't call fail() here — it exits immediately and would skip the finally
+  // block, leaking the browser process. Flag failure and let finally close it.
+  console.error(`harvest-psa-token: ${e.message}`);
+  process.exitCode = 1;
 } finally {
   await browser.close();
 }

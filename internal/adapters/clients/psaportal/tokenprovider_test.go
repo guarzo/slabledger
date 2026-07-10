@@ -4,46 +4,46 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
-
-type fakeStore struct {
-	tok string
-	exp time.Time
-	err error
-}
-
-func (f fakeStore) CurrentToken(ctx context.Context) (string, time.Time, error) {
-	return f.tok, f.exp, f.err
-}
 
 func TestStoredTokenProvider(t *testing.T) {
 	tests := []struct {
 		name    string
-		store   fakeStore
+		tok     string
+		exp     time.Time
 		want    string
 		wantErr bool
 	}{
 		{
 			name:    "empty token",
-			store:   fakeStore{tok: ""},
+			tok:     "",
 			wantErr: true,
 		},
 		{
 			name:    "expired token",
-			store:   fakeStore{tok: "x", exp: time.Now().Add(-time.Minute)},
+			tok:     "x",
+			exp:     time.Now().Add(-time.Minute),
 			wantErr: true,
 		},
 		{
-			name:  "valid token",
-			store: fakeStore{tok: "good", exp: time.Now().Add(time.Hour)},
-			want:  "good",
+			name: "valid token",
+			tok:  "good",
+			exp:  time.Now().Add(time.Hour),
+			want: "good",
 		},
 	}
 
 	ctx := context.Background()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewStoredTokenProvider(tt.store).AccessToken(ctx)
+			store := &mocks.PSATokenRepositoryMock{
+				CurrentTokenFn: func(context.Context) (string, time.Time, error) {
+					return tt.tok, tt.exp, nil
+				},
+			}
+			got, err := NewStoredTokenProvider(store).AccessToken(ctx)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
