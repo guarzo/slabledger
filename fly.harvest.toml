@@ -1,0 +1,25 @@
+# Fly config for the PSA token-harvester job (a SEPARATE Fly app from `slabledger`).
+#
+# This app builds the Playwright/Chromium image (Dockerfile.harvest) and runs the
+# psa-harvest binary to completion — it logs into the PSA portal, writes a fresh
+# encrypted access token to the shared Postgres, and exits. It has no HTTP service.
+#
+# It is NOT a long-running server: the actual run cadence comes from a *scheduled
+# machine* created with `fly machine run --schedule hourly` (see docs/psa-harvester.md).
+# `fly deploy` here only builds/pushes the image; it does NOT update an already-running
+# scheduled machine. The [vm]/primary_region blocks below apply to `fly deploy`, but
+# `fly machine run` does NOT reliably inherit them — pass --region/--vm-* explicitly
+# there. After a code change: rebuild, then `fly machine update <id> --image ...
+# --schedule hourly` so the hourly runs use the new image (see docs/psa-harvester.md).
+
+app = 'slabledger-psa-harvest'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'Dockerfile.harvest'
+
+[[vm]]
+  # Chromium needs more headroom than the app; 1GB is comfortable for one login.
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
