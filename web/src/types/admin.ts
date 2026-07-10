@@ -151,7 +151,6 @@ export interface PSASyncLastRun {
 
 export interface PSASyncStatusResponse {
   configured: boolean;
-  spreadsheetId: string;
   interval: string;
   lastRun?: PSASyncLastRun;
   pendingCount?: number;

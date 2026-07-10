@@ -151,7 +151,7 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
 
       <section>
         <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>PSA Sheets Sync</h3>
+          <h3 className={SECTION_HEADER + ' !mb-0'}>PSA Portal Sync</h3>
           <div className="flex items-center gap-3">
             <PulseLine at={psaStatus?.lastRun?.lastRunAt} />
             {psaConfigured ? (
