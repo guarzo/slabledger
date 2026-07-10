@@ -16,12 +16,12 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
   const handleRefresh = async () => {
     try {
       await refreshMutation.mutateAsync();
-      toast.success('PSA Sheets sync complete');
+      toast.success('PSA sync complete');
     } catch (err) {
       if (isAPIError(err) && err.status === 409) {
         toast.error('Sync already in progress — try again in a moment');
       } else {
-        toast.error('PSA Sheets sync failed');
+        toast.error('PSA sync failed');
       }
     }
   };
@@ -34,7 +34,8 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
           <span className="text-sm font-semibold text-[var(--text)]">Not configured</span>
         </div>
         <p className="text-xs text-[var(--text-muted)]">
-          Set <code>GOOGLE_SHEETS_SPREADSHEET_ID</code> and service account credentials to enable PSA Sheets sync.
+          Set <code>ENCRYPTION_KEY</code> and <code>PSA_SYNC_ENABLED</code> to enable PSA portal sync. A fresh access
+          token must be supplied by the <code>psa-harvest</code> job (see <code>docs/psa-harvester.md</code>).
         </p>
       </CardShell>
     );
@@ -44,14 +45,9 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
 
   return (
     <CardShell padding="lg">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[var(--success)] shrink-0" />
-          <span className="text-sm font-semibold text-[var(--text)]">Configured</span>
-        </div>
-        <span className="text-xs text-[var(--text-muted)] font-mono">
-          {data.spreadsheetId && data.spreadsheetId.length > 12 ? `${data.spreadsheetId.slice(0, 12)}…` : data.spreadsheetId}
-        </span>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-2 h-2 rounded-full bg-[var(--success)] shrink-0" />
+        <span className="text-sm font-semibold text-[var(--text)]">Configured</span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
@@ -61,9 +57,9 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
 
       <div className="flex items-center gap-2 pt-3 border-t border-[var(--surface-2)]">
         <Button variant="secondary" size="sm" onClick={handleRefresh} loading={refreshMutation.isPending}>
-          Sync from Sheets
+          Sync now
         </Button>
-        <span className="text-xs text-[var(--text-muted)]">Fetches the configured Google Sheet and imports new or updated rows.</span>
+        <span className="text-xs text-[var(--text-muted)]">Pulls the latest purchases from the PSA portal and imports new or updated rows.</span>
       </div>
 
       {lastRun && (

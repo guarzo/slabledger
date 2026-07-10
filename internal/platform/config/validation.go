@@ -78,6 +78,12 @@ func (cfg *Config) Validate() error {
 		}
 	}
 
+	// Reject partial PSA portal credentials — a set email with a missing password
+	// (or vice versa) is a misconfiguration, not a silent "disabled".
+	if (cfg.PSAPortal.Email == "") != (cfg.PSAPortal.Password == "") {
+		return apperrors.ConfigInvalid("psa-portal", "", "PSA_PORTAL_EMAIL and PSA_PORTAL_PASSWORD must both be set or both be empty")
+	}
+
 	return nil
 }
 

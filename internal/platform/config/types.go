@@ -177,7 +177,7 @@ type Config struct {
 	AdvisorRefresh     AdvisorRefreshConfig
 	CardLadder         CardLadderConfig
 	MarketMovers       MarketMoversConfig
-	GoogleSheets       GoogleSheetsConfig
+	PSAPortal          PSAPortalConfig
 	PSASync            PSASyncConfig
 	DH                 DHConfig
 	DHAnalyticsRefresh DHAnalyticsRefreshConfig
@@ -278,14 +278,14 @@ func (c *SnapshotEnrichConfig) ApplyDefaults() {
 	}
 }
 
-// GoogleSheetsConfig holds credentials and target for Google Sheets API access.
-type GoogleSheetsConfig struct {
-	CredentialsJSON string // Service account JSON key content
-	SpreadsheetID   string // Google Sheets document ID
-	TabName         string // Sheet/tab name (empty = first sheet)
+// PSAPortalConfig configures the PSA Buyer Campaign Manager portal feed.
+type PSAPortalConfig struct {
+	Enabled  bool // derived: true when Email and Password are set
+	Email    string
+	Password string
 }
 
-// PSASyncConfig controls the background PSA Google Sheets sync scheduler.
+// PSASyncConfig controls the background PSA portal sync scheduler.
 type PSASyncConfig struct {
 	Enabled      bool
 	Interval     time.Duration // how often to run sync (default: 24h)

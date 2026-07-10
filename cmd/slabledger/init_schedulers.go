@@ -56,9 +56,8 @@ type schedulerDeps struct {
 	DHPriceSyncService         dhpricing.Service
 	DHTombstoneStore           *postgres.DHCardTombstoneStore
 	GapStore                   *postgres.GapStore
-	PSASheetFetcher            scheduler.SheetFetcher
-	PSASpreadsheetID           string
-	PSATabName                 string
+	PSARowProvider             scheduler.RowProvider
+	PSATokenRefresher          scheduler.TokenRefresher
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -216,12 +215,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	if deps.GapStore != nil {
 		buildDeps.GapStore = deps.GapStore
 	}
-	// Wire PSA sync (nil-safe)
-	if deps.PSASheetFetcher != nil {
-		buildDeps.PSASheetFetcher = deps.PSASheetFetcher
+	// Wire PSA portal sync (nil-safe)
+	if deps.PSARowProvider != nil {
+		buildDeps.PSARowProvider = deps.PSARowProvider
+		buildDeps.PSATokenRefresher = deps.PSATokenRefresher
 		buildDeps.PSAImporter = deps.CampaignsService
-		buildDeps.PSASpreadsheetID = deps.PSASpreadsheetID
-		buildDeps.PSATabName = deps.PSATabName
 	}
 
 	// Wire cert enrichment (nil-safe)
