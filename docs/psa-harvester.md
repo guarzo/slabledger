@@ -65,14 +65,16 @@ fly secrets set -a slabledger-psa-harvest \
   DATABASE_URL='<same Postgres URL as slabledger>'
 
 # 3) Build & push the image (does NOT start a run on its own).
-fly deploy -c fly.harvest.toml --build-only --push -a slabledger-psa-harvest
+#    --image-label pins a stable tag (:harvest); without it fly deploy pushes a
+#    deployment-<timestamp> tag and there is no :latest to reference below.
+fly deploy -c fly.harvest.toml --build-only --push --image-label harvest -a slabledger-psa-harvest
 ```
 
 Create the scheduled machine (fires the harvester every hour):
 
 ```bash
 fly machine run \
-  registry.fly.io/slabledger-psa-harvest:latest \
+  registry.fly.io/slabledger-psa-harvest:harvest \
   --schedule hourly \
   --region iad \
   --vm-memory 1024 \
@@ -93,12 +95,18 @@ fly machine run \
 > hourly runs are almost all cheap no-ops — roughly one real login per day, plus a few
 > hourly retries in the 6h window before expiry if a login fails.
 
+> **Verify a one-off run before scheduling.** Run it once *without* `--schedule` and
+> confirm the logs show `psa-harvest: token is fresh` (exit 0) first. A machine created by
+> `fly machine run` **auto-restarts on failure**, so a crash-looping harvester retries
+> forever — if a test run crash-loops, `fly machine destroy <id> --force` it before fixing
+> and retrying.
+
 Inspect / re-run manually:
 
 ```bash
 fly machine list -a slabledger-psa-harvest          # see the scheduled machine (note its ID) + last exit
 fly logs -a slabledger-psa-harvest                  # success: "psa-harvest: token is fresh"
-fly machine run registry.fly.io/slabledger-psa-harvest:latest -a slabledger-psa-harvest  # one-off run now
+fly machine run registry.fly.io/slabledger-psa-harvest:harvest --region iad --vm-memory 1024 --vm-cpu-kind shared --vm-cpus 1 -a slabledger-psa-harvest  # one-off run now
 ```
 
 ### Updating the harvester after a code change
@@ -109,13 +117,13 @@ schedule would keep executing the old image indefinitely. After any harvester co
 rebuild the image and then point the existing machine at it:
 
 ```bash
-# 1) Rebuild + push the new image.
-fly deploy -c fly.harvest.toml --build-only --push -a slabledger-psa-harvest
+# 1) Rebuild + push the new image under the same stable tag.
+fly deploy -c fly.harvest.toml --build-only --push --image-label harvest -a slabledger-psa-harvest
 
 # 2) Update the existing scheduled machine to the new image (keep the schedule).
 #    Get <machine_id> from `fly machine list -a slabledger-psa-harvest`.
 fly machine update <machine_id> \
-  --image registry.fly.io/slabledger-psa-harvest:latest \
+  --image registry.fly.io/slabledger-psa-harvest:harvest \
   --schedule hourly \
   -a slabledger-psa-harvest
 ```

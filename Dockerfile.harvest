@@ -32,4 +32,8 @@ COPY web/scripts ./web/scripts
 COPY --from=gobuild /out/psa-harvest ./psa-harvest
 # Run as the image's built-in non-root user so Chromium keeps its sandbox.
 USER pwuser
-ENTRYPOINT ["/app/psa-harvest"]
+# The harvester never uses the on-disk cache, but config.Load() still runs
+# EnsureDirectories() on the cache path — default "data/cache.json" would try to
+# mkdir ./data under the read-only /app WORKDIR and fail. Point it at /tmp, which
+# pwuser can write.
+ENTRYPOINT ["/app/psa-harvest", "--cache", "/tmp/psa-harvest-cache.json"]
