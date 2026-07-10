@@ -22,6 +22,10 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
 )
 
+// Compile-time guard: the Postgres token store must satisfy the client's
+// TokenRepository (read+write) contract the harvester below depends on.
+var _ psaportal.TokenRepository = (*postgres.PSAPortalTokenStore)(nil)
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatalf("psa-harvest: %v", err)

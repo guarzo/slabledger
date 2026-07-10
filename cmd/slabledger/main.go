@@ -33,6 +33,10 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
+// Compile-time guard: the Postgres token store must satisfy the client's
+// read-only TokenStore contract that NewStoredTokenProvider depends on.
+var _ psaportal.TokenStore = (*postgres.PSAPortalTokenStore)(nil)
+
 // initLogger creates a new logger with the specified level and format
 func initLogger(level string, jsonFormat bool) observability.Logger {
 	var slogLevel slog.Level

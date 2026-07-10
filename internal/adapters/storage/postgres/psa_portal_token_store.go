@@ -23,9 +23,10 @@ func NewPSAPortalTokenStore(db *sql.DB, enc crypto.Encryptor) *PSAPortalTokenSto
 }
 
 // PSAPortalTokenStore structurally satisfies psaportal.TokenStore and
-// psaportal.TokenRepository; that coupling is enforced at wiring time in
-// cmd/slabledger (where both are passed to NewStoredTokenProvider/NewHarvester),
-// so this storage adapter avoids importing the client adapter (hexagonal rule).
+// psaportal.TokenRepository. Compile-time guards enforcing that live in the
+// cmd/ wiring packages (cmd/slabledger and cmd/psa-harvest), which import both
+// adapters; this storage adapter avoids importing the client adapter itself so
+// the hexagonal import rule holds.
 
 // CurrentToken returns the stored token (decrypted) and its expiry.
 // No row yet → ("", zero time, nil).
