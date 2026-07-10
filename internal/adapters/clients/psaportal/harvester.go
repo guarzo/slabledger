@@ -12,9 +12,11 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// TokenRepository reads and writes the harvested portal token.
+// TokenRepository reads and writes the harvested portal token. It extends the
+// read-only TokenStore with a write path (embedding keeps CurrentToken declared
+// in exactly one place, so the two interfaces can't drift apart).
 type TokenRepository interface {
-	CurrentToken(ctx context.Context) (token string, expiresAt time.Time, err error)
+	TokenStore
 	SaveToken(ctx context.Context, token string, expiresAt time.Time) error
 }
 

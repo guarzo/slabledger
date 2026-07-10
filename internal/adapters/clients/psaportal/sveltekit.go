@@ -68,7 +68,10 @@ func unflatten(data []json.RawMessage, idx int, memo map[int]json.RawMessage) (j
 				}
 				out[k] = rv
 			}
-			b, _ := json.Marshal(out)
+			b, err := json.Marshal(out)
+			if err != nil {
+				return nil, fmt.Errorf("psaportal: marshal object at %d: %w", idx, err)
+			}
 			memo[idx] = b
 			return b, nil
 		}
@@ -84,7 +87,10 @@ func unflatten(data []json.RawMessage, idx int, memo map[int]json.RawMessage) (j
 				}
 				out = append(out, rv)
 			}
-			b, _ := json.Marshal(out)
+			b, err := json.Marshal(out)
+			if err != nil {
+				return nil, fmt.Errorf("psaportal: marshal array at %d: %w", idx, err)
+			}
 			memo[idx] = b
 			return b, nil
 		}

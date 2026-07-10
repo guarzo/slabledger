@@ -7,7 +7,8 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// Lightdash "Itemized Purchases" field keys (confirmed via live spike — see SPIKE_FINDINGS.md).
+// Lightdash "Itemized Purchases" field keys (confirmed via live spike — see
+// docs/private/2026-06-22-psa-portal-spike-findings.md).
 const (
 	colCert       = "fct_instantoffers_offers_cert_number"
 	colTitle      = "marketplace_listings_listing_title"
