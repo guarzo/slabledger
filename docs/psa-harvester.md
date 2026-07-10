@@ -31,15 +31,18 @@ docker run --rm \
   slabledger-psa-harvest
 ```
 
-On success it logs `psa-harvest: access token refreshed` and exits 0. On failure the
+On success it logs `psa-harvest: token is fresh` and exits 0 (it logs
+`harvesting PSA portal access token` first only when the stored token is near expiry and
+an actual login is needed). On failure the
 underlying Playwright script's stderr (and a debug screenshot/HTML) is surfaced in the
 logs; exit is non-zero.
 
 ## Scheduling
 
 The stored token is valid ~24h, so it must be refreshed well inside that window.
-`cmd/psa-harvest` logs in *unconditionally* on every run (no staleness skip), so the
-cadence is purely how often the scheduler fires it.
+`cmd/psa-harvest` calls `EnsureFreshToken`: it only performs the browser login when the
+stored token drops below 6h of validity, and is a cheap no-op otherwise. So the scheduler
+can fire often (for retry margin) without paying for a real login every time.
 
 ### Production: Fly.io (current deploy)
 
@@ -75,16 +78,16 @@ fly machine run \
 ```
 
 > Fly's `--schedule` only accepts `hourly | daily | weekly | monthly` — there is no
-> "every 12h". `hourly` is used for a wide safety margin against a failed login. The
-> cost is up to 24 real portal logins/day; if PSA ever rate-limits or flags that, switch
-> `cmd/psa-harvest` to call `Harvester.EnsureFreshToken` (skips login while the stored
-> token is still fresh) instead of `Harvest`, then the extra runs become cheap no-ops.
+> "every 12h". `hourly` is used for a wide safety margin against a failed login. Because
+> `cmd/psa-harvest` uses `EnsureFreshToken` (login only when <6h validity remains), the
+> hourly runs are almost all cheap no-ops — roughly one real login per day, plus a few
+> hourly retries in the 6h window before expiry if a login fails.
 
 Inspect / re-run manually:
 
 ```bash
 fly machine list -a slabledger-psa-harvest          # see the scheduled machine + last exit
-fly logs -a slabledger-psa-harvest                  # success: "psa-harvest: access token refreshed"
+fly logs -a slabledger-psa-harvest                  # success: "psa-harvest: token is fresh"
 fly machine run registry.fly.io/slabledger-psa-harvest:latest -a slabledger-psa-harvest  # one-off run now
 ```
 

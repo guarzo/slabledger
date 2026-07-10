@@ -63,9 +63,12 @@ func run() error {
 
 	// workDir "." — the image's WORKDIR is where web/scripts/ lives.
 	h := psaportal.NewHarvester(store, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
-	if err := h.Harvest(ctx); err != nil {
+	// EnsureFreshToken skips the browser login while the stored token still has
+	// ample validity, so frequent (hourly) scheduled runs are cheap no-ops and only
+	// actually log in as the token nears expiry.
+	if err := h.EnsureFreshToken(ctx); err != nil {
 		return err
 	}
-	logger.Info(ctx, "psa-harvest: access token refreshed")
+	logger.Info(ctx, "psa-harvest: token is fresh (refreshed if it was near expiry)")
 	return nil
 }

@@ -39,7 +39,10 @@ func NewHarvester(repo TokenRepository, workDir, email, password string, logger 
 		args:     []string{"web/scripts/harvest-psa-token.mjs"},
 		dir:      workDir,
 		env:      []string{"PSA_PORTAL_EMAIL=" + email, "PSA_PORTAL_PASSWORD=" + password},
-		freshFor: time.Hour,
+		// Refresh once the stored ~24h token drops below 6h of validity. Paired with
+		// an hourly scheduler this leaves ~6 retry attempts before the token lapses,
+		// so a single failed login doesn't cause an outage.
+		freshFor: 6 * time.Hour,
 		logger:   logger,
 	}
 }
@@ -55,9 +58,9 @@ func (h *Harvester) EnsureFreshToken(ctx context.Context) error {
 	return h.Harvest(ctx)
 }
 
-// Harvest unconditionally runs the login script and stores a fresh token. The
-// out-of-process psa-harvest job calls this directly (every run yields a fresh
-// ~24h token); EnsureFreshToken wraps it with a staleness check for in-process use.
+// Harvest unconditionally runs the login script and stores a fresh token. Both the
+// out-of-process psa-harvest job and the in-process scheduler reach it through
+// EnsureFreshToken, which adds the staleness check so a still-valid token is reused.
 func (h *Harvester) Harvest(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, h.name, h.args...)
 	cmd.Dir = h.dir

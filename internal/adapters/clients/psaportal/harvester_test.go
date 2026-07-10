@@ -23,9 +23,18 @@ func TestHarvester_EnsureFreshToken(t *testing.T) {
 		{
 			name:          "skips when fresh",
 			currentToken:  "still-valid",
-			currentExpiry: time.Now().Add(2 * time.Hour),
-			cmdName:       "false", // would fail if called
-			wantSaved:     "",      // SaveToken must not be called
+			currentExpiry: time.Now().Add(12 * time.Hour), // well beyond the 6h freshFor threshold
+			cmdName:       "false",                        // would fail if called
+			wantSaved:     "",                             // SaveToken must not be called
+		},
+		{
+			name:          "harvests when within refresh window",
+			currentToken:  "near-expiry",
+			currentExpiry: time.Now().Add(2 * time.Hour), // inside the 6h freshFor threshold → refresh
+			cmdName:       "sh",
+			cmdArgs:       []string{"-c", `printf '{"accessToken":"renewed","expiresAt":"2099-01-01T00:00:00Z"}'`},
+			wantSaved:     "renewed",
+			wantSavedTime: true,
 		},
 		{
 			name:          "harvests when stale",
