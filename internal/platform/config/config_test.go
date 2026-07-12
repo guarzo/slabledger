@@ -350,47 +350,29 @@ func TestMaintenanceConfig(t *testing.T) {
 }
 
 func TestPSAPortalEnabled(t *testing.T) {
-	t.Run("enabled when credentials present", func(t *testing.T) {
-		t.Setenv("PSA_PORTAL_EMAIL", "harvester@example.com")
-		t.Setenv("PSA_PORTAL_PASSWORD", "secret")
-		t.Setenv("PSA_PORTAL_ENABLED", "")
+	tests := []struct {
+		name     string
+		email    string
+		password string
+		override string
+		want     bool
+	}{
+		{name: "enabled when credentials present", email: "harvester@example.com", password: "secret", override: "", want: true},
+		{name: "disabled when no credentials and no override", email: "", password: "", override: "", want: false},
+		{name: "override enables reader without credentials", email: "", password: "", override: "true", want: true},
+		{name: "override can force disable despite credentials", email: "harvester@example.com", password: "secret", override: "false", want: false},
+	}
 
-		cfg := FromEnv(Default())
-		if !cfg.PSAPortal.Enabled {
-			t.Error("expected PSAPortal enabled when email+password set")
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSA_PORTAL_EMAIL", tt.email)
+			t.Setenv("PSA_PORTAL_PASSWORD", tt.password)
+			t.Setenv("PSA_PORTAL_ENABLED", tt.override)
 
-	t.Run("disabled when no credentials and no override", func(t *testing.T) {
-		t.Setenv("PSA_PORTAL_EMAIL", "")
-		t.Setenv("PSA_PORTAL_PASSWORD", "")
-		t.Setenv("PSA_PORTAL_ENABLED", "")
-
-		cfg := FromEnv(Default())
-		if cfg.PSAPortal.Enabled {
-			t.Error("expected PSAPortal disabled with no credentials")
-		}
-	})
-
-	t.Run("override enables reader without credentials", func(t *testing.T) {
-		t.Setenv("PSA_PORTAL_EMAIL", "")
-		t.Setenv("PSA_PORTAL_PASSWORD", "")
-		t.Setenv("PSA_PORTAL_ENABLED", "true")
-
-		cfg := FromEnv(Default())
-		if !cfg.PSAPortal.Enabled {
-			t.Error("expected PSA_PORTAL_ENABLED=true to enable reader without credentials")
-		}
-	})
-
-	t.Run("override can force disable despite credentials", func(t *testing.T) {
-		t.Setenv("PSA_PORTAL_EMAIL", "harvester@example.com")
-		t.Setenv("PSA_PORTAL_PASSWORD", "secret")
-		t.Setenv("PSA_PORTAL_ENABLED", "false")
-
-		cfg := FromEnv(Default())
-		if cfg.PSAPortal.Enabled {
-			t.Error("expected PSA_PORTAL_ENABLED=false to disable despite credentials")
-		}
-	})
+			cfg := FromEnv(Default())
+			if cfg.PSAPortal.Enabled != tt.want {
+				t.Errorf("PSAPortal.Enabled = %v, want %v", cfg.PSAPortal.Enabled, tt.want)
+			}
+		})
+	}
 }
