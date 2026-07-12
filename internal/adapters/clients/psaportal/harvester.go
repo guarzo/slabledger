@@ -12,6 +12,12 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// TokenStore returns the most recently harvested portal access token.
+// A "" token (no row yet) is not an error — the caller treats it as "needs harvest".
+type TokenStore interface {
+	CurrentToken(ctx context.Context) (token string, expiresAt time.Time, err error)
+}
+
 // TokenRepository reads and writes the harvested portal token. It extends the
 // read-only TokenStore with a write path (embedding keeps CurrentToken declared
 // in exactly one place, so the two interfaces can't drift apart).
