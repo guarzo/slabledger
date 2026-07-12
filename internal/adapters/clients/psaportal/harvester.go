@@ -94,6 +94,14 @@ func (h *Harvester) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Refuse to overwrite a good snapshot with an empty one: a transient 0-row
+	// Lightdash result (error envelope, filter glitch) would otherwise stamp a
+	// fresh fetched_at and defeat the reader's staleness guard, turning a loud
+	// stale-failure into a silent "0 rows imported". Leave the previous snapshot
+	// in place so it ages out loudly instead.
+	if len(rows) == 0 {
+		return fmt.Errorf("psaportal: harvest returned 0 rows; keeping previous snapshot")
+	}
 	if err := h.snapshots.SaveSnapshot(ctx, rows, time.Now()); err != nil {
 		return err
 	}

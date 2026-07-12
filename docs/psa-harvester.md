@@ -29,7 +29,7 @@ migration would leave it writing snapshot rows the app can't yet read.
 ## Why a separate job
 
 Playwright/Chromium doesn't run on the app's alpine image (musl), and the app only
-needs a browser for a once-a-day login. Keeping it separate lets the app image stay
+needs a browser to harvest the portal rows. Keeping it separate lets the app image stay
 lean; the DB is the only coupling.
 
 ## Build & run
@@ -45,18 +45,20 @@ docker run --rm \
   slabledger-psa-harvest
 ```
 
-On success it logs `psa-harvest: token is fresh` and exits 0 (it logs
-`harvesting PSA portal access token` first only when the stored token is near expiry and
-an actual login is needed). On failure the
-underlying Playwright script's stderr (and a debug screenshot/HTML) is surfaced in the
-logs; exit is non-zero.
+On success it logs `psa-harvest: token and rows snapshot refreshed` and exits 0.
+On failure the underlying Playwright script's stderr (and a debug screenshot/HTML)
+is surfaced in the logs; exit is non-zero.
 
 ## Scheduling
 
-The stored token is valid ~24h, so it must be refreshed well inside that window.
-`cmd/psa-harvest` calls `EnsureFreshToken`: it only performs the browser login when the
-stored token drops below 6h of validity, and is a cheap no-op otherwise. So the scheduler
-can fire often (for retry margin) without paying for a real login every time.
+Every run does the full cycle: it launches Chromium, captures the analytics
+`__data.json`, and exchanges the embed JWT found there for the rows. The embed
+JWT is minted fresh per request with a ~1h TTL, so it must be exchanged on every
+run — there is no "cheap no-op" run. What *is* skipped when the stored token
+still has validity is the interactive SSO **login**: the script injects the
+stored token as a cookie and, if the session is still accepted, never touches the
+password form. So the scheduler should fire hourly for retry margin against a
+failed login, well inside the snapshot's 26h staleness ceiling.
 
 ### Production: Fly.io (current deploy)
 
@@ -104,22 +106,22 @@ fly machine run \
 > small for Chromium. The `1024`/`shared`/`1` values here mirror `fly.harvest.toml`.
 
 > Fly's `--schedule` only accepts `hourly | daily | weekly | monthly` — there is no
-> "every 12h". `hourly` is used for a wide safety margin against a failed login. Because
-> `cmd/psa-harvest` uses `EnsureFreshToken` (login only when <6h validity remains), the
-> hourly runs are almost all cheap no-ops — roughly one real login per day, plus a few
-> hourly retries in the 6h window before expiry if a login fails.
+> "every 12h". `hourly` is used for a wide safety margin against a failed login. Every
+> hourly run launches Chromium and re-exchanges the ~1h embed JWT for a fresh rows
+> snapshot; the stored-token cookie injection only skips the interactive SSO login, not
+> the run itself.
 
 > **Verify a one-off run before scheduling.** Run it once *without* `--schedule` and
-> confirm the logs show `psa-harvest: token is fresh` (exit 0) first. A machine created by
-> `fly machine run` **auto-restarts on failure**, so a crash-looping harvester retries
-> forever — if a test run crash-loops, `fly machine destroy <id> --force` it before fixing
-> and retrying.
+> confirm the logs show `psa-harvest: token and rows snapshot refreshed` (exit 0) first.
+> A machine created by `fly machine run` **auto-restarts on failure**, so a crash-looping
+> harvester retries forever — if a test run crash-loops, `fly machine destroy <id> --force`
+> it before fixing and retrying.
 
 Inspect / re-run manually:
 
 ```bash
 fly machine list -a slabledger-psa-harvest          # see the scheduled machine (note its ID) + last exit
-fly logs -a slabledger-psa-harvest                  # success: "psa-harvest: token is fresh"
+fly logs -a slabledger-psa-harvest                  # success: "psa-harvest: token and rows snapshot refreshed"
 fly machine run registry.fly.io/slabledger-psa-harvest:harvest --region iad --vm-memory 1024 --vm-cpu-kind shared --vm-cpus 1 -a slabledger-psa-harvest  # one-off run now
 ```
 
@@ -147,8 +149,8 @@ Re-pass `--schedule hourly` on update — it is set, not preserved implicitly. (
 
 ### Other platforms
 
-Any scheduler that can run the image every ~12h works — e.g. a `cron`/systemd timer or a
-Kubernetes `CronJob` (`0 */12 * * *`) using the `slabledger-psa-harvest` image with the
+Any scheduler that can run the image hourly works — e.g. a `cron`/systemd timer or a
+Kubernetes `CronJob` (`0 * * * *`) using the `slabledger-psa-harvest` image with the
 four env vars from a Secret.
 
 ## Env

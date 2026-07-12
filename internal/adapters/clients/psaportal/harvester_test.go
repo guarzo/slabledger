@@ -143,6 +143,36 @@ func TestHarvester_Run(t *testing.T) {
 		}
 	})
 
+	t.Run("empty rows do not overwrite the previous snapshot", func(t *testing.T) {
+		empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.HasSuffix(r.URL.Path, "/dashboard"):
+				fmt.Fprint(w, `{"results":{"tiles":[{"uuid":"tile-1","properties":{"chartSlug":"embed-itemized-purchases"}}]}}`)
+			default:
+				fmt.Fprint(w, `{"results":{"rows":[]}}`)
+			}
+		}))
+		defer empty.Close()
+
+		repo := &mocks.PSATokenRepositoryMock{}
+		snaps := &mocks.PSASnapshotWriterMock{}
+		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
+			observability.NewNoopLogger(), WithLightdashBaseURL(empty.URL))
+		h.name = "cat"
+		h.args = []string{scriptOutputFile(t, empty.URL)}
+
+		err := h.Run(context.Background())
+		if err == nil {
+			t.Fatal("expected error on zero-row harvest")
+		}
+		if repo.SavedToken != "tok-1" {
+			t.Errorf("token must still be saved on an empty harvest; got %q", repo.SavedToken)
+		}
+		if snaps.SavedRows != nil {
+			t.Errorf("empty harvest must not overwrite the snapshot; got %+v", snaps.SavedRows)
+		}
+	})
+
 	t.Run("script exec error", func(t *testing.T) {
 		repo := &mocks.PSATokenRepositoryMock{}
 		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, ".", "e", "p",

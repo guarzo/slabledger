@@ -81,12 +81,6 @@ async function dumpDebug(page, label) {
   }
 }
 
-// Browser selection. Playwright's bundled-browser download is unreliable in some
-// environments, so allow pointing at an already-installed Chrome/Chromium:
-//   PSA_PORTAL_CHROME_PATH    — absolute path to a chrome/chromium binary (executablePath)
-//   PSA_PORTAL_CHROME_CHANNEL — branded channel, e.g. "chrome" or "msedge" (no download)
-// If neither is set, Playwright uses its bundled Chromium (requires `playwright install`).
-
 // loginWithPassword drives the Collectors SSO password form. Selectors and
 // fallbacks are unchanged from the original inline flow.
 async function loginWithPassword(page) {
@@ -177,6 +171,11 @@ try {
   const cookies = await context.cookies(['https://www.psacard.com']);
   const at = cookies.find((c) => c.name === 'accessToken');
   if (!at || !at.value) {
+    // The two-outcome URL race above assumes we land on /signin or the portal.
+    // Include the actual landing URL so an unexpected third page (interstitial,
+    // consent, changed path) is diagnosable rather than hidden behind a generic
+    // "no accessToken cookie" error.
+    console.error(`harvest-psa-token: no accessToken cookie; landed on ${page.url()}`);
     await dumpDebug(page, 'no-access-cookie');
     throw new Error('login completed but no accessToken cookie was set');
   }
