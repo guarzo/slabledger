@@ -1,9 +1,9 @@
 // Command psa-harvest logs into the PSA Buyer Campaign Manager portal with a
 // headless browser and writes a fresh, AES-encrypted access token plus the
 // current portal rows snapshot to Postgres for the main app to consume. Run it
-// on a schedule (~every 12h) in an image that has a browser (see
-// Dockerfile.harvest); the lean alpine app image cannot run one and only reads
-// the token back out of the database.
+// hourly in an image that has a browser (see Dockerfile.harvest); the lean
+// alpine app image cannot run one and only reads the rows snapshot back out of
+// the database.
 //
 // Required env: PSA_PORTAL_EMAIL, PSA_PORTAL_PASSWORD, ENCRYPTION_KEY, DATABASE_URL.
 package main
