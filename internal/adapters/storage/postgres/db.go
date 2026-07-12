@@ -16,14 +16,16 @@ type DB struct {
 	logger observability.Logger
 }
 
-// Open parses a Postgres connection URL and returns a verified *DB.
+// Open parses a Postgres connection URL and returns a verified *DB. The caller's
+// context bounds the initial ping and its retry loop, so a startup deadline (e.g.
+// the psa-harvest run timeout) is honored instead of the ping backing off on its
+// own unbounded clock.
 //
 // QueryExecModeExec is used so that the driver does not rely on session-level
 // prepared statements. That keeps us compatible with both local Postgres and
 // Supabase's PgBouncer transaction pooling (port 6543) without extra tuning.
-func Open(url string, logger observability.Logger) (*DB, error) {
+func Open(ctx context.Context, url string, logger observability.Logger) (*DB, error) {
 	start := time.Now()
-	ctx := context.Background()
 
 	logger.Info(ctx, "opening database", observability.String("driver", "pgx/v5"))
 

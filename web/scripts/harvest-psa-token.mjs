@@ -2,7 +2,7 @@
 //
 // Logs into Collectors SSO (password-only) with stored credentials, lands back
 // on psacard.com, reads the `accessToken` cookie, and prints JSON to stdout:
-//   {"accessToken":"<jwt>","expiresAt":"<RFC3339>"}
+//   {"accessToken":"<jwt>","expiresAt":"<RFC3339>","analyticsData":"<raw __data.json body>"}
 //
 // The Go harvest trigger execs this and persists the result via the encrypted
 // token store. On any failure it writes a debug screenshot + HTML and exits 1.
@@ -11,6 +11,8 @@
 //   PSA_PORTAL_EMAIL     (required)
 //   PSA_PORTAL_PASSWORD  (required)
 //   PSA_PORTAL_START_URL (optional, default the buyer campaign manager home)
+//   PSA_PORTAL_ACCESS_TOKEN (optional) previously harvested token; injected as a
+//                            cookie so a still-valid session skips the SSO login
 //   PSA_HARVEST_DEBUG_DIR(optional, default /tmp)
 //   PSA_PORTAL_CHROME_PATH    (optional) absolute path to an installed chrome/chromium binary
 //   PSA_PORTAL_CHROME_CHANNEL (optional) branded channel, e.g. "chrome" or "msedge" (no download)
@@ -25,6 +27,7 @@ const EMAIL = process.env.PSA_PORTAL_EMAIL;
 const PASSWORD = process.env.PSA_PORTAL_PASSWORD;
 const START_URL =
   process.env.PSA_PORTAL_START_URL || 'https://www.psacard.com/buyercampaignmanager/';
+const ACCESS_TOKEN = process.env.PSA_PORTAL_ACCESS_TOKEN || '';
 const DEBUG_DIR = process.env.PSA_HARVEST_DEBUG_DIR || '/tmp';
 const UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
@@ -78,26 +81,9 @@ async function dumpDebug(page, label) {
   }
 }
 
-// Browser selection. Playwright's bundled-browser download is unreliable in some
-// environments, so allow pointing at an already-installed Chrome/Chromium:
-//   PSA_PORTAL_CHROME_PATH    — absolute path to a chrome/chromium binary (executablePath)
-//   PSA_PORTAL_CHROME_CHANNEL — branded channel, e.g. "chrome" or "msedge" (no download)
-// If neither is set, Playwright uses its bundled Chromium (requires `playwright install`).
-const launchOpts = { headless: true };
-if (process.env.PSA_PORTAL_CHROME_PATH) {
-  launchOpts.executablePath = process.env.PSA_PORTAL_CHROME_PATH;
-} else if (process.env.PSA_PORTAL_CHROME_CHANNEL) {
-  launchOpts.channel = process.env.PSA_PORTAL_CHROME_CHANNEL;
-}
-const browser = await chromium.launch(launchOpts);
-const context = await browser.newContext({ userAgent: UA });
-const page = await context.newPage();
-
-try {
-  await page.goto(START_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  // The portal bounces unauthenticated users to app.collectors.com/signin.
-  await page.waitForURL(/collectors\.com\/signin/i, { timeout: 30000 }).catch(() => {});
-
+// loginWithPassword drives the Collectors SSO password form. Selectors and
+// fallbacks are unchanged from the original inline flow.
+async function loginWithPassword(page) {
   // --- Email step ---
   const emailField = await firstVisible(page, [
     '#email',
@@ -139,14 +125,57 @@ try {
     throw new Error('could not find the submit button on the sign-in page');
   }
   await submit.click();
+}
 
-  // --- Wait for return to the portal ---
-  await page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 60000 }).catch(() => {});
+// Browser selection. Playwright's bundled-browser download is unreliable in some
+// environments, so allow pointing at an already-installed Chrome/Chromium:
+//   PSA_PORTAL_CHROME_PATH    — absolute path to a chrome/chromium binary (executablePath)
+//   PSA_PORTAL_CHROME_CHANNEL — branded channel, e.g. "chrome" or "msedge" (no download)
+// If neither is set, Playwright uses its bundled Chromium (requires `playwright install`).
+const launchOpts = { headless: true };
+if (process.env.PSA_PORTAL_CHROME_PATH) {
+  launchOpts.executablePath = process.env.PSA_PORTAL_CHROME_PATH;
+} else if (process.env.PSA_PORTAL_CHROME_CHANNEL) {
+  launchOpts.channel = process.env.PSA_PORTAL_CHROME_CHANNEL;
+}
+const browser = await chromium.launch(launchOpts);
+const context = await browser.newContext({ userAgent: UA });
+const page = await context.newPage();
+
+try {
+  // Inject a previously harvested token so a still-valid session skips SSO.
+  if (ACCESS_TOKEN) {
+    await context.addCookies([{
+      name: 'accessToken',
+      value: ACCESS_TOKEN,
+      domain: 'www.psacard.com',
+      path: '/',
+      secure: true,
+    }]);
+  }
+
+  await page.goto(START_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  // Authenticated sessions stay on the portal; everyone else bounces to
+  // app.collectors.com/signin. Wait for either outcome, then check where we are.
+  await Promise.race([
+    page.waitForURL(/collectors\.com\/signin/i, { timeout: 30000 }),
+    page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 30000 }),
+  ]).catch(() => {});
+
+  if (/collectors\.com\/signin/i.test(page.url())) {
+    await loginWithPassword(page);
+    await page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 60000 }).catch(() => {});
+  }
 
   // Read the accessToken cookie (set on psacard.com after the SSO round-trip).
   const cookies = await context.cookies(['https://www.psacard.com']);
   const at = cookies.find((c) => c.name === 'accessToken');
   if (!at || !at.value) {
+    // The two-outcome URL race above assumes we land on /signin or the portal.
+    // Include the actual landing URL so an unexpected third page (interstitial,
+    // consent, changed path) is diagnosable rather than hidden behind a generic
+    // "no accessToken cookie" error.
+    console.error(`harvest-psa-token: no accessToken cookie; landed on ${page.url()}`);
     await dumpDebug(page, 'no-access-cookie');
     throw new Error('login completed but no accessToken cookie was set');
   }
@@ -157,7 +186,23 @@ try {
     throw new Error('accessToken cookie is not a decodable JWT');
   }
 
-  process.stdout.write(JSON.stringify({ accessToken: at.value, expiresAt }) + '\n');
+  // Fetch the analytics __data.json from inside the page: the browser context
+  // already holds cf_clearance, so this bypasses the Cloudflare gate that
+  // blocks plain HTTP clients on datacenter IPs. Its embedUrl carries a
+  // Lightdash embed JWT minted fresh per request (~1h TTL) — the Go side
+  // exchanges it for rows immediately.
+  const analytics = await page.evaluate(async (path) => {
+    const r = await fetch(path, { credentials: 'include' });
+    return { status: r.status, body: await r.text() };
+  }, '/buyercampaignmanager/analytics/__data.json?x-sveltekit-invalidated=001');
+  if (analytics.status !== 200 || !analytics.body.includes('embedUrl')) {
+    await dumpDebug(page, 'analytics-fetch');
+    throw new Error(`analytics __data.json fetch failed (status ${analytics.status})`);
+  }
+
+  process.stdout.write(
+    JSON.stringify({ accessToken: at.value, expiresAt, analyticsData: analytics.body }) + '\n'
+  );
 } catch (e) {
   await dumpDebug(page, 'exception');
   // Don't call fail() here — it exits immediately and would skip the finally

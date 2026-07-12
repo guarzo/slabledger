@@ -2621,6 +2621,7 @@ Returns PSA sync configuration and last-run stats.
   "spreadsheetId": "1ABC...",
   "interval": "24h",
   "pendingCount": 3,
+  "snapshotFetchedAt": "2026-07-12T09:00:00Z",  // when the harvester last stored portal rows (omitted before first harvest)
   "lastRun": {
     "lastRunAt": "2025-01-15T10:00:00Z",
     "durationMs": 4500,

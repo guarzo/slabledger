@@ -68,7 +68,8 @@ type handlerInputs struct {
 	DHStore            *postgres.DHStore
 	SyncStateRepo      *postgres.SyncStateRepository
 	SchedulerResult    *scheduler.BuildResult
-	PSAPortalClient    *psaportal.Client
+	PSARowProvider     *psaportal.SnapshotRowProvider
+	PSASnapshotStore   *postgres.PSAPortalSnapshotStore
 	PendingItemsRepo   *postgres.PendingItemsRepository
 	DHTombstoneStore   *postgres.DHCardTombstoneStore
 }
@@ -113,12 +114,17 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		if in.CampaignsService != nil {
 			svc = in.CampaignsService
 		}
+		var snapInfo handlers.PSASnapshotInfo
+		if in.PSASnapshotStore != nil {
+			snapInfo = in.PSASnapshotStore
+		}
 		psaSyncHandler = handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
-			PendingRepo: in.PendingItemsRepo,
-			Refresher:   refresher,
-			Service:     svc,
-			Interval:    in.Cfg.PSASync.Interval.String(),
-			Logger:      logger,
+			PendingRepo:  in.PendingItemsRepo,
+			Refresher:    refresher,
+			Service:      svc,
+			SnapshotInfo: snapInfo,
+			Interval:     in.Cfg.PSASync.Interval.String(),
+			Logger:       logger,
 		})
 	}
 
@@ -381,9 +387,9 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	deps.FinanceService = in.FinanceService
 	deps.DHPriceSyncService = in.DHPriceSyncService
 
-	// Wire PSA portal client for manual sync endpoint (if configured)
-	if in.PSAPortalClient != nil {
-		deps.PSARowProvider = in.PSAPortalClient
+	// Wire PSA portal snapshot provider for the sync scheduler (if configured)
+	if in.PSARowProvider != nil {
+		deps.PSARowProvider = in.PSARowProvider
 	}
 
 	out := handlerOutputs{
