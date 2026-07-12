@@ -109,7 +109,11 @@ func campaignItems(root any) (items []any, pageSize, totalCount int, err error) 
 		return nil, 0, 0, fmt.Errorf("psaportal: campaignsResponse not an object")
 	}
 	itemsRaw, _ := cr["items"].([]any)
-	return itemsRaw, asInt(cr["pageSize"]), asInt(cr["totalCount"]), nil
+	pageSize = asInt(cr["pageSize"])
+	if pageSize <= 0 {
+		return nil, 0, 0, fmt.Errorf("psaportal: invalid pageSize %d in campaign list response", pageSize)
+	}
+	return itemsRaw, pageSize, asInt(cr["totalCount"]), nil
 }
 
 // mapListItem maps one campaignsResponse.items[] entry into a PortalCampaign.
