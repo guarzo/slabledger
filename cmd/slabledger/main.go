@@ -33,9 +33,9 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
-// Compile-time guard: the Postgres token store must satisfy the client's
-// read-only TokenStore contract that NewStoredTokenProvider depends on.
-var _ psaportal.TokenStore = (*postgres.PSAPortalTokenStore)(nil)
+// Compile-time guard: the Postgres snapshot store must satisfy the client's
+// SnapshotStore (read) contract the provider depends on.
+var _ psaportal.SnapshotStore = (*postgres.PSAPortalSnapshotStore)(nil)
 
 // initLogger creates a new logger with the specified level and format
 func initLogger(level string, jsonFormat bool) observability.Logger {
@@ -351,23 +351,15 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Initialize Market Movers client (store was created earlier for campaigns service)
 	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
 
-	// PSA portal client reads the harvested access token (decrypted) from Postgres.
-	// The token is refreshed out-of-process by the `psa-harvest` job (it needs a
-	// browser the lean app image can't run), so no in-process harvester is wired here.
-	var portalClient *psaportal.Client
-	switch {
-	case !cfg.PSAPortal.Enabled:
-		// Portal sync not enabled; nothing to wire.
-	case clEncryptor == nil:
-		logger.Warn(ctx, "PSA portal enabled but ENCRYPTION_KEY is not set; portal sync disabled")
-	default:
-		// Reuse the encryptor built earlier from ENCRYPTION_KEY (same key as CL/MM).
-		tokenStore := postgres.NewPSAPortalTokenStore(db.DB, clEncryptor)
-		portalClient = psaportal.New(
-			psaportal.NewStoredTokenProvider(tokenStore), psaportal.Config{},
-			psaportal.WithLogger(logger),
-		)
-		logger.Info(ctx, "PSA portal client initialized")
+	// PSA portal rows are harvested out-of-process by the `psa-harvest` job (it
+	// needs a browser to pass Cloudflare, which the lean app image can't run) and
+	// stored as a snapshot in Postgres; the reader only queries the DB.
+	var psaSnapshotStore *postgres.PSAPortalSnapshotStore
+	var psaRowProvider *psaportal.SnapshotRowProvider
+	if cfg.PSAPortal.Enabled {
+		psaSnapshotStore = postgres.NewPSAPortalSnapshotStore(db.DB)
+		psaRowProvider = psaportal.NewSnapshotRowProvider(psaSnapshotStore, logger)
+		logger.Info(ctx, "PSA portal snapshot provider initialized")
 	}
 
 	// DH price re-sync service: drives both the inline goroutine on review-price
@@ -421,8 +413,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHTombstoneStore:           dhTombstoneStore,
 		GapStore:                   gapStore,
 	}
-	if portalClient != nil {
-		sDeps.PSARowProvider = portalClient
+	if psaRowProvider != nil {
+		sDeps.PSARowProvider = psaRowProvider
 	}
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
@@ -462,7 +454,8 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHPriceSyncService: dhPriceSyncService,
 		SyncStateRepo:      syncStateRepo,
 		SchedulerResult:    schedulerResult,
-		PSAPortalClient:    portalClient,
+		PSARowProvider:     psaRowProvider,
+		PSASnapshotStore:   psaSnapshotStore,
 		PendingItemsRepo:   pendingItemsRepo,
 		DHTombstoneStore:   dhTombstoneStore,
 	})
