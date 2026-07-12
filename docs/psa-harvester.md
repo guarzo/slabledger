@@ -2,15 +2,29 @@
 
 The PSA Buyer Campaign Manager portal (which replaced the old Google-Sheet feed)
 authenticates with a confidential OAuth flow that can't be refreshed headlessly from
-a token alone. Instead, a small **out-of-process job logs in with a real browser** and
-writes a fresh ~24h access token to Postgres. The main app reads that token from the
-`psa_portal_token` table and never runs a browser itself.
+a token alone, and its Lightdash-embedded analytics data is Cloudflare-gated — requests
+from datacenter IPs get challenged, but a real browser passes. So a small **out-of-process
+job drives a real browser** end to end: it (1) logs in only when the stored token is
+stale (otherwise it injects the stored cookie and skips login), (2) captures the portal's
+`analytics/__data.json` in-browser to get past the Cloudflare check, (3) immediately
+exchanges the short-lived (~1h) embed JWT found there for the actual Lightdash rows, and
+(4) writes both a fresh `psa_portal_token` (for the next run's cookie injection) and a
+`psa_portal_snapshot` (the rows). The main app never runs a browser and never talks to
+Cloudflare — it only reads the already-fetched rows from `psa_portal_snapshot`.
 
 ```
-psa-harvest job (Chromium)  ──writes encrypted token──▶  psa_portal_token (Postgres)
-                                                                │
-                          main app  ──reads token──────────────┘  → PSA sync / import
+psa-harvest job (Chromium) ──token──▶ psa_portal_token ─┐   (login skipped while token valid)
+                    └──rows snapshot──▶ psa_portal_snapshot ──▶ main app PSA sync / import
 ```
+
+## Rollout order
+
+Because the main app now reads `psa_portal_snapshot` (added by migration `000017`)
+instead of talking to PSA itself, **deploy the main app first** so the migration runs
+and the table exists, then rebuild the harvest image and point the scheduled machine at
+it with `fly machine update <machine_id> --image ... --schedule hourly` (see
+"Updating the harvester after a code change" below). Deploying the harvester before the
+migration would leave it writing snapshot rows the app can't yet read.
 
 ## Why a separate job
 
