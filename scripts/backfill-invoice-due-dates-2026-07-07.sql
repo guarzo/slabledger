@@ -51,33 +51,47 @@
 --   table so the preview, the update, and the revert can never drift. A durable
 --   (non-TEMP) table is used deliberately so the ids/values survive past the
 --   psql session and remain available for a later rollback; drop it in Step 3.
---   DROP-then-create makes re-running the preview idempotent.
+--
+--   The build is GUARDED: it only runs when backfill_due_date_targets does not
+--   already exist. This is deliberate — after Step 1 applies, the invoices no
+--   longer match `due_date = ''`, so a blind DROP-then-rebuild would silently
+--   replace the durable rollback set with an EMPTY table and destroy the ability
+--   to revert. Re-running this script while the table exists is therefore a
+--   no-op for Step 0 (the existing preview/rollback set is preserved). To start
+--   a genuinely fresh preview, run the Step 3 cleanup first, then re-run.
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS backfill_due_date_targets;
-CREATE TABLE backfill_due_date_targets AS
-SELECT
-    id,
-    invoice_date,
-    status,
-    CASE
-        WHEN invoice_date::date < DATE '2026-05-15' THEN 'pre-05-15 (+14d)'
-        WHEN invoice_date::date <= DATE '2026-06-30' THEN 'mid (+1 business day)'
-        ELSE 'post-07-01 (+7d)'
-    END AS era,
-    to_char(
+DO $$
+BEGIN
+    IF to_regclass('backfill_due_date_targets') IS NOT NULL THEN
+        RAISE NOTICE 'backfill_due_date_targets already exists — preserving the existing preview/rollback set. Run Step 3 cleanup to rebuild from scratch.';
+        RETURN;
+    END IF;
+
+    CREATE TABLE backfill_due_date_targets AS
+    SELECT
+        id,
+        invoice_date,
+        status,
         CASE
-            WHEN invoice_date::date < DATE '2026-05-15'
-                THEN invoice_date::date + 14
-            WHEN invoice_date::date <= DATE '2026-06-30'
-                THEN invoice_date::date + CASE EXTRACT(DOW FROM invoice_date::date)
-                                              WHEN 5 THEN 3  -- Fri -> Mon
-                                              WHEN 6 THEN 2  -- Sat -> Mon
-                                              ELSE 1          -- Sun/Mon-Thu -> next day
-                                          END
-            ELSE invoice_date::date + 7
-        END, 'YYYY-MM-DD') AS computed_due_date
-FROM invoices
-WHERE due_date = '';
+            WHEN invoice_date::date < DATE '2026-05-15' THEN 'pre-05-15 (+14d)'
+            WHEN invoice_date::date <= DATE '2026-06-30' THEN 'mid (+1 business day)'
+            ELSE 'post-07-01 (+7d)'
+        END AS era,
+        to_char(
+            CASE
+                WHEN invoice_date::date < DATE '2026-05-15'
+                    THEN invoice_date::date + 14
+                WHEN invoice_date::date <= DATE '2026-06-30'
+                    THEN invoice_date::date + CASE EXTRACT(DOW FROM invoice_date::date)
+                                                  WHEN 5 THEN 3  -- Fri -> Mon
+                                                  WHEN 6 THEN 2  -- Sat -> Mon
+                                                  ELSE 1          -- Sun/Mon-Thu -> next day
+                                              END
+                ELSE invoice_date::date + 7
+            END, 'YYYY-MM-DD') AS computed_due_date
+    FROM invoices
+    WHERE due_date = '';
+END $$;
 
 -- Preview: rows that WILL be changed and their computed due dates.
 SELECT id, invoice_date, status, era, computed_due_date
