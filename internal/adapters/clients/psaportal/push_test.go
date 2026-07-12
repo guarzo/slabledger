@@ -34,7 +34,10 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 
 	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
 	err = c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
-		[]psacampaign.FieldChange{{Field: "bidPercentage", Old: "70", New: "80"}})
+		[]psacampaign.FieldChange{
+			{Field: "bidPercentage", Old: "70", New: "80"},
+			{Field: "priceMaximum", Old: "3000", New: "600"},
+		})
 	if err != nil {
 		t.Fatalf("PushCampaign: %v", err)
 	}
@@ -85,5 +88,46 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 		if _, isString := gm.(string); !isString {
 			t.Errorf("gradeMinimum should remain a string, got %T: %#v", gm, gm)
 		}
+	}
+
+	pm, ok := formData["priceMaximum"].(float64)
+	if !ok {
+		t.Fatalf("expected priceMaximum as JSON number, got %T: %#v", formData["priceMaximum"], formData["priceMaximum"])
+	}
+	if pm != 600 {
+		t.Errorf("priceMaximum = %v, want 600", pm)
+	}
+}
+
+func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
+	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	if err != nil {
+		t.Skipf("fixture missing: %v", err)
+	}
+	posted := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/edit/"):
+			_, _ = w.Write(edit)
+		case strings.Contains(r.URL.Path, "/updateCampaign"):
+			posted = true
+			_, _ = w.Write([]byte(`{"type":"result","result":"[{}]"}`))
+		default:
+			_, _ = w.Write([]byte(`<html>build/app/immutable/entry/app.HASH123.js</html>`))
+		}
+	}))
+	defer srv.Close()
+
+	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	err = c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
+		[]psacampaign.FieldChange{{Field: "biddPercentage", Old: "70", New: "80"}})
+	if err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+	if !strings.Contains(err.Error(), "biddPercentage") {
+		t.Errorf("expected error to mention unknown field name, got: %v", err)
+	}
+	if posted {
+		t.Error("expected no POST to updateCampaign for unknown field")
 	}
 }

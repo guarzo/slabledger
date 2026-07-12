@@ -54,6 +54,9 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 	}
 
 	for _, ch := range changes {
+		if _, exists := formData[ch.Field]; !exists {
+			return fmt.Errorf("psaportal: unknown campaign field %q", ch.Field)
+		}
 		if numericFormDataFields[ch.Field] {
 			n, err := strconv.ParseFloat(ch.New, 64)
 			if err != nil {
