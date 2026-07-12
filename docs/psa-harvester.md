@@ -122,29 +122,60 @@ Inspect / re-run manually:
 ```bash
 fly machine list -a slabledger-psa-harvest          # see the scheduled machine (note its ID) + last exit
 fly logs -a slabledger-psa-harvest                  # success: "psa-harvest: token and rows snapshot refreshed"
-fly machine run registry.fly.io/slabledger-psa-harvest:harvest --region iad --vm-memory 1024 --vm-cpu-kind shared --vm-cpus 1 -a slabledger-psa-harvest  # one-off run now
+fly machine run registry.fly.io/slabledger-psa-harvest:harvest --region iad --vm-memory 1024 --vm-cpu-kind shared --vm-cpus 1 -a slabledger-psa-harvest  # one-off run now```
+
+### Schedule
+
+The cadence lives on the **machine**, not in `fly.harvest.toml` or the deploy — it is set
+with `fly machine update --schedule` and is what makes Fly fire the machine on its own:
+
+```bash
+fly machine update <machine_id> --schedule hourly -a slabledger-psa-harvest
+# verify:
+fly machine status <machine_id> -a slabledger-psa-harvest --display-config | grep -i schedule  # -> "schedule": "hourly"
+```
+
+Accepted values are `hourly | daily | weekly | monthly` (there is no "every 12h"); `hourly`
+gives a wide safety margin — a missed run still leaves the reader inside its 26h staleness
+ceiling. Between runs the machine sits `stopped`; Fly starts it on schedule, it harvests,
+and it exits 0.
+
+**Keep exactly one scheduled machine.** Two machines with the same schedule both fire every
+hour and double-harvest (harmless — the snapshot is an idempotent singleton upsert — but
+wasteful). List and prune extras:
+
+```bash
+fly machine list -a slabledger-psa-harvest                 # expect ONE machine
+fly machine destroy <extra_machine_id> --force -a slabledger-psa-harvest
 ```
 
 ### Updating the harvester after a code change
 
-The scheduled machine is **unmanaged** — `fly deploy --build-only --push` rebuilds and
-pushes a new image, but it does **not** touch an already-running machine, so the hourly
-schedule would keep executing the old image indefinitely. After any harvester code change,
-rebuild the image and then point the existing machine at it:
+`fly deploy` (used to ship the main app from the same repo) **also rebuilds and rolls
+the harvester machine to the new image automatically** — the machine is managed as part
+of the app, so a merge + deploy is enough to get new harvester code running; you do not
+need to hand-roll the image onto the machine. Confirm the roll landed and the schedule
+survived it:
 
 ```bash
-# 1) Rebuild + push the new image under the same stable tag.
-fly deploy -c fly.harvest.toml --build-only --push --image-label harvest -a slabledger-psa-harvest
+# The machine's LAST UPDATED should be the deploy time, on the new image.
+fly machine list -a slabledger-psa-harvest
 
-# 2) Update the existing scheduled machine to the new image (keep the schedule).
-#    Get <machine_id> from `fly machine list -a slabledger-psa-harvest`.
+# Confirm the schedule is still set (see "Schedule" below — it must be re-asserted
+# if a machine was recreated rather than updated in place).
+fly machine status <machine_id> -a slabledger-psa-harvest --display-config | grep -i schedule
+```
+
+If you ever need to force a specific image onto the machine manually (e.g. rolling back):
+
+```bash
 fly machine update <machine_id> \
-  --image registry.fly.io/slabledger-psa-harvest:harvest \
+  --image registry.fly.io/slabledger-psa-harvest:<tag> \
   --schedule hourly \
   -a slabledger-psa-harvest
 ```
 
-Re-pass `--schedule hourly` on update — it is set, not preserved implicitly. (Alternatively,
+Re-pass `--schedule hourly` on any `fly machine update` — it is set, not preserved implicitly. (Alternatively,
 `fly machine destroy <machine_id>` then recreate with the `fly machine run` command above.)
 
 ### Other platforms
