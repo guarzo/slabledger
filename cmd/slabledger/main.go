@@ -167,7 +167,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}()
 
 	// Initialize database
-	db, err := postgres.Open(cfg.Database.URL, logger)
+	db, err := postgres.Open(ctx, cfg.Database.URL, logger)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
