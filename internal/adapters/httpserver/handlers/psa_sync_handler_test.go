@@ -8,12 +8,23 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
+
+// stubSnapshotInfo is a test stub for handlers.PSASnapshotInfo.
+type stubSnapshotInfo struct {
+	at  time.Time
+	err error
+}
+
+func (s stubSnapshotInfo) SnapshotFetchedAt(_ context.Context) (time.Time, error) {
+	return s.at, s.err
+}
 
 // mockPSASyncRefresher is a test mock for handlers.PSASyncRefresher.
 // Kept local because moving it to testutil/mocks would create an import cycle
@@ -62,6 +73,42 @@ func TestPSASyncHandler_HandleStatus(t *testing.T) {
 	}
 	if resp["pendingCount"] != float64(5) {
 		t.Errorf("expected pendingCount=5, got %v", resp["pendingCount"])
+	}
+}
+
+func TestHandleStatus_SnapshotFetchedAt(t *testing.T) {
+	fetched := time.Date(2026, 7, 12, 9, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		info    handlers.PSASnapshotInfo
+		wantKey bool
+	}{
+		{name: "reports snapshot age", info: stubSnapshotInfo{at: fetched}, wantKey: true},
+		{name: "zero time omitted", info: stubSnapshotInfo{}, wantKey: false},
+		{name: "nil info omitted", info: nil, wantKey: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
+				SnapshotInfo: tt.info,
+				Interval:     "24h0m0s",
+				Logger:       mocks.NewMockLogger(),
+			})
+			rec := httptest.NewRecorder()
+			h.HandleStatus(rec, httptest.NewRequest(http.MethodGet, "/api/admin/psa-sync/status", nil))
+
+			var resp map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			_, ok := resp["snapshotFetchedAt"]
+			if ok != tt.wantKey {
+				t.Errorf("snapshotFetchedAt present=%v, want %v", ok, tt.wantKey)
+			}
+			if tt.wantKey && resp["snapshotFetchedAt"] != "2026-07-12T09:00:00Z" {
+				t.Errorf("expected snapshotFetchedAt=2026-07-12T09:00:00Z, got %v", resp["snapshotFetchedAt"])
+			}
+		})
 	}
 }
 

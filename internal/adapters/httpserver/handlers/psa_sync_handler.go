@@ -5,11 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// PSASnapshotInfo reports when the PSA portal rows snapshot was last harvested.
+type PSASnapshotInfo interface {
+	SnapshotFetchedAt(ctx context.Context) (time.Time, error)
+}
 
 // PSASyncRefresher runs a PSA sync cycle on demand and provides last-run stats.
 type PSASyncRefresher interface {
@@ -24,30 +30,33 @@ type PSASyncPurchaseCreator interface {
 
 // PSASyncHandlerConfig holds dependencies for the PSA sync handler.
 type PSASyncHandlerConfig struct {
-	PendingRepo inventory.PendingItemRepository
-	Refresher   PSASyncRefresher       // optional
-	Service     PSASyncPurchaseCreator // optional
-	Interval    string
-	Logger      observability.Logger
+	PendingRepo  inventory.PendingItemRepository
+	Refresher    PSASyncRefresher       // optional
+	Service      PSASyncPurchaseCreator // optional
+	SnapshotInfo PSASnapshotInfo        // optional
+	Interval     string
+	Logger       observability.Logger
 }
 
 // PSASyncHandler serves PSA sync status and pending-item CRUD endpoints.
 type PSASyncHandler struct {
-	pendingRepo inventory.PendingItemRepository
-	refresher   PSASyncRefresher
-	service     PSASyncPurchaseCreator
-	interval    string
-	logger      observability.Logger
+	pendingRepo  inventory.PendingItemRepository
+	refresher    PSASyncRefresher
+	service      PSASyncPurchaseCreator
+	snapshotInfo PSASnapshotInfo
+	interval     string
+	logger       observability.Logger
 }
 
 // NewPSASyncHandler creates a new PSASyncHandler from the given config.
 func NewPSASyncHandler(cfg PSASyncHandlerConfig) *PSASyncHandler {
 	return &PSASyncHandler{
-		pendingRepo: cfg.PendingRepo,
-		refresher:   cfg.Refresher,
-		service:     cfg.Service,
-		interval:    cfg.Interval,
-		logger:      cfg.Logger,
+		pendingRepo:  cfg.PendingRepo,
+		refresher:    cfg.Refresher,
+		service:      cfg.Service,
+		snapshotInfo: cfg.SnapshotInfo,
+		interval:     cfg.Interval,
+		logger:       cfg.Logger,
 	}
 }
 
@@ -75,6 +84,16 @@ func (h *PSASyncHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 			h.logger.Warn(ctx, "failed to count pending items", observability.Err(err))
 		} else {
 			resp["pendingCount"] = count
+		}
+	}
+
+	if h.snapshotInfo != nil {
+		at, err := h.snapshotInfo.SnapshotFetchedAt(ctx)
+		switch {
+		case err != nil:
+			h.logger.Warn(ctx, "failed to read snapshot fetched_at", observability.Err(err))
+		case !at.IsZero():
+			resp["snapshotFetchedAt"] = at.UTC().Format(time.RFC3339)
 		}
 	}
 

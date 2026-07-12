@@ -59,12 +59,24 @@ func (lc *lightdashClient) tileRows(ctx context.Context, projectUUID, embedJWT, 
 	}
 
 	var envelope struct {
-		Results struct {
+		Status  string          `json:"status"`
+		Error   json.RawMessage `json:"error"`
+		Results *struct {
 			Rows []map[string]ldCell `json:"rows"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
 		return nil, fmt.Errorf("lightdash: decode response: %w", err)
+	}
+	// A rejected embed JWT or query error can come back with a 2xx status and an
+	// error envelope (httpx only errors on >=400). Treat a present error or a
+	// missing results object as a failure so a broken exchange doesn't decode to
+	// an empty-but-successful row set.
+	if len(envelope.Error) > 0 && string(envelope.Error) != "null" {
+		return nil, fmt.Errorf("lightdash: chart-and-results error: %s", envelope.Error)
+	}
+	if envelope.Results == nil {
+		return nil, fmt.Errorf("lightdash: chart-and-results returned no results object")
 	}
 
 	out := make([]map[string]string, len(envelope.Results.Rows))
