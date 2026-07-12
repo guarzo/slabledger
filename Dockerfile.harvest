@@ -20,8 +20,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -o /out/psa-harvest ./cmd/psa-harvest
 
-# 2) Official Playwright image ships Node + Chromium matching @playwright/test 1.59.
-FROM mcr.microsoft.com/playwright:v1.59.1-noble
+# 2) Official Playwright image ships Node + Chromium matching @playwright/test 1.60.
+FROM mcr.microsoft.com/playwright:v1.60.0-noble
 WORKDIR /app
 # Point the npm-installed @playwright/test at the browsers baked into the base image.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
