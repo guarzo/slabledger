@@ -12,6 +12,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
+	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
@@ -40,6 +41,9 @@ type CampaignsHandler struct {
 	baseCtx        context.Context
 	bgWG           sync.WaitGroup // tracks background goroutines (e.g. DH listing)
 	rowProvider    RowProvider    // optional: fetches PSA data from the portal
+
+	psaSnapshots psacampaign.SnapshotStore  // optional: PSA portal campaign snapshot reader
+	psaQueue     psacampaign.PushQueueStore // optional: PSA propose/publish push queue
 }
 
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
@@ -68,6 +72,16 @@ func WithExportService(svc export.Service) CampaignsHandlerOption {
 // WithPSARowProvider enables PSA portal sync for manual import.
 func WithPSARowProvider(p RowProvider) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.rowProvider = p }
+}
+
+// WithPSASnapshotStore enables the PSA portal campaign snapshot reader.
+func WithPSASnapshotStore(s psacampaign.SnapshotStore) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.psaSnapshots = s }
+}
+
+// WithPSAPushQueue enables the PSA propose/publish push queue.
+func WithPSAPushQueue(q psacampaign.PushQueueStore) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.psaQueue = q }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.
