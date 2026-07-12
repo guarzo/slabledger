@@ -22,7 +22,7 @@ func setupTestDB(t *testing.T) *DB {
 	}
 
 	logger := mocks.NewMockLogger()
-	db, err := Open(url, logger)
+	db, err := Open(context.Background(), url, logger)
 	if err != nil {
 		t.Skipf("Postgres not reachable at %q: %v (set POSTGRES_TEST_URL to override)", url, err)
 	}

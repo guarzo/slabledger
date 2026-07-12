@@ -280,7 +280,11 @@ func (c *SnapshotEnrichConfig) ApplyDefaults() {
 
 // PSAPortalConfig configures the PSA Buyer Campaign Manager portal feed.
 type PSAPortalConfig struct {
-	Enabled  bool // derived: true when Email and Password are set
+	// Enabled turns on the portal token reader. Defaults to true when Email and
+	// Password are set (the harvester app), but can be forced on via
+	// PSA_PORTAL_ENABLED for the reader-only main app, which holds no credentials
+	// and only decrypts tokens the harvester wrote.
+	Enabled  bool
 	Email    string
 	Password string
 }
