@@ -15,6 +15,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -40,7 +41,12 @@ func run() error {
 		return fmt.Errorf("config: %w", err)
 	}
 	logger := telemetry.NewSlogLogger(slog.LevelInfo, "json")
-	ctx := context.Background()
+	// Bound the whole harvest: the Playwright browser run and the DB writes
+	// inherit this deadline, so a hung login or navigation kills the process
+	// instead of leaving the scheduled machine blocked (and auto-restarting)
+	// forever. The in-script Playwright steps time out well inside this.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
 	switch {
 	case cfg.PSAPortal.Email == "" || cfg.PSAPortal.Password == "":
