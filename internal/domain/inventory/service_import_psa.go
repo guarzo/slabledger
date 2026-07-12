@@ -10,8 +10,17 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// defaultPSAPaymentTermDays is the standard net-payment term for PSA invoices.
-const defaultPSAPaymentTermDays = 15
+// defaultPSAPaymentTermDays is the standard net-payment term for PSA invoices
+// (July 2026 portal terms: due 7 calendar days after issue).
+const defaultPSAPaymentTermDays = 7
+
+// dueDateHealCutoff is the earliest invoice date the auto-detect paths (both
+// create and heal) will stamp with the uniform +7 term. Invoices dated before
+// this had era-specific PSA terms (+14, then +1 business day) and are left for
+// the reviewed era-aware backfill script (scripts/backfill-invoice-due-dates-2026-07-07.sql)
+// rather than being stamped with the wrong term during a re-import. Compared
+// lexicographically against the YYYY-MM-DD InvoiceDate string.
+const dueDateHealCutoff = "2026-07-01"
 
 func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error) {
 	allCampaigns, err := s.campaigns.ListCampaigns(ctx, false)
@@ -300,6 +309,27 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 	}
 }
 
+// dueDateFromInvoiceDate returns invoiceDate advanced by defaultPSAPaymentTermDays
+// as a YYYY-MM-DD string, or "" if invoiceDate is empty or unparseable.
+func dueDateFromInvoiceDate(invoiceDate string) string {
+	t, err := time.Parse("2006-01-02", invoiceDate)
+	if err != nil {
+		return ""
+	}
+	return t.AddDate(0, 0, defaultPSAPaymentTermDays).Format("2006-01-02")
+}
+
+// autoDetectedDueDate returns the uniform +7 due date for an invoice date, but
+// only for dates on or after dueDateHealCutoff. Pre-cutoff invoices had
+// era-specific PSA terms and are left empty (returns "") for the reviewed
+// era-aware backfill script, so both the create and heal paths stay consistent.
+func autoDetectedDueDate(invoiceDate string) string {
+	if invoiceDate < dueDateHealCutoff {
+		return ""
+	}
+	return dueDateFromInvoiceDate(invoiceDate)
+}
+
 func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (int, int) {
 	// Collect all unique invoice dates touched by this import so we reconcile
 	// totals even when the CSV row has PricePaid == 0 (existing purchase may
@@ -343,8 +373,25 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 			// Update existing invoice totals if purchases changed the amount
 			// (including zeroing out when all purchases were refunded).
 			for _, inv := range existing {
+				needsWrite := false
 				if inv.TotalCents != totalCents {
 					inv.TotalCents = totalCents
+					needsWrite = true
+				}
+				// Heal legacy rows: fill an empty due date so the forced-liquidation
+				// heuristic has data. Never overwrite a due date that is already set,
+				// and never stamp pre-cutoff invoices — those had era-specific terms
+				// and belong to the era-aware backfill script.
+				if inv.DueDate == "" {
+					if dd := autoDetectedDueDate(inv.InvoiceDate); dd != "" {
+						inv.DueDate = dd
+						needsWrite = true
+					} else if inv.InvoiceDate < dueDateHealCutoff && s.logger != nil {
+						s.logger.Warn(ctx, "autoDetectInvoices: skipping due-date heal for pre-cutoff invoice; leave for era-aware backfill",
+							observability.String("invoiceDate", inv.InvoiceDate))
+					}
+				}
+				if needsWrite {
 					inv.UpdatedAt = time.Now()
 					if err := s.finance.UpdateInvoice(ctx, inv); err != nil {
 						if s.logger != nil {
@@ -365,15 +412,11 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 			continue
 		}
 
-		dueDate := ""
-		if t, err := time.Parse("2006-01-02", invoiceDate); err == nil {
-			dueDate = t.AddDate(0, 0, defaultPSAPaymentTermDays).Format("2006-01-02")
-		}
 		inv := &Invoice{
 			ID:          s.idGen(),
 			InvoiceDate: invoiceDate,
 			TotalCents:  totalCents,
-			DueDate:     dueDate,
+			DueDate:     autoDetectedDueDate(invoiceDate),
 			Status:      "unpaid",
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
