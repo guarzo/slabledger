@@ -322,19 +322,6 @@ func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purch
 		return processUnmatched
 	}
 
-	// Honor the global ListingsPaused toggle for scheduler-driven pushes
-	// so card-show liquidation windows aren't undercut by fresh DH listings.
-	// Manual UI-initiated lists bypass this in the handler. Evaluated before
-	// EvaluateHoldTriggers so a paused row is just skipped and not mutated to
-	// `held` (which would survive after the toggle is turned back off and
-	// require operator review).
-	if pushCfg.ListingsPaused {
-		s.logger.Info(ctx, "dh push: listings paused — skipping psa_import",
-			observability.String("purchaseID", p.ID),
-			observability.String("cert", p.CertNumber))
-		return processSkipped
-	}
-
 	// Safety gates (capital-at-risk, unknown campaign, etc.) hold the row
 	// before we hit DH. Evaluated here so a push the operator wants to
 	// review never reaches psa_import.

@@ -277,6 +277,43 @@ func TestProcessPurchase_NoCertNumberMarksUnmatched(t *testing.T) {
 	}
 }
 
+// TestProcessPurchase_ListingsPausedStillMatches asserts that pausing listings
+// only gates the listing transition (relister path), not matching via
+// psa_import. psa_import always creates DH inventory as in_stock (never
+// listed), so gating it behind ListingsPaused wrongly blocked matching when
+// the operator only intended to pause listing.
+func TestProcessPurchase_ListingsPausedStillMatches(t *testing.T) {
+	importer := &stubPSAImporter{
+		responses: []*dh.PSAImportResponse{{
+			Success: true,
+			Results: []dh.PSAImportResult{{
+				CertNumber:    "111",
+				Resolution:    dh.PSAImportStatusMatched,
+				DHCardID:      999,
+				DHInventoryID: 1234,
+				Status:        dh.InventoryStatusInStock,
+			}},
+		}},
+	}
+	fields := &mocks.MockDHFieldsUpdater{}
+	status := &stubStatusUpdater{}
+	mapper := &stubCardIDSaver{}
+	s := newTestDHPushScheduler(importer, fields, status, mapper, nil)
+
+	pushCfg := inventory.DefaultDHPushConfig()
+	pushCfg.ListingsPaused = true
+
+	p := inventory.Purchase{ID: "p1", CertNumber: "111"}
+	got := s.processPurchase(context.Background(), p, pushCfg)
+
+	if got != processMatchedComplete {
+		t.Fatalf("got=%v want=processMatchedComplete — paused listings must not block psa_import matching", got)
+	}
+	if len(importer.requests) != 1 {
+		t.Fatalf("expected psa_import to be called once, got %d calls", len(importer.requests))
+	}
+}
+
 func TestPushViaPSAImport_SuccessPathsPersist(t *testing.T) {
 	successes := []string{
 		dh.PSAImportStatusMatched,
