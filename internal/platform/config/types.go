@@ -291,10 +291,11 @@ type PSAPortalConfig struct {
 
 // PSASyncConfig controls the background PSA portal sync scheduler.
 type PSASyncConfig struct {
-	Enabled      bool
-	Interval     time.Duration // how often to run sync (default: 24h)
-	InitialDelay time.Duration // delay before first run (default: 5m)
-	SyncHour     int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 10)
+	Enabled             bool
+	Interval            time.Duration // how often to run sync (default: 24h)
+	InitialDelay        time.Duration // delay before first run (default: 5m)
+	SyncHour            int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 10)
+	CampaignSyncEnabled bool          // harvester: fetch campaign config + drain approved PSA pushes
 }
 
 // CardLadderConfig controls the Card Ladder value refresh scheduler.
