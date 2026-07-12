@@ -84,13 +84,18 @@ func (c *Client) FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error
 	if err != nil {
 		return nil, err
 	}
+	return mapRows(ctx, raw, c.logger)
+}
+
+// mapRows converts flattened Lightdash rows into PSAExportRows. One malformed
+// row must not abort the whole sync; log and skip it, matching the CSV import
+// path (importPSARows). Rows without a cert number are silently dropped.
+func mapRows(ctx context.Context, raw []map[string]string, logger observability.Logger) ([]inventory.PSAExportRow, error) {
 	rows := make([]inventory.PSAExportRow, 0, len(raw))
 	for _, r := range raw {
 		m, err := mapRow(r)
 		if err != nil {
-			// One malformed Lightdash row must not abort the whole sync; log and
-			// skip it, matching the CSV import path (importPSARows).
-			c.logger.Warn(ctx, "psaportal: skipping malformed row", observability.Err(err))
+			logger.Warn(ctx, "psaportal: skipping malformed row", observability.Err(err))
 			continue
 		}
 		if m.CertNumber == "" {
