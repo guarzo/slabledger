@@ -348,3 +348,31 @@ func TestMaintenanceConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestPSAPortalEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		email    string
+		password string
+		override string
+		want     bool
+	}{
+		{name: "enabled when credentials present", email: "harvester@example.com", password: "secret", override: "", want: true},
+		{name: "disabled when no credentials and no override", email: "", password: "", override: "", want: false},
+		{name: "override enables reader without credentials", email: "", password: "", override: "true", want: true},
+		{name: "override can force disable despite credentials", email: "harvester@example.com", password: "secret", override: "false", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSA_PORTAL_EMAIL", tt.email)
+			t.Setenv("PSA_PORTAL_PASSWORD", tt.password)
+			t.Setenv("PSA_PORTAL_ENABLED", tt.override)
+
+			cfg := FromEnv(Default())
+			if cfg.PSAPortal.Enabled != tt.want {
+				t.Errorf("PSAPortal.Enabled = %v, want %v", cfg.PSAPortal.Enabled, tt.want)
+			}
+		})
+	}
+}
