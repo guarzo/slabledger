@@ -1,8 +1,9 @@
 // Command psa-harvest logs into the PSA Buyer Campaign Manager portal with a
-// headless browser and writes a fresh, AES-encrypted access token to Postgres for
-// the main app to consume. Run it on a schedule (~every 12h) in an image that has a
-// browser (see Dockerfile.harvest); the lean alpine app image cannot run one and
-// only reads the token back out of the database.
+// headless browser and writes a fresh, AES-encrypted access token plus the
+// current portal rows snapshot to Postgres for the main app to consume. Run it
+// on a schedule (~every 12h) in an image that has a browser (see
+// Dockerfile.harvest); the lean alpine app image cannot run one and only reads
+// the token back out of the database.
 //
 // Required env: PSA_PORTAL_EMAIL, PSA_PORTAL_PASSWORD, ENCRYPTION_KEY, DATABASE_URL.
 package main
@@ -22,9 +23,10 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
 )
 
-// Compile-time guard: the Postgres token store must satisfy the client's
-// TokenRepository (read+write) contract the harvester below depends on.
+// Compile-time guards: the Postgres stores must satisfy the client's
+// TokenRepository (read+write) and SnapshotWriter contracts.
 var _ psaportal.TokenRepository = (*postgres.PSAPortalTokenStore)(nil)
+var _ psaportal.SnapshotWriter = (*postgres.PSAPortalSnapshotStore)(nil)
 
 func main() {
 	if err := run(); err != nil {
@@ -60,15 +62,16 @@ func run() error {
 		return fmt.Errorf("encryptor: %w", err)
 	}
 	store := postgres.NewPSAPortalTokenStore(db.DB, enc)
+	snapshots := postgres.NewPSAPortalSnapshotStore(db.DB)
 
 	// workDir "." — the image's WORKDIR is where web/scripts/ lives.
-	h := psaportal.NewHarvester(store, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
-	// EnsureFreshToken skips the browser login while the stored token still has
-	// ample validity, so frequent (hourly) scheduled runs are cheap no-ops and only
-	// actually log in as the token nears expiry.
-	if err := h.EnsureFreshToken(ctx); err != nil {
+	h := psaportal.NewHarvester(store, snapshots, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
+	// Every run does the full cycle: the embed JWT captured by the browser lives
+	// ~1h, so it must be exchanged for rows immediately, every time. The script
+	// itself skips the SSO login while the stored token is still valid.
+	if err := h.Run(ctx); err != nil {
 		return err
 	}
-	logger.Info(ctx, "psa-harvest: token is fresh (refreshed if it was near expiry)")
+	logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
 	return nil
 }
