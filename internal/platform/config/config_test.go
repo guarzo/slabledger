@@ -348,3 +348,49 @@ func TestMaintenanceConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestPSAPortalEnabled(t *testing.T) {
+	t.Run("enabled when credentials present", func(t *testing.T) {
+		t.Setenv("PSA_PORTAL_EMAIL", "harvester@example.com")
+		t.Setenv("PSA_PORTAL_PASSWORD", "secret")
+		t.Setenv("PSA_PORTAL_ENABLED", "")
+
+		cfg := FromEnv(Default())
+		if !cfg.PSAPortal.Enabled {
+			t.Error("expected PSAPortal enabled when email+password set")
+		}
+	})
+
+	t.Run("disabled when no credentials and no override", func(t *testing.T) {
+		t.Setenv("PSA_PORTAL_EMAIL", "")
+		t.Setenv("PSA_PORTAL_PASSWORD", "")
+		t.Setenv("PSA_PORTAL_ENABLED", "")
+
+		cfg := FromEnv(Default())
+		if cfg.PSAPortal.Enabled {
+			t.Error("expected PSAPortal disabled with no credentials")
+		}
+	})
+
+	t.Run("override enables reader without credentials", func(t *testing.T) {
+		t.Setenv("PSA_PORTAL_EMAIL", "")
+		t.Setenv("PSA_PORTAL_PASSWORD", "")
+		t.Setenv("PSA_PORTAL_ENABLED", "true")
+
+		cfg := FromEnv(Default())
+		if !cfg.PSAPortal.Enabled {
+			t.Error("expected PSA_PORTAL_ENABLED=true to enable reader without credentials")
+		}
+	})
+
+	t.Run("override can force disable despite credentials", func(t *testing.T) {
+		t.Setenv("PSA_PORTAL_EMAIL", "harvester@example.com")
+		t.Setenv("PSA_PORTAL_PASSWORD", "secret")
+		t.Setenv("PSA_PORTAL_ENABLED", "false")
+
+		cfg := FromEnv(Default())
+		if cfg.PSAPortal.Enabled {
+			t.Error("expected PSA_PORTAL_ENABLED=false to disable despite credentials")
+		}
+	})
+}
