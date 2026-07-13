@@ -392,6 +392,14 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		deps.PSARowProvider = in.PSARowProvider
 	}
 
+	// Wire PSA campaign snapshot + push-queue stores so the read/approve
+	// endpoints work even when the harvester (which populates them) isn't
+	// running. DB-only, cheap to construct.
+	if in.DB != nil {
+		deps.PSASnapshotStore = postgres.NewPSACampaignSnapshotStore(in.DB.DB)
+		deps.PSAPushQueue = postgres.NewPSACampaignPushQueueStore(in.DB.DB)
+	}
+
 	out := handlerOutputs{
 		DHHandler:      dhHandler,
 		AdvisorHandler: advisorHandler,
