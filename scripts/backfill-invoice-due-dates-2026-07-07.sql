@@ -39,7 +39,10 @@
 --   After applying, revert exactly the rows this script changed:
 --     UPDATE invoices i SET due_date = ''
 --     FROM backfill_due_date_targets t
---     WHERE i.id = t.id;
+--     WHERE i.id = t.id
+--       AND i.due_date = t.computed_due_date;
+--   The due_date equality guard skips any row a later process has since
+--   changed, so rollback never clobbers a value this script didn't set.
 --   backfill_due_date_targets is a DURABLE table (Step 0), so the rollback works
 --   in a later psql session — not only the one that applied the change. Run the
 --   Step 3 cleanup to drop it once the rollback window has closed.
@@ -108,7 +111,8 @@ ORDER BY invoice_date;
 -- SET due_date = t.computed_due_date,
 --     updated_at = now()
 -- FROM backfill_due_date_targets t
--- WHERE i.id = t.id;
+-- WHERE i.id = t.id
+--   AND i.due_date = '';
 --
 -- COMMIT;
 
@@ -117,7 +121,9 @@ ORDER BY invoice_date;
 --   returns zero. On a dry run (apply block still commented) a NONZERO count is
 --   expected — it is the set of rows the apply block WILL change.
 -- ---------------------------------------------------------------------------
-SELECT count(*) AS remaining_empty_due_dates FROM invoices WHERE due_date = '';
+SELECT count(*) AS remaining_empty_due_dates
+FROM invoices
+WHERE due_date = '';
 
 -- ---------------------------------------------------------------------------
 -- Step 3: Cleanup — UNCOMMENT and run once the apply is confirmed and the
