@@ -37,7 +37,7 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
   const isLinked = !!campaign.psaCampaignRequestId;
 
   const { data: portalCampaignsData } = useQuery({
-    queryKey: ['psa-campaigns', 'list'],
+    queryKey: queryKeys.psaCampaigns.list,
     queryFn: () => api.listPSACampaigns(),
     enabled: open && !isLinked,
   });
@@ -164,6 +164,12 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
               )}
             </div>
           )}
+
+          <div className="flex justify-end mt-6">
+            <Dialog.Close asChild>
+              <Button variant="ghost" size="sm">Close</Button>
+            </Dialog.Close>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
