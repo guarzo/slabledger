@@ -9,6 +9,11 @@ import (
 	"testing"
 )
 
+// stubTokens is a static TokenProvider for campaign fetch/push tests.
+type stubTokens struct{ tok string }
+
+func (s stubTokens) AccessToken(context.Context) (string, error) { return s.tok, nil }
+
 func TestFetchCampaigns_ParsesListAndEdit(t *testing.T) {
 	list, err := os.ReadFile("../../../../docs/psa-campaigns-raw.json")
 	if err != nil {
