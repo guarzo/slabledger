@@ -58,7 +58,9 @@ func run() error {
 		return errors.New("DATABASE_URL is required")
 	}
 
-	db, err := postgres.Open(ctx, cfg.Database.URL, logger)
+	dbCtx, dbCancel := context.WithTimeout(ctx, 90*time.Second)
+	db, err := postgres.Open(dbCtx, cfg.Database.URL, logger)
+	dbCancel()
 	if err != nil {
 		return fmt.Errorf("db open: %w", err)
 	}
@@ -87,10 +89,15 @@ func run() error {
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 
 		campaigns, err := portal.FetchCampaigns(ctx)
-		if err != nil {
+		switch {
+		case err != nil:
 			logger.Error(ctx, "psa-harvest: fetch campaigns failed", observability.Err(err))
-		} else if err := snap.SaveSnapshot(ctx, campaigns); err != nil {
-			logger.Error(ctx, "psa-harvest: save snapshot failed", observability.Err(err))
+		case len(campaigns) == 0:
+			logger.Warn(ctx, "psa-harvest: fetch campaigns returned no rows, skipping snapshot save")
+		default:
+			if err := snap.SaveSnapshot(ctx, campaigns); err != nil {
+				logger.Error(ctx, "psa-harvest: save snapshot failed", observability.Err(err))
+			}
 		}
 
 		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, logger)

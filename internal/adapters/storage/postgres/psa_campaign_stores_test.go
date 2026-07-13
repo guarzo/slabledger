@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
@@ -31,6 +30,15 @@ func TestSnapshotStore_SaveGet(t *testing.T) {
 	require.Equal(t, "Crystal", got[0].Name)
 	require.Equal(t, "a", got[0].CampaignRequestID)
 	require.Equal(t, 70, got[0].BuyPercentClv)
+}
+
+func TestSnapshotStore_SaveSnapshot_EmptyRejected(t *testing.T) {
+	db := setupTestDB(t)
+	truncatePSACampaignTables(t, db)
+	s := NewPSACampaignSnapshotStore(db.DB)
+
+	err := s.SaveSnapshot(context.Background(), nil)
+	require.Error(t, err)
 }
 
 func TestSnapshotStore_GetSnapshot_Empty(t *testing.T) {
@@ -85,7 +93,7 @@ func TestPushQueueStore_Lifecycle(t *testing.T) {
 
 	// Approving an already-approved row should fail.
 	err = s.Approve(ctx, "push-1", "carol")
-	require.True(t, errors.Is(err, psacampaign.ErrPushNotPending))
+	require.ErrorIs(t, err, psacampaign.ErrPushNotPending)
 
 	require.NoError(t, s.MarkResult(ctx, "push-1", psacampaign.PushPushed, `{"ok":true}`, ""))
 
@@ -102,5 +110,5 @@ func TestPushQueueStore_Approve_NotPending(t *testing.T) {
 	ctx := context.Background()
 
 	err := s.Approve(ctx, "does-not-exist", "bob")
-	require.True(t, errors.Is(err, psacampaign.ErrPushNotPending))
+	require.ErrorIs(t, err, psacampaign.ErrPushNotPending)
 }

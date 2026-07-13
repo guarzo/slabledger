@@ -52,7 +52,7 @@ func TestCampaignStore_CampaignCRUD(t *testing.T) {
 
 	list, err := repo.ListCampaigns(ctx, false)
 	require.NoError(t, err)
-	assert.Len(t, list, 1)
+	require.Len(t, list, 1)
 	assert.Equal(t, "psa-req-123", list[0].PSACampaignRequestID)
 
 	c.Phase = inventory.PhaseActive

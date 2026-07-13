@@ -2,12 +2,21 @@ package psaportal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// ErrNoSnapshot indicates no rows snapshot has been stored yet by the
+// psa-harvest job.
+var ErrNoSnapshot = errors.New("psaportal: no rows snapshot stored")
+
+// ErrStaleSnapshot indicates the stored rows snapshot is older than
+// maxSnapshotAge.
+var ErrStaleSnapshot = errors.New("psaportal: rows snapshot is stale")
 
 // SnapshotStore reads the most recently harvested rows snapshot.
 type SnapshotStore interface {
@@ -45,10 +54,10 @@ func (p *SnapshotRowProvider) FetchRows(ctx context.Context) ([]inventory.PSAExp
 		return nil, err
 	}
 	if fetchedAt.IsZero() {
-		return nil, fmt.Errorf("psaportal: no rows snapshot stored; psa-harvest job must run first")
+		return nil, fmt.Errorf("%w; psa-harvest job must run first", ErrNoSnapshot)
 	}
 	if age := p.now().Sub(fetchedAt); age > maxSnapshotAge {
-		return nil, fmt.Errorf("psaportal: rows snapshot is stale (fetched %s ago); check the psa-harvest job", age.Round(time.Minute))
+		return nil, fmt.Errorf("%w (fetched %s ago); check the psa-harvest job", ErrStaleSnapshot, age.Round(time.Minute))
 	}
 	return mapRows(ctx, raw, p.logger)
 }

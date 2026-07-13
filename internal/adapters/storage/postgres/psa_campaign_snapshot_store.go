@@ -26,6 +26,9 @@ func NewPSACampaignSnapshotStore(db *sql.DB) *PSACampaignSnapshotStore {
 
 // SaveSnapshot upserts the singleton snapshot row.
 func (s *PSACampaignSnapshotStore) SaveSnapshot(ctx context.Context, campaigns []psacampaign.PortalCampaign) error {
+	if len(campaigns) == 0 {
+		return fmt.Errorf("psa_campaign_snapshot: refusing to save empty snapshot")
+	}
 	raw, err := json.Marshal(campaigns)
 	if err != nil {
 		return fmt.Errorf("psa_campaign_snapshot: marshal: %w", err)
