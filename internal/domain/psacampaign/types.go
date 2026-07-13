@@ -75,6 +75,7 @@ type PushStatus string
 const (
 	PushPending  PushStatus = "pending"
 	PushApproved PushStatus = "approved"
+	PushPushing  PushStatus = "pushing"
 	PushPushed   PushStatus = "pushed"
 	PushFailed   PushStatus = "failed"
 )

@@ -35,6 +35,7 @@ type PushQueueStoreMock struct {
 	ApproveFn      func(ctx context.Context, id, approvedBy string) error
 	ListByStatusFn func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error)
 	MarkResultFn   func(ctx context.Context, id string, status psacampaign.PushStatus, resultJSON, errMsg string) error
+	ClaimFn        func(ctx context.Context, id string) (bool, error)
 }
 
 var _ psacampaign.PushQueueStore = (*PushQueueStoreMock)(nil)
@@ -65,4 +66,11 @@ func (m *PushQueueStoreMock) MarkResult(ctx context.Context, id string, status p
 		return m.MarkResultFn(ctx, id, status, resultJSON, errMsg)
 	}
 	return nil
+}
+
+func (m *PushQueueStoreMock) Claim(ctx context.Context, id string) (bool, error) {
+	if m.ClaimFn != nil {
+		return m.ClaimFn(ctx, id)
+	}
+	return true, nil
 }

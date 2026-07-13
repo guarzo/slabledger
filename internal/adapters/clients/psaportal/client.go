@@ -37,6 +37,9 @@ func mapRows(ctx context.Context, raw []map[string]string, logger observability.
 			observability.Int("count", droppedNoCert), observability.Int("total", len(raw)))
 	}
 	if len(raw) > 0 && len(rows) == 0 {
+		if droppedNoCert == len(raw) {
+			return nil, fmt.Errorf("psaportal: all %d rows dropped for missing cert number (Lightdash cert fieldId may have shifted)", len(raw))
+		}
 		return nil, fmt.Errorf("psaportal: all %d rows failed to map", len(raw))
 	}
 	return rows, nil

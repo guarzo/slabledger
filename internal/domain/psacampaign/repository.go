@@ -33,4 +33,8 @@ type PushQueueStore interface {
 	Approve(ctx context.Context, id, approvedBy string) error
 	ListByStatus(ctx context.Context, status PushStatus) ([]PushRow, error)
 	MarkResult(ctx context.Context, id string, status PushStatus, resultJSON, errMsg string) error
+	// Claim atomically transitions row id from approved to pushing, returning
+	// true if the claim succeeded (i.e. the row was still approved). Used to
+	// prevent double-push from concurrent DrainPushQueue runs.
+	Claim(ctx context.Context, id string) (bool, error)
 }

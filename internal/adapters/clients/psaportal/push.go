@@ -101,5 +101,15 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("psaportal: update campaign status %d", resp.StatusCode)
 	}
+
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
+		return fmt.Errorf("psaportal: decode update campaign response: %w", err)
+	}
+	if envelope.Type != "result" {
+		return fmt.Errorf("psaportal: update campaign response type %q, want \"result\"", envelope.Type)
+	}
 	return nil
 }

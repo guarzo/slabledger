@@ -18,6 +18,18 @@ func DrainPushQueue(ctx context.Context, c *Client, q psacampaign.PushQueueStore
 	}
 
 	for _, row := range rows {
+		claimed, err := q.Claim(ctx, row.ID)
+		if err != nil {
+			logger.Error(ctx, "psaportal: claim push row failed",
+				observability.String("row_id", row.ID), observability.Err(err))
+			continue
+		}
+		if !claimed {
+			logger.Info(ctx, "psaportal: push row already claimed, skipping",
+				observability.String("row_id", row.ID))
+			continue
+		}
+
 		if err := c.PushCampaign(ctx, row.PSACampaignID, row.Diff.Changes); err != nil {
 			if markErr := q.MarkResult(ctx, row.ID, psacampaign.PushFailed, "", err.Error()); markErr != nil {
 				logger.Error(ctx, "psaportal: mark push failed result failed",

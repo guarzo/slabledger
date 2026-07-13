@@ -133,10 +133,13 @@ func mapListItem(itRaw any) (psacampaign.PortalCampaign, error) {
 		Category:          asString(it["category"]),
 		BuyPercentClv:     asInt(it["buyerPricePercentClv"]),
 		BuyBox: psacampaign.CampaignBuyBox{
-			GradeMin:          asString(buyBox["gradeMin"]),
-			GradeMax:          asString(buyBox["gradeMax"]),
-			YearMin:           asInt(buyBox["yearMin"]),
-			YearMax:           asInt(buyBox["yearMax"]),
+			GradeMin: asString(buyBox["gradeMin"]),
+			GradeMax: asString(buyBox["gradeMax"]),
+			YearMin:  asInt(buyBox["yearMin"]),
+			YearMax:  asInt(buyBox["yearMax"]),
+			// priceMin/priceMax/buyerFlatFee arrive as whole-USD integers on the
+			// wire (confirmed via docs/psa-campaigns-raw.json, e.g. 500, 3000);
+			// decimal-USD has not been observed. asIntCents converts to cents.
 			PriceMinCents:     asIntCents(buyBox["priceMin"]),
 			PriceMaxCents:     asIntCents(buyBox["priceMax"]),
 			ClvConfidenceMin:  asInt(buyBox["clvConfidenceMin"]),

@@ -74,3 +74,36 @@ func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
 		t.Fatalf("expected empty errMsg, got %q", gotErrMsg)
 	}
 }
+
+func TestDrainPushQueue_SkipsUnclaimableRow(t *testing.T) {
+	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: "http://example.invalid"})
+
+	row := psacampaign.PushRow{
+		ID:            "row-1",
+		PSACampaignID: "660a980d-bf1c-4988-9958-1eb2d1853c66",
+		Status:        psacampaign.PushApproved,
+	}
+
+	markResultCalled := false
+	q := &mocks.PushQueueStoreMock{
+		ListByStatusFn: func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
+			return []psacampaign.PushRow{row}, nil
+		},
+		ClaimFn: func(ctx context.Context, id string) (bool, error) {
+			return false, nil
+		},
+		MarkResultFn: func(ctx context.Context, id string, status psacampaign.PushStatus, resultJSON, errMsg string) error {
+			markResultCalled = true
+			return nil
+		},
+	}
+
+	pushed, failed := DrainPushQueue(context.Background(), c, q, observability.NewNoopLogger())
+
+	if pushed != 0 || failed != 0 {
+		t.Fatalf("expected pushed=0 failed=0, got pushed=%d failed=%d", pushed, failed)
+	}
+	if markResultCalled {
+		t.Fatal("expected MarkResult not to be called for unclaimable row")
+	}
+}
