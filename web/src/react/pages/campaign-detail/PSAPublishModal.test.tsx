@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import PSAPublishPanel from './PSAPublishPanel';
+import PSAPublishModal from './PSAPublishModal';
 import { ToastProvider } from '../../contexts/ToastContext';
 import { AuthProvider } from '../../contexts/AuthContext';
 import type { Campaign } from '../../../types/campaigns';
@@ -14,6 +14,8 @@ vi.mock('../../../js/api', () => ({
     psaPropose: vi.fn(),
     psaPublish: vi.fn(),
   },
+  isAPIError: (err: unknown): err is { status: number } =>
+    typeof err === 'object' && err !== null && 'status' in err,
 }));
 
 import { api } from '../../../js/api';
@@ -42,20 +44,20 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   } as Campaign;
 }
 
-function renderPanel(campaign: Campaign) {
+function renderModal(campaign: Campaign, onClose = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <AuthProvider>
         <ToastProvider>
-          <PSAPublishPanel campaign={campaign} />
+          <PSAPublishModal open={true} onClose={onClose} campaign={campaign} />
         </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
 }
 
-describe('PSAPublishPanel', () => {
+describe('PSAPublishModal', () => {
   beforeEach(() => {
     vi.mocked(api.listPSACampaigns).mockReset();
     vi.mocked(api.psaLink).mockReset();
@@ -69,7 +71,7 @@ describe('PSAPublishPanel', () => {
       diff: { changes: [{ field: 'bidPercentage', old: '70', new: '80' }] },
     });
 
-    renderPanel(makeCampaign());
+    renderModal(makeCampaign());
 
     fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
 
@@ -87,7 +89,7 @@ describe('PSAPublishPanel', () => {
     });
     vi.mocked(api.psaPublish).mockResolvedValue({ pushId: 'push-1', status: 'approved' });
 
-    renderPanel(makeCampaign());
+    renderModal(makeCampaign());
 
     fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
 

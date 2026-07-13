@@ -4,7 +4,7 @@ import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '..
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
-import PSAPublishPanel from '../campaign-detail/PSAPublishPanel';
+import PSAPublishModal from '../campaign-detail/PSAPublishModal';
 import type { UseFormReturn } from '../../hooks/useForm';
 import { phaseHexColors } from '../../utils/campaignConstants';
 
@@ -60,7 +60,8 @@ export default function CampaignsTab({
   createMutation: { isPending: boolean };
   onToggleCreate: () => void;
 }) {
-  const [expandedPSAId, setExpandedPSAId] = useState<string | null>(null);
+  const [psaModalCampaignId, setPsaModalCampaignId] = useState<string | null>(null);
+  const psaModalCampaign = campaigns.find(c => c.id === psaModalCampaignId) ?? null;
 
   // Compute the indices in the (already-sorted) campaign list where the phase
   // changes. We render a section eyebrow before the first row of each phase
@@ -269,22 +270,25 @@ export default function CampaignsTab({
                   <Button
                     size="sm"
                     variant="ghost"
-                    aria-label={expandedPSAId === c.id ? `Hide PSA publish panel for ${c.name}` : `Show PSA publish panel for ${c.name}`}
-                    onClick={() => setExpandedPSAId(expandedPSAId === c.id ? null : c.id)}
+                    aria-label={`Publish to PSA for ${c.name}`}
+                    onClick={() => setPsaModalCampaignId(c.id)}
                   >
                     PSA
                   </Button>
                 </div>
               </div>
-              {expandedPSAId === c.id && (
-                <div className="px-3">
-                  <PSAPublishPanel campaign={c} />
-                </div>
-              )}
               </Fragment>
             );
           })}
         </div>
+      )}
+
+      {psaModalCampaign && (
+        <PSAPublishModal
+          open={!!psaModalCampaign}
+          onClose={() => setPsaModalCampaignId(null)}
+          campaign={psaModalCampaign}
+        />
       )}
     </>
   );
