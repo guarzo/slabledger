@@ -1,0 +1,156 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api, isAPIError } from '../../../js/api';
+import { getErrorMessage } from '../../utils/formatters';
+import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { CardShell, Button, Select } from '../../ui';
+import type { Campaign, ProposedDiff } from '../../../types/campaigns';
+import { queryKeys } from '../../queries/queryKeys';
+
+export interface PSAPublishPanelProps {
+  campaign: Campaign;
+}
+
+/**
+ * Publish-to-PSA panel: shows link status, a pending before->after diff, and
+ * a publish action. Consumes the 4 PSA campaign-sync endpoints (Task 8).
+ */
+export default function PSAPublishPanel({ campaign }: PSAPublishPanelProps) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // approvedBy identifies who approved the push for audit purposes. There is
+  // no dedicated "approver" concept in the app yet, so we fall back to the
+  // logged-in user's username (via AuthContext) and a generic label if
+  // unauthenticated.
+  const approvedBy = user?.username || 'unknown';
+
+  const [selectedPSAId, setSelectedPSAId] = useState('');
+  const [diff, setDiff] = useState<ProposedDiff | null>(null);
+  const [pushId, setPushId] = useState<string | undefined>(undefined);
+  const [publishStatus, setPublishStatus] = useState<string | null>(null);
+
+  const isLinked = !!campaign.psaCampaignRequestId;
+
+  const { data: portalCampaignsData } = useQuery({
+    queryKey: ['psa-campaigns', 'list'],
+    queryFn: () => api.listPSACampaigns(),
+    enabled: !isLinked,
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: (psaCampaignRequestId: string) => api.psaLink(campaign.id, psaCampaignRequestId),
+    onSuccess: () => {
+      toast.success('Campaign linked to PSA portal campaign');
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to link campaign')),
+  });
+
+  const proposeMutation = useMutation({
+    mutationFn: () => api.psaPropose(campaign.id),
+    onSuccess: (res) => {
+      setDiff(res.diff);
+      setPushId(res.pushId);
+      setPublishStatus(null);
+      if (res.diff.changes.length === 0) {
+        toast.success('No changes to publish — campaign already matches PSA');
+      }
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to check for changes')),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: () => {
+      if (!pushId) throw new Error('No pending push to publish');
+      return api.psaPublish(campaign.id, pushId, approvedBy);
+    },
+    onSuccess: (res) => {
+      setPublishStatus(res.status);
+      toast.success('Push approved for publish to PSA');
+    },
+    onError: (err) => {
+      if (isAPIError(err) && err.status === 409) {
+        toast.error('This push is no longer pending — check for changes again');
+        return;
+      }
+      toast.error(getErrorMessage(err, 'Failed to publish to PSA'));
+    },
+  });
+
+  return (
+    <CardShell variant="default" padding="md">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[var(--text)]">Publish to PSA</h3>
+        {isLinked && (
+          <span className="text-xs text-[var(--text-muted)]">
+            Linked: {campaign.psaCampaignRequestId}
+          </span>
+        )}
+      </div>
+
+      {!isLinked ? (
+        <div className="flex items-center gap-2">
+          <Select
+            aria-label="PSA portal campaign"
+            value={selectedPSAId}
+            onChange={(e) => setSelectedPSAId(e.target.value)}
+            options={[
+              { value: '', label: 'Select a PSA campaign…' },
+              ...(portalCampaignsData?.campaigns ?? []).map((c) => ({
+                value: c.campaignRequestId,
+                label: c.name,
+              })),
+            ]}
+          />
+          <Button
+            size="sm"
+            disabled={!selectedPSAId}
+            loading={linkMutation.isPending}
+            onClick={() => linkMutation.mutate(selectedPSAId)}
+          >
+            Link
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={proposeMutation.isPending}
+            onClick={() => proposeMutation.mutate()}
+          >
+            Check for changes
+          </Button>
+
+          {diff && diff.changes.length > 0 && (
+            <div className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">
+              {diff.changes.map((change) => (
+                <div key={change.field}>
+                  <span className="font-medium text-[var(--text)]">{change.field}</span>
+                  {': '}
+                  {change.old} &rarr; {change.new}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {diff && diff.changes.length > 0 && pushId && (
+            <Button
+              size="sm"
+              loading={publishMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+            >
+              Publish to PSA
+            </Button>
+          )}
+
+          {publishStatus && (
+            <span className="text-xs text-[var(--success)]">Status: {publishStatus}</span>
+          )}
+        </div>
+      )}
+    </CardShell>
+  );
+}

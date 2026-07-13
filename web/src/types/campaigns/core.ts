@@ -21,6 +21,7 @@ export interface Campaign {
   psaSourcingFeeCents: number;
   ebayFeePct: number;
   expectedFillRate: number;
+  psaCampaignRequestId?: string;
   createdAt: string;
   updatedAt: string;
 }
