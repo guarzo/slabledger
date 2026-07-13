@@ -2720,6 +2720,129 @@ Dismisses a pending item without creating a purchase.
 
 ---
 
+## PSA Campaign Sync
+
+See [docs/psa-harvester.md](psa-harvester.md#campaign-sync) for the harvester-side flow
+(snapshot fetch, push-queue drain, `updateCampaign`). The endpoints below are the app's
+read + human-approval surface; the app never contacts psacard.com directly.
+
+### `GET /api/psa-campaigns`
+
+Auth: required (session)
+
+Returns the most recent PSA portal campaign snapshot (written by the harvester).
+
+**Response:** `200 OK`
+```json
+{
+  "campaigns": [
+    {
+      "campaignRequestId": "12345",
+      "name": "Pokemon Vintage",
+      "type": "CATEGORY",
+      "status": "PAUSED",
+      "category": "POKEMON",
+      "buyPercentClv": 78,
+      "buyBox": {
+        "gradeMin": "8",
+        "gradeMax": "10",
+        "yearMin": 1998,
+        "yearMax": 2003,
+        "priceMinCents": 5000,
+        "priceMaxCents": 50000,
+        "clvConfidenceMin": 60,
+        "buyerFlatFeeCents": 300
+      },
+      "dailyBudgetCents": 100000,
+      "dailySpecLimit": 20,
+      "subjectFilter": { "type": "Target", "subjects": [{ "id": 1, "name": "Charizard" }] },
+      "publisherFilter": { "type": "Target", "subjects": [] },
+      "createdAt": "2025-01-15T10:00:00Z",
+      "updatedAt": "2025-01-15T10:00:00Z"
+    }
+  ],
+  "fetchedAt": "2025-01-15T10:00:00Z"
+}
+```
+
+**Errors:** `503` PSA campaign sync not enabled; `500` internal error
+
+---
+
+### `POST /api/campaigns/{id}/psa-link`
+
+Auth: required (session)
+
+Links an internal campaign to a PSA portal campaign by request ID.
+
+**Path params:** `id` (internal campaign UUID)
+
+**Body:**
+```json
+{ "psaCampaignRequestId": "12345" }
+```
+
+**Response:** `200 OK` — full `Campaign` object (with `psaCampaignRequestId` set)
+
+**Errors:** `404` campaign not found; `400` invalid campaign data; `500` internal error
+
+---
+
+### `POST /api/campaigns/{id}/psa-propose`
+
+Auth: required (session)
+
+Computes the diff between an internal campaign and its linked PSA portal campaign (from
+the latest snapshot) and enqueues it as a `pending` row in the push queue for human
+approval. If there are no changes, no row is enqueued.
+
+**Path params:** `id` (internal campaign UUID)
+
+**Body:** (empty)
+
+**Response:** `200 OK`
+```json
+{
+  "pushId": "uuid",
+  "diff": {
+    "changes": [
+      { "field": "bidPercentage", "old": "75", "new": "78" }
+    ]
+  }
+}
+```
+`pushId` is omitted when `diff.changes` is empty (nothing was enqueued).
+
+**Errors:** `503` PSA campaign sync not enabled; `400` campaign not linked to a PSA
+portal campaign; `404` campaign not found or linked PSA campaign not found in snapshot;
+`500` internal error
+
+---
+
+### `POST /api/campaigns/{id}/psa-publish`
+
+Auth: required (session)
+
+Approves a pending push-queue row. This does not contact PSA directly — the row is
+marked `approved` and the next harvester run drains it via `updateCampaign`.
+
+**Path params:** `id` (internal campaign UUID)
+
+**Body:**
+```json
+{ "pushId": "uuid", "approvedBy": "username" }
+```
+
+**Response:** `200 OK`
+```json
+{ "pushId": "uuid", "status": "approved" }
+```
+
+**Errors:** `503` PSA campaign sync not enabled; `409` push row is not pending; `500`
+internal error
+
+---
+
 ## Opportunities
 
 ### `GET /api/opportunities/acquisition`

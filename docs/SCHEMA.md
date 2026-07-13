@@ -315,6 +315,7 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `expected_fill_rate` | REAL | NOT NULL DEFAULT 0.0 | Expected % of offers accepted |
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
+| `psa_campaign_request_id` | TEXT | | Linked PSA portal campaign request ID; added migration 000017 |
 
 **Indexes:** none (PK lookup only)
 
@@ -539,6 +540,55 @@ PSA card items awaiting cert resolution or campaign matching. Tracks ambiguous o
 **Indexes:** none
 
 **Foreign Keys:** none (external resolution may link to campaigns)
+
+---
+
+### `psa_campaign_snapshot`
+Singleton table holding the most recent PSA portal campaign-list fetch. Written by the
+`cmd/psa-harvest` job (see [docs/psa-harvester.md](../docs/psa-harvester.md#campaign-sync));
+the main app only reads it (`GET /api/psa-campaigns`), never fetches from PSA itself.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | INTEGER | PK, CHECK(id = 1) | Enforces singleton |
+| `raw_json` | JSONB | NOT NULL | Serialized `[]PortalCampaign` |
+| `fetched_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | When the harvester fetched the snapshot |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | Row last-write time |
+
+**Indexes:** none
+
+**Foreign Keys:** none
+
+**Added:** migration 000017
+
+---
+
+### `psa_campaign_push_queue`
+Human-approval queue for proposed PSA campaign edits. The app enqueues `pending` rows
+(`POST /api/campaigns/{id}/psa-propose`) and flips them to `approved`
+(`POST /api/campaigns/{id}/psa-publish`); only the harvester (`DrainPushQueue`) moves a
+row to `pushed`/`failed` after actually calling PSA's `updateCampaign`.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | TEXT | PK | UUID |
+| `psa_campaign_id` | TEXT | NOT NULL | PSA portal `campaignRequestId` |
+| `internal_campaign_id` | TEXT | | Linked internal campaign ID |
+| `proposed_diff` | JSONB | NOT NULL | Serialized `ProposedDiff` (field changes) |
+| `status` | TEXT | NOT NULL DEFAULT 'pending' | `pending`, `approved`, `pushed`, `failed` |
+| `requested_by` | TEXT | | Username that proposed the change |
+| `approved_by` | TEXT | | Username that approved the change |
+| `result_json` | JSONB | | Result payload from the push attempt |
+| `error` | TEXT | | Error message if `status = 'failed'` |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+**Indexes:**
+- `idx_psa_push_queue_status` on `(status)`
+
+**Foreign Keys:** none
+
+**Added:** migration 000017
 
 ---
 

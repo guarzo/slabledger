@@ -191,6 +191,7 @@ four env vars from a Secret.
 | `PSA_PORTAL_EMAIL` / `PSA_PORTAL_PASSWORD` | harvester (login) + app (enable gate) | portal login (password-only, no MFA); the app never logs in but won't wire the sync without them |
 | `ENCRYPTION_KEY` | harvester + app | AES key; token encrypted at rest |
 | `DATABASE_URL` | harvester + app | shared Postgres |
+| `PSA_CAMPAIGN_SYNC_ENABLED` | harvester only | gates the campaign snapshot fetch + push-queue drain described above; the app reads/writes the tables regardless but never contacts PSA itself |
 
 The **main app** needs `ENCRYPTION_KEY` + `DATABASE_URL` (to decrypt/read the token),
 `PSA_SYNC_ENABLED=true` to run the daily import, **and** `PSA_PORTAL_EMAIL` +
@@ -199,6 +200,73 @@ those credentials are present (`PSAPortal.Enabled = email != "" && password != "
 `config/loader.go`; the client is constructed in `cmd/slabledger/main.go`). Config also
 rejects setting just one of the pair — set both or neither. So in practice all four vars
 go on both apps, with `ENCRYPTION_KEY`/`DATABASE_URL` identical across them.
+
+## Campaign sync
+
+Separate from the per-cert token flow above, the harvester also syncs PSA **campaign
+configuration** (buy boxes, budgets, subject/publisher filters) — gated by
+`PSA_CAMPAIGN_SYNC_ENABLED`. When that flag is set, each `cmd/psa-harvest` run does two
+things after refreshing the token:
+
+1. **Read: snapshot the portal's campaign list.** `portal.FetchCampaigns` (in
+   `internal/adapters/clients/psaportal/campaigns.go`) pages the portal's campaign list,
+   enriches each entry with its edit-form subject/publisher filters, and the harvester
+   writes the result via `snap.SaveSnapshot` into the singleton `psa_campaign_snapshot`
+   table.
+2. **Write: drain the approved push queue.** `psaportal.DrainPushQueue` reads all
+   `psa_campaign_push_queue` rows with `status = 'approved'` and calls
+   `portal.PushCampaign` (via `updateCampaign`, see below) for each one, marking the row
+   `pushed` or `failed` based on the outcome.
+
+**The main app never contacts psacard.com directly** for campaign sync — Cloudflare
+IP-blocks the app server the same way it would block any non-browser-UA request from a
+Fly app IP. The app only:
+- Reads the latest snapshot (`GET /api/psa-campaigns`) to show portal campaign data.
+- Writes rows into `psa_campaign_push_queue` (`psa-propose`) and flips their status to
+  `approved` (`psa-publish`).
+
+The harvester (which already has a real Playwright login flow and the right egress
+profile) is the only process that talks to `psacard.com` for both the snapshot fetch and
+the push.
+
+### The three PSA portal endpoints used
+
+All three are called with the harvester's browser-mimicking `User-Agent` and the
+encrypted `accessToken` cookie, and are defined in
+`internal/adapters/clients/psaportal/`:
+
+- **List:** `GET /buyercampaignmanager/__data.json?x-sveltekit-trailing-slash=1&x-sveltekit-invalidated=001`
+  (`campaignsListPath` in `sveltekit.go`) — paginated (`&page=N`); the SvelteKit
+  ref-packed response is decoded (`DecodeRefPacked`) down to a
+  `campaignsResponse.items[]` array plus `pageSize`/`totalCount`, and each item is mapped
+  into a `PortalCampaign` (`campaigns.go`).
+- **Edit (per campaign):** `GET /buyercampaignmanager/campaigns/{campaignRequestId}/edit/__data.json?x-sveltekit-invalidated=0001`
+  (`campaignEditPathF`) — used both to enrich the list snapshot with subject/publisher
+  filters (`fetchCampaignFormData`) and, in `PushCampaign`, to fetch the current
+  `formData` object that gets read-modify-written before pushing changes back.
+- **Update:** `POST /buyercampaignmanager/_app/remote/{buildHash}/updateCampaign`
+  (`push.go`) — the mutated `formData` (only the changed fields are overwritten; numeric
+  fields listed in `numericFormDataFields` are coerced to JSON numbers) is re-encoded
+  with `EncodeRefPacked`, base64'd into a `payload` field, and POSTed as
+  `{"payload": ..., "refreshes": []}`. `{buildHash}` is resolved per-request via
+  `fetchBuildHash`, since PSA's SvelteKit build hash changes on portal deploys.
+
+### The human-approval gate
+
+Campaign edits are never pushed automatically. The flow is:
+
+1. The app computes a diff between an internal campaign and its linked PSA portal
+   campaign (`POST /api/campaigns/{id}/psa-propose`), and writes a `pending` row to
+   `psa_campaign_push_queue`.
+2. A human reviews the proposed diff in the UI and clicks **Publish**
+   (`POST /api/campaigns/{id}/psa-publish`), which flips the row to `approved` — this is
+   the only state transition the app can perform on a queue row.
+3. The next `cmd/psa-harvest` run (or a manual invocation) finds the `approved` row via
+   `DrainPushQueue` and actually calls `updateCampaign` against psacard.com, marking the
+   row `pushed` or `failed`.
+
+So there is always at least one human click, plus one harvester run, between a proposed
+change and it reaching PSA.
 
 ## Version coupling
 

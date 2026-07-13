@@ -23,8 +23,8 @@ import (
 	domainFinance "github.com/guarzo/slabledger/internal/domain/finance"
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	domainPortfolio "github.com/guarzo/slabledger/internal/domain/portfolio"
-	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	domainPricing "github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	domainTuning "github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
