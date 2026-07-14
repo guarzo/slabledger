@@ -25,6 +25,8 @@ type PushRow struct {
 	ApprovedBy         string
 	Diff               ProposedDiff
 	Status             PushStatus
+	Error              string    // last push error, set when Status is failed
+	UpdatedAt          time.Time // last lifecycle transition
 }
 
 // SnapshotStore persists the most recent portal campaign snapshot.
@@ -43,6 +45,9 @@ type PushQueueStore interface {
 	// true if the claim succeeded (i.e. the row was still approved). Used to
 	// prevent double-push from concurrent DrainPushQueue runs.
 	Claim(ctx context.Context, id string) (bool, error)
+	// LatestPerCampaign returns the most recent push row for each internal
+	// campaign (any status), for the UI's pending/in-flight/failed indicators.
+	LatestPerCampaign(ctx context.Context) ([]PushRow, error)
 }
 
 // CampaignLinker writes the portal campaign id onto an internal campaign
