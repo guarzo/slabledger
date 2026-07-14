@@ -111,15 +111,17 @@ func TestDrainPushQueue_SkipsUnclaimableRow(t *testing.T) {
 
 func TestDrainPushQueue_CreateRow(t *testing.T) {
 	tests := []struct {
-		name         string
-		createStatus int
-		createBody   string
-		linkErr      error
-		missingFD    bool
-		wantPushed   int
-		wantFailed   int
-		wantStatus   psacampaign.PushStatus
-		wantLinked   bool
+		name          string
+		createStatus  int
+		createBody    string
+		linkErr       error
+		missingFD     bool
+		alreadyLinked string
+		wantPushed    int
+		wantFailed    int
+		wantStatus    psacampaign.PushStatus
+		wantLinked    bool
+		wantNoPortal  bool
 	}{
 		{
 			name: "success creates links and marks pushed", createStatus: 200,
@@ -139,6 +141,10 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 		{
 			name: "missing formData marks failed without portal call", missingFD: true,
 			wantFailed: 1, wantStatus: psacampaign.PushFailed,
+		},
+		{
+			name: "already linked skips create (idempotent retry)", alreadyLinked: "uuid-existing-1",
+			wantPushed: 1, wantStatus: psacampaign.PushPushed, wantNoPortal: true,
 		},
 	}
 	for _, tt := range tests {
@@ -181,6 +187,9 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 					linkedInternal, linkedPSA = internalID, psaID
 					return tt.linkErr
 				},
+				LinkedPSACampaignIDFn: func(ctx context.Context, internalID string) (string, error) {
+					return tt.alreadyLinked, nil
+				},
 			}
 
 			c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
@@ -195,8 +204,8 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 			if tt.wantLinked && (linkedInternal != "c1" || linkedPSA != "uuid-new-1") {
 				t.Fatalf("linked %q/%q, want c1/uuid-new-1", linkedInternal, linkedPSA)
 			}
-			if tt.missingFD && portalCalled {
-				t.Fatal("portal must not be called for a create row without formData")
+			if (tt.missingFD || tt.wantNoPortal) && portalCalled {
+				t.Fatal("portal must not be called (missing formData or already-linked idempotent row)")
 			}
 		})
 	}

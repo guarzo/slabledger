@@ -41,7 +41,13 @@ type PushQueueStore interface {
 }
 
 // CampaignLinker writes the portal campaign id onto an internal campaign
-// after a successful create push.
+// after a successful create push, and reads it back so a retried create can
+// detect that the portal campaign already exists (idempotency guard).
 type CampaignLinker interface {
 	LinkPSACampaign(ctx context.Context, internalCampaignID, psaCampaignRequestID string) error
+	// LinkedPSACampaignID returns the portal campaign id currently linked to
+	// the internal campaign, or "" if none. Used by the drain to avoid
+	// re-creating a portal campaign for a row whose prior create already
+	// succeeded but failed to record its result.
+	LinkedPSACampaignID(ctx context.Context, internalCampaignID string) (string, error)
 }

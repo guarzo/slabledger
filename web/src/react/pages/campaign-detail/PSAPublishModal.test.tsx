@@ -143,7 +143,11 @@ describe('PSAPublishModal', () => {
     await waitFor(() => {
       expect(vi.mocked(api.psaProposeCreate)).toHaveBeenCalledWith('c1');
     });
-    expect(screen.getByText(/PAUSED/)).toBeInTheDocument();
+    // Wait for the preview to actually render (onSuccess committed to the DOM)
+    // before asserting on its fields, to avoid intermittent flakiness.
+    await waitFor(() => {
+      expect(screen.getByText(/PAUSED/)).toBeInTheDocument();
+    });
     expect(screen.getByText(/72%/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /approve & queue create/i }));

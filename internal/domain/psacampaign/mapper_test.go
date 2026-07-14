@@ -110,6 +110,21 @@ func TestTranslateToCreate(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "non-multiple-of-100 cents round to nearest USD",
+			mutate: func(c *inventory.Campaign) {
+				c.PSASourcingFeeCents = 350   // $3.50 -> $4
+				c.DailySpendCapCents = 299900 // $2999.00 -> $2999
+			},
+			check: func(t *testing.T, fd CampaignFormData) {
+				if fd.FlatFee != 4 {
+					t.Fatalf("FlatFee = %d, want 4 (350c rounds up)", fd.FlatFee)
+				}
+				if fd.DailyBudget != 2999 {
+					t.Fatalf("DailyBudget = %d, want 2999", fd.DailyBudget)
+				}
+			},
+		},
 		{name: "empty grade range", mutate: func(c *inventory.Campaign) { c.GradeRange = "" }, wantErr: "grade range"},
 		{name: "empty year range", mutate: func(c *inventory.Campaign) { c.YearRange = "" }, wantErr: "year range"},
 		{name: "non-numeric year", mutate: func(c *inventory.Campaign) { c.YearRange = "vintage-2020" }, wantErr: "year range"},

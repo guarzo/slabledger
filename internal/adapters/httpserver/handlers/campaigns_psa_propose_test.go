@@ -271,6 +271,7 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 		name        string
 		noQueue     bool
 		campaign    inventory.Campaign
+		queueRows   []psacampaign.PushRow
 		wantStatus  int
 		wantEnqueue bool
 	}{
@@ -294,6 +295,14 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 		},
 		{name: "valid create proposal", campaign: valid, wantStatus: http.StatusOK, wantEnqueue: true},
+		{
+			name:     "duplicate create already queued",
+			campaign: valid,
+			queueRows: []psacampaign.PushRow{
+				{ID: "existing", Operation: psacampaign.OpCreate, InternalCampaignID: "c1", Status: psacampaign.PushPending},
+			},
+			wantStatus: http.StatusConflict,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -310,6 +319,12 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 					enqueued = true
 					enqueuedRow = p
 					return nil
+				},
+				ListByStatusFn: func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
+					if status == psacampaign.PushPending {
+						return tt.queueRows, nil
+					}
+					return nil, nil
 				},
 			}
 			var opts []CampaignsHandlerOption

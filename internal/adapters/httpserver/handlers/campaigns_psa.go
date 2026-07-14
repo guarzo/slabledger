@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -240,6 +241,20 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Dedupe guard: reject if an unresolved create for this campaign is already
+	// queued, so a double-submit can't enqueue two OpCreate rows and produce
+	// duplicate portal campaigns before the link is written back.
+	exists, err := h.pendingCreateExists(r.Context(), c.ID)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to check for existing PSA create", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	if exists {
+		writeError(w, http.StatusConflict, "a PSA create is already queued for this campaign")
+		return
+	}
+
 	fd, err := psacampaign.TranslateToCreate(*c)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -266,4 +281,21 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 	}
 
 	writeJSON(w, http.StatusOK, psaProposeCreateResponse{PushID: row.ID, FormData: fd})
+}
+
+// pendingCreateExists reports whether an unresolved (pending or approved)
+// OpCreate push row already targets internalCampaignID.
+func (h *CampaignsHandler) pendingCreateExists(ctx context.Context, internalCampaignID string) (bool, error) {
+	for _, status := range []psacampaign.PushStatus{psacampaign.PushPending, psacampaign.PushApproved, psacampaign.PushPushing} {
+		rows, err := h.psaQueue.ListByStatus(ctx, status)
+		if err != nil {
+			return false, err
+		}
+		for _, row := range rows {
+			if row.Operation == psacampaign.OpCreate && row.InternalCampaignID == internalCampaignID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

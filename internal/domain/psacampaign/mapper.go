@@ -111,8 +111,8 @@ func TranslateToCreate(internal inventory.Campaign) (CampaignFormData, error) {
 		PrepackagedSpecListIDs:      []string{},
 		IsActive:                    false,
 		BidPercentage:               int(internal.BuyTermsCLPct*100 + 0.5),
-		FlatFee:                     internal.PSASourcingFeeCents / 100,
-		DailyBudget:                 internal.DailySpendCapCents / 100,
+		FlatFee:                     centsToWholeUSD(internal.PSASourcingFeeCents),
+		DailyBudget:                 centsToWholeUSD(internal.DailySpendCapCents),
 		DailySpecLimit:              createDailySpecLimit,
 		GradeMinimum:                gMin,
 		GradeMaximum:                gMax,
@@ -127,6 +127,12 @@ func TranslateToCreate(internal inventory.Campaign) (CampaignFormData, error) {
 		SelectedSubjects:            []SubjectRef{},
 		DeniedSpecs:                 []SubjectRef{},
 	}, nil
+}
+
+// centsToWholeUSD converts a cent value to whole USD for the portal wire,
+// rounding to nearest dollar so sub-dollar remainders aren't silently dropped.
+func centsToWholeUSD(cents int) int {
+	return (cents + 50) / 100
 }
 
 // splitRangeInts parses "a-b" (or "a") into integer ends.

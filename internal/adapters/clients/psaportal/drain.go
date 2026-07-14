@@ -76,6 +76,35 @@ func drainCreate(ctx context.Context, c *Client, q psacampaign.PushQueueStore, l
 		return false
 	}
 
+	// Idempotency guard: if a prior attempt on this row already created and
+	// linked a portal campaign (but failed to record its result), the internal
+	// campaign carries the portal id. Re-recording the existing id avoids
+	// creating a duplicate portal campaign on retry.
+	if linker != nil && row.InternalCampaignID != "" {
+		existingID, err := linker.LinkedPSACampaignID(ctx, row.InternalCampaignID)
+		if err != nil {
+			logger.Error(ctx, "psaportal: idempotency lookup failed, aborting create to avoid duplicate",
+				observability.String("row_id", row.ID),
+				observability.String("internal_campaign_id", row.InternalCampaignID),
+				observability.Err(err))
+			if markErr := q.MarkResult(ctx, row.ID, psacampaign.PushFailed, "", "idempotency lookup failed: "+err.Error()); markErr != nil {
+				logger.Error(ctx, "psaportal: mark create idempotency-failed result failed", observability.String("row_id", row.ID), observability.Err(markErr))
+			}
+			return false
+		}
+		if existingID != "" {
+			logger.Info(ctx, "psaportal: create row already linked, recording existing id without re-creating",
+				observability.String("row_id", row.ID),
+				observability.String("internal_campaign_id", row.InternalCampaignID),
+				observability.String("psa_campaign_id", existingID))
+			resultJSON, _ := json.Marshal(map[string]string{"campaignRequestId": existingID})
+			if err := q.MarkResult(ctx, row.ID, psacampaign.PushPushed, string(resultJSON), ""); err != nil {
+				logger.Error(ctx, "psaportal: mark create pushed (idempotent) result failed", observability.String("row_id", row.ID), observability.Err(err))
+			}
+			return true
+		}
+	}
+
 	newID, err := c.CreateCampaign(ctx, *row.Diff.Create)
 	if err != nil {
 		if markErr := q.MarkResult(ctx, row.ID, psacampaign.PushFailed, "", err.Error()); markErr != nil {
@@ -95,6 +124,12 @@ func drainCreate(ctx context.Context, c *Client, q psacampaign.PushQueueStore, l
 				observability.String("psa_campaign_id", newID),
 				observability.Err(err))
 		}
+	} else if linker != nil {
+		// A create row should always carry an internal campaign id; missing one
+		// means an upstream bug and leaves the new portal campaign unlinked.
+		logger.Error(ctx, "psaportal: create row missing internal_campaign_id, cannot link",
+			observability.String("row_id", row.ID),
+			observability.String("psa_campaign_id", newID))
 	}
 
 	resultJSON, _ := json.Marshal(map[string]string{"campaignRequestId": newID})

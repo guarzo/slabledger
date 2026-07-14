@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
@@ -34,4 +35,19 @@ func (l *PSACampaignLinker) LinkPSACampaign(ctx context.Context, internalCampaig
 		return fmt.Errorf("psa_campaign_link: no campaign with id %q", internalCampaignID)
 	}
 	return nil
+}
+
+// LinkedPSACampaignID returns the portal campaign id linked to internalCampaignID,
+// or "" if the campaign has no link yet.
+func (l *PSACampaignLinker) LinkedPSACampaignID(ctx context.Context, internalCampaignID string) (string, error) {
+	const q = `SELECT COALESCE(psa_campaign_request_id, '') FROM campaigns WHERE id = $1`
+	var id string
+	err := l.db.QueryRowContext(ctx, q, internalCampaignID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("psa_campaign_link: lookup: %w", err)
+	}
+	return id, nil
 }
