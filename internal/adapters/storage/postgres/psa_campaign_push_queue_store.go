@@ -47,8 +47,10 @@ func (s *PSACampaignPushQueueStore) Enqueue(ctx context.Context, p psacampaign.P
 		// The partial unique index uq_psa_push_queue_create_unresolved rejects a
 		// second unresolved create for the same internal campaign — surface it as
 		// a domain sentinel so the handler can return a clean 409 instead of 500.
+		// Match on the constraint name so unrelated 23505s (e.g. a primary-key
+		// collision) still follow the generic error path.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "uq_psa_push_queue_create_unresolved" {
 			return psacampaign.ErrDuplicateCreate
 		}
 		return fmt.Errorf("psa_campaign_push_queue: insert: %w", err)

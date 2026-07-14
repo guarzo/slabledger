@@ -183,33 +183,67 @@ func TestPushQueueStore_CreateOperation_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestPushQueueStore_CreateUnique_RejectsConcurrentUnresolved(t *testing.T) {
+func TestPushQueueStore_CreateUnique(t *testing.T) {
 	db := setupTestDB(t)
-	truncatePSACampaignTables(t, db)
 	s := NewPSACampaignPushQueueStore(db.DB)
 	ctx := context.Background()
 
-	mk := func(id string) psacampaign.PushRow {
+	mk := func(id, campaignID string, status psacampaign.PushStatus) psacampaign.PushRow {
 		return psacampaign.PushRow{
-			ID: id, Operation: psacampaign.OpCreate, InternalCampaignID: "camp-x",
+			ID: id, Operation: psacampaign.OpCreate, InternalCampaignID: campaignID,
 			Diff:   psacampaign.ProposedDiff{Create: &psacampaign.CampaignFormData{CampaignName: "X"}},
-			Status: psacampaign.PushPending,
+			Status: status,
 		}
 	}
 
-	// First unresolved create for camp-x succeeds.
-	require.NoError(t, s.Enqueue(ctx, mk("row-1")))
-
-	// A second unresolved create for the same campaign is rejected atomically.
-	err := s.Enqueue(ctx, mk("row-2"))
-	require.ErrorIs(t, err, psacampaign.ErrDuplicateCreate)
-
-	// Once the first leaves the unresolved set (e.g. failed), a retry is allowed.
-	require.NoError(t, s.MarkResult(ctx, "row-1", psacampaign.PushFailed, "", "portal down"))
-	require.NoError(t, s.Enqueue(ctx, mk("row-3")))
-
-	// A create for a different campaign is never blocked.
-	other := mk("row-4")
-	other.InternalCampaignID = "camp-y"
-	require.NoError(t, s.Enqueue(ctx, other))
+	// Each case runs against a freshly-truncated table and, before the assertion,
+	// applies its `setup` (prior enqueues / state transitions) so the sequential
+	// dependencies stay isolated per subtest.
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T)
+		enqueue psacampaign.PushRow
+		wantErr error
+	}{
+		{
+			name:    "first unresolved create succeeds",
+			setup:   func(t *testing.T) {},
+			enqueue: mk("row-1", "camp-x", psacampaign.PushPending),
+		},
+		{
+			name: "second unresolved create for same campaign rejected",
+			setup: func(t *testing.T) {
+				require.NoError(t, s.Enqueue(ctx, mk("row-1", "camp-x", psacampaign.PushPending)))
+			},
+			enqueue: mk("row-2", "camp-x", psacampaign.PushPending),
+			wantErr: psacampaign.ErrDuplicateCreate,
+		},
+		{
+			name: "retry allowed after first create fails",
+			setup: func(t *testing.T) {
+				require.NoError(t, s.Enqueue(ctx, mk("row-1", "camp-x", psacampaign.PushPending)))
+				require.NoError(t, s.MarkResult(ctx, "row-1", psacampaign.PushFailed, "", "portal down"))
+			},
+			enqueue: mk("row-3", "camp-x", psacampaign.PushPending),
+		},
+		{
+			name: "different campaign never blocked",
+			setup: func(t *testing.T) {
+				require.NoError(t, s.Enqueue(ctx, mk("row-1", "camp-x", psacampaign.PushPending)))
+			},
+			enqueue: mk("row-4", "camp-y", psacampaign.PushPending),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			truncatePSACampaignTables(t, db)
+			tt.setup(t)
+			err := s.Enqueue(ctx, tt.enqueue)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
