@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isAPIError } from '../../../js/api';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { Button, Select } from '../../ui';
 import type { Campaign, ProposedDiff } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
@@ -22,12 +21,6 @@ export interface PSAPublishModalProps {
 export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishModalProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-  // approvedBy identifies who approved the push for audit purposes. There is
-  // no dedicated "approver" concept in the app yet, so we fall back to the
-  // logged-in user's username (via AuthContext) and a generic label if
-  // unauthenticated.
-  const approvedBy = user?.username || 'unknown';
 
   const [selectedPSAId, setSelectedPSAId] = useState('');
   const [diff, setDiff] = useState<ProposedDiff | null>(null);
@@ -67,7 +60,7 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
   const publishMutation = useMutation({
     mutationFn: () => {
       if (!pushId) throw new Error('No pending push to publish');
-      return api.psaPublish(campaign.id, pushId, approvedBy);
+      return api.psaPublish(campaign.id, pushId);
     },
     onSuccess: (res) => {
       setPublishStatus(res.status);

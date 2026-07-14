@@ -100,7 +100,7 @@ describe('PSAPublishModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /publish to psa/i }));
 
     await waitFor(() => {
-      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-1', expect.any(String));
+      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-1');
     });
   });
 });

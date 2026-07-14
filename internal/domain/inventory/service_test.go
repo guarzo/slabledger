@@ -998,4 +998,3 @@ func TestService_CreateSale_SetsForcedLiquidation(t *testing.T) {
 		})
 	}
 }
-

@@ -34,7 +34,7 @@ func TestEncodeRefPacked_RoundTrip(t *testing.T) {
 func TestDecodeRefPacked_RealEditPayload(t *testing.T) {
 	raw, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
 	if err != nil {
-		t.Skipf("fixture missing: %v", err)
+		t.Fatalf("fixture missing: %v", err)
 	}
 	data, err := packedFromEnvelope(raw)
 	if err != nil {

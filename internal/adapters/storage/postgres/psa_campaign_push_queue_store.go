@@ -27,17 +27,15 @@ func (s *PSACampaignPushQueueStore) Enqueue(ctx context.Context, p psacampaign.P
 	if err != nil {
 		return fmt.Errorf("psa_campaign_push_queue: marshal diff: %w", err)
 	}
-	status := p.Status
-	if status == "" {
-		status = psacampaign.PushPending
-	}
+	// A newly enqueued proposal is always pending with no approver, regardless
+	// of what the caller passed — the approval identity is set only via Approve.
 	const q = `
 		INSERT INTO psa_campaign_push_queue
 			(id, psa_campaign_id, internal_campaign_id, proposed_diff, status, requested_by, approved_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, now(), now())`
+		VALUES ($1, $2, $3, $4::jsonb, $5, $6, NULL, now(), now())`
 	if _, err := s.db.ExecContext(ctx, q,
-		p.ID, p.PSACampaignID, nullString(p.InternalCampaignID), string(diff), status,
-		nullString(p.RequestedBy), nullString(p.ApprovedBy),
+		p.ID, p.PSACampaignID, nullString(p.InternalCampaignID), string(diff), string(psacampaign.PushPending),
+		nullString(p.RequestedBy),
 	); err != nil {
 		return fmt.Errorf("psa_campaign_push_queue: insert: %w", err)
 	}

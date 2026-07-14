@@ -168,8 +168,7 @@ func (h *CampaignsHandler) HandlePSAPropose(w http.ResponseWriter, r *http.Reque
 
 // psaPublishRequest is the body for HandlePSAPublish.
 type psaPublishRequest struct {
-	PushID     string `json:"pushId"`
-	ApprovedBy string `json:"approvedBy"`
+	PushID string `json:"pushId"`
 }
 
 // HandlePSAPublish handles POST /api/campaigns/{id}/psa-publish, approving a
@@ -185,7 +184,14 @@ func (h *CampaignsHandler) HandlePSAPublish(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.psaQueue.Approve(r.Context(), req.PushID, req.ApprovedBy); err != nil {
+	user, authOK := middleware.GetUserFromContext(r.Context())
+	if !authOK || user == nil || user.Username == "" {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	approvedBy := user.Username
+
+	if err := h.psaQueue.Approve(r.Context(), req.PushID, approvedBy); err != nil {
 		if errors.Is(err, psacampaign.ErrPushNotPending) {
 			writeError(w, http.StatusConflict, "push row is not pending")
 			return

@@ -16,7 +16,7 @@ import (
 func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
 	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
 	if err != nil {
-		t.Skipf("fixture missing: %v", err)
+		t.Fatalf("fixture missing: %v", err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

@@ -30,6 +30,23 @@ func TestSnapshotStore_SaveGet(t *testing.T) {
 	require.Equal(t, "Crystal", got[0].Name)
 	require.Equal(t, "a", got[0].CampaignRequestID)
 	require.Equal(t, 70, got[0].BuyPercentClv)
+
+	// Saving again replaces the singleton (ON CONFLICT DO UPDATE): the old data
+	// must be gone, not merged.
+	replacement := []psacampaign.PortalCampaign{
+		{CampaignRequestID: "b", Name: "Modern 10", BuyPercentClv: 72},
+		{CampaignRequestID: "c", Name: "Vintage", BuyPercentClv: 65},
+	}
+	require.NoError(t, s.SaveSnapshot(context.Background(), replacement))
+
+	got, _, err = s.GetSnapshot(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, "Modern 10", got[0].Name)
+	require.Equal(t, "Vintage", got[1].Name)
+	for _, c := range got {
+		require.NotEqual(t, "Crystal", c.Name, "old snapshot data must not survive replace")
+	}
 }
 
 func TestSnapshotStore_SaveSnapshot_EmptyRejected(t *testing.T) {

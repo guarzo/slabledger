@@ -10,7 +10,7 @@ declare module './client' {
     listPSACampaigns(): Promise<ListPSACampaignsResponse>;
     psaLink(id: string, psaCampaignRequestId: string): Promise<Campaign>;
     psaPropose(id: string): Promise<PSAProposeResponse>;
-    psaPublish(id: string, pushId: string, approvedBy: string): Promise<PSAPublishResponse>;
+    psaPublish(id: string, pushId: string): Promise<PSAPublishResponse>;
   }
 }
 
@@ -29,6 +29,6 @@ proto.psaPropose = async function (this: APIClient, id: string): Promise<PSAProp
   return this.post<PSAProposeResponse>(`/campaigns/${id}/psa-propose`, {});
 };
 
-proto.psaPublish = async function (this: APIClient, id: string, pushId: string, approvedBy: string): Promise<PSAPublishResponse> {
-  return this.post<PSAPublishResponse>(`/campaigns/${id}/psa-publish`, { pushId, approvedBy });
+proto.psaPublish = async function (this: APIClient, id: string, pushId: string): Promise<PSAPublishResponse> {
+  return this.post<PSAPublishResponse>(`/campaigns/${id}/psa-publish`, { pushId });
 };

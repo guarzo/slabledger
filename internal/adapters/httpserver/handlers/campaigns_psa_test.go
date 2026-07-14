@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/httpserver/middleware"
+	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -79,9 +81,11 @@ func TestHandlePSAPublish(t *testing.T) {
 			}
 			h := newTestPSAHandler(nil, queue)
 
-			body := `{"pushId":"push-123","approvedBy":"alice"}`
+			body := `{"pushId":"push-123"}`
 			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-publish", strings.NewReader(body))
 			req.SetPathValue("id", "c1")
+			ctx := context.WithValue(req.Context(), middleware.UserContextKey, &auth.User{Username: "alice"})
+			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 			h.HandlePSAPublish(rec, req)
 
@@ -99,12 +103,30 @@ func TestHandlePSAPublish(t *testing.T) {
 
 func TestHandlePSAPublish_NoQueue(t *testing.T) {
 	h := newTestPSAHandler(nil, nil)
-	body := `{"pushId":"push-123","approvedBy":"alice"}`
+	body := `{"pushId":"push-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-publish", strings.NewReader(body))
 	req.SetPathValue("id", "c1")
 	rec := httptest.NewRecorder()
 	h.HandlePSAPublish(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+}
+
+func TestHandlePSAPublish_Unauthenticated(t *testing.T) {
+	queue := &mocks.PushQueueStoreMock{
+		ApproveFn: func(ctx context.Context, id, approvedBy string) error {
+			t.Fatal("Approve should not be called without an authenticated user")
+			return nil
+		},
+	}
+	h := newTestPSAHandler(nil, queue)
+	body := `{"pushId":"push-123"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-publish", strings.NewReader(body))
+	req.SetPathValue("id", "c1")
+	rec := httptest.NewRecorder()
+	h.HandlePSAPublish(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

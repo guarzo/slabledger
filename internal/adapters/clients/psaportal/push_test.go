@@ -16,7 +16,7 @@ import (
 func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
 	if err != nil {
-		t.Skipf("fixture missing: %v", err)
+		t.Fatalf("fixture missing: %v", err)
 	}
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +102,7 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
 	if err != nil {
-		t.Skipf("fixture missing: %v", err)
+		t.Fatalf("fixture missing: %v", err)
 	}
 	posted := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

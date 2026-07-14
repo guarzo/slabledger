@@ -19,6 +19,9 @@ func (c *Client) fetchBuildHash(ctx context.Context, token string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("psaportal: build-hash page: %w", err)
 	}
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("psaportal: build-hash page status %d", resp.StatusCode)
+	}
 	m := buildHashRe.FindSubmatch(resp.Body)
 	if m == nil {
 		return "", fmt.Errorf("psaportal: build hash not found on portal page")
