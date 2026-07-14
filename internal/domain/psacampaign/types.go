@@ -80,6 +80,14 @@ const (
 	PushFailed   PushStatus = "failed"
 )
 
+// Operation distinguishes what a queued push row does at the portal.
+type Operation string
+
+const (
+	OpUpdate Operation = "update"
+	OpCreate Operation = "create"
+)
+
 // FieldChange is one proposed field mutation (old -> new), for audit + UI diff.
 type FieldChange struct {
 	Field string `json:"field"`
@@ -87,7 +95,10 @@ type FieldChange struct {
 	New   string `json:"new"`
 }
 
-// ProposedDiff is the set of changes a proposal wants to apply to a campaign.
+// ProposedDiff is the payload of a queued push. For updates it holds the field
+// changes; for creates it holds the full formData being created (the approver
+// reviews every field, not a diff).
 type ProposedDiff struct {
-	Changes []FieldChange `json:"changes"`
+	Changes []FieldChange     `json:"changes,omitempty"`
+	Create  *CampaignFormData `json:"create,omitempty"`
 }

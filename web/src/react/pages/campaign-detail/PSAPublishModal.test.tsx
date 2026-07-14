@@ -12,6 +12,7 @@ vi.mock('../../../js/api', () => ({
     listPSACampaigns: vi.fn(),
     psaLink: vi.fn(),
     psaPropose: vi.fn(),
+    psaProposeCreate: vi.fn(),
     psaPublish: vi.fn(),
   },
   isAPIError: (err: unknown): err is { status: number } =>
@@ -62,6 +63,7 @@ describe('PSAPublishModal', () => {
     vi.mocked(api.listPSACampaigns).mockReset();
     vi.mocked(api.psaLink).mockReset();
     vi.mocked(api.psaPropose).mockReset();
+    vi.mocked(api.psaProposeCreate).mockReset();
     vi.mocked(api.psaPublish).mockReset();
   });
 
@@ -101,6 +103,57 @@ describe('PSAPublishModal', () => {
 
     await waitFor(() => {
       expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-1');
+    });
+  });
+
+  it('Create on PSA flow proposes a create then queues it', async () => {
+    vi.mocked(api.listPSACampaigns).mockResolvedValue({ campaigns: [], fetchedAt: '' });
+    vi.mocked(api.psaProposeCreate).mockResolvedValue({
+      pushId: 'push-create-1',
+      formData: {
+        campaignName: 'Modern 10s',
+        campaignType: 'CATEGORY',
+        category: 'POKEMON',
+        prepackagedSpecListIds: [],
+        isActive: false,
+        bidPercentage: 72,
+        flatFee: 3,
+        dailyBudget: 3000,
+        dailySpecLimit: 2,
+        gradeMinimum: '10',
+        gradeMaximum: '10',
+        yearMinimum: 2024,
+        yearMaximum: 2026,
+        priceMinimum: 500,
+        priceMaximum: 3000,
+        cardLadderConfidenceMinimum: 3,
+        publisherFilterType: 'Target',
+        selectedPublishers: [],
+        subjectFilterType: 'Target',
+        selectedSubjects: [],
+        deniedSpecs: [],
+      },
+    });
+    vi.mocked(api.psaPublish).mockResolvedValue({ pushId: 'push-create-1', status: 'approved' });
+
+    renderModal(makeCampaign({ psaCampaignRequestId: '' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /create on psa/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(api.psaProposeCreate)).toHaveBeenCalledWith('c1');
+    });
+    // Wait for the preview to actually render (onSuccess committed to the DOM)
+    // before asserting on its fields, to avoid intermittent flakiness.
+    await waitFor(() => {
+      expect(screen.getByText(/PAUSED/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/72%/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /approve & queue create/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-create-1');
     });
   });
 });

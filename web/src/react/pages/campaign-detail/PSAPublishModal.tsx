@@ -5,7 +5,7 @@ import { api, isAPIError } from '../../../js/api';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Select } from '../../ui';
-import type { Campaign, ProposedDiff } from '../../../types/campaigns';
+import type { Campaign, ProposedDiff, CampaignFormData } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 
 export interface PSAPublishModalProps {
@@ -26,6 +26,7 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
   const [diff, setDiff] = useState<ProposedDiff | null>(null);
   const [pushId, setPushId] = useState<string | undefined>(undefined);
   const [publishStatus, setPublishStatus] = useState<string | null>(null);
+  const [createPreview, setCreatePreview] = useState<CampaignFormData | null>(null);
 
   const isLinked = !!campaign.psaCampaignRequestId;
 
@@ -55,6 +56,16 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
       }
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to check for changes')),
+  });
+
+  const proposeCreateMutation = useMutation({
+    mutationFn: () => api.psaProposeCreate(campaign.id),
+    onSuccess: (res) => {
+      setCreatePreview(res.formData);
+      setPushId(res.pushId);
+      setPublishStatus(null);
+    },
+    onError: (err) => toast.error(getErrorMessage(err, 'Failed to prepare PSA campaign')),
   });
 
   const publishMutation = useMutation({
@@ -97,6 +108,7 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
           </Dialog.Description>
 
           {!isLinked ? (
+            <>
             <div className="flex items-center gap-2">
               <Select
                 aria-label="PSA portal campaign"
@@ -119,6 +131,57 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
                 Link
               </Button>
             </div>
+
+              <div className="mt-4 pt-4 border-t border-[var(--surface-2)] flex flex-col gap-3">
+                <p className="text-xs text-[var(--text-muted)]">
+                  Or create a new PSA portal campaign from this campaign&rsquo;s config.
+                  It is created <span className="font-medium">paused</span> — add the
+                  inclusion list in the portal before activating.
+                </p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={proposeCreateMutation.isPending}
+                  onClick={() => proposeCreateMutation.mutate()}
+                >
+                  Create on PSA
+                </Button>
+
+                {createPreview && (
+                  <div className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">
+                    {Object.entries({
+                      Name: createPreview.campaignName,
+                      Category: createPreview.category,
+                      Status: 'PAUSED',
+                      'Bid %': `${createPreview.bidPercentage}%`,
+                      'Daily budget': `$${createPreview.dailyBudget}`,
+                      'Flat fee': `$${createPreview.flatFee}`,
+                      'Daily spec limit': `${createPreview.dailySpecLimit}`,
+                      Grades: `${createPreview.gradeMinimum}–${createPreview.gradeMaximum}`,
+                      Years: `${createPreview.yearMinimum}–${createPreview.yearMaximum}`,
+                      Prices: `$${createPreview.priceMinimum}–$${createPreview.priceMaximum}`,
+                      'CL confidence ≥': `${createPreview.cardLadderConfidenceMinimum}`,
+                      Subjects: 'none (add in portal before activating)',
+                    }).map(([k, v]) => (
+                      <div key={k}>
+                        <span className="font-medium text-[var(--text)]">{k}</span>: {v}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {createPreview && pushId && !publishStatus && (
+                  <Button size="sm" loading={publishMutation.isPending} onClick={() => publishMutation.mutate()}>
+                    Approve &amp; queue create
+                  </Button>
+                )}
+                {publishStatus && (
+                  <span className="text-xs text-[var(--success)]">
+                    Queued for harvester (status: {publishStatus}). The campaign links automatically once created.
+                  </span>
+                )}
+              </div>
+            </>
           ) : (
             <div className="flex flex-col gap-3">
               <Button

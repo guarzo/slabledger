@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 )
@@ -29,14 +32,27 @@ func (s *PSACampaignPushQueueStore) Enqueue(ctx context.Context, p psacampaign.P
 	}
 	// A newly enqueued proposal is always pending with no approver, regardless
 	// of what the caller passed — the approval identity is set only via Approve.
+	op := p.Operation
+	if op == "" {
+		op = psacampaign.OpUpdate
+	}
 	const q = `
 		INSERT INTO psa_campaign_push_queue
-			(id, psa_campaign_id, internal_campaign_id, proposed_diff, status, requested_by, approved_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4::jsonb, $5, $6, NULL, now(), now())`
+			(id, psa_campaign_id, internal_campaign_id, operation, proposed_diff, status, requested_by, approved_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, NULL, now(), now())`
 	if _, err := s.db.ExecContext(ctx, q,
-		p.ID, p.PSACampaignID, nullString(p.InternalCampaignID), string(diff), string(psacampaign.PushPending),
-		nullString(p.RequestedBy),
+		p.ID, nullString(p.PSACampaignID), nullString(p.InternalCampaignID), string(op),
+		string(diff), string(psacampaign.PushPending), nullString(p.RequestedBy),
 	); err != nil {
+		// The partial unique index uq_psa_push_queue_create_unresolved rejects a
+		// second unresolved create for the same internal campaign — surface it as
+		// a domain sentinel so the handler can return a clean 409 instead of 500.
+		// Match on the constraint name so unrelated 23505s (e.g. a primary-key
+		// collision) still follow the generic error path.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "uq_psa_push_queue_create_unresolved" {
+			return psacampaign.ErrDuplicateCreate
+		}
 		return fmt.Errorf("psa_campaign_push_queue: insert: %w", err)
 	}
 	return nil
@@ -84,7 +100,7 @@ func (s *PSACampaignPushQueueStore) Claim(ctx context.Context, id string) (bool,
 // ListByStatus returns all rows matching the given status.
 func (s *PSACampaignPushQueueStore) ListByStatus(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
 	const q = `
-		SELECT id, psa_campaign_id, COALESCE(internal_campaign_id, ''), proposed_diff, status,
+		SELECT id, COALESCE(psa_campaign_id, ''), COALESCE(internal_campaign_id, ''), operation, proposed_diff, status,
 		       COALESCE(requested_by, ''), COALESCE(approved_by, '')
 		  FROM psa_campaign_push_queue
 		 WHERE status = $1
@@ -99,9 +115,11 @@ func (s *PSACampaignPushQueueStore) ListByStatus(ctx context.Context, status psa
 	for rows.Next() {
 		var r psacampaign.PushRow
 		var diff []byte
-		if err := rows.Scan(&r.ID, &r.PSACampaignID, &r.InternalCampaignID, &diff, &r.Status, &r.RequestedBy, &r.ApprovedBy); err != nil {
+		var op string
+		if err := rows.Scan(&r.ID, &r.PSACampaignID, &r.InternalCampaignID, &op, &diff, &r.Status, &r.RequestedBy, &r.ApprovedBy); err != nil {
 			return nil, fmt.Errorf("psa_campaign_push_queue: scan: %w", err)
 		}
+		r.Operation = psacampaign.Operation(op)
 		if err := json.Unmarshal(diff, &r.Diff); err != nil {
 			return nil, fmt.Errorf("psa_campaign_push_queue: unmarshal diff: %w", err)
 		}
