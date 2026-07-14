@@ -147,9 +147,16 @@ The operator picks a Decision to dig into, asks for a related view, or requests 
 
 1. **"What about liquidation?"** — pull `/api/inventory` filtered to ≥30 days on eBay. Decisions look like: "Move 47 cards from Tier 2-3 to LGS batch — expected $19K cash, P&L ~−$340 (R-017 LGS math)."
 2. **"Should we reprice aging?"** — pull `/api/inventory` aging buckets. "Drop list price 10% on 14 cards aged 45-60 days."
-3. **"How's campaign X doing?"** — single-campaign drill: the `/analysis` campaign block + ledger Decisions + live `/api/campaigns` config.
+3. **"How's campaign X doing?"** — single-campaign drill: the `/analysis` campaign block + ledger Decisions + live `/api/campaigns` config. If a tune is approved and the campaign is **linked** (`psaCampaignRequestId` set), the scalar/range change (terms / cap / grade / price / CL confidence) can be staged via `psa-propose` + `psa-publish` (in-turn approval, R-030) instead of the manual PUT.
 4. **"Does the strategy doc still match?"** — diff design intent (`CAMPAIGN_STRATEGY.md`) against live state (`/api/campaigns` + `/analysis`) and surface drift. Doc edits go through Step 6.
 5. **"What should we add?"** — coverage / acquisition. Default to the edge thesis (CL-lag on ≥$150, second-tier characters, avoid sub-$150 modern); never default-recommend popular-tier from data (R-006).
+
+   **Staging an approved add (optional — manual PUT stays valid).** Once the operator approves an add, offer to stage the *scalar/range* config to the PSA portal. Read `psaCampaignRequestId` from `/api/campaigns` for that campaign and branch:
+   - **Unlinked** (`psaCampaignRequestId` empty) → `POST /api/campaigns/{id}/psa-propose-create`. On `200`, show the returned `formData`, and disclose: the portal campaign is created **paused with an empty inclusion list** — the operator adds the characters and activates it in the portal (R-030). On explicit yes → `psa-publish`. `409 "already queued"` = a create is pending, don't re-create; `409 "already created … link it manually"` = link-back failed, tell the operator to `psa-link`.
+   - **Linked** (`psaCampaignRequestId` set) → `POST /api/campaigns/{id}/psa-propose`. On `200` with a `pushId` and non-empty `diff`, show the diff (scalar/range only — inclusion adds are NOT in it), get an explicit yes → `psa-publish`. On `200` with no `pushId` (empty diff) → "already in sync, nothing to stage."
+   - **`503`** anywhere → PSA sync not enabled; fall back to the manual `PUT` path (hard-constraint 6).
+
+   `psa-publish` fires only after an in-turn yes (R-030). Character/inclusion adds are always finished manually in the portal — say so, so it's never implied a character add was staged. Curl syntax: `references/api-cheatsheet.md`.
 
 ### Step 5 — Persist (inline, same turn as approval)
 
