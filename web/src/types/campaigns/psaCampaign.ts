@@ -63,3 +63,33 @@ export interface PSAPublishResponse {
   pushId: string;
   status: string;
 }
+
+/** Mirrors psacampaign.CampaignFormData (Go). Prices/budget are whole USD. */
+export interface CampaignFormData {
+  campaignName: string;
+  campaignType: string;
+  category: string;
+  prepackagedSpecListIds: string[];
+  isActive: boolean;
+  bidPercentage: number;
+  flatFee: number;
+  dailyBudget: number;
+  dailySpecLimit: number;
+  gradeMinimum: string;
+  gradeMaximum: string;
+  yearMinimum: number;
+  yearMaximum: number;
+  priceMinimum: number;
+  priceMaximum: number;
+  cardLadderConfidenceMinimum: number;
+  publisherFilterType: string;
+  selectedPublishers: SubjectRef[];
+  subjectFilterType: string;
+  selectedSubjects: SubjectRef[];
+  deniedSpecs: SubjectRef[];
+}
+
+export interface PSAProposeCreateResponse {
+  pushId: string;
+  formData: CampaignFormData;
+}
