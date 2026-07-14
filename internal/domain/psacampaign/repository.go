@@ -10,6 +10,11 @@ import (
 // that is not currently in the pending state.
 var ErrPushNotPending = errors.New("psacampaign: push row is not pending")
 
+// ErrDuplicateCreate is returned by Enqueue when an unresolved create proposal
+// (pending/approved/pushing) already exists for the same internal campaign,
+// enforced atomically by a partial unique index.
+var ErrDuplicateCreate = errors.New("psacampaign: a create is already queued for this campaign")
+
 // PushRow is one queued edit awaiting approval/push to the PSA portal.
 type PushRow struct {
 	ID                 string

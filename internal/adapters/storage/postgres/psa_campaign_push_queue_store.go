@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 )
@@ -41,6 +44,13 @@ func (s *PSACampaignPushQueueStore) Enqueue(ctx context.Context, p psacampaign.P
 		p.ID, nullString(p.PSACampaignID), nullString(p.InternalCampaignID), string(op),
 		string(diff), string(psacampaign.PushPending), nullString(p.RequestedBy),
 	); err != nil {
+		// The partial unique index uq_psa_push_queue_create_unresolved rejects a
+		// second unresolved create for the same internal campaign — surface it as
+		// a domain sentinel so the handler can return a clean 409 instead of 500.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return psacampaign.ErrDuplicateCreate
+		}
 		return fmt.Errorf("psa_campaign_push_queue: insert: %w", err)
 	}
 	return nil

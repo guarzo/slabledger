@@ -280,6 +280,12 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 		Status:             psacampaign.PushPending,
 	}
 	if err := h.psaQueue.Enqueue(r.Context(), row); err != nil {
+		// Authoritative dedupe: the partial unique index rejects a concurrent
+		// second unresolved create that raced past existingCreateStatus above.
+		if errors.Is(err, psacampaign.ErrDuplicateCreate) {
+			writeError(w, http.StatusConflict, "a PSA create is already queued for this campaign")
+			return
+		}
 		h.logger.Error(r.Context(), "failed to enqueue PSA create", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return

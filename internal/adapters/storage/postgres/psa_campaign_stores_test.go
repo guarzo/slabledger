@@ -182,3 +182,34 @@ func TestPushQueueStore_CreateOperation_RoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestPushQueueStore_CreateUnique_RejectsConcurrentUnresolved(t *testing.T) {
+	db := setupTestDB(t)
+	truncatePSACampaignTables(t, db)
+	s := NewPSACampaignPushQueueStore(db.DB)
+	ctx := context.Background()
+
+	mk := func(id string) psacampaign.PushRow {
+		return psacampaign.PushRow{
+			ID: id, Operation: psacampaign.OpCreate, InternalCampaignID: "camp-x",
+			Diff:   psacampaign.ProposedDiff{Create: &psacampaign.CampaignFormData{CampaignName: "X"}},
+			Status: psacampaign.PushPending,
+		}
+	}
+
+	// First unresolved create for camp-x succeeds.
+	require.NoError(t, s.Enqueue(ctx, mk("row-1")))
+
+	// A second unresolved create for the same campaign is rejected atomically.
+	err := s.Enqueue(ctx, mk("row-2"))
+	require.ErrorIs(t, err, psacampaign.ErrDuplicateCreate)
+
+	// Once the first leaves the unresolved set (e.g. failed), a retry is allowed.
+	require.NoError(t, s.MarkResult(ctx, "row-1", psacampaign.PushFailed, "", "portal down"))
+	require.NoError(t, s.Enqueue(ctx, mk("row-3")))
+
+	// A create for a different campaign is never blocked.
+	other := mk("row-4")
+	other.InternalCampaignID = "camp-y"
+	require.NoError(t, s.Enqueue(ctx, other))
+}
