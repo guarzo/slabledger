@@ -74,3 +74,17 @@ func (m *PushQueueStoreMock) Claim(ctx context.Context, id string) (bool, error)
 	}
 	return true, nil
 }
+
+// CampaignLinkerMock implements psacampaign.CampaignLinker with the Fn-field pattern.
+type CampaignLinkerMock struct {
+	LinkPSACampaignFn func(ctx context.Context, internalCampaignID, psaCampaignRequestID string) error
+}
+
+var _ psacampaign.CampaignLinker = (*CampaignLinkerMock)(nil)
+
+func (m *CampaignLinkerMock) LinkPSACampaign(ctx context.Context, internalCampaignID, psaCampaignRequestID string) error {
+	if m.LinkPSACampaignFn != nil {
+		return m.LinkPSACampaignFn(ctx, internalCampaignID, psaCampaignRequestID)
+	}
+	return nil
+}

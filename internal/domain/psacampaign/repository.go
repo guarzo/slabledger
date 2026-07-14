@@ -39,3 +39,9 @@ type PushQueueStore interface {
 	// prevent double-push from concurrent DrainPushQueue runs.
 	Claim(ctx context.Context, id string) (bool, error)
 }
+
+// CampaignLinker writes the portal campaign id onto an internal campaign
+// after a successful create push.
+type CampaignLinker interface {
+	LinkPSACampaign(ctx context.Context, internalCampaignID, psaCampaignRequestID string) error
+}

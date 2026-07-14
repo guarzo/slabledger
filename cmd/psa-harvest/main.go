@@ -87,6 +87,7 @@ func run() error {
 		portal := psaportal.New(psaportal.NewStoredTokenProvider(store), psaportal.Config{}, psaportal.WithLogger(logger))
 		snap := postgres.NewPSACampaignSnapshotStore(db.DB)
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
+		linker := postgres.NewPSACampaignLinker(db.DB)
 
 		campaigns, err := portal.FetchCampaigns(ctx)
 		switch {
@@ -100,7 +101,7 @@ func run() error {
 			}
 		}
 
-		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, logger)
+		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, linker, logger)
 		logger.Info(ctx, "psa-harvest: push queue drained",
 			observability.Int("pushed", pushed), observability.Int("failed", failed))
 	}
