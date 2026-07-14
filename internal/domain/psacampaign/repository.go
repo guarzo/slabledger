@@ -13,6 +13,7 @@ var ErrPushNotPending = errors.New("psacampaign: push row is not pending")
 // PushRow is one queued edit awaiting approval/push to the PSA portal.
 type PushRow struct {
 	ID                 string
+	Operation          Operation
 	PSACampaignID      string
 	InternalCampaignID string
 	RequestedBy        string

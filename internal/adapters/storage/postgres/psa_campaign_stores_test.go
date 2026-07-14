@@ -129,3 +129,56 @@ func TestPushQueueStore_Approve_NotPending(t *testing.T) {
 	err := s.Approve(ctx, "does-not-exist", "bob")
 	require.ErrorIs(t, err, psacampaign.ErrPushNotPending)
 }
+
+func TestPushQueueStore_CreateOperation_RoundTrip(t *testing.T) {
+	db := setupTestDB(t)
+	truncatePSACampaignTables(t, db)
+	s := NewPSACampaignPushQueueStore(db.DB)
+	ctx := context.Background()
+
+	fd := &psacampaign.CampaignFormData{
+		CampaignName: "Modern 10s", CampaignType: "CATEGORY", Category: "POKEMON",
+		PrepackagedSpecListIDs: []string{}, IsActive: false,
+		BidPercentage: 72, FlatFee: 3, DailyBudget: 3000, DailySpecLimit: 2,
+		GradeMinimum: "10", GradeMaximum: "10", YearMinimum: 2024, YearMaximum: 2026,
+		PriceMinimum: 500, PriceMaximum: 3000, CardLadderConfidenceMinimum: 3,
+		PublisherFilterType: "Target", SelectedPublishers: []psacampaign.SubjectRef{},
+		SubjectFilterType: "Target", SelectedSubjects: []psacampaign.SubjectRef{},
+		DeniedSpecs: []psacampaign.SubjectRef{},
+	}
+	row := psacampaign.PushRow{
+		ID: "row-create-1", Operation: psacampaign.OpCreate,
+		InternalCampaignID: "c1", RequestedBy: "test",
+		Diff: psacampaign.ProposedDiff{Create: fd}, Status: psacampaign.PushPending,
+	}
+	require.NoError(t, s.Enqueue(ctx, row))
+
+	rows, err := s.ListByStatus(ctx, psacampaign.PushPending)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	got := rows[0]
+	require.Equal(t, psacampaign.OpCreate, got.Operation)
+	require.Empty(t, got.PSACampaignID, "create rows have no portal id yet")
+	require.Equal(t, "c1", got.InternalCampaignID)
+	require.NotNil(t, got.Diff.Create)
+	require.Equal(t, "Modern 10s", got.Diff.Create.CampaignName)
+	require.False(t, got.Diff.Create.IsActive, "creates must be born paused")
+	require.Equal(t, "10", got.Diff.Create.GradeMinimum)
+	require.Equal(t, 3000, got.Diff.Create.PriceMaximum)
+
+	// Rows enqueued without an Operation (the existing update path) default to update.
+	legacy := psacampaign.PushRow{
+		ID: "row-legacy-1", PSACampaignID: "portal-1",
+		Diff:   psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{{Field: "bidPercentage", Old: "70", New: "72"}}},
+		Status: psacampaign.PushPending,
+	}
+	require.NoError(t, s.Enqueue(ctx, legacy))
+	rows, err = s.ListByStatus(ctx, psacampaign.PushPending)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, r := range rows {
+		if r.ID == "row-legacy-1" {
+			require.Equal(t, psacampaign.OpUpdate, r.Operation)
+		}
+	}
+}
