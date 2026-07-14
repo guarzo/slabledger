@@ -303,6 +303,14 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 			},
 			wantStatus: http.StatusConflict,
 		},
+		{
+			name:     "pushed-but-unlinked create rejects re-create",
+			campaign: valid,
+			queueRows: []psacampaign.PushRow{
+				{ID: "done", Operation: psacampaign.OpCreate, InternalCampaignID: "c1", Status: psacampaign.PushPushed},
+			},
+			wantStatus: http.StatusConflict,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -321,10 +329,13 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 					return nil
 				},
 				ListByStatusFn: func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
-					if status == psacampaign.PushPending {
-						return tt.queueRows, nil
+					var out []psacampaign.PushRow
+					for _, r := range tt.queueRows {
+						if r.Status == status {
+							out = append(out, r)
+						}
 					}
-					return nil, nil
+					return out, nil
 				},
 			}
 			var opts []CampaignsHandlerOption

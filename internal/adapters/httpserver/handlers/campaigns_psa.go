@@ -241,16 +241,21 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Dedupe guard: reject if an unresolved create for this campaign is already
-	// queued, so a double-submit can't enqueue two OpCreate rows and produce
-	// duplicate portal campaigns before the link is written back.
-	exists, err := h.pendingCreateExists(r.Context(), c.ID)
+	// Dedupe guard: reject if a create for this campaign already exists. Pending/
+	// approved/pushing rows mean a double-submit; a pushed-but-unlinked row means
+	// the portal campaign was already created but its link-back failed — the
+	// operator should link it manually (psa-link) rather than create a duplicate.
+	existing, err := h.existingCreateStatus(r.Context(), c.ID)
 	if err != nil {
 		h.logger.Error(r.Context(), "failed to check for existing PSA create", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	if exists {
+	switch existing {
+	case psacampaign.PushPushed:
+		writeError(w, http.StatusConflict, "a PSA campaign was already created for this campaign but is not linked — link it manually instead of creating another")
+		return
+	case psacampaign.PushPending, psacampaign.PushApproved, psacampaign.PushPushing:
 		writeError(w, http.StatusConflict, "a PSA create is already queued for this campaign")
 		return
 	}
@@ -283,19 +288,21 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, psaProposeCreateResponse{PushID: row.ID, FormData: fd})
 }
 
-// pendingCreateExists reports whether an unresolved (pending or approved)
-// OpCreate push row already targets internalCampaignID.
-func (h *CampaignsHandler) pendingCreateExists(ctx context.Context, internalCampaignID string) (bool, error) {
-	for _, status := range []psacampaign.PushStatus{psacampaign.PushPending, psacampaign.PushApproved, psacampaign.PushPushing} {
+// existingCreateStatus returns the status of an existing OpCreate push row for
+// internalCampaignID, or "" if none exists. It checks unresolved rows (pending,
+// approved, pushing) plus pushed rows — a pushed-but-unlinked create means the
+// portal campaign exists and a re-create would duplicate it.
+func (h *CampaignsHandler) existingCreateStatus(ctx context.Context, internalCampaignID string) (psacampaign.PushStatus, error) {
+	for _, status := range []psacampaign.PushStatus{psacampaign.PushPending, psacampaign.PushApproved, psacampaign.PushPushing, psacampaign.PushPushed} {
 		rows, err := h.psaQueue.ListByStatus(ctx, status)
 		if err != nil {
-			return false, err
+			return "", err
 		}
 		for _, row := range rows {
 			if row.Operation == psacampaign.OpCreate && row.InternalCampaignID == internalCampaignID {
-				return true, nil
+				return status, nil
 			}
 		}
 	}
-	return false, nil
+	return "", nil
 }
