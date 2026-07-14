@@ -176,7 +176,7 @@ Skill-level invariants that bind every step:
 3. **Name which buy% you mean.** Pair a realized buy-quality figure (`bpclAtBuy.dollarWeighted`, clean CL-at-buy) with the contract `buyTermsCLPct` in the same sentence. Realized > contract is a diagnostic question, not a parameter recommendation (R-001).
 4. **API-first investigation** (R-021). curl before reading code. 5 seconds of curl beats 15 minutes of source-tracing.
 5. **Don't rationalize contradicting facts** (R-020). When a data point contradicts your theory or the operator's account, STOP and ask. Disjunctions hide root causes.
-6. **Mutations PUT the full record, never PATCH** (R-008). GET `/api/campaigns` → mutate in memory → PUT `/api/campaigns/{id}` with the complete body → verify by re-GET that `updatedAt` advanced. Any HTTP 200 whose body starts with `<!doctype html>` or contains `<div id="root">` is the SPA catch-all — treat as failure.
+6. **Mutations PUT the full record, never PATCH** (R-008). GET `/api/campaigns` → mutate in memory → PUT `/api/campaigns/{id}` with the complete body → verify by re-GET that `updatedAt` advanced. Any HTTP 200 whose body starts with `<!doctype html>` or contains `<div id="root">` is the SPA catch-all — treat as failure. This also governs the PSA push queue — `psa-propose`/`psa-propose-create` + `psa-publish` are mutations under **R-030**; every publish requires explicit in-turn operator approval, exactly like a PUT. Staging carries scalar/range config only (terms, cap, grade/year/price, CL confidence); inclusion-list character adds are never staged (operator finishes them in the portal).
 7. **Model the data-generating process before citing any new metric** (R-027/R-028). Before ranking on or building a recommendation from a ratio/rate, state how each input is produced and what contaminates it (frozen-vs-moving inputs, forced-liquidation distortion, construction floor, survivorship). If the metric is new this session and a recommendation will lean on it, show 1–2 worked examples with real cards and numbers and get an operator sanity-check before building. If you can't explain in one sentence how a number is generated, you can't cite it as evidence.
 
 ---
@@ -197,6 +197,7 @@ Skill-level invariants that bind every step:
 - Generate prose openers, weekly health summaries, or "state of the portfolio" reports beyond the ≤10-line Situational read.
 - Send emails to PSA/Brady. Drafts only, operator sends.
 - Edit campaigns autonomously. Every PUT requires operator approval in-turn (R-008).
+- Publish a PSA push-queue proposal (`psa-publish`) without explicit in-turn operator approval, or stage a character/inclusion add (v1 stages scalar/range config only) (R-030).
 - Cut buy terms on filling segments under any circumstances (R-001).
 - Rank, include, or exclude a character on any metric computed from this system's purchase/sale history (R-006). Character selection is operator judgment or external market comps only.
 - Recommend closing the DH listing gap (R-004).
