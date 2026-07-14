@@ -260,3 +260,97 @@ func TestHandlePSALink(t *testing.T) {
 		})
 	}
 }
+
+func TestHandlePSAProposeCreate(t *testing.T) {
+	valid := inventory.Campaign{
+		ID: "c1", Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
+		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
+		CLConfidence: "3-4", PSASourcingFeeCents: 300,
+	}
+	tests := []struct {
+		name        string
+		noQueue     bool
+		campaign    inventory.Campaign
+		wantStatus  int
+		wantEnqueue bool
+	}{
+		{name: "queue disabled", noQueue: true, campaign: valid, wantStatus: http.StatusServiceUnavailable},
+		{
+			name: "already linked",
+			campaign: func() inventory.Campaign {
+				c := valid
+				c.PSACampaignRequestID = "portal-1"
+				return c
+			}(),
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "unmappable ranges",
+			campaign: func() inventory.Campaign {
+				c := valid
+				c.GradeRange = ""
+				return c
+			}(),
+			wantStatus: http.StatusBadRequest,
+		},
+		{name: "valid create proposal", campaign: valid, wantStatus: http.StatusOK, wantEnqueue: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var enqueuedRow psacampaign.PushRow
+			enqueued := false
+			svc := &mocks.MockInventoryService{
+				GetCampaignFn: func(ctx context.Context, id string) (*inventory.Campaign, error) {
+					c := tt.campaign
+					return &c, nil
+				},
+			}
+			queue := &mocks.PushQueueStoreMock{
+				EnqueueFn: func(ctx context.Context, p psacampaign.PushRow) error {
+					enqueued = true
+					enqueuedRow = p
+					return nil
+				},
+			}
+			var opts []CampaignsHandlerOption
+			if !tt.noQueue {
+				opts = append(opts, WithPSAPushQueue(queue))
+			}
+			h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose-create", strings.NewReader(`{}`))
+			req.SetPathValue("id", "c1")
+			rec := httptest.NewRecorder()
+			h.HandlePSAProposeCreate(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if enqueued != tt.wantEnqueue {
+				t.Fatalf("Enqueue called = %v, want %v", enqueued, tt.wantEnqueue)
+			}
+			if !tt.wantEnqueue {
+				return
+			}
+			if enqueuedRow.Operation != psacampaign.OpCreate {
+				t.Fatalf("Operation = %q, want create", enqueuedRow.Operation)
+			}
+			if enqueuedRow.PSACampaignID != "" || enqueuedRow.InternalCampaignID != "c1" {
+				t.Fatalf("ids wrong: %+v", enqueuedRow)
+			}
+			if enqueuedRow.Diff.Create == nil || enqueuedRow.Diff.Create.IsActive {
+				t.Fatalf("Diff.Create = %+v, want formData with IsActive=false", enqueuedRow.Diff.Create)
+			}
+			var resp struct {
+				PushID   string                       `json:"pushId"`
+				FormData psacampaign.CampaignFormData `json:"formData"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if resp.PushID == "" || resp.FormData.CampaignName != "Modern 10s" || resp.FormData.BidPercentage != 72 {
+				t.Fatalf("response = %+v", resp)
+			}
+		})
+	}
+}

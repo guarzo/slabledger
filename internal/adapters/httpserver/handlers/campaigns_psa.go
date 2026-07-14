@@ -203,3 +203,67 @@ func (h *CampaignsHandler) HandlePSAPublish(w http.ResponseWriter, r *http.Reque
 
 	writeJSON(w, http.StatusOK, map[string]string{"pushId": req.PushID, "status": string(psacampaign.PushApproved)})
 }
+
+// psaProposeCreateResponse is the response for HandlePSAProposeCreate.
+type psaProposeCreateResponse struct {
+	PushID   string                       `json:"pushId"`
+	FormData psacampaign.CampaignFormData `json:"formData"`
+}
+
+// HandlePSAProposeCreate handles POST /api/campaigns/{id}/psa-propose-create,
+// building the full portal formData for an UNLINKED internal campaign and
+// enqueueing a create for human approval. The portal campaign is created
+// paused; approval goes through the existing psa-publish endpoint.
+func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http.Request) {
+	if h.psaQueue == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA campaign sync not enabled")
+		return
+	}
+	id, ok := pathID(w, r, "id", "Campaign ID")
+	if !ok {
+		return
+	}
+
+	c, err := h.service.GetCampaign(r.Context(), id)
+	if err != nil {
+		if inventory.IsCampaignNotFound(err) {
+			writeError(w, http.StatusNotFound, "Campaign not found")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to get campaign", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	if c.PSACampaignRequestID != "" {
+		writeError(w, http.StatusBadRequest, "campaign is already linked to a PSA portal campaign")
+		return
+	}
+
+	fd, err := psacampaign.TranslateToCreate(*c)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	requestedBy := "analysis"
+	if user, authOK := middleware.GetUserFromContext(r.Context()); authOK && user != nil && user.Username != "" {
+		requestedBy = user.Username
+	}
+
+	row := psacampaign.PushRow{
+		ID:                 uuid.New().String(),
+		Operation:          psacampaign.OpCreate,
+		InternalCampaignID: c.ID,
+		RequestedBy:        requestedBy,
+		Diff:               psacampaign.ProposedDiff{Create: &fd},
+		Status:             psacampaign.PushPending,
+	}
+	if err := h.psaQueue.Enqueue(r.Context(), row); err != nil {
+		h.logger.Error(r.Context(), "failed to enqueue PSA create", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, psaProposeCreateResponse{PushID: row.ID, FormData: fd})
+}

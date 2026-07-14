@@ -124,6 +124,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/campaigns/{id}/psa-link", authRoute(rt.campaignsHandler.HandlePSALink))
 	mux.Handle("POST /api/campaigns/{id}/psa-propose", authRoute(rt.campaignsHandler.HandlePSAPropose))
 	mux.Handle("POST /api/campaigns/{id}/psa-publish", authRoute(rt.campaignsHandler.HandlePSAPublish))
+	mux.Handle("POST /api/campaigns/{id}/psa-propose-create", authRoute(rt.campaignsHandler.HandlePSAProposeCreate))
 
 	// Campaign purchases
 	mux.Handle("GET /api/campaigns/{id}/purchases", authRoute(rt.campaignsHandler.HandleListPurchases))
