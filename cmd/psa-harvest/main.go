@@ -19,6 +19,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
@@ -57,7 +58,9 @@ func run() error {
 		return errors.New("DATABASE_URL is required")
 	}
 
-	db, err := postgres.Open(ctx, cfg.Database.URL, logger)
+	dbCtx, dbCancel := context.WithTimeout(ctx, 90*time.Second)
+	db, err := postgres.Open(dbCtx, cfg.Database.URL, logger)
+	dbCancel()
 	if err != nil {
 		return fmt.Errorf("db open: %w", err)
 	}
@@ -79,5 +82,28 @@ func run() error {
 		return err
 	}
 	logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
+
+	if cfg.PSASync.CampaignSyncEnabled {
+		portal := psaportal.New(psaportal.NewStoredTokenProvider(store), psaportal.Config{}, psaportal.WithLogger(logger))
+		snap := postgres.NewPSACampaignSnapshotStore(db.DB)
+		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
+
+		campaigns, err := portal.FetchCampaigns(ctx)
+		switch {
+		case err != nil:
+			logger.Error(ctx, "psa-harvest: fetch campaigns failed", observability.Err(err))
+		case len(campaigns) == 0:
+			logger.Warn(ctx, "psa-harvest: fetch campaigns returned no rows, skipping snapshot save")
+		default:
+			if err := snap.SaveSnapshot(ctx, campaigns); err != nil {
+				logger.Error(ctx, "psa-harvest: save snapshot failed", observability.Err(err))
+			}
+		}
+
+		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, logger)
+		logger.Info(ctx, "psa-harvest: push queue drained",
+			observability.Int("pushed", pushed), observability.Int("failed", failed))
+	}
+
 	return nil
 }

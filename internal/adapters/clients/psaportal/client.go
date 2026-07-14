@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -35,6 +37,9 @@ func mapRows(ctx context.Context, raw []map[string]string, logger observability.
 			observability.Int("count", droppedNoCert), observability.Int("total", len(raw)))
 	}
 	if len(raw) > 0 && len(rows) == 0 {
+		if droppedNoCert == len(raw) {
+			return nil, fmt.Errorf("psaportal: all %d rows dropped for missing cert number (Lightdash cert fieldId may have shifted)", len(raw))
+		}
 		return nil, fmt.Errorf("psaportal: all %d rows failed to map", len(raw))
 	}
 	return rows, nil
@@ -55,3 +60,54 @@ func parseEmbedURL(u string) (projectUUID, jwt string, err error) {
 	}
 	return projectUUID, jwt, nil
 }
+
+// TokenProvider yields a valid PSA access token.
+type TokenProvider interface {
+	AccessToken(ctx context.Context) (string, error)
+}
+
+// Config configures a portal Client; an empty PSABaseURL falls back to the
+// production default.
+type Config struct {
+	PSABaseURL string
+}
+
+// Client fetches and pushes PSA Buyer Campaign Manager campaign config. It is
+// used only by the Cloudflare-trusted psa-harvest job — the campaign read/write
+// hop to psacard.com lives entirely in the harvester, never the main app.
+type Client struct {
+	tokens     TokenProvider
+	http       *httpx.Client
+	psaBaseURL string
+	logger     observability.Logger
+}
+
+// Option configures optional Client dependencies.
+type Option func(*Client)
+
+// WithLogger attaches a logger (used to report skipped malformed campaigns).
+func WithLogger(l observability.Logger) Option {
+	return func(c *Client) { c.logger = l }
+}
+
+// New builds a Client. tp supplies access tokens.
+func New(tp TokenProvider, cfg Config, opts ...Option) *Client {
+	if cfg.PSABaseURL == "" {
+		cfg.PSABaseURL = defaultPSABaseURL
+	}
+	hc := httpx.DefaultConfig("PSAPortal")
+	hc.DefaultTimeout = 30 * time.Second
+	c := &Client{
+		tokens:     tp,
+		http:       httpx.NewClient(hc),
+		psaBaseURL: cfg.PSABaseURL,
+		logger:     observability.NewNoopLogger(),
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// baseURL returns the configured PSA portal base URL.
+func (c *Client) baseURL() string { return c.psaBaseURL }

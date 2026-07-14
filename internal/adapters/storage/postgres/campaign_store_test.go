@@ -19,22 +19,23 @@ func TestCampaignStore_CampaignCRUD(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	c := &inventory.Campaign{
-		ID:                  "camp-1",
-		Name:                "Vintage Core PSA 8-9",
-		Sport:               "Pokemon",
-		YearRange:           "1999-2003",
-		GradeRange:          "8-9",
-		PriceRange:          "250-1500",
-		CLConfidence:        "3-4",
-		BuyTermsCLPct:       0.80,
-		DailySpendCapCents:  150000,
-		InclusionList:       "charizard pikachu blastoise",
-		Phase:               inventory.PhasePending,
-		ExclusionMode:       true,
-		PSASourcingFeeCents: 300,
-		EbayFeePct:          0.1235,
-		CreatedAt:           now,
-		UpdatedAt:           now,
+		ID:                   "camp-1",
+		Name:                 "Vintage Core PSA 8-9",
+		Sport:                "Pokemon",
+		YearRange:            "1999-2003",
+		GradeRange:           "8-9",
+		PriceRange:           "250-1500",
+		CLConfidence:         "3-4",
+		BuyTermsCLPct:        0.80,
+		DailySpendCapCents:   150000,
+		InclusionList:        "charizard pikachu blastoise",
+		Phase:                inventory.PhasePending,
+		ExclusionMode:        true,
+		PSASourcingFeeCents:  300,
+		EbayFeePct:           0.1235,
+		PSACampaignRequestID: "psa-req-123",
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 
 	err := repo.CreateCampaign(ctx, c)
@@ -47,18 +48,23 @@ func TestCampaignStore_CampaignCRUD(t *testing.T) {
 	assert.Equal(t, c.BuyTermsCLPct, got.BuyTermsCLPct)
 	assert.Equal(t, c.Phase, got.Phase)
 	assert.Equal(t, true, got.ExclusionMode)
+	assert.Equal(t, "psa-req-123", got.PSACampaignRequestID)
 
 	list, err := repo.ListCampaigns(ctx, false)
 	require.NoError(t, err)
-	assert.Len(t, list, 1)
+	require.Len(t, list, 1)
+	assert.Equal(t, "psa-req-123", list[0].PSACampaignRequestID)
 
 	c.Phase = inventory.PhaseActive
 	c.UpdatedAt = time.Now().UTC()
+	c.PSACampaignRequestID = "psa-req-456"
 	err = repo.UpdateCampaign(ctx, c)
 	require.NoError(t, err)
 
-	got, _ = repo.GetCampaign(ctx, "camp-1")
+	got, err = repo.GetCampaign(ctx, "camp-1")
+	require.NoError(t, err)
 	assert.Equal(t, inventory.PhaseActive, got.Phase)
+	assert.Equal(t, "psa-req-456", got.PSACampaignRequestID)
 
 	_, err = repo.GetCampaign(ctx, "nonexistent")
 	assert.ErrorIs(t, err, inventory.ErrCampaignNotFound)

@@ -44,4 +44,5 @@ export const queryKeys = {
   psaExchange: {
     opportunities: ['psaExchange', 'opportunities'] as const,
   },
+  psaCampaigns: { list: ['psa-campaigns', 'list'] as const },
 } as const;

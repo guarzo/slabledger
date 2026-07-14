@@ -150,24 +150,25 @@ func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string
 
 // Campaign represents a PSA Direct Buy campaign with buy parameters and fee configuration.
 type Campaign struct {
-	ID                  string    `json:"id"`
-	Name                string    `json:"name"`
-	Sport               string    `json:"sport"`
-	YearRange           string    `json:"yearRange"`          // e.g. "1999-2003"
-	GradeRange          string    `json:"gradeRange"`         // e.g. "9-10"
-	PriceRange          string    `json:"priceRange"`         // e.g. "50-500"
-	CLConfidence        string    `json:"clConfidence"`       // CL confidence range, e.g. "2.5-4"
-	BuyTermsCLPct       float64   `json:"buyTermsCLPct"`      // Buy at X% of CL value (0-1)
-	DailySpendCapCents  int       `json:"dailySpendCapCents"` // Max daily spend in cents
-	InclusionList       string    `json:"inclusionList"`      // Comma-separated card names/sets
-	ExclusionMode       bool      `json:"exclusionMode"`      // If true, inclusionList acts as exclusion list
-	Phase               Phase     `json:"phase"`
-	PSASourcingFeeCents int       `json:"psaSourcingFeeCents"` // Default 300 ($3)
-	EbayFeePct          float64   `json:"ebayFeePct"`          // Default 0.1235 (12.35%)
-	ExpectedFillRate    float64   `json:"expectedFillRate"`    // Target fill rate as percentage (0-100)
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedAt           time.Time `json:"updatedAt"`
-	Kind                string    `json:"kind"` // Derived at HTTP layer: "external" or "standard" (not persisted)
+	ID                   string    `json:"id"`
+	Name                 string    `json:"name"`
+	Sport                string    `json:"sport"`
+	YearRange            string    `json:"yearRange"`          // e.g. "1999-2003"
+	GradeRange           string    `json:"gradeRange"`         // e.g. "9-10"
+	PriceRange           string    `json:"priceRange"`         // e.g. "50-500"
+	CLConfidence         string    `json:"clConfidence"`       // CL confidence range, e.g. "2.5-4"
+	BuyTermsCLPct        float64   `json:"buyTermsCLPct"`      // Buy at X% of CL value (0-1)
+	DailySpendCapCents   int       `json:"dailySpendCapCents"` // Max daily spend in cents
+	InclusionList        string    `json:"inclusionList"`      // Comma-separated card names/sets
+	ExclusionMode        bool      `json:"exclusionMode"`      // If true, inclusionList acts as exclusion list
+	Phase                Phase     `json:"phase"`
+	PSASourcingFeeCents  int       `json:"psaSourcingFeeCents"`            // Default 300 ($3)
+	EbayFeePct           float64   `json:"ebayFeePct"`                     // Default 0.1235 (12.35%)
+	ExpectedFillRate     float64   `json:"expectedFillRate"`               // Target fill rate as percentage (0-100)
+	PSACampaignRequestID string    `json:"psaCampaignRequestId,omitempty"` // 1:1 link to PSA portal campaign
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
+	Kind                 string    `json:"kind"` // Derived at HTTP layer: "external" or "standard" (not persisted)
 }
 
 // SetKind sets the Kind field based on the campaign ID.

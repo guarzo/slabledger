@@ -1,9 +1,10 @@
-import { Fragment, useMemo } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
 import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
+import PSAPublishModal from '../campaign-detail/PSAPublishModal';
 import type { UseFormReturn } from '../../hooks/useForm';
 import { phaseHexColors } from '../../utils/campaignConstants';
 
@@ -59,6 +60,9 @@ export default function CampaignsTab({
   createMutation: { isPending: boolean };
   onToggleCreate: () => void;
 }) {
+  const [psaModalCampaignId, setPsaModalCampaignId] = useState<string | null>(null);
+  const psaModalCampaign = campaigns.find(c => c.id === psaModalCampaignId) ?? null;
+
   // Compute the indices in the (already-sorted) campaign list where the phase
   // changes. We render a section eyebrow before the first row of each phase
   // so the operator gets a quick "10 active · 2 pending" structural read
@@ -263,12 +267,28 @@ export default function CampaignsTab({
                   >
                     {isClosed ? '' : `${formatDollarsWhole(c.dailySpendCapCents)}/d · ${formatPct(c.buyTermsCLPct)}`}
                   </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Publish to PSA for ${c.name}`}
+                    onClick={() => setPsaModalCampaignId(c.id)}
+                  >
+                    PSA
+                  </Button>
                 </div>
               </div>
               </Fragment>
             );
           })}
         </div>
+      )}
+
+      {psaModalCampaign && (
+        <PSAPublishModal
+          open={!!psaModalCampaign}
+          onClose={() => setPsaModalCampaignId(null)}
+          campaign={psaModalCampaign}
+        />
       )}
     </>
   );

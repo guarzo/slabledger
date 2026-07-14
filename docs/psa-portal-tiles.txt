@@ -1,0 +1,264 @@
+PSA Buyer Campaign Manager — Lightdash embed tile inventory
+Probed live 2026-07-12 from Cloudflare-trusted devcontainer.
+
+Analytics page:   https://www.psacard.com/buyercampaignmanager/analytics/__data.json
+Lightdash host:   https://collectors.lightdash.cloud
+Project UUID:     e4995db3-cb94-4a66-9b19-7bb36f156e33
+Auth:             embed JWT (~783 chars) extracted from analytics __data.json embedUrl fragment;
+                  same JWT unlocks every tile via POST /api/v1/embed/{project}/chart-and-results.
+
+Dashboard tiles (POST /api/v1/embed/{project}/dashboard -> results.tiles[]): 8 total
+  All are saved_chart tiles. Only embed-itemized-purchases is currently ingested (PR #469).
+
+  #  slug                                                        tile uuid                              title
+  1  embed-campaign-name-items-purchased                         a4b0748d-5fbd-433a-aae8-27b223424772   Daily Items Purchased by Campaign
+  2  copy-of-embed-campaign-name-items-purchased-1779974328044   d5b0637b-69c5-4839-9001-a13dcf7b47fb   Daily Spend by Campaign
+  3  embed-itemized-purchases  [INGESTED]                        da5a4113-72cf-405f-9cbb-f829a27ff148   Itemized Purchases
+  4  embed-shipments                                             b245958c-57ea-4795-b781-cbeaa8bf8706   Shipments
+  5  embed-shipment-packing-slip                                 38c02788-bf73-42be-82ba-09bfae71e297   Shipment Packing Slip (tracking # filter)
+  6  embed-awaiting-shipment                                     bdd84ae0-2a6b-4bbb-b0b0-598f8f25d502   Items Awaiting Shipment
+  7  embed-weekly-summay-2                                       2b6716c2-3fb7-4508-9d91-fb173d26d442   Weekly Purchase Summary
+  8  embed-refunded-items                                        994f1909-c030-4a60-bae1-5dc8bba67c5e   Refunded Items
+
+Observed fields per campaign-ish tile (live rows):
+  Tile 1 (Daily Items Purchased by Campaign):
+    marketplace_listings_buyer_payment_date_pst_day, adjusted_description, fct_instantoffers_offers_total_offers_accepted_metric
+    sample: 2026-07-06, "Modern 10", 2
+  Tile 2 (Daily Spend by Campaign):
+    marketplace_listings_buyer_payment_date_pst_day, adjusted_description, marketplace_listings_total_listing_final_price_metric
+    sample: 2026-07-06, "Modern 10", 1135.68
+  Tile 7 (Weekly Purchase Summary):
+    week, total_item_count, + per-category cert counts (pokemon, one_piece, baseball, basketball,
+    football, soccer, hockey, multi_sports, boxing_wrestling_mma, non_sports)
+
+KEY FINDING:
+  "Campaign" appears ONLY as a free-text label (adjusted_description, e.g. "Modern 10") attached to
+  actual purchase/spend rows. NONE of the 8 tiles expose the offer-PROGRAM configuration we want:
+  which cards/sets PSA is soliciting, buy terms / buy%, category eligibility, or campaign IDs as a
+  catalog. Searched the analytics __data.json page payload for campaign/offer/solicit/category/
+  terms/buy_percent/eligible/spec/set_name -> 0 hits page-side.
+
+CONCLUSION / NEXT STEP:
+  The campaign/offer-program config is on a DIFFERENT portal page (not this analytics dashboard).
+  User to provide network traces from that page so we can identify its endpoint(s), auth, and
+  payload shape. Reuse of the harvested access token cookie is likely; whether it's another
+  Lightdash embed or a plain PSA JSON API is TBD from the traces.
+
+Reusable probe recipe (from a Cloudflare-trusted host):
+  1. Decrypt stored token: SELECT access_token FROM psa_portal_token WHERE id=1 (prod SUPABASE_URL),
+     AES-256-GCM decrypt with ENCRYPTION_KEY (64-hex -> raw 32 bytes; else sha256(key)).
+  2. GET analytics __data.json with Cookie: accessToken=<tok> + browser UA -> embedUrl (has #jwt).
+  3. POST /api/v1/embed/{project}/dashboard {} with header Lightdash-Embed-Token: <jwt> -> tiles[].
+  4. POST /api/v1/embed/{project}/chart-and-results {tileUuid,...} -> results.rows[].
+
+
+================================================================================
+CAMPAIGN / OFFER-PROGRAM CONFIG  (found 2026-07-12 via user-provided trace, verified live)
+================================================================================
+This is the data we actually want. It is NOT a Lightdash tile — it's a plain PSA
+SvelteKit data endpoint on psacard.com, same accessToken cookie auth as analytics.
+
+Request URL:
+  https://www.psacard.com/buyercampaignmanager/__data.json?x-sveltekit-trailing-slash=1&x-sveltekit-invalidated=001
+Auth:    Cookie: accessToken=<harvested token>   (SAME token/cookie as itemized-purchases path)
+Method:  GET, browser UA. Verified live from devcontainer -> HTTP 200.
+Query params it honors (from "uses.search_params"): page, q, status  -> pagination + search + status filter.
+Paging:  campaignsResponse.{pageNumber,pageSize,totalCount}; default pageSize 50.
+
+Payload is SvelteKit "reference-packed": every value (incl. leaves) is an index into a
+flat data[] array. Must deref recursively. Decoded shape per campaign item:
+
+  campaignRequestId        uuid            e.g. 0554a104-a735-43d6-b181-51067c594216  (the campaign ID)
+  campaignType             enum            "CATEGORY"
+  campaignName             string          "Modern 10", "Crystal"  (matches adjusted_description in tiles)
+  status                   enum            "PAUSED" | (presumably "ACTIVE"/others)
+  category                 enum            "POKEMON"
+  prepackagedSpecListIds   []              spec-list refs (empty in sample)
+  buyerPricePercentClv     int (percent)   72, 70   <- the buy% / % of CLV offered
+  buyBox: {
+    gradeMin, gradeMax     string          "10".."10" / "1".."10"
+    yearMin, yearMax       int             2024..2026 / 2002..2003
+    priceMin, priceMax     int (USD)       500..3000   <- confirm cents vs dollars on ingest
+    clvConfidenceMin       int             4
+    buyerFlatFee           int             3
+  }
+  budget: { dailyBudget int(3000), dailySpecQuantityLimit int(2) }
+  publishers: { allow, deny }   \
+  subjects:   { allow, deny }    >  inclusion / exclusion controls (character/subject/spec lists)
+  specs:      { deny }          /   ENCODING UNCERTAIN: both sample campaigns near-empty; the
+                                    derefed values were small ints (0/2/5). Need a campaign with
+                                    populated allow/deny lists to confirm whether these are ID
+                                    arrays or counts.  <-- FOLLOW-UP / ask PSA dev team.
+  createdAt, updatedAt     RFC3339 timestamps
+
+Sample (2 campaigns live today, both PAUSED, both POKEMON/CATEGORY):
+  Modern 10  buy% 72  grade 10-10  year 2024-2026  price 500-3000  clvConfMin 4  flatFee 3  dailyBudget 3000
+  Crystal    buy% 70  grade 1-10   year 2002-2003  price 500-3000  clvConfMin 4  flatFee 3  dailyBudget 3000
+
+Raw payload saved: docs/psa-campaigns-raw.json
+
+DESIGN IMPLICATION:
+  Same harvester → snapshot → reader pattern as itemized-purchases, BUT a second, simpler
+  fetch path: no Lightdash embed hop needed. New client method GETs the psacard.com
+  buyercampaignmanager/__data.json, derefs the SvelteKit pack (sveltekit.go already has
+  DecodeSvelteKitValue — may need a recursive-deref helper), maps to a domain type, and stores
+  in a new singleton snapshot table (e.g. psa_campaign_snapshot) that the main app reads.
+  Main app still never hits psacard.com — harvester/out-of-process job does the fetch.
+  OPEN: paginate if totalCount > pageSize; nail down allow/deny/specs encoding.
+
+
+--------------------------------------------------------------------------------
+ALLOW/DENY ENCODING — RESOLVED (2026-07-12): they are COUNTS, not list contents.
+--------------------------------------------------------------------------------
+Full deref of the SvelteKit flat array (len 45) shows publishers/subjects/specs
+{allow,deny} values point at integer leaves:
+  Modern 10: publishers{allow:0,deny:0} subjects{allow:0,deny:0} specs{deny:2}
+  Crystal:   publishers{allow:0,deny:0} subjects{allow:5,deny:0} specs{deny:0}
+i.e. Crystal solicits 5 allowed subjects and Modern 10 denies 2 specs — but the
+list endpoint returns only the CARDINALITY, never the member IDs/names.
+
+=> The itemized allow/deny list CONTENTS are NOT on the list page. They are loaded
+   on-demand when a campaign is opened, via an endpoint we have not identified.
+   Route-style guesses under /buyercampaignmanager/{id}/__data.json and several
+   /api/... REST patterns all 404 (probed live, 2026-07-12).
+
+NEEDED FROM USER: a network trace captured while OPENING/EDITING the Crystal
+campaign (id 660a980d-bf1c-4988-9958-1eb2d1853c66) in the portal — specifically the
+XHR that returns the 5 allowed subjects. That reveals the detail endpoint URL, auth,
+and the allow/deny member shape (spec IDs? subject names? PSA specIds?).
+
+Everything ELSE we need for a first ingest (campaign id, name, type, status, category,
+buy%, buyBox bounds, budget, timestamps, allow/deny COUNTS) IS available from the
+list endpoint and can ship without the detail endpoint. The member lists are a
+strategically-valuable phase 2 once the detail trace lands.
+
+
+================================================================================
+CAMPAIGN DETAIL / EDIT ENDPOINT — FOUND & VERIFIED LIVE (2026-07-12)
+================================================================================
+This is the member-list source (phase 2). Route segment order matters:
+
+  GET https://www.psacard.com/buyercampaignmanager/campaigns/{campaignId}/edit/__data.json?x-sveltekit-invalidated=0001
+  Auth:   Cookie: accessToken=<harvested token>   (SAME token as list + itemized)
+  Verified live -> HTTP 200. Also SvelteKit reference-packed (recursive deref required).
+  (My earlier 404s used /{id}/edit and /edit/{id}; correct is /campaigns/{id}/edit/.)
+  Raw saved: docs/psa-campaign-edit-raw.json
+
+formData (the campaign config, richer than the list row):
+  campaignName, campaignType, category, prepackagedSpecListIds[]
+  isActive (bool)  <- note: list endpoint uses status "PAUSED"; here isActive:false
+  bidPercentage (70)  <- SAME as list's buyerPricePercentClv
+  flatFee (3), dailyBudget (3000), dailySpecLimit (2)
+  gradeMinimum/Maximum ("1".."10"), yearMinimum/Maximum (2002/2003)
+  priceMinimum/Maximum (500/3000), cardLadderConfidenceMinimum (4)
+  publisherFilterType ("Exclude"|"Target"), selectedPublishers[]  <- {id,name}
+  subjectFilterType   ("Target"|"Exclude"), selectedSubjects[]    <- {id,name}
+  deniedSpecs[]
+
+  >>> Crystal selectedSubjects (subjectFilterType "Target") — THE STRATEGIC PAYLOAD:
+      4807 Charizard, 4836 Umbreon, 4842 Lugia, 4844 Celebi, 4851 Mudkip
+      ids are PSA subject IDs (stable, joinable to our inclusion-list character work).
+  filterType semantics: "Target" = allow-list (solicit only these); "Exclude" = deny-list.
+      This maps back to the list endpoint's {allow,deny} COUNTS (Crystal subjects.allow=5).
+
+Also returned page-side (reference data, same payload — useful catalogs):
+  categories[]        20 items: {name, categoryId}  (BASEBALL, POKEMON, ONE PIECE, LORCANA, ...)
+  publishers[]        33 items: {id, name}          (Topps, Panini, Nintendo, Bandai, ...)
+  prepackagedSpecLists[] 27 items: {id(uuid), name, status, createdAt, updatedAt, [description]}
+                      (Formula 1, Riftbound, UFC, WWE, Panini Kaboom! Basketball, ...)
+
+⚠️ PII / AUTH-SCOPE CAVEAT (do not ingest blindly):
+  The edit payload embeds the buyer's OWN account identity in node[0]:
+    user JWT claims (aud/cid/exp/iss/scp/sub, CollectorsId, NavisionId),
+    userProfile (email user@example.com, firstName/lastName "Card Yeti", collectorsId,
+    netsuiteId, state, locale, createdOn), buyerAccountCid, feature flags.
+  This is OUR account data (self), not third-party PII — but the snapshot/harvester must
+  extract ONLY formData + the reference catalogs and DROP the user/userProfile/JWT nodes.
+  Never persist the embedded access JWT.
+
+INGEST DESIGN (updated — two-phase, both now fully specified):
+  Phase 1 (list snapshot): GET buyercampaignmanager/__data.json -> all campaigns w/ config +
+    allow/deny counts. Paginate on page= if totalCount>pageSize(50). Singleton snapshot table.
+  Phase 2 (detail enrichment): for each campaignId, GET .../campaigns/{id}/edit/__data.json ->
+    selectedSubjects/selectedPublishers/deniedSpecs member lists + filterType. Store per-campaign.
+    Strip self-identity nodes. N+1 fetches (one per campaign) — fine at ~2-50 campaigns, done in
+    the out-of-process harvester, not the main app.
+  Reuse: sveltekit.go DecodeSvelteKitValue exists but is single-key; both payloads need a
+    RECURSIVE deref helper (new). Money still cents on ingest (price 500/3000 look like whole USD).
+
+
+================================================================================
+SCOPE DECISION (2026-07-12): ONE COMBINED read+write spec. Waiting on Save trace.
+================================================================================
+User wants read ingest AND edit/push in a single spec (not shipped separately), so we
+can approve changes in the campaign-analysis skill and auto-update the PSA portal,
+SYNCED with our internal app campaign API.
+
+READ PATH — fully specified & live-verified (see sections above). Ready to write up.
+
+WRITE PATH — BLOCKED, needs before it can be specified:
+  1. *** Network trace of SAVING a campaign edit in the PSA portal. ***
+     Everything found so far is GET __data.json (SvelteKit loader). The mutation is a
+     separate request fired on "Save" in the editor — almost certainly POST/PUT to a
+     REST API (JWT iss = https://auth.collectors.com/... suggests an api.collectors.com
+     or similar host), NOT the __data.json route. Need: method, URL, request headers
+     (auth: cookie vs Bearer JWT?), and full request body shape (does it echo the whole
+     formData? partial?). DO NOT guess this endpoint.
+  2. Cloudflare/IP constraint applies to writes too: main app's Fly IP is 403'd by
+     psacard.com. The PSA push must run from a Cloudflare-trusted context (harvester-side
+     / out-of-process), same as reads. Architectural, not a detail.
+  3. Sync source-of-truth (internal app API vs PSA portal, conflict resolution) —
+     DEFERRED per user; capture as open question, decide in the write portion of the spec.
+     NB internal campaign mutations must PUT the full record (no PATCH) — memory hard rule.
+
+NEXT ACTION: user to capture the Save-campaign trace, then resume brainstorming ->
+combined spec -> writing-plans.
+
+
+================================================================================
+WRITE / SAVE ENDPOINT — FOUND & VERIFIED (2026-07-12). Write path now UNBLOCKED.
+================================================================================
+The mutation is a SvelteKit REMOTE FUNCTION (not __data.json, not a REST host):
+
+  POST https://www.psacard.com/buyercampaignmanager/_app/remote/{buildHash}/updateCampaign
+    e.g. .../_app/remote/1fvuqqe/updateCampaign
+    ⚠️ {buildHash} ("1fvuqqe") is the SvelteKit app build id — it CHANGES on every PSA
+       frontend deploy. Must be scraped fresh from the app (page HTML / __data.json), not
+       hardcoded. Same harvest run that grabs the token can capture it. FOLLOW-UP: confirm
+       where the hash is exposed (likely in the analytics/portal page HTML script imports).
+  Auth: same accessToken cookie (browser context). Cloudflare constraint applies -> must
+       run from the Cloudflare-trusted harvester/out-of-process context, NOT the main app.
+
+Request body (application/json):
+  { "payload": "<base64>", "refreshes": [] }
+  payload = base64 of a SvelteKit reference-packed array. Decoded arg[0]:
+    { "id": "<campaignId>", "formData": { ...FULL formData... } }
+  >>> The FULL formData is echoed (not a partial patch) — SAME shape as the edit endpoint's
+      formData (campaignName, campaignType, category, prepackagedSpecListIds, isActive,
+      bidPercentage, flatFee, dailyBudget, dailySpecLimit, grade/year/price min/max,
+      cardLadderConfidenceMinimum, publisherFilterType, selectedPublishers[],
+      subjectFilterType, selectedSubjects[]{id,name}, deniedSpecs[]).
+  => WRITE STRATEGY: GET edit endpoint -> deref formData -> mutate the field(s) we approve ->
+     re-pack to reference-packed base64 -> POST. Read-modify-write of the whole record.
+     (Mirrors our internal hard rule: PUT full campaign record, never PATCH.)
+
+Reference-packing for the REQUEST (we must ENCODE, not just decode):
+  arg is serialized as a flat array where every value (incl. nested) is replaced by its
+  index in the array; index 0 is the root. Need an ENCODER (dedup-by-value like devalue).
+  NOTE observed: PSA's own encoder de-dupes scalars (priceMaximum reused index 10 = 3000,
+  same as dailyBudget). Our encoder does not need to match byte-for-byte — server derefs by
+  index — but must produce a valid self-consistent packed array. VERIFY with a live round-trip.
+
+Response: { "type":"result", "result":"<json-string of a reference-packed array>" }
+  Decodes to the updated campaign (list-row shape + an "audit" block:
+  {buyerAccountId, createdByCid, updatedByCid}). Use to confirm the write.
+
+VERIFIED LIVE: user's in-browser Save changed Crystal bidPercentage 70->72; re-reading the
+  list endpoint shows buyerPricePercentClv=72, updatedAt=2026-07-12T21:02:44 (== save resp).
+  (We only READ to confirm; we did not originate a write during exploration.)
+
+REMAINING OPEN QUESTIONS for the write portion of the spec:
+  - buildHash lifecycle: exact scrape source + refresh cadence (deploy invalidates it).
+  - Reference-pack ENCODER: implement + round-trip test against a no-op save.
+  - Sync source-of-truth (internal API vs PSA) + conflict handling — deferred, decide here.
+  - Safety: dry-run / confirm-diff before pushing; audit-log every PSA mutation our side.

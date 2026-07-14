@@ -36,42 +36,42 @@ import (
 // assemble the ServerDependencies struct. Every field is set by runServer
 // before calling createHandlers.
 type handlerInputs struct {
-	Cfg                *config.Config
-	Logger             observability.Logger
-	DB                 *postgres.DB
-	PriceProvImpl      pricing.PriceProvider
-	PriceRepo          *postgres.DBTracker
-	AuthService        auth.Service
-	CampaignsService   inventory.Service
-	ArbitrageService   arbitrage.Service
-	DHPriceSyncService dhpricing.Service
-	PortfolioService   portfolio.Service
-	TuningService      tuning.Service
-	CampaignStore      *postgres.CampaignStore
-	FinanceService     finance.Service
-	ExportService      export.Service
-	PurchaseStore      *postgres.PurchaseStore
-	CardIDMappingRepo  *postgres.CardIDMappingRepository
-	IntelRepo          *postgres.MarketIntelligenceRepository
-	TrajectoryRepo     *postgres.CardPriceTrajectoryRepository
-	SuggestionsRepo    *postgres.DHSuggestionsRepository
-	DemandRepo         *postgres.DHDemandRepository
-	AdvisorService     advisor.Service
-	AzureAIClient      advisor.LLMProvider
-	AICallRepo         *postgres.AICallRepository
-	CLClient           *cardladder.Client
-	CLStore            *postgres.CardLadderStore
-	MMStore            *postgres.MarketMoversStore
-	MMClient           *marketmovers.Client
-	DHClient           *dh.Client
-	DHEventStore       *postgres.DHEventStore
-	DHStore            *postgres.DHStore
-	SyncStateRepo      *postgres.SyncStateRepository
-	SchedulerResult    *scheduler.BuildResult
-	PSARowProvider     *psaportal.SnapshotRowProvider
-	PSASnapshotStore   *postgres.PSAPortalSnapshotStore
-	PendingItemsRepo   *postgres.PendingItemsRepository
-	DHTombstoneStore   *postgres.DHCardTombstoneStore
+	Cfg                  *config.Config
+	Logger               observability.Logger
+	DB                   *postgres.DB
+	PriceProvImpl        pricing.PriceProvider
+	PriceRepo            *postgres.DBTracker
+	AuthService          auth.Service
+	CampaignsService     inventory.Service
+	ArbitrageService     arbitrage.Service
+	DHPriceSyncService   dhpricing.Service
+	PortfolioService     portfolio.Service
+	TuningService        tuning.Service
+	CampaignStore        *postgres.CampaignStore
+	FinanceService       finance.Service
+	ExportService        export.Service
+	PurchaseStore        *postgres.PurchaseStore
+	CardIDMappingRepo    *postgres.CardIDMappingRepository
+	IntelRepo            *postgres.MarketIntelligenceRepository
+	TrajectoryRepo       *postgres.CardPriceTrajectoryRepository
+	SuggestionsRepo      *postgres.DHSuggestionsRepository
+	DemandRepo           *postgres.DHDemandRepository
+	AdvisorService       advisor.Service
+	AzureAIClient        advisor.LLMProvider
+	AICallRepo           *postgres.AICallRepository
+	CLClient             *cardladder.Client
+	CLStore              *postgres.CardLadderStore
+	MMStore              *postgres.MarketMoversStore
+	MMClient             *marketmovers.Client
+	DHClient             *dh.Client
+	DHEventStore         *postgres.DHEventStore
+	DHStore              *postgres.DHStore
+	SyncStateRepo        *postgres.SyncStateRepository
+	SchedulerResult      *scheduler.BuildResult
+	PSARowProvider       *psaportal.SnapshotRowProvider
+	PSARowsSnapshotStore *postgres.PSAPortalSnapshotStore
+	PendingItemsRepo     *postgres.PendingItemsRepository
+	DHTombstoneStore     *postgres.DHCardTombstoneStore
 }
 
 // handlerOutputs holds the constructed handlers that are also needed post-
@@ -115,8 +115,8 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			svc = in.CampaignsService
 		}
 		var snapInfo handlers.PSASnapshotInfo
-		if in.PSASnapshotStore != nil {
-			snapInfo = in.PSASnapshotStore
+		if in.PSARowsSnapshotStore != nil {
+			snapInfo = in.PSARowsSnapshotStore
 		}
 		psaSyncHandler = handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
 			PendingRepo:  in.PendingItemsRepo,
@@ -390,6 +390,14 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	// Wire PSA portal snapshot provider for the sync scheduler (if configured)
 	if in.PSARowProvider != nil {
 		deps.PSARowProvider = in.PSARowProvider
+	}
+
+	// Wire PSA campaign snapshot + push-queue stores so the read/approve
+	// endpoints work even when the harvester (which populates them) isn't
+	// running. DB-only, cheap to construct.
+	if in.DB != nil {
+		deps.PSASnapshotStore = postgres.NewPSACampaignSnapshotStore(in.DB.DB)
+		deps.PSAPushQueue = postgres.NewPSACampaignPushQueueStore(in.DB.DB)
 	}
 
 	out := handlerOutputs{

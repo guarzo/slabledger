@@ -39,6 +39,14 @@ function fail(msg) {
 
 if (!EMAIL || !PASSWORD) fail('PSA_PORTAL_EMAIL and PSA_PORTAL_PASSWORD are required');
 
+// The accessToken cookie must be scoped to whatever host START_URL actually
+// points at (PSA_PORTAL_START_URL is operator-configurable), not a hardcoded
+// default — otherwise an injected cookie silently never applies.
+const COOKIE_DOMAIN = new URL(START_URL).hostname;
+if (!COOKIE_DOMAIN.endsWith('psacard.com')) {
+  fail(`PSA_PORTAL_START_URL host "${COOKIE_DOMAIN}" is not a psacard.com host`);
+}
+
 function jwtExpiry(token) {
   // Returns RFC3339 expiry from the JWT `exp` claim, or null.
   const parts = token.split('.');
@@ -148,7 +156,7 @@ try {
     await context.addCookies([{
       name: 'accessToken',
       value: ACCESS_TOKEN,
-      domain: 'www.psacard.com',
+      domain: COOKIE_DOMAIN,
       path: '/',
       secure: true,
     }]);

@@ -24,6 +24,7 @@ import (
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	domainPortfolio "github.com/guarzo/slabledger/internal/domain/portfolio"
 	domainPricing "github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	domainTuning "github.com/guarzo/slabledger/internal/domain/tuning"
 )
 
@@ -63,6 +64,8 @@ type ServerDependencies struct {
 	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
 	LiquidationHandler        *handlers.LiquidationHandler     // Liquidation pricing; nil = disabled
 	PSARowProvider            handlers.RowProvider             // optional: PSA portal fetcher for manual sync
+	PSASnapshotStore          psacampaign.SnapshotStore        // optional: PSA campaign snapshot reader
+	PSAPushQueue              psacampaign.PushQueueStore       // optional: PSA campaign push-queue reader/writer
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -177,6 +180,12 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		}
 		if deps.PSARowProvider != nil {
 			opts = append(opts, handlers.WithPSARowProvider(deps.PSARowProvider))
+		}
+		if deps.PSASnapshotStore != nil {
+			opts = append(opts, handlers.WithPSASnapshotStore(deps.PSASnapshotStore))
+		}
+		if deps.PSAPushQueue != nil {
+			opts = append(opts, handlers.WithPSAPushQueue(deps.PSAPushQueue))
 		}
 		campaignsHandler = handlers.NewCampaignsHandler(
 			deps.CampaignsService,

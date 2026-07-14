@@ -89,10 +89,11 @@ func Default() Config {
 			RefreshHour: 5,    // 5 AM UTC
 		},
 		PSASync: PSASyncConfig{
-			Enabled:      false,
-			Interval:     24 * time.Hour,
-			InitialDelay: 5 * time.Minute,
-			SyncHour:     10, // 10 AM UTC (1 hour after PSA updates at 9am)
+			Enabled:             false,
+			Interval:            24 * time.Hour,
+			InitialDelay:        5 * time.Minute,
+			SyncHour:            10, // 10 AM UTC (1 hour after PSA updates at 9am)
+			CampaignSyncEnabled: false,
 		},
 		DH: DHConfig{
 			Enabled:               true,

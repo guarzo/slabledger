@@ -389,6 +389,9 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 					} else if inv.InvoiceDate < dueDateHealCutoff && s.logger != nil {
 						s.logger.Warn(ctx, "autoDetectInvoices: skipping due-date heal for pre-cutoff invoice; leave for era-aware backfill",
 							observability.String("invoiceDate", inv.InvoiceDate))
+					} else if s.logger != nil {
+						s.logger.Warn(ctx, "autoDetectInvoices: could not heal due date, invoice date is unparseable",
+							observability.String("invoiceDate", inv.InvoiceDate))
 					}
 				}
 				if needsWrite {

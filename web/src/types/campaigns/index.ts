@@ -4,3 +4,4 @@ export * from './imports';
 export * from './analytics';
 export * from './portfolio';
 export * from './priceReview';
+export * from './psaCampaign';

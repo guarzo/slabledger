@@ -248,6 +248,7 @@ func FromEnv(base Config) Config {
 	// PSA sync scheduler
 	envBool("PSA_SYNC_ENABLED", &cfg.PSASync.Enabled, false)
 	envIntRange("PSA_SYNC_HOUR", &cfg.PSASync.SyncHour, -1, 23)
+	envBool("PSA_CAMPAIGN_SYNC_ENABLED", &cfg.PSASync.CampaignSyncEnabled, false)
 
 	return cfg
 }

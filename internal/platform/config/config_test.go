@@ -376,3 +376,14 @@ func TestPSAPortalEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestPSACampaignSyncEnabled(t *testing.T) {
+	t.Setenv("PSA_CAMPAIGN_SYNC_ENABLED", "true")
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.PSASync.CampaignSyncEnabled {
+		t.Error("expected CampaignSyncEnabled true")
+	}
+}
