@@ -2843,6 +2843,46 @@ internal error
 
 ---
 
+### `GET /api/psa-pushes`
+
+Auth: required (session)
+
+Returns the most recent push-queue row per internal campaign (any status), for the
+UI's pending/in-flight/failed indicators and the publish modal. Creates echo the full
+proposed `formData`; updates echo the field `diff`.
+
+**Response:** `200 OK`
+```json
+{
+  "pushes": [
+    {
+      "campaignId": "uuid",
+      "pushId": "uuid",
+      "operation": "create",
+      "status": "pending",
+      "formData": { "campaignName": "…", "bidPercentage": 72 },
+      "requestedBy": "user@example.com",
+      "updatedAt": "2026-07-14T12:00:00Z"
+    },
+    {
+      "campaignId": "uuid",
+      "pushId": "uuid",
+      "operation": "update",
+      "status": "failed",
+      "error": "portal 500",
+      "diff": { "changes": [ { "field": "bidPercentage", "old": "70", "new": "72" } ] },
+      "requestedBy": "user@example.com",
+      "approvedBy": "user@example.com",
+      "updatedAt": "2026-07-14T13:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors:** `503` PSA campaign sync not enabled; `500` internal error
+
+---
+
 ## Opportunities
 
 ### `GET /api/opportunities/acquisition`

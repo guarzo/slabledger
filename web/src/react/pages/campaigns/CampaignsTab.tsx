@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
-import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
+import { Fragment, useMemo, useState, type CSSProperties } from 'react';
+import type { Campaign, CampaignPNL, CreateCampaignInput, Phase, PSAPushRow } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
 import CardShell from '../../ui/CardShell';
@@ -7,6 +7,7 @@ import CampaignFormFields from '../../ui/CampaignFormFields';
 import PSAPublishModal from '../campaign-detail/PSAPublishModal';
 import type { UseFormReturn } from '../../hooks/useForm';
 import { phaseHexColors } from '../../utils/campaignConstants';
+import { classifyPushStatus, type PushIndicatorState } from '../../utils/psaPush';
 
 const PHASE_TONES: Record<Phase, StatusTone> = {
   active: 'success',
@@ -22,6 +23,19 @@ const PHASE_LABELS: Record<Phase, string> = {
 
 /** Phase order on the page. Matches the parent's sortCampaigns(). */
 const PHASE_ORDER: Phase[] = ['active', 'pending', 'closed'];
+
+// Each state gets a distinct shape (filled dot / ring / square) so the
+// indicator is distinguishable without relying on color alone; the title
+// gives sighted users the label on hover, the aria-label covers screen readers.
+const PUSH_INDICATOR: Record<PushIndicatorState, { label: string; dotClass: string; dotStyle: CSSProperties }> = {
+  pending: { label: 'approval pending', dotClass: 'w-1.5 h-1.5 rounded-full', dotStyle: { backgroundColor: 'var(--warning)' } },
+  inflight: { label: 'push in flight', dotClass: 'w-2 h-2 rounded-full border-2 bg-transparent', dotStyle: { borderColor: 'var(--info)' } },
+  failed: { label: 'last push failed', dotClass: 'w-1.5 h-1.5', dotStyle: { backgroundColor: 'var(--danger)' } },
+};
+
+function pushIndicatorState(push: PSAPushRow | undefined): PushIndicatorState | null {
+  return push ? classifyPushStatus(push.status) : null;
+}
 
 function PhaseBadge({ phase }: { phase: Phase }) {
   return (
@@ -47,6 +61,7 @@ export default function CampaignsTab({
   campaigns,
   pnlMap,
   healthMap,
+  psaPushMap,
   showCreate,
   form,
   createMutation,
@@ -55,6 +70,7 @@ export default function CampaignsTab({
   campaigns: Campaign[];
   pnlMap: Record<string, CampaignPNL>;
   healthMap: Record<string, string>;
+  psaPushMap: Record<string, PSAPushRow>;
   showCreate: boolean;
   form: UseFormReturn<CreateCampaignInput>;
   createMutation: { isPending: boolean };
@@ -267,14 +283,27 @@ export default function CampaignsTab({
                   >
                     {isClosed ? '' : `${formatDollarsWhole(c.dailySpendCapCents)}/d · ${formatPct(c.buyTermsCLPct)}`}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Publish to PSA for ${c.name}`}
-                    onClick={() => setPsaModalCampaignId(c.id)}
-                  >
-                    PSA
-                  </Button>
+                  {(() => {
+                    const indicator = pushIndicatorState(psaPushMap[c.id]);
+                    return (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Publish to PSA for ${c.name}${indicator ? ` — ${PUSH_INDICATOR[indicator].label}` : ''}`}
+                        onClick={() => setPsaModalCampaignId(c.id)}
+                      >
+                        PSA
+                        {indicator && (
+                          <span
+                            className={`inline-block ml-1.5 align-middle ${PUSH_INDICATOR[indicator].dotClass}`}
+                            style={PUSH_INDICATOR[indicator].dotStyle}
+                            title={PUSH_INDICATOR[indicator].label}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </Button>
+                    );
+                  })()}
                 </div>
               </div>
               </Fragment>
@@ -288,6 +317,7 @@ export default function CampaignsTab({
           open={!!psaModalCampaign}
           onClose={() => setPsaModalCampaignId(null)}
           campaign={psaModalCampaign}
+          pushRow={psaPushMap[psaModalCampaign.id] ?? null}
         />
       )}
     </>

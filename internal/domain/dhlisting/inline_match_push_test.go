@@ -25,6 +25,11 @@ func (p *purchaseLookupByCert) GetPurchasesByCertNumbers(_ context.Context, cert
 	out := make(map[string]*inventory.Purchase)
 	for _, c := range certs {
 		if x, ok := p.byCert[c]; ok {
+			// These fixtures exercise the inline match+push path, which only
+			// runs for items past the receipt gate; default them to PSA-shipped.
+			if !x.IsReceivedOrShipped() {
+				x.PSAShipDate = "2026-07-15"
+			}
 			out[c] = x
 		}
 	}

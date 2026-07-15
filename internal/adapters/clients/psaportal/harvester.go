@@ -2,6 +2,7 @@ package psaportal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,12 @@ type TokenRepository interface {
 	TokenStore
 	SaveToken(ctx context.Context, token string, expiresAt time.Time) error
 }
+
+// ErrPersistence marks a Run failure that came from persisting the token or
+// snapshot to the store, as opposed to a browser/Lightdash/network failure.
+// The caller propagates these (non-zero exit) because a DB write fault is
+// retryable, unlike a Cloudflare block where a retry cannot help.
+var ErrPersistence = errors.New("psaportal: persistence failure")
 
 // Harvester persists the handshake token, then fetches the analytics
 // __data.json via the browser session and immediately exchanges the freshly
@@ -59,13 +66,15 @@ func NewHarvester(repo TokenRepository, snapshots SnapshotWriter, logger observa
 // Run persists the handshake token, then fetches the analytics __data.json via
 // the browser session and exchanges its embed JWT for the Lightdash rows. The
 // token is saved before the Lightdash exchange so a Lightdash failure still
-// leaves a fresh token behind.
+// leaves a fresh token behind. Failures persisting the token or snapshot are
+// wrapped in ErrPersistence so the caller can propagate them (retryable) while
+// treating browser/Lightdash failures as best-effort.
 func (h *Harvester) Run(ctx context.Context, session Fetcher, token string, expiresAt time.Time) error {
 	if token == "" {
 		return fmt.Errorf("psaportal: harvester received empty token")
 	}
 	if err := h.repo.SaveToken(ctx, token, expiresAt); err != nil {
-		return err
+		return fmt.Errorf("%w: save token: %w", ErrPersistence, err)
 	}
 	h.logger.Info(ctx, "harvested PSA portal access token",
 		observability.String("expires_at", expiresAt.Format(time.RFC3339)))
@@ -94,7 +103,7 @@ func (h *Harvester) Run(ctx context.Context, session Fetcher, token string, expi
 		return fmt.Errorf("psaportal: harvest returned 0 rows; keeping previous snapshot")
 	}
 	if err := h.snapshots.SaveSnapshot(ctx, rows, time.Now()); err != nil {
-		return err
+		return fmt.Errorf("%w: save snapshot: %w", ErrPersistence, err)
 	}
 	h.logger.Info(ctx, "saved PSA portal rows snapshot", observability.Int("rows", len(rows)))
 	return nil

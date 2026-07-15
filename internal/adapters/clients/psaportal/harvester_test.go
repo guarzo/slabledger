@@ -2,6 +2,7 @@ package psaportal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -165,6 +166,33 @@ func TestHarvester_Run(t *testing.T) {
 		af := analyticsFetcher{status: 500, analyticsBody: "oops"}
 		if err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour)); err == nil {
 			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("SaveToken failure is wrapped as ErrPersistence", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{
+			SaveTokenFn: func(_ context.Context, _ string, _ time.Time) error {
+				return errors.New("db write failed")
+			},
+		}
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{}
+		err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour))
+		if !errors.Is(err, ErrPersistence) {
+			t.Fatalf("expected ErrPersistence, got %v", err)
+		}
+	})
+
+	t.Run("analytics failure is not ErrPersistence", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{}
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{err: fmt.Errorf("boom")}
+		err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour))
+		if err == nil {
+			t.Fatal("expected an error from analytics failure")
+		}
+		if errors.Is(err, ErrPersistence) {
+			t.Fatalf("analytics failure must not be ErrPersistence, got %v", err)
 		}
 	})
 }

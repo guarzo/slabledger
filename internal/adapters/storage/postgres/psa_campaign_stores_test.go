@@ -247,3 +247,89 @@ func TestPushQueueStore_CreateUnique(t *testing.T) {
 		})
 	}
 }
+
+func TestPushQueueStore_LatestPerCampaign(t *testing.T) {
+	db := setupTestDB(t)
+	truncatePSACampaignTables(t, db)
+	s := NewPSACampaignPushQueueStore(db.DB)
+	ctx := context.Background()
+
+	fd := psacampaign.CampaignFormData{CampaignName: "Modern 10s", BidPercentage: 72}
+
+	// Campaign A: two update rows — the newer one must win. Enqueue runs as
+	// separate autocommit statements, so each row gets its own now() timestamp
+	// and insert order == created_at order (matches existing test style).
+	require.NoError(t, s.Enqueue(ctx, psacampaign.PushRow{
+		ID: "a-old", PSACampaignID: "psa-a", InternalCampaignID: "camp-a",
+		RequestedBy: "alice",
+		Diff:        psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{{Field: "bidPercentage", Old: "70", New: "72"}}},
+	}))
+	require.NoError(t, s.MarkResult(ctx, "a-old", psacampaign.PushFailed, "", "portal 500"))
+	require.NoError(t, s.Enqueue(ctx, psacampaign.PushRow{
+		ID: "a-newer", PSACampaignID: "psa-a", InternalCampaignID: "camp-a",
+		RequestedBy: "alice",
+		Diff:        psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{{Field: "bidPercentage", Old: "72", New: "75"}}},
+	}))
+
+	// Campaign B: a pending create — formData must round-trip.
+	require.NoError(t, s.Enqueue(ctx, psacampaign.PushRow{
+		ID: "b-1", Operation: psacampaign.OpCreate, InternalCampaignID: "camp-b",
+		RequestedBy: "alice",
+		Diff:        psacampaign.ProposedDiff{Create: &fd},
+	}))
+
+	// Campaign C: a single failed row — Error and UpdatedAt must round-trip.
+	require.NoError(t, s.Enqueue(ctx, psacampaign.PushRow{
+		ID: "c-1", PSACampaignID: "psa-c", InternalCampaignID: "camp-c",
+		RequestedBy: "bob",
+		Diff:        psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{{Field: "flatFee", Old: "3", New: "4"}}},
+	}))
+	require.NoError(t, s.MarkResult(ctx, "c-1", psacampaign.PushFailed, "", "boom"))
+
+	got, err := s.LatestPerCampaign(ctx)
+	require.NoError(t, err)
+
+	byCampaign := map[string]psacampaign.PushRow{}
+	for _, r := range got {
+		byCampaign[r.InternalCampaignID] = r
+	}
+
+	tests := []struct {
+		name       string
+		campaignID string
+		wantID     string
+		wantOp     psacampaign.Operation
+		wantStatus psacampaign.PushStatus
+		wantError  string
+	}{
+		{"latest update row wins", "camp-a", "a-newer", psacampaign.OpUpdate, psacampaign.PushPending, ""},
+		{"pending create row carries formData", "camp-b", "b-1", psacampaign.OpCreate, psacampaign.PushPending, ""},
+		{"failed row round-trips error", "camp-c", "c-1", psacampaign.OpUpdate, psacampaign.PushFailed, "boom"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, ok := byCampaign[tt.campaignID]
+			require.True(t, ok, "row for %s", tt.campaignID)
+			require.Equal(t, tt.wantID, r.ID)
+			require.Equal(t, tt.wantOp, r.Operation)
+			require.Equal(t, tt.wantStatus, r.Status)
+			require.Equal(t, tt.wantError, r.Error)
+			require.False(t, r.UpdatedAt.IsZero(), "UpdatedAt must be scanned")
+		})
+	}
+
+	// The create row must carry its formData back.
+	require.NotNil(t, byCampaign["camp-b"].Diff.Create)
+	require.Equal(t, "Modern 10s", byCampaign["camp-b"].Diff.Create.CampaignName)
+	require.Len(t, got, 3)
+}
+
+func TestPushQueueStore_LatestPerCampaign_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	truncatePSACampaignTables(t, db)
+	s := NewPSACampaignPushQueueStore(db.DB)
+
+	got, err := s.LatestPerCampaign(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, got)
+}

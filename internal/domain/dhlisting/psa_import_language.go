@@ -26,7 +26,16 @@ func InferDHLanguage(setName, cardName string) string {
 	case strings.Contains(hay, "korean"):
 		return "korean"
 	case strings.Contains(hay, "chinese"):
-		return "chinese"
+		// DH distinguishes Simplified from Traditional; a bare "chinese"
+		// override is rejected as partner_card_error. Only return a value when
+		// the script is explicit — otherwise defer to DH's PSA metadata.
+		switch {
+		case strings.Contains(hay, "simplified"):
+			return "chinese_simplified"
+		case strings.Contains(hay, "traditional"):
+			return "chinese_traditional"
+		}
+		return ""
 	}
 	return ""
 }

@@ -74,7 +74,9 @@ func run() error {
 	snapshots := postgres.NewPSAPortalSnapshotStore(db.DB)
 
 	// One browser login per run, shared by the token/analytics harvest and the
-	// campaign sync/drain, so every psacard.com call clears Cloudflare.
+	// campaign sync/drain, so every psacard.com call clears Cloudflare. The
+	// writes cannot reach the portal any other way, so a failed session open is
+	// fatal for the run.
 	storedToken, _, _ := store.CurrentToken(ctx) // best-effort; "" just means full SSO
 	session, token, expiresAt, err := psaportal.OpenBrowserSession(ctx, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, storedToken, logger)
 	if err != nil {
@@ -84,9 +86,16 @@ func run() error {
 
 	h := psaportal.NewHarvester(store, snapshots, logger)
 	// Best-effort: a failed analytics read must not skip queued writes (the
-	// session is already authenticated). Log and continue to the drain.
+	// session is already authenticated). A persistence failure (token/snapshot
+	// DB write) is retryable, so propagate it for a non-zero exit; a
+	// browser/Lightdash failure is not helped by a retry — log and continue to
+	// the drain, which rides the same authenticated session.
 	if err := h.Run(ctx, session, token, expiresAt); err != nil {
-		logger.Error(ctx, "psa-harvest: token/analytics harvest failed", observability.Err(err))
+		if errors.Is(err, psaportal.ErrPersistence) {
+			return err
+		}
+		logger.Warn(ctx, "psa-harvest: token/analytics harvest failed, continuing to drain",
+			observability.Err(err))
 	} else {
 		logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
 	}
