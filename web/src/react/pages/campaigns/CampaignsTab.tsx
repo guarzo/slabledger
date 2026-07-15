@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../../types/campaigns';
+import type { Campaign, CampaignPNL, CreateCampaignInput, Phase, PSAPushRow } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
 import CardShell from '../../ui/CardShell';
@@ -22,6 +22,27 @@ const PHASE_LABELS: Record<Phase, string> = {
 
 /** Phase order on the page. Matches the parent's sortCampaigns(). */
 const PHASE_ORDER: Phase[] = ['active', 'pending', 'closed'];
+
+/** Visual state of the PSA button's push indicator. `pushed` and absent rows
+    render no indicator — the queue entry is resolved. */
+type PushIndicatorState = 'pending' | 'inflight' | 'failed';
+
+const PUSH_INDICATOR: Record<PushIndicatorState, { color: string; label: string }> = {
+  pending: { color: 'var(--warning)', label: 'approval pending' },
+  inflight: { color: 'var(--info)', label: 'push in flight' },
+  failed: { color: 'var(--danger)', label: 'last push failed' },
+};
+
+function pushIndicatorState(push: PSAPushRow | undefined): PushIndicatorState | null {
+  if (!push) return null;
+  switch (push.status) {
+    case 'pending': return 'pending';
+    case 'approved':
+    case 'pushing': return 'inflight';
+    case 'failed': return 'failed';
+    default: return null; // pushed = resolved
+  }
+}
 
 function PhaseBadge({ phase }: { phase: Phase }) {
   return (
@@ -47,6 +68,7 @@ export default function CampaignsTab({
   campaigns,
   pnlMap,
   healthMap,
+  psaPushMap,
   showCreate,
   form,
   createMutation,
@@ -55,6 +77,7 @@ export default function CampaignsTab({
   campaigns: Campaign[];
   pnlMap: Record<string, CampaignPNL>;
   healthMap: Record<string, string>;
+  psaPushMap: Record<string, PSAPushRow>;
   showCreate: boolean;
   form: UseFormReturn<CreateCampaignInput>;
   createMutation: { isPending: boolean };
@@ -267,14 +290,26 @@ export default function CampaignsTab({
                   >
                     {isClosed ? '' : `${formatDollarsWhole(c.dailySpendCapCents)}/d · ${formatPct(c.buyTermsCLPct)}`}
                   </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Publish to PSA for ${c.name}`}
-                    onClick={() => setPsaModalCampaignId(c.id)}
-                  >
-                    PSA
-                  </Button>
+                  {(() => {
+                    const indicator = pushIndicatorState(psaPushMap[c.id]);
+                    return (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Publish to PSA for ${c.name}${indicator ? ` — ${PUSH_INDICATOR[indicator].label}` : ''}`}
+                        onClick={() => setPsaModalCampaignId(c.id)}
+                      >
+                        PSA
+                        {indicator && (
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full ml-1.5 align-middle"
+                            style={{ backgroundColor: PUSH_INDICATOR[indicator].color }}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </Button>
+                    );
+                  })()}
                 </div>
               </div>
               </Fragment>
