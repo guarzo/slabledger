@@ -295,6 +295,16 @@ func (p *Purchase) ToCardIdentity() CardIdentity {
 	}
 }
 
+// IsReceivedOrShipped reports whether the card is physically in hand
+// (ReceivedAt != nil) or has been shipped by PSA (PSAShipDate != ""). This is
+// the same predicate the DH push scheduler gates on
+// (GetPurchasesByDHPushStatus / receivedOrShippedPredicate) and is the minimum
+// bar for putting an item live on DH: we must never list something that hasn't
+// at least left PSA.
+func (p *Purchase) IsReceivedOrShipped() bool {
+	return p.ReceivedAt != nil || p.PSAShipDate != ""
+}
+
 // NeedsDHPush returns true if this purchase is eligible for DH push pipeline enrollment.
 // A purchase is eligible once it has been received (ReceivedAt != nil) OR shipped by PSA
 // (PSAShipDate != ""). Shipping alone is sufficient because DH allows 2 days from order
