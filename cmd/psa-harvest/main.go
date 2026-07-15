@@ -84,6 +84,12 @@ func run() error {
 	// token. Log and continue; the token, if any, was already saved before the
 	// Lightdash exchange inside Run.
 	if err := h.Run(ctx); err != nil {
+		// A persistence failure (token/snapshot DB write) is retryable, so
+		// propagate it for a non-zero exit. A browser/Lightdash failure is not
+		// helped by a retry — log it and continue to the token-gated drain.
+		if errors.Is(err, psaportal.ErrPersistence) {
+			return err
+		}
 		logger.Warn(ctx, "psa-harvest: token/snapshot harvest failed, continuing to drain",
 			observability.Err(err))
 	} else {

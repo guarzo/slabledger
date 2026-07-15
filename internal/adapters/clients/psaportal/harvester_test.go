@@ -3,6 +3,7 @@ package psaportal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -265,6 +266,48 @@ func TestHarvester_Run(t *testing.T) {
 		}
 		if len(snaps.SavedRows) != 1 {
 			t.Errorf("expected browser run to save snapshot, got %+v", snaps.SavedRows)
+		}
+	})
+
+	t.Run("SaveToken failure is wrapped as ErrPersistence", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{
+			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
+				return "stored-tok", time.Now().Add(2 * time.Minute), nil // stale -> browser runs
+			},
+			SaveTokenFn: func(_ context.Context, _ string, _ time.Time) error {
+				return errors.New("db write failed")
+			},
+		}
+		snaps := &mocks.PSASnapshotWriterMock{}
+		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
+			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
+		h.name = "cat"
+		h.args = []string{scriptOutputFile(t, srv.URL)}
+
+		err := h.Run(context.Background())
+		if !errors.Is(err, ErrPersistence) {
+			t.Fatalf("expected ErrPersistence, got %v", err)
+		}
+	})
+
+	t.Run("browser failure is not ErrPersistence", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{
+			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
+				return "stored-tok", time.Now().Add(2 * time.Minute), nil // stale -> browser runs
+			},
+		}
+		snaps := &mocks.PSASnapshotWriterMock{}
+		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
+			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
+		h.name = "false" // browser exits non-zero
+		h.args = nil
+
+		err := h.Run(context.Background())
+		if err == nil {
+			t.Fatal("expected an error from browser failure")
+		}
+		if errors.Is(err, ErrPersistence) {
+			t.Fatalf("browser failure must not be ErrPersistence, got %v", err)
 		}
 	})
 }
