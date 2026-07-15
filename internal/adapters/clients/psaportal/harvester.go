@@ -26,6 +26,15 @@ type TokenRepository interface {
 	SaveToken(ctx context.Context, token string, expiresAt time.Time) error
 }
 
+// Browser short-circuit windows. When the stored token still has at least
+// tokenFreshWindow of life AND the rows snapshot is younger than
+// snapshotFreshWindow, Run skips launching Chromium entirely — avoiding the
+// back-to-back headless launches that trigger Cloudflare 403s on rapid re-runs.
+const (
+	tokenFreshWindow    = 30 * time.Minute
+	snapshotFreshWindow = 55 * time.Minute
+)
+
 // Harvester runs the Playwright login script, persists the access token, and
 // immediately exchanges the freshly minted embed JWT for the Lightdash rows,
 // persisting them as the snapshot the main app's sync reads.
@@ -73,6 +82,10 @@ func NewHarvester(repo TokenRepository, snapshots SnapshotWriter, workDir, email
 // is saved before the Lightdash exchange so a Lightdash failure still leaves a
 // fresh token behind.
 func (h *Harvester) Run(ctx context.Context) error {
+	if !h.browserNeeded(ctx) {
+		h.logger.Info(ctx, "harvest skipped: token fresh + snapshot recent")
+		return nil
+	}
 	res, err := h.execScript(ctx)
 	if err != nil {
 		return err
@@ -107,6 +120,22 @@ func (h *Harvester) Run(ctx context.Context) error {
 	}
 	h.logger.Info(ctx, "saved PSA portal rows snapshot", observability.Int("rows", len(rows)))
 	return nil
+}
+
+// browserNeeded reports whether this run must launch the browser. It returns
+// true (browser required) when the stored token is missing/stale or the rows
+// snapshot is due; false only when both are fresh. Any read error is treated as
+// "needed" so a lookup failure never suppresses a harvest.
+func (h *Harvester) browserNeeded(ctx context.Context) bool {
+	tok, exp, err := h.repo.CurrentToken(ctx)
+	if err != nil || tok == "" || time.Until(exp) < tokenFreshWindow {
+		return true
+	}
+	fetchedAt, err := h.snapshots.SnapshotFetchedAt(ctx)
+	if err != nil || time.Since(fetchedAt) > snapshotFreshWindow {
+		return true
+	}
+	return false
 }
 
 type scriptResult struct {

@@ -194,4 +194,77 @@ func TestHarvester_Run(t *testing.T) {
 			t.Fatalf("expected empty-token error, got %v", err)
 		}
 	})
+
+	t.Run("skips browser when token fresh and snapshot recent", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{
+			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
+				return "stored-tok", time.Now().Add(12 * time.Hour), nil
+			},
+		}
+		snaps := &mocks.PSASnapshotWriterMock{
+			SnapshotFetchedAtFn: func(_ context.Context) (time.Time, error) {
+				return time.Now().Add(-10 * time.Minute), nil
+			},
+		}
+		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
+			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
+		// If the browser is (wrongly) launched, "false" exits non-zero and Run errors.
+		h.name = "false"
+		h.args = nil
+
+		if err := h.Run(context.Background()); err != nil {
+			t.Fatalf("expected browser to be skipped, got error: %v", err)
+		}
+		if snaps.SavedRows != nil {
+			t.Errorf("expected no snapshot write on skip, got %+v", snaps.SavedRows)
+		}
+	})
+
+	t.Run("runs browser when token nearly expired", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{
+			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
+				return "stored-tok", time.Now().Add(2 * time.Minute), nil
+			},
+		}
+		snaps := &mocks.PSASnapshotWriterMock{
+			SnapshotFetchedAtFn: func(_ context.Context) (time.Time, error) {
+				return time.Now().Add(-10 * time.Minute), nil
+			},
+		}
+		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
+			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
+		h.name = "cat"
+		h.args = []string{scriptOutputFile(t, srv.URL)}
+
+		if err := h.Run(context.Background()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(snaps.SavedRows) != 1 {
+			t.Errorf("expected browser run to save snapshot, got %+v", snaps.SavedRows)
+		}
+	})
+
+	t.Run("runs browser when snapshot stale even if token fresh", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{
+			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
+				return "stored-tok", time.Now().Add(12 * time.Hour), nil
+			},
+		}
+		snaps := &mocks.PSASnapshotWriterMock{
+			SnapshotFetchedAtFn: func(_ context.Context) (time.Time, error) {
+				return time.Now().Add(-2 * time.Hour), nil
+			},
+		}
+		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
+			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
+		h.name = "cat"
+		h.args = []string{scriptOutputFile(t, srv.URL)}
+
+		if err := h.Run(context.Background()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(snaps.SavedRows) != 1 {
+			t.Errorf("expected browser run to save snapshot, got %+v", snaps.SavedRows)
+		}
+	})
 }
