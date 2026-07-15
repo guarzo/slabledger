@@ -134,10 +134,11 @@ func TestHandlePSAPublish_Unauthenticated(t *testing.T) {
 func TestHandleListPSAPushes(t *testing.T) {
 	fd := psacampaign.CampaignFormData{CampaignName: "Modern 10s", BidPercentage: 72}
 	tests := []struct {
-		name       string
-		queue      *mocks.PushQueueStoreMock
-		wantStatus int
-		wantBody   []string // substrings that must appear in the response body
+		name            string
+		queue           *mocks.PushQueueStoreMock
+		wantStatus      int
+		wantBody        []string // substrings that must appear in the response body
+		wantBodyExclude []string // substrings that must NOT appear in the response body
 	}{
 		{
 			name:       "queue not configured returns 503",
@@ -174,6 +175,7 @@ func TestHandleListPSAPushes(t *testing.T) {
 				`"campaignId":"camp-2"`, `"operation":"update"`, `"status":"failed"`,
 				`"error":"portal 500"`, `"diff"`, `"bidPercentage"`, `"approvedBy":"carol"`,
 			},
+			wantBodyExclude: []string{`"formData":null`, `"diff":null`},
 		},
 		{
 			name: "empty queue returns empty array not null",
@@ -200,10 +202,9 @@ func TestHandleListPSAPushes(t *testing.T) {
 					t.Fatalf("body missing %q: %s", want, rec.Body.String())
 				}
 			}
-			if tt.name == "create row maps formData, update row maps diff" {
-				body := rec.Body.String()
-				if strings.Contains(body, `"formData":null`) || strings.Contains(body, `"diff":null`) {
-					t.Fatalf("null formData/diff should be omitted: %s", body)
+			for _, exclude := range tt.wantBodyExclude {
+				if strings.Contains(rec.Body.String(), exclude) {
+					t.Fatalf("body must not contain %q: %s", exclude, rec.Body.String())
 				}
 			}
 		})

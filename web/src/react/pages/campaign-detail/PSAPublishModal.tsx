@@ -222,7 +222,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                     Approve &amp; queue create
                   </Button>
                 )}
-                {publishStatus && (
+                {publishStatus && !inFlightRow && (
                   <span className="text-xs text-[var(--success)]">
                     Queued for harvester (status: {publishStatus}). The campaign links automatically once created.
                   </span>
@@ -264,7 +264,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                 </Button>
               )}
 
-              {publishStatus && (
+              {publishStatus && !inFlightRow && (
                 <span className="text-xs text-[var(--success)]">Status: {publishStatus}</span>
               )}
             </div>
