@@ -34,6 +34,9 @@ func (m *mockResetter) ResetDHFieldsForRepushDueToDelete(_ context.Context, purc
 type mockPurchaseLookup struct {
 	purchases map[string]*inventory.Purchase
 	err       error
+	// keepUnreceived disables the default receipt backfill below. Set it only
+	// in tests that deliberately exercise the not-received listing gate.
+	keepUnreceived bool
 }
 
 func (m *mockPurchaseLookup) GetPurchasesByCertNumbers(_ context.Context, certNumbers []string) (map[string]*inventory.Purchase, error) {
@@ -43,6 +46,12 @@ func (m *mockPurchaseLookup) GetPurchasesByCertNumbers(_ context.Context, certNu
 	result := make(map[string]*inventory.Purchase)
 	for _, cn := range certNumbers {
 		if p, ok := m.purchases[cn]; ok {
+			// Fixtures represent items already eligible to list, so default them
+			// to PSA-shipped (satisfying the ListPurchases receipt gate) unless
+			// the test opts out to exercise the gate itself.
+			if !m.keepUnreceived && !p.IsReceivedOrShipped() {
+				p.PSAShipDate = "2026-07-15"
+			}
 			result[cn] = p
 		}
 	}
@@ -359,6 +368,50 @@ func TestListPurchases_EmptyInput(t *testing.T) {
 	}
 	if result.Error != nil {
 		t.Errorf("expected no error for empty input, got %v", result.Error)
+	}
+}
+
+// TestListPurchases_NotReceivedOrShippedIsNotListed is the regression guard for
+// the production incident where a price review on a not-yet-received card
+// (received_at NULL, psa_ship_date empty) inline-pushed and listed it on DH.
+// A card that has neither been received nor shipped by PSA must never go live,
+// no matter its push status or committed price.
+func TestListPurchases_NotReceivedOrShippedIsNotListed(t *testing.T) {
+	certNum := "152931233"
+	notInHand := &inventory.Purchase{
+		ID:                 "p-not-in-hand",
+		CertNumber:         certNum,
+		DHInventoryID:      48978,
+		DHStatus:           inventory.DHStatusInStock,
+		DHPushStatus:       inventory.DHPushStatusMatched,
+		ReviewedPriceCents: 52700,
+		ReceivedAt:         nil, // not in hand
+		PSAShipDate:        "",  // not shipped either
+	}
+	lookup := &mockPurchaseLookup{
+		purchases:      map[string]*inventory.Purchase{certNum: notInHand},
+		keepUnreceived: true, // exercise the gate; don't backfill receipt
+	}
+	lister := &mockInventoryLister{}
+	updater := &mockFieldsUpdater{}
+
+	svc := newTestService(t, lookup,
+		WithDHListingLister(lister),
+		WithDHListingFieldsUpdater(updater),
+	)
+	result := svc.ListPurchases(context.Background(), []string{certNum})
+
+	if result.Listed != 0 {
+		t.Errorf("Listed: got %d, want 0 (not-in-hand must never be listed)", result.Listed)
+	}
+	if result.Skipped != 1 {
+		t.Errorf("Skipped: got %d, want 1", result.Skipped)
+	}
+	if lister.updateCalls != 0 {
+		t.Errorf("UpdateInventoryStatus called %d times, want 0 (must not transition to listed)", lister.updateCalls)
+	}
+	if len(updater.calls) != 0 {
+		t.Errorf("UpdatePurchaseDHFields called %d times, want 0", len(updater.calls))
 	}
 }
 

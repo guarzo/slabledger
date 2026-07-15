@@ -211,6 +211,19 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	failedCerts := map[string]error{}
 	for _, cn := range sortedCerts {
 		p := purchases[cn]
+		// Hard gate: never put an item live on DH unless it has at least left
+		// PSA (received in hand, or PSA-shipped). The push scheduler enforces
+		// this via GetPurchasesByDHPushStatus, but the inline/manual/auto-list
+		// paths reach ListPurchases directly and previously bypassed it — a
+		// price review on a not-yet-received card would inline-push and list it.
+		if !p.IsReceivedOrShipped() {
+			s.logger.Warn(ctx, "dh listing: purchase not received or shipped; refusing to list",
+				observability.String("cert", p.CertNumber),
+				observability.String("purchaseID", p.ID))
+			failedCerts[cn] = errors.New("not received or shipped by PSA; cannot list on DH")
+			skipped++
+			continue
+		}
 		// If pending DH push, do inline match + push first.
 		if p.DHInventoryID == 0 && p.DHPushStatus == inventory.DHPushStatusPending {
 			if s.psaImporter == nil {
