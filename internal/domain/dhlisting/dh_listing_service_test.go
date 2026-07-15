@@ -13,6 +13,21 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// countingImporter is a minimal DHPSAImporter that records how many times it is
+// called. Used to assert the receipt gate blocks inlineMatchAndPush before it
+// ever reaches the PSA importer. Defined locally because this internal test
+// package cannot import internal/testutil/mocks (that package imports dhlisting,
+// which would create an import cycle).
+type countingImporter struct {
+	calls   int
+	results []DHPSAImportResult
+}
+
+func (c *countingImporter) PSAImport(context.Context, []DHPSAImportItem) ([]DHPSAImportResult, error) {
+	c.calls++
+	return c.results, nil
+}
+
 type mockResetter struct {
 	resetErr         error
 	resetCalls       []string // purchaseIDs passed to ResetDHFieldsForRepush
@@ -377,41 +392,67 @@ func TestListPurchases_EmptyInput(t *testing.T) {
 // A card that has neither been received nor shipped by PSA must never go live,
 // no matter its push status or committed price.
 func TestListPurchases_NotReceivedOrShippedIsNotListed(t *testing.T) {
-	certNum := "152931233"
-	notInHand := &inventory.Purchase{
-		ID:                 "p-not-in-hand",
-		CertNumber:         certNum,
-		DHInventoryID:      48978,
-		DHStatus:           inventory.DHStatusInStock,
-		DHPushStatus:       inventory.DHPushStatusMatched,
-		ReviewedPriceCents: 52700,
-		ReceivedAt:         nil, // not in hand
-		PSAShipDate:        "",  // not shipped either
+	cases := []struct {
+		name     string
+		purchase *inventory.Purchase
+	}{
+		{
+			// Pending push: the gate must fire before inlineMatchAndPush so the
+			// PSA importer is never called — this is the exact production path
+			// (price review → auto-list → inline push → listed).
+			name: "pending push must not inline-push or list",
+			purchase: &inventory.Purchase{
+				ID:                 "p-not-in-hand",
+				CertNumber:         "152931233",
+				DHInventoryID:      0,
+				DHPushStatus:       inventory.DHPushStatusPending,
+				ReviewedPriceCents: 52700,
+				ReceivedAt:         nil, // not in hand
+				PSAShipDate:        "",  // not shipped either
+			},
+		},
 	}
-	lookup := &mockPurchaseLookup{
-		purchases:      map[string]*inventory.Purchase{certNum: notInHand},
-		keepUnreceived: true, // exercise the gate; don't backfill receipt
-	}
-	lister := &mockInventoryLister{}
-	updater := &mockFieldsUpdater{}
 
-	svc := newTestService(t, lookup,
-		WithDHListingLister(lister),
-		WithDHListingFieldsUpdater(updater),
-	)
-	result := svc.ListPurchases(context.Background(), []string{certNum})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			certNum := tc.purchase.CertNumber
+			lookup := &mockPurchaseLookup{
+				purchases:      map[string]*inventory.Purchase{certNum: tc.purchase},
+				keepUnreceived: true, // exercise the gate; don't backfill receipt
+			}
+			lister := &mockInventoryLister{}
+			updater := &mockFieldsUpdater{}
+			// If the gate ever failed to fire, the importer would return an
+			// inventory ID and the item would list. Assert it is never called.
+			importer := &countingImporter{
+				results: []DHPSAImportResult{
+					{Resolution: PSAImportStatusMatched, DHCardID: 999, DHInventoryID: 1234, DHStatus: "in_stock"},
+				},
+			}
 
-	if result.Listed != 0 {
-		t.Errorf("Listed: got %d, want 0 (not-in-hand must never be listed)", result.Listed)
-	}
-	if result.Skipped != 1 {
-		t.Errorf("Skipped: got %d, want 1", result.Skipped)
-	}
-	if lister.updateCalls != 0 {
-		t.Errorf("UpdateInventoryStatus called %d times, want 0 (must not transition to listed)", lister.updateCalls)
-	}
-	if len(updater.calls) != 0 {
-		t.Errorf("UpdatePurchaseDHFields called %d times, want 0", len(updater.calls))
+			svc := newTestService(t, lookup,
+				WithDHListingLister(lister),
+				WithDHListingFieldsUpdater(updater),
+				WithDHListingPSAImporter(importer),
+			)
+			result := svc.ListPurchases(context.Background(), []string{certNum})
+
+			if result.Listed != 0 {
+				t.Errorf("Listed: got %d, want 0 (not-in-hand must never be listed)", result.Listed)
+			}
+			if result.Skipped != 1 {
+				t.Errorf("Skipped: got %d, want 1", result.Skipped)
+			}
+			if importer.calls != 0 {
+				t.Errorf("PSAImport called %d times, want 0 (gate must block before inline push)", importer.calls)
+			}
+			if lister.updateCalls != 0 {
+				t.Errorf("UpdateInventoryStatus called %d times, want 0 (must not transition to listed)", lister.updateCalls)
+			}
+			if len(updater.calls) != 0 {
+				t.Errorf("UpdatePurchaseDHFields called %d times, want 0", len(updater.calls))
+			}
+		})
 	}
 }
 
