@@ -53,6 +53,22 @@ func TestBrowserSession_Do_FramesAndCorrelates(t *testing.T) {
 	}
 }
 
+func TestReadHandshake(t *testing.T) {
+	in := `{"type":"ready","accessToken":"tok-9","expiresAt":"2099-01-01T00:00:00Z"}` + "\n"
+	sc := bufio.NewScanner(strings.NewReader(in))
+	sc.Buffer(make([]byte, 0, 1024), 1<<20)
+	tok, exp, err := readHandshake(sc)
+	if err != nil {
+		t.Fatalf("readHandshake: %v", err)
+	}
+	if tok != "tok-9" {
+		t.Fatalf("tok = %q", tok)
+	}
+	if exp.Year() != 2099 {
+		t.Fatalf("exp = %v", exp)
+	}
+}
+
 func TestBrowserSession_Do_PropagatesScriptError(t *testing.T) {
 	reqR, reqW := io.Pipe()
 	respR, respW := io.Pipe()
