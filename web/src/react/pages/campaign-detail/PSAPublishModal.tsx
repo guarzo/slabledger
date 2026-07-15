@@ -249,7 +249,10 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
             </>
           ) : (
             <div className="flex flex-col gap-3">
-              {!inFlightRow && (
+              {/* psa-propose has no update dedupe on the backend — proposing
+                  while a row is already queued would enqueue a duplicate, so
+                  the button hides until the current row resolves or fails. */}
+              {!pendingRow && !inFlightRow && (
                 <Button
                   size="sm"
                   variant="secondary"

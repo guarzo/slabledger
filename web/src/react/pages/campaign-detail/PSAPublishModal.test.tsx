@@ -235,6 +235,8 @@ describe('PSAPublishModal with a queued push row', () => {
     expect(screen.getByText(/bidPercentage/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /publish to psa/i })).toBeInTheDocument();
     expect(vi.mocked(api.psaPropose)).not.toHaveBeenCalled();
+    // Proposing again would enqueue a duplicate update row — button hidden.
+    expect(screen.queryByRole('button', { name: /check for changes/i })).not.toBeInTheDocument();
   });
 
   it('shows in-flight status and hides action buttons for an approved row', () => {
