@@ -23,9 +23,12 @@ type SnapshotStore interface {
 	CurrentSnapshot(ctx context.Context) (rows []map[string]string, fetchedAt time.Time, err error)
 }
 
-// SnapshotWriter persists a harvested rows snapshot (harvester side).
+// SnapshotWriter persists a harvested rows snapshot (harvester side) and reports
+// when the stored snapshot was last written, so the harvester can decide whether
+// a fresh browser fetch is due.
 type SnapshotWriter interface {
 	SaveSnapshot(ctx context.Context, rows []map[string]string, fetchedAt time.Time) error
+	SnapshotFetchedAt(ctx context.Context) (time.Time, error)
 }
 
 // maxSnapshotAge is how stale the stored snapshot may be before FetchRows

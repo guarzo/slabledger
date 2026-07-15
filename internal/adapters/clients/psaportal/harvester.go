@@ -26,6 +26,21 @@ type TokenRepository interface {
 	SaveToken(ctx context.Context, token string, expiresAt time.Time) error
 }
 
+// Browser short-circuit windows. When the stored token still has at least
+// tokenFreshWindow of life AND the rows snapshot is no older than
+// snapshotFreshWindow, Run skips launching Chromium entirely — avoiding the
+// back-to-back headless launches that trigger Cloudflare 403s on rapid re-runs.
+const (
+	tokenFreshWindow    = 30 * time.Minute
+	snapshotFreshWindow = 55 * time.Minute
+)
+
+// ErrPersistence marks a Run failure that came from persisting the token or
+// snapshot to the store, as opposed to a browser/Lightdash/network failure.
+// The caller propagates these (non-zero exit) because a DB write fault is
+// retryable, unlike a Cloudflare block where a retry cannot help.
+var ErrPersistence = errors.New("psaportal: persistence failure")
+
 // Harvester runs the Playwright login script, persists the access token, and
 // immediately exchanges the freshly minted embed JWT for the Lightdash rows,
 // persisting them as the snapshot the main app's sync reads.
@@ -66,13 +81,21 @@ func NewHarvester(repo TokenRepository, snapshots SnapshotWriter, workDir, email
 	return h
 }
 
-// Run performs one full harvest cycle: run the browser script (passing the
-// stored token so a still-valid session skips the SSO login), persist the
-// fresh token, then exchange the just-minted embed JWT (~1h TTL, so it must be
-// used immediately) for the Lightdash rows and persist the snapshot. The token
+// Run performs one harvest cycle. It first short-circuits (see browserNeeded):
+// when the stored token and rows snapshot are both fresh it skips the browser
+// entirely and returns nil. Otherwise it runs the browser script (passing the
+// stored token so a still-valid session skips the SSO login), persists the
+// fresh token, then exchanges the just-minted embed JWT (~1h TTL, so it must be
+// used immediately) for the Lightdash rows and persists the snapshot. The token
 // is saved before the Lightdash exchange so a Lightdash failure still leaves a
-// fresh token behind.
+// fresh token behind. Failures persisting the token or snapshot are wrapped in
+// ErrPersistence so the caller can propagate them (retryable) while treating
+// browser/Lightdash failures as best-effort.
 func (h *Harvester) Run(ctx context.Context) error {
+	if !h.browserNeeded(ctx) {
+		h.logger.Info(ctx, "harvest skipped: token fresh + snapshot recent")
+		return nil
+	}
 	res, err := h.execScript(ctx)
 	if err != nil {
 		return err
@@ -85,7 +108,7 @@ func (h *Harvester) Run(ctx context.Context) error {
 		return fmt.Errorf("psaportal: harvester returned empty token")
 	}
 	if err := h.repo.SaveToken(ctx, res.AccessToken, exp); err != nil {
-		return err
+		return fmt.Errorf("%w: save token: %w", ErrPersistence, err)
 	}
 	h.logger.Info(ctx, "harvested PSA portal access token",
 		observability.String("expires_at", exp.Format(time.RFC3339)))
@@ -103,10 +126,26 @@ func (h *Harvester) Run(ctx context.Context) error {
 		return fmt.Errorf("psaportal: harvest returned 0 rows; keeping previous snapshot")
 	}
 	if err := h.snapshots.SaveSnapshot(ctx, rows, time.Now()); err != nil {
-		return err
+		return fmt.Errorf("%w: save snapshot: %w", ErrPersistence, err)
 	}
 	h.logger.Info(ctx, "saved PSA portal rows snapshot", observability.Int("rows", len(rows)))
 	return nil
+}
+
+// browserNeeded reports whether this run must launch the browser. It returns
+// true (browser required) when the stored token is missing/stale or the rows
+// snapshot is due; false only when both are fresh. Any read error is treated as
+// "needed" so a lookup failure never suppresses a harvest.
+func (h *Harvester) browserNeeded(ctx context.Context) bool {
+	tok, exp, err := h.repo.CurrentToken(ctx)
+	if err != nil || tok == "" || time.Until(exp) < tokenFreshWindow {
+		return true
+	}
+	fetchedAt, err := h.snapshots.SnapshotFetchedAt(ctx)
+	if err != nil || time.Since(fetchedAt) > snapshotFreshWindow {
+		return true
+	}
+	return false
 }
 
 type scriptResult struct {
