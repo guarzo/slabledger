@@ -169,6 +169,16 @@ func TestHarvester_Run(t *testing.T) {
 		}
 	})
 
+	t.Run("analytics 200 missing embedUrl", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{}
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{status: 200, analyticsBody: "{}"}
+		err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour))
+		if err == nil || !strings.Contains(err.Error(), "missing embedUrl") {
+			t.Fatalf("expected missing-embedUrl error, got %v", err)
+		}
+	})
+
 	t.Run("SaveToken failure is wrapped as ErrPersistence", func(t *testing.T) {
 		repo := &mocks.PSATokenRepositoryMock{
 			SaveTokenFn: func(_ context.Context, _ string, _ time.Time) error {

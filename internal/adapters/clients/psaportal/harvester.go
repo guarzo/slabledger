@@ -86,8 +86,11 @@ func (h *Harvester) Run(ctx context.Context, session Fetcher, token string, expi
 	if err != nil {
 		return fmt.Errorf("psaportal: analytics fetch: %w", err)
 	}
-	if resp.Status != 200 || !strings.Contains(resp.Body, "embedUrl") {
+	if resp.Status != 200 {
 		return fmt.Errorf("psaportal: analytics __data.json fetch failed (status %d)", resp.Status)
+	}
+	if !strings.Contains(resp.Body, "embedUrl") {
+		return fmt.Errorf("psaportal: analytics __data.json response missing embedUrl")
 	}
 
 	rows, err := h.fetchRowsFromAnalytics(ctx, []byte(resp.Body))
