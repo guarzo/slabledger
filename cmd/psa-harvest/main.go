@@ -78,13 +78,20 @@ func run() error {
 	// Every run does the full cycle: the embed JWT captured by the browser lives
 	// ~1h, so it must be exchanged for rows immediately, every time. The script
 	// itself skips the SSO login while the stored token is still valid.
+	// Harvest is best-effort: a browser/Lightdash failure (e.g. a transient
+	// Cloudflare 403) must not block the drain, which only needs the stored
+	// token. Log and continue; the token, if any, was already saved before the
+	// Lightdash exchange inside Run.
 	if err := h.Run(ctx); err != nil {
-		return err
+		logger.Warn(ctx, "psa-harvest: token/snapshot harvest failed, continuing to drain",
+			observability.Err(err))
+	} else {
+		logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
 	}
-	logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
 
 	if cfg.PSASync.CampaignSyncEnabled {
-		portal := psaportal.New(psaportal.NewStoredTokenProvider(store), psaportal.Config{}, psaportal.WithLogger(logger))
+		tp := psaportal.NewStoredTokenProvider(store)
+		portal := psaportal.New(tp, psaportal.Config{}, psaportal.WithLogger(logger))
 		snap := postgres.NewPSACampaignSnapshotStore(db.DB)
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 		linker := postgres.NewPSACampaignLinker(db.DB)
@@ -101,9 +108,11 @@ func run() error {
 			}
 		}
 
-		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, linker, logger)
-		logger.Info(ctx, "psa-harvest: push queue drained",
-			observability.Int("pushed", pushed), observability.Int("failed", failed))
+		pushed, failed, skipped := psaportal.DrainApprovedPushes(ctx, tp, portal, queue, linker, logger)
+		if !skipped {
+			logger.Info(ctx, "psa-harvest: push queue drained",
+				observability.Int("pushed", pushed), observability.Int("failed", failed))
+		}
 	}
 
 	return nil
