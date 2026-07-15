@@ -20,7 +20,8 @@ func (m *PSASnapshotStoreMock) CurrentSnapshot(ctx context.Context) ([]map[strin
 // PSASnapshotWriterMock is a test double for psaportal.SnapshotWriter.
 // It records the last saved rows/fetchedAt so tests can assert on them.
 type PSASnapshotWriterMock struct {
-	SaveSnapshotFn func(ctx context.Context, rows []map[string]string, fetchedAt time.Time) error
+	SaveSnapshotFn      func(ctx context.Context, rows []map[string]string, fetchedAt time.Time) error
+	SnapshotFetchedAtFn func(ctx context.Context) (time.Time, error)
 
 	SavedRows      []map[string]string
 	SavedFetchedAt time.Time
@@ -33,4 +34,11 @@ func (m *PSASnapshotWriterMock) SaveSnapshot(ctx context.Context, rows []map[str
 		return m.SaveSnapshotFn(ctx, rows, fetchedAt)
 	}
 	return nil
+}
+
+func (m *PSASnapshotWriterMock) SnapshotFetchedAt(ctx context.Context) (time.Time, error) {
+	if m.SnapshotFetchedAtFn != nil {
+		return m.SnapshotFetchedAtFn(ctx)
+	}
+	return time.Time{}, nil
 }
