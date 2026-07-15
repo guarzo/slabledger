@@ -75,10 +75,12 @@ func NewHarvester(repo TokenRepository, snapshots SnapshotWriter, workDir, email
 	return h
 }
 
-// Run performs one full harvest cycle: run the browser script (passing the
-// stored token so a still-valid session skips the SSO login), persist the
-// fresh token, then exchange the just-minted embed JWT (~1h TTL, so it must be
-// used immediately) for the Lightdash rows and persist the snapshot. The token
+// Run performs one harvest cycle. It first short-circuits (see browserNeeded):
+// when the stored token and rows snapshot are both fresh it skips the browser
+// entirely and returns nil. Otherwise it runs the browser script (passing the
+// stored token so a still-valid session skips the SSO login), persists the
+// fresh token, then exchanges the just-minted embed JWT (~1h TTL, so it must be
+// used immediately) for the Lightdash rows and persists the snapshot. The token
 // is saved before the Lightdash exchange so a Lightdash failure still leaves a
 // fresh token behind.
 func (h *Harvester) Run(ctx context.Context) error {

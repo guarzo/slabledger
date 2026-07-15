@@ -75,9 +75,10 @@ func run() error {
 
 	// workDir "." — the image's WORKDIR is where web/scripts/ lives.
 	h := psaportal.NewHarvester(store, snapshots, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
-	// Every run does the full cycle: the embed JWT captured by the browser lives
-	// ~1h, so it must be exchanged for rows immediately, every time. The script
-	// itself skips the SSO login while the stored token is still valid.
+	// When it does run the browser, Run exchanges the ~1h embed JWT for rows
+	// immediately (the script skips the SSO login while the stored token is still
+	// valid); it may also short-circuit and skip the browser entirely when the
+	// token and snapshot are both fresh.
 	// Harvest is best-effort: a browser/Lightdash failure (e.g. a transient
 	// Cloudflare 403) must not block the drain, which only needs the stored
 	// token. Log and continue; the token, if any, was already saved before the
