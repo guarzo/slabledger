@@ -5,20 +5,22 @@ import { api, isAPIError } from '../../../js/api';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Select } from '../../ui';
-import type { Campaign, ProposedDiff, CampaignFormData } from '../../../types/campaigns';
+import type { Campaign, ProposedDiff, CampaignFormData, PSAPushRow } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 
 export interface PSAPublishModalProps {
   open: boolean;
   onClose: () => void;
   campaign: Campaign;
+  /** The campaign's latest push-queue row (from GET /api/psa-pushes), if any. */
+  pushRow?: PSAPushRow | null;
 }
 
 /**
  * Publish-to-PSA modal: shows link status, a pending before->after diff, and
  * a publish action. Consumes the 4 PSA campaign-sync endpoints (Task 8).
  */
-export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishModalProps) {
+export default function PSAPublishModal({ open, onClose, campaign, pushRow = null }: PSAPublishModalProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -29,6 +31,17 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
   const [createPreview, setCreatePreview] = useState<CampaignFormData | null>(null);
 
   const isLinked = !!campaign.psaCampaignRequestId;
+
+  // A queued-but-unresolved row from the shared psa-pushes query. Pending rows
+  // are renderable/approvable directly — this is the 409-dead-end fix: the
+  // preview and approve button no longer require a fresh propose call.
+  const pendingRow = pushRow?.status === 'pending' ? pushRow : null;
+  const inFlightRow = pushRow && (pushRow.status === 'approved' || pushRow.status === 'pushing') ? pushRow : null;
+  const failedRow = pushRow?.status === 'failed' ? pushRow : null;
+
+  const effectiveCreatePreview = createPreview ?? (pendingRow?.operation === 'create' ? pendingRow.formData ?? null : null);
+  const effectiveDiff = diff ?? (pendingRow?.operation === 'update' ? pendingRow.diff ?? null : null);
+  const effectivePushId = pushId ?? pendingRow?.pushId;
 
   const { data: portalCampaignsData } = useQuery({
     queryKey: queryKeys.psaCampaigns.list,
@@ -54,6 +67,7 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
       if (res.diff.changes.length === 0) {
         toast.success('No changes to publish — campaign already matches PSA');
       }
+      queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
     },
     onError: (err) => toast.error(getErrorMessage(err, 'Failed to check for changes')),
   });
@@ -64,22 +78,34 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
       setCreatePreview(res.formData);
       setPushId(res.pushId);
       setPublishStatus(null);
+      queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
     },
-    onError: (err) => toast.error(getErrorMessage(err, 'Failed to prepare PSA campaign')),
+    onError: (err) => {
+      if (isAPIError(err) && err.status === 409) {
+        // A create is already queued — refresh the shared push list so the
+        // queued row (and its approve button) renders instead of a dead end.
+        queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
+        toast.error('A PSA create is already queued for this campaign — review it below');
+        return;
+      }
+      toast.error(getErrorMessage(err, 'Failed to prepare PSA campaign'));
+    },
   });
 
   const publishMutation = useMutation({
     mutationFn: () => {
-      if (!pushId) throw new Error('No pending push to publish');
-      return api.psaPublish(campaign.id, pushId);
+      if (!effectivePushId) throw new Error('No pending push to publish');
+      return api.psaPublish(campaign.id, effectivePushId);
     },
     onSuccess: (res) => {
       setPublishStatus(res.status);
       toast.success('Push approved for publish to PSA');
+      queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
     },
     onError: (err) => {
       if (isAPIError(err) && err.status === 409) {
         toast.error('This push is no longer pending — check for changes again');
+        queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
         return;
       }
       toast.error(getErrorMessage(err, 'Failed to publish to PSA'));
@@ -106,6 +132,19 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
           <Dialog.Description className="sr-only">
             Link this campaign to a PSA portal campaign and publish pending changes.
           </Dialog.Description>
+
+          {inFlightRow && (
+            <p className="text-xs text-[var(--info)] mb-3">
+              Push in flight (status: {inFlightRow.status})
+              {inFlightRow.approvedBy ? ` — approved by ${inFlightRow.approvedBy}` : ''}.
+              The harvester picks it up on its next run.
+            </p>
+          )}
+          {failedRow && (
+            <p className="text-xs text-[var(--danger)] mb-3">
+              Last push failed{failedRow.error ? `: ${failedRow.error}` : ''}. Propose again to retry.
+            </p>
+          )}
 
           {!isLinked ? (
             <>
@@ -138,29 +177,37 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
                   It is created <span className="font-medium">paused</span> — add the
                   inclusion list in the portal before activating.
                 </p>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={proposeCreateMutation.isPending}
-                  onClick={() => proposeCreateMutation.mutate()}
-                >
-                  Create on PSA
-                </Button>
+                {!pendingRow && !inFlightRow && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={proposeCreateMutation.isPending}
+                    onClick={() => proposeCreateMutation.mutate()}
+                  >
+                    Create on PSA
+                  </Button>
+                )}
+                {pendingRow?.operation === 'create' && (
+                  <p className="text-xs text-[var(--warning)]">
+                    A create is queued and awaiting approval
+                    {pendingRow.requestedBy ? ` (requested by ${pendingRow.requestedBy})` : ''}.
+                  </p>
+                )}
 
-                {createPreview && (
+                {effectiveCreatePreview && (
                   <div className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">
                     {Object.entries({
-                      Name: createPreview.campaignName,
-                      Category: createPreview.category,
+                      Name: effectiveCreatePreview.campaignName,
+                      Category: effectiveCreatePreview.category,
                       Status: 'PAUSED',
-                      'Bid %': `${createPreview.bidPercentage}%`,
-                      'Daily budget': `$${createPreview.dailyBudget}`,
-                      'Flat fee': `$${createPreview.flatFee}`,
-                      'Daily spec limit': `${createPreview.dailySpecLimit}`,
-                      Grades: `${createPreview.gradeMinimum}–${createPreview.gradeMaximum}`,
-                      Years: `${createPreview.yearMinimum}–${createPreview.yearMaximum}`,
-                      Prices: `$${createPreview.priceMinimum}–$${createPreview.priceMaximum}`,
-                      'CL confidence ≥': `${createPreview.cardLadderConfidenceMinimum}`,
+                      'Bid %': `${effectiveCreatePreview.bidPercentage}%`,
+                      'Daily budget': `$${effectiveCreatePreview.dailyBudget}`,
+                      'Flat fee': `$${effectiveCreatePreview.flatFee}`,
+                      'Daily spec limit': `${effectiveCreatePreview.dailySpecLimit}`,
+                      Grades: `${effectiveCreatePreview.gradeMinimum}–${effectiveCreatePreview.gradeMaximum}`,
+                      Years: `${effectiveCreatePreview.yearMinimum}–${effectiveCreatePreview.yearMaximum}`,
+                      Prices: `$${effectiveCreatePreview.priceMinimum}–$${effectiveCreatePreview.priceMaximum}`,
+                      'CL confidence ≥': `${effectiveCreatePreview.cardLadderConfidenceMinimum}`,
                       Subjects: 'none (add in portal before activating)',
                     }).map(([k, v]) => (
                       <div key={k}>
@@ -170,7 +217,7 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
                   </div>
                 )}
 
-                {createPreview && pushId && !publishStatus && (
+                {effectiveCreatePreview && effectivePushId && !publishStatus && !inFlightRow && (
                   <Button size="sm" loading={publishMutation.isPending} onClick={() => publishMutation.mutate()}>
                     Approve &amp; queue create
                   </Button>
@@ -184,18 +231,20 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
             </>
           ) : (
             <div className="flex flex-col gap-3">
-              <Button
-                size="sm"
-                variant="secondary"
-                loading={proposeMutation.isPending}
-                onClick={() => proposeMutation.mutate()}
-              >
-                Check for changes
-              </Button>
+              {!inFlightRow && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={proposeMutation.isPending}
+                  onClick={() => proposeMutation.mutate()}
+                >
+                  Check for changes
+                </Button>
+              )}
 
-              {diff && diff.changes.length > 0 && (
+              {effectiveDiff && effectiveDiff.changes.length > 0 && (
                 <div className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">
-                  {diff.changes.map((change) => (
+                  {effectiveDiff.changes.map((change) => (
                     <div key={change.field}>
                       <span className="font-medium text-[var(--text)]">{change.field}</span>
                       {': '}
@@ -205,7 +254,7 @@ export default function PSAPublishModal({ open, onClose, campaign }: PSAPublishM
                 </div>
               )}
 
-              {diff && diff.changes.length > 0 && pushId && (
+              {effectiveDiff && effectiveDiff.changes.length > 0 && effectivePushId && !publishStatus && (
                 <Button
                   size="sm"
                   loading={publishMutation.isPending}

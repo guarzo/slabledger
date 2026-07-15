@@ -323,6 +323,7 @@ export default function CampaignsTab({
           open={!!psaModalCampaign}
           onClose={() => setPsaModalCampaignId(null)}
           campaign={psaModalCampaign}
+          pushRow={psaPushMap[psaModalCampaign.id] ?? null}
         />
       )}
     </>
