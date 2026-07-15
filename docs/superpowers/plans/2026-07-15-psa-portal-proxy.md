@@ -309,7 +309,7 @@ Expected: no issues.
 
 Documented for the operator; run after merge/deploy:
 
-1. `fly secrets set PSA_PORTAL_PROXY_URL='http://spnm11hz3j:...@us.decodo.com:10001' -a slabledger-psa-harvest` (real creds from Decodo; validated via Chromium 2026-07-15).
+1. `fly secrets set PSA_PORTAL_PROXY_URL='http://<user>:<pass>@us.decodo.com:10001' -a slabledger-psa-harvest` (Decodo US residential gateway; real creds live only in the Fly secret / password manager, validated via Chromium 2026-07-15).
 2. Reset the pending create row (prod DB, `SUPABASE_DB_URL` in `/workspace/.env`):
    `UPDATE psa_campaign_push_queue SET status='approved', error=NULL WHERE id='3fa8cdb6-0439-4f82-ad52-bf8abd79d73d';`
 3. `fly deploy` **then** `fly machine update <id> --image … --schedule hourly` (per `docs/psa-harvester.md` — plain deploy does not update the scheduled machine).
