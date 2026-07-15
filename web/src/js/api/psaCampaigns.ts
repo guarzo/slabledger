@@ -2,7 +2,7 @@
  * PSA portal campaign sync API methods (Task 8 endpoints).
  */
 
-import type { Campaign, ListPSACampaignsResponse, PSAProposeResponse, PSAProposeCreateResponse, PSAPublishResponse } from '../../types/campaigns';
+import type { Campaign, ListPSACampaignsResponse, PSAProposeResponse, PSAProposeCreateResponse, PSAPublishResponse, ListPSAPushesResponse } from '../../types/campaigns';
 import type { APIClient } from './client';
 
 declare module './client' {
@@ -12,6 +12,7 @@ declare module './client' {
     psaPropose(id: string): Promise<PSAProposeResponse>;
     psaProposeCreate(id: string): Promise<PSAProposeCreateResponse>;
     psaPublish(id: string, pushId: string): Promise<PSAPublishResponse>;
+    listPSAPushes(): Promise<ListPSAPushesResponse>;
   }
 }
 
@@ -36,4 +37,8 @@ proto.psaProposeCreate = async function (this: APIClient, id: string): Promise<P
 
 proto.psaPublish = async function (this: APIClient, id: string, pushId: string): Promise<PSAPublishResponse> {
   return this.post<PSAPublishResponse>(`/campaigns/${id}/psa-publish`, { pushId });
+};
+
+proto.listPSAPushes = async function (this: APIClient): Promise<ListPSAPushesResponse> {
+  return this.get<ListPSAPushesResponse>('/psa-pushes');
 };

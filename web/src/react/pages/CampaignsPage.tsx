@@ -4,10 +4,10 @@
  * Lists all campaigns with P&L summary info and portfolio summary strip.
  */
 import { useState, useMemo } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { reportError } from '../../js/errors';
-import type { Campaign, CampaignPNL, CreateCampaignInput, Phase } from '../../types/campaigns';
+import type { Campaign, CampaignPNL, CreateCampaignInput, Phase, PSAPushRow } from '../../types/campaigns';
 import { queryKeys } from '../queries/queryKeys';
 import PokeballLoader from '../PokeballLoader';
 import { formatCents, formatPct, formatPriceRange, getErrorMessage } from '../utils/formatters';
@@ -217,6 +217,16 @@ export default function CampaignsPage() {
     return map;
   }, [healthData]);
 
+  const { data: psaPushesData } = useQuery({
+    queryKey: queryKeys.psaPushes.list,
+    queryFn: () => api.listPSAPushes(),
+  });
+  const psaPushMap = useMemo(() => {
+    const map: Record<string, PSAPushRow> = {};
+    psaPushesData?.pushes?.forEach(p => { map[p.campaignId] = p; });
+    return map;
+  }, [psaPushesData]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -342,6 +352,7 @@ export default function CampaignsPage() {
           campaigns={campaigns}
           pnlMap={pnlMap}
           healthMap={healthMap}
+          psaPushMap={psaPushMap}
           showCreate={showCreate}
           form={form}
           createMutation={createMutation}

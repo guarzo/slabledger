@@ -93,3 +93,23 @@ export interface PSAProposeCreateResponse {
   pushId: string;
   formData: CampaignFormData;
 }
+
+export type PSAPushStatus = 'pending' | 'approved' | 'pushing' | 'pushed' | 'failed';
+
+/** Mirrors psaPushRowResponse (Go, campaigns_psa.go). */
+export interface PSAPushRow {
+  campaignId: string;
+  pushId: string;
+  operation: 'create' | 'update';
+  status: PSAPushStatus;
+  error?: string;
+  formData?: CampaignFormData;
+  diff?: ProposedDiff;
+  requestedBy?: string;
+  approvedBy?: string;
+  updatedAt: string;
+}
+
+export interface ListPSAPushesResponse {
+  pushes: PSAPushRow[];
+}

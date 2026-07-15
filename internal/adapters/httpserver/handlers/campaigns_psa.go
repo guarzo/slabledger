@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -313,4 +314,56 @@ func (h *CampaignsHandler) existingCreateStatus(ctx context.Context, internalCam
 		}
 	}
 	return "", nil
+}
+
+// psaPushRowResponse is one row of HandleListPSAPushes. For creates the full
+// proposed formData is echoed (so the modal can render the preview without
+// re-proposing); for updates the field diff is echoed.
+type psaPushRowResponse struct {
+	CampaignID  string                        `json:"campaignId"`
+	PushID      string                        `json:"pushId"`
+	Operation   psacampaign.Operation         `json:"operation"`
+	Status      psacampaign.PushStatus        `json:"status"`
+	Error       string                        `json:"error,omitempty"`
+	FormData    *psacampaign.CampaignFormData `json:"formData,omitempty"`
+	Diff        *psacampaign.ProposedDiff     `json:"diff,omitempty"`
+	RequestedBy string                        `json:"requestedBy,omitempty"`
+	ApprovedBy  string                        `json:"approvedBy,omitempty"`
+	UpdatedAt   time.Time                     `json:"updatedAt"`
+}
+
+// HandleListPSAPushes handles GET /api/psa-pushes, returning the most recent
+// push-queue row per internal campaign (any status). Latest-row-wins is
+// computed in SQL; the frontend maps resolved (pushed) rows to "no indicator".
+func (h *CampaignsHandler) HandleListPSAPushes(w http.ResponseWriter, r *http.Request) {
+	if h.psaQueue == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA campaign sync not enabled")
+		return
+	}
+	rows, err := h.psaQueue.LatestPerCampaign(r.Context())
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to list PSA pushes", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	pushes := make([]psaPushRowResponse, 0, len(rows))
+	for _, row := range rows {
+		resp := psaPushRowResponse{
+			CampaignID:  row.InternalCampaignID,
+			PushID:      row.ID,
+			Operation:   row.Operation,
+			Status:      row.Status,
+			Error:       row.Error,
+			RequestedBy: row.RequestedBy,
+			ApprovedBy:  row.ApprovedBy,
+			UpdatedAt:   row.UpdatedAt,
+		}
+		if row.Operation == psacampaign.OpCreate {
+			resp.FormData = row.Diff.Create
+		} else if len(row.Diff.Changes) > 0 {
+			resp.Diff = &psacampaign.ProposedDiff{Changes: row.Diff.Changes}
+		}
+		pushes = append(pushes, resp)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pushes": pushes})
 }
