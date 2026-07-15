@@ -12,15 +12,10 @@ import (
 // paginating the list endpoint and enriching each item with its edit-form
 // subject/publisher filters.
 func (c *Client) FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampaign, error) {
-	token, err := c.tokens.AccessToken(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	var out []psacampaign.PortalCampaign
 	page := 1
 	for {
-		root, err := c.getRefPacked(ctx, token, fmt.Sprintf("%s%s&page=%d", c.baseURL(), campaignsListPath, page))
+		root, err := c.getRefPacked(ctx, fmt.Sprintf("%s%s&page=%d", c.baseURL(), campaignsListPath, page))
 		if err != nil {
 			return nil, err
 		}
@@ -34,7 +29,7 @@ func (c *Client) FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampai
 				c.logger.Warn(ctx, "psaportal: skipping malformed campaign", observability.Err(err))
 				continue
 			}
-			fd, err := c.fetchCampaignFormData(ctx, token, pc.CampaignRequestID)
+			fd, err := c.fetchCampaignFormData(ctx, pc.CampaignRequestID)
 			if err != nil {
 				c.logger.Warn(ctx, "psaportal: edit fetch failed",
 					observability.String("campaign_id", pc.CampaignRequestID), observability.Err(err))
@@ -52,9 +47,9 @@ func (c *Client) FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampai
 }
 
 // fetchCampaignFormData fetches and decodes the edit-page formData for one campaign.
-func (c *Client) fetchCampaignFormData(ctx context.Context, token, campaignID string) (psacampaign.CampaignFormData, error) {
+func (c *Client) fetchCampaignFormData(ctx context.Context, campaignID string) (psacampaign.CampaignFormData, error) {
 	url := c.baseURL() + fmt.Sprintf(campaignEditPathF, campaignID)
-	root, err := c.getRefPacked(ctx, token, url)
+	root, err := c.getRefPacked(ctx, url)
 	if err != nil {
 		return psacampaign.CampaignFormData{}, err
 	}
@@ -73,21 +68,17 @@ func (c *Client) fetchCampaignFormData(ctx context.Context, token, campaignID st
 	return decodeFormData(fd)
 }
 
-// getRefPacked fetches url and resolves the SvelteKit ref-packed envelope into a plain value.
-func (c *Client) getRefPacked(ctx context.Context, token, url string) (any, error) {
-	headers := map[string]string{
-		"Cookie":     "accessToken=" + token,
-		"User-Agent": browserUA,
-		"Accept":     "application/json",
-	}
-	resp, err := c.http.Get(ctx, url, headers, 0)
+// getRefPacked fetches url via the browser session and resolves the SvelteKit
+// ref-packed envelope into a plain value.
+func (c *Client) getRefPacked(ctx context.Context, url string) (any, error) {
+	resp, err := c.fetch.Do(ctx, FetchRequest{URL: url, Method: "GET"})
 	if err != nil {
 		return nil, fmt.Errorf("psaportal: campaign fetch: %w", err)
 	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("psaportal: campaign fetch status %d", resp.StatusCode)
+	if resp.Status != 200 {
+		return nil, fmt.Errorf("psaportal: campaign fetch status %d", resp.Status)
 	}
-	packed, err := packedFromEnvelope(resp.Body)
+	packed, err := packedFromEnvelope([]byte(resp.Body))
 	if err != nil {
 		return nil, err
 	}

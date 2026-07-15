@@ -3,10 +3,7 @@ package psaportal
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -19,19 +16,13 @@ func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.Contains(r.URL.Path, "/edit/"):
-			_, _ = w.Write(edit)
-		case strings.Contains(r.URL.Path, "/updateCampaign"):
-			_, _ = w.Write([]byte(`{"type":"result","result":"[{}]"}`))
-		default:
-			_, _ = w.Write([]byte(`<html>build/app/immutable/entry/app.HASH123.js</html>`))
-		}
-	}))
-	defer srv.Close()
+	ff := &fakeFetcher{routes: map[string]string{
+		"/edit/__data.json?x-sveltekit-invalidated=0001": string(edit),
+		"/buyercampaignmanager/_app/remote/":             `{"type":"result","result":"[{}]"}`,
+		"/buyercampaignmanager":                          `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+	}}
 
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	c := New(ff, Config{})
 
 	row := psacampaign.PushRow{
 		ID:            "row-1",
@@ -77,7 +68,7 @@ func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
 }
 
 func TestDrainPushQueue_SkipsUnclaimableRow(t *testing.T) {
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: "http://example.invalid"})
+	c := New(&fakeFetcher{}, Config{PSABaseURL: "http://example.invalid"})
 
 	row := psacampaign.PushRow{
 		ID:            "row-1",
@@ -149,17 +140,13 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			portalCalled := false
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if strings.Contains(r.URL.Path, "/createCampaign") {
-					portalCalled = true
-					w.WriteHeader(tt.createStatus)
-					_, _ = w.Write([]byte(tt.createBody))
-					return
-				}
-				_, _ = w.Write([]byte(`<html>build/app/immutable/entry/app.HASH123.js</html>`))
-			}))
-			defer srv.Close()
+			ff := &fakeFetcher{
+				routes: map[string]string{
+					"/buyercampaignmanager/_app/remote/": tt.createBody,
+					"/buyercampaignmanager":              `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+				},
+				statusFor: map[string]int{"/buyercampaignmanager/_app/remote/": tt.createStatus},
+			}
 
 			fd := &psacampaign.CampaignFormData{CampaignName: "Modern 10s", CampaignType: "CATEGORY", Category: "POKEMON", GradeMinimum: "10", GradeMaximum: "10"}
 			if tt.missingFD {
@@ -192,7 +179,7 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 				},
 			}
 
-			c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+			c := New(ff, Config{})
 			pushed, failed := DrainPushQueue(context.Background(), c, q, linker, observability.NewNoopLogger())
 
 			if pushed != tt.wantPushed || failed != tt.wantFailed {
@@ -204,6 +191,7 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 			if tt.wantLinked && (linkedInternal != "c1" || linkedPSA != "uuid-new-1") {
 				t.Fatalf("linked %q/%q, want c1/uuid-new-1", linkedInternal, linkedPSA)
 			}
+			portalCalled := ff.captured["/buyercampaignmanager/_app/remote/"] != ""
 			if (tt.missingFD || tt.wantNoPortal) && portalCalled {
 				t.Fatal("portal must not be called (missing formData or already-linked idempotent row)")
 			}

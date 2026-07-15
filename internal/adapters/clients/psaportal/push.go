@@ -30,13 +30,8 @@ var numericFormDataFields = map[string]bool{
 // changed fields, then re-encodes and POSTs the whole record to PSA's
 // updateCampaign endpoint (mirroring the internal PUT-full-record rule).
 func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampaign.FieldChange) error {
-	token, err := c.tokens.AccessToken(ctx)
-	if err != nil {
-		return err
-	}
-
 	editURL := c.baseURL() + fmt.Sprintf(campaignEditPathF, id)
-	root, err := c.getRefPacked(ctx, token, editURL)
+	root, err := c.getRefPacked(ctx, editURL)
 	if err != nil {
 		return err
 	}
@@ -68,7 +63,7 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 		}
 	}
 
-	buildHash, err := c.fetchBuildHash(ctx, token)
+	buildHash, err := c.fetchBuildHash(ctx)
 	if err != nil {
 		return err
 	}
@@ -89,23 +84,18 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 	}
 
 	updateURL := fmt.Sprintf("%s/buyercampaignmanager/_app/remote/%s/updateCampaign", c.baseURL(), buildHash)
-	headers := map[string]string{
-		"Cookie":       "accessToken=" + token,
-		"User-Agent":   browserUA,
-		"Content-Type": "application/json",
-	}
-	resp, err := c.http.Post(ctx, updateURL, headers, body, 0)
+	resp, err := c.fetch.Do(ctx, FetchRequest{URL: updateURL, Method: "POST", Body: string(body)})
 	if err != nil {
 		return fmt.Errorf("psaportal: update campaign: %w", err)
 	}
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("psaportal: update campaign status %d", resp.StatusCode)
+	if resp.Status != 200 {
+		return fmt.Errorf("psaportal: update campaign status %d", resp.Status)
 	}
 
 	var envelope struct {
 		Type string `json:"type"`
 	}
-	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &envelope); err != nil {
 		return fmt.Errorf("psaportal: decode update campaign response: %w", err)
 	}
 	if envelope.Type != "result" {

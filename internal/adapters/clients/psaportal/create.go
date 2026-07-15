@@ -15,11 +15,7 @@ import (
 // array). Errors after a 200 response mention that the campaign may already
 // exist on the portal, so callers never blind-retry a decode failure.
 func (c *Client) CreateCampaign(ctx context.Context, fd psacampaign.CampaignFormData) (string, error) {
-	token, err := c.tokens.AccessToken(ctx)
-	if err != nil {
-		return "", err
-	}
-	buildHash, err := c.fetchBuildHash(ctx, token)
+	buildHash, err := c.fetchBuildHash(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -53,24 +49,19 @@ func (c *Client) CreateCampaign(ctx context.Context, fd psacampaign.CampaignForm
 	}
 
 	createURL := fmt.Sprintf("%s/buyercampaignmanager/_app/remote/%s/createCampaign", c.baseURL(), buildHash)
-	headers := map[string]string{
-		"Cookie":       "accessToken=" + token,
-		"User-Agent":   browserUA,
-		"Content-Type": "application/json",
-	}
-	resp, err := c.http.Post(ctx, createURL, headers, body, 0)
+	resp, err := c.fetch.Do(ctx, FetchRequest{URL: createURL, Method: "POST", Body: string(body)})
 	if err != nil {
 		return "", fmt.Errorf("psaportal: create campaign: %w", err)
 	}
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("psaportal: create campaign status %d", resp.StatusCode)
+	if resp.Status != 200 {
+		return "", fmt.Errorf("psaportal: create campaign status %d", resp.Status)
 	}
 
 	var envelope struct {
 		Type   string `json:"type"`
 		Result string `json:"result"`
 	}
-	if err := json.Unmarshal(resp.Body, &envelope); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &envelope); err != nil {
 		return "", fmt.Errorf("psaportal: decode create campaign response: %w", err)
 	}
 	if envelope.Type != "result" {

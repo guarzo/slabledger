@@ -3,16 +3,10 @@ package psaportal
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
-
-// stubTokens is a static TokenProvider for campaign fetch/push tests.
-type stubTokens struct{ tok string }
-
-func (s stubTokens) AccessToken(context.Context) (string, error) { return s.tok, nil }
 
 func TestFetchCampaigns_ParsesListAndEdit(t *testing.T) {
 	list, err := os.ReadFile("../../../../docs/psa-campaigns-raw.json")
@@ -23,16 +17,12 @@ func TestFetchCampaigns_ParsesListAndEdit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/buyercampaignmanager/__data.json" {
-			_, _ = w.Write(list)
-			return
-		}
-		_, _ = w.Write(edit) // any /campaigns/{id}/edit path
-	}))
-	defer srv.Close()
+	ff := &fakeFetcher{routes: map[string]string{
+		campaignsListPath: string(list),
+		"/edit/__data.json?x-sveltekit-invalidated=0001": string(edit),
+	}}
 
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	c := New(ff, Config{})
 	got, err := c.FetchCampaigns(context.Background())
 	if err != nil {
 		t.Fatalf("FetchCampaigns: %v", err)
@@ -141,22 +131,9 @@ func TestFetchCampaigns_MultiPage(t *testing.T) {
 	}
 
 	var listCalls int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/buyercampaignmanager/__data.json" {
-			listCalls++
-			page := r.URL.Query().Get("page")
-			if page == "2" {
-				_, _ = w.Write(page2)
-				return
-			}
-			_, _ = w.Write(page1)
-			return
-		}
-		_, _ = w.Write(editEnv)
-	}))
-	defer srv.Close()
+	pageFetcher := &multiPageFetcher{page1: page1, page2: page2, editEnv: editEnv, calls: &listCalls}
 
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	c := New(pageFetcher, Config{})
 	got, err := c.FetchCampaigns(context.Background())
 	if err != nil {
 		t.Fatalf("FetchCampaigns: %v", err)
@@ -173,15 +150,32 @@ func TestFetchCampaigns_MultiPage(t *testing.T) {
 	}
 }
 
+// multiPageFetcher serves list pages 1 and 2 distinctly (keyed on the
+// "&page=" query suffix) and a canned edit-form response for everything else.
+type multiPageFetcher struct {
+	page1, page2, editEnv []byte
+	calls                 *int
+}
+
+func (f *multiPageFetcher) Do(_ context.Context, req FetchRequest) (FetchResponse, error) {
+	if strings.Contains(req.URL, campaignsListPath) {
+		*f.calls++
+		if strings.Contains(req.URL, "&page=2") {
+			return FetchResponse{Status: 200, Body: string(f.page2)}, nil
+		}
+		return FetchResponse{Status: 200, Body: string(f.page1)}, nil
+	}
+	return FetchResponse{Status: 200, Body: string(f.editEnv)}, nil
+}
+
 func TestFetchCampaigns_InvalidPageSize(t *testing.T) {
 	page := buildListEnvelope(t, []any{campaignItem("id-1", "A")}, 0, 5) // pageSize missing/zero
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(page)
-	}))
-	defer srv.Close()
+	ff := &fakeFetcher{routes: map[string]string{
+		campaignsListPath: string(page),
+	}}
 
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	c := New(ff, Config{})
 	_, err := c.FetchCampaigns(context.Background())
 	if err == nil {
 		t.Fatal("expected error for invalid pageSize, got nil")

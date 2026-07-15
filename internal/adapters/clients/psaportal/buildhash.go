@@ -12,19 +12,19 @@ import (
 var buildHashRe = regexp.MustCompile(`immutable/entry/app\.([A-Za-z0-9_-]{6,})\.js`)
 
 // fetchBuildHash scrapes the portal landing page for the current SvelteKit
-// build hash, needed to construct the /_app/remote/{hash}/updateCampaign URL.
-func (c *Client) fetchBuildHash(ctx context.Context, token string) (string, error) {
-	headers := map[string]string{"Cookie": "accessToken=" + token, "User-Agent": browserUA}
-	resp, err := c.http.Get(ctx, c.baseURL()+"/buyercampaignmanager", headers, 0)
+// build hash via the browser session, needed to construct the
+// /_app/remote/{hash}/updateCampaign URL.
+func (c *Client) fetchBuildHash(ctx context.Context) (string, error) {
+	resp, err := c.fetch.Do(ctx, FetchRequest{URL: c.baseURL() + "/buyercampaignmanager", Method: "GET"})
 	if err != nil {
 		return "", fmt.Errorf("psaportal: build-hash page: %w", err)
 	}
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("psaportal: build-hash page status %d", resp.StatusCode)
+	if resp.Status != 200 {
+		return "", fmt.Errorf("psaportal: build-hash page status %d", resp.Status)
 	}
-	m := buildHashRe.FindSubmatch(resp.Body)
+	m := buildHashRe.FindStringSubmatch(resp.Body)
 	if m == nil {
 		return "", fmt.Errorf("psaportal: build hash not found on portal page")
 	}
-	return string(m[1]), nil
+	return m[1], nil
 }
