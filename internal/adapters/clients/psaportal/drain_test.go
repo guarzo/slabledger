@@ -210,3 +210,51 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 		})
 	}
 }
+
+func TestDrainApprovedPushes_SkipsWithoutValidToken(t *testing.T) {
+	tp := &fakeTokenProvider{err: errors.New("no stored access token")}
+	q := &mocks.PushQueueStoreMock{
+		ListByStatusFn: func(context.Context, psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
+			t.Fatal("ListByStatus must not be called when token is invalid")
+			return nil, nil
+		},
+	}
+	pushed, failed, skipped := DrainApprovedPushes(
+		context.Background(), tp, nil, q, &mocks.CampaignLinkerMock{}, observability.NewNoopLogger())
+
+	if !skipped {
+		t.Error("expected skipped=true when no valid token")
+	}
+	if pushed != 0 || failed != 0 {
+		t.Errorf("expected 0/0 counts on skip, got %d/%d", pushed, failed)
+	}
+}
+
+func TestDrainApprovedPushes_DrainsWithValidToken(t *testing.T) {
+	tp := &fakeTokenProvider{token: "tok-1"}
+	called := false
+	q := &mocks.PushQueueStoreMock{
+		ListByStatusFn: func(context.Context, psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
+			called = true
+			return nil, nil // no approved rows -> 0/0, but drain path was entered
+		},
+	}
+	_, _, skipped := DrainApprovedPushes(
+		context.Background(), tp, New(tp, Config{}), q, &mocks.CampaignLinkerMock{}, observability.NewNoopLogger())
+
+	if skipped {
+		t.Error("expected skipped=false when token valid")
+	}
+	if !called {
+		t.Error("expected DrainPushQueue to run (ListByStatus called)")
+	}
+}
+
+type fakeTokenProvider struct {
+	token string
+	err   error
+}
+
+func (f *fakeTokenProvider) AccessToken(context.Context) (string, error) {
+	return f.token, f.err
+}
