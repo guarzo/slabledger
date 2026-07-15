@@ -130,3 +130,82 @@ func TestHandlePSAPublish_Unauthenticated(t *testing.T) {
 		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandleListPSAPushes(t *testing.T) {
+	fd := psacampaign.CampaignFormData{CampaignName: "Modern 10s", BidPercentage: 72}
+	tests := []struct {
+		name       string
+		queue      *mocks.PushQueueStoreMock
+		wantStatus int
+		wantBody   []string // substrings that must appear in the response body
+	}{
+		{
+			name:       "queue not configured returns 503",
+			queue:      nil,
+			wantStatus: http.StatusServiceUnavailable,
+		},
+		{
+			name: "create row maps formData, update row maps diff",
+			queue: &mocks.PushQueueStoreMock{
+				LatestPerCampaignFn: func(ctx context.Context) ([]psacampaign.PushRow, error) {
+					return []psacampaign.PushRow{
+						{
+							ID: "push-c", Operation: psacampaign.OpCreate, InternalCampaignID: "camp-1",
+							RequestedBy: "alice", Status: psacampaign.PushPending,
+							Diff:      psacampaign.ProposedDiff{Create: &fd},
+							UpdatedAt: time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC),
+						},
+						{
+							ID: "push-u", Operation: psacampaign.OpUpdate, InternalCampaignID: "camp-2",
+							PSACampaignID: "psa-2", RequestedBy: "bob", ApprovedBy: "carol",
+							Status: psacampaign.PushFailed, Error: "portal 500",
+							Diff: psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{
+								{Field: "bidPercentage", Old: "70", New: "72"},
+							}},
+							UpdatedAt: time.Date(2026, 7, 14, 13, 0, 0, 0, time.UTC),
+						},
+					}, nil
+				},
+			},
+			wantStatus: http.StatusOK,
+			wantBody: []string{
+				`"campaignId":"camp-1"`, `"pushId":"push-c"`, `"operation":"create"`,
+				`"formData"`, `"campaignName":"Modern 10s"`,
+				`"campaignId":"camp-2"`, `"operation":"update"`, `"status":"failed"`,
+				`"error":"portal 500"`, `"diff"`, `"bidPercentage"`, `"approvedBy":"carol"`,
+			},
+		},
+		{
+			name: "empty queue returns empty array not null",
+			queue: &mocks.PushQueueStoreMock{
+				LatestPerCampaignFn: func(ctx context.Context) ([]psacampaign.PushRow, error) {
+					return nil, nil
+				},
+			},
+			wantStatus: http.StatusOK,
+			wantBody:   []string{`"pushes":[]`},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestPSAHandler(nil, tt.queue)
+			req := httptest.NewRequest(http.MethodGet, "/api/psa-pushes", nil)
+			rec := httptest.NewRecorder()
+			h.HandleListPSAPushes(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			for _, want := range tt.wantBody {
+				if !strings.Contains(rec.Body.String(), want) {
+					t.Fatalf("body missing %q: %s", want, rec.Body.String())
+				}
+			}
+			if tt.name == "create row maps formData, update row maps diff" {
+				body := rec.Body.String()
+				if strings.Contains(body, `"formData":null`) || strings.Contains(body, `"diff":null`) {
+					t.Fatalf("null formData/diff should be omitted: %s", body)
+				}
+			}
+		})
+	}
+}
