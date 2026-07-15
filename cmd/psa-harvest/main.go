@@ -87,7 +87,7 @@ func run() error {
 		logger.Warn(ctx, "psa-harvest: token/snapshot harvest failed, continuing to drain",
 			observability.Err(err))
 	} else {
-		logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
+		logger.Info(ctx, "psa-harvest: harvest step complete (token/snapshot fresh or refreshed)")
 	}
 
 	if cfg.PSASync.CampaignSyncEnabled {

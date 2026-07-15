@@ -27,7 +27,7 @@ type TokenRepository interface {
 }
 
 // Browser short-circuit windows. When the stored token still has at least
-// tokenFreshWindow of life AND the rows snapshot is younger than
+// tokenFreshWindow of life AND the rows snapshot is no older than
 // snapshotFreshWindow, Run skips launching Chromium entirely — avoiding the
 // back-to-back headless launches that trigger Cloudflare 403s on rapid re-runs.
 const (
