@@ -402,3 +402,46 @@ curl -s -A "slabledger/1.0" -H "Authorization: Bearer $KEY" "$BASE/api/v1/enterp
 - Also live per operator's docs: `GET /cards/:id/insights` (sentiment + price_forecast), `GET /suggestions` (daily AI picks with structured_reasoning).
 
 **Caveat before citing:** demand counts are DH-marketplace-scoped and small in absolute terms (views typically <100) — treat as directional external evidence for the strategy lane (R-006-compliant character comps), never as market-wide ground truth on its own. Character keys include variants as distinct names ("Dark Charizard" ≠ "Charizard") — check inclusion-list matching behavior before assuming coverage.
+
+## PSA portal push queue (verified live 2026-07-14, PR #479)
+
+Stage internal campaign config to the PSA Buyer Campaign Manager portal through a human-approval queue. Every propose→publish is a **mutation** (ledger R-030): `psa-publish` requires explicit in-turn operator approval, exactly like a `PUT /api/campaigns/{id}`. Routes: `routes.go:123-127`. Auth: the Step 0b `LOCAL_API_TOKEN` bearer.
+
+**Wire facts.** Portal money is whole USD, rounded (`(cents+50)/100`). Grades are strings (`"10"`). A created campaign is ALWAYS born paused (`isActive:false`) with empty subject/publisher lists. **Staging translates scalar/range config only** — `bidPercentage` (terms), `dailyBudget` (cap), grade/year/price min-max, `cardLadderConfidenceMinimum`. Subject/inclusion lists are NOT translated (v1); the operator adds characters and activates in the portal. `psa-publish` does NOT write to psacard.com — it flips the queue row to `approved`; a harvester drains approved rows out-of-band, creates/updates the portal campaign, and links the returned id back.
+
+**Link status** lives on the internal campaign: `psaCampaignRequestId` (from `GET /api/campaigns`). Empty = unlinked (use propose-create); set = linked (use propose). `503 "PSA campaign sync not enabled"` = feature not wired; fall back to the manual PUT path.
+
+```bash
+BASE=<config base URL>; ID=<internal campaign UUID>
+
+# Snapshot of portal campaigns → {campaigns:[...], fetchedAt}
+curl -s -H "Authorization: Bearer $LOCAL_API_TOKEN" "$BASE/api/psa-campaigns"
+
+# Link an internal campaign to an existing portal campaign → returns the campaign
+curl -s -X POST -H "Authorization: Bearer $LOCAL_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"psaCampaignRequestId":"<portal request id>"}' \
+  "$BASE/api/campaigns/$ID/psa-link"
+
+# Propose an UPDATE (linked campaign) → {pushId?, diff}
+#   200 + pushId + diff.changes = staged; 200 + no pushId + empty changes = already in sync
+#   400 "not linked" if the campaign has no psaCampaignRequestId
+curl -s -X POST -H "Authorization: Bearer $LOCAL_API_TOKEN" \
+  "$BASE/api/campaigns/$ID/psa-propose"
+
+# Propose a CREATE (unlinked campaign) → {pushId, formData}; formData.isActive=false (born paused)
+#   400 "already linked" if the campaign is linked
+#   409 "a PSA create is already queued for this campaign"  (pending/approved/pushing)
+#   409 "already created … link it manually"                 (pushed but link-back failed → use psa-link)
+curl -s -X POST -H "Authorization: Bearer $LOCAL_API_TOKEN" \
+  "$BASE/api/campaigns/$ID/psa-propose-create"
+
+# APPROVE a queued proposal (create or update) → {pushId, status:"approved"}
+#   409 "push row is not pending" if already approved; 401 if the session has no username
+curl -s -X POST -H "Authorization: Bearer $LOCAL_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"pushId":"<pushId from propose>"}' \
+  "$BASE/api/campaigns/$ID/psa-publish"
+```
+
+Never call `psa-publish` without an explicit in-turn operator yes (R-030).
