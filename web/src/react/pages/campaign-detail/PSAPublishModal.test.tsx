@@ -45,9 +45,8 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
   } as Campaign;
 }
 
-function renderModal(campaign: Campaign, pushRow: PSAPushRow | null = null, onClose = vi.fn()) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+function modalTree(campaign: Campaign, pushRow: PSAPushRow | null, qc: QueryClient, onClose = vi.fn()) {
+  return (
     <QueryClientProvider client={qc}>
       <AuthProvider>
         <ToastProvider>
@@ -56,6 +55,11 @@ function renderModal(campaign: Campaign, pushRow: PSAPushRow | null = null, onCl
       </AuthProvider>
     </QueryClientProvider>
   );
+}
+
+function renderModal(campaign: Campaign, pushRow: PSAPushRow | null = null, onClose = vi.fn()) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(modalTree(campaign, pushRow, qc, onClose));
 }
 
 describe('PSAPublishModal', () => {
@@ -279,5 +283,43 @@ describe('PSAPublishModal with a queued push row', () => {
     expect(screen.getByText(/portal returned 500/)).toBeInTheDocument();
     // Retry path: the normal propose button stays available.
     expect(screen.getByRole('button', { name: /check for changes/i })).toBeInTheDocument();
+  });
+
+  it('drops stale local state when the queued row is superseded by a different push', async () => {
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-old',
+      diff: { changes: [{ field: 'bidPercentage', old: '70', new: '80' }] },
+    });
+    vi.mocked(api.psaPublish).mockResolvedValue({ pushId: 'push-new', status: 'approved' });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const campaign = makeCampaign();
+    const view = render(modalTree(campaign, null, qc));
+
+    // Build local state for push-old via the normal propose flow.
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/bidPercentage/)).toBeInTheDocument();
+    });
+
+    // The shared query refetch delivers a different pending push (superseded
+    // out-of-band) — the row must win over the stale local diff/pushId.
+    const supersededRow: PSAPushRow = {
+      campaignId: 'c1',
+      pushId: 'push-new',
+      operation: 'update',
+      status: 'pending',
+      updatedAt: '2026-07-15T12:00:00Z',
+      diff: { changes: [{ field: 'flatFee', old: '3', new: '4' }] },
+    };
+    view.rerender(modalTree(campaign, supersededRow, qc));
+
+    expect(screen.getByText(/flatFee/)).toBeInTheDocument();
+    expect(screen.queryByText(/bidPercentage/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /publish to psa/i }));
+    await waitFor(() => {
+      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-new');
+    });
   });
 });

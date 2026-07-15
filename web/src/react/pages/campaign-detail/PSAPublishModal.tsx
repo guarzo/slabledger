@@ -41,6 +41,22 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   const inFlightRow = pushState === 'inflight' ? pushRow : null;
   const failedRow = pushState === 'failed' ? pushRow : null;
 
+  // The queued row is authoritative. If the shared query now names a different
+  // push than the one local mutation state came from (superseded out-of-band),
+  // that local state is stale — drop it so the row's data and pushId win and
+  // an old publishStatus can't suppress actions for the new row.
+  const rowPushId = pushRow?.pushId;
+  const [lastRowPushId, setLastRowPushId] = useState(rowPushId);
+  if (rowPushId !== lastRowPushId) {
+    setLastRowPushId(rowPushId);
+    if (publishStatus) setPublishStatus(null);
+    if (pushId && rowPushId && rowPushId !== pushId) {
+      setDiff(null);
+      setPushId(undefined);
+      setCreatePreview(null);
+    }
+  }
+
   const effectiveCreatePreview = createPreview ?? ((pendingRow?.operation === 'create' || inFlightRow?.operation === 'create') ? (pendingRow?.formData ?? inFlightRow?.formData ?? null) : null);
   const effectiveDiff = diff ?? ((pendingRow?.operation === 'update' || inFlightRow?.operation === 'update') ? (pendingRow?.diff ?? inFlightRow?.diff ?? null) : null);
   const effectivePushId = pushId ?? pendingRow?.pushId;

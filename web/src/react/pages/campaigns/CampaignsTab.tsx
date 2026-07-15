@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties } from 'react';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase, PSAPushRow } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
@@ -24,10 +24,13 @@ const PHASE_LABELS: Record<Phase, string> = {
 /** Phase order on the page. Matches the parent's sortCampaigns(). */
 const PHASE_ORDER: Phase[] = ['active', 'pending', 'closed'];
 
-const PUSH_INDICATOR: Record<PushIndicatorState, { color: string; label: string }> = {
-  pending: { color: 'var(--warning)', label: 'approval pending' },
-  inflight: { color: 'var(--info)', label: 'push in flight' },
-  failed: { color: 'var(--danger)', label: 'last push failed' },
+// Each state gets a distinct shape (filled dot / ring / square) so the
+// indicator is distinguishable without relying on color alone; the title
+// gives sighted users the label on hover, the aria-label covers screen readers.
+const PUSH_INDICATOR: Record<PushIndicatorState, { label: string; dotClass: string; dotStyle: CSSProperties }> = {
+  pending: { label: 'approval pending', dotClass: 'w-1.5 h-1.5 rounded-full', dotStyle: { backgroundColor: 'var(--warning)' } },
+  inflight: { label: 'push in flight', dotClass: 'w-2 h-2 rounded-full border-2 bg-transparent', dotStyle: { borderColor: 'var(--info)' } },
+  failed: { label: 'last push failed', dotClass: 'w-1.5 h-1.5', dotStyle: { backgroundColor: 'var(--danger)' } },
 };
 
 function pushIndicatorState(push: PSAPushRow | undefined): PushIndicatorState | null {
@@ -292,8 +295,9 @@ export default function CampaignsTab({
                         PSA
                         {indicator && (
                           <span
-                            className="inline-block w-1.5 h-1.5 rounded-full ml-1.5 align-middle"
-                            style={{ backgroundColor: PUSH_INDICATOR[indicator].color }}
+                            className={`inline-block ml-1.5 align-middle ${PUSH_INDICATOR[indicator].dotClass}`}
+                            style={PUSH_INDICATOR[indicator].dotStyle}
+                            title={PUSH_INDICATOR[indicator].label}
                             aria-hidden="true"
                           />
                         )}
