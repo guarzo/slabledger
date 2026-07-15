@@ -78,7 +78,7 @@ func run() error {
 	// writes cannot reach the portal any other way, so a failed session open is
 	// fatal for the run.
 	storedToken, _, _ := store.CurrentToken(ctx) // best-effort; "" just means full SSO
-	session, token, expiresAt, err := psaportal.OpenBrowserSession(ctx, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, storedToken, logger)
+	session, token, expiresAt, err := psaportal.OpenBrowserSession(ctx, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, storedToken, cfg.PSAPortal.ProxyURL, logger)
 	if err != nil {
 		return fmt.Errorf("open portal session: %w", err)
 	}
