@@ -40,7 +40,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   const failedRow = pushRow?.status === 'failed' ? pushRow : null;
 
   const effectiveCreatePreview = createPreview ?? (pendingRow?.operation === 'create' ? pendingRow.formData ?? null : null);
-  const effectiveDiff = diff ?? (pendingRow?.operation === 'update' ? pendingRow.diff ?? null : null);
+  const effectiveDiff = diff ?? ((pendingRow?.operation === 'update' || inFlightRow?.operation === 'update') ? (pendingRow?.diff ?? inFlightRow?.diff ?? null) : null);
   const effectivePushId = pushId ?? pendingRow?.pushId;
 
   const { data: portalCampaignsData } = useQuery({
@@ -254,7 +254,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                 </div>
               )}
 
-              {effectiveDiff && effectiveDiff.changes.length > 0 && effectivePushId && !publishStatus && (
+              {effectiveDiff && effectiveDiff.changes.length > 0 && effectivePushId && !publishStatus && !inFlightRow && (
                 <Button
                   size="sm"
                   loading={publishMutation.isPending}

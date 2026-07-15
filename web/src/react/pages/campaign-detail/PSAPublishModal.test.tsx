@@ -248,6 +248,23 @@ describe('PSAPublishModal with a queued push row', () => {
     expect(screen.queryByRole('button', { name: /approve & queue create/i })).not.toBeInTheDocument();
   });
 
+  it('hides the update publish button while a push is in flight', () => {
+    const inFlightUpdateRow: PSAPushRow = {
+      campaignId: 'c1',
+      pushId: 'push-inflight-1',
+      operation: 'update',
+      status: 'approved',
+      approvedBy: 'bob',
+      updatedAt: '2026-07-14T12:00:00Z',
+      diff: { changes: [{ field: 'bidPercentage', old: '70', new: '80' }] },
+    };
+    renderModal(makeCampaign(), inFlightUpdateRow);
+
+    expect(screen.getByText(/push in flight/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /publish to psa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /check for changes/i })).not.toBeInTheDocument();
+  });
+
   it('shows the stored error for a failed row and keeps the retry path', () => {
     const failedRow: PSAPushRow = {
       campaignId: 'c1',
