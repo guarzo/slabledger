@@ -65,6 +65,7 @@ type browserSession struct {
 // tests and for OpenBrowserSession).
 func newSession(stdin io.Writer, stdout io.Reader) *browserSession {
 	sc := bufio.NewScanner(stdout)
+	// 16 MiB max frame. A single reply exceeding this makes Scan() return ErrTooLong and permanently kills the session (all later Do calls on it fail). Portal list pages + edit forms are far under this; revisit if a payload ever approaches it.
 	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024) // portal payloads can be large
 	return &browserSession{
 		enc: json.NewEncoder(stdin),

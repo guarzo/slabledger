@@ -59,11 +59,6 @@ func parseEmbedURL(u string) (projectUUID, jwt string, err error) {
 	return projectUUID, jwt, nil
 }
 
-// TokenProvider yields a valid PSA access token.
-type TokenProvider interface {
-	AccessToken(ctx context.Context) (string, error)
-}
-
 // Config configures a portal Client; an empty PSABaseURL falls back to the
 // production default.
 type Config struct {

@@ -201,6 +201,7 @@ try {
   }
 
   // Emit the handshake so Go can persist the token immediately.
+  // STDOUT CONTRACT: only NDJSON frames (handshake + per-request replies) may be written to stdout. All logging/debug goes to stderr — a stray stdout write desyncs the Go-side scanner. Never console.log here.
   process.stdout.write(
     JSON.stringify({ type: 'ready', accessToken: at.value, expiresAt }) + '\n'
   );
