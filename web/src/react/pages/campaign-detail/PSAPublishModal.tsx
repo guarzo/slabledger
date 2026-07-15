@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Button, Select } from '../../ui';
 import type { Campaign, ProposedDiff, CampaignFormData, PSAPushRow } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
+import { classifyPushStatus } from '../../utils/psaPush';
 
 export interface PSAPublishModalProps {
   open: boolean;
@@ -35,11 +36,12 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   // A queued-but-unresolved row from the shared psa-pushes query. Pending rows
   // are renderable/approvable directly — this is the 409-dead-end fix: the
   // preview and approve button no longer require a fresh propose call.
-  const pendingRow = pushRow?.status === 'pending' ? pushRow : null;
-  const inFlightRow = pushRow && (pushRow.status === 'approved' || pushRow.status === 'pushing') ? pushRow : null;
-  const failedRow = pushRow?.status === 'failed' ? pushRow : null;
+  const pushState = pushRow ? classifyPushStatus(pushRow.status) : null;
+  const pendingRow = pushState === 'pending' ? pushRow : null;
+  const inFlightRow = pushState === 'inflight' ? pushRow : null;
+  const failedRow = pushState === 'failed' ? pushRow : null;
 
-  const effectiveCreatePreview = createPreview ?? (pendingRow?.operation === 'create' ? pendingRow.formData ?? null : null);
+  const effectiveCreatePreview = createPreview ?? ((pendingRow?.operation === 'create' || inFlightRow?.operation === 'create') ? (pendingRow?.formData ?? inFlightRow?.formData ?? null) : null);
   const effectiveDiff = diff ?? ((pendingRow?.operation === 'update' || inFlightRow?.operation === 'update') ? (pendingRow?.diff ?? inFlightRow?.diff ?? null) : null);
   const effectivePushId = pushId ?? pendingRow?.pushId;
 

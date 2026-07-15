@@ -7,6 +7,7 @@ import CampaignFormFields from '../../ui/CampaignFormFields';
 import PSAPublishModal from '../campaign-detail/PSAPublishModal';
 import type { UseFormReturn } from '../../hooks/useForm';
 import { phaseHexColors } from '../../utils/campaignConstants';
+import { classifyPushStatus, type PushIndicatorState } from '../../utils/psaPush';
 
 const PHASE_TONES: Record<Phase, StatusTone> = {
   active: 'success',
@@ -23,10 +24,6 @@ const PHASE_LABELS: Record<Phase, string> = {
 /** Phase order on the page. Matches the parent's sortCampaigns(). */
 const PHASE_ORDER: Phase[] = ['active', 'pending', 'closed'];
 
-/** Visual state of the PSA button's push indicator. `pushed` and absent rows
-    render no indicator — the queue entry is resolved. */
-type PushIndicatorState = 'pending' | 'inflight' | 'failed';
-
 const PUSH_INDICATOR: Record<PushIndicatorState, { color: string; label: string }> = {
   pending: { color: 'var(--warning)', label: 'approval pending' },
   inflight: { color: 'var(--info)', label: 'push in flight' },
@@ -34,14 +31,7 @@ const PUSH_INDICATOR: Record<PushIndicatorState, { color: string; label: string 
 };
 
 function pushIndicatorState(push: PSAPushRow | undefined): PushIndicatorState | null {
-  if (!push) return null;
-  switch (push.status) {
-    case 'pending': return 'pending';
-    case 'approved':
-    case 'pushing': return 'inflight';
-    case 'failed': return 'failed';
-    default: return null; // pushed = resolved
-  }
+  return push ? classifyPushStatus(push.status) : null;
 }
 
 function PhaseBadge({ phase }: { phase: Phase }) {

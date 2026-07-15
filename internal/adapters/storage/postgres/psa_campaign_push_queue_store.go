@@ -97,11 +97,38 @@ func (s *PSACampaignPushQueueStore) Claim(ctx context.Context, id string) (bool,
 	return n == 1, nil
 }
 
+// pushRowColumns is the SELECT column list consumed by scanPushRows.
+const pushRowColumns = `id, COALESCE(psa_campaign_id, ''), COALESCE(internal_campaign_id, ''), operation, proposed_diff, status,
+	       COALESCE(requested_by, ''), COALESCE(approved_by, ''), COALESCE(error, ''), updated_at`
+
+// scanPushRows drains rows selected with pushRowColumns into PushRow values.
+// opLabel names the calling query in error contexts.
+func scanPushRows(rows *sql.Rows, opLabel string) ([]psacampaign.PushRow, error) {
+	var out []psacampaign.PushRow
+	for rows.Next() {
+		var r psacampaign.PushRow
+		var diff []byte
+		var op string
+		if err := rows.Scan(&r.ID, &r.PSACampaignID, &r.InternalCampaignID, &op, &diff, &r.Status,
+			&r.RequestedBy, &r.ApprovedBy, &r.Error, &r.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("psa_campaign_push_queue: %s scan: %w", opLabel, err)
+		}
+		r.Operation = psacampaign.Operation(op)
+		if err := json.Unmarshal(diff, &r.Diff); err != nil {
+			return nil, fmt.Errorf("psa_campaign_push_queue: %s unmarshal diff: %w", opLabel, err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("psa_campaign_push_queue: %s rows: %w", opLabel, err)
+	}
+	return out, nil
+}
+
 // ListByStatus returns all rows matching the given status.
 func (s *PSACampaignPushQueueStore) ListByStatus(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
 	const q = `
-		SELECT id, COALESCE(psa_campaign_id, ''), COALESCE(internal_campaign_id, ''), operation, proposed_diff, status,
-		       COALESCE(requested_by, ''), COALESCE(approved_by, '')
+		SELECT ` + pushRowColumns + `
 		  FROM psa_campaign_push_queue
 		 WHERE status = $1
 		 ORDER BY created_at`
@@ -110,64 +137,27 @@ func (s *PSACampaignPushQueueStore) ListByStatus(ctx context.Context, status psa
 		return nil, fmt.Errorf("psa_campaign_push_queue: list: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-
-	var out []psacampaign.PushRow
-	for rows.Next() {
-		var r psacampaign.PushRow
-		var diff []byte
-		var op string
-		if err := rows.Scan(&r.ID, &r.PSACampaignID, &r.InternalCampaignID, &op, &diff, &r.Status, &r.RequestedBy, &r.ApprovedBy); err != nil {
-			return nil, fmt.Errorf("psa_campaign_push_queue: scan: %w", err)
-		}
-		r.Operation = psacampaign.Operation(op)
-		if err := json.Unmarshal(diff, &r.Diff); err != nil {
-			return nil, fmt.Errorf("psa_campaign_push_queue: unmarshal diff: %w", err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("psa_campaign_push_queue: rows: %w", err)
-	}
-	return out, nil
+	return scanPushRows(rows, "list")
 }
 
 // LatestPerCampaign returns the most recent push row per internal campaign,
-// any status. Latest-row-wins is computed here (DISTINCT ON + created_at DESC)
-// so the UI has a single source of truth for its pending/in-flight/failed
-// indicators. No index: the queue holds a handful of rows, a scan is fine.
+// any status. Latest-row-wins is computed here (DISTINCT ON + created_at DESC,
+// id DESC as a deterministic tie-break) so the UI has a single source of truth
+// for its pending/in-flight/failed indicators. No index: the queue holds a
+// handful of rows, a scan is fine.
 func (s *PSACampaignPushQueueStore) LatestPerCampaign(ctx context.Context) ([]psacampaign.PushRow, error) {
 	const q = `
 		SELECT DISTINCT ON (internal_campaign_id)
-		       id, COALESCE(psa_campaign_id, ''), internal_campaign_id, operation, proposed_diff, status,
-		       COALESCE(requested_by, ''), COALESCE(approved_by, ''), COALESCE(error, ''), updated_at
+		       ` + pushRowColumns + `
 		  FROM psa_campaign_push_queue
 		 WHERE internal_campaign_id IS NOT NULL
-		 ORDER BY internal_campaign_id, created_at DESC`
+		 ORDER BY internal_campaign_id, created_at DESC, id DESC`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("psa_campaign_push_queue: latest per campaign: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-
-	var out []psacampaign.PushRow
-	for rows.Next() {
-		var r psacampaign.PushRow
-		var diff []byte
-		var op string
-		if err := rows.Scan(&r.ID, &r.PSACampaignID, &r.InternalCampaignID, &op, &diff, &r.Status,
-			&r.RequestedBy, &r.ApprovedBy, &r.Error, &r.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("psa_campaign_push_queue: latest scan: %w", err)
-		}
-		r.Operation = psacampaign.Operation(op)
-		if err := json.Unmarshal(diff, &r.Diff); err != nil {
-			return nil, fmt.Errorf("psa_campaign_push_queue: latest unmarshal diff: %w", err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("psa_campaign_push_queue: latest rows: %w", err)
-	}
-	return out, nil
+	return scanPushRows(rows, "latest")
 }
 
 // MarkResult records the outcome of a push attempt.
