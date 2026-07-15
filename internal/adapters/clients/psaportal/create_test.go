@@ -4,13 +4,61 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 )
+
+// fakeFetcher routes requests by URL substring to canned responses, recording
+// the last POST body seen per matched key. It replaces the httptest servers now
+// that the Client no longer speaks HTTP directly.
+type fakeFetcher struct {
+	// routes maps a URL substring to the response body to return (status 200).
+	routes    map[string]string
+	captured  map[string]string
+	statusFor map[string]int // optional non-200 status per substring
+	errFor    map[string]string
+}
+
+func (f *fakeFetcher) Do(_ context.Context, req FetchRequest) (FetchResponse, error) {
+	bestSub, bestBody, found := "", "", false
+	for sub, body := range f.routes {
+		if strings.Contains(req.URL, sub) && len(sub) > len(bestSub) {
+			bestSub, bestBody, found = sub, body, true
+		}
+	}
+	if !found {
+		return FetchResponse{Status: 404}, nil
+	}
+	if f.captured == nil {
+		f.captured = map[string]string{}
+	}
+	f.captured[bestSub] = req.Body
+	if e, ok := f.errFor[bestSub]; ok {
+		return FetchResponse{}, fmt.Errorf("%s", e)
+	}
+	st := 200
+	if s, ok := f.statusFor[bestSub]; ok {
+		st = s
+	}
+	return FetchResponse{Status: st, Body: bestBody}, nil
+}
+
+// extractPayload base64-decodes the "payload" field of a captured POST body.
+func extractPayload(t *testing.T, body string) string {
+	t.Helper()
+	var gotBody map[string]any
+	if err := json.Unmarshal([]byte(body), &gotBody); err != nil {
+		t.Fatalf("unmarshal captured body: %v", err)
+	}
+	payloadStr, ok := gotBody["payload"].(string)
+	if !ok {
+		t.Fatalf("payload missing or not a string: %#v", gotBody)
+	}
+	return payloadStr
+}
 
 func createFormData() psacampaign.CampaignFormData {
 	return psacampaign.CampaignFormData{
@@ -26,20 +74,13 @@ func createFormData() psacampaign.CampaignFormData {
 }
 
 func TestCreateCampaign_PostsBareFormDataAndDecodesID(t *testing.T) {
-	var gotBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.Contains(r.URL.Path, "/createCampaign"):
-			_ = json.NewDecoder(r.Body).Decode(&gotBody)
-			// result is a JSON *string* containing a ref-packed array (verified live 2026-07-14)
-			_, _ = w.Write([]byte(`{"type":"result","result":"[{\"campaignRequestId\":1,\"status\":2},\"uuid-new-1\",\"PAUSED\"]"}`))
-		default:
-			_, _ = w.Write([]byte(`<html>build/app/immutable/entry/app.HASH123.js</html>`))
-		}
-	}))
-	defer srv.Close()
+	ff := &fakeFetcher{routes: map[string]string{
+		// result is a JSON *string* containing a ref-packed array (verified live 2026-07-14)
+		"/buyercampaignmanager/_app/remote/": `{"type":"result","result":"[{\"campaignRequestId\":1,\"status\":2},\"uuid-new-1\",\"PAUSED\"]"}`,
+		"/buyercampaignmanager":              `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+	}}
 
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	c := New(ff, Config{})
 	id, err := c.CreateCampaign(context.Background(), createFormData())
 	if err != nil {
 		t.Fatalf("CreateCampaign: %v", err)
@@ -48,10 +89,7 @@ func TestCreateCampaign_PostsBareFormDataAndDecodesID(t *testing.T) {
 		t.Fatalf("id = %q, want uuid-new-1", id)
 	}
 
-	payloadStr, ok := gotBody["payload"].(string)
-	if !ok {
-		t.Fatalf("payload missing or not a string: %#v", gotBody)
-	}
+	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/"])
 	decoded, err := base64.StdEncoding.DecodeString(payloadStr)
 	if err != nil {
 		t.Fatalf("base64: %v", err)
@@ -103,17 +141,15 @@ func TestCreateCampaign_Failures(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if strings.Contains(r.URL.Path, "/createCampaign") {
-					w.WriteHeader(tt.statusCode)
-					_, _ = w.Write([]byte(tt.response))
-					return
-				}
-				_, _ = w.Write([]byte(`<html>build/app/immutable/entry/app.HASH123.js</html>`))
-			}))
-			defer srv.Close()
+			ff := &fakeFetcher{
+				routes: map[string]string{
+					"/buyercampaignmanager/_app/remote/": tt.response,
+					"/buyercampaignmanager":              `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+				},
+				statusFor: map[string]int{"/buyercampaignmanager/_app/remote/": tt.statusCode},
+			}
 
-			c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+			c := New(ff, Config{})
 			_, err := c.CreateCampaign(context.Background(), createFormData())
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("err = %v, want containing %q", err, tt.wantErr)

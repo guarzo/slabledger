@@ -141,17 +141,3 @@ func drainCreate(ctx context.Context, c *Client, q psacampaign.PushQueueStore, l
 		observability.String("psa_campaign_id", newID))
 	return true
 }
-
-// DrainApprovedPushes gates DrainPushQueue on a usable stored token. When the
-// token provider yields no valid token, it logs an explicit WARN and returns
-// skipped=true without touching the queue — so a failed browser harvest that
-// left no fresh token degrades cleanly instead of failing each row. Otherwise it
-// drains and returns the push/fail counts with skipped=false.
-func DrainApprovedPushes(ctx context.Context, tp TokenProvider, c *Client, q psacampaign.PushQueueStore, linker psacampaign.CampaignLinker, logger observability.Logger) (pushed, failed int, skipped bool) {
-	if _, err := tp.AccessToken(ctx); err != nil {
-		logger.Warn(ctx, "drain skipped: no valid PSA token", observability.Err(err))
-		return 0, 0, true
-	}
-	pushed, failed = DrainPushQueue(ctx, c, q, linker, logger)
-	return pushed, failed, false
-}

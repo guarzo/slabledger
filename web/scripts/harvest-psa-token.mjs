@@ -1,8 +1,14 @@
 // Headless harvester for the PSA Buyer Campaign Manager access token.
 //
 // Logs into Collectors SSO (password-only) with stored credentials, lands back
-// on psacard.com, reads the `accessToken` cookie, and prints JSON to stdout:
-//   {"accessToken":"<jwt>","expiresAt":"<RFC3339>","analyticsData":"<raw __data.json body>"}
+// on psacard.com, reads the `accessToken` cookie, and emits a handshake line
+// to stdout: {"type":"ready","accessToken":"<jwt>","expiresAt":"<RFC3339>"}
+//
+// After the handshake it serves a persistent NDJSON fetch loop: each stdin
+// line is a request {"id","url","method","body"}, run inside the page (so it
+// carries cf_clearance + the accessToken cookie) via page.evaluate, replied to
+// on stdout as {"id","status","body"} or {"id","error"}. A stdin line
+// {"type":"close"} (or stdin EOF) ends the loop and closes the browser.
 //
 // The Go harvest trigger execs this and persists the result via the encrypted
 // token store. On any failure it writes a debug screenshot + HTML and exits 1.
@@ -194,23 +200,41 @@ try {
     throw new Error('accessToken cookie is not a decodable JWT');
   }
 
-  // Fetch the analytics __data.json from inside the page: the browser context
-  // already holds cf_clearance, so this bypasses the Cloudflare gate that
-  // blocks plain HTTP clients on datacenter IPs. Its embedUrl carries a
-  // Lightdash embed JWT minted fresh per request (~1h TTL) — the Go side
-  // exchanges it for rows immediately.
-  const analytics = await page.evaluate(async (path) => {
-    const r = await fetch(path, { credentials: 'include' });
-    return { status: r.status, body: await r.text() };
-  }, '/buyercampaignmanager/analytics/__data.json?x-sveltekit-invalidated=001');
-  if (analytics.status !== 200 || !analytics.body.includes('embedUrl')) {
-    await dumpDebug(page, 'analytics-fetch');
-    throw new Error(`analytics __data.json fetch failed (status ${analytics.status})`);
-  }
-
+  // Emit the handshake so Go can persist the token immediately.
+  // STDOUT CONTRACT: only NDJSON frames (handshake + per-request replies) may be written to stdout. All logging/debug goes to stderr — a stray stdout write desyncs the Go-side scanner. Never console.log here.
   process.stdout.write(
-    JSON.stringify({ accessToken: at.value, expiresAt, analyticsData: analytics.body }) + '\n'
+    JSON.stringify({ type: 'ready', accessToken: at.value, expiresAt }) + '\n'
   );
+
+  // Serve a persistent NDJSON fetch loop: read one request per line from stdin,
+  // run it inside the page (carries cf_clearance + accessToken cookie), and
+  // write back an id-correlated reply. Exit on {"type":"close"} or stdin EOF.
+  const rl = (await import('node:readline')).createInterface({ input: process.stdin });
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let msg;
+    try {
+      msg = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (msg.type === 'close') break;
+    try {
+      const result = await page.evaluate(async ({ url, method, body }) => {
+        const opts = { method, credentials: 'include' };
+        if (method === 'POST') {
+          opts.headers = { 'content-type': 'application/json' };
+          if (body) opts.body = body;
+        }
+        const r = await fetch(url, opts);
+        return { status: r.status, body: await r.text() };
+      }, { url: msg.url, method: msg.method || 'GET', body: msg.body || null });
+      process.stdout.write(JSON.stringify({ id: msg.id, status: result.status, body: result.body }) + '\n');
+    } catch (e) {
+      process.stdout.write(JSON.stringify({ id: msg.id, error: e.message }) + '\n');
+    }
+  }
 } catch (e) {
   await dumpDebug(page, 'exception');
   // Don't call fail() here — it exits immediately and would skip the finally

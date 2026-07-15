@@ -2,13 +2,10 @@ package psaportal
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -36,27 +33,26 @@ func fakeLightdash(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// scriptOutputFile writes a fake harvest-script JSON output to a temp file and
-// returns its path; tests run it via `cat` instead of node.
-func scriptOutputFile(t *testing.T, ldURL string) string {
-	t.Helper()
-	// Minimal SvelteKit __data.json: root object {"embedUrl": <ptr 1>}, value at
-	// index 1 is the embed URL string.
-	svelteKit := fmt.Sprintf(
-		`{"type":"data","nodes":[{"type":"data","data":[{"embedUrl":1},"%s/embed/proj-1#jwt-1"]}]}`, ldURL)
-	out, err := json.Marshal(map[string]string{
-		"accessToken":   "tok-1",
-		"expiresAt":     "2099-01-01T00:00:00Z",
-		"analyticsData": svelteKit,
-	})
-	if err != nil {
-		t.Fatal(err)
+// analyticsFetcher returns the given SvelteKit __data.json body for the
+// analytics path and 404 otherwise.
+type analyticsFetcher struct {
+	analyticsBody string
+	status        int
+	err           error
+}
+
+func (a analyticsFetcher) Do(_ context.Context, req FetchRequest) (FetchResponse, error) {
+	if a.err != nil {
+		return FetchResponse{}, a.err
 	}
-	p := filepath.Join(t.TempDir(), "script-output.json")
-	if err := os.WriteFile(p, out, 0o600); err != nil {
-		t.Fatal(err)
+	if strings.Contains(req.URL, "/buyercampaignmanager/analytics/__data.json") {
+		st := a.status
+		if st == 0 {
+			st = 200
+		}
+		return FetchResponse{Status: st, Body: a.analyticsBody}, nil
 	}
-	return p
+	return FetchResponse{Status: 404}, nil
 }
 
 func TestHarvester_Run(t *testing.T) {
@@ -65,12 +61,14 @@ func TestHarvester_Run(t *testing.T) {
 	t.Run("full pipeline saves token then snapshot", func(t *testing.T) {
 		repo := &mocks.PSATokenRepositoryMock{}
 		snaps := &mocks.PSASnapshotWriterMock{}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		h.name = "cat"
-		h.args = []string{scriptOutputFile(t, srv.URL)}
+		h := NewHarvester(repo, snaps, observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
 
-		if err := h.Run(context.Background()); err != nil {
+		svelteKit := fmt.Sprintf(
+			`{"type":"data","nodes":[{"type":"data","data":[{"embedUrl":1},"%s/embed/proj-1#jwt-1"]}]}`, srv.URL)
+		af := analyticsFetcher{analyticsBody: svelteKit}
+		exp := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		if err := h.Run(context.Background(), af, "tok-1", exp); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if repo.SavedToken != "tok-1" {
@@ -84,41 +82,6 @@ func TestHarvester_Run(t *testing.T) {
 		}
 	})
 
-	t.Run("passes stored valid token to script env", func(t *testing.T) {
-		repo := &mocks.PSATokenRepositoryMock{
-			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
-				return "stored-tok", time.Now().Add(12 * time.Hour), nil
-			},
-		}
-		snaps := &mocks.PSASnapshotWriterMock{}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		// Echo the env var back as the failure message so we can assert it was set.
-		h.name = "sh"
-		h.args = []string{"-c", `test "$PSA_PORTAL_ACCESS_TOKEN" = "stored-tok" && cat ` + scriptOutputFile(t, srv.URL) + ` || exit 42`}
-
-		if err := h.Run(context.Background()); err != nil {
-			t.Fatalf("expected env var to be set, got error: %v", err)
-		}
-	})
-
-	t.Run("expired stored token is not passed to script", func(t *testing.T) {
-		repo := &mocks.PSATokenRepositoryMock{
-			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
-				return "expired-tok", time.Now().Add(-1 * time.Hour), nil
-			},
-		}
-		snaps := &mocks.PSASnapshotWriterMock{}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		h.name = "sh"
-		h.args = []string{"-c", `test -z "$PSA_PORTAL_ACCESS_TOKEN" && cat ` + scriptOutputFile(t, srv.URL) + ` || exit 42`}
-
-		if err := h.Run(context.Background()); err != nil {
-			t.Fatalf("expected env var to be empty, got error: %v", err)
-		}
-	})
-
 	t.Run("token still saved when lightdash fails", func(t *testing.T) {
 		bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadGateway)
@@ -127,12 +90,14 @@ func TestHarvester_Run(t *testing.T) {
 
 		repo := &mocks.PSATokenRepositoryMock{}
 		snaps := &mocks.PSASnapshotWriterMock{}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(bad.URL))
-		h.name = "cat"
-		h.args = []string{scriptOutputFile(t, bad.URL)}
+		h := NewHarvester(repo, snaps, observability.NewNoopLogger(), WithLightdashBaseURL(bad.URL))
 
-		err := h.Run(context.Background())
+		svelteKit := fmt.Sprintf(
+			`{"type":"data","nodes":[{"type":"data","data":[{"embedUrl":1},"%s/embed/proj-1#jwt-1"]}]}`, bad.URL)
+		af := analyticsFetcher{analyticsBody: svelteKit}
+		exp := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		err := h.Run(context.Background(), af, "tok-1", exp)
 		if err == nil {
 			t.Fatal("expected error from lightdash failure")
 		}
@@ -157,12 +122,14 @@ func TestHarvester_Run(t *testing.T) {
 
 		repo := &mocks.PSATokenRepositoryMock{}
 		snaps := &mocks.PSASnapshotWriterMock{}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(empty.URL))
-		h.name = "cat"
-		h.args = []string{scriptOutputFile(t, empty.URL)}
+		h := NewHarvester(repo, snaps, observability.NewNoopLogger(), WithLightdashBaseURL(empty.URL))
 
-		err := h.Run(context.Background())
+		svelteKit := fmt.Sprintf(
+			`{"type":"data","nodes":[{"type":"data","data":[{"embedUrl":1},"%s/embed/proj-1#jwt-1"]}]}`, empty.URL)
+		af := analyticsFetcher{analyticsBody: svelteKit}
+		exp := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		err := h.Run(context.Background(), af, "tok-1", exp)
 		if err == nil {
 			t.Fatal("expected error on zero-row harvest")
 		}
@@ -174,140 +141,68 @@ func TestHarvester_Run(t *testing.T) {
 		}
 	})
 
-	t.Run("script exec error", func(t *testing.T) {
+	t.Run("empty token is rejected", func(t *testing.T) {
 		repo := &mocks.PSATokenRepositoryMock{}
-		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, ".", "e", "p",
-			observability.NewNoopLogger())
-		h.name = "false"
-		if err := h.Run(context.Background()); err == nil {
-			t.Fatal("expected error")
-		}
-	})
-
-	t.Run("empty token in script output", func(t *testing.T) {
-		repo := &mocks.PSATokenRepositoryMock{}
-		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, ".", "e", "p",
-			observability.NewNoopLogger())
-		h.name = "sh"
-		h.args = []string{"-c", `printf '{"accessToken":"","expiresAt":"2099-01-01T00:00:00Z","analyticsData":"{}"}'`}
-		if err := h.Run(context.Background()); err == nil ||
-			!strings.Contains(err.Error(), "empty token") {
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{}
+		err := h.Run(context.Background(), af, "", time.Now())
+		if err == nil || !strings.Contains(err.Error(), "empty token") {
 			t.Fatalf("expected empty-token error, got %v", err)
 		}
 	})
 
-	t.Run("skips browser when token fresh and snapshot recent", func(t *testing.T) {
-		repo := &mocks.PSATokenRepositoryMock{
-			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
-				return "stored-tok", time.Now().Add(12 * time.Hour), nil
-			},
-		}
-		snaps := &mocks.PSASnapshotWriterMock{
-			SnapshotFetchedAtFn: func(_ context.Context) (time.Time, error) {
-				return time.Now().Add(-10 * time.Minute), nil
-			},
-		}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		// If the browser is (wrongly) launched, "false" exits non-zero and Run errors.
-		h.name = "false"
-		h.args = nil
-
-		if err := h.Run(context.Background()); err != nil {
-			t.Fatalf("expected browser to be skipped, got error: %v", err)
-		}
-		if snaps.SavedRows != nil {
-			t.Errorf("expected no snapshot write on skip, got %+v", snaps.SavedRows)
+	t.Run("analytics fetch error", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{}
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{err: fmt.Errorf("boom")}
+		if err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour)); err == nil {
+			t.Fatal("expected error")
 		}
 	})
 
-	t.Run("runs browser when token nearly expired", func(t *testing.T) {
-		repo := &mocks.PSATokenRepositoryMock{
-			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
-				return "stored-tok", time.Now().Add(2 * time.Minute), nil
-			},
-		}
-		snaps := &mocks.PSASnapshotWriterMock{
-			SnapshotFetchedAtFn: func(_ context.Context) (time.Time, error) {
-				return time.Now().Add(-10 * time.Minute), nil
-			},
-		}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		h.name = "cat"
-		h.args = []string{scriptOutputFile(t, srv.URL)}
-
-		if err := h.Run(context.Background()); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(snaps.SavedRows) != 1 {
-			t.Errorf("expected browser run to save snapshot, got %+v", snaps.SavedRows)
+	t.Run("analytics fetch non-200", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{}
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{status: 500, analyticsBody: "oops"}
+		if err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour)); err == nil {
+			t.Fatal("expected error")
 		}
 	})
 
-	t.Run("runs browser when snapshot stale even if token fresh", func(t *testing.T) {
-		repo := &mocks.PSATokenRepositoryMock{
-			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
-				return "stored-tok", time.Now().Add(12 * time.Hour), nil
-			},
-		}
-		snaps := &mocks.PSASnapshotWriterMock{
-			SnapshotFetchedAtFn: func(_ context.Context) (time.Time, error) {
-				return time.Now().Add(-2 * time.Hour), nil
-			},
-		}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		h.name = "cat"
-		h.args = []string{scriptOutputFile(t, srv.URL)}
-
-		if err := h.Run(context.Background()); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(snaps.SavedRows) != 1 {
-			t.Errorf("expected browser run to save snapshot, got %+v", snaps.SavedRows)
+	t.Run("analytics 200 missing embedUrl", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{}
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{status: 200, analyticsBody: "{}"}
+		err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour))
+		if err == nil || !strings.Contains(err.Error(), "missing embedUrl") {
+			t.Fatalf("expected missing-embedUrl error, got %v", err)
 		}
 	})
 
 	t.Run("SaveToken failure is wrapped as ErrPersistence", func(t *testing.T) {
 		repo := &mocks.PSATokenRepositoryMock{
-			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
-				return "stored-tok", time.Now().Add(2 * time.Minute), nil // stale -> browser runs
-			},
 			SaveTokenFn: func(_ context.Context, _ string, _ time.Time) error {
 				return errors.New("db write failed")
 			},
 		}
-		snaps := &mocks.PSASnapshotWriterMock{}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		h.name = "cat"
-		h.args = []string{scriptOutputFile(t, srv.URL)}
-
-		err := h.Run(context.Background())
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{}
+		err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour))
 		if !errors.Is(err, ErrPersistence) {
 			t.Fatalf("expected ErrPersistence, got %v", err)
 		}
 	})
 
-	t.Run("browser failure is not ErrPersistence", func(t *testing.T) {
-		repo := &mocks.PSATokenRepositoryMock{
-			CurrentTokenFn: func(_ context.Context) (string, time.Time, error) {
-				return "stored-tok", time.Now().Add(2 * time.Minute), nil // stale -> browser runs
-			},
-		}
-		snaps := &mocks.PSASnapshotWriterMock{}
-		h := NewHarvester(repo, snaps, ".", "email@test.com", "pw",
-			observability.NewNoopLogger(), WithLightdashBaseURL(srv.URL))
-		h.name = "false" // browser exits non-zero
-		h.args = nil
-
-		err := h.Run(context.Background())
+	t.Run("analytics failure is not ErrPersistence", func(t *testing.T) {
+		repo := &mocks.PSATokenRepositoryMock{}
+		h := NewHarvester(repo, &mocks.PSASnapshotWriterMock{}, observability.NewNoopLogger())
+		af := analyticsFetcher{err: fmt.Errorf("boom")}
+		err := h.Run(context.Background(), af, "tok-1", time.Now().Add(time.Hour))
 		if err == nil {
-			t.Fatal("expected an error from browser failure")
+			t.Fatal("expected an error from analytics failure")
 		}
 		if errors.Is(err, ErrPersistence) {
-			t.Fatalf("browser failure must not be ErrPersistence, got %v", err)
+			t.Fatalf("analytics failure must not be ErrPersistence, got %v", err)
 		}
 	})
 }

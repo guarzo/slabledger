@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -61,23 +59,17 @@ func parseEmbedURL(u string) (projectUUID, jwt string, err error) {
 	return projectUUID, jwt, nil
 }
 
-// TokenProvider yields a valid PSA access token.
-type TokenProvider interface {
-	AccessToken(ctx context.Context) (string, error)
-}
-
 // Config configures a portal Client; an empty PSABaseURL falls back to the
 // production default.
 type Config struct {
 	PSABaseURL string
 }
 
-// Client fetches and pushes PSA Buyer Campaign Manager campaign config. It is
-// used only by the Cloudflare-trusted psa-harvest job — the campaign read/write
-// hop to psacard.com lives entirely in the harvester, never the main app.
+// Client fetches and pushes PSA Buyer Campaign Manager campaign config. Its
+// transport is a browser-context Fetcher (never a direct HTTP client), so all
+// psacard.com I/O clears Cloudflare from the harvester machine.
 type Client struct {
-	tokens     TokenProvider
-	http       *httpx.Client
+	fetch      Fetcher
 	psaBaseURL string
 	logger     observability.Logger
 }
@@ -90,16 +82,13 @@ func WithLogger(l observability.Logger) Option {
 	return func(c *Client) { c.logger = l }
 }
 
-// New builds a Client. tp supplies access tokens.
-func New(tp TokenProvider, cfg Config, opts ...Option) *Client {
+// New builds a Client whose transport is fetch (a browser session).
+func New(fetch Fetcher, cfg Config, opts ...Option) *Client {
 	if cfg.PSABaseURL == "" {
 		cfg.PSABaseURL = defaultPSABaseURL
 	}
-	hc := httpx.DefaultConfig("PSAPortal")
-	hc.DefaultTimeout = 30 * time.Second
 	c := &Client{
-		tokens:     tp,
-		http:       httpx.NewClient(hc),
+		fetch:      fetch,
 		psaBaseURL: cfg.PSABaseURL,
 		logger:     observability.NewNoopLogger(),
 	}

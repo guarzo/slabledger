@@ -73,32 +73,35 @@ func run() error {
 	store := postgres.NewPSAPortalTokenStore(db.DB, enc)
 	snapshots := postgres.NewPSAPortalSnapshotStore(db.DB)
 
-	// workDir "." — the image's WORKDIR is where web/scripts/ lives.
-	h := psaportal.NewHarvester(store, snapshots, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, logger)
-	// When it does run the browser, Run exchanges the ~1h embed JWT for rows
-	// immediately (the script skips the SSO login while the stored token is still
-	// valid); it may also short-circuit and skip the browser entirely when the
-	// token and snapshot are both fresh.
-	// Harvest is best-effort: a browser/Lightdash failure (e.g. a transient
-	// Cloudflare 403) must not block the drain, which only needs the stored
-	// token. Log and continue; the token, if any, was already saved before the
-	// Lightdash exchange inside Run.
-	if err := h.Run(ctx); err != nil {
-		// A persistence failure (token/snapshot DB write) is retryable, so
-		// propagate it for a non-zero exit. A browser/Lightdash failure is not
-		// helped by a retry — log it and continue to the token-gated drain.
+	// One browser login per run, shared by the token/analytics harvest and the
+	// campaign sync/drain, so every psacard.com call clears Cloudflare. The
+	// writes cannot reach the portal any other way, so a failed session open is
+	// fatal for the run.
+	storedToken, _, _ := store.CurrentToken(ctx) // best-effort; "" just means full SSO
+	session, token, expiresAt, err := psaportal.OpenBrowserSession(ctx, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, storedToken, logger)
+	if err != nil {
+		return fmt.Errorf("open portal session: %w", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	h := psaportal.NewHarvester(store, snapshots, logger)
+	// Best-effort: a failed analytics read must not skip queued writes (the
+	// session is already authenticated). A persistence failure (token/snapshot
+	// DB write) is retryable, so propagate it for a non-zero exit; a
+	// browser/Lightdash failure is not helped by a retry — log and continue to
+	// the drain, which rides the same authenticated session.
+	if err := h.Run(ctx, session, token, expiresAt); err != nil {
 		if errors.Is(err, psaportal.ErrPersistence) {
 			return err
 		}
-		logger.Warn(ctx, "psa-harvest: token/snapshot harvest failed, continuing to drain",
+		logger.Warn(ctx, "psa-harvest: token/analytics harvest failed, continuing to drain",
 			observability.Err(err))
 	} else {
-		logger.Info(ctx, "psa-harvest: harvest step complete (token/snapshot fresh or refreshed)")
+		logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
 	}
 
 	if cfg.PSASync.CampaignSyncEnabled {
-		tp := psaportal.NewStoredTokenProvider(store)
-		portal := psaportal.New(tp, psaportal.Config{}, psaportal.WithLogger(logger))
+		portal := psaportal.New(session, psaportal.Config{}, psaportal.WithLogger(logger))
 		snap := postgres.NewPSACampaignSnapshotStore(db.DB)
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 		linker := postgres.NewPSACampaignLinker(db.DB)
@@ -115,11 +118,9 @@ func run() error {
 			}
 		}
 
-		pushed, failed, skipped := psaportal.DrainApprovedPushes(ctx, tp, portal, queue, linker, logger)
-		if !skipped {
-			logger.Info(ctx, "psa-harvest: push queue drained",
-				observability.Int("pushed", pushed), observability.Int("failed", failed))
-		}
+		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, linker, logger)
+		logger.Info(ctx, "psa-harvest: push queue drained",
+			observability.Int("pushed", pushed), observability.Int("failed", failed))
 	}
 
 	return nil

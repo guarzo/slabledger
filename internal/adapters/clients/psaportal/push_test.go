@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -18,21 +16,13 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
-	var gotBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.Contains(r.URL.Path, "/edit/"):
-			_, _ = w.Write(edit)
-		case strings.Contains(r.URL.Path, "/updateCampaign"):
-			_ = json.NewDecoder(r.Body).Decode(&gotBody)
-			_, _ = w.Write([]byte(`{"type":"result","result":"[{}]"}`))
-		default:
-			_, _ = w.Write([]byte(`<html>build/app/immutable/entry/app.HASH123.js</html>`))
-		}
-	}))
-	defer srv.Close()
+	ff := &fakeFetcher{routes: map[string]string{
+		"/edit/__data.json?x-sveltekit-invalidated=0001": string(edit),
+		"/buyercampaignmanager/_app/remote/":             `{"type":"result","result":"[{}]"}`,
+		"/buyercampaignmanager":                          `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+	}}
 
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	c := New(ff, Config{})
 	err = c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
 		[]psacampaign.FieldChange{
 			{Field: "bidPercentage", Old: "70", New: "80"},
@@ -41,14 +31,7 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PushCampaign: %v", err)
 	}
-	payloadRaw, ok := gotBody["payload"]
-	if !ok {
-		t.Fatal("expected base64 payload in POST body")
-	}
-	payloadStr, ok := payloadRaw.(string)
-	if !ok {
-		t.Fatalf("payload not a string: %T", payloadRaw)
-	}
+	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/"])
 
 	decoded, err := base64.StdEncoding.DecodeString(payloadStr)
 	if err != nil {
@@ -104,21 +87,13 @@ func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
-	posted := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.Contains(r.URL.Path, "/edit/"):
-			_, _ = w.Write(edit)
-		case strings.Contains(r.URL.Path, "/updateCampaign"):
-			posted = true
-			_, _ = w.Write([]byte(`{"type":"result","result":"[{}]"}`))
-		default:
-			_, _ = w.Write([]byte(`<html>build/app/immutable/entry/app.HASH123.js</html>`))
-		}
-	}))
-	defer srv.Close()
+	ff := &fakeFetcher{routes: map[string]string{
+		"/edit/__data.json?x-sveltekit-invalidated=0001": string(edit),
+		"/buyercampaignmanager/_app/remote/":             `{"type":"result","result":"[{}]"}`,
+		"/buyercampaignmanager":                          `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+	}}
 
-	c := New(stubTokens{tok: "tok"}, Config{PSABaseURL: srv.URL})
+	c := New(ff, Config{})
 	err = c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
 		[]psacampaign.FieldChange{{Field: "biddPercentage", Old: "70", New: "80"}})
 	if err == nil {
@@ -127,7 +102,7 @@ func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "biddPercentage") {
 		t.Errorf("expected error to mention unknown field name, got: %v", err)
 	}
-	if posted {
+	if _, ok := ff.captured["/buyercampaignmanager/_app/remote/"]; ok {
 		t.Error("expected no POST to updateCampaign for unknown field")
 	}
 }

@@ -31,12 +31,12 @@ func (m *SnapshotStoreMock) GetSnapshot(ctx context.Context) ([]psacampaign.Port
 
 // PushQueueStoreMock implements psacampaign.PushQueueStore with the Fn-field pattern.
 type PushQueueStoreMock struct {
-	EnqueueFn            func(ctx context.Context, p psacampaign.PushRow) error
-	ApproveFn            func(ctx context.Context, id, approvedBy string) error
-	ListByStatusFn       func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error)
-	MarkResultFn         func(ctx context.Context, id string, status psacampaign.PushStatus, resultJSON, errMsg string) error
-	ClaimFn              func(ctx context.Context, id string) (bool, error)
-	LatestPerCampaignFn  func(ctx context.Context) ([]psacampaign.PushRow, error)
+	EnqueueFn           func(ctx context.Context, p psacampaign.PushRow) error
+	ApproveFn           func(ctx context.Context, id, approvedBy string) error
+	ListByStatusFn      func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error)
+	MarkResultFn        func(ctx context.Context, id string, status psacampaign.PushStatus, resultJSON, errMsg string) error
+	ClaimFn             func(ctx context.Context, id string) (bool, error)
+	LatestPerCampaignFn func(ctx context.Context) ([]psacampaign.PushRow, error)
 }
 
 var _ psacampaign.PushQueueStore = (*PushQueueStoreMock)(nil)
