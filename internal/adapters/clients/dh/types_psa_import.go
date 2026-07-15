@@ -31,14 +31,17 @@ const (
 // --- PSA Import Language/Rarity Enum Values ---
 
 const (
-	PSAImportLanguageEnglish  = "english"
-	PSAImportLanguageJapanese = "japanese"
-	PSAImportLanguageGerman   = "german"
-	PSAImportLanguageFrench   = "french"
-	PSAImportLanguageItalian  = "italian"
-	PSAImportLanguageSpanish  = "spanish"
-	PSAImportLanguageKorean   = "korean"
-	PSAImportLanguageChinese  = "chinese"
+	PSAImportLanguageEnglish            = "english"
+	PSAImportLanguageJapanese           = "japanese"
+	PSAImportLanguageGerman             = "german"
+	PSAImportLanguageFrench             = "french"
+	PSAImportLanguageItalian            = "italian"
+	PSAImportLanguageSpanish            = "spanish"
+	PSAImportLanguageKorean             = "korean"
+	PSAImportLanguageChineseTraditional = "chinese_traditional"
+	PSAImportLanguageChineseSimplified  = "chinese_simplified"
+	PSAImportLanguagePortuguese         = "portuguese"
+	PSAImportLanguageRussian            = "russian"
 )
 
 // PSAImportOverrides are merged per-field over PSA's metadata (override wins).
