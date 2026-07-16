@@ -4,11 +4,12 @@
 // on psacard.com, reads the `accessToken` cookie, and emits a handshake line
 // to stdout: {"type":"ready","accessToken":"<jwt>","expiresAt":"<RFC3339>"}
 //
-// After the handshake it serves a persistent NDJSON fetch loop: each stdin
-// line is a request {"id","url","method","body"}, run inside the page (so it
-// carries cf_clearance + the accessToken cookie) via page.evaluate, replied to
-// on stdout as {"id","status","body"} or {"id","error"}. A stdin line
-// {"type":"close"} (or stdin EOF) ends the loop and closes the browser.
+// After the handshake it serves a persistent NDJSON request loop: each stdin
+// line is a request {"id","url","method","body"}, run in the page (so it
+// carries cf_clearance + the accessToken cookie) — GETs via page.goto, POSTs
+// via page.evaluate/fetch — replied to on stdout as {"id","status","body"} or
+// {"id","error"}. A stdin line {"type":"close"} (or stdin EOF) ends the loop
+// and closes the browser. See the loop below for why GETs must navigate.
 //
 // The Go harvest trigger execs this and persists the result via the encrypted
 // token store. On any failure it writes a debug screenshot + HTML and exits 1.
@@ -210,9 +211,20 @@ try {
     JSON.stringify({ type: 'ready', accessToken: at.value, expiresAt }) + '\n'
   );
 
-  // Serve a persistent NDJSON fetch loop: read one request per line from stdin,
-  // run it inside the page (carries cf_clearance + accessToken cookie), and
-  // write back an id-correlated reply. Exit on {"type":"close"} or stdin EOF.
+  // Serve a persistent NDJSON request loop: read one request per line from
+  // stdin, run it in the browser context (carries cf_clearance + accessToken
+  // cookie), and write back an id-correlated reply. Exit on {"type":"close"}
+  // or stdin EOF.
+  //
+  // GET requests navigate (page.goto) rather than issue a background fetch():
+  // through the Fly -> residential-proxy egress path, Cloudflare re-challenges
+  // the 2nd+ in-page fetch() of a session with a "Just a moment" 403 that a
+  // background request cannot solve, whereas a real navigation re-runs the JS
+  // challenge every time and clears cleanly (verified on Fly iad — a bare
+  // fetch() 403s after the first request; goto returns 200 across idle gaps).
+  // POSTs (create/updateCampaign) stay as an in-page fetch: callers always GET
+  // the build-hash page immediately before, so the POST is the first request
+  // after a fresh navigation and rides its clearance.
   const rl = (await import('node:readline')).createInterface({ input: process.stdin });
   for await (const line of rl) {
     const trimmed = line.trim();
@@ -224,17 +236,28 @@ try {
       continue;
     }
     if (msg.type === 'close') break;
+    const method = (msg.method || 'GET').toUpperCase();
+    // Resolve relative request URLs (e.g. the analytics __data.json path)
+    // against the portal origin so page.goto receives an absolute URL.
+    const absURL = new URL(msg.url, START_URL).href;
     try {
-      const result = await page.evaluate(async ({ url, method, body }) => {
-        const opts = { method, credentials: 'include' };
-        if (method === 'POST') {
-          opts.headers = { 'content-type': 'application/json' };
+      let status;
+      let body;
+      if (method === 'GET') {
+        const resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        status = resp.status();
+        body = await resp.text();
+      } else {
+        const result = await page.evaluate(async ({ url, body }) => {
+          const opts = { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' } };
           if (body) opts.body = body;
-        }
-        const r = await fetch(url, opts);
-        return { status: r.status, body: await r.text() };
-      }, { url: msg.url, method: msg.method || 'GET', body: msg.body || null });
-      process.stdout.write(JSON.stringify({ id: msg.id, status: result.status, body: result.body }) + '\n');
+          const r = await fetch(url, opts);
+          return { status: r.status, body: await r.text() };
+        }, { url: absURL, body: msg.body || null });
+        status = result.status;
+        body = result.body;
+      }
+      process.stdout.write(JSON.stringify({ id: msg.id, status, body }) + '\n');
     } catch (e) {
       process.stdout.write(JSON.stringify({ id: msg.id, error: e.message }) + '\n');
     }
