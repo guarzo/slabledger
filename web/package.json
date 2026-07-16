@@ -63,6 +63,9 @@
     "vite": "^8.1.0",
     "vitest": "^4.1.8"
   },
+  "overrides": {
+    "@babel/core": "^7.29.6"
+  },
   "dependencies": {
     "@tanstack/react-query": "^5.100.14",
     "@tanstack/react-virtual": "^3.13.24",
