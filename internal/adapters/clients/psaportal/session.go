@@ -144,7 +144,7 @@ func readHandshake(sc *bufio.Scanner) (token string, expiresAt time.Time, err er
 // OpenBrowserSession launches the harvest script, waits for its login handshake,
 // and returns a live session plus the freshly minted token. A still-valid
 // storedToken is passed via PSA_PORTAL_ACCESS_TOKEN so the script can skip SSO.
-func OpenBrowserSession(ctx context.Context, workDir, email, password, storedToken string, logger observability.Logger) (*browserSession, string, time.Time, error) {
+func OpenBrowserSession(ctx context.Context, workDir, email, password, storedToken, proxyURL string, logger observability.Logger) (*browserSession, string, time.Time, error) {
 	cmd := exec.CommandContext(ctx, "node", "web/scripts/harvest-psa-token.mjs")
 	cmd.Dir = workDir
 	cmd.Env = append(cmd.Environ(),
@@ -153,6 +153,9 @@ func OpenBrowserSession(ctx context.Context, workDir, email, password, storedTok
 	)
 	if storedToken != "" {
 		cmd.Env = append(cmd.Env, "PSA_PORTAL_ACCESS_TOKEN="+storedToken)
+	}
+	if proxyURL != "" {
+		cmd.Env = append(cmd.Env, "PSA_PORTAL_PROXY_URL="+proxyURL)
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

@@ -377,6 +377,26 @@ func TestPSAPortalEnabled(t *testing.T) {
 	}
 }
 
+func TestPSAPortalProxyURL(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want string
+	}{
+		{name: "set from env", env: "http://u:p@host:10001", want: "http://u:p@host:10001"},
+		{name: "empty when unset", env: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("PSA_PORTAL_PROXY_URL", tt.env)
+			cfg := FromEnv(Default())
+			if cfg.PSAPortal.ProxyURL != tt.want {
+				t.Errorf("PSAPortal.ProxyURL = %q, want %q", cfg.PSAPortal.ProxyURL, tt.want)
+			}
+		})
+	}
+}
+
 func TestPSACampaignSyncEnabled(t *testing.T) {
 	t.Setenv("PSA_CAMPAIGN_SYNC_ENABLED", "true")
 	cfg, err := Load(nil)

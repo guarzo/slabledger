@@ -239,6 +239,7 @@ func FromEnv(base Config) Config {
 	// PSA Buyer Campaign Manager portal credentials (headless-login harvester)
 	cfg.PSAPortal.Email = os.Getenv("PSA_PORTAL_EMAIL")
 	cfg.PSAPortal.Password = os.Getenv("PSA_PORTAL_PASSWORD")
+	cfg.PSAPortal.ProxyURL = os.Getenv("PSA_PORTAL_PROXY_URL")
 	// Default: enabled when credentials are present (harvester app). The
 	// reader-only main app holds no credentials, so PSA_PORTAL_ENABLED lets it
 	// turn on the token reader explicitly.

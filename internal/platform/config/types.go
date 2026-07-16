@@ -287,6 +287,11 @@ type PSAPortalConfig struct {
 	Enabled  bool
 	Email    string
 	Password string
+	// ProxyURL, when set, routes the harvester's Playwright browser through a
+	// proxy so psacard.com sees a clean egress IP (Cloudflare challenges the Fly
+	// datacenter IP). Optional; empty = direct egress. Format:
+	// http://user:pass@host:port or socks5://host:port.
+	ProxyURL string
 }
 
 // PSASyncConfig controls the background PSA portal sync scheduler.

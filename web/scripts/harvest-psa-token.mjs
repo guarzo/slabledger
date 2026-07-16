@@ -28,6 +28,7 @@
 // Google Chrome) or PSA_PORTAL_CHROME_PATH=/path/to/chromium — no Playwright download needed.
 
 import { chromium } from '@playwright/test';
+import { proxyFromEnv } from './proxy-from-env.mjs';
 
 const EMAIL = process.env.PSA_PORTAL_EMAIL;
 const PASSWORD = process.env.PSA_PORTAL_PASSWORD;
@@ -153,7 +154,10 @@ if (process.env.PSA_PORTAL_CHROME_PATH) {
   launchOpts.channel = process.env.PSA_PORTAL_CHROME_CHANNEL;
 }
 const browser = await chromium.launch(launchOpts);
-const context = await browser.newContext({ userAgent: UA });
+const contextOpts = { userAgent: UA };
+const proxy = proxyFromEnv(process.env.PSA_PORTAL_PROXY_URL);
+if (proxy) contextOpts.proxy = proxy;
+const context = await browser.newContext(contextOpts);
 const page = await context.newPage();
 
 try {

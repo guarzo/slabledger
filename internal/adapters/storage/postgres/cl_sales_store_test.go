@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/stretchr/testify/assert"
@@ -29,20 +30,24 @@ func TestCLSalesStore_GetCompSummariesByKeys(t *testing.T) {
 		        ('cert-b', 'coll-b', 'gem-b', 'PSA 9')`)
 	require.NoError(t, err)
 
-	// Insert sales comps. Spread gem-a across distinct dates so ORDER BY sale_date ASC
-	// is deterministic, allowing us to assert LastSaleCents unambiguously.
-	// Prices: 9000 (Apr 16), 11000 (Apr 17), 12000 (Apr 18), 10000 (Apr 19), 13000 (Apr 20).
+	// Insert sales comps. Spread gem-a across distinct recent dates so ORDER BY
+	// sale_date ASC is deterministic and every row stays inside the store's
+	// rolling 90-day window (dates are relative to time.Now(), not hardcoded, so
+	// the test does not rot as the calendar advances).
+	// Prices by age: 9000 (-4d), 11000 (-3d), 12000 (-2d), 10000 (-1d), 13000 (today).
 	// Sorted: [9000, 10000, 11000, 12000, 13000] → median=11000, last=13000, high=13000, low=9000.
-	now := "2026-04-20"
+	now := time.Now()
+	day := func(offset int) string { return now.AddDate(0, 0, offset).Format("2006-01-02") }
+	today := day(0)
 	for _, row := range [][]any{
-		{"gem-a", "item-a-1", "2026-04-16", 9000, "ebay", "g10"},
-		{"gem-a", "item-a-2", "2026-04-17", 11000, "ebay", "g10"},
-		{"gem-a", "item-a-3", "2026-04-18", 12000, "ebay", "g10"},
-		{"gem-a", "item-a-4", "2026-04-19", 10000, "ebay", "g10"},
-		{"gem-a", "item-a-5", now, 13000, "ebay", "g10"},
-		{"gem-b", "item-b-1", now, 4000, "ebay", "g9"},
-		{"gem-b", "item-b-2", now, 5000, "ebay", "g9"},
-		{"gem-b", "item-b-3", now, 4500, "ebay", "g9"},
+		{"gem-a", "item-a-1", day(-4), 9000, "ebay", "g10"},
+		{"gem-a", "item-a-2", day(-3), 11000, "ebay", "g10"},
+		{"gem-a", "item-a-3", day(-2), 12000, "ebay", "g10"},
+		{"gem-a", "item-a-4", day(-1), 10000, "ebay", "g10"},
+		{"gem-a", "item-a-5", today, 13000, "ebay", "g10"},
+		{"gem-b", "item-b-1", today, 4000, "ebay", "g9"},
+		{"gem-b", "item-b-2", today, 5000, "ebay", "g9"},
+		{"gem-b", "item-b-3", today, 4500, "ebay", "g9"},
 	} {
 		_, err := db.ExecContext(ctx,
 			`INSERT INTO cl_sales_comps
@@ -68,7 +73,7 @@ func TestCLSalesStore_GetCompSummariesByKeys(t *testing.T) {
 	assert.Equal(t, 11000, a.MedianCents)
 	assert.Equal(t, 13000, a.HighestCents)
 	assert.Equal(t, 9000, a.LowestCents)
-	assert.Equal(t, 13000, a.LastSaleCents) // 2026-04-20 row is the most recent
+	assert.Equal(t, 13000, a.LastSaleCents) // today's row is the most recent
 	assert.Len(t, a.PriceCentsList, 5)
 	require.Len(t, a.ByPlatform, 1)
 	assert.Equal(t, "ebay", a.ByPlatform[0].Platform)
