@@ -6,7 +6,7 @@ export function proxyFromEnv(url) {
   const u = new URL(url);
   return {
     server: `${u.protocol}//${u.host}`,
-    username: u.username || undefined,
+    username: u.username ? decodeURIComponent(u.username) : undefined,
     password: u.password ? decodeURIComponent(u.password) : undefined,
   };
 }

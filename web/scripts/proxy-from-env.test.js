@@ -13,6 +13,11 @@ describe('proxyFromEnv', () => {
       input: 'socks5://host:1080',
       want: { server: 'socks5://host:1080', username: undefined, password: undefined },
     },
+    {
+      name: 'percent-encoded credentials are decoded',
+      input: 'http://user%40name:pa%3Ass@host:10001',
+      want: { server: 'http://host:10001', username: 'user@name', password: 'pa:ss' },
+    },
     { name: 'empty string', input: '', want: undefined },
     { name: 'undefined', input: undefined, want: undefined },
   ];
