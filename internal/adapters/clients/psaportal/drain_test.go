@@ -17,9 +17,11 @@ func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
 		t.Fatalf("fixture missing: %v", err)
 	}
 	ff := &fakeFetcher{routes: map[string]string{
-		"/edit/__data.json?x-sveltekit-invalidated=0001": string(edit),
-		"/buyercampaignmanager/_app/remote/":             `{"type":"result","result":"[{}]"}`,
-		"/buyercampaignmanager":                          `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+		"/edit/__data.json?x-sveltekit-invalidated=0001":          string(edit),
+		"/buyercampaignmanager/_app/remote/abc123/updateCampaign": `{"type":"result","result":"[{}]"}`,
+		"/buyercampaignmanager":                                   `<html><script src="/buyercampaignmanager/_app/immutable/entry/app.HASH123.js"></script></html>`,
+		"immutable/entry/app.HASH123.js":                          `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
+		"immutable/chunks/REMOTE.js":                              `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
 	}}
 
 	c := New(ff, Config{})
@@ -142,10 +144,12 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ff := &fakeFetcher{
 				routes: map[string]string{
-					"/buyercampaignmanager/_app/remote/": tt.createBody,
-					"/buyercampaignmanager":              `<html>build/app/immutable/entry/app.HASH123.js</html>`,
+					"/buyercampaignmanager/_app/remote/abc123/createCampaign": tt.createBody,
+					"/buyercampaignmanager":                                   `<html><script src="/buyercampaignmanager/_app/immutable/entry/app.HASH123.js"></script></html>`,
+					"immutable/entry/app.HASH123.js":                          `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
+					"immutable/chunks/REMOTE.js":                              `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
 				},
-				statusFor: map[string]int{"/buyercampaignmanager/_app/remote/": tt.createStatus},
+				statusFor: map[string]int{"/buyercampaignmanager/_app/remote/abc123/createCampaign": tt.createStatus},
 			}
 
 			fd := &psacampaign.CampaignFormData{CampaignName: "Modern 10s", CampaignType: "CATEGORY", Category: "POKEMON", GradeMinimum: "10", GradeMaximum: "10"}
@@ -191,7 +195,7 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 			if tt.wantLinked && (linkedInternal != "c1" || linkedPSA != "uuid-new-1") {
 				t.Fatalf("linked %q/%q, want c1/uuid-new-1", linkedInternal, linkedPSA)
 			}
-			portalCalled := ff.captured["/buyercampaignmanager/_app/remote/"] != ""
+			portalCalled := ff.captured["/buyercampaignmanager/_app/remote/abc123/createCampaign"] != ""
 			if (tt.missingFD || tt.wantNoPortal) && portalCalled {
 				t.Fatal("portal must not be called (missing formData or already-linked idempotent row)")
 			}

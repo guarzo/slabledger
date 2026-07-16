@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -72,6 +73,15 @@ type Client struct {
 	fetch      Fetcher
 	psaBaseURL string
 	logger     observability.Logger
+
+	// remoteHashCache memoizes resolved SvelteKit remote-function hashes
+	// (fn name -> hash segment) for the lifetime of the run, so a drain of
+	// many queued pushes crawls the client bundle once, not per campaign.
+	// The current caller (a sequential drain over one browser session) is
+	// single-threaded; the mutex keeps the lazy map safe if a future caller
+	// shares a Client across goroutines.
+	remoteHashMu    sync.Mutex
+	remoteHashCache map[string]string
 }
 
 // Option configures optional Client dependencies.
