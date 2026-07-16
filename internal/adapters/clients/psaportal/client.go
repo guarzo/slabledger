@@ -72,6 +72,11 @@ type Client struct {
 	fetch      Fetcher
 	psaBaseURL string
 	logger     observability.Logger
+
+	// remoteHashCache memoizes resolved SvelteKit remote-function hashes
+	// (fn name -> hash segment) for the lifetime of the run, so a drain of
+	// many queued pushes crawls the client bundle once, not per campaign.
+	remoteHashCache map[string]string
 }
 
 // Option configures optional Client dependencies.

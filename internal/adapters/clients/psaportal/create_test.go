@@ -73,12 +73,24 @@ func createFormData() psacampaign.CampaignFormData {
 	}
 }
 
+// bundleRoutes returns fakeFetcher routes that model the SvelteKit client bundle
+// crawl fetchRemoteHash performs: landing page -> app entry chunk -> a chunk that
+// carries the remote-function id literals. The remote hash here is "abc123", so
+// create/update POSTs must target /_app/remote/abc123/{fn}.
+func bundleRoutes() map[string]string {
+	return map[string]string{
+		"/buyercampaignmanager":          `<html><script src="/buyercampaignmanager/_app/immutable/entry/app.HASH123.js"></script></html>`,
+		"immutable/entry/app.HASH123.js": `const __vite__mapDeps=(d=["../nodes/6.NODE.js","../chunks/REMOTE.js"]);`,
+		"immutable/nodes/6.NODE.js":      `export const component=()=>{};`,
+		"immutable/chunks/REMOTE.js":     `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
+	}
+}
+
 func TestCreateCampaign_PostsBareFormDataAndDecodesID(t *testing.T) {
-	ff := &fakeFetcher{routes: map[string]string{
-		// result is a JSON *string* containing a ref-packed array (verified live 2026-07-14)
-		"/buyercampaignmanager/_app/remote/": `{"type":"result","result":"[{\"campaignRequestId\":1,\"status\":2},\"uuid-new-1\",\"PAUSED\"]"}`,
-		"/buyercampaignmanager":              `<html>build/app/immutable/entry/app.HASH123.js</html>`,
-	}}
+	routes := bundleRoutes()
+	// result is a JSON *string* containing a ref-packed array (verified live 2026-07-14)
+	routes["/buyercampaignmanager/_app/remote/abc123/createCampaign"] = `{"type":"result","result":"[{\"campaignRequestId\":1,\"status\":2},\"uuid-new-1\",\"PAUSED\"]"}`
+	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})
 	id, err := c.CreateCampaign(context.Background(), createFormData())
@@ -89,7 +101,7 @@ func TestCreateCampaign_PostsBareFormDataAndDecodesID(t *testing.T) {
 		t.Fatalf("id = %q, want uuid-new-1", id)
 	}
 
-	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/"])
+	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/abc123/createCampaign"])
 	decoded, err := base64.StdEncoding.DecodeString(payloadStr)
 	if err != nil {
 		t.Fatalf("base64: %v", err)
@@ -141,12 +153,11 @@ func TestCreateCampaign_Failures(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			routes := bundleRoutes()
+			routes["/buyercampaignmanager/_app/remote/abc123/createCampaign"] = tt.response
 			ff := &fakeFetcher{
-				routes: map[string]string{
-					"/buyercampaignmanager/_app/remote/": tt.response,
-					"/buyercampaignmanager":              `<html>build/app/immutable/entry/app.HASH123.js</html>`,
-				},
-				statusFor: map[string]int{"/buyercampaignmanager/_app/remote/": tt.statusCode},
+				routes:    routes,
+				statusFor: map[string]int{"/buyercampaignmanager/_app/remote/abc123/createCampaign": tt.statusCode},
 			}
 
 			c := New(ff, Config{})

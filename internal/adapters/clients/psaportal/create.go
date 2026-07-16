@@ -15,7 +15,7 @@ import (
 // array). Errors after a 200 response mention that the campaign may already
 // exist on the portal, so callers never blind-retry a decode failure.
 func (c *Client) CreateCampaign(ctx context.Context, fd psacampaign.CampaignFormData) (string, error) {
-	buildHash, err := c.fetchBuildHash(ctx)
+	remoteHash, err := c.fetchRemoteHash(ctx, "createCampaign")
 	if err != nil {
 		return "", err
 	}
@@ -48,7 +48,7 @@ func (c *Client) CreateCampaign(ctx context.Context, fd psacampaign.CampaignForm
 		return "", fmt.Errorf("psaportal: marshal create request: %w", err)
 	}
 
-	createURL := fmt.Sprintf("%s/buyercampaignmanager/_app/remote/%s/createCampaign", c.baseURL(), buildHash)
+	createURL := fmt.Sprintf("%s/buyercampaignmanager/_app/remote/%s/createCampaign", c.baseURL(), remoteHash)
 	resp, err := c.fetch.Do(ctx, FetchRequest{URL: createURL, Method: "POST", Body: string(body)})
 	if err != nil {
 		return "", fmt.Errorf("psaportal: create campaign: %w", err)
