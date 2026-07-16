@@ -19,9 +19,11 @@ var chunkPathRe = regexp.MustCompile(`(?:chunks|nodes)/[A-Za-z0-9_.-]+\.js`)
 // fn in a compiled client chunk. SvelteKit addresses remote functions at
 // /_app/remote/{hash}/{fn} where {hash} is a djb2 (base36) hash of the .remote
 // source file's path — NOT the app build hash — and the client bundles the id
-// as the string literal "{hash}/{fn}" (e.g. "1fvuqqe/createCampaign").
+// as the string literal "{hash}/{fn}" (e.g. "1fvuqqe/createCampaign"). The hash
+// is opaque and variable length, so match one-or-more lowercase-alphanumeric
+// characters rather than a fixed-length window.
 func remoteHashReFor(fn string) *regexp.Regexp {
-	return regexp.MustCompile(`"([a-z0-9]{5,10})/` + regexp.QuoteMeta(fn) + `"`)
+	return regexp.MustCompile(`"([a-z0-9]+)/` + regexp.QuoteMeta(fn) + `"`)
 }
 
 // fetchRemoteHash resolves the SvelteKit remote-function hash segment for fn
@@ -30,8 +32,12 @@ func remoteHashReFor(fn string) *regexp.Regexp {
 // immutable chunk for the "{hash}/{fn}" literal. The hash only changes when PSA
 // renames the backing .remote source file, so it is cached on the Client for
 // the lifetime of the run (one harvester drain), shared across all queued
-// pushes rather than re-crawled per campaign.
+// pushes rather than re-crawled per campaign. The lock is held across discovery
+// so concurrent callers coalesce onto a single crawl instead of racing.
 func (c *Client) fetchRemoteHash(ctx context.Context, fn string) (string, error) {
+	c.remoteHashMu.Lock()
+	defer c.remoteHashMu.Unlock()
+
 	if c.remoteHashCache == nil {
 		c.remoteHashCache = map[string]string{}
 	}
