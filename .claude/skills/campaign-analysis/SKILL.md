@@ -29,7 +29,7 @@ Read these files in order. Do NOT read scattered `~/.claude/projects/-workspace/
 2. `docs/private/campaign-analysis-ledger.md` — full file (~11 Rules). ⭐ rules are gates checked at Step 2.
 3. `docs/private/campaign-state-log.md` — top 10 entries only (recent state changes). The most recent entry's date is your `since=` value in Step 1.
 4. `docs/private/CAMPAIGN_STRATEGY.md` — design intent (business model, exit-channel math, edge thesis, Quick-Copy reference).
-5. `docs/private/impossible-data-asks.md` if it exists — hold in memory; every partner-ask draft cross-references it.
+5. `docs/private/campaign-analysis-wishlist.md` — the living data-gap and improvement tracker; hold known gaps in memory so every partner-ask draft cross-references them (don't re-ask for data already logged as an impossible/pending ask).
 
 ### Step 0a — Housekeeping (≤5 lines, only when something needs operator attention)
 
@@ -152,7 +152,7 @@ The operator picks a Decision to dig into, asks for a related view, or requests 
 5. **"What should we add?"** — coverage / acquisition. Default to the edge thesis (CL-lag on ≥$150, second-tier characters, avoid sub-$150 modern); never default-recommend popular-tier from data (R-006).
 
    **Staging an approved add (optional — manual PUT stays valid).** Once the operator approves an add, offer to stage the *scalar/range* config to the PSA portal. Read `psaCampaignRequestId` from `/api/campaigns` for that campaign and branch:
-   - **Unlinked** (`psaCampaignRequestId` empty) → `POST /api/campaigns/{id}/psa-propose-create`. On `200`, show the returned `formData`, and disclose: the portal campaign is created **paused with an empty inclusion list** — the operator adds the characters and activates it in the portal (R-030). On explicit yes → `psa-publish`. `409 "already queued"` = a create is pending, don't re-create; `409 "already created … link it manually"` = link-back failed, tell the operator to `psa-link`.
+   - **Unlinked** (`psaCampaignRequestId` empty) → `POST /api/campaigns/{id}/psa-propose-create`. On `200`, show the returned `formData`, and disclose: the portal campaign is created **paused with an empty inclusion list** — the operator adds the characters and activates it in the portal (R-030). On explicit yes → `psa-publish`; the harvester then creates the portal campaign and links it back (verified working — confirm the link landed). `409 "already queued"` = a create is pending, don't re-create; `409 "already created … link it manually"` = link-back failed, tell the operator to `psa-link`.
    - **Linked** (`psaCampaignRequestId` set) → `POST /api/campaigns/{id}/psa-propose`. On `200` with a `pushId` and non-empty `diff`, show the diff (scalar/range only — inclusion adds are NOT in it), get an explicit yes → `psa-publish`. On `200` with no `pushId` (empty diff) → "already in sync, nothing to stage."
    - **`503`** anywhere → PSA sync not enabled; fall back to the manual `PUT` path (hard-constraint 6).
 
