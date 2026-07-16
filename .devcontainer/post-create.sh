@@ -30,6 +30,23 @@ if ! curl -fsSL https://claude.ai/install.sh | bash; then
     echo "⚠️  Claude Code CLI installation failed, continuing..."
 fi
 
+# Install my@guarzo marketplace + plugins and link Codex config. These require
+# the claude CLI (just installed above) on PATH, so they run here rather than in
+# local-seed.sh (which runs at container start, before this script).
+if [ -x "$HOME/.dotfiles/ai/marketplace/install.sh" ]; then
+    echo "🌱 Installing my@guarzo marketplace + plugin..."
+    bash "$HOME/.dotfiles/ai/marketplace/install.sh" || echo "⚠️  marketplace install failed (non-fatal)"
+fi
+# Install the Codex CLI (@openai/codex) globally, then link its config.
+echo "🤖 Installing Codex CLI..."
+if ! npm install -g @openai/codex; then
+    echo "⚠️  Codex CLI installation failed, continuing..."
+fi
+if [ -x "$HOME/.dotfiles/ai/codex/install.sh" ]; then
+    echo "🌱 Linking Codex config..."
+    bash "$HOME/.dotfiles/ai/codex/install.sh" || echo "⚠️  codex config link failed (non-fatal)"
+fi
+
 # Restore Claude config from backup if the main file is missing but a backup exists
 CLAUDE_CFG="$HOME/.claude.json"
 if [ ! -f "$CLAUDE_CFG" ]; then
@@ -55,11 +72,6 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     echo "📝 Creating .env from .env.example..."
     cp .env.example .env
     echo "⚠️  Remember to update .env with your actual API keys!"
-fi
-
-echo "🤖 Installing OpenCode CLI..."
-if ! curl -fsSL https://opencode.ai/install | bash; then
-    echo "⚠️  OpenCode CLI installation failed, continuing..."
 fi
 
 # Build the application to verify everything works

@@ -125,17 +125,14 @@ RUN echo "alias ll='ls -lah'" >> /home/$USERNAME/.bashrc \
     && echo "alias gt='go test ./...'" >> /home/$USERNAME/.bashrc \
     && echo "alias gtr='go test -race ./...'" >> /home/$USERNAME/.bashrc
 
-# Ensure ~/.local/bin and ~/.opencode/bin are on PATH for bash
-RUN echo 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"' >> /home/$USERNAME/.bashrc
+# Ensure ~/.local/bin is on PATH for bash
+RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/$USERNAME/.bashrc
 
 # Enable bash completion
 RUN echo "source /etc/bash_completion" >> /home/$USERNAME/.bashrc
 
 # Install flyctl (Fly.io CLI) to /usr/local/bin so it's on PATH for all users
 RUN curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
-
-# Install OpenCode AI coding agent
-RUN curl -fsSL https://opencode.ai/install | bash
 
 # Install Oh My Zsh for vscode user
 USER $USERNAME
@@ -195,10 +192,9 @@ RUN printf '%s\n' \
     '' \
     '# AI coding agents' \
     'alias claude="claude"' \
-    'alias oc="opencode"' \
     '' \
-    '# Ensure Claude Code, OpenCode, and local binaries are on PATH' \
-    'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"' \
+    '# Ensure Claude Code and local binaries are on PATH' \
+    'export PATH="$HOME/.local/bin:$PATH"' \
     '' \
     'export EDITOR=vim' \
     'cd /workspace 2>/dev/null || true' \
