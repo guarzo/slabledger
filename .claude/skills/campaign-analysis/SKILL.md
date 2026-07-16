@@ -29,7 +29,7 @@ Read these files in order. Do NOT read scattered `~/.claude/projects/-workspace/
 2. `docs/private/campaign-analysis-ledger.md` — full file (~11 Rules). ⭐ rules are gates checked at Step 2.
 3. `docs/private/campaign-state-log.md` — top 10 entries only (recent state changes). The most recent entry's date is your `since=` value in Step 1.
 4. `docs/private/CAMPAIGN_STRATEGY.md` — design intent (business model, exit-channel math, edge thesis, Quick-Copy reference).
-5. `docs/private/impossible-data-asks.md` if it exists — hold in memory; every partner-ask draft cross-references it.
+5. `docs/private/campaign-analysis-wishlist.md` — the living data-gap and improvement tracker; hold known gaps in memory so every partner-ask draft cross-references them (don't re-ask for data already logged as an impossible/pending ask).
 
 ### Step 0a — Housekeeping (≤5 lines, only when something needs operator attention)
 
