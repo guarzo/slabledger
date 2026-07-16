@@ -5,8 +5,8 @@ set -e
 
 echo "🔄 Running post-start tasks..."
 
-# Fix Claude Code and OpenCode host path references.
-# When ~/.claude or ~/.opencode is mounted from the host, config files contain
+# Fix Claude Code host path references.
+# When ~/.claude is mounted from the host, config files contain
 # absolute paths using the host username (e.g. /home/tng/.claude/...) which
 # don't resolve in the container where the user is "vscode". Create a symlink
 # from the host home directory to the container home so these paths resolve.
@@ -32,34 +32,6 @@ if [ -d "$CONTAINER_HOME/.claude" ]; then
             sudo ln -sfn "$CONTAINER_HOME" "$HOST_HOME"
         fi
     done
-fi
-
-# Handle OpenCode config - detect host home from opencode config
-# OpenCode uses the XDG-standard path ~/.config/opencode
-if [ -d "$CONTAINER_HOME/.config/opencode" ]; then
-    HOST_HOME=""
-    # Primary: detect host home from broken symlinks in the config dir.
-    # When the host mounts ~/.config/opencode, symlinks inside it still point to
-    # host paths (e.g. /home/node/.dotfiles/...). Read the target of any broken
-    # symlink to extract the host home directory.
-    for item in "$CONTAINER_HOME/.config/opencode"/*; do
-        if [ -L "$item" ] && [ ! -e "$item" ]; then
-            HOST_HOME=$(readlink "$item" | grep -oP '^/home/[^/]+' || true)
-            [ -n "$HOST_HOME" ] && break
-        fi
-    done
-    # Fallback: check opencode config file for absolute paths
-    if [ -z "$HOST_HOME" ]; then
-        OPENCODE_CONFIG="$CONTAINER_HOME/.config/opencode/opencode.json"
-        if [ -f "$OPENCODE_CONFIG" ]; then
-            HOST_HOME=$(grep -oP '"/home/[^"]+' "$OPENCODE_CONFIG" | head -1 | tr -d '"' | grep -oP '/home/[^/]+' || true)
-        fi
-    fi
-    # Create symlink if host home differs from container home
-    if [ -n "$HOST_HOME" ] && [ "$HOST_HOME" != "$CONTAINER_HOME" ] && [ ! -e "$HOST_HOME" ]; then
-        echo "🔗 Creating symlink $HOST_HOME -> $CONTAINER_HOME (OpenCode host path fix)"
-        sudo ln -sfn "$CONTAINER_HOME" "$HOST_HOME"
-    fi
 fi
 
 # Remove Windows credential helper if present (copied from host .gitconfig)
@@ -97,7 +69,6 @@ echo "📊 Environment Info:"
 echo "  Go version: $(go version | awk '{print $3}')"
 echo "  Node version: $(node --version 2>/dev/null || echo 'not installed')"
 echo "  Claude Code: $(claude --version 2>/dev/null || echo 'not installed')"
-echo "  OpenCode: $(opencode --version 2>/dev/null || echo 'not installed')"
 echo "  Shell: $(basename "${SHELL}")"
 echo "  Working directory: $(pwd)"
 echo ""
@@ -128,5 +99,4 @@ echo "  make build         # Build application"
 echo "  make run           # Run server"
 echo "  make lint          # Lint code"
 echo "  claude             # Start Claude Code CLI"
-echo "  opencode           # Start OpenCode CLI"
 echo ""
