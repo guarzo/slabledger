@@ -1,13 +1,52 @@
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { Dialog } from 'radix-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, isAPIError } from '../../../js/api';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
-import { Button, Select } from '../../ui';
+import { Button, Select, StatusPill, CardShell, SectionEyebrow } from '../../ui';
 import type { Campaign, ProposedDiff, CampaignFormData, PSAPushRow } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
-import { classifyPushStatus } from '../../utils/psaPush';
+import { classifyPushStatus, syncState, SYNC_LABELS, SYNC_TONES } from '../../utils/psaPush';
+
+/** Tinted status banner (icon + text), matching StatusPill's tone tokens.
+    Used for push-lifecycle messages that need more room than a pill. */
+function SyncBanner({ tone, children }: { tone: 'info' | 'warning' | 'danger' | 'success'; children: ReactNode }) {
+  const toneVar = `var(--${tone})`;
+  return (
+    <div
+      role={tone === 'danger' ? 'alert' : 'status'}
+      className="flex gap-2.5 items-start px-3 py-2.5 rounded-[var(--radius-md)] border text-xs leading-relaxed"
+      style={{
+        backgroundColor: `color-mix(in oklab, ${toneVar} 10%, transparent)`,
+        borderColor: `color-mix(in oklab, ${toneVar} 30%, transparent)`,
+        color: 'var(--text)',
+      }}
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
+        style={{ backgroundColor: toneVar }}
+        aria-hidden="true"
+      />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+/** Key/value preview grid — replaces stacked "Label: value" sentences with
+    a scannable two-column layout. */
+function PreviewGrid({ rows }: { rows: Array<[string, ReactNode]> }) {
+  return (
+    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+      {rows.map(([k, v]) => (
+        <Fragment key={k}>
+          <span className="text-[var(--text-subtle)] whitespace-nowrap">{k}</span>
+          <span className="text-[var(--text)] font-medium tabular-nums">{v}</span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
 
 export interface PSAPublishModalProps {
   open: boolean;
@@ -130,6 +169,8 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
     },
   });
 
+  const sync = syncState(isLinked, pushRow?.status);
+
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <Dialog.Portal>
@@ -137,64 +178,86 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
         <Dialog.Content
           className="fixed right-0 top-0 bottom-0 z-50 w-[min(480px,calc(100%-2rem))] bg-[var(--surface-1)] border-l border-[var(--surface-2)] p-6 shadow-2xl data-[state=open]:animate-[slideInFromRight_200ms_cubic-bezier(0.4,0,0.2,1)] overflow-y-auto"
         >
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-3 mb-1">
             <Dialog.Title className="text-lg font-semibold text-[var(--text)]">
               Publish to PSA
             </Dialog.Title>
-            {isLinked && (
-              <span className="text-xs text-[var(--text-muted)]">
-                Linked: {campaign.psaCampaignRequestId}
-              </span>
-            )}
+            <StatusPill tone={SYNC_TONES[sync]}>{SYNC_LABELS[sync]}</StatusPill>
           </div>
+          {isLinked && (
+            <p className="text-xs text-[var(--text-subtle)] mb-4">
+              Linked to <span className="font-medium text-[var(--text-muted)]">{campaign.psaCampaignRequestId}</span>
+            </p>
+          )}
+          {!isLinked && <div className="mb-4" />}
           <Dialog.Description className="sr-only">
             Link this campaign to a PSA portal campaign and publish pending changes.
           </Dialog.Description>
 
-          {inFlightRow && (
-            <p className="text-xs text-[var(--info)] mb-3">
-              Push in flight (status: {inFlightRow.status})
-              {inFlightRow.approvedBy ? ` — approved by ${inFlightRow.approvedBy}` : ''}.
-              The harvester picks it up on its next run.
-            </p>
-          )}
-          {failedRow && (
-            <p className="text-xs text-[var(--danger)] mb-3">
-              Last push failed{failedRow.error ? `: ${failedRow.error}` : ''}. Propose again to retry.
-            </p>
-          )}
+          <div className="flex flex-col gap-3 mb-5">
+            {inFlightRow && (
+              <SyncBanner tone="info">
+                Push in flight (status: {inFlightRow.status})
+                {inFlightRow.approvedBy ? ` — approved by ${inFlightRow.approvedBy}` : ''}.
+                The harvester picks it up on its next run.
+              </SyncBanner>
+            )}
+            {failedRow && (
+              <SyncBanner tone="danger">
+                Last push failed{failedRow.error ? `: ${failedRow.error}` : ''}. Propose again to retry.
+              </SyncBanner>
+            )}
+            {pendingRow?.operation === 'create' && !isLinked && (
+              <SyncBanner tone="warning">
+                A create is queued and awaiting approval
+                {pendingRow.requestedBy ? ` (requested by ${pendingRow.requestedBy})` : ''}.
+              </SyncBanner>
+            )}
+            {publishStatus && !inFlightRow && (
+              <SyncBanner tone="success">
+                {isLinked
+                  ? `Status: ${publishStatus}`
+                  : `Queued for harvester (status: ${publishStatus}). The campaign links automatically once created.`}
+              </SyncBanner>
+            )}
+          </div>
 
           {!isLinked ? (
-            <>
-            <div className="flex items-center gap-2">
-              <Select
-                aria-label="PSA portal campaign"
-                value={selectedPSAId}
-                onChange={(e) => setSelectedPSAId(e.target.value)}
-                options={[
-                  { value: '', label: 'Select a PSA campaign…' },
-                  ...(portalCampaignsData?.campaigns ?? []).map((c) => ({
-                    value: c.campaignRequestId,
-                    label: c.name,
-                  })),
-                ]}
-              />
-              <Button
-                size="sm"
-                disabled={!selectedPSAId}
-                loading={linkMutation.isPending}
-                onClick={() => linkMutation.mutate(selectedPSAId)}
-              >
-                Link
-              </Button>
-            </div>
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <SectionEyebrow>Link an existing campaign</SectionEyebrow>
+                <div className="flex items-center gap-2">
+                  <Select
+                    aria-label="PSA portal campaign"
+                    value={selectedPSAId}
+                    onChange={(e) => setSelectedPSAId(e.target.value)}
+                    options={[
+                      { value: '', label: 'Select a PSA campaign…' },
+                      ...(portalCampaignsData?.campaigns ?? []).map((c) => ({
+                        value: c.campaignRequestId,
+                        label: c.name,
+                      })),
+                    ]}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={!selectedPSAId}
+                    loading={linkMutation.isPending}
+                    onClick={() => linkMutation.mutate(selectedPSAId)}
+                  >
+                    Link
+                  </Button>
+                </div>
+              </div>
 
-              <div className="mt-4 pt-4 border-t border-[var(--surface-2)] flex flex-col gap-3">
-                <p className="text-xs text-[var(--text-muted)]">
-                  Or create a new PSA portal campaign from this campaign&rsquo;s config.
-                  It is created <span className="font-medium">paused</span> — add the
-                  inclusion list in the portal before activating.
-                </p>
+              <div className="pt-4 border-t border-[var(--surface-2)] flex flex-col gap-3">
+                <div>
+                  <SectionEyebrow>Or create a new campaign</SectionEyebrow>
+                  <p className="text-xs text-[var(--text-muted)] mt-1.5">
+                    Built from this campaign&rsquo;s config. Created <span className="font-medium text-[var(--text)]">paused</span> —
+                    add the inclusion list in the portal before activating.
+                  </p>
+                </div>
                 {!pendingRow && !inFlightRow && (
                   <Button
                     size="sm"
@@ -205,34 +268,26 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                     Create on PSA
                   </Button>
                 )}
-                {pendingRow?.operation === 'create' && (
-                  <p className="text-xs text-[var(--warning)]">
-                    A create is queued and awaiting approval
-                    {pendingRow.requestedBy ? ` (requested by ${pendingRow.requestedBy})` : ''}.
-                  </p>
-                )}
 
                 {effectiveCreatePreview && (
-                  <div className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">
-                    {Object.entries({
-                      Name: effectiveCreatePreview.campaignName,
-                      Category: effectiveCreatePreview.category,
-                      Status: 'PAUSED',
-                      'Bid %': `${effectiveCreatePreview.bidPercentage}%`,
-                      'Daily budget': `$${effectiveCreatePreview.dailyBudget}`,
-                      'Flat fee': `$${effectiveCreatePreview.flatFee}`,
-                      'Daily spec limit': `${effectiveCreatePreview.dailySpecLimit}`,
-                      Grades: `${effectiveCreatePreview.gradeMinimum}–${effectiveCreatePreview.gradeMaximum}`,
-                      Years: `${effectiveCreatePreview.yearMinimum}–${effectiveCreatePreview.yearMaximum}`,
-                      Prices: `$${effectiveCreatePreview.priceMinimum}–$${effectiveCreatePreview.priceMaximum}`,
-                      'CL confidence ≥': `${effectiveCreatePreview.cardLadderConfidenceMinimum}`,
-                      Subjects: 'none (add in portal before activating)',
-                    }).map(([k, v]) => (
-                      <div key={k}>
-                        <span className="font-medium text-[var(--text)]">{k}</span>: {v}
-                      </div>
-                    ))}
-                  </div>
+                  <CardShell variant="data" padding="sm">
+                    <PreviewGrid
+                      rows={[
+                        ['Name', effectiveCreatePreview.campaignName],
+                        ['Category', effectiveCreatePreview.category],
+                        ['Status', 'PAUSED'],
+                        ['Bid %', `${effectiveCreatePreview.bidPercentage}%`],
+                        ['Daily budget', `$${effectiveCreatePreview.dailyBudget}`],
+                        ['Flat fee', `$${effectiveCreatePreview.flatFee}`],
+                        ['Daily spec limit', `${effectiveCreatePreview.dailySpecLimit}`],
+                        ['Grades', `${effectiveCreatePreview.gradeMinimum}–${effectiveCreatePreview.gradeMaximum}`],
+                        ['Years', `${effectiveCreatePreview.yearMinimum}–${effectiveCreatePreview.yearMaximum}`],
+                        ['Prices', `$${effectiveCreatePreview.priceMinimum}–$${effectiveCreatePreview.priceMaximum}`],
+                        ['CL confidence ≥', `${effectiveCreatePreview.cardLadderConfidenceMinimum}`],
+                        ['Subjects', 'none (add in portal before activating)'],
+                      ]}
+                    />
+                  </CardShell>
                 )}
 
                 {effectiveCreatePreview && effectivePushId && !publishStatus && !inFlightRow && (
@@ -240,13 +295,8 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                     Approve &amp; queue create
                   </Button>
                 )}
-                {publishStatus && !inFlightRow && (
-                  <span className="text-xs text-[var(--success)]">
-                    Queued for harvester (status: {publishStatus}). The campaign links automatically once created.
-                  </span>
-                )}
               </div>
-            </>
+            </div>
           ) : (
             <div className="flex flex-col gap-3">
               {/* psa-propose has no update dedupe on the backend — proposing
@@ -263,19 +313,28 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                 </Button>
               )}
 
-              {effectiveDiff && effectiveDiff.changes.length > 0 && (
-                <div className="flex flex-col gap-1 text-xs text-[var(--text-muted)]">
-                  {effectiveDiff.changes.map((change) => (
-                    <div key={change.field}>
-                      <span className="font-medium text-[var(--text)]">{change.field}</span>
-                      {': '}
-                      {change.old} &rarr; {change.new}
-                    </div>
-                  ))}
-                </div>
+              {effectiveDiff && (effectiveDiff.changes?.length ?? 0) === 0 && (
+                <p className="text-xs text-[var(--text-subtle)]">Already matches PSA — nothing to publish.</p>
               )}
 
-              {effectiveDiff && effectiveDiff.changes.length > 0 && effectivePushId && !publishStatus && !inFlightRow && (
+              {effectiveDiff && (effectiveDiff.changes?.length ?? 0) > 0 && (
+                <CardShell variant="data" padding="sm">
+                  <div className="flex flex-col gap-2 text-xs">
+                    {effectiveDiff.changes.map((change) => (
+                      <div key={change.field} className="flex items-baseline justify-between gap-3">
+                        <span className="text-[var(--text-subtle)] whitespace-nowrap">{change.field}</span>
+                        <span className="tabular-nums text-right">
+                          <span className="text-[var(--text-muted)]">{change.old}</span>
+                          <span className="text-[var(--text-subtle)] mx-1.5">&rarr;</span>
+                          <span className="text-[var(--text)] font-medium">{change.new}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardShell>
+              )}
+
+              {effectiveDiff && (effectiveDiff.changes?.length ?? 0) > 0 && effectivePushId && !publishStatus && !inFlightRow && (
                 <Button
                   size="sm"
                   loading={publishMutation.isPending}
@@ -283,10 +342,6 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                 >
                   Publish to PSA
                 </Button>
-              )}
-
-              {publishStatus && !inFlightRow && (
-                <span className="text-xs text-[var(--success)]">Status: {publishStatus}</span>
               )}
             </div>
           )}

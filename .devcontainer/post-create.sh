@@ -18,6 +18,12 @@ if [ -d "web" ] && [ -f "web/package.json" ]; then
     if [ -f "web/node_modules/.bin/playwright" ]; then
         echo "🎭 Installing Playwright Chromium browser..."
         (cd web && npx playwright install chromium) || echo "⚠️  Playwright browser install failed, continuing..."
+
+        # Chromium's shared-lib deps (libglib2.0-0, libnss3, libgbm1, etc.) aren't
+        # pulled in by `playwright install` alone — without this, headless runs
+        # fail with "error while loading shared libraries: libglib-2.0.so.0".
+        echo "📚 Installing Playwright OS-level dependencies..."
+        (cd web && sudo env "PATH=$PATH" npx playwright install-deps chromium) || echo "⚠️  Playwright system deps install failed, continuing..."
     fi
 fi
 
