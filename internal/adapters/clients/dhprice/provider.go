@@ -232,7 +232,9 @@ func buildPrice(productName string, sales []dh.RecentSale) *pricing.Price {
 	lastByGrade := make(map[pricing.Grade]*lastSale)
 
 	for _, s := range sales {
-		key := s.GradingCompany + " " + s.Grade
+		// DH returns grading_company in mixed case ("psa" today, "PSA" historically).
+		// Normalize to upper so the gradeKey map lookup is case-insensitive.
+		key := strings.ToUpper(s.GradingCompany) + " " + s.Grade
 		g, ok := gradeKey[key]
 		if !ok {
 			continue
