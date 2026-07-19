@@ -146,38 +146,6 @@ func TestGenerateDigest_LLMError(t *testing.T) {
 	}
 }
 
-func TestAnalyzeCampaign_FormatsPrompt(t *testing.T) {
-	campaignID := "campaign-42"
-	var capturedReqs []CompletionRequest
-	llm := &mockLLMProvider{
-		Responses: []func(CompletionRequest, func(CompletionChunk)) error{
-			func(req CompletionRequest, stream func(CompletionChunk)) error {
-				capturedReqs = append(capturedReqs, req)
-				stream(CompletionChunk{Delta: "Campaign analysis result."})
-				return nil
-			},
-		},
-	}
-	executor := &mockToolExecutor{}
-	svc := NewService(llm, executor)
-
-	err := svc.AnalyzeCampaign(context.Background(), campaignID, func(StreamEvent) {})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(capturedReqs) == 0 {
-		t.Fatal("no completion requests captured")
-	}
-	req := capturedReqs[0]
-	if len(req.Messages) == 0 {
-		t.Fatal("expected at least one message in request")
-	}
-	userMsg := req.Messages[0]
-	if !strings.Contains(userMsg.Content, campaignID) {
-		t.Errorf("user message %q does not contain campaign ID %q", userMsg.Content, campaignID)
-	}
-}
-
 func TestCollectDigest_ReturnsContent(t *testing.T) {
 	want := "Full digest content returned synchronously."
 	llm := &mockLLMProvider{

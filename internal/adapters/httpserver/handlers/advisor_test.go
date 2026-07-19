@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -54,45 +53,6 @@ func TestHandleDigest_Success(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "data: [DONE]") {
 		t.Errorf("expected 'data: [DONE]' in SSE body, got: %s", body)
-	}
-}
-
-// --- HandleCampaignAnalysis ---
-
-func TestHandleCampaignAnalysis_MissingCampaignID(t *testing.T) {
-	h := newAdvisorHandler(&mocks.MockAdvisorService{})
-
-	body := `{"campaignId":""}`
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/campaign", bytes.NewBufferString(body))
-	req = withUser(req)
-	rec := httptest.NewRecorder()
-	h.HandleCampaignAnalysis(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d; body: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleCampaignAnalysis_Success(t *testing.T) {
-	svc := &mocks.MockAdvisorService{
-		AnalyzeCampaignFn: func(_ context.Context, campaignID string, stream func(advisor.StreamEvent)) error {
-			stream(advisor.StreamEvent{Type: advisor.EventDelta, Content: "campaign analysis for " + campaignID})
-			return nil
-		},
-	}
-	h := newAdvisorHandler(svc)
-
-	body := `{"campaignId":"c1"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/advisor/campaign", bytes.NewBufferString(body))
-	req = withUser(req)
-	rec := httptest.NewRecorder()
-	h.HandleCampaignAnalysis(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "data: [DONE]") {
-		t.Errorf("expected DONE sentinel in SSE body")
 	}
 }
 

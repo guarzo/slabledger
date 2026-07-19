@@ -9,7 +9,6 @@ import (
 // MockAdvisorService is a test mock for advisor.Service.
 type MockAdvisorService struct {
 	GenerateDigestFn     func(ctx context.Context, stream func(advisor.StreamEvent)) error
-	AnalyzeCampaignFn    func(ctx context.Context, campaignID string, stream func(advisor.StreamEvent)) error
 	AnalyzeLiquidationFn func(ctx context.Context, stream func(advisor.StreamEvent)) error
 	CollectDigestFn      func(ctx context.Context) (string, error)
 	CollectLiquidationFn func(ctx context.Context) (string, error)
@@ -20,13 +19,6 @@ var _ advisor.Service = (*MockAdvisorService)(nil)
 func (m *MockAdvisorService) GenerateDigest(ctx context.Context, stream func(advisor.StreamEvent)) error {
 	if m.GenerateDigestFn != nil {
 		return m.GenerateDigestFn(ctx, stream)
-	}
-	return nil
-}
-
-func (m *MockAdvisorService) AnalyzeCampaign(ctx context.Context, campaignID string, stream func(advisor.StreamEvent)) error {
-	if m.AnalyzeCampaignFn != nil {
-		return m.AnalyzeCampaignFn(ctx, campaignID, stream)
 	}
 	return nil
 }

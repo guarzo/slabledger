@@ -75,7 +75,7 @@ type ImageGenerator interface {
 ### 1. Advisor
 
 **Package:** `internal/domain/advisor/`  
-**Invocation:** on-demand via the streaming HTTP endpoints (`/api/advisor/digest`, `/api/advisor/campaign-analysis`, `/api/advisor/liquidation-analysis`).
+**Invocation:** on-demand via the streaming HTTP endpoints (`/api/advisor/digest`, `/api/advisor/liquidation-analysis`).
 
 The advisor is a multi-round tool-calling agent. Each operation runs a loop:
 
@@ -90,7 +90,6 @@ Tool results are truncated to **12 000 chars** each before being sent back to th
 | Operation | Max rounds | Max tokens | Temperature | Reasoning effort |
 |---|---|---|---|---|
 | `GenerateDigest` | 4 | 32 768 | 0.3 | medium |
-| `AnalyzeCampaign` | 3 | 32 768 | 0.3 | medium |
 | `AnalyzeLiquidation` | 3 | 32 768 | 0.3 | medium |
 | `AssessPurchase` | 1 | 32 768 | 0.3 | medium |
 
@@ -102,19 +101,13 @@ Each operation uses a filtered subset:
 
 **Digest (4 rounds, 11 tools):** `get_dashboard_summary`, `get_weekly_review`, `get_global_inventory`, `get_portfolio_insights`, `get_flagged_inventory`, `get_inventory_alerts`, `get_acquisition_targets`, `get_dh_suggestions`, `get_expected_values_batch`, `get_campaign_tuning`, `get_campaign_pnl`
 
-**Campaign analysis (3 rounds, 5 tools):** `get_campaign_pnl`, `get_pnl_by_channel`, `get_campaign_tuning`, `get_inventory_aging`, `get_expected_values`
-
 **Liquidation (3 rounds, 6 tools):** `get_dashboard_summary`, `get_flagged_inventory`, `get_suggestion_stats`, `get_inventory_alerts`, `get_expected_values_batch`, `suggest_price_batch`
 
 **Purchase assessment (1 round, 4 tools):** `get_campaign_tuning`, `get_cert_lookup`, `evaluate_purchase`, `get_campaign_pnl`
 
 #### Scored analysis
 
-For `AssessPurchase` and `AnalyzeCampaign`, a pre-computed `ScoreCard` is injected into the system prompt and a structured JSON schema is appended, forcing structured JSON output from the LLM.
-
-#### Prior context
-
-The last completed analysis of the same type is fetched from the `advisor_cache` table, truncated to **2 000 chars**, and prepended to the system prompt.
+For `AssessPurchase`, a pre-computed `ScoreCard` is injected into the system prompt and a structured JSON schema is appended, forcing structured JSON output from the LLM.
 
 ---
 
@@ -163,7 +156,7 @@ The pipeline is idempotent: if picks already exist for today, it skips the run. 
 
 ## AI call tracking
 
-All LLM calls are recorded via `ai.AICallTracker` (implemented by `sqlite.AICallRepository`). Tracked operations: `digest`, `campaign_analysis`, `liquidation`, `purchase_assessment`.
+All LLM calls are recorded via `ai.AICallTracker` (implemented by `postgres.AICallRepository`). Tracked operations include: `digest`, `liquidation`, `purchase_assessment`.
 
 Usage stats are exposed via the `/api/ai/usage` endpoint.
 

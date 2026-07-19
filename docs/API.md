@@ -1478,23 +1478,6 @@ Streams a weekly portfolio intelligence digest.
 
 ---
 
-### `POST /api/advisor/campaign-analysis`
-
-Auth: RequireAuth
-
-Streams a health and tuning narrative for a specific campaign.
-
-**Body:**
-```json
-{ "campaignId": "uuid" }
-```
-
-**Response:** `200 OK` — SSE stream
-
-**Errors:** `400` missing campaignId
-
----
-
 ### `POST /api/advisor/liquidation-analysis`
 
 Auth: RequireAuth
