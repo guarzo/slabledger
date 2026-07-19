@@ -62,46 +62,6 @@ function BrowseDirect({ item, currentPath }: { item: NavItem; currentPath: strin
   );
 }
 
-function ReportsDropdown({ currentPath }: { currentPath: string }) {
-  const items = navItemsForGroup('reports');
-  const anyActive = items.some((it) => isRouteActive(it.path, currentPath));
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          className={`${browseDirectClass} ${anyActive ? browseActiveClass : browseInactiveClass} gap-1.5`}
-          aria-label="Reports menu"
-        >
-          Reports
-          <ChevronDown />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="start"
-          sideOffset={6}
-          className="min-w-[220px] py-1 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-[var(--radius-md)] shadow-[var(--shadow-2)] z-50 data-[state=open]:animate-[fadeIn_150ms_ease-out]"
-        >
-          {items.map((item) => (
-            <DropdownMenu.Item key={item.path} asChild>
-              <Link
-                to={item.path}
-                className="flex flex-col gap-0.5 px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]/60 data-[highlighted]:bg-[var(--surface-2)]/60 outline-none cursor-default focus-ring rounded-sm mx-1"
-              >
-                <span className="font-medium">{item.label}</span>
-                {item.description && (
-                  <span className="text-2xs text-[var(--text-subtle)]">{item.description}</span>
-                )}
-              </Link>
-            </DropdownMenu.Item>
-          ))}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  );
-}
-
 function ScanLink({ currentPath }: { currentPath: string }) {
   const primary = primaryItemForGroup('scan');
   if (!primary) return null;
@@ -149,7 +109,7 @@ function MobileDrawer({ currentPath, onNavigate, isAdmin }: { currentPath: strin
     {
       key: 'browse',
       heading: 'Browse',
-      items: [...navItemsForZone('browse'), ...navItemsForGroup('reports')],
+      items: navItemsForZone('browse'),
     },
     { key: 'do', heading: 'Do', items: navItemsForGroup('scan') },
   ];
@@ -303,7 +263,6 @@ export default function Header() {
           {browseItems.map((item) => (
             <BrowseDirect key={item.path} item={item} currentPath={location.pathname} />
           ))}
-          <ReportsDropdown currentPath={location.pathname} />
           <span className="w-px h-5 bg-[rgba(255,255,255,0.08)] mx-1" aria-hidden="true" />
           <ScanLink currentPath={location.pathname} />
         </nav>

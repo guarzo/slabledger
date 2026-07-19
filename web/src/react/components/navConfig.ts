@@ -6,7 +6,7 @@
  */
 
 export type NavZone = 'home' | 'browse' | 'do' | 'hidden';
-export type NavGroup = 'reports' | 'scan';
+export type NavGroup = 'scan';
 
 export interface NavItem {
   path: string;
@@ -24,15 +24,6 @@ export const NAV_ITEMS: NavItem[] = [
 
   { path: '/campaigns', label: 'Campaigns', shortLabel: 'Campaigns', zone: 'browse' },
   { path: '/inventory', label: 'Inventory', shortLabel: 'Inventory', zone: 'browse' },
-
-  {
-    path: '/opportunities/psa-exchange',
-    label: 'Opportunities',
-    shortLabel: 'Opps',
-    zone: 'browse',
-    group: 'reports',
-    description: 'PSA-Exchange listings',
-  },
 
   {
     path: '/scan',

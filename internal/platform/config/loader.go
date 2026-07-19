@@ -96,15 +96,6 @@ func envBool(key string, target *bool, defaultVal bool) {
 	}
 }
 
-// envFloat reads an environment variable, parses it as a float64, and assigns it to target if valid.
-func envFloat(key string, target *float64) {
-	if v := os.Getenv(key); v != "" {
-		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-			*target = parsed
-		}
-	}
-}
-
 // FromEnv overlays environment variables onto the base config.
 // Uses the env* helper functions above which provide type-safe, validated parsing.
 // FromFlags reads configuration from CLI flags using the standard flag package.
@@ -202,15 +193,6 @@ func FromEnv(base Config) Config {
 	}
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
-	cfg.Adapters.PSAExchangeToken = os.Getenv("PSA_EXCHANGE_TOKEN")
-	cfg.Adapters.PSAExchangeBuyerCID = os.Getenv("PSA_EXCHANGE_BUYER_CID")
-	envString("PSA_EXCHANGE_BASE_URL", &cfg.Adapters.PSAExchangeBaseURL)
-	envIntPositive("PSA_EXCHANGE_HIGH_LIQ_VELOCITY", &cfg.Adapters.PSAExchangeHighLiqVelocity)
-	envIntPositive("PSA_EXCHANGE_HIGH_LIQ_CONFIDENCE", &cfg.Adapters.PSAExchangeHighLiqConfidence)
-	envFloat("PSA_EXCHANGE_HIGH_LIQ_OFFER_PCT", &cfg.Adapters.PSAExchangeHighLiqOfferPct)
-	envFloat("PSA_EXCHANGE_DEFAULT_OFFER_PCT", &cfg.Adapters.PSAExchangeDefaultOfferPct)
-	envIntPositive("PSA_EXCHANGE_MIN_CONFIDENCE", &cfg.Adapters.PSAExchangeMinConfidence)
-	envIntPositive("PSA_EXCHANGE_MIN_QUARTER_VELOCITY", &cfg.Adapters.PSAExchangeMinQuarterVelocity)
 	envDurationPositive("AZURE_AI_TIMEOUT", &cfg.Adapters.AzureAICompletionTimeout)
 	envIntPositive("DH_CACHE_TTL_HOURS", &cfg.DH.CacheTTLHours)
 	envIntPositive("DH_RATE_LIMIT_RPS", &cfg.DH.RateLimitRPS)
