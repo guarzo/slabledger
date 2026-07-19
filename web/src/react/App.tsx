@@ -27,7 +27,6 @@ const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
 const ScanPage = lazy(() => import('./pages/ScanPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
-const PsaExchangePage = lazy(() => import('./pages/PsaExchangePage'));
 
 function AppContent() {
   const location = useLocation();
@@ -68,18 +67,9 @@ function AppContent() {
                   </PageTransition>
                 </ProtectedRoute>
               } />
-              {/* PSA-Exchange Opportunities */}
-              <Route path="/opportunities/psa-exchange" element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <PsaExchangePage />
-                  </PageTransition>
-                </ProtectedRoute>
-              } />
               {/* Canonical redirects for legacy URLs */}
               <Route path="/watchlist" element={<Navigate to="/" replace />} />
               <Route path="/favorites" element={<Navigate to="/" replace />} />
-              <Route path="/opportunities" element={<Navigate to="/" replace />} />
               <Route path="/pricing" element={<Navigate to="/" replace />} />
               <Route path="/suggestions" element={<Navigate to="/" replace />} />
               {/* Campaigns */}
