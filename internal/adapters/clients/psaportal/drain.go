@@ -3,10 +3,41 @@ package psaportal
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 )
+
+// transientPushError reports whether a portal push failed on an edge/transport
+// condition that a later run with a fresh browser session routinely clears —
+// Cloudflare block/challenge (403), rate limiting (429), or a portal outage
+// (503). Observed 2026-07-18: one run's every GET drew an instant Cloudflare
+// 403 while runs minutes later were clean; marking such rows terminally failed
+// is what left approved pushes permanently unsent. All portal client errors
+// carry the HTTP code as a "status <code>" suffix (push.go, create.go,
+// buildhash.go), so match on that. App-level rejections (400/422/…) stay
+// terminal.
+func transientPushError(err error) bool {
+	msg := err.Error()
+	for _, s := range []string{"status 403", "status 429", "status 503"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// pushOutcome returns the queue status a failed push should land in: back to
+// approved for transient transport errors (retried by the next hourly drain;
+// creates are safe to retry via the linker idempotency guard), failed
+// otherwise.
+func pushOutcome(err error) psacampaign.PushStatus {
+	if transientPushError(err) {
+		return psacampaign.PushApproved
+	}
+	return psacampaign.PushFailed
+}
 
 // DrainPushQueue pushes all approved rows in q to the PSA portal via c,
 // marking each row pushed or failed based on the outcome. It returns the
@@ -41,13 +72,15 @@ func DrainPushQueue(ctx context.Context, c *Client, q psacampaign.PushQueueStore
 		}
 
 		if err := c.PushCampaign(ctx, row.PSACampaignID, row.Diff.Changes); err != nil {
-			if markErr := q.MarkResult(ctx, row.ID, psacampaign.PushFailed, "", err.Error()); markErr != nil {
+			outcome := pushOutcome(err)
+			if markErr := q.MarkResult(ctx, row.ID, outcome, "", err.Error()); markErr != nil {
 				logger.Error(ctx, "psaportal: mark push failed result failed",
 					observability.String("row_id", row.ID), observability.Err(markErr))
 			}
 			logger.Error(ctx, "psaportal: push campaign failed",
 				observability.String("row_id", row.ID),
 				observability.String("psa_campaign_id", row.PSACampaignID),
+				observability.String("outcome", string(outcome)),
 				observability.Err(err))
 			failed++
 			continue
@@ -107,10 +140,14 @@ func drainCreate(ctx context.Context, c *Client, q psacampaign.PushQueueStore, l
 
 	newID, err := c.CreateCampaign(ctx, *row.Diff.Create)
 	if err != nil {
-		if markErr := q.MarkResult(ctx, row.ID, psacampaign.PushFailed, "", err.Error()); markErr != nil {
+		outcome := pushOutcome(err)
+		if markErr := q.MarkResult(ctx, row.ID, outcome, "", err.Error()); markErr != nil {
 			logger.Error(ctx, "psaportal: mark create failed result failed", observability.String("row_id", row.ID), observability.Err(markErr))
 		}
-		logger.Error(ctx, "psaportal: create campaign failed", observability.String("row_id", row.ID), observability.Err(err))
+		logger.Error(ctx, "psaportal: create campaign failed",
+			observability.String("row_id", row.ID),
+			observability.String("outcome", string(outcome)),
+			observability.Err(err))
 		return false
 	}
 

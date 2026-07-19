@@ -244,7 +244,24 @@ try {
       let status;
       let body;
       if (method === 'GET') {
-        const resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        // Cloudflare intermittently answers a navigation with an instant
+        // "Just a moment" 403 even when the same URL cleared moments earlier
+        // (observed 2026-07-18 on Fly: one run's every GET 403'd while runs
+        // minutes later were clean). Headless Chromium never solves the
+        // interstitial in place (20s poll: no cf_clearance, no redirect), but
+        // the challenge decision is rate-based: a fresh navigation after a
+        // ~20s+ backoff was observed to return 200. So back off, re-navigate,
+        // and only report the 403 if it survives both retries.
+        const cfRetryable = new Set([403, 429, 503]);
+        let resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        for (let attempt = 1; cfRetryable.has(resp.status()) && attempt <= 2; attempt++) {
+          const head = (await resp.text()).slice(0, 200).replace(/\s+/g, ' ');
+          console.error(
+            `harvest-psa-token: GET ${absURL} -> ${resp.status()} (attempt ${attempt}/3), body head: ${head}`
+          );
+          await page.waitForTimeout(15000 * attempt);
+          resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        }
         status = resp.status();
         body = await resp.text();
       } else {
@@ -256,6 +273,13 @@ try {
         }, { url: absURL, body: msg.body || null });
         status = result.status;
         body = result.body;
+        if (status !== 200) {
+          // Failed POSTs (create/updateCampaign) previously vanished with only
+          // a status code — keep the body head diagnosable in the Fly logs.
+          console.error(
+            `harvest-psa-token: POST ${absURL} -> ${status}, body head: ${body.slice(0, 200).replace(/\s+/g, ' ')}`
+          );
+        }
       }
       process.stdout.write(JSON.stringify({ id: msg.id, status, body }) + '\n');
     } catch (e) {

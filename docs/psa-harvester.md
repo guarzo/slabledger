@@ -166,6 +166,14 @@ fly machine list -a slabledger-psa-harvest
 fly machine status <machine_id> -a slabledger-psa-harvest --display-config | grep -i schedule
 ```
 
+> **A displayed schedule is not proof the scheduler is firing.** After the 2026-07-16
+> deploy recreated the machine, its config still showed `"schedule": "hourly"` but Fly
+> never started it again — zero start events for two days. After any deploy, also check
+> the event log (`fly machine status <machine_id>`) or the harvester's DB writes
+> (`psa_portal_token.updated_at`) for a run *after* the deploy time. If the machine
+> isn't firing, re-assert with `fly machine update <machine_id> --schedule hourly` and
+> kick one run with `fly machine start <machine_id>`.
+
 If you ever need to force a specific image onto the machine manually (e.g. rolling back):
 
 ```bash
