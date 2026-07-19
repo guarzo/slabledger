@@ -17,6 +17,7 @@ import InlinePriceEdit from './InlinePriceEdit';
 import RowActions from './RowActions';
 import { resolveContextualPrimary, resolveOverflowActions, ACTION_LABELS } from './rowActions';
 import { ACTIONS_COLUMN_WIDTH } from './columnWidths';
+import CopyableCert from './CopyableCert';
 
 const DH_BADGE_TITLES: Record<string, string> = {
   sold:              'Sold on DoubleHolo',
@@ -205,7 +206,7 @@ export default function DesktopRow({
         <div className="text-xs text-[var(--text-muted)] truncate leading-tight">
           {item.purchase.setName && <>{item.purchase.setName}</>}
           {item.purchase.cardNumber && <> &middot; #{item.purchase.cardNumber}</>}
-          {item.purchase.certNumber && <> &middot; {item.purchase.certNumber}</>}
+          {item.purchase.certNumber && <> &middot; <CopyableCert certNumber={item.purchase.certNumber} /></>}
         </div>
       </div>
 
