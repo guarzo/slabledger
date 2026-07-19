@@ -275,8 +275,6 @@ func (rt *Router) Setup() http.Handler {
 	// Arbitrage opportunities routes
 	rt.registerOpportunitiesRoutes(mux)
 
-	// PSA-exchange opportunity routes
-
 	// DH routes
 	rt.registerDHRoutes(mux)
 

@@ -96,15 +96,6 @@ func envBool(key string, target *bool, defaultVal bool) {
 	}
 }
 
-// envFloat reads an environment variable, parses it as a float64, and assigns it to target if valid.
-func envFloat(key string, target *float64) {
-	if v := os.Getenv(key); v != "" {
-		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-			*target = parsed
-		}
-	}
-}
-
 // FromEnv overlays environment variables onto the base config.
 // Uses the env* helper functions above which provide type-safe, validated parsing.
 // FromFlags reads configuration from CLI flags using the standard flag package.
