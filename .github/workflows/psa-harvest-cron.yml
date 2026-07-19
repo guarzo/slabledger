@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
       - name: Start the harvester machine
         env:
@@ -49,7 +49,7 @@ jobs:
 
           # start can fail because the machine is already running (Fly's own
           # schedule fired, or a run is in progress) — that is success for us.
-          state=$(flyctl machines list -a "$FLY_APP" --json | jq -r ".[] | select(.id == \"$machine_id\") | .state")
+          state=$(flyctl machines list -a "$FLY_APP" --json | jq -r --arg id "$machine_id" '.[] | select(.id == $id) | .state')
           echo "start failed; machine state is '$state'"
           case "$state" in
             started|starting) exit 0 ;;
