@@ -6,9 +6,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
-	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
-	psaexchangeadapter "github.com/guarzo/slabledger/internal/adapters/clients/psaexchange"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
@@ -27,7 +25,6 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/portfolio"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
-	"github.com/guarzo/slabledger/internal/domain/psaexchange"
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
@@ -133,46 +130,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	if in.ArbitrageService != nil {
 		opportunitiesHandler = handlers.NewOpportunitiesHandler(in.ArbitrageService, logger)
 	}
-
-	// PSA-Exchange (read-only acquisition feed). Handler is always constructed
-	// so the route registers; service stays nil when no token is configured,
-	// causing the handler to return 503 (documented disabled-mode behavior).
-	var pxeService psaexchange.Service
-	if in.Cfg.Adapters.PSAExchangeToken != "" {
-		pxeHTTP := httpx.NewClient(httpx.DefaultConfig("psaexchange"))
-		pxeOpts := []psaexchangeadapter.Option{
-			psaexchangeadapter.WithToken(in.Cfg.Adapters.PSAExchangeToken),
-			psaexchangeadapter.WithBuyerCID(in.Cfg.Adapters.PSAExchangeBuyerCID),
-		}
-		if in.Cfg.Adapters.PSAExchangeBaseURL != "" {
-			pxeOpts = append(pxeOpts, psaexchangeadapter.WithBaseURL(in.Cfg.Adapters.PSAExchangeBaseURL))
-		}
-		pxeClient := psaexchangeadapter.NewClient(pxeHTTP, pxeOpts...)
-		policy := psaexchange.DefaultPolicy()
-		if v := in.Cfg.Adapters.PSAExchangeHighLiqVelocity; v > 0 {
-			policy.HighLiquidityVelocity = v
-		}
-		if v := in.Cfg.Adapters.PSAExchangeHighLiqConfidence; v > 0 {
-			policy.HighLiquidityConfidence = v
-		}
-		if v := in.Cfg.Adapters.PSAExchangeHighLiqOfferPct; v > 0 {
-			policy.HighLiquidityOfferPct = v
-		}
-		if v := in.Cfg.Adapters.PSAExchangeDefaultOfferPct; v > 0 {
-			policy.DefaultOfferPct = v
-		}
-		if v := in.Cfg.Adapters.PSAExchangeMinConfidence; v > 0 {
-			policy.MinConfidence = v
-		}
-		if v := in.Cfg.Adapters.PSAExchangeMinQuarterVelocity; v > 0 {
-			policy.MinQuarterVelocity = v
-		}
-		pxeService = psaexchange.NewService(pxeClient,
-			psaexchange.WithLogger(logger),
-			psaexchange.WithPolicy(policy),
-		)
-	}
-	psaExchangeHandler := handlers.NewPSAExchangeHandler(pxeService, logger)
 
 	// DH handler (bulk match + intelligence; nil when client is not configured)
 	var dhHandler *handlers.DHHandler
@@ -335,7 +292,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		MarketMoversHandler:       mmHandler,
 		PSASyncHandler:            psaSyncHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
-		PSAExchangeHandler:        psaExchangeHandler,
 		DHHandler:                 dhHandler,
 		DHReconcileHandler:        dhReconcileHandler,
 		DHTombstonesHandler:       dhTombstonesHandler,
