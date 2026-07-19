@@ -33,4 +33,7 @@ it('Clear all wipes every scanned row after confirmation', async () => {
 
   // Status bar (and its "scanned" count) is gone — list empty
   await waitFor(() => expect(screen.queryByText(/scanned/)).toBeNull());
+
+  // Scan input regains focus so the next cert can be typed immediately
+  await waitFor(() => expect(input).toHaveFocus());
 });

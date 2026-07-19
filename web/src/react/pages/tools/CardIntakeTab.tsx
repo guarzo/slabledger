@@ -178,7 +178,10 @@ export default function CardIntakeTab() {
   const handleClearAll = () => {
     setCerts(new Map());
     setClearAllOpen(false);
-    inputRef.current?.focus();
+    // Defer refocus until after the Radix AlertDialog has finished closing;
+    // its onCloseAutoFocus restores focus on unmount and would otherwise
+    // clobber a synchronous focus() call here.
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const handleImportNew = async () => {
