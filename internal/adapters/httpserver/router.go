@@ -39,20 +39,20 @@ type Router struct {
 	marketMoversHandler       *handlers.MarketMoversHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
 
-	dhHandler                 *handlers.DHHandler
-	dhReconcileHandler        *handlers.DHReconcileHandler
-	dhTombstonesHandler       *handlers.DHTombstonesHandler
-	cardCatalogHandler        *handlers.CardCatalogHandler
-	psaSyncHandler            *handlers.PSASyncHandler
-	nichesHandler             *handlers.NichesHandler
-	campaignSignalsHandler    *handlers.CampaignSignalsHandler
-	liquidationHandler        *handlers.LiquidationHandler
-	pricingAPIKey             string
-	logger                    observability.Logger
-	databasePath              string
-	timingStore               *middleware.TimingStore
-	googleOAuthEnv            string
-	localAPIToken             string
+	dhHandler              *handlers.DHHandler
+	dhReconcileHandler     *handlers.DHReconcileHandler
+	dhTombstonesHandler    *handlers.DHTombstonesHandler
+	cardCatalogHandler     *handlers.CardCatalogHandler
+	psaSyncHandler         *handlers.PSASyncHandler
+	nichesHandler          *handlers.NichesHandler
+	campaignSignalsHandler *handlers.CampaignSignalsHandler
+	liquidationHandler     *handlers.LiquidationHandler
+	pricingAPIKey          string
+	logger                 observability.Logger
+	databasePath           string
+	timingStore            *middleware.TimingStore
+	googleOAuthEnv         string
+	localAPIToken          string
 }
 
 // RouterConfig holds configuration for creating a new Router
@@ -69,29 +69,29 @@ type RouterConfig struct {
 	TuningService             tuning.Service
 	PriceHintsHandler         *handlers.PriceHintsHandler
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
-	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
-	CampaignsRepo             handlers.CertPriceLookup         // For pricing API handler
-	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
-	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
-	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
-	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
-	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
+	PricingAPIKey             string                         // Bearer token; empty = pricing API disabled
+	CampaignsRepo             handlers.CertPriceLookup       // For pricing API handler
+	AdvisorHandler            *handlers.AdvisorHandler       // AI advisor; nil = disabled
+	AIStatusHandler           *handlers.AIStatusHandler      // AI usage stats; nil = disabled
+	PriceFlagsHandler         *handlers.PriceFlagsHandler    // Price flag admin; nil = disabled
+	CardLadderHandler         *handlers.CardLadderHandler    // Card Ladder admin; nil = disabled
+	MarketMoversHandler       *handlers.MarketMoversHandler  // Market Movers admin; nil = disabled
+	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
 
-	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
-	DHReconcileHandler        *handlers.DHReconcileHandler     // Admin DH reconcile trigger; nil = disabled
-	DHTombstonesHandler       *handlers.DHTombstonesHandler    // Admin DH tombstones count/clear; nil = disabled
-	CardCatalogHandler        *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
-	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
-	NichesHandler             *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
-	CampaignSignalsHandler    *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
-	LiquidationHandler        *handlers.LiquidationHandler     // Liquidation pricing; nil = disabled
-	Logger                    observability.Logger
-	AdminEmails               []string
-	DatabasePath              string
-	TimingStore               *middleware.TimingStore
-	GoogleOAuthEnv            string // controls login button visibility; "production" shows it
-	LocalAPIToken             string // dev-mode bearer bypass; empty = disabled
+	DHHandler              *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
+	DHReconcileHandler     *handlers.DHReconcileHandler     // Admin DH reconcile trigger; nil = disabled
+	DHTombstonesHandler    *handlers.DHTombstonesHandler    // Admin DH tombstones count/clear; nil = disabled
+	CardCatalogHandler     *handlers.CardCatalogHandler     // CL card catalog search; nil = disabled
+	PSASyncHandler         *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
+	NichesHandler          *handlers.NichesHandler          // DH niche-opportunity leaderboard; nil = disabled
+	CampaignSignalsHandler *handlers.CampaignSignalsHandler // DH campaign signals; nil = disabled
+	LiquidationHandler     *handlers.LiquidationHandler     // Liquidation pricing; nil = disabled
+	Logger                 observability.Logger
+	AdminEmails            []string
+	DatabasePath           string
+	TimingStore            *middleware.TimingStore
+	GoogleOAuthEnv         string // controls login button visibility; "production" shows it
+	LocalAPIToken          string // dev-mode bearer bypass; empty = disabled
 }
 
 // NewRouter creates a new router with the given configuration
@@ -170,8 +170,6 @@ func NewRouter(cfg RouterConfig) *Router {
 	if cfg.OpportunitiesHandler != nil {
 		rt.opportunitiesHandler = cfg.OpportunitiesHandler
 	}
-
-
 
 	if cfg.DHHandler != nil {
 		rt.dhHandler = cfg.DHHandler

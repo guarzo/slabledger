@@ -99,15 +99,15 @@ type AuthConfig struct {
 // These are read from environment variables centrally and passed to adapter
 // constructors — adapters never read env vars directly.
 type AdapterConfig struct {
-	PSAToken            string // PSA_ACCESS_TOKEN - PSA cert lookup (comma-separated for rotation)
-	PricingAPIKey       string // PRICING_API_KEY - Bearer token for pricing API auth
-	GoogleOAuthEnv      string // GOOGLE_OAUTH_ENV - controls login button visibility ("production" shows it)
-	LocalAPIToken       string // LOCAL_API_TOKEN - dev-mode bearer bypass; empty = disabled
-	AzureAIEndpoint     string // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
-	AzureAIKey          string // AZURE_AI_API_KEY - Azure AI API key
-	AzureAIDeployment   string // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
-	DHEnterpriseKey     string // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
-	DHBaseURL           string // DH_API_BASE_URL
+	PSAToken                 string        // PSA_ACCESS_TOKEN - PSA cert lookup (comma-separated for rotation)
+	PricingAPIKey            string        // PRICING_API_KEY - Bearer token for pricing API auth
+	GoogleOAuthEnv           string        // GOOGLE_OAUTH_ENV - controls login button visibility ("production" shows it)
+	LocalAPIToken            string        // LOCAL_API_TOKEN - dev-mode bearer bypass; empty = disabled
+	AzureAIEndpoint          string        // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
+	AzureAIKey               string        // AZURE_AI_API_KEY - Azure AI API key
+	AzureAIDeployment        string        // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
+	DHEnterpriseKey          string        // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
+	DHBaseURL                string        // DH_API_BASE_URL
 	AzureAICompletionTimeout time.Duration // AZURE_AI_TIMEOUT - Completion poll fallback timeout (default: 3m)
 }
 
