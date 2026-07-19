@@ -121,7 +121,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
       setDiff(res.diff);
       setPushId(res.pushId);
       setPublishStatus(null);
-      if (res.diff.changes.length === 0) {
+      if ((res.diff.changes?.length ?? 0) === 0) {
         toast.success('No changes to publish — campaign already matches PSA');
       }
       queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
@@ -213,7 +213,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                 {pendingRow.requestedBy ? ` (requested by ${pendingRow.requestedBy})` : ''}.
               </SyncBanner>
             )}
-            {publishStatus && !inFlightRow && (
+            {publishStatus && !inFlightRow && !failedRow && (
               <SyncBanner tone="success">
                 {isLinked
                   ? `Status: ${publishStatus}`
