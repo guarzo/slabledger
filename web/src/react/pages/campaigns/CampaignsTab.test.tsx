@@ -82,46 +82,62 @@ function renderTab(campaigns: Campaign[], psaPushMap: Record<string, PSAPushRow>
   );
 }
 
-describe('CampaignsTab PSA push indicator', () => {
+describe('CampaignsTab PSA sync indicator', () => {
   const tests: Array<{
     name: string;
+    campaign?: Partial<Campaign>;
     push: PSAPushRow | undefined;
     wantLabel: string;
+    wantBadge: string;
   }> = [
     {
-      name: 'no push row keeps the plain label',
+      name: 'never linked, no push row shows Not on PSA',
       push: undefined,
-      wantLabel: 'Publish to PSA for Test Campaign',
+      wantLabel: 'Publish to PSA for Test Campaign — currently Not on PSA',
+      wantBadge: 'Not on PSA',
     },
     {
-      name: 'pending push marks approval pending',
+      name: 'linked, no push row shows Synced',
+      campaign: { psaCampaignRequestId: 'psa-123' },
+      push: undefined,
+      wantLabel: 'Publish to PSA for Test Campaign — currently Synced',
+      wantBadge: 'Synced',
+    },
+    {
+      name: 'pending push marks Pending',
       push: makePush({ status: 'pending' }),
-      wantLabel: 'Publish to PSA for Test Campaign — approval pending',
+      wantLabel: 'Publish to PSA for Test Campaign — currently Pending',
+      wantBadge: 'Pending',
     },
     {
-      name: 'approved push marks in flight',
+      name: 'approved push marks Pushing',
       push: makePush({ status: 'approved' }),
-      wantLabel: 'Publish to PSA for Test Campaign — push in flight',
+      wantLabel: 'Publish to PSA for Test Campaign — currently Pushing',
+      wantBadge: 'Pushing',
     },
     {
-      name: 'pushing push marks in flight',
+      name: 'pushing push marks Pushing',
       push: makePush({ status: 'pushing' }),
-      wantLabel: 'Publish to PSA for Test Campaign — push in flight',
+      wantLabel: 'Publish to PSA for Test Campaign — currently Pushing',
+      wantBadge: 'Pushing',
     },
     {
-      name: 'failed push marks failure',
+      name: 'failed push marks Failed',
       push: makePush({ status: 'failed' }),
-      wantLabel: 'Publish to PSA for Test Campaign — last push failed',
+      wantLabel: 'Publish to PSA for Test Campaign — currently Failed',
+      wantBadge: 'Failed',
     },
     {
-      name: 'pushed (resolved) push keeps the plain label',
+      name: 'pushed (resolved) push with no link falls back to Not on PSA',
       push: makePush({ status: 'pushed' }),
-      wantLabel: 'Publish to PSA for Test Campaign',
+      wantLabel: 'Publish to PSA for Test Campaign — currently Not on PSA',
+      wantBadge: 'Not on PSA',
     },
   ];
 
-  it.each(tests)('$name', ({ push, wantLabel }) => {
-    renderTab([makeCampaign()], push ? { c1: push } : {});
+  it.each(tests)('$name', ({ campaign, push, wantLabel, wantBadge }) => {
+    renderTab([makeCampaign(campaign)], push ? { c1: push } : {});
     expect(screen.getByRole('button', { name: wantLabel })).toBeInTheDocument();
+    expect(screen.getByText(wantBadge)).toBeInTheDocument();
   });
 });
