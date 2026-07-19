@@ -32,9 +32,8 @@ type (
 )
 
 const (
-	OpDigest           = ai.OpDigest
-	OpCampaignAnalysis = ai.OpCampaignAnalysis
-	OpLiquidation      = ai.OpLiquidation
+	OpDigest      = ai.OpDigest
+	OpLiquidation = ai.OpLiquidation
 )
 
 const (

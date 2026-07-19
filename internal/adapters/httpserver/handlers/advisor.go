@@ -39,28 +39,6 @@ func (h *AdvisorHandler) HandleDigest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleCampaignAnalysis generates a campaign health and tuning narrative via SSE.
-func (h *AdvisorHandler) HandleCampaignAnalysis(w http.ResponseWriter, r *http.Request) {
-	if requireUser(w, r) == nil {
-		return
-	}
-
-	var req struct {
-		CampaignID string `json:"campaignId"`
-	}
-	if !decodeBody(w, r, &req) {
-		return
-	}
-	if req.CampaignID == "" {
-		writeError(w, http.StatusBadRequest, "campaignId required")
-		return
-	}
-
-	h.streamAnalysis(w, r, func(stream func(advisor.StreamEvent)) error {
-		return h.service.AnalyzeCampaign(r.Context(), req.CampaignID, stream)
-	})
-}
-
 // HandleLiquidationAnalysis generates liquidation candidates via SSE.
 func (h *AdvisorHandler) HandleLiquidationAnalysis(w http.ResponseWriter, r *http.Request) {
 	if requireUser(w, r) == nil {

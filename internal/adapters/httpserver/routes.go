@@ -217,7 +217,6 @@ func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
 		return
 	}
 	mux.Handle("POST /api/advisor/digest", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleDigest)))
-	mux.Handle("POST /api/advisor/campaign-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleCampaignAnalysis)))
 	mux.Handle("POST /api/advisor/liquidation-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleLiquidationAnalysis)))
 	mux.HandleFunc("/advisor", rt.spaHandler.HandleIndex)
 	rt.logger.Info(context.Background(), "AI advisor routes registered")

@@ -2,7 +2,6 @@ package advisor
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -37,11 +36,6 @@ var operationTools = map[AIOperation][]string{
 		"get_acquisition_targets", "get_dh_suggestions",
 		"get_expected_values_batch",
 		"get_campaign_tuning", "get_campaign_pnl",
-	},
-	OpCampaignAnalysis: {
-		"get_campaign_pnl", "get_pnl_by_channel",
-		"get_campaign_tuning", "get_inventory_aging",
-		"get_expected_values",
 	},
 	OpLiquidation: {
 		"get_dashboard_summary", "get_flagged_inventory",
@@ -81,12 +75,6 @@ var _ Service = (*service)(nil)
 
 func (s *service) GenerateDigest(ctx context.Context, stream func(StreamEvent)) error {
 	_, err := s.runAnalysis(ctx, OpDigest, digestSystemPrompt, digestUserPrompt, stream)
-	return err
-}
-
-func (s *service) AnalyzeCampaign(ctx context.Context, campaignID string, stream func(StreamEvent)) error {
-	userPrompt := fmt.Sprintf(campaignAnalysisUserPrompt, campaignID)
-	_, err := s.runAnalysis(ctx, OpCampaignAnalysis, campaignAnalysisSystemPrompt, userPrompt, stream)
 	return err
 }
 

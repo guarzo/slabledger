@@ -14,9 +14,6 @@ type Service interface {
 	// GenerateDigest produces a narrative weekly intelligence digest.
 	GenerateDigest(ctx context.Context, stream func(StreamEvent)) error
 
-	// AnalyzeCampaign produces a health and tuning narrative for a campaign.
-	AnalyzeCampaign(ctx context.Context, campaignID string, stream func(StreamEvent)) error
-
 	// AnalyzeLiquidation identifies cards to consider selling now with pricing.
 	AnalyzeLiquidation(ctx context.Context, stream func(StreamEvent)) error
 
