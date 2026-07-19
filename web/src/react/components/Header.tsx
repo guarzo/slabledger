@@ -102,60 +102,26 @@ function ReportsDropdown({ currentPath }: { currentPath: string }) {
   );
 }
 
-function ScanSplitButton({ currentPath }: { currentPath: string }) {
-  const items = navItemsForGroup('scan');
+function ScanLink({ currentPath }: { currentPath: string }) {
   const primary = primaryItemForGroup('scan');
-  const anyActive = items.some((it) => isRouteActive(it.path, currentPath));
   if (!primary) return null;
+  const active = isRouteActive(primary.path, currentPath);
 
   const activeFill =
     'text-white font-semibold bg-[var(--brand-500)]/20 border-[var(--brand-500)]/40 shadow-[var(--shadow-1)]';
   const restingFill =
     'text-[var(--text)] font-medium bg-[var(--surface-2)]/60 border-[var(--surface-3)] hover:bg-[var(--surface-2)]';
-  const sharedSegment = 'inline-flex items-center px-3 py-2 text-sm border focus-ring whitespace-nowrap transition-colors';
+  const segment =
+    'inline-flex items-center px-3.5 py-2 text-sm border rounded-md focus-ring whitespace-nowrap transition-colors';
 
   return (
-    <div className="inline-flex rounded-md overflow-hidden">
-      <Link
-        to={primary.path}
-        aria-current={isRouteActive(primary.path, currentPath) ? 'page' : undefined}
-        className={`${sharedSegment} ${anyActive ? activeFill : restingFill} border-r-0 rounded-l-md`}
-      >
-        {primary.label}
-      </Link>
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            aria-label="More do-zone actions"
-            className={`${sharedSegment} ${anyActive ? activeFill : restingFill} rounded-r-md px-2`}
-          >
-            <ChevronDown />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            align="end"
-            sideOffset={6}
-            className="min-w-[220px] py-1 bg-[var(--surface-1)] border border-[var(--surface-2)] rounded-[var(--radius-md)] shadow-[var(--shadow-2)] z-50 data-[state=open]:animate-[fadeIn_150ms_ease-out]"
-          >
-            {items.map((item) => (
-              <DropdownMenu.Item key={item.path} asChild>
-                <Link
-                  to={item.path}
-                  className="flex flex-col gap-0.5 px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]/60 data-[highlighted]:bg-[var(--surface-2)]/60 outline-none cursor-default focus-ring rounded-sm mx-1"
-                >
-                  <span className="font-medium">{item.label}</span>
-                  {item.description && (
-                    <span className="text-2xs text-[var(--text-subtle)]">{item.description}</span>
-                  )}
-                </Link>
-              </DropdownMenu.Item>
-            ))}
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </div>
+    <Link
+      to={primary.path}
+      aria-current={active ? 'page' : undefined}
+      className={`${segment} ${active ? activeFill : restingFill}`}
+    >
+      {primary.label}
+    </Link>
   );
 }
 
@@ -339,7 +305,7 @@ export default function Header() {
           ))}
           <ReportsDropdown currentPath={location.pathname} />
           <span className="w-px h-5 bg-[rgba(255,255,255,0.08)] mx-1" aria-hidden="true" />
-          <ScanSplitButton currentPath={location.pathname} />
+          <ScanLink currentPath={location.pathname} />
         </nav>
 
         {/* Right cluster */}

@@ -243,6 +243,22 @@ export default function CampaignsPage() {
           <Button
             size="sm"
             variant="secondary"
+            title="Open PSA Buyer Campaign Manager"
+            aria-label="Open PSA Buyer Campaign Manager"
+            icon={
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true" focusable="false">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            }
+            onClick={() => window.open('https://www.psacard.com/buyercampaignmanager/', '_blank', 'noopener,noreferrer')}
+          >
+            PSA
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
             title="Export active campaigns to clipboard"
             aria-label="Export active campaigns to clipboard"
             icon={

@@ -7,6 +7,7 @@ import { rowIsListable, rowAwaitingSync, dhPushStuck, scanFieldsFromResult, impo
 import { loadQueue, saveQueue } from './cardIntakeStorage';
 import { CertRowItem, StatDot } from './CardIntakeRow';
 import { useCardIntakePolling } from './useCardIntakePolling';
+import { ConfirmDialog } from '../../ui';
 
 export default function CardIntakeTab() {
   const [input, setInput] = useState('');
@@ -15,6 +16,7 @@ export default function CardIntakeTab() {
   const [importError, setImportError] = useState<string | null>(null);
   const [highlightedCert, setHighlightedCert] = useState<string | null>(null);
   const [fixMatchTarget, setFixMatchTarget] = useState<CertRow | null>(null);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const certsRef = useRef(certs);
   certsRef.current = certs;
@@ -173,6 +175,15 @@ export default function CardIntakeTab() {
     });
   };
 
+  const handleClearAll = () => {
+    setCerts(new Map());
+    setClearAllOpen(false);
+    // Defer refocus until after the Radix AlertDialog has finished closing;
+    // its onCloseAutoFocus restores focus on unmount and would otherwise
+    // clobber a synchronous focus() call here.
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   const handleImportNew = async () => {
     // Re-collect both freshly-resolved rows and rows staged for retry after a
     // previous transient PSA failure.
@@ -321,6 +332,13 @@ export default function CardIntakeTab() {
               Clear completed
             </button>
           )}
+          <button
+            onClick={() => setClearAllOpen(true)}
+            className="text-[var(--text-subtle)] hover:text-[var(--danger)] underline underline-offset-2 text-[11px]"
+            title="Remove every scanned row, including sold, retry, and staged"
+          >
+            Clear all
+          </button>
         </div>
       )}
 
@@ -388,6 +406,17 @@ export default function CardIntakeTab() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={clearAllOpen}
+        title="Clear all scanned rows?"
+        message="This removes every row from the scan list, including sold, retry, and staged items. This cannot be undone."
+        confirmLabel="Clear all"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={handleClearAll}
+        onCancel={() => setClearAllOpen(false)}
+      />
     </div>
   );
 }
