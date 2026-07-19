@@ -53,7 +53,6 @@ type InMemoryCampaignStore struct {
 	GetPurchaseByCertNumberFn           func(ctx context.Context, grader, certNumber string) (*inventory.Purchase, error)
 	UpdatePurchaseCLValueFn             func(ctx context.Context, id string, clValueCents int, population int) error
 	UpdatePurchaseCLSyncedAtFn          func(ctx context.Context, id string, syncedAt string) error
-	UpdatePurchaseMMValueFn             func(ctx context.Context, id string, mmValueCents int) error
 	UpdatePurchaseCardMetadataFn        func(ctx context.Context, id string, cardName, cardNumber, setName string) error
 	UpdatePurchaseImagesFn              func(ctx context.Context, id string, frontURL, backURL string) error
 	UpdatePurchaseGradeFn               func(ctx context.Context, id string, gradeValue float64) error
@@ -393,18 +392,6 @@ func (m *InMemoryCampaignStore) UpdatePurchaseCLSyncedAt(ctx context.Context, id
 		return inventory.ErrPurchaseNotFound
 	}
 	p.CLSyncedAt = syncedAt
-	return nil
-}
-
-func (m *InMemoryCampaignStore) UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error {
-	if m.UpdatePurchaseMMValueFn != nil {
-		return m.UpdatePurchaseMMValueFn(ctx, id, mmValueCents)
-	}
-	p, ok := m.Purchases[id]
-	if !ok {
-		return inventory.ErrPurchaseNotFound
-	}
-	p.MMValueCents = mmValueCents
 	return nil
 }
 

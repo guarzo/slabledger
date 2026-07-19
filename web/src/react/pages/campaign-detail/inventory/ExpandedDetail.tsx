@@ -50,13 +50,12 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const cb = costBasis(purchase);
 
   const clCents = purchase.clValueCents;
-  const mmCents = purchase.mmValueCents ?? 0;
   const dhMidCents = snap?.midPriceCents ?? 0;
   const lastSoldCents = mostRecentSale(item)?.cents ?? 0;
 
   const sources = useMemo(
-    () => buildPriceSources({ clCents, dhMidCents, costCents: cb, lastSoldCents, mmCents }),
-    [clCents, dhMidCents, cb, lastSoldCents, mmCents],
+    () => buildPriceSources({ clCents, dhMidCents, costCents: cb, lastSoldCents }),
+    [clCents, dhMidCents, cb, lastSoldCents],
   );
 
   const preSelected = useMemo(

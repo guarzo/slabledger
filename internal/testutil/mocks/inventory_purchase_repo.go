@@ -23,7 +23,6 @@ type PurchaseRepositoryMock struct {
 	GetPurchasesByDHInventoryIDsFn       func(ctx context.Context, dhIDs []int) (map[int]*inventory.Purchase, error)
 	UpdatePurchaseCLValueFn              func(ctx context.Context, id string, clValueCents int, population int) error
 	UpdatePurchaseCLSyncedAtFn           func(ctx context.Context, id string, syncedAt string) error
-	UpdatePurchaseMMValueFn              func(ctx context.Context, id string, mmValueCents int) error
 	UpdatePurchaseCardMetadataFn         func(ctx context.Context, id, cardName, cardNumber, setName string) error
 	UpdatePurchaseImagesFn               func(ctx context.Context, id, frontURL, backURL string) error
 	UpdatePurchaseGradeFn                func(ctx context.Context, id string, gradeValue float64) error
@@ -161,13 +160,6 @@ func (m *PurchaseRepositoryMock) UpdatePurchaseCLValue(ctx context.Context, id s
 func (m *PurchaseRepositoryMock) UpdatePurchaseCLSyncedAt(ctx context.Context, id string, syncedAt string) error {
 	if m.UpdatePurchaseCLSyncedAtFn != nil {
 		return m.UpdatePurchaseCLSyncedAtFn(ctx, id, syncedAt)
-	}
-	return nil
-}
-
-func (m *PurchaseRepositoryMock) UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error {
-	if m.UpdatePurchaseMMValueFn != nil {
-		return m.UpdatePurchaseMMValueFn(ctx, id, mmValueCents)
 	}
 	return nil
 }

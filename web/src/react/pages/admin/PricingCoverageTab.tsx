@@ -25,7 +25,6 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
     matchingCards,
     awaitingReceiptCards,
     clPricedCards,
-    mmPricedCards,
     totalUnsold,
     recentFailures,
   } = diag;
@@ -69,7 +68,6 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <SummaryCard label="CL Priced" value={`${clPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
-              <SummaryCard label="MM Priced" value={`${mmPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
             </div>
           </div>
         </div>

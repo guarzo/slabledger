@@ -18,8 +18,6 @@ import (
 //	}
 type MockImportService struct {
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
-	ExportMMFormatGlobalFn      func(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error)
-	RefreshMMValuesGlobalFn     func(ctx context.Context, rows []inventory.MMRefreshRow) (*inventory.MMRefreshResult, error)
 	EnsureExternalCampaignFn    func(ctx context.Context) (*inventory.Campaign, error)
 	ImportExternalCSVFn         func(ctx context.Context, rows []inventory.ShopifyExportRow) (*inventory.ExternalImportResult, error)
 	ImportOrdersSalesFn         func(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error)
@@ -39,20 +37,6 @@ func (m *MockImportService) ImportPSAExportGlobal(ctx context.Context, rows []in
 		return m.ImportPSAExportGlobalFn(ctx, rows)
 	}
 	return &inventory.PSAImportResult{}, nil
-}
-
-func (m *MockImportService) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error) {
-	if m.ExportMMFormatGlobalFn != nil {
-		return m.ExportMMFormatGlobalFn(ctx, missingMMOnly)
-	}
-	return []inventory.MMExportEntry{}, nil
-}
-
-func (m *MockImportService) RefreshMMValuesGlobal(ctx context.Context, rows []inventory.MMRefreshRow) (*inventory.MMRefreshResult, error) {
-	if m.RefreshMMValuesGlobalFn != nil {
-		return m.RefreshMMValuesGlobalFn(ctx, rows)
-	}
-	return &inventory.MMRefreshResult{}, nil
 }
 
 func (m *MockImportService) EnsureExternalCampaign(ctx context.Context) (*inventory.Campaign, error) {

@@ -69,13 +69,6 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 			mux.Handle("POST /api/admin/cardladder/add-card", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleAddCard)))
 			mux.Handle("POST /api/admin/cardladder/sync-to-cl", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSyncToCardLadder)))
 		}
-		if rt.marketMoversHandler != nil {
-			mux.Handle("POST /api/admin/marketmovers/config", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleSaveConfig)))
-			mux.Handle("GET /api/admin/marketmovers/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleStatus)))
-			mux.Handle("GET /api/admin/marketmovers/failures", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleFailures)))
-			mux.Handle("POST /api/admin/marketmovers/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleRefresh)))
-			mux.Handle("POST /api/admin/marketmovers/sync-collection", rt.authMW.RequireAdmin(http.HandlerFunc(rt.marketMoversHandler.HandleSyncCollection)))
-		}
 		if rt.psaSyncHandler != nil {
 			mux.Handle("GET /api/admin/psa-sync/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleStatus)))
 			mux.Handle("POST /api/admin/psa-sync/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleRefresh)))
@@ -155,8 +148,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/purchases/import-psa", authRoute(rt.campaignsHandler.HandleGlobalImportPSA))
 	mux.Handle("POST /api/purchases/sync-psa-sheets", authRoute(rt.campaignsHandler.HandleSyncPSASheets))
 	// PSA pending items are served under /api/admin/psa-sync/pending/ (see registerAdminRoutes)
-	mux.Handle("GET /api/purchases/export-mm", authRoute(rt.campaignsHandler.HandleGlobalExportMM))
-	mux.Handle("POST /api/purchases/refresh-mm", authRoute(rt.campaignsHandler.HandleGlobalRefreshMM))
 	mux.Handle("POST /api/purchases/import-external", authRoute(rt.campaignsHandler.HandleGlobalImportExternal))
 	mux.Handle("POST /api/purchases/import-orders", authRoute(rt.campaignsHandler.HandleImportOrders))
 	mux.Handle("POST /api/purchases/import-orders/confirm", authRoute(rt.campaignsHandler.HandleConfirmOrdersSales))

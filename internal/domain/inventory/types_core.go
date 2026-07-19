@@ -204,15 +204,10 @@ type Purchase struct {
 	Grader     string  `json:"grader,omitempty"`     // e.g. "PSA", "CGC", "BGS", "SGC"
 	GradeValue float64 `json:"gradeValue"`           // Numeric grade (1-10, supports half-grades like 9.5)
 
-	// --- Market Movers data ---
-	CLValueCents           int     `json:"clValueCents"`                     // Current CL market value (scheduler-refreshed; frozen snapshot lives in CLValueAtPurchaseCents)
-	CLValueUpdatedAt       string  `json:"clValueUpdatedAt,omitempty"`       // When CL value was last refreshed (RFC3339)
-	CLValueAtPurchaseCents int     `json:"clValueAtPurchaseCents,omitempty"` // CL value at purchase/first-enrichment; set once, never overwritten (0 = no snapshot)
-	MMValueCents           int     `json:"mmValueCents"`                     // Market Movers 30-day avg price (cents)
-	MMTrendPct             float64 `json:"mmTrendPct,omitempty"`             // MM 30-day price change % (positive = rising)
-	MMSales30d             int     `json:"mmSales30d,omitempty"`             // MM 30-day sales volume (count)
-	MMActiveLowCents       int     `json:"mmActiveLowCents,omitempty"`       // MM lowest active BIN listing (cents)
-	MMValueUpdatedAt       string  `json:"mmValueUpdatedAt,omitempty"`       // When MM value was last refreshed (RFC3339)
+	// --- Card Ladder data ---
+	CLValueCents           int    `json:"clValueCents"`                     // Current CL market value (scheduler-refreshed; frozen snapshot lives in CLValueAtPurchaseCents)
+	CLValueUpdatedAt       string `json:"clValueUpdatedAt,omitempty"`       // When CL value was last refreshed (RFC3339)
+	CLValueAtPurchaseCents int    `json:"clValueAtPurchaseCents,omitempty"` // CL value at purchase/first-enrichment; set once, never overwritten (0 = no snapshot)
 
 	// --- Purchase cost & logistics ---
 	BuyCostCents        int     `json:"buyCostCents"`         // Actual cost paid

@@ -6,7 +6,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
-	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
@@ -58,8 +57,6 @@ type handlerInputs struct {
 	AICallRepo           *postgres.AICallRepository
 	CLClient             *cardladder.Client
 	CLStore              *postgres.CardLadderStore
-	MMStore              *postgres.MarketMoversStore
-	MMClient             *marketmovers.Client
 	DHClient             *dh.Client
 	DHEventStore         *postgres.DHEventStore
 	DHStore              *postgres.DHStore
@@ -89,15 +86,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var clHandler *handlers.CardLadderHandler
 	if in.CLStore != nil {
 		clHandler = handlers.NewCardLadderHandler(in.CLStore, in.CLClient, logger)
-	}
-
-	// Market Movers handler
-	var mmHandler *handlers.MarketMoversHandler
-	if in.MMStore != nil {
-		mmHandler = handlers.NewMarketMoversHandler(in.MMStore, in.MMClient, logger)
-		if in.PurchaseStore != nil {
-			mmHandler.SetPurchaseLister(in.PurchaseStore)
-		}
 	}
 
 	// PSA Sync handler (pending items + admin status)
@@ -223,11 +211,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		clHandler.SetSyncUpdater(in.PurchaseStore)
 	}
 
-	// Wire Market Movers manual refresh into the handler
-	if mmHandler != nil && in.SchedulerResult != nil && in.SchedulerResult.MMRefresh != nil {
-		mmHandler.SetRefresher(in.SchedulerResult.MMRefresh)
-	}
-
 	// Price hints handler
 	priceHintsHandler := handlers.NewPriceHintsHandler(in.CardIDMappingRepo, logger)
 
@@ -289,7 +272,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
-		MarketMoversHandler:       mmHandler,
 		PSASyncHandler:            psaSyncHandler,
 		OpportunitiesHandler:      opportunitiesHandler,
 		DHHandler:                 dhHandler,

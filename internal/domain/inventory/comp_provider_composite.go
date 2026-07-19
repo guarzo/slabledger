@@ -3,7 +3,7 @@ package inventory
 import "context"
 
 // CompositeCompProvider chains multiple CompSummaryProviders, returning results
-// from the first provider that has data for each key. Typical order: CL → MM → DH.
+// from the first provider that has data for each key. Typical order: CL → DH.
 type CompositeCompProvider struct {
 	providers []CompSummaryProvider
 }

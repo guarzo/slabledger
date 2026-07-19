@@ -11,15 +11,11 @@ export function buildPriceSources(prices: {
   dhMidCents: number;
   costCents: number;
   lastSoldCents: number;
-  mmCents?: number;
 }): PriceSource[] {
   const sources: PriceSource[] = [
     { label: 'Cost', priceCents: prices.costCents, source: 'cost_markup' },
     { label: 'CL', priceCents: prices.clCents, source: 'cl' },
   ];
-  if (prices.mmCents && prices.mmCents > 0) {
-    sources.push({ label: 'MM', priceCents: prices.mmCents, source: 'mm' });
-  }
   sources.push(
     { label: 'DH', priceCents: prices.dhMidCents, source: 'market' },
     { label: 'Last Sold', priceCents: prices.lastSoldCents, source: 'last_sold' },

@@ -160,14 +160,13 @@ export function CertRowItem({
   const clCents = market?.clValueCents ?? 0;
   const dhCents = market?.gradePriceCents ?? 0;
   const lastSoldCents = market?.lastSoldCents ?? 0;
-  const mmCents = market?.sourcePrices?.find(p => p.source === 'MarketMovers')?.priceCents ?? 0;
   const costCents = buyCostCents ?? 0;
 
   const sources = useMemo(
     () => canList
-      ? buildPriceSources({ clCents, dhMidCents: dhCents, costCents, lastSoldCents, mmCents })
+      ? buildPriceSources({ clCents, dhMidCents: dhCents, costCents, lastSoldCents })
       : [],
-    [canList, clCents, dhCents, costCents, lastSoldCents, mmCents],
+    [canList, clCents, dhCents, costCents, lastSoldCents],
   );
   const preSelected = useMemo<PreSelection>(
     () => dhCents > 0 ? { kind: 'source', source: 'market' } : { kind: 'none' },

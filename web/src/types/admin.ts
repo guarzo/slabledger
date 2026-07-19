@@ -85,53 +85,6 @@ export interface CLSyncResult {
 }
 
 // ---------------------------------------------------------------------------
-// Market Movers types
-// ---------------------------------------------------------------------------
-
-export interface MMPriceStats {
-  unsoldTotal: number;
-  withMMPrice: number;
-  syncedCount: number;
-  oldestUpdate: string;
-  newestUpdate: string;
-  staleCount: number;
-}
-
-export interface MMLastRun {
-  lastRunAt: string;
-  durationMs: number;
-  updated: number;
-  newMappings: number;
-  skipped: number;
-  searchFailed: number;
-  totalPurchases: number;
-  tokenMismatches: number;
-  noSalesData: number;
-  uploadedLastRun: number;
-  deletedLastRun: number;
-}
-
-export interface MMStatusResponse {
-  configured: boolean;
-  username?: string;
-  cardsMapped?: number;
-  priceStats?: MMPriceStats;
-  lastRun?: MMLastRun;
-}
-
-export interface MMSyncError {
-  certNumber: string;
-  error: string;
-}
-
-export interface MMSyncResult {
-  synced: number;
-  skipped: number;
-  failed: number;
-  errors?: MMSyncError[];
-}
-
-// ---------------------------------------------------------------------------
 // PSA Sync types
 // ---------------------------------------------------------------------------
 

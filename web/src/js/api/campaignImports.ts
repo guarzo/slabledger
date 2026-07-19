@@ -7,7 +7,7 @@ import type {
   CertLookupResult,
   CertImportResult,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
-  ScanCertResponse, ScanCertsResponse, ResolveCertResponse, MMRefreshResult,
+  ScanCertResponse, ScanCertsResponse, ResolveCertResponse,
 } from '../../types/campaigns';
 import type { PriceFlagsResponse } from '../../types/campaigns/priceReview';
 import type { PSAPendingItem } from '../../types/admin';
@@ -17,10 +17,6 @@ declare module './client' {
   interface APIClient {
     // Cert lookup
     lookupCert(certNumber: string): Promise<CertLookupResult>;
-
-    // Global imports / exports
-    globalExportMM(missingMMOnly?: boolean): Promise<Blob>;
-    globalRefreshMM(file: File): Promise<MMRefreshResult>;
 
     // PSA / External imports
     globalImportPSA(file: File): Promise<PSAImportResult>;
@@ -58,19 +54,6 @@ proto.lookupCert = async function (this: APIClient, certNumber: string): Promise
 };
 
 // Global purchase endpoints (cross-campaign)
-proto.globalExportMM = async function (this: APIClient, missingMMOnly?: boolean): Promise<Blob> {
-  const params = missingMMOnly ? '?missing_mm_only=true' : '';
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/export-mm${params}`,
-    {},
-  );
-  return response.blob();
-};
-
-proto.globalRefreshMM = async function (this: APIClient, file: File): Promise<MMRefreshResult> {
-  return this.uploadFile<MMRefreshResult>('/purchases/refresh-mm', file);
-};
-
 // PSA CSV import (global)
 proto.globalImportPSA = async function (this: APIClient, file: File): Promise<PSAImportResult> {
   return this.uploadFile<PSAImportResult>('/purchases/import-psa', file);

@@ -69,7 +69,6 @@ type PricingDiagnostics struct {
 	MatchingCards        int              `json:"matchingCards"`
 	AwaitingReceiptCards int              `json:"awaitingReceiptCards"`
 	CLPricedCards        int              `json:"clPricedCards"`
-	MMPricedCards        int              `json:"mmPricedCards"`
 	TotalUnsold          int              `json:"totalUnsold"`
 	RecentFailures       []FailureSummary `json:"recentFailures"`
 }

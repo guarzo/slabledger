@@ -40,8 +40,6 @@ type MockInventoryService struct {
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
-	ExportMMFormatGlobalFn      func(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error)
-	RefreshMMValuesGlobalFn     func(ctx context.Context, rows []inventory.MMRefreshRow) (*inventory.MMRefreshResult, error)
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
 	// Capital & Invoice
@@ -253,20 +251,6 @@ func (m *MockInventoryService) GetFlaggedInventory(ctx context.Context) ([]inven
 		return m.GetFlaggedInventoryFn(ctx)
 	}
 	return []inventory.AgingItem{}, nil
-}
-
-func (m *MockInventoryService) ExportMMFormatGlobal(ctx context.Context, missingMMOnly bool) ([]inventory.MMExportEntry, error) {
-	if m.ExportMMFormatGlobalFn != nil {
-		return m.ExportMMFormatGlobalFn(ctx, missingMMOnly)
-	}
-	return []inventory.MMExportEntry{}, nil
-}
-
-func (m *MockInventoryService) RefreshMMValuesGlobal(ctx context.Context, rows []inventory.MMRefreshRow) (*inventory.MMRefreshResult, error) {
-	if m.RefreshMMValuesGlobalFn != nil {
-		return m.RefreshMMValuesGlobalFn(ctx, rows)
-	}
-	return &inventory.MMRefreshResult{}, nil
 }
 
 func (m *MockInventoryService) ImportPSAExportGlobal(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {

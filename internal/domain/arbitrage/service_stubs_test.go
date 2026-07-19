@@ -68,9 +68,6 @@ func (r *stubPurchaseRepo) UpdatePurchaseCLValue(_ context.Context, _ string, _,
 func (r *stubPurchaseRepo) UpdatePurchaseCLSyncedAt(_ context.Context, _ string, _ string) error {
 	return nil
 }
-func (r *stubPurchaseRepo) UpdatePurchaseMMValue(_ context.Context, _ string, _ int) error {
-	return nil
-}
 func (r *stubPurchaseRepo) UpdatePurchaseCardMetadata(_ context.Context, _, _, _, _ string) error {
 	return nil
 }

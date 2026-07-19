@@ -119,10 +119,8 @@ export default function DesktopRow({
   const hotSeller = isHotSeller(item);
   const dot = syncDotProps({
     clSyncedAt: item.purchase.clSyncedAt,
-    mmValueUpdatedAt: item.purchase.mmValueUpdatedAt,
     dhLastSyncedAt: item.purchase.dhLastSyncedAt,
     clHasValue: (item.purchase.clValueCents ?? 0) > 0,
-    hasMMValue: (item.purchase.mmValueCents ?? 0) > 0,
     hasDHPrice: (snap?.gradePriceCents ?? 0) > 0 || (snap?.lastSoldCents ?? 0) > 0,
     clLastError: item.purchase.clLastError,
   });

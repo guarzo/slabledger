@@ -14,13 +14,13 @@ var _ Scheduler = (*PricingEnrichJob)(nil)
 
 // Pricing-enrich throughput tunables. The previous single-worker / depth-200
 // setup dropped intake bursts because each cert blocks on 5–7 upstream HTTP
-// calls (CL + MM) — IO-bound, not CPU-bound — so parallelism is cheap on a
+// calls (CL) — IO-bound, not CPU-bound — so parallelism is cheap on a
 // shared-cpu VM and deeper buffering absorbs CSV-scale imports.
 const (
 	pricingQueueSize   = 1000
 	pricingWorkerCount = 4
 
-	// FreshPriceWindow is how long an on-demand CL/MM price is considered
+	// FreshPriceWindow is how long an on-demand CL price is considered
 	// current. Within this window, re-enqueuing the same cert (e.g. a CSV
 	// re-import, a double-scan at intake) skips the upstream call. Sized to
 	// comfortably cover burst re-imports without staling out the freshly
@@ -43,9 +43,9 @@ func isPriceFresh(updatedAtRFC3339 string) bool {
 }
 
 // SinglePurchasePricer drives on-demand pricing for one purchase against a
-// specific provider. Both CardLadderRefreshScheduler and
-// MarketMoversRefreshScheduler expose a method with this shape so the enrich
-// job can fan out without coupling to either package beyond the interface.
+// specific provider. CardLadderRefreshScheduler exposes a method with this
+// shape so the enrich job can fan out without coupling to its package beyond
+// the interface.
 //
 // Concurrency invariant: PricingEnrichJob.priceOne calls multiple pricers
 // concurrently, each on its own shallow copy of *Purchase. Implementations
@@ -59,7 +59,7 @@ type SinglePurchasePricer interface {
 
 // PricingEnrichJob bridges the intake-time pricing enqueuer to the daily
 // refresh schedulers. Given a cert number, a pool of workers loads the
-// purchase and fans it out to every configured pricer (CL, MM) so freshly
+// purchase and fans it out to every configured pricer (CL) so freshly
 // scanned inventory gets priced immediately instead of waiting for the next
 // daily cycle.
 //
@@ -67,10 +67,9 @@ type SinglePurchasePricer interface {
 // the Purchase so concurrent writes to value fields (CLValueCents,
 // DHPushStatus) can't race. Pointer fields on Purchase remain shared across
 // copies; see the SinglePurchasePricer interface doc for the invariant
-// pricers must uphold. MM never reads fields CL mutates, so there is no
-// logical cross-pricer coupling today.
+// pricers must uphold.
 //
-// Pricers are optional — if CL/MM isn't configured, the scheduler constructor
+// Pricers are optional — if CL isn't configured, the scheduler constructor
 // is passed nil and this job drops the enqueue with a warning.
 type PricingEnrichJob struct {
 	StopHandle
@@ -216,7 +215,7 @@ func (j *PricingEnrichJob) priceOne(ctx context.Context, certNum string, workerI
 			// Shallow copy: value fields are isolated per goroutine, but pointer
 			// fields (ReceivedAt, EbayExportFlaggedAt, DHUnlistedDetectedAt) are
 			// still shared. See the SinglePurchasePricer interface doc — pricers
-			// must not mutate through those pointers. Neither CL nor MM does
+			// must not mutate through those pointers. CL does not mutate them
 			// today; enforce it in review for any new pricer.
 			pCopy := *purchase
 			if err := pricer.PriceSinglePurchase(ctx, &pCopy); err != nil {

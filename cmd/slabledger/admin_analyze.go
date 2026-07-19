@@ -121,7 +121,7 @@ func adminAnalyze(ctx context.Context, args []string) error {
 	}
 
 	campaignsInit := initializeCampaignsService(
-		ctx, &cfg, logger, db, priceProvImpl, intelRepo, nil, nil, nil, nil,
+		ctx, &cfg, logger, db, priceProvImpl, intelRepo, nil, nil, nil,
 	)
 	campaignsService := campaignsInit.service
 	arbSvc := campaignsInit.arbSvc

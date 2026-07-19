@@ -5,7 +5,6 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
@@ -99,13 +98,6 @@ type BuildDeps struct {
 	// survives server restarts. Optional — when nil, stats remain in-memory.
 	SchedulerStatsStore *postgres.SchedulerStatsStore
 
-	// Market Movers dependencies (optional)
-	MMClient         *marketmovers.Client
-	MMStore          *postgres.MarketMoversStore
-	MMSalesStore     *postgres.MMSalesStore
-	MMPurchaseLister MMPurchaseLister
-	MMValueUpdater   MMValueUpdater
-
 	// PSA sync dependencies (optional)
 	PSARowProvider    RowProvider
 	PSATokenRefresher TokenRefresher
@@ -122,19 +114,17 @@ type BuildDeps struct {
 // BuildResult holds the scheduler group and optional auxiliary references.
 type BuildResult struct {
 	Group             *Group
-	CardLadderRefresh *CardLadderRefreshScheduler   // nil if Card Ladder is not configured
-	MMRefresh         *MarketMoversRefreshScheduler // nil if Market Movers is not configured
-	PSASync           *PSASyncScheduler             // nil if PSA sync is not configured
-	CertEnrichJob     *CertEnrichJob                // nil if cert lookup is not configured
-	DHOrdersPoll      *DHOrdersPollScheduler        // nil if DH orders poll is not configured
-	DHReconcile       *DHReconcileScheduler         // nil if DH reconciler is not configured
+	CardLadderRefresh *CardLadderRefreshScheduler // nil if Card Ladder is not configured
+	PSASync           *PSASyncScheduler           // nil if PSA sync is not configured
+	CertEnrichJob     *CertEnrichJob              // nil if cert lookup is not configured
+	DHOrdersPoll      *DHOrdersPollScheduler      // nil if DH orders poll is not configured
+	DHReconcile       *DHReconcileScheduler       // nil if DH reconciler is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
 func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
 	var clRefresh *CardLadderRefreshScheduler
-	var mmRefresh *MarketMoversRefreshScheduler
 	var psaSync *PSASyncScheduler
 	var certEnrichJob *CertEnrichJob
 	var dhReconcile *DHReconcileScheduler
@@ -435,27 +425,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, certEnrichJob)
 	}
 
-	// Market Movers value refresh scheduler.
-	// Created whenever the store and purchase interfaces are available, even if
-	// no client exists yet at startup. SetClient is called by the handler when
-	// credentials are saved for the first time, activating the scheduler without
-	// requiring a server restart.
-	if deps.MMStore != nil && deps.MMPurchaseLister != nil && deps.MMValueUpdater != nil {
-		mmRefresh = NewMarketMoversRefreshScheduler(
-			deps.MMClient, deps.MMStore,
-			deps.MMPurchaseLister, deps.MMValueUpdater,
-			deps.Logger, cfg.MarketMovers,
-		)
-		if deps.MMSalesStore != nil {
-			mmRefresh.SetSalesStore(deps.MMSalesStore)
-		}
-		schedulers = append(schedulers, mmRefresh)
-	}
-
 	return BuildResult{
 		Group:             NewGroup(schedulers...),
 		CardLadderRefresh: clRefresh,
-		MMRefresh:         mmRefresh,
 		PSASync:           psaSync,
 		CertEnrichJob:     certEnrichJob,
 		DHOrdersPoll:      dhOrdersPoll,

@@ -34,7 +34,7 @@ func (s *service) SetReviewedPrice(ctx context.Context, purchaseID string, price
 	}
 	if priceCents > 0 {
 		switch ReviewSource(source) {
-		case ReviewSourceManual, ReviewSourceCL, ReviewSourceMarket, ReviewSourceLastSold, ReviewSourceCostMarkup, ReviewSourceMM, ReviewSourceLiquidation:
+		case ReviewSourceManual, ReviewSourceCL, ReviewSourceMarket, ReviewSourceLastSold, ReviewSourceCostMarkup, ReviewSourceLiquidation:
 			// valid
 		default:
 			return errors.NewAppError(ErrCodeCampaignValidation, "invalid review source: "+source)

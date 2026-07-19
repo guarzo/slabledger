@@ -85,38 +85,3 @@ func ApplyCLSignal(snap *MarketSnapshot, clCents int) {
 		setFallbackPercentiles(snap)
 	}
 }
-
-// applyMMSignal incorporates Market Movers data into the market snapshot.
-// MM avg price is added as a visible source price. When the DH snapshot lacks trend or
-// volume data (e.g. card not in the DH catalog), MM values are used as fallbacks so that
-// ComputeInventorySignals and advisor scoring remain fully functional.
-// If no DH median exists, the MM avg price seeds the snapshot directly.
-func ApplyMMSignal(snap *MarketSnapshot, p *Purchase) {
-	if snap == nil || p.MMValueCents <= 0 {
-		return
-	}
-
-	snap.SourcePrices = append(snap.SourcePrices, SourcePrice{
-		Source:     "MarketMovers",
-		PriceCents: p.MMValueCents,
-	})
-
-	// Use MM avg as median seed only when DH has not provided one
-	if snap.MedianCents == 0 {
-		snap.MedianCents = p.MMValueCents
-		setFallbackPercentiles(snap)
-	}
-
-	// Populate LowestListCents from MM active BIN when DH hasn't set it
-	if snap.LowestListCents == 0 && p.MMActiveLowCents > 0 {
-		snap.LowestListCents = p.MMActiveLowCents
-	}
-
-	// Use MM trend and volume as fallbacks when DH snapshot has none
-	if snap.Trend30d == 0 && p.MMTrendPct != 0 {
-		snap.Trend30d = p.MMTrendPct
-	}
-	if snap.SalesLast30d == 0 && p.MMSales30d > 0 {
-		snap.SalesLast30d = p.MMSales30d
-	}
-}

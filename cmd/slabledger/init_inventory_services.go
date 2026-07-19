@@ -45,8 +45,7 @@ type campaignsInitResult struct {
 	dhStore          *postgres.DHStore
 	certLookup       inventory.CertLookup
 	certEnrichJob    *scheduler.CertEnrichJob    // nil if PSA not configured
-	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL/MM schedulers exist
-	mmSalesStore     *postgres.MMSalesStore
+	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL schedulers exist
 	dhCompStore      *postgres.DHCompCacheStore
 	arbSvc           arbitrage.Service
 	portSvc          portfolio.Service
@@ -66,7 +65,6 @@ func initializeCampaignsService(
 	db *postgres.DB,
 	priceProvImpl pricing.PriceProvider,
 	intelRepo *postgres.MarketIntelligenceRepository,
-	mmStore *postgres.MarketMoversStore,
 	dhClient *dh.Client,
 	eventRecorder dhevents.Recorder,
 	cardIDMappingRepo *postgres.CardIDMappingRepository,
@@ -110,11 +108,10 @@ func initializeCampaignsService(
 		campaignOpts = append(campaignOpts, inventory.WithIntelligenceRepo(intelRepo))
 	}
 
-	// Comp analytics — composite provider: CL → MM → DH fallback chain.
+	// Comp analytics — composite provider: CL → DH fallback chain.
 	clSalesStore := postgres.NewCLSalesStore(db.DB)
-	mmSalesStore := postgres.NewMMSalesStore(db.DB)
 	dhCompStore := postgres.NewDHCompCacheStore(db.DB)
-	compositeComp := inventory.NewCompositeCompProvider(clSalesStore, mmSalesStore, dhCompStore)
+	compositeComp := inventory.NewCompositeCompProvider(clSalesStore, dhCompStore)
 	campaignOpts = append(campaignOpts, inventory.WithCompSummaryProvider(compositeComp))
 
 	// Structured logger — required so phase-timing diagnostic logs in
@@ -122,24 +119,6 @@ func initializeCampaignsService(
 	// `if s.logger != nil`). Without this, we're blind to where inventory
 	// page time goes.
 	campaignOpts = append(campaignOpts, inventory.WithLogger(logger))
-
-	// Market Movers search title enrichment for CSV export (optional).
-	if mmStore != nil {
-		mmAdapter := inventory.MMMappingFunc(func(ctx context.Context) (map[string]string, error) {
-			mappings, err := mmStore.ListMappings(ctx)
-			if err != nil {
-				return nil, err
-			}
-			result := make(map[string]string, len(mappings))
-			for _, m := range mappings {
-				if m.SearchTitle != "" {
-					result[m.SlabSerial] = m.SearchTitle
-				}
-			}
-			return result, nil
-		})
-		campaignOpts = append(campaignOpts, inventory.WithMMMappings(mmAdapter))
-	}
 
 	// DH event recorder — records dh_state_events for enrollment and card-id-resolution.
 	if eventRecorder != nil {
@@ -161,10 +140,10 @@ func initializeCampaignsService(
 		)
 	}
 
-	// Pricing enrichment job — on-demand CL+MM pricing triggered by intake.
-	// Pricers are attached later in initializeSchedulers once the CL/MM
-	// schedulers exist; until then the enqueuer is a no-op so injecting it
-	// here is safe even when CL/MM are disabled.
+	// Pricing enrichment job — on-demand CL pricing triggered by intake.
+	// Pricers are attached later in initializeSchedulers once the CL
+	// scheduler exists; until then the enqueuer is a no-op so injecting it
+	// here is safe even when CL is disabled.
 	pricingEnrichJob := scheduler.NewPricingEnrichJob(purchaseStore, logger)
 	campaignOpts = append(campaignOpts, inventory.WithPricingEnqueuer(pricingEnrichJob))
 
@@ -238,7 +217,6 @@ func initializeCampaignsService(
 		certLookup:       certLookup,
 		certEnrichJob:    certEnrichJobForSvc,
 		pricingEnrichJob: pricingEnrichJob,
-		mmSalesStore:     mmSalesStore,
 		dhCompStore:      dhCompStore,
 		arbSvc:           arbSvc,
 		portSvc:          portSvc,

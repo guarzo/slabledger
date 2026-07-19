@@ -50,7 +50,6 @@ type PurchaseRepository interface {
 	// Field updates
 	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error
 	UpdatePurchaseCLSyncedAt(ctx context.Context, id string, syncedAt string) error
-	UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error
 	UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error
 	UpdatePurchaseImages(ctx context.Context, id string, frontURL, backURL string) error
 	UpdatePurchaseGrade(ctx context.Context, id string, gradeValue float64) error

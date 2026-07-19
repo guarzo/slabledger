@@ -128,9 +128,6 @@ func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*in
 		if snap != nil && d.Purchase.CLValueCents > 0 {
 			inventory.ApplyCLSignal(snap, d.Purchase.CLValueCents)
 		}
-		if snap != nil {
-			inventory.ApplyMMSignal(snap, &d.Purchase)
-		}
 		if inventory.HasAnyPriceData(snap) {
 			currentSnapshots[key] = snap
 		}

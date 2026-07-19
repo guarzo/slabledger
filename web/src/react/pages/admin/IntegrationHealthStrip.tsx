@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
+import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 
 type TileStatus = 'healthy' | 'warning' | 'down' | 'unconfigured' | 'unknown';
 
@@ -51,7 +51,6 @@ function Tile({ label, status, metric, detail }: TileProps) {
 export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }) {
   const { data: dh } = useDHStatus({ enabled });
   const { data: cl } = useCardLadderStatus({ enabled });
-  const { data: mm } = useMarketMoversStatus({ enabled });
   const { data: psa } = usePSASyncStatus({ enabled });
 
   const dhHealth = dh?.api_health;
@@ -73,19 +72,6 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
   const clStale = cl?.priceStats?.staleCount ?? 0;
   const clDetail = clStale > 0 ? `${clStale} stale (>7d)` : undefined;
 
-  const mmPriced = mm?.priceStats?.withMMPrice ?? 0;
-  const mmTotal = mm?.priceStats?.unsoldTotal ?? 0;
-  const mmStale = mm?.priceStats?.staleCount ?? 0;
-  const mmStatus: TileStatus = !mm
-    ? 'unknown'
-    : !mm.configured
-      ? 'unconfigured'
-      : mmStale > 0
-        ? 'warning'
-        : 'healthy';
-  const mmMetric = mm ? (mm.configured ? `${mmPriced}/${mmTotal} priced` : 'Not configured') : 'Unknown';
-  const mmDetail = mmStale > 0 ? `${mmStale} stale` : undefined;
-
   const psaStatus: TileStatus = !psa ? 'unknown' : (psa.configured ? 'healthy' : 'unconfigured');
   const psaPending = psa?.pendingCount ?? 0;
   const psaMetric = psa
@@ -96,7 +82,6 @@ export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }
   const tiles: TileProps[] = [
     { label: 'DoubleHolo', status: dhStatus, metric: dhMetric, detail: dhDetail },
     { label: 'Card Ladder', status: clStatus, metric: clMetric, detail: clDetail },
-    { label: 'Market Movers', status: mmStatus, metric: mmMetric, detail: mmDetail },
     { label: 'PSA Sync', status: psaStatus, metric: psaMetric, detail: psaDetail },
   ];
 

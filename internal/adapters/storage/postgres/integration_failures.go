@@ -36,7 +36,7 @@ const ReasonUnprocessed = "unprocessed"
 const maxIntegrationFailureSamples = 200
 
 // queryIntegrationFailures is the shared implementation behind
-// MarketMoversStore.GetMMFailures and CardLadderStore.GetCLFailures.
+// CardLadderStore.GetCLFailures.
 //
 // It returns:
 //   - grouped counts by reason tag for rows whose reason column is non-empty
@@ -51,11 +51,10 @@ const maxIntegrationFailureSamples = 200
 // is safe from injection.
 func queryIntegrationFailures(ctx context.Context, db *sql.DB, reasonCol, reasonAtCol, valueCol string, sampleLimit int) (*IntegrationFailuresReport, error) {
 	// Validate reason + reason-timestamp + value column as a triple so a
-	// caller can't mix mm_last_error with cl_last_error_at or cl_value_cents
-	// with mm_last_error. The allowlist doubles as the only-ever safe values
+	// caller can't mix cl_last_error with a mismatched timestamp or value
+	// column. The allowlist doubles as the only-ever safe values
 	// for the string interpolation below.
 	switch {
-	case reasonCol == "mm_last_error" && reasonAtCol == "mm_last_error_at" && valueCol == "mm_value_cents":
 	case reasonCol == "cl_last_error" && reasonAtCol == "cl_last_error_at" && valueCol == "cl_value_cents":
 	default:
 		return nil, fmt.Errorf("queryIntegrationFailures: invalid column triple (%q, %q, %q)", reasonCol, reasonAtCol, valueCol)
