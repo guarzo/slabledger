@@ -126,8 +126,18 @@ fly machine run registry.fly.io/slabledger-psa-harvest:harvest --region iad --vm
 
 ### Schedule
 
-The cadence lives on the **machine**, not in `fly.harvest.toml` or the deploy — it is set
-with `fly machine update --schedule` and is what makes Fly fire the machine on its own:
+**The primary cadence is a GitHub Actions cron** (`.github/workflows/psa-harvest-cron.yml`):
+every hour it runs `fly machine start` on the app's machine, which works regardless of the
+machine's schedule state — so a deploy recreating the machine can no longer silently kill
+the pipeline (which Fly's own scheduler did on 2026-07-16 and again on 2026-07-19). It
+needs a `FLY_API_TOKEN` repo secret (`fly tokens create deploy -a slabledger-psa-harvest`).
+A red run in the Actions tab is the alert surface; "machine already started" is treated as
+success. Fly's on-machine schedule (below) stays as a second layer — GitHub cron is
+best-effort and either layer alone keeps the pipeline alive; a double fire is a harmless
+duplicate harvest.
+
+The Fly-side cadence lives on the **machine**, not in `fly.harvest.toml` or the deploy — it
+is set with `fly machine update --schedule` and is what makes Fly fire the machine on its own:
 
 ```bash
 fly machine update <machine_id> --schedule hourly -a slabledger-psa-harvest
