@@ -161,6 +161,14 @@ func (s *service) recaptureMarketSnapshotDetailed(ctx context.Context, purchaseI
 		return snapshotProviderError
 	}
 	if snapshot == nil {
+		if s.logger != nil {
+			s.logger.Info(ctx, "recaptureMarketSnapshot: provider returned nil snapshot",
+				observability.String("purchaseID", purchaseID),
+				observability.String("card", card.CardName),
+				observability.String("set", card.SetName),
+				observability.String("cardNumber", card.CardNumber),
+				observability.Float64("grade", grade))
+		}
 		return snapshotProviderError
 	}
 	applyCLCorrection(snapshot, clValueCents)
@@ -168,8 +176,9 @@ func (s *service) recaptureMarketSnapshotDetailed(ctx context.Context, purchaseI
 	data.applySnapshot(snapshot, time.Now().Format("2006-01-02"))
 	if err := s.purchases.UpdatePurchaseMarketSnapshot(ctx, purchaseID, data); err != nil {
 		if s.logger != nil {
-			s.logger.Debug(ctx, "UpdatePurchaseMarketSnapshot failed",
+			s.logger.Warn(ctx, "UpdatePurchaseMarketSnapshot failed",
 				observability.String("purchaseID", purchaseID),
+				observability.String("card", card.CardName),
 				observability.Err(err))
 		}
 		return snapshotDBError
