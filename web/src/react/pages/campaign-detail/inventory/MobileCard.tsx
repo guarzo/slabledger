@@ -106,7 +106,7 @@ export default function MobileCard({
             <div className="text-xs text-[var(--text-muted)]">
               {showCampaignColumn && item.campaignName && <>{item.campaignName} &middot; </>}
               {item.purchase.setName && <>{item.purchase.setName} &middot; </>}
-              <CopyableCert certNumber={item.purchase.certNumber}>Cert #{item.purchase.certNumber}</CopyableCert> &middot; <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
+              {item.purchase.certNumber && <><CopyableCert certNumber={item.purchase.certNumber}>Cert #{item.purchase.certNumber}</CopyableCert> &middot; </>}<GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
             </div>
             <div className={`text-[11px] mt-0.5 tabular-nums ${daysColor}`} title={inHandTitle}>
               {inHandLabel}

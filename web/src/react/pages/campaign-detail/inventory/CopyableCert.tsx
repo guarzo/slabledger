@@ -33,7 +33,7 @@ export default function CopyableCert({ certNumber, children }: CopyableCertProps
       onClick={handleClick}
       title="Copy cert number"
       aria-label={`Copy cert number ${certNumber}`}
-      className={`inline cursor-pointer bg-transparent border-0 p-0 font-inherit text-inherit hover:text-[var(--text)] hover:underline ${
+      className={`inline cursor-pointer bg-transparent border-0 p-0 text-inherit hover:text-[var(--text)] hover:underline ${
         copied ? 'text-[var(--success,#16a34a)]' : ''
       }`}
     >
