@@ -69,6 +69,80 @@ func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
 	}
 }
 
+func TestTransientPushError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "cloudflare 403", err: errors.New("psaportal: remote-hash landing page: status 403"), want: true},
+		{name: "rate limit 429", err: errors.New("psaportal: update campaign status 429"), want: true},
+		{name: "outage 503", err: errors.New("psaportal: create campaign status 503"), want: true},
+		{name: "app rejection 400 is terminal", err: errors.New("psaportal: update campaign status 400"), want: false},
+		{name: "server error 500 is terminal", err: errors.New("psaportal: create campaign status 500"), want: false},
+		{name: "non-status error is terminal", err: errors.New("psaportal: browser fetch error: net::ERR_FAILED"), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := transientPushError(tt.err); got != tt.want {
+				t.Fatalf("transientPushError(%q) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDrainPushQueue_UpdateTransient403RequeuesApproved(t *testing.T) {
+	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	if err != nil {
+		t.Fatalf("fixture missing: %v", err)
+	}
+	ff := &fakeFetcher{
+		routes: map[string]string{
+			"/edit/__data.json?x-sveltekit-invalidated=0001":          string(edit),
+			"/buyercampaignmanager/_app/remote/abc123/updateCampaign": `{}`,
+			"/buyercampaignmanager":                                   `<html><script src="/buyercampaignmanager/_app/immutable/entry/app.HASH123.js"></script></html>`,
+			"immutable/entry/app.HASH123.js":                          `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
+			"immutable/chunks/REMOTE.js":                              `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
+		},
+		statusFor: map[string]int{"/buyercampaignmanager/_app/remote/abc123/updateCampaign": 403},
+	}
+	c := New(ff, Config{})
+
+	row := psacampaign.PushRow{
+		ID:            "row-1",
+		PSACampaignID: "660a980d-bf1c-4988-9958-1eb2d1853c66",
+		Status:        psacampaign.PushApproved,
+		Diff: psacampaign.ProposedDiff{
+			Changes: []psacampaign.FieldChange{{Field: "bidPercentage", Old: "70", New: "80"}},
+		},
+	}
+
+	var gotStatus psacampaign.PushStatus
+	var gotErrMsg string
+	q := &mocks.PushQueueStoreMock{
+		ListByStatusFn: func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error) {
+			return []psacampaign.PushRow{row}, nil
+		},
+		MarkResultFn: func(ctx context.Context, id string, status psacampaign.PushStatus, resultJSON, errMsg string) error {
+			gotStatus = status
+			gotErrMsg = errMsg
+			return nil
+		},
+	}
+
+	pushed, failed := DrainPushQueue(context.Background(), c, q, nil, observability.NewNoopLogger())
+
+	if pushed != 0 || failed != 1 {
+		t.Fatalf("expected pushed=0 failed=1, got pushed=%d failed=%d", pushed, failed)
+	}
+	if gotStatus != psacampaign.PushApproved {
+		t.Fatalf("expected transient 403 to requeue row as PushApproved, got %v", gotStatus)
+	}
+	if gotErrMsg == "" {
+		t.Fatal("expected the transport error to be recorded on the requeued row")
+	}
+}
+
 func TestDrainPushQueue_SkipsUnclaimableRow(t *testing.T) {
 	c := New(&fakeFetcher{}, Config{PSABaseURL: "http://example.invalid"})
 
@@ -124,6 +198,14 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 		{
 			name: "portal failure marks failed", createStatus: 500, createBody: `{}`,
 			wantFailed: 1, wantStatus: psacampaign.PushFailed,
+		},
+		{
+			name: "cloudflare 403 requeues as approved for next drain", createStatus: 403, createBody: `{}`,
+			wantFailed: 1, wantStatus: psacampaign.PushApproved,
+		},
+		{
+			name: "portal 503 requeues as approved for next drain", createStatus: 503, createBody: `{}`,
+			wantFailed: 1, wantStatus: psacampaign.PushApproved,
 		},
 		{
 			name: "link failure still pushed", createStatus: 200,
