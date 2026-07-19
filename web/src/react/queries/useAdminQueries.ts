@@ -162,55 +162,6 @@ export function useSyncCardLadderCollection() {
   });
 }
 
-export function useMarketMoversStatus(options?: AdminQueryOptions) {
-  return useQuery({
-    queryKey: queryKeys.admin.marketMoversStatus,
-    queryFn: () => api.getMarketMoversStatus(),
-    staleTime: 60_000,
-    enabled: options?.enabled ?? true,
-  });
-}
-
-export function useMarketMoversFailures(options?: AdminQueryOptions) {
-  return useQuery({
-    queryKey: queryKeys.admin.marketMoversFailures,
-    queryFn: () => api.getMarketMoversFailures(50),
-    staleTime: 60_000,
-    enabled: options?.enabled ?? false,
-  });
-}
-
-export function useSaveMarketMoversConfig() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (config: { username: string; password: string }) =>
-      api.saveMarketMoversConfig(config),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
-    },
-  });
-}
-
-export function useTriggerMarketMoversRefresh() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.triggerMarketMoversRefresh(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
-    },
-  });
-}
-
-export function useSyncMarketMoversCollection() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.syncMarketMoversCollection(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.marketMoversStatus });
-    },
-  });
-}
-
 export function useDHStatus(options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.dhStatus,

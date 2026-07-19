@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildPriceSources, preSelectSource } from './priceDecisionHelpers';
 
 describe('buildPriceSources', () => {
-  it('includes Cost and CL first, then DH and Last Sold at end when mmCents absent', () => {
+  it('includes Cost and CL first, then DH and Last Sold at end', () => {
     const sources = buildPriceSources({
       clCents: 1000,
       dhMidCents: 2000,
@@ -16,49 +16,10 @@ describe('buildPriceSources', () => {
     expect(sources[2]).toMatchObject({ label: 'DH', source: 'market', priceCents: 2000 });
     expect(sources[3]).toMatchObject({ label: 'Last Sold', source: 'last_sold', priceCents: 1800 });
   });
-
-  it('inserts MM between CL and DH when mmCents is present and positive', () => {
-    const sources = buildPriceSources({
-      clCents: 1000,
-      dhMidCents: 2000,
-      costCents: 500,
-      lastSoldCents: 1800,
-      mmCents: 1500,
-    });
-
-    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'mm', 'market', 'last_sold']);
-    expect(sources[2]).toMatchObject({ label: 'MM', source: 'mm', priceCents: 1500 });
-    expect(sources[3]).toMatchObject({ label: 'DH', source: 'market', priceCents: 2000 });
-    expect(sources[4]).toMatchObject({ label: 'Last Sold', source: 'last_sold', priceCents: 1800 });
-  });
-
-  it('omits MM when mmCents is 0', () => {
-    const sources = buildPriceSources({
-      clCents: 1000,
-      dhMidCents: 2000,
-      costCents: 500,
-      lastSoldCents: 1800,
-      mmCents: 0,
-    });
-
-    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'market', 'last_sold']);
-  });
-
-  it('omits MM when mmCents is undefined', () => {
-    const sources = buildPriceSources({
-      clCents: 1000,
-      dhMidCents: 2000,
-      costCents: 500,
-      lastSoldCents: 1800,
-      mmCents: undefined,
-    });
-
-    expect(sources.map(s => s.source)).toEqual(['cost_markup', 'cl', 'market', 'last_sold']);
-  });
 });
 
 describe('preSelectSource fallback ordering', () => {
-  it('selects the first non-zero source when no reviewedPriceCents given (no MM)', () => {
+  it('selects the first non-zero source when no reviewedPriceCents given', () => {
     const sources = buildPriceSources({
       clCents: 0,
       dhMidCents: 2000,
@@ -82,17 +43,16 @@ describe('preSelectSource fallback ordering', () => {
     expect(result).toEqual({ kind: 'source', source: 'cost_markup' });
   });
 
-  it('selects mm as fallback when cost and cl are zero but mm is present', () => {
+  it('selects the first non-zero source when cost and cl are zero', () => {
     const sources = buildPriceSources({
       clCents: 0,
       dhMidCents: 2000,
       costCents: 0,
       lastSoldCents: 1800,
-      mmCents: 1500,
     });
 
     const result = preSelectSource(sources);
-    expect(result).toEqual({ kind: 'source', source: 'mm' });
+    expect(result).toEqual({ kind: 'source', source: 'market' });
   });
 
   it('returns none when all sources are zero', () => {
@@ -113,11 +73,10 @@ describe('preSelectSource fallback ordering', () => {
       dhMidCents: 2000,
       costCents: 500,
       lastSoldCents: 1800,
-      mmCents: 1500,
     });
 
-    const result = preSelectSource(sources, 1500);
-    expect(result).toEqual({ kind: 'source', source: 'mm' });
+    const result = preSelectSource(sources, 1000);
+    expect(result).toEqual({ kind: 'source', source: 'cl' });
   });
 
   it('returns manual when reviewedPriceCents matches no source', () => {

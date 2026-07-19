@@ -166,7 +166,6 @@ type Config struct {
 	SnapshotEnrich     SnapshotEnrichConfig
 	AdvisorRefresh     AdvisorRefreshConfig
 	CardLadder         CardLadderConfig
-	MarketMovers       MarketMoversConfig
 	PSAPortal          PSAPortalConfig
 	PSASync            PSASyncConfig
 	DH                 DHConfig
@@ -298,12 +297,6 @@ type CardLadderConfig struct {
 	Enabled     bool          // Enable CL refresh scheduler (default: false)
 	Interval    time.Duration // How often to run refresh (default: 24h)
 	RefreshHour int           // Hour (0-23 UTC) to schedule daily runs (default: 4)
-}
-
-// MarketMoversConfig controls the Market Movers value refresh scheduler.
-type MarketMoversConfig struct {
-	Enabled     bool // Enable MM refresh scheduler (default: true)
-	RefreshHour int  // Hour (0-23 UTC) to schedule daily runs (default: 5)
 }
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.

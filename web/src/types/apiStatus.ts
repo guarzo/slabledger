@@ -39,7 +39,6 @@ export interface PricingDiagnosticsResponse {
   matchingCards: number;
   awaitingReceiptCards: number;
   clPricedCards: number;
-  mmPricedCards: number;
   totalUnsold: number;
   recentFailures: FailureSummary[];
 }

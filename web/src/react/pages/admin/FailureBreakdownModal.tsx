@@ -12,14 +12,8 @@ interface Props {
 // human-readable without coupling to a full i18n layer — add to this map
 // when new reason tags are introduced in the schedulers.
 const REASON_DESCRIPTIONS: Record<string, string> = {
-  // Market Movers
   no_card_name: 'Purchase has no card name to search',
-  no_cert_results: 'Cert-based search returned zero MM results',
-  cert_token_mismatch: 'Cert search returned hits but none matched the card name',
-  no_name_results: 'Name-based fallback search returned zero MM results',
-  name_token_mismatch: 'Name search top result rejected by token match',
-  no_30d_sales: 'Card is mapped but has no sales in the last 30 days',
-  // Shared — the modal is used for both MM and CL so this description must
+  // Shared — the modal is used across integrations so this description must
   // be provider-neutral.
   api_error: 'External API returned an error',
   unprocessed: 'No value and no error tag — scheduler never tagged the row',

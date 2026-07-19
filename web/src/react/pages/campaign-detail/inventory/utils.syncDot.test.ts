@@ -15,10 +15,8 @@ describe('syncDotProps', () => {
     const ts = iso(2);
     const { color } = syncDotProps({
       clSyncedAt: ts,
-      mmValueUpdatedAt: ts,
       dhLastSyncedAt: ts,
       clHasValue: true,
-      hasMMValue: true,
       hasDHPrice: true,
     });
     expect(color).toBe('#22c55e');
@@ -50,10 +48,8 @@ describe('syncDotProps', () => {
     vi.setSystemTime(NOW);
     const { color } = syncDotProps({
       clSyncedAt: iso(48),
-      mmValueUpdatedAt: iso(48),
       dhLastSyncedAt: iso(48),
       clHasValue: true,
-      hasMMValue: true,
       hasDHPrice: true,
     });
     expect(color).toBe('#ef4444');

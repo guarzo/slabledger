@@ -84,20 +84,19 @@ func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context,
 	return nil
 }
 
-// queryPriceCoverage counts unsold inventory cards with CL and MM prices.
+// queryPriceCoverage counts unsold inventory cards with CL prices.
 // TotalUnsold is populated by queryMappingCoverage so the widget's per-price
 // ratios share a denominator with the pipeline stages.
 func (r *PricingDiagnosticsRepository) queryPriceCoverage(ctx context.Context, diag *pricing.PricingDiagnostics) error {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT
-			COALESCE(SUM(CASE WHEN cp.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS cl_priced,
-			COALESCE(SUM(CASE WHEN cp.mm_value_cents > 0 THEN 1 ELSE 0 END), 0) AS mm_priced
+			COALESCE(SUM(CASE WHEN cp.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS cl_priced
 		FROM campaign_purchases cp
 		JOIN campaigns c ON cp.campaign_id = c.id
 		LEFT JOIN campaign_sales cs ON cp.id = cs.purchase_id
 		WHERE cs.id IS NULL AND c.phase != 'closed'
 	`)
-	if err := row.Scan(&diag.CLPricedCards, &diag.MMPricedCards); err != nil {
+	if err := row.Scan(&diag.CLPricedCards); err != nil {
 		return fmt.Errorf("query price coverage: %w", err)
 	}
 	return nil

@@ -6,7 +6,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
-	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
@@ -43,9 +42,6 @@ type schedulerDeps struct {
 	CardLadderSalesStore       *postgres.CLSalesStore
 	CardLadderCompRefreshStore *postgres.CompRefreshStore
 	SchedulerStatsStore        *postgres.SchedulerStatsStore
-	MMClient                   *marketmovers.Client
-	MMStore                    *postgres.MarketMoversStore
-	MMSalesStore               *postgres.MMSalesStore
 	DHClient                   *dh.Client
 	DHEventStore               *postgres.DHEventStore
 	DHIntelligenceRepo         *postgres.MarketIntelligenceRepository
@@ -90,20 +86,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// Wire DH event recorder (nil-safe)
 	if deps.DHEventStore != nil {
 		buildDeps.EventRecorder = deps.DHEventStore
-	}
-	// Wire Market Movers (nil-safe: only set if non-nil to avoid typed-nil interface issues)
-	if deps.MMClient != nil {
-		buildDeps.MMClient = deps.MMClient
-	}
-	if deps.MMStore != nil {
-		buildDeps.MMStore = deps.MMStore
-	}
-	if deps.MMSalesStore != nil {
-		buildDeps.MMSalesStore = deps.MMSalesStore
-	}
-	if deps.PurchaseStore != nil {
-		buildDeps.MMPurchaseLister = deps.PurchaseStore
-		buildDeps.MMValueUpdater = deps.PurchaseStore
 	}
 	// Nil-safe interface conversion for DH dependencies.
 	if deps.DHClient != nil {
@@ -236,10 +218,10 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 
-	// Wire the pricing-enrich job's providers now that CL/MM schedulers exist.
-	// A nil pricer (CL or MM not configured) is filtered inside SetPricers.
+	// Wire the pricing-enrich job's providers now that the CL scheduler exists.
+	// A nil pricer (CL not configured) is filtered inside SetPricers.
 	if deps.PricingEnrichJob != nil {
-		deps.PricingEnrichJob.SetPricers(schedulerResult.CardLadderRefresh, schedulerResult.MMRefresh)
+		deps.PricingEnrichJob.SetPricers(schedulerResult.CardLadderRefresh)
 		schedulerResult.Group.Add(deps.PricingEnrichJob)
 	}
 

@@ -36,11 +36,6 @@ export interface Purchase {
   grader?: string;
   gradeValue: number;
   clValueCents: number;
-  mmValueCents?: number;
-  mmTrendPct?: number;
-  mmSales30d?: number;
-  mmActiveLowCents?: number;
-  mmValueUpdatedAt?: string;
   buyCostCents: number;
   psaSourcingFeeCents: number;
   population?: number;

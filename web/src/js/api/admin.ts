@@ -3,7 +3,7 @@
  */
 
 import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHFixMatchRequest, DHFixMatchResponse, DHRetryMatchResponse, DHPushConfig, DHReconcileTriggerResult } from '../../types/apiStatus';
-import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, MMStatusResponse, MMSyncResult, PSASyncStatusResponse } from '../../types/admin';
+import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
 
@@ -27,11 +27,6 @@ declare module './client' {
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
     syncCardLadderCollection(): Promise<CLSyncResult>;
-    getMarketMoversStatus(): Promise<MMStatusResponse>;
-    getMarketMoversFailures(limit?: number): Promise<IntegrationFailuresReport>;
-    saveMarketMoversConfig(config: { username: string; password: string }): Promise<{ status: string }>;
-    triggerMarketMoversRefresh(): Promise<{ status: string }>;
-    syncMarketMoversCollection(): Promise<MMSyncResult>;
     getDHStatus(): Promise<DHStatusResponse>;
     triggerDHBulkMatch(): Promise<DHBulkMatchResponse>;
     fixDHMatch(req: DHFixMatchRequest): Promise<DHFixMatchResponse>;
@@ -116,27 +111,6 @@ proto.triggerCardLadderRefresh = async function (this: APIClient) {
 
 proto.syncCardLadderCollection = async function (this: APIClient) {
   return this.post<CLSyncResult>('/admin/cardladder/sync-to-cl');
-};
-
-proto.getMarketMoversStatus = async function (this: APIClient) {
-  return this.get<MMStatusResponse>('/admin/marketmovers/status');
-};
-
-proto.getMarketMoversFailures = async function (this: APIClient, limit?: number) {
-  const q = limit ? `?limit=${limit}` : '';
-  return this.get<IntegrationFailuresReport>(`/admin/marketmovers/failures${q}`);
-};
-
-proto.saveMarketMoversConfig = async function (this: APIClient, config: { username: string; password: string }) {
-  return this.post<{ status: string }>('/admin/marketmovers/config', config);
-};
-
-proto.triggerMarketMoversRefresh = async function (this: APIClient) {
-  return this.post<{ status: string }>('/admin/marketmovers/refresh');
-};
-
-proto.syncMarketMoversCollection = async function (this: APIClient) {
-  return this.post<MMSyncResult>('/admin/marketmovers/sync-collection');
 };
 
 proto.getDHStatus = async function (this: APIClient): Promise<DHStatusResponse> {

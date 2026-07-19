@@ -15,7 +15,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
-	"github.com/guarzo/slabledger/internal/adapters/clients/marketmovers"
 	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
@@ -132,40 +131,4 @@ func initializeCardLadder(
 		observability.String("collectionId", clCfg.CollectionID))
 
 	return client, fbAuth, store
-}
-
-// initializeMarketMovers creates the Market Movers client, auth, and store.
-// Returns nil client if encryption key is not configured or if not yet configured.
-func initializeMarketMovers(
-	ctx context.Context,
-	logger observability.Logger,
-	db *postgres.DB,
-	encryptor crypto.Encryptor,
-) (*marketmovers.Client, *postgres.MarketMoversStore) {
-	if encryptor == nil {
-		logger.Info(ctx, "Market Movers disabled: encryption key not configured")
-		return nil, nil
-	}
-
-	store := postgres.NewMarketMoversStore(db.DB, encryptor)
-
-	// Try to load existing config to set up the client
-	mmCfg, err := store.GetConfig(ctx)
-	if err != nil {
-		logger.Warn(ctx, "failed to load Market Movers config", observability.Err(err))
-	}
-
-	if mmCfg == nil {
-		logger.Info(ctx, "Market Movers not configured; use POST /api/admin/marketmovers/config to set up")
-		return nil, store
-	}
-
-	mmAuth := marketmovers.NewAuth()
-	client := marketmovers.NewClient(
-		marketmovers.WithTokenManager(mmAuth, mmCfg.RefreshToken, time.Time{}),
-	)
-	logger.Info(ctx, "Market Movers client initialized",
-		observability.Bool("hasUsername", mmCfg.Username != ""))
-
-	return client, store
 }

@@ -48,7 +48,6 @@ type ServerDependencies struct {
 	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
-	MarketMoversHandler       *handlers.MarketMoversHandler    // Market Movers admin; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler   // Arbitrage opportunities; nil = disabled
 	DHHandler                 *handlers.DHHandler              // DH bulk match + intelligence; nil = disabled
@@ -215,7 +214,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		AIStatusHandler:           deps.AIStatusHandler,
 		PriceFlagsHandler:         deps.PriceFlagsHandler,
 		CardLadderHandler:         deps.CardLadderHandler,
-		MarketMoversHandler:       deps.MarketMoversHandler,
 		PSASyncHandler:            deps.PSASyncHandler,
 		OpportunitiesHandler:      deps.OpportunitiesHandler,
 		DHHandler:                 deps.DHHandler,

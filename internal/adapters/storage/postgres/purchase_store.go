@@ -268,19 +268,6 @@ func (ps *PurchaseStore) UpdatePurchaseCLValue(ctx context.Context, id string, c
 	)
 }
 
-// UpdatePurchaseMMError records or clears the last mapping/pricing failure reason
-// for a purchase. Pass reason="" to clear on success. reasonAt is normalized
-// to "" whenever reason is "" so the timestamp never lags behind the tag.
-func (ps *PurchaseStore) UpdatePurchaseMMError(ctx context.Context, id, reason, reasonAt string) error {
-	if reason == "" {
-		reasonAt = ""
-	}
-	return ps.execAndExpectRow(ctx, "update mm last error",
-		`UPDATE campaign_purchases SET mm_last_error = $1, mm_last_error_at = $2, updated_at = $3 WHERE id = $4`,
-		reason, reasonAt, time.Now().UTC().Format(time.RFC3339), id,
-	)
-}
-
 // UpdatePurchaseCLError records or clears the last mapping/pricing failure reason
 // for a purchase. Pass reason="" to clear on success. reasonAt is normalized
 // to "" whenever reason is "" so the timestamp never lags behind the tag.
@@ -300,36 +287,6 @@ func (ps *PurchaseStore) UpdatePurchaseCLSyncedAt(ctx context.Context, id string
 	return ps.execAndExpectRow(ctx, "update cl_synced_at",
 		`UPDATE campaign_purchases SET cl_synced_at = $1, updated_at = $2 WHERE id = $3`,
 		syncedAt, time.Now().UTC().Format(time.RFC3339), id,
-	)
-}
-
-func (ps *PurchaseStore) UpdatePurchaseMMValue(ctx context.Context, id string, mmValueCents int) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	return ps.execAndExpectRow(ctx, "update mm value",
-		`UPDATE campaign_purchases SET mm_value_cents = $1, mm_value_updated_at = $2, updated_at = $3 WHERE id = $4`,
-		mmValueCents, now, now, id,
-	)
-}
-
-// UpdatePurchaseMMSignals writes all Market Movers signals in a single statement.
-// Used by the daily MM refresh scheduler. mmValueCents is the 30-day count-weighted
-// average, mmTrendPct is the 30-day price-change fraction (e.g. 0.15 = +15%),
-// mmSales30d is the total sales count over 30 days, and mmActiveLowCents is the
-// lowest active BIN listing price (0 if no active listings found).
-func (ps *PurchaseStore) UpdatePurchaseMMSignals(
-	ctx context.Context,
-	id string,
-	mmValueCents int,
-	mmTrendPct float64,
-	mmSales30d int,
-	mmActiveLowCents int,
-) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	return ps.execAndExpectRow(ctx, "update mm signals",
-		`UPDATE campaign_purchases
-		 SET mm_value_cents = $1, mm_trend_pct = $2, mm_sales_30d = $3, mm_active_low_cents = $4, mm_value_updated_at = $5, updated_at = $6
-		 WHERE id = $7`,
-		mmValueCents, mmTrendPct, mmSales30d, mmActiveLowCents, now, now, id,
 	)
 }
 

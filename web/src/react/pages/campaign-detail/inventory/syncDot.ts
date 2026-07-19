@@ -12,14 +12,11 @@ export interface SyncDotProps {
 
 export interface SyncDotInput {
   clSyncedAt?: string;
-  mmValueUpdatedAt?: string;
   dhLastSyncedAt?: string;
   /** Does DH (primary price source) currently have a usable price on the row? */
   hasDHPrice?: boolean;
   /** Did CL return a non-zero value, directly or via catalog fallback? */
   clHasValue?: boolean;
-  /** Does MM currently have a usable value on the row? */
-  hasMMValue?: boolean;
   /** Current CL error/status tag, if any. */
   clLastError?: 'no_value' | 'catalog_fallback' | 'api_error' | 'quota_exhausted' | 'no_image_match' | 'no_cert_match';
 }
@@ -27,12 +24,12 @@ export interface SyncDotInput {
 /** Returns color + tooltip for the per-row sync freshness dot.
  *
  *  Green  — DH has a price AND DH synced within 24h (primary source is healthy and current).
- *  Yellow — DH synced recently but is missing a price, OR DH stale while CL/MM still have a value.
+ *  Yellow — DH synced recently but is missing a price, OR DH stale while CL still has a value.
  *  Red    — no fresh data from any source.
  *  Grey   — nothing has ever synced.
  */
 export function syncDotProps(input: SyncDotInput): SyncDotProps {
-  const { clSyncedAt, mmValueUpdatedAt, dhLastSyncedAt, hasDHPrice, clHasValue, hasMMValue, clLastError } = input;
+  const { clSyncedAt, dhLastSyncedAt, hasDHPrice, clHasValue, clLastError } = input;
   const now = Date.now();
   const threshold = 24 * 60 * 60 * 1000;
 
@@ -45,18 +42,16 @@ export function syncDotProps(input: SyncDotInput): SyncDotProps {
 
   const dhFresh = within24h(dhLastSyncedAt);
   const clFresh = within24h(clSyncedAt);
-  const mmFresh = within24h(mmValueUpdatedAt);
 
-  const hasAnyTimestamp = !!(clSyncedAt || mmValueUpdatedAt || dhLastSyncedAt);
+  const hasAnyTimestamp = !!(clSyncedAt || dhLastSyncedAt);
   const anyFreshWithValue =
     (dhFresh && hasDHPrice) ||
-    (clFresh && clHasValue) ||
-    (mmFresh && hasMMValue);
+    (clFresh && clHasValue);
 
   let color: string;
   if (dhFresh && hasDHPrice) {
     color = '#22c55e'; // green — primary source is healthy
-  } else if (anyFreshWithValue || dhFresh || clFresh || mmFresh) {
+  } else if (anyFreshWithValue || dhFresh || clFresh) {
     color = '#f59e0b'; // yellow — stale, partial, or synced-without-value
   } else if (!hasAnyTimestamp) {
     color = '#6b7280'; // grey — never synced
@@ -66,7 +61,6 @@ export function syncDotProps(input: SyncDotInput): SyncDotProps {
 
   const tooltip = [
     clLine(clSyncedAt, clHasValue, clLastError),
-    sourceLine('MM', mmValueUpdatedAt, hasMMValue),
     sourceLine('DH', dhLastSyncedAt, hasDHPrice),
   ].join('\n');
 

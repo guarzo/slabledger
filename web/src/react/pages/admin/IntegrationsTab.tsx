@@ -1,8 +1,7 @@
 import { CardLadderTab } from './CardLadderTab';
 import { DHTab } from './DHTab';
-import { MarketMoversTab } from './MarketMoversTab';
 import { PSASyncTab } from './PSASyncTab';
-import { useCardLadderStatus, useDHStatus, useMarketMoversStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
+import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import SalesImportSection from '../tools/SalesImportSection';
 import { StatusPill } from '../../ui';
 
@@ -42,12 +41,10 @@ function PulseLine({ at }: { at?: string | null }) {
 export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
   const { data: dhStatus } = useDHStatus({ enabled });
   const { data: clStatus } = useCardLadderStatus({ enabled });
-  const { data: mmStatus } = useMarketMoversStatus({ enabled });
   const { data: psaStatus } = usePSASyncStatus({ enabled });
 
   const dhHealthy = dhStatus?.api_health ? dhStatus.api_health.success_rate >= 0.95 : false;
   const clConnected = clStatus?.configured ?? false;
-  const mmConnected = mmStatus?.configured ?? false;
   const psaConfigured = psaStatus?.configured ?? false;
 
   // Page-level DH error banner: surfaced when DH has either an active
@@ -127,24 +124,6 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
         </div>
         <div className="mb-3" />
         <CardLadderTab enabled={enabled} />
-      </section>
-
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>Market Movers</h3>
-          <div className="flex items-center gap-3">
-            <PulseLine at={mmStatus?.lastRun?.lastRunAt} />
-            {mmConnected ? (
-              <StatusPill tone="success">Connected</StatusPill>
-            ) : (
-              <StatusPill tone="danger">Not connected</StatusPill>
-            )}
-          </div>
-        </div>
-        <div className="mb-3" />
-        <MarketMoversTab enabled={enabled} />
       </section>
 
       <hr className="border-[var(--surface-2)]" />

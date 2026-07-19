@@ -280,25 +280,19 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		return err
 	}
 
-	// Create encryptor early — needed by Card Ladder, Market Movers, and MM mapping adapter.
+	// Create encryptor early — needed by Card Ladder.
 	var clEncryptor crypto.Encryptor
 	if cfg.Auth.EncryptionKey != "" {
 		var encErr error
 		clEncryptor, encErr = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
 		if encErr != nil {
-			logger.Warn(ctx, "encryptor initialization failed, CL/MM token persistence disabled",
+			logger.Warn(ctx, "encryptor initialization failed, CL token persistence disabled",
 				observability.Err(encErr))
 		}
 	}
 
-	// Create MM store early so the campaigns service can use it for export enrichment.
-	var mmStore *postgres.MarketMoversStore
-	if clEncryptor != nil {
-		mmStore = postgres.NewMarketMoversStore(db.DB, clEncryptor)
-	}
-
 	campaignsInit := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, intelRepo, mmStore, dhClient, eventStore, cardIDMappingRepo,
+		ctx, cfg, logger, db, priceProvImpl, intelRepo, dhClient, eventStore, cardIDMappingRepo,
 	)
 	campaignsService := campaignsInit.service
 	certLookup := campaignsInit.certLookup
@@ -338,7 +332,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		return err
 	}
 
-	// Initialize Card Ladder (encryptor was created earlier for MM mapping adapter)
+	// Initialize Card Ladder
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clSalesStore *postgres.CLSalesStore
 	var clCompRefreshStore *postgres.CompRefreshStore
@@ -347,9 +341,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		clCompRefreshStore = postgres.NewCompRefreshStore(db.DB)
 	}
 	schedulerStatsStore := postgres.NewSchedulerStatsStore(db.DB)
-
-	// Initialize Market Movers client (store was created earlier for campaigns service)
-	mmClient, _ := initializeMarketMovers(ctx, logger, db, clEncryptor)
 
 	// PSA portal rows are harvested out-of-process by the `psa-harvest` job (it
 	// needs a browser to pass Cloudflare, which the lean app image can't run) and
@@ -399,9 +390,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CardLadderSalesStore:       clSalesStore,
 		CardLadderCompRefreshStore: clCompRefreshStore,
 		SchedulerStatsStore:        schedulerStatsStore,
-		MMClient:                   mmClient,
-		MMStore:                    mmStore,
-		MMSalesStore:               campaignsInit.mmSalesStore,
 		DHClient:                   dhClient,
 		DHEventStore:               eventStore,
 		DHIntelligenceRepo:         intelRepo,
@@ -446,8 +434,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		AICallRepo:           aiCallRepo,
 		CLClient:             clClient,
 		CLStore:              clStore,
-		MMStore:              mmStore,
-		MMClient:             mmClient,
 		DHClient:             dhClient,
 		DHEventStore:         eventStore,
 		DHStore:              campaignsInit.dhStore,

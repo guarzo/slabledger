@@ -122,7 +122,7 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 	return item
 }
 
-// buildEnrichedSnapshot constructs a MarketSnapshot from purchase data, incorporating CL and MM signals.
+// buildEnrichedSnapshot constructs a MarketSnapshot from purchase data, incorporating CL signals.
 func (s *service) buildEnrichedSnapshot(p *Purchase) *MarketSnapshot {
 	snap := SnapshotFromPurchase(p)
 
@@ -132,15 +132,6 @@ func (s *service) buildEnrichedSnapshot(p *Purchase) *MarketSnapshot {
 			snap = &MarketSnapshot{}
 		}
 		ApplyCLSignal(snap, p.CLValueCents)
-	}
-
-	// Incorporate Market Movers avg price as a corroborating source price.
-	// Also use MM trend/volume as fallback when the DH snapshot lacks them.
-	if p.MMValueCents > 0 {
-		if snap == nil {
-			snap = &MarketSnapshot{}
-		}
-		ApplyMMSignal(snap, p)
 	}
 
 	return snap
