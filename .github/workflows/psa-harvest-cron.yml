@@ -1,0 +1,57 @@
+# Hourly watchdog for the PSA harvester (see docs/psa-harvester.md and
+# docs/superpowers/specs/2026-07-19-psa-harvest-cron-design.md).
+#
+# Fly's on-machine schedule has twice stopped firing silently after a deploy
+# recreated the machine. This workflow is the primary cadence: `fly machine
+# start` works regardless of the machine's schedule state, so deploys can no
+# longer kill the pipeline. Fly's `--schedule hourly` stays on the machine as
+# a second layer; a double fire is harmless (idempotent snapshot upsert,
+# atomic push-queue claims).
+#
+# A red run here is the alert surface: bad FLY_API_TOKEN, no machine, or a
+# Fly API failure. "Machine already started" exits green.
+
+name: psa-harvest-cron
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: psa-harvest-cron
+  cancel-in-progress: false
+
+jobs:
+  start-harvester:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+
+      - name: Start the harvester machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP: slabledger-psa-harvest
+        run: |
+          set -euo pipefail
+
+          machine_id=$(flyctl machines list -a "$FLY_APP" --json | jq -r '.[0].id // empty')
+          if [ -z "$machine_id" ]; then
+            echo "::error::no machines found in app $FLY_APP"
+            exit 1
+          fi
+          echo "starting machine $machine_id"
+
+          if flyctl machine start "$machine_id" -a "$FLY_APP"; then
+            exit 0
+          fi
+
+          # start can fail because the machine is already running (Fly's own
+          # schedule fired, or a run is in progress) — that is success for us.
+          state=$(flyctl machines list -a "$FLY_APP" --json | jq -r --arg id "$machine_id" '.[] | select(.id == $id) | .state')
+          echo "start failed; machine state is '$state'"
+          case "$state" in
+            started|starting) exit 0 ;;
+            *) echo "::error::machine $machine_id not startable (state '$state')"; exit 1 ;;
+          esac
