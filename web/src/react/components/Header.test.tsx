@@ -55,4 +55,14 @@ describe('Header — Track I mobile chrome', () => {
     expect(drawer).toHaveClass(cardStyles['v-elevated']);
     expect(drawer!.querySelector('nav[aria-label="Main navigation"]')).not.toBeNull();
   });
+
+  it('renders Scan as a plain link with no dropdown trigger', async () => {
+    renderHeader();
+    // The desktop Scan control is a link to /scan…
+    const scanLinks = await screen.findAllByRole('link', { name: 'Scan' });
+    expect(scanLinks.length).toBeGreaterThan(0);
+    expect(scanLinks.some((el) => el.getAttribute('href') === '/scan')).toBe(true);
+    // …and the old split-button dropdown trigger is gone.
+    expect(screen.queryByRole('button', { name: 'More do-zone actions' })).toBeNull();
+  });
 });
