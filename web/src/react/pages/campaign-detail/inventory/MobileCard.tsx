@@ -12,6 +12,7 @@ import { wasUnlistedFromDH } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_TONES } from './dhBadge';
 import RowActions from './RowActions';
 import { resolveContextualPrimary, resolveOverflowActions, ACTION_LABELS } from './rowActions';
+import CopyableCert from './CopyableCert';
 
 interface MobileCardProps {
   item: AgingItem;
@@ -105,7 +106,7 @@ export default function MobileCard({
             <div className="text-xs text-[var(--text-muted)]">
               {showCampaignColumn && item.campaignName && <>{item.campaignName} &middot; </>}
               {item.purchase.setName && <>{item.purchase.setName} &middot; </>}
-              Cert #{item.purchase.certNumber} &middot; <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
+              <CopyableCert certNumber={item.purchase.certNumber}>Cert #{item.purchase.certNumber}</CopyableCert> &middot; <GradeBadge grader={item.purchase.grader || 'PSA'} grade={item.purchase.gradeValue} size="sm" />
             </div>
             <div className={`text-[11px] mt-0.5 tabular-nums ${daysColor}`} title={inHandTitle}>
               {inHandLabel}
