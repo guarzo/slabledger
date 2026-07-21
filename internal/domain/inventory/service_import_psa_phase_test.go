@@ -94,3 +94,36 @@ func TestService_ImportPSAExportGlobal_MatchesRealCampaignRegardlessOfPhase(t *t
 		})
 	}
 }
+
+func TestService_ImportPSAExportGlobal_PersistsSchedulerPendingItemSource(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	pendingRepo := &mocks.MockPendingItemRepository{}
+	var saved []inventory.PendingItem
+	pendingRepo.SavePendingItemsFn = func(_ context.Context, items []inventory.PendingItem) error {
+		saved = append(saved, items...)
+		return nil
+	}
+	svc := inventory.NewService(
+		repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(),
+		inventory.WithPendingItemRepository(pendingRepo),
+	)
+	ctx := inventory.WithImportSource(context.Background(), "scheduler")
+
+	result, err := svc.ImportPSAExportGlobal(ctx, []inventory.PSAExportRow{{
+		CertNumber: "PSA-SCHEDULER-PENDING", ListingTitle: "PIKACHU PSA 5",
+		Grade: 5, PricePaid: 100, Date: "2026-07-15", Category: "Pokemon",
+	}})
+	if err != nil {
+		t.Fatalf("ImportPSAExportGlobal: %v", err)
+	}
+	if result.Unmatched != 1 {
+		t.Fatalf("Unmatched = %d, want 1", result.Unmatched)
+	}
+	if len(saved) != 1 {
+		t.Fatalf("saved pending items = %d, want 1", len(saved))
+	}
+	if saved[0].Source != "scheduler" {
+		t.Errorf("Source = %q, want scheduler", saved[0].Source)
+	}
+}

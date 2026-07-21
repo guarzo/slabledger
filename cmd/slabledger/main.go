@@ -406,9 +406,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	}
 	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
 
-	// Create pending items repository for PSA sync handler.
-	pendingItemsRepo := postgres.NewPendingItemsRepository(db.DB)
-
 	deps, hOut := createHandlers(ctx, handlerInputs{
 		Cfg:                  cfg,
 		Logger:               logger,
@@ -442,7 +439,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		SchedulerResult:      schedulerResult,
 		PSARowProvider:       psaRowProvider,
 		PSARowsSnapshotStore: psaSnapshotStore,
-		PendingItemsRepo:     pendingItemsRepo,
+		PendingItemsRepo:     campaignsInit.pendingItemsRepo,
 		DHTombstoneStore:     dhTombstoneStore,
 	})
 	serverErr := startWebServer(ctx, deps)
