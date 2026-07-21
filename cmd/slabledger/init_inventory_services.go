@@ -43,6 +43,7 @@ type campaignsInitResult struct {
 	financeStore     *postgres.FinanceStore
 	pricingStore     *postgres.PricingStore
 	dhStore          *postgres.DHStore
+	pendingItemsRepo *postgres.PendingItemsRepository
 	certLookup       inventory.CertLookup
 	certEnrichJob    *scheduler.CertEnrichJob    // nil if PSA not configured
 	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL schedulers exist
@@ -77,10 +78,12 @@ func initializeCampaignsService(
 	financeStore := postgres.NewFinanceStore(db.DB, logger)
 	pricingStore := postgres.NewPricingStore(db.DB, logger)
 	dhStore := postgres.NewDHStore(db.DB, logger)
+	pendingItemsRepo := postgres.NewPendingItemsRepository(db.DB)
 
 	priceLookupAdapter := lookup.NewAdapter(priceProvImpl)
 	campaignOpts := []inventory.ServiceOption{
 		inventory.WithPriceLookup(priceLookupAdapter),
+		inventory.WithPendingItemRepository(pendingItemsRepo),
 		inventory.WithIDGenerator(uuid.NewString),
 		inventory.WithMaxSnapshotRetries(cfg.SnapshotEnrich.MaxRetries),
 	}
@@ -214,6 +217,7 @@ func initializeCampaignsService(
 		financeStore:     financeStore,
 		pricingStore:     pricingStore,
 		dhStore:          dhStore,
+		pendingItemsRepo: pendingItemsRepo,
 		certLookup:       certLookup,
 		certEnrichJob:    certEnrichJobForSvc,
 		pricingEnrichJob: pricingEnrichJob,
