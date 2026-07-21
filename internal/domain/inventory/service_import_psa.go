@@ -27,12 +27,9 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 	if err != nil {
 		return nil, fmt.Errorf("list campaigns: %w", err)
 	}
-	// Only active campaigns for new purchase allocation (exclude external — only Shopify import uses it)
-	activeCampaigns, err := s.campaigns.ListCampaigns(ctx, true)
-	if err != nil {
-		return nil, fmt.Errorf("list active campaigns: %w", err)
-	}
-	activeCampaigns = filterOutExternal(activeCampaigns)
+	// PSA purchases can arrive after a campaign leaves its active phase. Match
+	// against every real campaign; External is reserved for Shopify imports.
+	matchingCampaigns := filterOutExternal(allCampaigns)
 
 	campaignMap := make(map[string]*Campaign, len(allCampaigns))
 	for i := range allCampaigns {
@@ -104,7 +101,14 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 		}
 
 		// New purchase — find matching campaign (use float64 grade for half-grade support)
-		match := FindMatchingCampaign(gradeValue, buyCostCents, meta.CardName, meta.SetName, meta.CardYear, activeCampaigns)
+		match := FindMatchingCampaign(
+			gradeValue,
+			buyCostCents,
+			meta.CardName,
+			meta.SetName,
+			meta.CardYear,
+			matchingCampaigns,
+		)
 		var campaign *Campaign
 		if match.Status == "matched" {
 			campaign = campaignMap[match.CampaignID]
