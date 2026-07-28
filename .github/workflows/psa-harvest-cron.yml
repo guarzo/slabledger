@@ -8,8 +8,14 @@
 # a second layer; a double fire is harmless (idempotent snapshot upsert,
 # atomic push-queue claims).
 #
-# A red run here is the alert surface: bad FLY_API_TOKEN, no machine, or a
-# Fly API failure. "Machine already started" exits green.
+# A red run here is the alert surface: bad FLY_API_TOKEN, no machine, a Fly API
+# failure, or a stale snapshot (the harvester started but did not produce fresh
+# data). "Machine already started" exits green.
+#
+# The staleness gate matters: starting the machine says nothing about whether the
+# harvest worked. On 2026-07-23 the harvester failed for four days while this
+# workflow stayed green, and on 2026-07-28 a total login failure was masked for
+# hours by a still-valid cached token. Only snapshot freshness catches both.
 
 name: psa-harvest-cron
 
@@ -25,7 +31,7 @@ concurrency:
 jobs:
   start-harvester:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
@@ -55,3 +61,65 @@ jobs:
             started|starting) exit 0 ;;
             *) echo "::error::machine $machine_id not startable (state '$state')"; exit 1 ;;
           esac
+
+      - name: Verify the snapshot is fresh
+        # Starting the machine proves nothing about the harvest. Fail red if the
+        # rows snapshot is older than the threshold, so a silently-broken
+        # harvester cannot masquerade as a green cron run.
+        #
+        # Missing credentials are a HARD FAILURE on scheduled/dispatch runs: a
+        # silent skip here is exactly the "green while broken" hole this step
+        # exists to close. Only PR events (forks, no secret access) are allowed
+        # to skip, and they skip the whole step rather than half-checking.
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          PSA_STATUS_URL: ${{ secrets.PSA_STATUS_URL }}
+          PSA_API_TOKEN: ${{ secrets.PSA_API_TOKEN }}
+          # The app rejects snapshots older than 26h; alert before that bites.
+          MAX_AGE_MINUTES: '150'
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PSA_STATUS_URL:-}" ] || [ -z "${PSA_API_TOKEN:-}" ]; then
+            echo "::error::PSA_STATUS_URL and PSA_API_TOKEN must be set; refusing to report green without verifying snapshot freshness"
+            exit 1
+          fi
+
+          # The harvest takes ~60-90s from a cold boot; give it room to land
+          # before we read freshness, so we measure the run we just started.
+          sleep 180
+
+          # --fail-with-body: a 4xx/5xx must fail here, not fall through to jq
+          # and surface as the misleading "no snapshotFetchedAt" error.
+          body=$(curl -sS --fail-with-body --max-time 30 --retry 3 --retry-delay 10 \
+            -H "Authorization: Bearer $PSA_API_TOKEN" "$PSA_STATUS_URL")
+
+          fetched_at=$(printf '%s' "$body" | jq -r '.snapshotFetchedAt // empty')
+          if [ -z "$fetched_at" ]; then
+            echo "::error::status response has no snapshotFetchedAt"
+            printf '%s\n' "$body" | head -c 2000
+            exit 1
+          fi
+
+          if ! fetched_epoch=$(date -u -d "$fetched_at" +%s 2>/dev/null); then
+            echo "::error::could not parse snapshotFetchedAt '$fetched_at'"
+            exit 1
+          fi
+
+          # Compare in seconds: integer-dividing to minutes first discards up to
+          # 59s, letting a snapshot past the limit round back down under it.
+          now_epoch=$(date -u +%s)
+          age_seconds=$(( now_epoch - fetched_epoch ))
+          max_seconds=$(( MAX_AGE_MINUTES * 60 ))
+          echo "snapshotFetchedAt=$fetched_at ($(( age_seconds / 60 ))m old, max ${MAX_AGE_MINUTES}m)"
+
+          # A future timestamp means clock skew or a bad write — never "fresh".
+          if [ "$age_seconds" -lt 0 ]; then
+            echo "::error::snapshotFetchedAt '$fetched_at' is in the future (clock skew or bad data)"
+            exit 1
+          fi
+
+          if [ "$age_seconds" -ge "$max_seconds" ]; then
+            echo "::error::PSA snapshot is stale: $(( age_seconds / 60 ))m old (max ${MAX_AGE_MINUTES}m). The harvester machine started but produced no fresh data — check 'fly logs -a slabledger-psa-harvest' for login failures."
+            exit 1
+          fi
