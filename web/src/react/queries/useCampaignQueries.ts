@@ -293,6 +293,23 @@ export function usePSAPendingItems() {
   });
 }
 
+/**
+ * Resolves a PSA cert number to real card details. Used to display a meaningful
+ * card name for pending items whose PSA listing title was a placeholder (e.g.
+ * "PSA Offer - <cert>" from instant-offer acquisitions that never got a title).
+ * Enabled only when a cert number is provided; results are cached indefinitely
+ * since cert metadata never changes.
+ */
+export function useCertLookup(certNumber: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.certs.lookup(certNumber ?? ''),
+    queryFn: () => api.lookupCert(certNumber as string),
+    enabled: enabled && !!certNumber,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 export function useAssignPendingItem() {
   const qc = useQueryClient();
   return useMutation({

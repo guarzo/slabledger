@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { usePSAPendingItems, useAssignPendingItem, useDismissPendingItem, useCampaigns } from '../../queries/useCampaignQueries';
+import { usePSAPendingItems, useAssignPendingItem, useDismissPendingItem, useCampaigns, useCertLookup } from '../../queries/useCampaignQueries';
 import type { PSAPendingItem } from '../../../types/admin';
 import PokeballLoader from '../../PokeballLoader';
 
@@ -7,11 +7,27 @@ function formatCents(cents: number): string {
   return '$' + (cents / 100).toFixed(2);
 }
 
+/**
+ * A pending item's cardName is a placeholder when PSA never attached a real
+ * marketplace listing title — e.g. instant-offer acquisitions arrive as
+ * "PSA Offer - <cert>". Such names can't disambiguate campaigns, so we resolve
+ * the real card name on demand via a cert lookup.
+ */
+function isPlaceholderName(item: PSAPendingItem): boolean {
+  const name = item.cardName?.trim() ?? '';
+  return name === '' || name.toLowerCase().startsWith('psa offer');
+}
+
 function PendingRow({ item }: { item: PSAPendingItem }) {
   const { data: campaignsData } = useCampaigns(false);
   const assign = useAssignPendingItem();
   const dismiss = useDismissPendingItem();
   const [selectedCampaign, setSelectedCampaign] = useState(item.candidates?.[0] ?? '');
+
+  const needsLookup = isPlaceholderName(item);
+  const certLookup = useCertLookup(item.certNumber, needsLookup);
+  const resolvedName = certLookup.data?.cert.cardName?.trim();
+  const displayName = resolvedName || item.cardName;
 
   const campaigns = campaignsData ?? [];
   const dropdownCampaigns = item.status === 'ambiguous'
@@ -26,7 +42,13 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
   return (
     <tr className="border-b border-[var(--surface-2)]">
       <td className="py-2 pr-3 font-mono text-xs">{item.certNumber}</td>
-      <td className="py-2 pr-3 text-sm truncate max-w-[200px]" title={item.cardName}>{item.cardName}</td>
+      <td className="py-2 pr-3 text-sm truncate max-w-[200px]" title={displayName}>
+        {needsLookup && certLookup.isLoading ? (
+          <span className="text-[var(--text-muted)] italic">Looking up cert…</span>
+        ) : (
+          displayName
+        )}
+      </td>
       <td className="py-2 pr-3 text-sm text-center">{item.grade}</td>
       <td className="py-2 pr-3 text-sm text-right">{formatCents(item.buyCostCents)}</td>
       <td className="py-2 pr-3">

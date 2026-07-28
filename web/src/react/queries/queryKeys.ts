@@ -39,6 +39,9 @@ export const queryKeys = {
   purchases: {
     psaPendingItems: ['purchases', 'psaPendingItems'] as const,
   },
+  certs: {
+    lookup: (certNumber: string) => ['certs', certNumber] as const,
+  },
   psaCampaigns: { list: ['psa-campaigns', 'list'] as const },
   psaPushes: { list: ['psa-pushes', 'list'] as const },
 } as const;
