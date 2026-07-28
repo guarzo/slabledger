@@ -31,7 +31,12 @@ concurrency:
 jobs:
   start-harvester:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    # Job-level env is visible to step `if:` conditions; a step's own `env:` is
+    # not, and `secrets.*` cannot be referenced from a step `if:` at all.
+    env:
+      PSA_STATUS_URL: ${{ secrets.PSA_STATUS_URL }}
+      PSA_API_TOKEN: ${{ secrets.PSA_API_TOKEN }}
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
@@ -68,12 +73,11 @@ jobs:
         # harvester cannot masquerade as a green cron run.
         #
         # Skipped (not failed) when the secrets are absent, so forks and PRs
-        # without access do not report spurious red. Note: a step's own `env:`
-        # is not visible to its `if:`, so this tests the secrets directly.
-        if: ${{ secrets.PSA_STATUS_URL != '' && secrets.PSA_API_TOKEN != '' }}
+        # without access do not report spurious red. The condition reads the
+        # job-level env above: a step's own `env:` is not visible to its own
+        # `if:`, and `secrets.*` is not a valid named value in a step `if:`.
+        if: ${{ env.PSA_STATUS_URL != '' && env.PSA_API_TOKEN != '' }}
         env:
-          PSA_STATUS_URL: ${{ secrets.PSA_STATUS_URL }}
-          PSA_API_TOKEN: ${{ secrets.PSA_API_TOKEN }}
           # The app rejects snapshots older than 26h; alert before that bites.
           MAX_AGE_MINUTES: '150'
         run: |
