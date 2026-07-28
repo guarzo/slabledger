@@ -306,6 +306,7 @@ export function useCertLookup(certNumber: string | undefined, enabled: boolean) 
     queryFn: () => api.lookupCert(certNumber as string),
     enabled: enabled && !!certNumber,
     staleTime: Infinity,
+    gcTime: Infinity,
     retry: false,
   });
 }

@@ -13,9 +13,14 @@ function formatCents(cents: number): string {
  * "PSA Offer - <cert>". Such names can't disambiguate campaigns, so we resolve
  * the real card name on demand via a cert lookup.
  */
+// Matches the exact PSA instant-offer placeholder "PSA Offer - <cert>" (cert is
+// the non-empty listing suffix). Scoped tightly so a legitimately named card
+// like "PSA Offer Card" is not mistaken for a placeholder.
+const placeholderNameRegex = /^psa offer - .+$/;
+
 function isPlaceholderName(item: PSAPendingItem): boolean {
   const name = item.cardName?.trim() ?? '';
-  return name === '' || name.toLowerCase().startsWith('psa offer');
+  return name === '' || placeholderNameRegex.test(name.toLowerCase());
 }
 
 function PendingRow({ item }: { item: PSAPendingItem }) {
