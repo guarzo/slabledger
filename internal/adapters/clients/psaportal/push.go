@@ -72,7 +72,14 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 		return err
 	}
 
-	packed, err := EncodeRefPacked([]any{map[string]any{"id": id, "formData": formData}})
+	// PSA's compiled edit page calls the remote function with a bare object:
+	// `updateCampaign({id, formData})` (nodes/11.*.js), exactly as the create
+	// page calls `createCampaign({...formData})`. The argument must NOT be
+	// wrapped in an array — SvelteKit passes the decoded payload straight
+	// through as the function's single argument, so an array makes the
+	// server-side destructure of `id`/`formData` yield undefined and the
+	// endpoint fails with an opaque 500 "Internal Error" + errorId.
+	packed, err := EncodeRefPacked(map[string]any{"id": id, "formData": formData})
 	if err != nil {
 		return fmt.Errorf("psaportal: encode update payload: %w", err)
 	}

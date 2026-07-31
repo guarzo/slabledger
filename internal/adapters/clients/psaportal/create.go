@@ -10,10 +10,11 @@ import (
 )
 
 // CreateCampaign creates a new portal campaign from fd and returns the new
-// campaign's request ID. The ref-packed wire body is the bare formData object
-// (unlike updateCampaign, which wraps {id, formData} in a single-element
-// array). Errors after a 200 response mention that the campaign may already
-// exist on the portal, so callers never blind-retry a decode failure.
+// campaign's request ID. The ref-packed wire body is the bare formData object,
+// matching PSA's own client (`createCampaign({...formData})`); updateCampaign
+// is likewise a bare object, just with an {id, formData} shape. Errors after a
+// 200 response mention that the campaign may already exist on the portal, so
+// callers never blind-retry a decode failure.
 func (c *Client) CreateCampaign(ctx context.Context, fd psacampaign.CampaignFormData) (string, error) {
 	remoteHash, err := c.fetchRemoteHash(ctx, "createCampaign")
 	if err != nil {
