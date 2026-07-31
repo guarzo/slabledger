@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-31
 **Migration:** `000022_add_decision_provenance`
-**Status:** Design approved, ready for implementation plan
+**Status:** Design v2 (post-review), ready for implementation plan
 
 ## Problem
 
@@ -18,223 +18,229 @@ is currently unrecoverable.
 
 ## Territory corrections (map vs. codebase)
 
-The original request's map diverged from the code in ways that change the
-implementation. Confirmed by inspection:
+Confirmed by inspection; these change the implementation:
 
 1. **No `cardLadderConfidenceMinimum` on the purchase's campaign.**
    `inventory.Campaign` has `CLConfidence string` — a *range* like `"2.5-4"`.
-   The scalar `CardLadderConfidenceMinimum int` exists only on the PSA-portal
-   `psacampaign` types, not in the `CreatePurchase` path.
-   **Decision:** parse the min of the range (`"2.5-4" → 2`, truncated), mirroring
-   the existing `psacampaign.splitRange` convention. No new campaign column.
+   The scalar exists only on PSA-portal `psacampaign` types.
+   **Decision:** parse the truncated min of the range (`"2.5-4" → 2`), mirroring
+   `psacampaign.splitRange`. No new campaign column.
 
-2. **Item 4 is not a broken-plumbing bug.** There are three sale-creation paths:
+2. **Item 4 is not a broken-plumbing bug.** Three sale-creation paths:
    - **Single-card `RecordSaleModal`** → `HandleCreateSale` → `service.CreateSale`
-     — *does* store `days_listed`/`original_list_price_cents`/`price_reductions`
-     (behind the form's collapsed "Add listing details" expander).
+     — *does* store `days_listed`/`original_list_price_cents`/`price_reductions`.
    - **`BulkRecordSaleModal`** → `HandleBulkSales` → `CreateBulkSales` — builds
-     the Sale from only `{price, channel, date}`; never sets those fields.
+     the Sale from only `{price, channel, date}`.
    - **Order CSV import** → `ConfirmOrdersSales` — CSV carries no listing history.
 
-   All 754 historical rows came through bulk + import, hence 0/754.
-   These components live under `web/src/react/pages/campaign-detail/` but the
-   **only mount point is the `/inventory` page** (`GlobalInventoryPage` →
-   `InventoryTab`); there is no campaign-detail route in `App.tsx`. The folder
-   name is legacy.
-   **Decision:** add the three listing-detail fields to `BulkRecordSaleModal`
-   (the high-volume path). CSV imports legitimately leave them 0 = unknown.
+   All 754 historical rows came through bulk + import. Components live under
+   `web/src/react/pages/campaign-detail/` but the **only mount point is
+   `/inventory`** (`GlobalInventoryPage` → `InventoryTab`); no campaign-detail
+   route exists. Folder name is legacy.
+   **Decision:** add per-item listing-detail fields to `BulkRecordSaleModal`.
 
-3. **DH comp-thickness (item 3) is partly an ingest bug.**
-   `pricing/lookup/adapter.go buildMarketSnapshot` never copies `Confidence` or
-   `SourceCount` from the DH `Price` into the snapshot — this is why `confidence`
-   is null on every row. `ActiveListings`/`SalesLast30d` already flow when
-   `price.Market != nil` (rare at purchase time). Historical rows cannot be
-   backfilled.
-   **Decision:** fix the ingest going forward; freeze the four DH fields at
-   purchase-creation; accept historical rows stay 0 = unknown.
+3. **DH ingest already copies these fields — my v1 "fix" was wrong (review #2).**
+   `buildMarketSnapshot` (adapter.go:266-270) already sets
+   `snap.Confidence = price.Confidence` and `snap.SourceCount = len(price.Sources)`.
+   `pricing.Price` has **no** `SourceCount` field (only `Sources []string`).
+   The real gap is downstream: `MarketSnapshotData` (the struct persisted to
+   columns) has **no** `Confidence`/`SourceCount` fields, and `applySnapshot`
+   (types_core.go:131) discards them — they survive only inside `SnapshotJSON`.
 
-## Decisions (confirmed with operator)
+## Decisions (confirmed with operator, v2)
 
-- **Confidence source:** parse min of `campaign.CLConfidence` range, truncated.
-- **Item 4 scope:** add listing-detail fields to `BulkRecordSaleModal`.
-- **DH ingest:** fix ingest + freeze new columns; no historical backfill.
-- **`sale_reason` override:** single-card form `<select>` + dedicated PATCH endpoint.
-- **`forced_liquidation` back-compat:** becomes a `GENERATED ALWAYS AS
-  (sale_reason = 'invoice_pressure') STORED` column. Consequence accepted: an
-  operator setting `aging_policy`/`bulk_lot`/`show_clearout` flips the legacy
-  boolean to false. That is the correct semantic (only invoice pressure is
-  "forced") and changes what the existing "Forced" P&L bucket counts.
-- **Sale-side freeze applies to all three paths** including eBay/DH/Shopify
-  import — `cl_value_at_sale_cents` and `channel_fee_pct_at_sale` need no
-  external call (`purchase.CLValueCents` and `campaign`+`channel` are already
-  in scope in every path).
-- **`sale_reason` default at creation:** `invoice_pressure` when the
-  `IsForcedLiquidation` heuristic is true, else `discretionary`. The richer
-  values are operator-only (nothing at creation can derive them).
-- **Analysis richness:** option (A) — build the full confidence×buy% cohort
-  block now, not just raw per-row fields.
+- **Confidence source:** truncated min of `campaign.CLConfidence` range.
+- **Frozen-zero semantics (review #1):** the 6 purchase provenance columns are
+  **nullable** (`NULL` = not captured, `0` = genuinely observed zero). No
+  `DEFAULT 0`. Analytics skip `NULL`, keep real zeros.
+- **`source_count_at_purchase` meaning (review #2):** freeze
+  `len(price.Sources)` as-is = **count of distinct pricing platforms**
+  (post-CL-correction), NOT comparable-sales count. Documented honestly under
+  that name; not labeled "comp thickness."
+- **Freeze location (review #3):** set-once at **first enrichment** — whichever
+  of synchronous `CreatePurchase` capture or asynchronous
+  `UpdatePurchaseMarketSnapshot` happens first. Same semantics as
+  `cl_value_at_purchase_cents`.
+- **Item 4 scope:** add per-item listing fields to `BulkRecordSaleModal`.
+- **`sale_reason` UX (review #5):** creation **preserves** an explicit valid
+  reason and defaults to the heuristic only when the field is empty. PATCH for
+  later edits.
+- **`forced_liquidation` back-compat:** `GENERATED ALWAYS AS
+  (sale_reason = 'invoice_pressure') STORED`. Operator setting a non-pressure
+  reason flips the legacy boolean false (correct semantic; changes the "Forced"
+  P&L bucket).
+- **Sale-side freeze applies to all three paths**, but for imports these are
+  **record-time proxies**, not exact decision-time values (review #9).
+- **Buy-term bucket (review #7):** `buyCost / cl_value_at_purchase_cents` (frozen
+  CL, never current), 5% bands; `<50%` and `>=100%` each collapse to one bucket;
+  missing frozen CL → explicit `unknown` bucket.
+- **Analysis richness:** option (A) — full confidence×buy% cohort block now.
 
 ## § 1 — Migration `000022_add_decision_provenance`
 
-Additive columns; set-once semantics enforced in Go (INSERT-only, never in any
-UPDATE), matching `000015`.
+Additive; set-once enforced in Go (INSERT/first-enrichment only).
 
-### `campaign_purchases` — 6 frozen columns (set at purchase-creation)
+### `campaign_purchases` — 6 frozen columns, **NULLABLE** (set at first enrichment)
 
-| Column | Type | Source at create |
+| Column | Type | Source |
 |---|---|---|
-| `cl_confidence_at_purchase` | `SMALLINT NOT NULL DEFAULT 0` | min of `campaign.CLConfidence` range (truncated) |
-| `population_at_purchase` | `BIGINT NOT NULL DEFAULT 0` | `purchase.Population` |
-| `dh_confidence_at_purchase` | `DOUBLE PRECISION NOT NULL DEFAULT 0` | snapshot `Confidence` |
-| `source_count_at_purchase` | `BIGINT NOT NULL DEFAULT 0` | snapshot `SourceCount` |
-| `active_listings_at_purchase` | `BIGINT NOT NULL DEFAULT 0` | snapshot `ActiveListings` |
-| `sales_last_30d_at_purchase` | `BIGINT NOT NULL DEFAULT 0` | snapshot `SalesLast30d` |
+| `cl_confidence_at_purchase` | `SMALLINT` (NULL) | truncated min of `campaign.CLConfidence` |
+| `population_at_purchase` | `BIGINT` (NULL) | `purchase.Population` |
+| `dh_confidence_at_purchase` | `DOUBLE PRECISION` (NULL) | snapshot `Confidence` |
+| `source_count_at_purchase` | `BIGINT` (NULL) | `len(price.Sources)` = distinct platforms |
+| `active_listings_at_purchase` | `BIGINT` (NULL) | snapshot `ActiveListings` |
+| `sales_last_30d_at_purchase` | `BIGINT` (NULL) | snapshot `SalesLast30d` |
+
+`NULL` = never captured; a stored `0` = a real measured zero. No backfill.
 
 ### `campaign_sales` — 3 new columns + boolean→reason swap
 
 | Column | Type | Notes |
 |---|---|---|
-| `sale_reason` | `TEXT NOT NULL DEFAULT ''` | one of: `discretionary`, `invoice_pressure`, `aging_policy`, `bulk_lot`, `show_clearout` |
-| `cl_value_at_sale_cents` | `BIGINT NOT NULL DEFAULT 0` | frozen at sale (item 6) |
-| `channel_fee_pct_at_sale` | `DOUBLE PRECISION NOT NULL DEFAULT 0` | frozen at sale (item 7) |
+| `sale_reason` | `TEXT NOT NULL DEFAULT ''` + `CHECK (sale_reason IN ('','discretionary','invoice_pressure','aging_policy','bulk_lot','show_clearout'))` | `''` = legacy/unknown, only via backfill/creation-default gaps |
+| `cl_value_at_sale_cents` | `BIGINT NOT NULL DEFAULT 0` | frozen at sale (0 = unknown) |
+| `channel_fee_pct_at_sale` | `DOUBLE PRECISION NOT NULL DEFAULT 0` | frozen at sale |
 
 ### `forced_liquidation` back-compat sequence (up migration)
 
-1. Add `sale_reason TEXT NOT NULL DEFAULT ''`, `cl_value_at_sale_cents`,
+1. Add `sale_reason` (with CHECK), `cl_value_at_sale_cents`,
    `channel_fee_pct_at_sale`.
-2. Backfill `sale_reason` (derivable data only):
+2. Backfill `sale_reason` (derivable only):
    - `forced_liquidation = TRUE` → `invoice_pressure`
-   - in-person channel AND `sale_price_cents < 0.80 *
-     cl_value_at_purchase_cents` (join purchase; only where
-     `cl_value_at_purchase_cents > 0`) → `invoice_pressure`
-     — captures the ~36 sales (~$5.2K) the 6-day heuristic missed.
+   - in-person channel (`inperson`/`local`/`cardshow`) AND `sale_price_cents <
+     0.80 * cl_value_at_purchase_cents` (join purchase; only where
+     `cl_value_at_purchase_cents > 0`) → `invoice_pressure` (~36 sales, ~$5.2K)
    - else → `discretionary`
 3. `DROP COLUMN forced_liquidation`.
 4. Re-add `forced_liquidation BOOLEAN GENERATED ALWAYS AS
-   (sale_reason = 'invoice_pressure') STORED`. Immutable expression → all
-   existing reads (`analysis.go:114,216`, scan helpers) work unchanged.
+   (sale_reason = 'invoice_pressure') STORED`.
 
-**Down migration** reverses: drop generated col → re-add plain
-`forced_liquidation BOOLEAN NOT NULL DEFAULT FALSE` → `UPDATE ... SET
-forced_liquidation = (sale_reason = 'invoice_pressure')` → drop the 3 new sale
-columns and the 6 purchase columns.
-
-In-person channel set for backfill = `inperson`, `local`, `cardshow` (matches
-`inventory.forcedChannels`).
+**Down migration** reverses: drop generated col → re-add plain boolean → `UPDATE
+... = (sale_reason='invoice_pressure')` → drop 3 sale cols + 6 purchase cols.
 
 ## § 2 — Go domain & adapter layer
 
 ### Types (`internal/domain/inventory/types_core.go`)
-- `Purchase`: add 6 `*AtPurchase` fields (int/int/float64/int/int/int),
-  `json:"...AtPurchase,omitempty"`.
+- Add `Confidence float64` and `SourceCount int` to **`MarketSnapshotData`**
+  (the shared struct persisted to columns) and copy them in `applySnapshot`.
+  This is the actual root-cause fix (review #3) — without it the async persist
+  path drops both values.
+- `Purchase`: add 6 provenance fields as **`*int`/`*float64` pointers** (nullable
+  ⇔ NULL column) so measured-zero ≠ missing. `json:",omitempty"`.
 - `Sale`: add `SaleReason string`, `CLValueAtSaleCents int`,
-  `ChannelFeePctAtSale float64`. Keep `ForcedLiquidation bool` but treat as
-  **read-only** (generated column; Go stops writing it).
-- New `SaleReason*` string-const block + `ValidSaleReason(string) bool` guard
-  (5 values + `""`).
+  `ChannelFeePctAtSale float64`. `ForcedLiquidation bool` becomes **read-only**
+  (generated).
+- `SaleReason*` const block. Two guards: `ValidSaleReason(s)` (allows `""`, used
+  for creation-default fallback) and `ValidSaleReasonForPatch(s)` (rejects `""`).
 
-### Snapshot ingest fix (`internal/domain/pricing/lookup/adapter.go`)
-In `buildMarketSnapshot`, copy `snap.Confidence = price.Confidence` and
-`snap.SourceCount = price.SourceCount` from the DH `Price`. Root-cause fix for
-"confidence null on all rows." `ActiveListings`/`SalesLast30d` already flow via
-`price.Market`.
+### Confidence parse helper
+Exported `ParseCLConfidenceMin(s string) (int, bool)` — truncated min of a range;
+`ok=false` on unparseable input (→ leave column NULL). Unit-tested.
 
-### Confidence parse helper (`internal/domain/inventory/`)
-Exported `ParseCLConfidenceMin(s string) int` — truncating min of a range like
-`"2.5-4"` → `2`; returns 0 on unparseable input. Unit-testable; mirrors
-`psacampaign.splitRange` truncation.
+### Freeze at first enrichment (set-once, both paths)
+- **Sync** `service_crud.go CreatePurchase`: keep the campaign from `GetCampaign`
+  (currently discarded); after `captureMarketSnapshot`, populate the 6 pointers
+  when currently nil.
+- **Async** first-enrichment path (confirmed by inspection):
+  `processSnapshotsByStatus` (`service_snapshots.go:217`) loops purchases with
+  the **full `p` in scope**, calling `recaptureMarketSnapshotDetailed` → builds
+  `MarketSnapshotData` → `UpdatePurchaseMarketSnapshot`
+  (`purchase_price_store.go:255`).
+  - Extend `UpdatePurchaseMarketSnapshot`'s UPDATE to set the 4 DH provenance
+    columns **only when currently NULL** (`col = CASE WHEN col IS NULL THEN $n
+    ELSE col END`), sourced from the now-provenance-carrying `MarketSnapshotData`.
+    First writer wins.
+  - `population_at_purchase` also freezes here from `p.Population` (in scope).
+  - `cl_confidence_at_purchase`: the enrichment loop does **not** load the
+    campaign, but `p.CampaignID` is available. Fetch the campaign once per
+    distinct `CampaignID` in the loop (PSA-bulk rows cluster by campaign; cache
+    in a `map[string]int` of parsed confidence) and pass the value through to the
+    freeze. This closes the async gap for all 6 fields — no field is left
+    sync-only.
 
-### Freeze at purchase-creation (`service_crud.go CreatePurchase`)
-- Keep the campaign returned by `GetCampaign` (currently discarded at ~:60).
-- After `captureMarketSnapshot`, set the 6 frozen fields **set-once** (only when
-  currently 0): confidence from `ParseCLConfidenceMin(campaign.CLConfidence)`,
-  population from `p.Population`, the four DH fields from the applied snapshot.
+### Persist (`purchase_store.go` + scan helpers)
+- Extend `CreatePurchase` INSERT + `purchaseColumns`/`purchaseColumnsAliased` +
+  `scanPurchase` (scan into `sql.Null*` → pointers).
 
-### Persist (`purchase_store.go`)
-- Extend `CreatePurchase` INSERT (6 new params).
-- Extend `purchaseColumns` + `purchaseColumnsAliased` + `scanPurchase`.
-- `UpdatePurchaseCLValue`: **no change** — it correctly writes live `population`.
-  Add a comment at the `population = $2` line noting `population_at_purchase` is
-  the frozen counterpart and must never be added to an UPDATE.
-
-### Freeze at sale-creation (all 3 paths: `CreateSale`, `CreateBulkSales`,
-`ConfirmOrdersSales`)
+### Freeze at sale-creation (all 3 paths)
 - `sa.CLValueAtSaleCents = purchase.CLValueCents`
 - `sa.ChannelFeePctAtSale = EffectiveChannelFeePct(channel, campaign)` — new
-  helper extracted from `CalculateSaleFee`'s branch logic so fee cents and pct
-  never diverge (eBay/TCGPlayer → campaign eBay pct; website → 3%; else → 0).
-- `sa.SaleReason = invoice_pressure if IsForcedLiquidation(...) else
-  discretionary`.
-- Stop setting `sa.ForcedLiquidation` (generated).
-- Extend `sale_store.go` INSERT + `saleColumns` + `saleColumnsAliased` +
-  `scanSale`/`scanPurchaseWithSale`.
+  helper extracted from `CalculateSaleFee` so fee cents and pct never diverge.
+- `sa.SaleReason`: **preserve** a caller-supplied valid reason; default to
+  `invoice_pressure if IsForcedLiquidation(...) else discretionary` only when
+  empty (review #5).
+- Stop setting `ForcedLiquidation`.
 
-### Operator override (item 5)
-- New `PATCH /api/campaigns/{id}/sales/{saleID}` handler → validates reason via
-  `ValidSaleReason` → `SaleRepository.UpdateSaleReason(ctx, saleID, reason)`
-  (`UPDATE sale_reason, updated_at`). Generated `forced_liquidation` follows.
-- Add `UpdateSaleReason` to the `SaleRepository` interface + Postgres impl +
-  `internal/testutil/mocks` `SaleRepositoryMock`.
+### Sale column split (review #4)
+- `saleInsertColumns` — excludes generated `forced_liquidation`; used by all
+  INSERTs.
+- `saleColumns` — full read/scan list, still includes `forced_liquidation`.
+- Update `sale_store.go` INSERT + placeholder count; scan unchanged.
+
+### Operator override (review #6)
+- `PATCH /api/campaigns/{id}/sales/{saleID}` → `ValidSaleReasonForPatch`
+  (rejects `""`) → `SaleRepository.UpdateSaleReason(ctx, campaignID, saleID,
+  reason)`. The UPDATE is **campaign-scoped** (`WHERE id=$saleID AND purchase_id
+  IN (SELECT id FROM campaign_purchases WHERE campaign_id=$campaignID)`) so the
+  path param is enforced; returns not-found if the sale isn't in that campaign.
+- Add to `SaleRepository` interface + Postgres impl + `mocks.SaleRepositoryMock`.
 
 ## § 3 — Analysis API surface (option A) & frontend
 
-Consumer of `/api/portfolio/analysis` is the **campaign-analysis skill** (no
-frontend TS consumer). The analysis load path (`GetPurchasesWithSales` /
-`GetAllPurchasesWithSales`) already reuses the shared column lists +
-`scanPurchaseWithSale`, so frozen fields flow in automatically once § 2 extends
-those.
+Consumer is the **campaign-analysis skill** (no frontend TS consumer). Analysis
+load reuses shared column lists + `scanPurchaseWithSale`, so provenance flows in
+once § 2 extends them.
 
-### `analysis_types.go` / `analysis.go` additions (per `CampaignAnalysis`)
-1. **`PNLByConfidenceBuy []ConfBuyCohortRow`** — the experiment deliverable.
-   Row = `{clConfidenceAtPurchase, buyTermsBucket, n, soldCount, revenueCents,
-   netProfitCents, roiPct, avgSourceCount, avgActiveListings, avgSalesLast30d,
-   avgPopulationAtBuy}`. Rows with `cl_confidence_at_purchase = 0` go in an
-   explicit `unknown` bucket, never mixed into a real level.
-2. **`SplitPNL.ByReason map[string]PNLBlock`** — keyed by the 5 reasons; the 36
-   reclassified sales now land in `invoice_pressure`. `Discretionary`/`Forced`
-   kept as-is for back-compat.
-3. **Comp-thickness averages** on cohort rows computed over frozen fields with a
-   coverage count (`N`/`Total`/`CoveragePct` pattern from `BPCLStats`);
-   skip-if-zero before averaging so 0 = unknown never dilutes.
+### `analysis_types.go` / `analysis.go`
+1. **`PNLByConfidenceBuy []ConfBuyCohortRow`.** Row =
+   `{clConfidenceAtPurchase (or "unknown"), buyTermsBucket, n, soldCount,
+   revenueCents, netProfitCents, roiPct, avgSourceCount, avgActiveListings,
+   avgSalesLast30d, avgPopulationAtBuy, coverage...}`.
+   - `buyTermsBucket` = `buyCost / cl_value_at_purchase_cents` (frozen CL only),
+     5% bands; `<50%`→`"<50"`, `>=100%`→`">=100"`; frozen CL NULL/0 → `"unknown"`.
+   - `cl_confidence_at_purchase` NULL → explicit `unknown` confidence bucket.
+   - averages computed only over rows where that pointer is non-nil (NULL
+     skipped; measured `0` included), each with a coverage count.
+2. **`SplitPNL.ByReason map[string]PNLBlock`** keyed by the 5 reasons.
+   `Discretionary`/`Forced` kept for back-compat.
 
-### Frontend (`web/src/types/campaigns/core.ts` + components)
-- Add new `Sale`/`Purchase` fields to match Go JSON tags: `saleReason`,
-  `clValueAtSaleCents`, `channelFeePctAtSale`, the 6 `*AtPurchase`.
-- `RecordSaleForm` (single): add `sale_reason` `<select>`.
+### Frontend
+- `web/src/types/campaigns/core.ts`: add new `Sale`/`Purchase` fields matching
+  Go JSON tags (provenance fields optional/nullable).
+- `RecordSaleForm` (single): add `sale_reason` `<select>` (sent on create,
+  preserved server-side).
 - `BulkRecordSaleModal`: add `sale_reason` `<select>` **and** the three
-  listing-detail inputs (item 4: `originalListPrice`, `priceReductions`,
-  `daysListed`) + wire them into the bulk request/handler/`CreateBulkSales`.
+  listing-detail inputs as **per-item** fields; extend `BulkSaleInput`
+  (`types_core.go:407`) + handler + `CreateBulkSales` to carry them per card.
+  Partial-failure retries preserve per-item values because they live on the item.
 
 ### Docs
-- `docs/SCHEMA.md`: new columns + generated-column note.
-- `docs/API.md`: PATCH route + analysis response additions.
-
-## "0/'' = unknown" invariant
-
-Enforced in the compute layer (skip-if-zero before averaging; explicit `unknown`
-cohort buckets), consistent with `computeBPCLAtBuy`'s existing
-`CLValueAtPurchaseCents == 0` guard. A pre-instrumentation row must never read as
-a real confidence 0 or population 0.
+- `SCHEMA.md`: new columns (nullable note, CHECK, generated col).
+- `API.md`: PATCH route, `BulkSaleInput` shape change, analysis additions.
+  Document imported `*_at_sale` values as **record-time proxies** (review #9).
 
 ## Testing
-
-- Table-driven, mocks from `internal/testutil/mocks`.
-- `ParseCLConfidenceMin` unit table (ranges, single values, junk → 0).
-- Set-once guard: creating a purchase twice / refreshing CL never overwrites a
-  non-zero frozen field.
+- `ParseCLConfidenceMin` table (ranges/singles/junk → ok=false).
+- Set-once across **both** freeze paths: sync create, async first-enrichment,
+  and refresh-after-enrichment never overwrites a non-nil value.
+- Genuine-zero vs missing: a captured `0` active-listings row is included in
+  averages; a NULL row is skipped.
+- `MarketSnapshotData.applySnapshot` now round-trips Confidence/SourceCount.
 - `EffectiveChannelFeePct` parity with `CalculateSaleFee` across channels.
-- Sale freeze across all three creation paths (single/bulk/import) sets
-  cl-at-sale, channel-fee, and reason default.
-- Migration up/down round-trip incl. `sale_reason` backfill rules and the
-  generated `forced_liquidation` reflecting reason.
-- `UpdateSaleReason` PATCH validates against `ValidSaleReason`.
-- Analysis: confidence×buy% cohort buckets `0` into `unknown`; `ByReason` split;
-  coverage-guarded averages.
+- Sale freeze across all 3 paths sets cl-at-sale, channel-fee, reason default;
+  explicit creation reason is preserved, empty defaults to heuristic.
+- Generated-column INSERT via `saleInsertColumns` succeeds; scan reads
+  `forced_liquidation` back.
+- `UpdateSaleReason`: rejects `""`, rejects sale not in campaign, reflects into
+  generated boolean.
+- Migration up/down round-trip incl. backfill rules + CHECK.
+- Cohort buckets: `<50`/`>=100`/`unknown` boundaries; confidence NULL →
+  unknown; buy% uses frozen CL not current.
 
 ## Explicit exclusions
-
-- No historical backfill of DH comp fields or listing-detail fields (no source).
-- No new campaign column for confidence (parsed from existing range).
-- No frontend analysis-page types (endpoint has no UI consumer).
-- No change to `population` live-refresh behavior (only the frozen counterpart
-  is protected).
+- No historical backfill of provenance/listing fields (no source).
+- No new campaign column for confidence.
+- No frontend analysis-page types (no UI consumer).
+- No change to `population` live-refresh (only the frozen counterpart protected).
+- `source_count_at_purchase` is platform count, explicitly **not** comp-sales
+  count.
