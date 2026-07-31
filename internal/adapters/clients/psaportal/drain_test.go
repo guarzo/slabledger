@@ -80,7 +80,10 @@ func TestTransientPushError(t *testing.T) {
 		{name: "outage 503", err: errors.New("psaportal: create campaign status 503"), want: true},
 		{name: "app rejection 400 is terminal", err: errors.New("psaportal: update campaign status 400"), want: false},
 		{name: "server error 500 is terminal", err: errors.New("psaportal: create campaign status 500"), want: false},
-		{name: "non-status error is terminal", err: errors.New("psaportal: browser fetch error: net::ERR_FAILED"), want: false},
+		{name: "proxy tunnel drop is transient", err: errors.New("psaportal: campaign fetch: psaportal: browser fetch error: page.goto: net::ERR_TUNNEL_CONNECTION_FAILED"), want: true},
+		{name: "connection reset is transient", err: errors.New("psaportal: browser fetch error: net::ERR_CONNECTION_RESET"), want: true},
+		{name: "connection timed out is transient", err: errors.New("psaportal: browser fetch error: page.goto: net::ERR_CONNECTION_TIMED_OUT"), want: true},
+		{name: "generic net::ERR_FAILED stays terminal", err: errors.New("psaportal: browser fetch error: net::ERR_FAILED"), want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

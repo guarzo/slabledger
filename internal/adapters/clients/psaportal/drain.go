@@ -10,22 +10,47 @@ import (
 )
 
 // transientPushError reports whether a portal push failed on an edge/transport
-// condition that a later run with a fresh browser session routinely clears —
-// Cloudflare block/challenge (403), rate limiting (429), or a portal outage
-// (503). Observed 2026-07-18: one run's every GET drew an instant Cloudflare
-// 403 while runs minutes later were clean; marking such rows terminally failed
-// is what left approved pushes permanently unsent. All portal client errors
-// carry the HTTP code as a "status <code>" suffix (push.go, create.go,
-// buildhash.go), so match on that. App-level rejections (400/422/…) stay
-// terminal.
+// condition that a later run with a fresh browser session routinely clears.
+// Two families qualify:
+//
+//   - HTTP status codes carrying a "status <code>" suffix (all portal client
+//     errors add one — push.go, create.go, buildhash.go): Cloudflare
+//     block/challenge (403), rate limiting (429), portal outage (503).
+//     Observed 2026-07-18: one run's every GET drew an instant 403 while runs
+//     minutes later were clean. App-level rejections (400/422/500/…) stay
+//     terminal.
+//   - Chromium network signatures on a browser fetch (surfaced as
+//     "browser fetch error: …", session.go): a dropped residential-proxy tunnel
+//     or reset connection. Observed 2026-07-31: an approved Vintage Core push
+//     hit ERR_TUNNEL_CONNECTION_FAILED on the edit-form GET and was terminally
+//     failed, when the very next run's fetch would have succeeded. Only specific
+//     connection/proxy signatures qualify — the generic net::ERR_FAILED is
+//     ambiguous and stays terminal.
 func transientPushError(err error) bool {
 	msg := err.Error()
-	for _, s := range []string{"status 403", "status 429", "status 503"} {
+	for _, s := range transientPushSignatures {
 		if strings.Contains(msg, s) {
 			return true
 		}
 	}
 	return false
+}
+
+// transientPushSignatures are substrings that mark a push failure as retryable.
+// HTTP-status suffixes and Chromium transport-error codes that a fresh session
+// routinely clears; kept together so both families are visible in one place.
+var transientPushSignatures = []string{
+	"status 403",
+	"status 429",
+	"status 503",
+	"ERR_TUNNEL_CONNECTION_FAILED",
+	"ERR_PROXY_CONNECTION_FAILED",
+	"ERR_CONNECTION_RESET",
+	"ERR_CONNECTION_CLOSED",
+	"ERR_CONNECTION_TIMED_OUT",
+	"ERR_TIMED_OUT",
+	"ERR_NETWORK_CHANGED",
+	"ERR_EMPTY_RESPONSE",
 }
 
 // pushOutcome returns the queue status a failed push should land in: back to
