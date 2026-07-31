@@ -1,18 +1,78 @@
 # docker-compose.override.yml.example
 #
-# Copy this file to docker-compose.override.yml for local customizations.
-# The override file is .gitignored and will be auto-created (empty) if missing.
+# Copy to docker-compose.override.yml (gitignored) for local customizations.
+# devcontainer.json lists it in dockerComposeFile, and initializeCommand
+# auto-creates an empty stub if it is missing, so the container still builds
+# without it — you just get none of the seeding below.
 #
-# Uncomment sections below as needed:
+# ---------------------------------------------------------------------------
+# THE /host-seed CONTRACT
+# ---------------------------------------------------------------------------
+# .devcontainer/local-seed.sh (also local + gitignored) reads host config from
+# /host-seed and copies it into container-local named volumes. The two halves
+# must agree: the mounts below are the INPUT, and the paths local-seed.sh reads
+# are SEED_CLAUDE=/host-seed/.claude and SEED_DOTFILES=/host-seed/.dotfiles.
+# Adding a path here means adding it to the seed script's copy list too.
+#
+# Why seed-and-copy instead of bind-mounting host config directly:
+#
+#   1. A writable bind lets the container write container-absolute paths back
+#      into host config (Claude Code stores absolute paths), corrupting it for
+#      the host. The named volumes below remove that possibility entirely.
+#   2. Read-only still means READABLE. Mounting all of ~/.claude would expose
+#      .credentials.json, history.jsonl, and every session transcript under
+#      projects/ to any process in the container. Only the authored config the
+#      seed actually copies is mounted, path by path.
+#
+# Host SSH keys and gh auth are deliberately NOT mounted: they are single global
+# credentials that would force this container onto the host GitHub identity
+# across every project. Authenticate inside the container instead (`gh auth
+# login`, or a project-scoped GH_TOKEN).
+# ---------------------------------------------------------------------------
 services:
   app:
+    # host.docker.internal must resolve for the Vekil proxy hook in ~/.zshrc.
+    # The base compose uses a custom bridge (dev_network), which — unlike
+    # Docker Desktop's default — provides no automatic mapping.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     volumes:
-      # Mount host Git config (for commit signing, user info)
+      # --- authored ~/.claude subset, read-only (seed step 1) ---
+      # Deliberately path-by-path, never `~/.claude:/host-seed/.claude`.
+      - ~/.claude/settings.json:/host-seed/.claude/settings.json:ro,cached
+      - ~/.claude/CLAUDE.md:/host-seed/.claude/CLAUDE.md:ro,cached
+      - ~/.claude/config:/host-seed/.claude/config:ro,cached
+      - ~/.claude/commands:/host-seed/.claude/commands:ro,cached
+      - ~/.claude/skills:/host-seed/.claude/skills:ro,cached
+
+      # --- dotfiles, read-only (supplies the claude/codex installers) ---
+      - ~/.dotfiles:/host-seed/.dotfiles:ro,cached
+
+      # --- container-local writable homes ---
+      # Load-bearing: Compose merges service volumes by container-target path,
+      # so these also shadow any host bind that appears at the same target.
+      - claude-local-home:/home/vscode/.claude
+      - dotfiles-local-home:/home/vscode/.dotfiles
+
+      # Host Git config (commit signing, user info). Read-only.
+      # NOTE: if your ~/.gitconfig sets core.excludesFile = ~/.gitignore, that
+      # path is a dotfiles symlink on the host and does NOT exist in the
+      # container. local-seed.sh recreates it; without that link git silently
+      # treats the global gitignore as empty and personal overlay files show up
+      # as untracked.
       - ~/.gitconfig:/home/vscode/.gitconfig:cached,ro
 
-      # Mount host SSH keys (for Git over SSH)
-      - ~/.ssh:/home/vscode/.ssh:cached,ro
+    # Override the base `sleep infinity`. This command is the container's PID 1,
+    # so it runs on every start AND every rebuild — that is what makes the seed
+    # self-healing, and why no postStartCommand is needed in devcontainer.json.
+    command: >-
+      bash -c "bash /workspace/.devcontainer/local-seed.sh; exec sleep infinity"
 
     # environment:
-    #   # Add any personal environment overrides here
+    #   # Personal environment overrides
     #   MY_CUSTOM_VAR: "value"
+
+volumes:
+  claude-local-home:
+  dotfiles-local-home:
