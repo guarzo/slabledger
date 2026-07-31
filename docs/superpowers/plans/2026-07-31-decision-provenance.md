@@ -4,7 +4,7 @@
 
 **Goal:** Freeze decision-time provenance on purchases (confidence, population, DH comp fields) and sales (sale_reason, cl-at-sale, channel-fee), and surface confidence×buy% cohorts in `/api/portfolio/analysis`.
 
-**Architecture:** Additive migration `000022` (nullable frozen columns + generated `forced_liquidation`); set-once freeze logic in the inventory domain service, split by when each fact is known (creation-time vs first-successful-capture); analysis cohorts computed in the portfolio domain; new fields surfaced through existing shared column lists.
+**Architecture:** Additive migration `000022` (nullable frozen columns; `forced_liquidation` stays a plain app-maintained boolean so image-only rollback is safe); set-once freeze logic in the inventory domain service, split by when each fact is known (creation-time vs first-successful-capture), with server-authoritative clearing of client-supplied provenance; analysis cohorts computed in the portfolio domain; new fields surfaced through existing shared column lists.
 
 **Tech Stack:** Go 1.26, hexagonal architecture, Postgres (`jackc/pgx/v5/stdlib`), `golang-migrate/migrate/v4`, React/TS frontend.
 
@@ -48,10 +48,10 @@
 - Modify: `internal/domain/portfolio/analysis.go` (compute cohorts + ByReason)
 
 **Adapters — postgres**
-- Modify: `internal/adapters/storage/postgres/purchase_scan_helpers.go` (column lists + scan dests, saleInsertColumns split)
+- Modify: `internal/adapters/storage/postgres/purchase_scan_helpers.go` (column lists + scan dests; extend saleColumns/saleColumnsAliased)
 - Modify: `internal/adapters/storage/postgres/purchase_store.go` (CreatePurchase INSERT)
 - Modify: `internal/adapters/storage/postgres/purchase_price_store.go` (UpdatePurchaseMarketSnapshot set-once market freeze)
-- Modify: `internal/adapters/storage/postgres/sale_store.go` (CreateSale via saleInsertColumns; UpdateSaleReason impl)
+- Modify: `internal/adapters/storage/postgres/sale_store.go` (CreateSale INSERT +3 cols; UpdateSaleReason impl)
 
 **Adapters — http**
 - Modify: `internal/adapters/httpserver/routes.go` (PATCH route)
@@ -67,11 +67,11 @@
 - Modify: `web/src/react/pages/campaign-detail/BulkRecordSaleModal.tsx`
 
 **Docs**
-- Modify: `docs/SCHEMA.md`, `docs/API.md`
+- Modify: `docs/SCHEMA.md`, `docs/API.md`, `docs/OPERATIONS.md`
 
 ---
 
-## Task 1: Migration 000022 (schema + backfill + generated column)
+## Task 1: Migration 000022 (schema + backfill; forced_liquidation stays plain boolean)
 
 **Files:**
 - Create: `internal/adapters/storage/postgres/migrations/000022_add_decision_provenance.up.sql`
@@ -79,7 +79,7 @@
 - Test: `internal/adapters/storage/postgres/migration_000022_test.go`
 
 **Interfaces:**
-- Produces: 6 nullable `campaign_purchases` columns; `campaign_sales.sale_reason` (TEXT, CHECK), `cl_value_at_sale_cents` (BIGINT NOT NULL DEFAULT 0), `channel_fee_pct_at_sale` (DOUBLE PRECISION NULL); `forced_liquidation` regenerated as GENERATED STORED.
+- Produces: 6 nullable `campaign_purchases` columns; `campaign_sales.sale_reason` (TEXT, CHECK), `cl_value_at_sale_cents` (BIGINT NOT NULL DEFAULT 0), `channel_fee_pct_at_sale` (DOUBLE PRECISION NULL); `forced_liquidation` remains a plain writable BOOLEAN, re-synced to the backfilled reasons.
 
 - [ ] **Step 1: Write the up migration**
 
@@ -116,22 +116,30 @@ UPDATE campaign_sales s SET sale_reason = 'invoice_pressure'
 
 UPDATE campaign_sales SET sale_reason = 'discretionary' WHERE sale_reason = '';
 
--- Replace the plain boolean with a generated column derived from sale_reason.
-ALTER TABLE campaign_sales DROP COLUMN forced_liquidation;
-ALTER TABLE campaign_sales
-    ADD COLUMN forced_liquidation BOOLEAN NOT NULL
-        GENERATED ALWAYS AS (sale_reason = 'invoice_pressure') STORED;
+-- forced_liquidation stays a PLAIN boolean (NOT generated), so the previous
+-- image — which INSERTs forced_liquidation explicitly — keeps working after an
+-- image-only rollback (see docs/OPERATIONS.md; no DB down-migration on rollback).
+-- The app maintains it alongside sale_reason (forced == reason='invoice_pressure').
+-- Re-sync it here to match the just-backfilled reasons.
+UPDATE campaign_sales SET forced_liquidation = (sale_reason = 'invoice_pressure');
 ```
+
+**Rollback safety note (in the migration file as a comment and in Task 15 docs):**
+because `forced_liquidation` remains an ordinary writable column, the old binary
+can still INSERT/read it after rollback. The new provenance columns are additive
+and nullable/defaulted, so the old binary ignores them harmlessly. No coordinated
+DB down-migration is required. (A down-migration still exists for completeness but
+is not part of the normal rollback path; note it collapses specialized reasons —
+`aging_policy`/`bulk_lot`/`show_clearout` are lost — which is acceptable only for
+a full teardown, not a production rollback.)
 
 - [ ] **Step 2: Write the down migration**
 
 Create `000022_add_decision_provenance.down.sql`:
 
 ```sql
-ALTER TABLE campaign_sales DROP COLUMN forced_liquidation;
-ALTER TABLE campaign_sales ADD COLUMN forced_liquidation BOOLEAN NOT NULL DEFAULT FALSE;
-UPDATE campaign_sales SET forced_liquidation = (sale_reason = 'invoice_pressure');
-
+-- forced_liquidation is already a plain boolean and is left in place (it existed
+-- pre-000022). Only the columns 000022 added are dropped.
 ALTER TABLE campaign_sales
     DROP COLUMN channel_fee_pct_at_sale,
     DROP COLUMN cl_value_at_sale_cents,
@@ -186,11 +194,13 @@ func TestMigration000022_SaleReasonBackfill(t *testing.T) {
 	// Step up to v22 — runs the backfill.
 	require.NoError(t, m.Steps(1))
 
-	// S1: in-person, 7000 < 0.80*10000 → invoice_pressure; generated col TRUE.
-	// S2: ebay full price → discretionary; generated col FALSE.
+	// S1: in-person, 7000 < 0.80*10000 → sale_reason 'invoice_pressure'; forced_liquidation re-synced to TRUE.
+	// S2: ebay full price → sale_reason 'discretionary'; forced_liquidation FALSE.
 	// Assert sale_reason + forced_liquidation for both via SELECT.
+	// (forced_liquidation is a plain column re-synced by the up-migration, not generated.)
 
-	// Round-trip down/up to confirm reversibility.
+	// Round-trip down/up to confirm reversibility (down keeps forced_liquidation,
+	// drops only the 000022-added columns; up re-adds + re-backfills them).
 	require.NoError(t, m.Steps(-1))
 	require.NoError(t, m.Steps(1))
 }
@@ -578,7 +588,7 @@ git commit -m "feat(inventory): capture market presence + pre-correction source 
 
 **Interfaces:**
 - Consumes: `applyCLCorrection`, `applyMarketSnapshot`, `MarketSnapshot` (now carrying `SourceCountRaw`/`MarketDataObserved` from Task 5).
-- Produces: `captureMarketSnapshot(ctx, r, card, grade, clValueCents) (*MarketSnapshot, bool)` — bool = a snapshot was actually fetched and applied. On provider error / skip conditions returns `(nil, false)`. `SourceCountRaw`/`MarketDataObserved` need **no** stamping here — Task 5 already populated them on the receiver's embedded `MarketSnapshotData` via `applySnapshot`.
+- Produces: `captureMarketSnapshot(ctx, r, card, grade, clValueCents) (*MarketSnapshot, bool)` — bool = a snapshot was actually fetched and applied. Returns `(nil, false)` on skip conditions, on provider error, **and when the provider returns `(nil, nil)`** (the real adapter and the default `MockPriceLookup` both do this — treating it as success would deref nil in `applyCLCorrection`). `SourceCountRaw`/`MarketDataObserved` need **no** stamping here — Task 5 already populated them on the receiver's embedded `MarketSnapshotData` via `applySnapshot`.
 
 **Why no inference:** presence and pre-correction count are captured at the adapter (Task 5), so `captureMarketSnapshot` only needs to signal success/failure so the freeze in Task 7 can gate on it. The async path (`recaptureMarketSnapshotDetailed`) already returns a `snapshotResult` and already routes through `applySnapshot`, so its `MarketSnapshotData` likewise carries the three fields — no change needed there beyond what Task 9 persists.
 
@@ -589,6 +599,7 @@ func TestCaptureMarketSnapshot_SignalsSuccess(t *testing.T) {
 	// service with a mock priceProv returning a snapshot → returns (snap, true),
 	// and the receiver's Confidence/SourceCountRaw/MarketDataObserved are set.
 	// service with a mock priceProv returning an error → returns (nil, false).
+	// service with a mock priceProv returning (nil, nil) → returns (nil, false), NO panic.
 	// Build the service using the existing mock-priceLookup harness in service_test.go.
 }
 ```
@@ -600,9 +611,17 @@ Expected: FAIL (captureMarketSnapshot returns nothing)
 
 - [ ] **Step 3: Change signature to signal success**
 
-In `captureMarketSnapshot`, change the signature to `(*MarketSnapshot, bool)`. Return `(nil, false)` on the skip guard (nil provider / empty name / zero grade / generic set) and on the provider-error branch. On success:
+In `captureMarketSnapshot`, change the signature to `(*MarketSnapshot, bool)`. Return `(nil, false)` on the skip guard (nil provider / empty name / zero grade / generic set), on the provider-error branch, **and when `snapshot == nil`** (guard before touching it — the current code has a latent nil deref here that must not be carried forward). On success:
 
 ```go
+		snapshot, err := s.priceProv.GetMarketSnapshot(ctx, card, grade)
+		if err != nil {
+			// ...existing warn log...
+			return nil, false
+		}
+		if snapshot == nil {
+			return nil, false // provider had no data; not an observed-zero
+		}
 		applyCLCorrection(snapshot, clValueCents)
 		applyMarketSnapshot(r, snapshot) // copies snapshot incl. the 3 provenance fields into r's MarketSnapshotData
 		return snapshot, true
@@ -645,13 +664,22 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 	// After CreatePurchase: CLConfidenceAtPurchase == 2, PopulationAtPurchase == 50.
 	// A purchase with Population 0 → PopulationAtPurchase stays nil.
 }
+func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
+	// caller submits all 6 *AtPurchase pointers pre-filled with junk (e.g.
+	// PopulationAtPurchase=&999999, DHConfidenceAtPurchase=&0.99) AND a provider
+	// that returns an ERROR (capture fails).
+	// After CreatePurchase: the 4 market fields are nil (capture failed, not forged),
+	// PopulationAtPurchase == the real p.Population (or nil if 0), and
+	// CLConfidenceAtPurchase is derived from the campaign — NONE of the submitted
+	// junk survives.
+}
 ```
 
-Fill in using the existing test harness (see `TestCreateSale...` in `service_test.go` for constructing `service` with mocks). Assert both the populated and the `Population:0 → nil` cases.
+Fill in using the existing test harness (see `TestCreateSale...` in `service_test.go` for constructing `service` with mocks). Assert the populated case, the `Population:0 → nil` case, and the forged-input case.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `go test ./internal/domain/inventory/ -run TestCreatePurchase_FreezesCreationFacts -v`
+Run: `go test ./internal/domain/inventory/ -run 'TestCreatePurchase_FreezesCreationFacts|TestCreatePurchase_IgnoresClientForgedProvenance' -v`
 Expected: FAIL (unknown field CLConfidenceAtPurchase)
 
 - [ ] **Step 3: Add pointers + freeze logic**
@@ -667,20 +695,27 @@ In `types_core.go` Purchase, after `CLValueAtPurchaseCents`:
 	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
 ```
 
-In `CreatePurchase` (`service_crud.go`), capture the campaign and freeze. Replace the discarded `GetCampaign` result:
+In `CreatePurchase` (`service_crud.go`), capture the campaign and freeze. **First clear any client-supplied provenance** (P1: the handler decodes the raw body into `inventory.Purchase`, so these pointers are attacker-controllable; the `if == nil` guards below would otherwise permanently freeze forged values). Replace the discarded `GetCampaign` result:
 
 ```go
 	campaign, err := s.campaigns.GetCampaign(ctx, p.CampaignID)
 	if err != nil {
 		return fmt.Errorf("campaign lookup: %w", err)
 	}
+	// Server-authoritative: discard any client-supplied frozen provenance up front,
+	// so the set-once guards below can only ever freeze server-derived values.
+	p.CLConfidenceAtPurchase = nil
+	p.PopulationAtPurchase = nil
+	p.DHConfidenceAtPurchase = nil
+	p.SourceCountAtPurchase = nil
+	p.ActiveListingsAtPurchase = nil
+	p.SalesLast30dAtPurchase = nil
+
 	// (a) creation-time facts, set-once
-	if p.CLConfidenceAtPurchase == nil {
-		if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
-			p.CLConfidenceAtPurchase = &c
-		}
+	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
+		p.CLConfidenceAtPurchase = &c
 	}
-	if p.PopulationAtPurchase == nil && p.Population > 0 {
+	if p.Population > 0 {
 		pop := p.Population
 		p.PopulationAtPurchase = &pop
 	}
@@ -688,14 +723,10 @@ In `CreatePurchase` (`service_crud.go`), capture the campaign and freeze. Replac
 	if p.SnapshotStatus != SnapshotStatusPending {
 		if snap, ok := s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents); ok {
 			// (b) market-time facts, gated on confirmed capture
-			if p.DHConfidenceAtPurchase == nil {
-				conf := snap.Confidence
-				p.DHConfidenceAtPurchase = &conf
-			}
-			if p.SourceCountAtPurchase == nil {
-				sc := p.SourceCountRaw // set on the embed by applyMarketSnapshot
-				p.SourceCountAtPurchase = &sc
-			}
+			conf := snap.Confidence
+			p.DHConfidenceAtPurchase = &conf
+			sc := p.SourceCountRaw // set on the embed by applyMarketSnapshot
+			p.SourceCountAtPurchase = &sc
 			if p.MarketDataObserved {
 				al := p.ActiveListings
 				sl := p.SalesLast30d
@@ -706,7 +737,7 @@ In `CreatePurchase` (`service_crud.go`), capture the campaign and freeze. Replac
 	}
 ```
 
-(Adjust field access to match how Task 6 stamps `SourceCountRaw`/`MarketDataObserved` onto the embedded `MarketSnapshotData` — `p.SourceCountRaw`, `p.MarketDataObserved`.)
+(The `if == nil` guards are no longer needed once the fields are cleared up front; assignment is unconditional after the clear. Field access `p.SourceCountRaw`/`p.MarketDataObserved` reads the embedded `MarketSnapshotData` populated by Task 5.)
 
 - [ ] **Step 4: Run test**
 
@@ -880,7 +911,7 @@ In `types_core.go` Sale: add
 	ChannelFeePctAtSale *float64 `json:"channelFeePctAtSale,omitempty"`
 ```
 
-Update the `ForcedLiquidation` doc comment to note it is now a generated read-only column (kept for back-compat). Add a shared helper in `service_crud.go`:
+Keep the `ForcedLiquidation bool` field writable — it stays a **plain app-maintained boolean** (not generated), kept in sync with `sale_reason`. Add a shared helper in `service_crud.go` that also **clears client-forged provenance** (P1: the HTTP handler decodes the raw body into the domain `Sale`, so a caller could submit `clValueAtSaleCents`/`channelFeePctAtSale`; the server must overwrite them, never trust them):
 
 ```go
 func freezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
@@ -894,14 +925,31 @@ func freezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forc
 			sa.SaleReason = SaleReasonDiscretionary
 		}
 	}
+	// Server-authoritative: overwrite any client-supplied values.
 	sa.CLValueAtSaleCents = purchase.CLValueCents
 	pct := EffectiveChannelFeePct(sa.SaleChannel, campaign)
 	sa.ChannelFeePctAtSale = &pct
+	// Keep the plain boolean in sync with the reason (app-maintained; not generated).
+	sa.ForcedLiquidation = sa.SaleReason == SaleReasonInvoicePressure
 	return nil
 }
 ```
 
-Call `freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(...))` in `CreateSale`, `CreateBulkSales`, and `ConfirmOrdersSales` right after the existing `ForcedLiquidation`/fee computation, and stop assigning `sa.ForcedLiquidation`. In `CreateSale`, return the error if non-nil (before persisting). For the bulk/import loops, on error append to `result.Errors` and `continue`.
+Note `SaleReason` is a legitimate client input (preserved when valid), so it is
+NOT cleared — only the two derived numeric fields and the boolean are
+server-authoritative.
+
+Call `freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(...))` in `CreateSale`, `CreateBulkSales`, and `ConfirmOrdersSales` right after the existing fee computation, replacing the old `sa.ForcedLiquidation = IsForcedLiquidation(...)` line. In `CreateSale`, return the error if non-nil (before persisting). For the bulk/import loops, on error append to `result.Errors` and `continue`.
+
+Also add a **forged-input test** for the sale side:
+
+```go
+func TestCreateSale_IgnoresClientForgedProvenance(t *testing.T) {
+	// caller submits CLValueAtSaleCents=99999999 and *ChannelFeePctAtSale=0.99;
+	// purchase.CLValueCents=12000, ebay campaign 0.10.
+	// After CreateSale: CLValueAtSaleCents==12000 and *ChannelFeePctAtSale==0.10 (forged values overwritten).
+}
+```
 
 - [ ] **Step 4: Run tests**
 
@@ -917,35 +965,36 @@ git commit -m "feat(inventory): freeze sale provenance across all creation paths
 
 ---
 
-## Task 11: Sale column split + persist + analytics JOIN scan
+## Task 11: Persist sale provenance + analytics JOIN scan
 
 **Files:**
-- Modify: `internal/adapters/storage/postgres/purchase_scan_helpers.go` (saleInsertColumns, saleColumns, saleColumnsAliased, scanSale, scanPurchaseWithSale)
-- Modify: `internal/adapters/storage/postgres/sale_store.go` (CreateSale uses saleInsertColumns)
+- Modify: `internal/adapters/storage/postgres/purchase_scan_helpers.go` (saleColumns, saleColumnsAliased, scanSale, scanPurchaseWithSale)
+- Modify: `internal/adapters/storage/postgres/sale_store.go` (CreateSale INSERT)
 - Test: `internal/adapters/storage/postgres/sale_store_test.go`, `internal/adapters/storage/postgres/analytics_store_test.go`
 
 **Interfaces:**
 - Consumes: Sale new fields (Task 10).
-- Produces: `saleInsertColumns` (all writable sale columns incl. the 3 new, **excluding** generated `forced_liquidation`); `saleColumns`/`saleColumnsAliased` extended with the 3 new columns; scans populate them.
+- Produces: `saleColumns`/`saleColumnsAliased` extended with the 3 new columns; `CreateSale` INSERT writes them plus `forced_liquidation` (still a plain writable boolean — no column split needed).
+
+**Note:** because Task 1 keeps `forced_liquidation` as an ordinary writable column (not generated), the existing `saleColumns` is used for both INSERT and read. No `saleInsertColumns` split is required.
 
 - [ ] **Step 1: Write the failing tests**
 
-(a) `sale_store_test.go`: create a sale with `SaleReason "invoice_pressure"`, `CLValueAtSaleCents 9000`, `ChannelFeePctAtSale &0.10`; `GetSaleByPurchaseID` returns them and `ForcedLiquidation == true` (generated). (b) `analytics_store_test.go`: extend the existing roundtrip (`TestGetAllPurchasesWithSalesFieldRoundtrip`) to assert `sale_reason` and `cl_value_at_sale_cents` come back through `GetAllPurchasesWithSales`.
+(a) `sale_store_test.go`: create a sale with `SaleReason "invoice_pressure"`, `CLValueAtSaleCents 9000`, `ChannelFeePctAtSale &0.10`, `ForcedLiquidation true`; `GetSaleByPurchaseID` returns all four. (b) `analytics_store_test.go`: extend the existing roundtrip (`TestGetAllPurchasesWithSalesFieldRoundtrip`) to assert `sale_reason` and `cl_value_at_sale_cents` come back through `GetAllPurchasesWithSales`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/adapters/storage/postgres/ -run 'TestCreateSale|TestGetAllPurchasesWithSales' -v`
-Expected: FAIL (INSERT tries to write generated column / aliased list missing fields)
+Expected: FAIL (INSERT/read column list missing the 3 new fields)
 
-- [ ] **Step 3: Split columns + extend scans**
+- [ ] **Step 3: Extend columns + scans + INSERT**
 
 In `purchase_scan_helpers.go`:
-- Add `saleInsertColumns` = current `saleColumns` **minus** `forced_liquidation`, **plus** `sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale`.
-- Extend `saleColumns` (read) with the 3 new columns (keep `forced_liquidation` last for scan-order stability, but append new cols before it — match scan dest order).
+- Extend `saleColumns` with `sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale` (append after the existing columns; keep `forced_liquidation` in its current position and match scan-dest order).
 - Extend `saleColumnsAliased` with `s.sale_reason, s.cl_value_at_sale_cents, s.channel_fee_pct_at_sale`.
 - Extend `scanSale` dests and the `scanPurchaseWithSale` sale-side dests with `sql.NullString`/`sql.NullInt64`/`sql.NullFloat64` locals for the 3 new fields and assign into the Sale (SaleReason from NullString.String; CLValueAtSaleCents from NullInt64; ChannelFeePctAtSale as `*float64` from NullFloat64).
 
-In `sale_store.go` `CreateSale`, change `INSERT INTO campaign_sales (` + saleColumns + `)` to `saleInsertColumns`, update the `VALUES ($1..$N)` count, and add `s.SaleReason, s.CLValueAtSaleCents, s.ChannelFeePctAtSale` to the args (drop `s.ForcedLiquidation`).
+In `sale_store.go` `CreateSale`, add the 3 new columns to the `INSERT INTO campaign_sales (` + saleColumns + `)` list (they're already in `saleColumns`), bump the `VALUES ($1..$N)` count by 3, and add `s.SaleReason, s.CLValueAtSaleCents, s.ChannelFeePctAtSale` to the args. `s.ForcedLiquidation` stays in the args (writable boolean).
 
 - [ ] **Step 4: Run tests**
 
@@ -956,7 +1005,7 @@ Expected: PASS
 
 ```bash
 git add internal/adapters/storage/postgres/purchase_scan_helpers.go internal/adapters/storage/postgres/sale_store.go internal/adapters/storage/postgres/sale_store_test.go internal/adapters/storage/postgres/analytics_store_test.go
-git commit -m "feat(db): split sale insert/read columns for generated forced_liquidation; persist sale provenance"
+git commit -m "feat(db): persist sale provenance columns (reason, cl-at-sale, channel-fee)"
 ```
 
 ---
@@ -990,12 +1039,12 @@ Expected: FAIL (undefined)
 
 Interface (`repository_sale.go`): add `UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error`.
 
-Impl (`sale_store.go`), campaign-scoped, reusing `execAndExpectRow`-style:
+Impl (`sale_store.go`), campaign-scoped. Because `forced_liquidation` is a plain app-maintained boolean (not generated), the UPDATE must keep it in sync with the new reason:
 
 ```go
 func (ss *SaleStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
 	result, err := ss.db.ExecContext(ctx,
-		`UPDATE campaign_sales SET sale_reason = $1, updated_at = $2
+		`UPDATE campaign_sales SET sale_reason = $1, forced_liquidation = ($1 = 'invoice_pressure'), updated_at = $2
 		 WHERE id = $3 AND purchase_id IN (SELECT id FROM campaign_purchases WHERE campaign_id = $4)`,
 		reason, time.Now(), saleID, campaignID)
 	if err != nil {
@@ -1111,17 +1160,32 @@ In `CreateBulkSales`, when building `sa := &Sale{...}`, add `OriginalListPriceCe
 Frontend request contracts (all three must change or the fields are dropped at the type boundary):
 - `web/src/js/api/campaignPurchases.ts`: change the `createBulkSales` item type from `{ purchaseId: string; salePriceCents: number }[]` to include `originalListPriceCents?: number; priceReductions?: number; daysListed?: number; saleReason?: string`.
 - `web/src/react/queries/useCampaignQueries.ts`: apply the identical item-type change to `useCreateBulkSales`'s `mutationFn` `data.items`.
-- `web/src/react/pages/campaign-detail/BulkRecordSaleModal.tsx`: add three optional number inputs (mirror `RecordSaleForm`'s "Add listing details" expander) and a `sale_reason` `<select>` (options: discretionary, invoice_pressure, aging_policy, bulk_lot, show_clearout; default empty = server heuristic), and include the parsed per-item values on each item of the bulk request payload.
+- `web/src/react/pages/campaign-detail/BulkRecordSaleModal.tsx`: add per-row optional number inputs (mirror `RecordSaleForm`'s "Add listing details" expander) and a `sale_reason` `<select>` (options: discretionary, invoice_pressure, aging_policy, bulk_lot, show_clearout; default empty = server heuristic). Store the four per-item values in **state keyed by purchaseId** (not by array index) so that when a partial failure narrows the retry set the remaining rows keep their values. Labels must be **row-specific and accessible** (e.g. `aria-label={`Days listed for ${cardName}`}`). Include the parsed per-item values on each item of the bulk request payload.
 
-- [ ] **Step 4: Run test + frontend build**
+- [ ] **Step 4: Write bulk-modal component tests**
 
-Run: `go test ./internal/domain/inventory/ -run TestCreateBulkSales_CopiesPerItemFields -v && (cd web && npm run build)`
-Expected: PASS; frontend build OK
+The component has an existing suite (`BulkRecordSaleModal.test.tsx`); extend it (vitest + testing-library, matching that file's setup):
 
-- [ ] **Step 5: Commit**
+```ts
+// 1. Payload: fill per-row fields for 2 items → onSuccess/mutation called with
+//    items carrying originalListPriceCents/priceReductions/daysListed/saleReason
+//    keyed to the right purchaseId.
+// 2. Reset: closing and reopening the modal clears per-row field state.
+// 3. Partial-failure retry: simulate a BulkSaleResult with one failed item; the
+//    modal narrows to the failed row and that row STILL shows its entered values
+//    (keyed by purchaseId, not index).
+// 4. Accessibility: each row's inputs are reachable by their row-specific label.
+```
+
+- [ ] **Step 5: Run test + frontend build + component tests**
+
+Run: `go test ./internal/domain/inventory/ -run TestCreateBulkSales_CopiesPerItemFields -v && (cd web && npm run build && npm test -- BulkRecordSaleModal)`
+Expected: PASS; build OK; component tests PASS
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add internal/domain/inventory/types_core.go internal/domain/inventory/service_crud.go internal/domain/inventory/service_crud_test.go web/src/js/api/campaignPurchases.ts web/src/react/queries/useCampaignQueries.ts web/src/react/pages/campaign-detail/BulkRecordSaleModal.tsx
+git add internal/domain/inventory/types_core.go internal/domain/inventory/service_crud.go internal/domain/inventory/service_crud_test.go web/src/js/api/campaignPurchases.ts web/src/react/queries/useCampaignQueries.ts web/src/react/pages/campaign-detail/BulkRecordSaleModal.tsx web/src/react/pages/campaign-detail/BulkRecordSaleModal.test.tsx
 git commit -m "feat: per-item listing details and sale_reason in bulk sale path"
 ```
 
@@ -1237,7 +1301,7 @@ git commit -m "feat(portfolio): deterministic confidence×buy cohorts and by-rea
 **Files:**
 - Modify: `web/src/types/campaigns/core.ts` (Sale, Purchase, **CreateSaleInput**)
 - Modify: `web/src/react/pages/campaign-detail/RecordSaleForm.tsx`
-- Modify: `docs/SCHEMA.md`, `docs/API.md`
+- Modify: `docs/SCHEMA.md`, `docs/API.md`, `docs/OPERATIONS.md`
 - Test: frontend build + existing vitest
 
 **Interfaces:**
@@ -1254,7 +1318,7 @@ In `RecordSaleForm.tsx`, add a `sale_reason` `<select>` (options: discretionary,
 
 - [ ] **Step 2: Update docs**
 
-`docs/SCHEMA.md`: document the 6 nullable purchase columns, the 3 sale columns (note `channel_fee_pct_at_sale` nullable, `sale_reason` CHECK), and `forced_liquidation` now GENERATED. `docs/API.md`: add `PATCH /api/campaigns/{id}/sales/{saleID}`, the `CreateSaleInput.saleReason` + `BulkSaleInput` per-item fields, and the analysis response additions (`pnlByConfidenceBuy`, `pnl.byReason`); note imported `*_at_sale` values are record-time proxies.
+`docs/SCHEMA.md`: document the 6 nullable purchase columns, the 3 sale columns (note `channel_fee_pct_at_sale` nullable, `sale_reason` CHECK), and that `forced_liquidation` stays a plain app-maintained boolean (kept in sync with `sale_reason`). `docs/OPERATIONS.md`: add a one-line note that 000022 is rollback-safe under the documented image-only rollback (new columns additive/nullable; `forced_liquidation` unchanged in shape). `docs/API.md`: add `PATCH /api/campaigns/{id}/sales/{saleID}`, the `CreateSaleInput.saleReason` + `BulkSaleInput` per-item fields, and the analysis response additions (`pnlByConfidenceBuy`, `pnl.byReason`); note imported `*_at_sale` values are record-time proxies.
 
 - [ ] **Step 3: Build + test frontend**
 
@@ -1264,7 +1328,7 @@ Expected: build OK; tests PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add web/src/types/campaigns/core.ts web/src/react/pages/campaign-detail/RecordSaleForm.tsx docs/SCHEMA.md docs/API.md
+git add web/src/types/campaigns/core.ts web/src/react/pages/campaign-detail/RecordSaleForm.tsx docs/SCHEMA.md docs/API.md docs/OPERATIONS.md
 git commit -m "feat(web/docs): provenance TS types, CreateSaleInput.saleReason, schema/API docs"
 ```
 
@@ -1308,10 +1372,11 @@ git commit -m "chore: verification fixups for decision-provenance"
 ## Self-Review
 
 **Spec coverage:**
-- §1 migration → Task 1 (backfill tested via version-stepped v21→v22, since setupTestDB auto-migrates to head). Purchase 6 cols nullable → Tasks 1,7,8. Sale 3 cols + generated boolean → Tasks 1,10,11. Backfill + CHECK → Task 1.
-- §2 MarketSnapshot(+Data) provenance + adapter capture of presence & pre-correction count → Task 5. Capture-success signal → Task 6. Split freeze (creation vs capture) → Tasks 7,9. Persist → Tasks 8,9. Sale freeze all 3 paths + reason preserve/reject + bulk/order-import tests → Task 10. Column split → Task 11. PATCH campaign-scoped + MockInventoryService + repo mock (`inventory_sale_repo.go`) → Task 12. EffectiveChannelFeePct pointer via local (addressable) → Tasks 4,10.
-- §3 cohorts in a new `analysis_cohorts.go` (analysis.go is 392 lines), integer-% boundary math, sorted deterministic output, all-5-key ByReason → Task 14. saleColumnsAliased scan → Task 11. Frontend request contracts (`CreateSaleInput.saleReason`, `createBulkSales`/`useCreateBulkSales` item types) + selects + bulk per-item incl. reason → Tasks 13,15. Docs → Task 15.
+- §1 migration → Task 1 (backfill tested via version-stepped v21→v22, since setupTestDB auto-migrates to head; `forced_liquidation` kept as a plain app-maintained boolean for rollback safety). Purchase 6 cols nullable → Tasks 1,7,8. Sale 3 cols + plain boolean → Tasks 1,10,11. Backfill + CHECK → Task 1.
+- §2 MarketSnapshot(+Data) provenance + adapter capture of presence & pre-correction count → Task 5. Capture-success signal incl. nil-snapshot guard → Task 6. Split freeze (creation vs capture) with server-authoritative clearing of client input → Tasks 7,9. Persist → Tasks 8,9. Sale freeze all 3 paths + reason preserve/reject + forged-input clearing + bulk/order-import tests → Task 10. Column persist (no split — boolean writable) → Task 11. PATCH campaign-scoped keeps boolean in sync + MockInventoryService + repo mock (`inventory_sale_repo.go`) → Task 12. EffectiveChannelFeePct pointer via local (addressable) → Tasks 4,10.
+- §3 cohorts in a new `analysis_cohorts.go` (analysis.go is 392 lines), integer-% boundary math, sorted deterministic output, all-5-key ByReason → Task 14. saleColumnsAliased scan → Task 11. Frontend request contracts (`CreateSaleInput.saleReason`, `createBulkSales`/`useCreateBulkSales` item types) + selects + bulk per-item incl. reason + component tests → Tasks 13,15. Docs (incl. OPERATIONS rollback note) → Task 15.
 - Review-round-4 fixes: market presence from `price.Market != nil` not value inference (#1, Task 5); bulk sale_reason end-to-end (#2, Task 13); frontend contracts (#3, Tasks 13,15); mock compile fixes + correct filenames (#4, Task 12); version-stepped migration test (#5, Task 1); bulk/order-import sale-freeze tests (#6, Task 10); deterministic cohorts in new file (#7, Task 14); race-gate at Task 16 + scoped staging (#8, Global Constraints + Task 16).
+- Review-round-5 fixes: forged immutable provenance blocked by server-clears-then-derives on purchase (Task 7 `TestCreatePurchase_IgnoresClientForgedProvenance`) and sale (Task 10 `freezeSaleProvenance` overwrites + `TestCreateSale_IgnoresClientForgedProvenance`) (P1); rollback-safe plain boolean instead of generated column, additive/nullable new cols, OPERATIONS note (Tasks 1,10,11,12,15) (P1); nil-snapshot treated as capture failure, no panic (Task 6) (P1); bulk-modal keyed state + reset + partial-failure retry + a11y component tests (Task 13) (P2).
 - Exclusions (no backfill of provenance, no async creation-fact fallback, source_count = pre-correction platforms) honored: Tasks 7/9 freeze forward-only; Task 5 pre-correction count.
 
 **Placeholder scan:** All code steps contain concrete code or exact instructions with named symbols. Test bodies that reference the existing harness point to the specific existing test/harness to copy (Tasks 1,7,8,9,11 — DB/service harness is pre-existing and per-repo).
