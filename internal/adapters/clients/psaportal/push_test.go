@@ -217,6 +217,12 @@ func TestDumpFormData(t *testing.T) {
 			wantSubs: []string{"note(string)=" + strings.Repeat("é", 80) + "…"},
 		},
 		{
+			// Keys are capped at 64 runes, rune-safe.
+			name:     "long multibyte key truncated on rune boundary",
+			in:       map[string]any{strings.Repeat("é", 65): 1},
+			wantSubs: []string{strings.Repeat("é", 64) + "…(int)=1"},
+		},
+		{
 			name:       "keys emitted in sorted order",
 			in:         map[string]any{"c": 3, "a": 1, "b": 2},
 			wantPrefix: "a(int)=1, b(int)=2, c(int)=3",
