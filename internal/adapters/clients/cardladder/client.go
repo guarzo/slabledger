@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,7 +20,24 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 )
 
-const defaultSearchURL = "https://search-zzvl7ri3bq-uc.a.run.app/search"
+// defaultSearchURL is CL's current search endpoint. The previous Cloud Run host
+// (search-zzvl7ri3bq-uc.a.run.app) was decommissioned and now 404s on every path,
+// including "/". CL_SEARCH_URL overrides this so a future move can be fixed by
+// config alone; CL has no other config.Config presence (its credentials live in
+// the database), so the override is resolved here rather than in the config loader.
+const defaultSearchURL = "https://search.cardladder.com/search"
+
+// searchURLEnv is the operator override for defaultSearchURL.
+const searchURLEnv = "CL_SEARCH_URL"
+
+// resolveSearchURL returns the configured search endpoint, preferring the
+// environment override over the compiled-in default.
+func resolveSearchURL() string {
+	if u := strings.TrimSpace(os.Getenv(searchURLEnv)); u != "" {
+		return u
+	}
+	return defaultSearchURL
+}
 
 // Client accesses Card Ladder's Cloud Run search API.
 type Client struct {
@@ -71,7 +89,7 @@ func NewClient(opts ...ClientOption) *Client {
 	config := httpx.DefaultConfig("CardLadder")
 
 	c := &Client{
-		searchURL:   defaultSearchURL,
+		searchURL:   resolveSearchURL(),
 		rateLimiter: rate.NewLimiter(rate.Limit(1), 1), // 1 req/sec
 		httpClient:  httpx.NewClient(config),
 	}

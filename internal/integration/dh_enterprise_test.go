@@ -45,7 +45,7 @@ func TestDHEnterprise_ResolveCert(t *testing.T) {
 		t.Fatalf("ResolveCert: %v", err)
 	}
 
-	t.Logf("ResolveCert result: cert=%s status=%s dh_card_id=%d card=%q set=%q grade=%.1f",
+	t.Logf("ResolveCert result: cert=%s status=%s dh_card_id=%d card=%q set=%q grade=%q",
 		resp.CertNumber, resp.Status, resp.DHCardID, resp.CardName, resp.SetName, resp.Grade)
 
 	if resp.CertNumber != "84189955" {

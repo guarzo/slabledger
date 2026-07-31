@@ -15,6 +15,53 @@ import (
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
+func TestClient_SearchURLResolution(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		opts []ClientOption
+		want string
+	}{
+		{
+			name: "defaults to the current CL search host",
+			want: "https://search.cardladder.com/search",
+		},
+		{
+			name: "CL_SEARCH_URL overrides the default",
+			env:  "https://search-next.cardladder.com/search",
+			want: "https://search-next.cardladder.com/search",
+		},
+		{
+			name: "surrounding whitespace is trimmed",
+			env:  "  https://search-next.cardladder.com/search\n",
+			want: "https://search-next.cardladder.com/search",
+		},
+		{
+			name: "whitespace-only override falls back to the default",
+			env:  "   ",
+			want: "https://search.cardladder.com/search",
+		},
+		{
+			name: "WithBaseURL wins over the env var",
+			env:  "https://search-next.cardladder.com/search",
+			opts: []ClientOption{WithBaseURL("http://explicit.test/search")},
+			want: "http://explicit.test/search",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Always set the var, including to "", so an ambient CL_SEARCH_URL
+			// (this repo autoloads .env) cannot make these cases non-deterministic.
+			t.Setenv("CL_SEARCH_URL", tt.env)
+			c := NewClient(tt.opts...)
+			if c.searchURL != tt.want {
+				t.Errorf("searchURL = %q, want %q", c.searchURL, tt.want)
+			}
+		})
+	}
+}
+
 func TestClient_FetchCollection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("index") != "collectioncards" {
