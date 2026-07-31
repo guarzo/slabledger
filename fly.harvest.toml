@@ -19,7 +19,10 @@ primary_region = 'iad'
   dockerfile = 'Dockerfile.harvest'
 
 [[vm]]
-  # Chromium needs more headroom than the app; 1GB is comfortable for one login.
-  memory = '1gb'
+  # Chromium needs headroom to render the portal + Cloudflare challenge on a cold
+  # boot. Bumped to 2x/2GB after 1x/1GB cold-boot contention was implicated in the
+  # 2026-07 login failures (see docs/psa-harvester.md). Persisted here so a deploy
+  # does not silently revert a manual `fly machine update` back to 1x/1GB.
+  memory = '2gb'
   cpu_kind = 'shared'
-  cpus = 1
+  cpus = 2

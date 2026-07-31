@@ -290,4 +290,8 @@ change and it reaching PSA.
 
 `Dockerfile.harvest`'s `mcr.microsoft.com/playwright:vX-…` tag must match
 `web/package.json`'s `@playwright/test` version so the npm-installed client matches the
-browsers baked into the base image. Bump them together.
+browsers baked into the base image. Bump them together. A mismatch crashes every harvest
+at `chromium.launch()` (`Executable doesn't exist … Please update docker image as well`),
+which is upstream of login and took the pipeline down for days after a Dependabot bump on
+2026-07-29. `scripts/check-playwright-version.sh` (wired into `make check` and CI) now
+fails loudly on any mismatch, so a future client bump can't ship without the image bump.
