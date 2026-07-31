@@ -106,6 +106,11 @@ func (e *refEncoder) add(v any) (int, error) {
 		}
 		e.out[slot] = b
 		return slot, nil
+	case Sentinel:
+		// devalue encodes these as the negative pointer itself, inline — no
+		// slot is allocated. Returning the raw value makes the parent object
+		// or array reference it directly, which is what PSA's client expects.
+		return int(t), nil
 	case []any:
 		slot := e.reserve()
 		arr := make([]int, len(t))

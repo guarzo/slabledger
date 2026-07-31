@@ -123,3 +123,63 @@ func TestDecodeRefPacked_MalformedPointer(t *testing.T) {
 		t.Fatal("expected error for out-of-range pointer 99")
 	}
 }
+
+// TestRefPacked_SentinelRoundTrip is the core fidelity guarantee: a value PSA
+// sent as a sentinel must come back out as the same sentinel, not as null.
+func TestRefPacked_SentinelRoundTrip(t *testing.T) {
+	sentinels := []struct {
+		name string
+		s    Sentinel
+	}{
+		{name: "undefined", s: SentinelUndefined},
+		{name: "hole", s: SentinelHole},
+		{name: "nan", s: SentinelNaN},
+		{name: "posinf", s: SentinelPosInf},
+		{name: "neginf", s: SentinelNegInf},
+		{name: "negzero", s: SentinelNegZero},
+		{name: "sparse", s: SentinelSparse},
+	}
+	for _, tt := range sentinels {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mirrors the PushCampaign shape: a bare {id, formData} object
+			// (see #519 — NOT wrapped in an array).
+			src := map[string]any{
+				"id": "x",
+				"formData": map[string]any{
+					"bidPercentage": float64(72),
+					"optionalField": tt.s,
+				},
+			}
+			packed, err := EncodeRefPacked(src)
+			if err != nil {
+				t.Fatalf("encode: %v", err)
+			}
+			back, err := DecodeRefPacked(packed)
+			if err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if !reflect.DeepEqual(back, src) {
+				t.Errorf("round-trip mismatch:\n want %#v\n got  %#v", src, back)
+			}
+		})
+	}
+}
+
+// The encoder must emit a sentinel inline as a negative pointer, exactly as
+// devalue does — never as an allocated slot holding null.
+func TestEncodeRefPacked_SentinelIsInline(t *testing.T) {
+	packed, err := EncodeRefPacked(map[string]any{"u": SentinelUndefined})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if len(packed) != 1 {
+		t.Fatalf("expected 1 slot (object only), got %d: %s", len(packed), packed)
+	}
+	var obj map[string]int
+	if err := json.Unmarshal(packed[0], &obj); err != nil {
+		t.Fatalf("slot 0 not an object of pointers: %v", err)
+	}
+	if obj["u"] != -1 {
+		t.Errorf("want pointer -1 for undefined, got %d", obj["u"])
+	}
+}
