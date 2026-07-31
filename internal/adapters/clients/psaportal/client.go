@@ -110,3 +110,15 @@ func New(fetch Fetcher, cfg Config, opts ...Option) *Client {
 
 // baseURL returns the configured PSA portal base URL.
 func (c *Client) baseURL() string { return c.psaBaseURL }
+
+// truncateBody trims a portal response body for inclusion in an error message.
+// The portal returns a JSON envelope whose error detail lives in a body we
+// otherwise discard; surfacing it (bounded) is what lets a failed create/update
+// be diagnosed without re-running against the live portal.
+func truncateBody(s string) string {
+	const maxLen = 500
+	if len(s) > maxLen {
+		return s[:maxLen] + "…(truncated)"
+	}
+	return s
+}

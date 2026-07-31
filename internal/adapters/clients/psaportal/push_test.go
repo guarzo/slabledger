@@ -104,3 +104,28 @@ func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 		t.Error("expected no POST to updateCampaign for unknown field")
 	}
 }
+
+// A 200 response whose envelope type is not "result" is a portal-side rejection;
+// the error must surface the response body so the failure is diagnosable without
+// re-running against the live portal (W-016).
+func TestPushCampaign_ErrorEnvelopeSurfacesBody(t *testing.T) {
+	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	if err != nil {
+		t.Fatalf("fixture missing: %v", err)
+	}
+	routes := bundleRoutes()
+	routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
+	routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] =
+		`{"type":"error","error":{"message":"priceMinimum below floor"}}`
+	ff := &fakeFetcher{routes: routes}
+
+	c := New(ff, Config{})
+	err = c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
+		[]psacampaign.FieldChange{{Field: "priceMinimum", Old: "150", New: "200"}})
+	if err == nil {
+		t.Fatal("expected error for non-result envelope, got nil")
+	}
+	if !strings.Contains(err.Error(), "priceMinimum below floor") {
+		t.Errorf("expected error to include the portal response body, got: %v", err)
+	}
+}

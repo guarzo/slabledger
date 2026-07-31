@@ -99,7 +99,7 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 		return fmt.Errorf("psaportal: decode update campaign response: %w", err)
 	}
 	if envelope.Type != "result" {
-		return fmt.Errorf("psaportal: update campaign response type %q, want \"result\"", envelope.Type)
+		return fmt.Errorf("psaportal: update campaign response type %q, want \"result\": %s", envelope.Type, truncateBody(resp.Body))
 	}
 	return nil
 }
