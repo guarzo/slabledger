@@ -29,6 +29,12 @@ func (c *Client) BuildCollectionCard(ctx context.Context, cert, grader string) (
 	if resp.Result.GemRateCondition != "" {
 		resp.Result.Condition = cardutil.ConditionToAPIFormat(resp.Result.GemRateCondition)
 	}
+	// The API stopped returning gradingCompany, but httpcardestimate still requires
+	// it and rejects an empty value with INVALID_ARGUMENT ("Missing request data").
+	// Backfill from the grader we were called with, for the same reason as above.
+	if resp.Result.GradingCompany == "" {
+		resp.Result.GradingCompany = grader
+	}
 	return &resp.Result, nil
 }
 

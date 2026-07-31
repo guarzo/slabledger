@@ -253,6 +253,57 @@ func TestClient_BuildCollectionCard_NewContract(t *testing.T) {
 	}
 }
 
+// The live httpbuildcollectioncard no longer returns gradingCompany. Downstream
+// (ResolveAndCreateCard -> CardEstimate) requires it, and an empty value makes the
+// callable reject the request with INVALID_ARGUMENT "Missing request data", so the
+// client backfills it from the grader argument it was called with.
+func TestClient_BuildCollectionCard_BackfillsGradingCompany(t *testing.T) {
+	tests := []struct {
+		name   string
+		raw    string
+		grader string
+		want   string
+	}{
+		{
+			name:   "absent gradingCompany is backfilled from grader",
+			raw:    `{"result":{"profileId":"psa-2739997","grade":"g9","player":"Pikachu-Holo"}}`,
+			grader: "psa",
+			want:   "psa",
+		},
+		{
+			name:   "empty gradingCompany is backfilled from grader",
+			raw:    `{"result":{"profileId":"psa-2739997","grade":"g9","gradingCompany":""}}`,
+			grader: "psa",
+			want:   "psa",
+		},
+		{
+			name:   "present gradingCompany is preserved",
+			raw:    `{"result":{"profileId":"bgs-12","grade":"g9","gradingCompany":"BGS"}}`,
+			grader: "psa",
+			want:   "BGS",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(tt.raw)) //nolint:errcheck
+			}))
+			defer server.Close()
+
+			client := NewClient(WithFunctionsURL(server.URL), WithStaticToken("test-token"))
+			resp, err := client.BuildCollectionCard(context.Background(), "69145695", tt.grader)
+			if err != nil {
+				t.Fatalf("BuildCollectionCard failed: %v", err)
+			}
+			if resp.GradingCompany != tt.want {
+				t.Errorf("GradingCompany = %q, want %q", resp.GradingCompany, tt.want)
+			}
+		})
+	}
+}
+
 func TestDoCallable_MissingResult(t *testing.T) {
 	tests := []struct {
 		name     string
