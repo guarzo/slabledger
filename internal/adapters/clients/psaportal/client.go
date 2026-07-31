@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -114,11 +115,13 @@ func (c *Client) baseURL() string { return c.psaBaseURL }
 // truncateBody trims a portal response body for inclusion in an error message.
 // The portal returns a JSON envelope whose error detail lives in a body we
 // otherwise discard; surfacing it (bounded) is what lets a failed create/update
-// be diagnosed without re-running against the live portal.
+// be diagnosed without re-running against the live portal. The limit is applied
+// on a rune boundary so a multi-byte character is never split into invalid UTF-8.
 func truncateBody(s string) string {
-	const maxLen = 500
-	if len(s) > maxLen {
-		return s[:maxLen] + "…(truncated)"
+	const maxRunes = 500
+	if utf8.RuneCountInString(s) <= maxRunes {
+		return s
 	}
-	return s
+	runes := []rune(s)
+	return string(runes[:maxRunes]) + "…(truncated)"
 }
