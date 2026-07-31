@@ -118,8 +118,10 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 
 // dumpFormData renders a formData map as a stable, bounded "key(type)=value"
 // string for diagnostic logging. Keys are sorted so successive dumps diff
-// cleanly; each value is length-capped so a large record cannot flood the log.
+// cleanly; each value is length-capped and the whole output is capped by a
+// total budget so a large record cannot flood the log.
 func dumpFormData(fd map[string]any) string {
+	const totalBudget = 2000 // cap the whole diagnostic line, not just per-value
 	keys := make([]string, 0, len(fd))
 	for k := range fd {
 		keys = append(keys, k)
@@ -127,21 +129,29 @@ func dumpFormData(fd map[string]any) string {
 	sort.Strings(keys)
 	var b strings.Builder
 	for i, k := range keys {
+		if b.Len() >= totalBudget {
+			fmt.Fprintf(&b, ", …(%d more fields)", len(keys)-i)
+			break
+		}
 		if i > 0 {
 			b.WriteString(", ")
 		}
 		v := fd[k]
-		fmt.Fprintf(&b, "%s(%T)=%s", k, v, truncateValue(v))
+		fmt.Fprintf(&b, "%s(%T)=%s", truncateRunes(k, 64), v, truncateValue(v))
 	}
 	return b.String()
 }
 
 // truncateValue formats a single formData value, capping its length.
 func truncateValue(v any) string {
-	s := fmt.Sprintf("%v", v)
-	const maxRunes = 80
-	if utf8.RuneCountInString(s) > maxRunes {
-		return string([]rune(s)[:maxRunes]) + "…"
+	return truncateRunes(fmt.Sprintf("%v", v), 80)
+}
+
+// truncateRunes caps s to n runes (rune-safe, never splitting a multi-byte
+// character) and appends an ellipsis when it trims.
+func truncateRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
 	}
-	return s
+	return string([]rune(s)[:n]) + "…"
 }

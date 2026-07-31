@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -187,9 +188,11 @@ func TestTruncateBody(t *testing.T) {
 
 func TestDumpFormData(t *testing.T) {
 	tests := []struct {
-		name     string
-		in       map[string]any
-		wantSubs []string // substrings that must all be present
+		name       string
+		in         map[string]any
+		wantSubs   []string // substrings that must all be present
+		wantPrefix string   // when set, output must start with this
+		maxLen     int      // when > 0, output length must not exceed this
 	}{
 		{
 			name:     "sorted keys with types and values",
@@ -202,9 +205,28 @@ func TestDumpFormData(t *testing.T) {
 			wantSubs: []string{"selectedSubjects(<nil>)=<nil>"},
 		},
 		{
-			name:     "long value truncated",
+			name:     "long ascii value truncated",
 			in:       map[string]any{"note": strings.Repeat("z", 200)},
 			wantSubs: []string{"note(string)=" + strings.Repeat("z", 80) + "…"},
+		},
+		{
+			// A byte-based cap would split the final multi-byte rune; the value
+			// must be exactly 80 whole runes followed by the ellipsis.
+			name:     "long multibyte value truncated on rune boundary",
+			in:       map[string]any{"note": strings.Repeat("é", 81)},
+			wantSubs: []string{"note(string)=" + strings.Repeat("é", 80) + "…"},
+		},
+		{
+			name:       "keys emitted in sorted order",
+			in:         map[string]any{"c": 3, "a": 1, "b": 2},
+			wantPrefix: "a(int)=1, b(int)=2, c(int)=3",
+		},
+		{
+			// Many fields must not produce an unbounded line.
+			name:     "total output is budget-capped",
+			in:       manyFields(500),
+			wantSubs: []string{"more fields)"},
+			maxLen:   2100, // totalBudget (2000) + one trailing entry + suffix
 		},
 	}
 	for _, tt := range tests {
@@ -215,13 +237,21 @@ func TestDumpFormData(t *testing.T) {
 					t.Errorf("dumpFormData() = %q, want substring %q", got, sub)
 				}
 			}
+			if tt.wantPrefix != "" && !strings.HasPrefix(got, tt.wantPrefix) {
+				t.Errorf("dumpFormData() = %q, want prefix %q", got, tt.wantPrefix)
+			}
+			if tt.maxLen > 0 && len(got) > tt.maxLen {
+				t.Errorf("dumpFormData() length = %d, want <= %d", len(got), tt.maxLen)
+			}
 		})
 	}
 }
 
-func TestDumpFormData_StableOrder(t *testing.T) {
-	fd := map[string]any{"c": 3, "a": 1, "b": 2}
-	if got := dumpFormData(fd); !strings.HasPrefix(got, "a(int)=1, b(int)=2, c(int)=3") {
-		t.Errorf("dumpFormData() = %q, want keys in sorted order", got)
+// manyFields builds a formData map with n distinct keys for budget testing.
+func manyFields(n int) map[string]any {
+	fd := make(map[string]any, n)
+	for i := 0; i < n; i++ {
+		fd[fmt.Sprintf("field%04d", i)] = i
 	}
+	return fd
 }
