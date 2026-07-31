@@ -183,3 +183,28 @@ func TestEncodeRefPacked_SentinelIsInline(t *testing.T) {
 		t.Errorf("want pointer -1 for undefined, got %d", obj["u"])
 	}
 }
+
+// Sentinels encode inline and allocate no slot, so a bare Sentinel as the root
+// would leave slot 0 unwritten and yield an empty packed array. Every real root
+// (object/array/scalar) reserves slot 0, so a non-zero root ref means the
+// caller handed us a value the wire format cannot carry on its own.
+func TestEncodeRefPacked_SentinelRootRejected(t *testing.T) {
+	roots := []struct {
+		name string
+		root any
+	}{
+		{name: "undefined", root: SentinelUndefined},
+		{name: "sparse", root: SentinelSparse},
+	}
+	for _, tt := range roots {
+		t.Run(tt.name, func(t *testing.T) {
+			packed, err := EncodeRefPacked(tt.root)
+			if err == nil {
+				t.Fatalf("expected error for sentinel root, got packed=%s", packed)
+			}
+			if packed != nil {
+				t.Errorf("expected nil packed alongside error, got %s", packed)
+			}
+		})
+	}
+}

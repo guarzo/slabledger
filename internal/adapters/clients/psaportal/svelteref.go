@@ -77,8 +77,15 @@ func resolveValue(data []json.RawMessage, idx int, memo map[int]any) (any, error
 // not required — only self-consistency.
 func EncodeRefPacked(v any) ([]json.RawMessage, error) {
 	e := &refEncoder{index: map[string]int{}}
-	if _, err := e.add(v); err != nil {
+	root, err := e.add(v)
+	if err != nil {
 		return nil, err
+	}
+	// Sentinels encode inline and allocate no slot (see add), so a bare
+	// Sentinel root would leave slot 0 unwritten and silently return an empty
+	// array. Every real root reserves slot 0 on the first add.
+	if root != 0 {
+		return nil, fmt.Errorf("psaportal: encode: root must not be a sentinel (got %v)", v)
 	}
 	return e.out, nil
 }
