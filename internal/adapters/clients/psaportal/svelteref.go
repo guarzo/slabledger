@@ -6,18 +6,69 @@ import (
 )
 
 // DecodeRefPacked resolves a SvelteKit reference-packed array (root at index 0)
-// into a plain Go value (map[string]any / []any / scalar). It reuses unflatten,
-// then json-unmarshals into any.
+// into a plain Go value (map[string]any / []any / scalar / Sentinel).
 func DecodeRefPacked(data []json.RawMessage) (any, error) {
-	resolved, err := unflatten(data, 0, map[int]json.RawMessage{})
-	if err != nil {
-		return nil, err
+	return resolveValue(data, 0, map[int]any{})
+}
+
+// resolveValue resolves slot idx of a ref-packed array into a plain Go value.
+//
+// It is a value-based sibling of unflatten rather than a wrapper around it:
+// unflatten returns JSON bytes, and devalue's sentinels (undefined, NaN, ±Inf)
+// have no JSON representation, so they cannot survive that bottleneck. The two
+// resolvers are kept separate deliberately — unflatten serves
+// DecodeSvelteKitValue, which returns raw bytes to its caller and never
+// re-encodes, so it has no fidelity requirement.
+func resolveValue(data []json.RawMessage, idx int, memo map[int]any) (any, error) {
+	if s, ok := sentinelFor(idx); ok {
+		return s, nil
 	}
-	var out any
-	if err := json.Unmarshal(resolved, &out); err != nil {
-		return nil, fmt.Errorf("psaportal: decode ref-packed root: %w", err)
+	if idx < 0 || idx >= len(data) {
+		return nil, fmt.Errorf("psaportal: pointer %d out of range", idx)
 	}
-	return out, nil
+	if v, ok := memo[idx]; ok {
+		return v, nil
+	}
+	memo[idx] = nil // cycle guard, mirroring unflatten
+	raw := data[idx]
+
+	if len(raw) > 0 && raw[0] == '{' {
+		var obj map[string]int
+		if err := json.Unmarshal(raw, &obj); err == nil {
+			out := make(map[string]any, len(obj))
+			for k, ptr := range obj {
+				rv, err := resolveValue(data, ptr, memo)
+				if err != nil {
+					return nil, err
+				}
+				out[k] = rv
+			}
+			memo[idx] = out
+			return out, nil
+		}
+	}
+	if len(raw) > 0 && raw[0] == '[' {
+		var arr []int
+		if err := json.Unmarshal(raw, &arr); err == nil {
+			out := make([]any, 0, len(arr))
+			for _, ptr := range arr {
+				rv, err := resolveValue(data, ptr, memo)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, rv)
+			}
+			memo[idx] = out
+			return out, nil
+		}
+	}
+
+	var scalar any
+	if err := json.Unmarshal(raw, &scalar); err != nil {
+		return nil, fmt.Errorf("psaportal: decode slot %d: %w", idx, err)
+	}
+	memo[idx] = scalar
+	return scalar, nil
 }
 
 // EncodeRefPacked packs v into a SvelteKit reference array with root at index 0.
