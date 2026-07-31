@@ -63,27 +63,30 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 		t.Fatalf("expected formData object, got %#v", entry["formData"])
 	}
 
-	bp, ok := formData["bidPercentage"].(float64)
-	if !ok {
-		t.Fatalf("expected bidPercentage as JSON number, got %T: %#v", formData["bidPercentage"], formData["bidPercentage"])
+	// Each changed/preserved field is checked for both its JSON type and its
+	// value: numerics must stay JSON numbers and grade bounds must stay
+	// strings, since PSA rejects a type-shifted record.
+	tests := []struct {
+		name  string
+		field string
+		want  any
+	}{
+		{name: "changed numeric field", field: "bidPercentage", want: float64(80)},
+		{name: "changed numeric field with cents-like value", field: "priceMaximum", want: float64(600)},
+		{name: "grade bound stays a string", field: "gradeMinimum", want: "1"},
+		{name: "grade bound stays a string (max)", field: "gradeMaximum", want: "10"},
+		{name: "untouched numeric field preserved", field: "yearMinimum", want: float64(2002)},
 	}
-	if bp != 80 {
-		t.Errorf("bidPercentage = %v, want 80", bp)
-	}
-
-	// String fields (e.g. gradeMinimum) must remain strings, not be numified.
-	if gm, ok := formData["gradeMinimum"]; ok {
-		if _, isString := gm.(string); !isString {
-			t.Errorf("gradeMinimum should remain a string, got %T: %#v", gm, gm)
-		}
-	}
-
-	pm, ok := formData["priceMaximum"].(float64)
-	if !ok {
-		t.Fatalf("expected priceMaximum as JSON number, got %T: %#v", formData["priceMaximum"], formData["priceMaximum"])
-	}
-	if pm != 600 {
-		t.Errorf("priceMaximum = %v, want 600", pm)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := formData[tt.field]
+			if !ok {
+				t.Fatalf("formData missing field %q", tt.field)
+			}
+			if got != tt.want {
+				t.Errorf("%s = %#v (%T), want %#v (%T)", tt.field, got, got, tt.want, tt.want)
+			}
+		})
 	}
 }
 
