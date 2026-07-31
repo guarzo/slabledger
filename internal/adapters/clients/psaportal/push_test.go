@@ -46,13 +46,17 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeRefPacked: %v", err)
 	}
-	arr, ok := resolved.([]any)
-	if !ok || len(arr) != 1 {
-		t.Fatalf("expected single-element array, got %#v", resolved)
-	}
-	entry, ok := arr[0].(map[string]any)
+	// PSA's own client calls updateCampaign with a BARE object argument —
+	// `K({id, formData})` in the compiled edit-page chunk (nodes/11.*.js) —
+	// mirroring createCampaign's `I({...formData})`. Wrapping it in a
+	// single-element array makes the remote function destructure `undefined`
+	// and return an opaque 500 "Internal Error".
+	entry, ok := resolved.(map[string]any)
 	if !ok {
-		t.Fatalf("expected object entry, got %#v", arr[0])
+		t.Fatalf("expected bare object payload, got %#v", resolved)
+	}
+	if got := entry["id"]; got != "660a980d-bf1c-4988-9958-1eb2d1853c66" {
+		t.Errorf("id = %#v, want the campaign id", got)
 	}
 	formData, ok := entry["formData"].(map[string]any)
 	if !ok {
