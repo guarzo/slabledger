@@ -5,8 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
+	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 )
 
@@ -99,7 +103,45 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 		return fmt.Errorf("psaportal: decode update campaign response: %w", err)
 	}
 	if envelope.Type != "result" {
+		// PSA returns an opaque 500 ("Internal Error" + errorId) when it rejects
+		// the read-modify-written record, with no field-level detail. Dump the
+		// exact formData we sent (keys, Go types, values) so a campaign-specific
+		// encode/round-trip corruption can be spotted without re-running blind.
+		c.logger.Error(ctx, "psaportal: update campaign rejected — dumping sent formData",
+			observability.String("campaign_id", id),
+			observability.String("response_body", truncateBody(resp.Body)),
+			observability.String("form_data", dumpFormData(formData)))
 		return fmt.Errorf("psaportal: update campaign response type %q, want \"result\": %s", envelope.Type, truncateBody(resp.Body))
 	}
 	return nil
+}
+
+// dumpFormData renders a formData map as a stable, bounded "key(type)=value"
+// string for diagnostic logging. Keys are sorted so successive dumps diff
+// cleanly; each value is length-capped so a large record cannot flood the log.
+func dumpFormData(fd map[string]any) string {
+	keys := make([]string, 0, len(fd))
+	for k := range fd {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		v := fd[k]
+		fmt.Fprintf(&b, "%s(%T)=%s", k, v, truncateValue(v))
+	}
+	return b.String()
+}
+
+// truncateValue formats a single formData value, capping its length.
+func truncateValue(v any) string {
+	s := fmt.Sprintf("%v", v)
+	const maxRunes = 80
+	if utf8.RuneCountInString(s) > maxRunes {
+		return string([]rune(s)[:maxRunes]) + "…"
+	}
+	return s
 }

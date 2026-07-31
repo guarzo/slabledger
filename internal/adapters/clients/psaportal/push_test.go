@@ -184,3 +184,44 @@ func TestTruncateBody(t *testing.T) {
 		})
 	}
 }
+
+func TestDumpFormData(t *testing.T) {
+	tests := []struct {
+		name     string
+		in       map[string]any
+		wantSubs []string // substrings that must all be present
+	}{
+		{
+			name:     "sorted keys with types and values",
+			in:       map[string]any{"priceMinimum": 200.0, "gradeMinimum": "9"},
+			wantSubs: []string{"gradeMinimum(string)=9", "priceMinimum(float64)=200"},
+		},
+		{
+			name:     "nil value renders",
+			in:       map[string]any{"selectedSubjects": nil},
+			wantSubs: []string{"selectedSubjects(<nil>)=<nil>"},
+		},
+		{
+			name:     "long value truncated",
+			in:       map[string]any{"note": strings.Repeat("z", 200)},
+			wantSubs: []string{"note(string)=" + strings.Repeat("z", 80) + "…"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dumpFormData(tt.in)
+			for _, sub := range tt.wantSubs {
+				if !strings.Contains(got, sub) {
+					t.Errorf("dumpFormData() = %q, want substring %q", got, sub)
+				}
+			}
+		})
+	}
+}
+
+func TestDumpFormData_StableOrder(t *testing.T) {
+	fd := map[string]any{"c": 3, "a": 1, "b": 2}
+	if got := dumpFormData(fd); !strings.HasPrefix(got, "a(int)=1, b(int)=2, c(int)=3") {
+		t.Errorf("dumpFormData() = %q, want keys in sorted order", got)
+	}
+}
