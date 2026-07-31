@@ -46,7 +46,11 @@ func DecodeSvelteKitValue(raw []byte, topKey string) (json.RawMessage, error) {
 }
 
 func unflatten(data []json.RawMessage, idx int, memo map[int]json.RawMessage) (json.RawMessage, error) {
-	if idx == -1 {
+	// All devalue sentinels collapse to null on this path. DecodeSvelteKitValue
+	// hands raw JSON bytes to its caller and never re-encodes them, so there is
+	// no round trip to corrupt — but erroring here would abort an otherwise
+	// good decode. DecodeRefPacked/resolveValue is the fidelity-preserving path.
+	if _, ok := sentinelFor(idx); ok {
 		return json.RawMessage("null"), nil
 	}
 	if idx < 0 || idx >= len(data) {
