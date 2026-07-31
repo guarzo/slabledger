@@ -50,17 +50,28 @@ Confirmed by inspection; these change the implementation:
 ## Decisions (confirmed with operator, v2)
 
 - **Confidence source:** truncated min of `campaign.CLConfidence` range.
-- **Frozen-zero semantics (review #1):** the 6 purchase provenance columns are
-  **nullable** (`NULL` = not captured, `0` = genuinely observed zero). No
-  `DEFAULT 0`. Analytics skip `NULL`, keep real zeros.
-- **`source_count_at_purchase` meaning (review #2):** freeze
-  `len(price.Sources)` as-is = **count of distinct pricing platforms**
-  (post-CL-correction), NOT comparable-sales count. Documented honestly under
-  that name; not labeled "comp thickness."
-- **Freeze location (review #3):** set-once at **first enrichment** — whichever
-  of synchronous `CreatePurchase` capture or asynchronous
-  `UpdatePurchaseMarketSnapshot` happens first. Same semantics as
-  `cl_value_at_purchase_cents`.
+- **Frozen-zero semantics (review #1):** the 6 purchase provenance columns and
+  `channel_fee_pct_at_sale` are **nullable** (`NULL` = not captured, `0` =
+  genuinely observed zero). No `DEFAULT 0`. Analytics skip `NULL`, keep real
+  zeros.
+- **`source_count_at_purchase` meaning (review #3):** **provider platform count
+  captured BEFORE `applyCLCorrection`** — i.e. `len(price.Sources)` of external
+  pricing platforms (DH/eBay/etc.), excluding the `cardladder` anchor that
+  correction unconditionally appends. Represents external comp breadth, not our
+  own signal. Requires capturing the count pre-correction and threading it to the
+  freeze (see § 2). Documented under that name; not "comp thickness."
+- **Freeze lifecycle (review #1 + #2) — SPLIT by when each fact is known:**
+  - `cl_confidence_at_purchase` and `population_at_purchase` are known at **row
+    creation** → freeze set-once in `CreatePurchase`, independent of any
+    snapshot. Campaign confidence is editable later (`campaign_store.go
+    UpdateCampaign`) and population refreshes via `UpdatePurchaseCLValue`, so
+    waiting for async enrichment would record post-decision values.
+  - The 4 market fields (dh_confidence, source_count, active_listings,
+    sales_last_30d) freeze at the **first SUCCESSFUL snapshot** — gated on
+    confirmed capture, never on a silent provider failure (review #2).
+  - Async enrichment fills `cl_confidence`/`population` **only as a NULL
+    compatibility fallback** (for rows created before this migration that never
+    got them); it does **not** fetch current campaign state as the normal path.
 - **Item 4 scope:** add per-item listing fields to `BulkRecordSaleModal`.
 - **`sale_reason` UX (review #5):** creation **preserves** an explicit valid
   reason and defaults to the heuristic only when the field is empty. PATCH for
@@ -99,7 +110,7 @@ Additive; set-once enforced in Go (INSERT/first-enrichment only).
 |---|---|---|
 | `sale_reason` | `TEXT NOT NULL DEFAULT ''` + `CHECK (sale_reason IN ('','discretionary','invoice_pressure','aging_policy','bulk_lot','show_clearout'))` | `''` = legacy/unknown, only via backfill/creation-default gaps |
 | `cl_value_at_sale_cents` | `BIGINT NOT NULL DEFAULT 0` | frozen at sale (0 = unknown) |
-| `channel_fee_pct_at_sale` | `DOUBLE PRECISION NOT NULL DEFAULT 0` | frozen at sale |
+| `channel_fee_pct_at_sale` | `DOUBLE PRECISION` (NULL) | frozen at sale; NULL=uncaptured (legacy), 0.0=real free channel |
 
 ### `forced_liquidation` back-compat sequence (up migration)
 
@@ -121,15 +132,17 @@ Additive; set-once enforced in Go (INSERT/first-enrichment only).
 ## § 2 — Go domain & adapter layer
 
 ### Types (`internal/domain/inventory/types_core.go`)
-- Add `Confidence float64` and `SourceCount int` to **`MarketSnapshotData`**
+- Add `Confidence float64` and `SourceCountRaw int` to **`MarketSnapshotData`**
   (the shared struct persisted to columns) and copy them in `applySnapshot`.
-  This is the actual root-cause fix (review #3) — without it the async persist
-  path drops both values.
+  Without this the async persist path drops both values (root cause). Note
+  `SourceCountRaw` must be the **pre-CL-correction** platform count (see the
+  capture gate below), distinct from `MarketSnapshot.SourceCount` which
+  `applyCLCorrection` inflates with `cardladder`.
 - `Purchase`: add 6 provenance fields as **`*int`/`*float64` pointers** (nullable
   ⇔ NULL column) so measured-zero ≠ missing. `json:",omitempty"`.
 - `Sale`: add `SaleReason string`, `CLValueAtSaleCents int`,
-  `ChannelFeePctAtSale float64`. `ForcedLiquidation bool` becomes **read-only**
-  (generated).
+  `ChannelFeePctAtSale *float64` (nullable — legacy NULL vs real 0.0).
+  `ForcedLiquidation bool` becomes **read-only** (generated).
 - `SaleReason*` const block. Two guards: `ValidSaleReason(s)` (allows `""`, used
   for creation-default fallback) and `ValidSaleReasonForPatch(s)` (rejects `""`).
 
@@ -137,26 +150,47 @@ Additive; set-once enforced in Go (INSERT/first-enrichment only).
 Exported `ParseCLConfidenceMin(s string) (int, bool)` — truncated min of a range;
 `ok=false` on unparseable input (→ leave column NULL). Unit-tested.
 
-### Freeze at first enrichment (set-once, both paths)
-- **Sync** `service_crud.go CreatePurchase`: keep the campaign from `GetCampaign`
-  (currently discarded); after `captureMarketSnapshot`, populate the 6 pointers
-  when currently nil.
-- **Async** first-enrichment path (confirmed by inspection):
-  `processSnapshotsByStatus` (`service_snapshots.go:217`) loops purchases with
-  the **full `p` in scope**, calling `recaptureMarketSnapshotDetailed` → builds
-  `MarketSnapshotData` → `UpdatePurchaseMarketSnapshot`
-  (`purchase_price_store.go:255`).
-  - Extend `UpdatePurchaseMarketSnapshot`'s UPDATE to set the 4 DH provenance
-    columns **only when currently NULL** (`col = CASE WHEN col IS NULL THEN $n
-    ELSE col END`), sourced from the now-provenance-carrying `MarketSnapshotData`.
-    First writer wins.
-  - `population_at_purchase` also freezes here from `p.Population` (in scope).
-  - `cl_confidence_at_purchase`: the enrichment loop does **not** load the
-    campaign, but `p.CampaignID` is available. Fetch the campaign once per
-    distinct `CampaignID` in the loop (PSA-bulk rows cluster by campaign; cache
-    in a `map[string]int` of parsed confidence) and pass the value through to the
-    freeze. This closes the async gap for all 6 fields — no field is left
-    sync-only.
+### Freeze lifecycle — split by when each fact is known
+
+**(a) Row-creation facts — `cl_confidence_at_purchase`, `population_at_purchase`.**
+Frozen in `service_crud.go CreatePurchase`, set-once, **independent of any
+snapshot**:
+- Keep the campaign returned by `GetCampaign` (currently discarded); set
+  confidence from `ParseCLConfidenceMin(campaign.CLConfidence)` when `ok` and the
+  pointer is nil.
+- Set population from `p.Population` when nil.
+- These freeze even when the purchase is created `pending` (PSA bulk), because
+  they don't depend on the price provider. This is the decision-time value;
+  waiting for async enrichment would capture edited-campaign / refreshed-pop
+  values instead (review #1).
+
+**(b) Market facts — `dh_confidence`, `source_count`, `active_listings`,
+`sales_last_30d`.** Frozen on the **first SUCCESSFUL snapshot**, gated on
+confirmed capture (review #2):
+- `captureMarketSnapshot` currently returns nothing and silently returns on
+  provider error — copying fields after it would store 0 as a real observation.
+  Fix: have the capture helpers **signal success** (return a bool / the applied
+  `*MarketSnapshot`, or freeze only when `snapshot.SnapshotDate` is non-empty).
+  Freeze the 4 market pointers **only** on confirmed apply; a failed capture
+  leaves them NULL.
+- Capture the **pre-correction** platform count: read `len(snapshot.Sources)`
+  *before* `applyCLCorrection` appends `cardladder`, and carry it into
+  `SourceCountRaw` (review #3). Both the sync (`captureMarketSnapshot`) and async
+  (`recaptureMarketSnapshotDetailed`) helpers call `applyCLCorrection`, so both
+  must snapshot the count before that call.
+- Sync path: freeze in `CreatePurchase` when capture succeeds. Async path:
+  `UpdatePurchaseMarketSnapshot` (`purchase_price_store.go:255`) sets the 4
+  columns **only when currently NULL** (`col = CASE WHEN col IS NULL THEN $n ELSE
+  col END`), sourced from the now-provenance-carrying `MarketSnapshotData`. First
+  successful writer wins.
+
+**(c) Async compatibility fallback.** `processSnapshotsByStatus`
+(`service_snapshots.go:217`) loops purchases with the full `p` in scope. For rows
+predating this migration whose (a)-fields are still NULL, backfill
+`population_at_purchase` from `p.Population` and `cl_confidence_at_purchase` from
+the owning campaign (fetch once per distinct `CampaignID`, cache in a
+`map[string]int`). This is a **NULL-only fallback**, not the normal path — new
+rows already have (a) frozen at creation.
 
 ### Persist (`purchase_store.go` + scan helpers)
 - Extend `CreatePurchase` INSERT + `purchaseColumns`/`purchaseColumnsAliased` +
@@ -164,18 +198,26 @@ Exported `ParseCLConfidenceMin(s string) (int, bool)` — truncated min of a ran
 
 ### Freeze at sale-creation (all 3 paths)
 - `sa.CLValueAtSaleCents = purchase.CLValueCents`
-- `sa.ChannelFeePctAtSale = EffectiveChannelFeePct(channel, campaign)` — new
-  helper extracted from `CalculateSaleFee` so fee cents and pct never diverge.
+- `sa.ChannelFeePctAtSale = &EffectiveChannelFeePct(channel, campaign)` (pointer;
+  always captured on new sales, so non-nil going forward) — new helper extracted
+  from `CalculateSaleFee` so fee cents and pct never diverge.
 - `sa.SaleReason`: **preserve** a caller-supplied valid reason; default to
   `invoice_pressure if IsForcedLiquidation(...) else discretionary` only when
   empty (review #5).
 - Stop setting `ForcedLiquidation`.
 
 ### Sale column split (review #4)
-- `saleInsertColumns` — excludes generated `forced_liquidation`; used by all
-  INSERTs.
-- `saleColumns` — full read/scan list, still includes `forced_liquidation`.
-- Update `sale_store.go` INSERT + placeholder count; scan unchanged.
+- `saleInsertColumns` — excludes generated `forced_liquidation`; adds the 3 new
+  sale columns; used by all INSERTs.
+- `saleColumns` — full read/scan list, still includes `forced_liquidation` + the
+  3 new columns.
+- **`saleColumnsAliased`** — the LEFT-JOIN list used by portfolio analysis
+  (`analytics_store.go:190`) — currently has only `forced_liquidation` and none
+  of the new fields. **Must** be extended with `sale_reason`,
+  `cl_value_at_sale_cents`, `channel_fee_pct_at_sale`, and `scanPurchaseWithSale`
+  extended to scan them (`sql.Null*`), or `SplitPNL.ByReason` reads nothing
+  (review #4).
+- Update `sale_store.go` INSERT placeholder count; `scanSale`/`scanPurchaseWithSale`.
 
 ### Operator override (review #6)
 - `PATCH /api/campaigns/{id}/sales/{saleID}` → `ValidSaleReasonForPatch`
@@ -193,12 +235,14 @@ once § 2 extends them.
 
 ### `analysis_types.go` / `analysis.go`
 1. **`PNLByConfidenceBuy []ConfBuyCohortRow`.** Row =
-   `{clConfidenceAtPurchase (or "unknown"), buyTermsBucket, n, soldCount,
+   `{confidenceBucket string, buyTermsBucket string, n, soldCount,
    revenueCents, netProfitCents, roiPct, avgSourceCount, avgActiveListings,
    avgSalesLast30d, avgPopulationAtBuy, coverage...}`.
+   - `confidenceBucket` (review #5): **always a string** to avoid a union-valued
+     JSON field — the numeric level as a string (`"2"`, `"3"`) or `"unknown"`
+     when `cl_confidence_at_purchase` is NULL. No `*int`/union.
    - `buyTermsBucket` = `buyCost / cl_value_at_purchase_cents` (frozen CL only),
      5% bands; `<50%`→`"<50"`, `>=100%`→`">=100"`; frozen CL NULL/0 → `"unknown"`.
-   - `cl_confidence_at_purchase` NULL → explicit `unknown` confidence bucket.
    - averages computed only over rows where that pointer is non-nil (NULL
      skipped; measured `0` included), each with a coverage count.
 2. **`SplitPNL.ByReason map[string]PNLBlock`** keyed by the 5 reasons.
@@ -221,26 +265,36 @@ once § 2 extends them.
 
 ## Testing
 - `ParseCLConfidenceMin` table (ranges/singles/junk → ok=false).
-- Set-once across **both** freeze paths: sync create, async first-enrichment,
-  and refresh-after-enrichment never overwrites a non-nil value.
-- Genuine-zero vs missing: a captured `0` active-listings row is included in
-  averages; a NULL row is skipped.
-- `MarketSnapshotData.applySnapshot` now round-trips Confidence/SourceCount.
-- `EffectiveChannelFeePct` parity with `CalculateSaleFee` across channels.
+- **Split lifecycle:** confidence+population freeze at creation even for a
+  `pending` (no-snapshot) purchase; market fields stay NULL until a successful
+  snapshot.
+- **Capture-success gate:** a purchase whose provider lookup fails leaves the 4
+  market columns NULL (never a false 0); a successful capture with a real 0
+  active-listings stores 0.
+- **Pre-correction source count:** `SourceCountRaw` excludes the `cardladder`
+  source that `applyCLCorrection` appends.
+- Set-once: async first-enrichment and refresh-after-enrichment never overwrite a
+  non-nil value; async fallback fills confidence/population only when NULL.
+- `MarketSnapshotData.applySnapshot` round-trips Confidence/SourceCountRaw.
+- `EffectiveChannelFeePct` parity with `CalculateSaleFee` across channels; fee
+  pointer non-nil on new sales, NULL on legacy rows.
 - Sale freeze across all 3 paths sets cl-at-sale, channel-fee, reason default;
   explicit creation reason is preserved, empty defaults to heuristic.
 - Generated-column INSERT via `saleInsertColumns` succeeds; scan reads
   `forced_liquidation` back.
+- **Analysis JOIN scan:** `saleColumnsAliased` + `scanPurchaseWithSale` return
+  `sale_reason` so `ByReason` is populated (regression guard for review #4).
 - `UpdateSaleReason`: rejects `""`, rejects sale not in campaign, reflects into
   generated boolean.
 - Migration up/down round-trip incl. backfill rules + CHECK.
-- Cohort buckets: `<50`/`>=100`/`unknown` boundaries; confidence NULL →
-  unknown; buy% uses frozen CL not current.
+- Cohort buckets: `<50`/`>=100`/`unknown` boundaries; `confidenceBucket` always a
+  string incl. `"unknown"`; buy% uses frozen CL not current.
 
 ## Explicit exclusions
 - No historical backfill of provenance/listing fields (no source).
 - No new campaign column for confidence.
 - No frontend analysis-page types (no UI consumer).
 - No change to `population` live-refresh (only the frozen counterpart protected).
-- `source_count_at_purchase` is platform count, explicitly **not** comp-sales
-  count.
+- `source_count_at_purchase` is **external provider platform count
+  (pre-CL-correction)**, explicitly not comp-sales count and not including the
+  Card Ladder anchor.
