@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 )
@@ -102,5 +103,84 @@ func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 	}
 	if _, ok := ff.captured["/buyercampaignmanager/_app/remote/abc123/updateCampaign"]; ok {
 		t.Error("expected no POST to updateCampaign for unknown field")
+	}
+}
+
+// A 200 response whose envelope type is not "result" is a portal-side rejection;
+// the error must surface the response body so the failure is diagnosable without
+// re-running against the live portal (W-016).
+func TestPushCampaign_ErrorEnvelopeSurfacesBody(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		wantIn   string
+	}{
+		{
+			name:     "short body surfaced verbatim",
+			response: `{"type":"error","error":{"message":"priceMinimum below floor"}}`,
+			wantIn:   "priceMinimum below floor",
+		},
+		{
+			name:     "long body is truncated",
+			response: `{"type":"error","msg":"` + strings.Repeat("x", 600) + `"}`,
+			wantIn:   "…(truncated)",
+		},
+	}
+	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	if err != nil {
+		t.Fatalf("fixture missing: %v", err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			routes := bundleRoutes()
+			routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
+			routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = tt.response
+			ff := &fakeFetcher{routes: routes}
+
+			c := New(ff, Config{})
+			err := c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
+				[]psacampaign.FieldChange{{Field: "priceMinimum", Old: "150", New: "200"}})
+			if err == nil {
+				t.Fatal("expected error for non-result envelope, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantIn) {
+				t.Errorf("expected error to contain %q, got: %v", tt.wantIn, err)
+			}
+		})
+	}
+}
+
+func TestTruncateBody(t *testing.T) {
+	tests := []struct {
+		name         string
+		in           string
+		wantSuffix   string
+		wantExact    string // when set, output must equal this exactly
+		wantRuneLen  int    // when > 0, expected rune count of output
+		wantValidUTF bool
+	}{
+		{name: "short passes through", in: "hello", wantExact: "hello", wantValidUTF: true},
+		{name: "exactly 500 runes passes through", in: strings.Repeat("a", 500), wantExact: strings.Repeat("a", 500), wantValidUTF: true},
+		{name: "501 ascii runes truncated", in: strings.Repeat("a", 501), wantSuffix: "…(truncated)", wantRuneLen: 500 + len([]rune("…(truncated)")), wantValidUTF: true},
+		// 501 multi-byte runes: a naive byte slice at 500 would split a rune;
+		// rune-based truncation must keep the output valid UTF-8.
+		{name: "utf8 boundary not split", in: strings.Repeat("é", 501), wantSuffix: "…(truncated)", wantRuneLen: 500 + len([]rune("…(truncated)")), wantValidUTF: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateBody(tt.in)
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("truncateBody() = %q, want %q", got, tt.wantExact)
+			}
+			if tt.wantSuffix != "" && !strings.HasSuffix(got, tt.wantSuffix) {
+				t.Errorf("truncateBody() = %q, want suffix %q", got, tt.wantSuffix)
+			}
+			if tt.wantRuneLen > 0 && utf8.RuneCountInString(got) != tt.wantRuneLen {
+				t.Errorf("truncateBody() rune count = %d, want %d", utf8.RuneCountInString(got), tt.wantRuneLen)
+			}
+			if tt.wantValidUTF && !utf8.ValidString(got) {
+				t.Errorf("truncateBody() produced invalid UTF-8: %q", got)
+			}
+		})
 	}
 }

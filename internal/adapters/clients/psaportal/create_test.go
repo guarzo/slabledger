@@ -147,7 +147,7 @@ func TestCreateCampaign_Failures(t *testing.T) {
 		wantErr    string
 	}{
 		{name: "non-200", response: `{}`, statusCode: 500, wantErr: "status 500"},
-		{name: "wrong envelope type", response: `{"type":"error"}`, statusCode: 200, wantErr: `type "error"`},
+		{name: "wrong envelope type", response: `{"type":"error","error":{"message":"duplicate name"}}`, statusCode: 200, wantErr: "duplicate name"},
 		{name: "undecodable result", response: `{"type":"result","result":"not-json"}`, statusCode: 200, wantErr: "may exist on portal"},
 		{name: "missing id", response: `{"type":"result","result":"[{\"status\":1},\"PAUSED\"]"}`, statusCode: 200, wantErr: "may exist on portal"},
 	}

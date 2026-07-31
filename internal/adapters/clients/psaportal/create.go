@@ -65,7 +65,7 @@ func (c *Client) CreateCampaign(ctx context.Context, fd psacampaign.CampaignForm
 		return "", fmt.Errorf("psaportal: decode create campaign response: %w", err)
 	}
 	if envelope.Type != "result" {
-		return "", fmt.Errorf("psaportal: create campaign response type %q, want \"result\"", envelope.Type)
+		return "", fmt.Errorf("psaportal: create campaign response type %q, want \"result\": %s", envelope.Type, truncateBody(resp.Body))
 	}
 
 	// From here on the portal HAS accepted the create; decode failures must
