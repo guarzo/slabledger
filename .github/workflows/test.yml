@@ -65,6 +65,11 @@ jobs:
         version: v2.11.4
         args: --timeout=3m
 
+    # Integration tests only run on the weekly schedule, so tagged code is never
+    # compiled by PR CI. Vet it here so it cannot rot undetected (no secrets needed).
+    - name: Vet integration-tagged code
+      run: go vet -tags integration ./...
+
     - name: Build binary
       run: go build -o slabledger ./cmd/slabledger
 
