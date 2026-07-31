@@ -32,6 +32,16 @@ func TestClient_SearchURLResolution(t *testing.T) {
 			want: "https://search-next.cardladder.com/search",
 		},
 		{
+			name: "surrounding whitespace is trimmed",
+			env:  "  https://search-next.cardladder.com/search\n",
+			want: "https://search-next.cardladder.com/search",
+		},
+		{
+			name: "whitespace-only override falls back to the default",
+			env:  "   ",
+			want: "https://search.cardladder.com/search",
+		},
+		{
 			name: "WithBaseURL wins over the env var",
 			env:  "https://search-next.cardladder.com/search",
 			opts: []ClientOption{WithBaseURL("http://explicit.test/search")},
@@ -41,9 +51,9 @@ func TestClient_SearchURLResolution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.env != "" {
-				t.Setenv("CL_SEARCH_URL", tt.env)
-			}
+			// Always set the var, including to "", so an ambient CL_SEARCH_URL
+			// (this repo autoloads .env) cannot make these cases non-deterministic.
+			t.Setenv("CL_SEARCH_URL", tt.env)
 			c := NewClient(tt.opts...)
 			if c.searchURL != tt.want {
 				t.Errorf("searchURL = %q, want %q", c.searchURL, tt.want)
