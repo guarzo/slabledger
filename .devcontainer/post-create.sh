@@ -27,41 +27,12 @@ if [ -d "web" ] && [ -f "web/package.json" ]; then
     fi
 fi
 
-# Ensure ~/.local/bin is on PATH for this script (and future bash sessions)
-export PATH="$HOME/.local/bin:$PATH"
-
-# Install Claude Code CLI
-echo "🤖 Installing Claude Code CLI..."
-if ! curl -fsSL https://claude.ai/install.sh | bash; then
-    echo "⚠️  Claude Code CLI installation failed, continuing..."
-fi
-
-# Install my@guarzo marketplace + plugins and link Codex config. These require
-# the claude CLI (just installed above) on PATH, so they run here rather than in
-# local-seed.sh (which runs at container start, before this script).
-if [ -x "$HOME/.dotfiles/ai/marketplace/install.sh" ]; then
-    echo "🌱 Installing my@guarzo marketplace + plugin..."
-    bash "$HOME/.dotfiles/ai/marketplace/install.sh" || echo "⚠️  marketplace install failed (non-fatal)"
-fi
-# Install the Codex CLI (@openai/codex) globally, then link its config.
-echo "🤖 Installing Codex CLI..."
-if ! npm install -g @openai/codex; then
-    echo "⚠️  Codex CLI installation failed, continuing..."
-fi
-if [ -x "$HOME/.dotfiles/ai/codex/install.sh" ]; then
-    echo "🌱 Linking Codex config..."
-    bash "$HOME/.dotfiles/ai/codex/install.sh" || echo "⚠️  codex config link failed (non-fatal)"
-fi
-
-# Restore Claude config from backup if the main file is missing but a backup exists
-CLAUDE_CFG="$HOME/.claude.json"
-if [ ! -f "$CLAUDE_CFG" ]; then
-    BACKUP=$(ls -t "$HOME/.claude/backups/.claude.json.backup."* 2>/dev/null | head -1)
-    if [ -n "$BACKUP" ]; then
-        echo "🔧 Restoring Claude config from backup..."
-        cp "$BACKUP" "$CLAUDE_CFG"
-    fi
-fi
+# NOTE: Claude Code CLI, Codex, the my@guarzo marketplace, and ~/.claude config
+# are NOT installed here. They are owned by .devcontainer/local-seed.sh (local,
+# gitignored), which runs on EVERY container start. Installing them from
+# postCreateCommand was a bug: it runs once per container creation, while the
+# binaries live in the ephemeral writable layer that a rebuild wipes — so after
+# any rebuild `claude` silently vanished.
 
 # Create data directories if they don't exist
 echo "📁 Creating data directories..."
@@ -93,7 +64,5 @@ echo "  - Run server: go run ./cmd/slabledger server"
 echo "  - Run tests:  go test ./..."
 echo "  - Run with race detector: go test -race ./..."
 echo "  - Lint code:  golangci-lint run"
-echo "  - Claude Code: claude"
 echo ""
 echo "⚠️  Don't forget to update .env with your API keys!"
-echo "⚠️  Set ANTHROPIC_API_KEY in .env for Claude Code CLI"
