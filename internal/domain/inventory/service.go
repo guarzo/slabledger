@@ -78,6 +78,12 @@ type MarketSnapshot struct {
 	SourceCount int      `json:"sourceCount,omitempty"`
 	Sources     []string `json:"sources,omitempty"`
 	Confidence  float64  `json:"confidence,omitempty"`
+	// SourceCountRaw is len(Sources) at build time, BEFORE applyCLCorrection
+	// appends the "cardladder" anchor. This is the external-platform count.
+	SourceCountRaw int `json:"sourceCountRaw,omitempty"`
+	// MarketDataObserved is true when the DH CardLookup returned a market block
+	// (price.Market != nil) — distinguishing an observed zero from a missing one.
+	MarketDataObserved bool `json:"marketDataObserved,omitempty"`
 
 	// Per-source pricing data
 	SourcePrices []SourcePrice `json:"sourcePrices,omitempty"`

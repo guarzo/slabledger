@@ -36,6 +36,18 @@ func TestCampaignSetKind(t *testing.T) {
 	}
 }
 
+func TestApplySnapshotCopiesProvenance(t *testing.T) {
+	var d MarketSnapshotData
+	snap := &MarketSnapshot{Confidence: 0.9, SourceCountRaw: 2, MarketDataObserved: true, ActiveListings: 3, SalesLast30d: 12}
+	d.applySnapshot(snap, "2026-07-31")
+	if d.Confidence != 0.9 || d.SourceCountRaw != 2 || !d.MarketDataObserved {
+		t.Errorf("provenance not copied: %+v", d)
+	}
+	if d.ActiveListings != 3 || d.SalesLast30d != 12 {
+		t.Errorf("market fields not copied: %+v", d)
+	}
+}
+
 func TestNeedsDHPush(t *testing.T) {
 	received := "2026-04-20"
 	tests := []struct {

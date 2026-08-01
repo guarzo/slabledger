@@ -126,6 +126,11 @@ type MarketSnapshotData struct {
 	Trend30d          float64 `json:"trend30d,omitempty"`
 	SnapshotDate      string  `json:"snapshotDate,omitempty"`
 	SnapshotJSON      string  `json:"-"` // Full MarketSnapshot serialized as JSON (DB column, not in API)
+
+	// Decision-time provenance (persisted to *_at_purchase columns via the freeze paths).
+	Confidence         float64 `json:"confidence,omitempty"`     // DH pricing confidence
+	SourceCountRaw     int     `json:"sourceCountRaw,omitempty"` // external platform count, pre-CL-correction
+	MarketDataObserved bool    `json:"-"`                        // true when CardLookup market data was present
 }
 
 func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string) {
@@ -139,6 +144,9 @@ func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string
 	d.SalesLast30d = snapshot.SalesLast30d
 	d.Trend30d = snapshot.Trend30d
 	d.SnapshotDate = date
+	d.Confidence = snapshot.Confidence
+	d.SourceCountRaw = snapshot.SourceCountRaw
+	d.MarketDataObserved = snapshot.MarketDataObserved
 
 	// Persist the full snapshot as JSON for frontend consumption
 	if b, err := json.Marshal(snapshot); err == nil {
