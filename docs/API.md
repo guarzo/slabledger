@@ -641,9 +641,33 @@ Records a sale for a purchase within this campaign. Computes `netProfitCents`, `
 
 Valid `saleChannel` values: `ebay`, `website`, `inperson`, `tcgplayer`, `local`, `other`, `gamestop`, `cardshow`, `doubleholo`
 
+Optional `saleReason` (one of `discretionary`, `invoice_pressure`, `aging_policy`, `bulk_lot`, `show_clearout`); omit to let the server derive a default (from `forced_liquidation`/channel heuristics). Sending `saleReason: ""` is equivalent to omitting it.
+
 **Response:** `201 Created` — `Sale` object (may include `warnings` array)
 
 **Errors:** `400` invalid data or purchase belongs to different campaign; `404` purchase or campaign not found; `409` sale already exists for this purchase
+
+---
+
+### `PATCH /api/campaigns/{id}/sales/{saleID}`
+
+Auth: RequireAuth
+
+Updates the `saleReason` on an existing sale record (e.g. correcting a
+misclassified reason after the fact).
+
+**Path params:** `id` (campaign UUID), `saleID` (sale UUID)
+
+**Body:**
+```json
+{ "saleReason": "aging_policy" }
+```
+
+`saleReason` must be one of `discretionary`, `invoice_pressure`, `aging_policy`, `bulk_lot`, `show_clearout` (or `""`).
+
+**Response:** `204 No Content`
+
+**Errors:** `400` invalid `saleReason` value; `404` sale not found
 
 ---
 
@@ -661,10 +685,12 @@ Creates multiple sales in one request.
   "saleChannel": "ebay",
   "saleDate": "2025-02-01",
   "items": [
-    { "purchaseId": "uuid", "salePriceCents": 130000 }
+    { "purchaseId": "uuid", "salePriceCents": 130000, "saleReason": "bulk_lot" }
   ]
 }
 ```
+
+Per-item optional fields (all in `items[]`, mirroring the single-sale endpoint): `originalListPriceCents`, `priceReductions`, `daysListed`, `saleReason`. `saleReason` follows the same omit-when-default rule as the single-sale endpoint.
 
 **Response:** `201 Created` — `BulkSaleResult`
 ```json
@@ -676,6 +702,35 @@ Creates multiple sales in one request.
 ```
 
 ---
+
+### `GET /api/portfolio/analysis`
+
+Auth: RequireAuth
+
+Returns cross-campaign portfolio analysis. **Query params:** `since` (optional, `YYYY-MM-DD`).
+
+**Response:** `200 OK` — `portfolio.AnalysisResponse`. Each `campaigns[]` entry (`CampaignAnalysis`) includes, in addition to the existing `bpclAtBuy`/`weeklyFill`/`inScopeByGrade`:
+
+- `pnlByConfidenceBuy` — array of cohort rows aggregating P&L and provenance
+  averages by `(CL confidence at purchase) × (buy cost as % of CL at
+  purchase)`, using the frozen `*_at_purchase` snapshot columns (migration
+  000022). Sorted by confidence bucket then buy-terms bucket, `"unknown"`
+  last.
+- `pnl.byReason` — map keyed by `saleReason` (`discretionary`,
+  `invoice_pressure`, `aging_policy`, `bulk_lot`, `show_clearout`) to a
+  `PNLBlock` (`soldCount`, `revenueCents`, `netProfitCents`, `roiPct`). All
+  five keys are always present, even with zero sales. Sales with an empty/
+  legacy `saleReason` are excluded from this map but still counted in the
+  existing `pnl.discretionary`/`pnl.forced` split.
+
+Imported historical purchases/sales that predate migration 000022 (or were
+imported without a market-data source) will have `null`/absent
+`*_at_purchase` and `*_at_sale` fields; these values are **record-time
+proxies** captured at import/purchase/sale time, not live market data — treat
+them as directional signal, not authoritative pricing.
+
+---
+
 
 ## Campaign Analytics
 

@@ -102,6 +102,25 @@ Options when this happens:
 Either way, this requires manual judgment. This section exists so you're
 not surprised mid-incident.
 
+### Migration 000022 (decision provenance) is rollback-safe
+
+Migration `000022_add_decision_provenance` is safe under the image-only
+rollback path above (steps 1–4, no `migrate.Down()` needed):
+
+- All new columns are additive and nullable/defaulted (6 nullable columns
+  on `campaign_purchases`; `sale_reason`, `cl_value_at_sale_cents`,
+  `channel_fee_pct_at_sale` on `campaign_sales`). A rolled-back previous
+  image that doesn't know these columns exist simply never reads or
+  writes them — no crash.
+- `forced_liquidation` is unchanged in shape (still a plain boolean the
+  app sets directly); the previous image's INSERTs against it keep
+  working unmodified.
+- The `campaign_sales_derive_reason` trigger backfills `sale_reason` on
+  any row the old image inserts without it (deriving from
+  `forced_liquidation`), so sales recorded during the rollback window
+  still get a valid, non-empty `sale_reason` once the new image is
+  redeployed — no manual backfill needed.
+
 ## Where things live
 
 - Prod URL: `https://slabledger.dpao.la`
