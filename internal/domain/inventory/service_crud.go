@@ -57,16 +57,48 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	}
 
 	// Verify campaign exists
-	_, err := s.campaigns.GetCampaign(ctx, p.CampaignID)
+	campaign, err := s.campaigns.GetCampaign(ctx, p.CampaignID)
 	if err != nil {
 		return fmt.Errorf("campaign lookup: %w", err)
+	}
+
+	// Server-authoritative: discard any client-supplied frozen provenance up front.
+	// The HTTP handler decodes the raw request body straight into inventory.Purchase,
+	// so these pointers are attacker-controllable; clearing them here ensures the
+	// freeze logic below can only ever set SERVER-derived values.
+	p.CLConfidenceAtPurchase = nil
+	p.PopulationAtPurchase = nil
+	p.DHConfidenceAtPurchase = nil
+	p.SourceCountAtPurchase = nil
+	p.ActiveListingsAtPurchase = nil
+	p.SalesLast30dAtPurchase = nil
+
+	// (a) creation-time facts, set-once.
+	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
+		p.CLConfidenceAtPurchase = &c
+	}
+	if p.Population > 0 {
+		pop := p.Population
+		p.PopulationAtPurchase = &pop
 	}
 
 	// Skip synchronous market snapshot when the caller has flagged the purchase
 	// for asynchronous background enrichment (e.g. during bulk PSA import).
 	if p.SnapshotStatus != SnapshotStatusPending {
 		// Best-effort: capture market snapshot at time of purchase.
-		_, _ = s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
+		if snap, ok := s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents); ok {
+			// (b) market-time facts, gated on confirmed capture.
+			conf := snap.Confidence
+			p.DHConfidenceAtPurchase = &conf
+			sc := p.SourceCountRaw // set on the embed by applyMarketSnapshot
+			p.SourceCountAtPurchase = &sc
+			if p.MarketDataObserved {
+				al := p.ActiveListings
+				sl := p.SalesLast30d
+				p.ActiveListingsAtPurchase = &al
+				p.SalesLast30dAtPurchase = &sl
+			}
+		}
 	}
 
 	now := time.Now()

@@ -217,6 +217,14 @@ type Purchase struct {
 	CLValueUpdatedAt       string `json:"clValueUpdatedAt,omitempty"`       // When CL value was last refreshed (RFC3339)
 	CLValueAtPurchaseCents int    `json:"clValueAtPurchaseCents,omitempty"` // CL value at purchase/first-enrichment; set once, never overwritten (0 = no snapshot)
 
+	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
+	CLConfidenceAtPurchase   *int     `json:"clConfidenceAtPurchase,omitempty"`
+	PopulationAtPurchase     *int     `json:"populationAtPurchase,omitempty"`
+	DHConfidenceAtPurchase   *float64 `json:"dhConfidenceAtPurchase,omitempty"`
+	SourceCountAtPurchase    *int     `json:"sourceCountAtPurchase,omitempty"`
+	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
+	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
+
 	// --- Purchase cost & logistics ---
 	BuyCostCents        int     `json:"buyCostCents"`         // Actual cost paid
 	PSASourcingFeeCents int     `json:"psaSourcingFeeCents"`  // Fee charged per card

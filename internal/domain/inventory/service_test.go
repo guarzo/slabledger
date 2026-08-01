@@ -475,6 +475,97 @@ func TestService_CreateSale_CapturesSnapshot(t *testing.T) {
 	}
 }
 
+func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "")))
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78, CLConfidence: "2.5-4"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	p := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Charizard", CertNumber: "88888881",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+		Population: 50,
+	}
+	if err := svc.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("CreatePurchase: %v", err)
+	}
+
+	if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
+		t.Errorf("CLConfidenceAtPurchase = %v, want 2", p.CLConfidenceAtPurchase)
+	}
+	if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != 50 {
+		t.Errorf("PopulationAtPurchase = %v, want 50", p.PopulationAtPurchase)
+	}
+
+	p2 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Pikachu", CertNumber: "88888882",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+		Population: 0,
+	}
+	if err := svc.CreatePurchase(ctx, p2); err != nil {
+		t.Fatalf("CreatePurchase p2: %v", err)
+	}
+	if p2.PopulationAtPurchase != nil {
+		t.Errorf("PopulationAtPurchase = %v, want nil for Population:0", p2.PopulationAtPurchase)
+	}
+}
+
+func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	failingLookup := &mockPriceLookup{
+		GetMarketSnapshotFn: func(_ context.Context, _ inventory.CardIdentity, _ float64) (*inventory.MarketSnapshot, error) {
+			return nil, fmt.Errorf("boom")
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(failingLookup))
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78, CLConfidence: "2.5-4"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	junkInt := 999999
+	junkFloat := 0.99
+	p := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Charizard", CertNumber: "88888883",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+		Population:               50,
+		CLConfidenceAtPurchase:   &junkInt,
+		PopulationAtPurchase:     &junkInt,
+		DHConfidenceAtPurchase:   &junkFloat,
+		SourceCountAtPurchase:    &junkInt,
+		ActiveListingsAtPurchase: &junkInt,
+		SalesLast30dAtPurchase:   &junkInt,
+	}
+	if err := svc.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("CreatePurchase: %v", err)
+	}
+
+	if p.DHConfidenceAtPurchase != nil {
+		t.Errorf("DHConfidenceAtPurchase = %v, want nil (capture failed)", p.DHConfidenceAtPurchase)
+	}
+	if p.SourceCountAtPurchase != nil {
+		t.Errorf("SourceCountAtPurchase = %v, want nil (capture failed)", p.SourceCountAtPurchase)
+	}
+	if p.ActiveListingsAtPurchase != nil {
+		t.Errorf("ActiveListingsAtPurchase = %v, want nil (capture failed)", p.ActiveListingsAtPurchase)
+	}
+	if p.SalesLast30dAtPurchase != nil {
+		t.Errorf("SalesLast30dAtPurchase = %v, want nil (capture failed)", p.SalesLast30dAtPurchase)
+	}
+	if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != 50 {
+		t.Errorf("PopulationAtPurchase = %v, want 50 (real value)", p.PopulationAtPurchase)
+	}
+	if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
+		t.Errorf("CLConfidenceAtPurchase = %v, want 2 (derived from campaign)", p.CLConfidenceAtPurchase)
+	}
+}
+
 // --- ImportPSAExportGlobal tests ---
 
 func TestService_ImportPSAExportGlobal_Allocate(t *testing.T) {
