@@ -46,14 +46,15 @@ func ComputeAnalysis(
 		}
 		cRows := byCampaign[c.ID]
 		analyses = append(analyses, CampaignAnalysis{
-			CampaignID:     c.ID,
-			CampaignName:   c.Name,
-			Phase:          c.Phase,
-			BuyTermsCLPct:  c.BuyTermsCLPct,
-			BPCLAtBuy:      computeBPCLAtBuy(cRows),
-			PNL:            computeSplitPNL(cRows),
-			WeeklyFill:     computeWeeklyFill(c, cRows, now),
-			InScopeByGrade: computeInScopeByGrade(c, cRows),
+			CampaignID:         c.ID,
+			CampaignName:       c.Name,
+			Phase:              c.Phase,
+			BuyTermsCLPct:      c.BuyTermsCLPct,
+			BPCLAtBuy:          computeBPCLAtBuy(cRows),
+			PNL:                computeSplitPNL(cRows),
+			WeeklyFill:         computeWeeklyFill(c, cRows, now),
+			InScopeByGrade:     computeInScopeByGrade(c, cRows),
+			PNLByConfidenceBuy: computeConfidenceBuyCohorts(cRows),
 		})
 	}
 
@@ -106,6 +107,13 @@ func computeBPCLAtBuy(rows []inventory.PurchaseWithSale) BPCLStats {
 // computeSplitPNL separates realised P&L into discretionary vs forced-liquidation.
 func computeSplitPNL(rows []inventory.PurchaseWithSale) SplitPNL {
 	var disc, forced PNLBlock
+	byReason := map[string]PNLBlock{
+		inventory.SaleReasonDiscretionary:   {},
+		inventory.SaleReasonInvoicePressure: {},
+		inventory.SaleReasonAgingPolicy:     {},
+		inventory.SaleReasonBulkLot:         {},
+		inventory.SaleReasonShowClearout:    {},
+	}
 	for _, r := range rows {
 		if r.Sale == nil {
 			continue
@@ -117,10 +125,25 @@ func computeSplitPNL(rows []inventory.PurchaseWithSale) SplitPNL {
 		b.SoldCount++
 		b.RevenueCents += r.Sale.SalePriceCents
 		b.NetProfitCents += r.Sale.NetProfitCents
+
+		// Legacy/unknown sales (SaleReason == "") still count above but are
+		// skipped from the 5-key reason buckets.
+		if r.Sale.SaleReason == "" {
+			continue
+		}
+		rb := byReason[r.Sale.SaleReason]
+		rb.SoldCount++
+		rb.RevenueCents += r.Sale.SalePriceCents
+		rb.NetProfitCents += r.Sale.NetProfitCents
+		byReason[r.Sale.SaleReason] = rb
 	}
 	disc.ROIPct = roiPct(disc.RevenueCents, disc.NetProfitCents)
 	forced.ROIPct = roiPct(forced.RevenueCents, forced.NetProfitCents)
-	return SplitPNL{Discretionary: disc, Forced: forced}
+	for reason, rb := range byReason {
+		rb.ROIPct = roiPct(rb.RevenueCents, rb.NetProfitCents)
+		byReason[reason] = rb
+	}
+	return SplitPNL{Discretionary: disc, Forced: forced, ByReason: byReason}
 }
 
 // roiPct computes netProfit/(revenue-netProfit)*100, returning 0 when cost basis ≤ 0.
