@@ -450,6 +450,12 @@ Individual graded cards bought under a campaign.
 | `cl_value_updated_at` | TEXT | NOT NULL DEFAULT '' | When CL value was last refreshed; added migration 000060 |
 | `mid_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Mid-market price from DH snapshot; added migration 000066 |
 | `last_sold_date` | TEXT | NOT NULL DEFAULT '' | ISO date of last DH sale; added migration 000066 |
+| `cl_confidence_at_purchase` | SMALLINT | NULL | Card Ladder confidence at time of purchase; NULL=not captured; added migration 000022 |
+| `population_at_purchase` | BIGINT | NULL | PSA population snapshot at time of purchase; NULL=not captured; added migration 000022 |
+| `dh_confidence_at_purchase` | DOUBLE PRECISION | NULL | DH price confidence at time of purchase; NULL=not captured; added migration 000022 |
+| `source_count_at_purchase` | BIGINT | NULL | Number of pricing sources observed at purchase; NULL=not captured; added migration 000022 |
+| `active_listings_at_purchase` | BIGINT | NULL | Active listing count at time of purchase; NULL=not captured; added migration 000022 |
+| `sales_last_30d_at_purchase` | BIGINT | NULL | 30-day sale count at time of purchase; NULL=not captured; added migration 000022 |
 
 **Unique:** `(grader, cert_number)`
 
@@ -503,6 +509,9 @@ Sale records for purchased cards (one per purchase, enforced by UNIQUE).
 | `sold_at_asking_price` | INTEGER | NOT NULL DEFAULT 0 | Boolean; added migration 000007 |
 | `was_cracked` | INTEGER | NOT NULL DEFAULT 0 | 1 if slab was cracked out; added migration 000012 |
 | `order_id` | TEXT | NOT NULL DEFAULT '' | DH order ID for poll idempotency; added migration 000030 |
+| `sale_reason` | TEXT | NOT NULL DEFAULT '', CHECK IN ('', 'discretionary', 'invoice_pressure', 'aging_policy', 'bulk_lot', 'show_clearout') | Why the sale happened; empty is backfilled by the `campaign_sales_derive_reason` trigger (see below); added migration 000022 |
+| `cl_value_at_sale_cents` | BIGINT | NOT NULL DEFAULT 0 | Card Ladder value at time of sale; added migration 000022 |
+| `channel_fee_pct_at_sale` | DOUBLE PRECISION | NULL | Effective channel fee % at time of sale; NULL=not captured; added migration 000022 |
 
 **Unique:** `(purchase_id)` — one sale record per purchase
 
@@ -512,6 +521,15 @@ Sale records for purchased cards (one per purchase, enforced by UNIQUE).
 - `idx_sales_order_id` on `(order_id)` WHERE `order_id != ''` (partial unique); added migration 000030
 
 **Foreign Keys:** `purchase_id → campaign_purchases(id)` ON DELETE CASCADE
+
+**Trigger:** `campaign_sales_derive_reason_trg` (BEFORE INSERT OR UPDATE, added migration 000022) — if
+`sale_reason` is left empty on a write, derives it from `forced_liquidation`
+(`TRUE` → `'invoice_pressure'`, `FALSE` → `'discretionary'`). `forced_liquidation`
+remains a plain, app-maintained boolean column (not a generated column); the app
+keeps it in sync with `sale_reason` (`forced_liquidation = (sale_reason =
+'invoice_pressure')`). The trigger exists primarily so a legacy-shaped INSERT
+(no `sale_reason`, e.g. from a rolled-back previous image) still gets a
+non-empty reason rather than silently falling out of reason-based analysis.
 
 ---
 

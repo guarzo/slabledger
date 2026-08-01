@@ -895,6 +895,54 @@ func TestCachedAdapter_GetMarketSnapshot_Cached(t *testing.T) {
 	}
 }
 
+func TestBuildMarketSnapshot_Provenance(t *testing.T) {
+	adapter := NewAdapter(&mockPriceProvider{})
+
+	t.Run("MarketPresentAllZeroListings_ObservedTrue", func(t *testing.T) {
+		price := &pricing.Price{
+			Grades: pricing.GradedPrices{PSA9Cents: 9000},
+			Market: &pricing.MarketData{},
+		}
+		snap, err := adapter.buildMarketSnapshot(price, 9)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !snap.MarketDataObserved {
+			t.Errorf("MarketDataObserved = false, want true")
+		}
+		if snap.ActiveListings != 0 {
+			t.Errorf("ActiveListings = %d, want 0", snap.ActiveListings)
+		}
+	})
+
+	t.Run("MarketNil_ObservedFalse", func(t *testing.T) {
+		price := &pricing.Price{
+			Grades: pricing.GradedPrices{PSA9Cents: 9000},
+		}
+		snap, err := adapter.buildMarketSnapshot(price, 9)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if snap.MarketDataObserved {
+			t.Errorf("MarketDataObserved = true, want false")
+		}
+	})
+
+	t.Run("SourcesTwo_SourceCountRawTwo", func(t *testing.T) {
+		price := &pricing.Price{
+			Grades:  pricing.GradedPrices{PSA9Cents: 9000},
+			Sources: []string{"ebay", "dh"},
+		}
+		snap, err := adapter.buildMarketSnapshot(price, 9)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if snap.SourceCountRaw != 2 {
+			t.Errorf("SourceCountRaw = %d, want 2", snap.SourceCountRaw)
+		}
+	})
+}
+
 // TestCacheKey_NoCollision verifies that cacheKey produces distinct keys for
 // cards whose field values, if naively concatenated with "|", would collide.
 func TestCacheKey_NoCollision(t *testing.T) {

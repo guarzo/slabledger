@@ -67,7 +67,9 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			-- gem/spec
 			gem_rate_id, psa_spec_id,
 			-- provenance snapshot
-			cl_value_at_purchase_cents
+			cl_value_at_purchase_cents,
+			cl_confidence_at_purchase, population_at_purchase, dh_confidence_at_purchase,
+			source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase
 		) VALUES (
 			-- identity
 			$1, $2, $3, $4, $5, $6, $7, $8,
@@ -94,7 +96,8 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			-- gem/spec
 			$53, $54,
 			-- provenance snapshot
-			$55
+			$55,
+			$56, $57, $58, $59, $60, $61
 		)
 	`
 	_, err := ps.db.ExecContext(ctx, query,
@@ -114,6 +117,8 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus, p.DHCandidatesJSON,
 		p.GemRateID, p.PSASpecID,
 		p.CLValueAtPurchaseCents,
+		p.CLConfidenceAtPurchase, p.PopulationAtPurchase, p.DHConfidenceAtPurchase,
+		p.SourceCountAtPurchase, p.ActiveListingsAtPurchase, p.SalesLast30dAtPurchase,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return inventory.ErrDuplicateCertNumber

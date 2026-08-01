@@ -92,6 +92,13 @@ export interface Purchase {
   salesLast30d?: number;
   trend30d?: number;
   snapshotDate?: string;
+  // Decision provenance at time of purchase
+  clConfidenceAtPurchase?: number;
+  populationAtPurchase?: number;
+  dhConfidenceAtPurchase?: number;
+  sourceCountAtPurchase?: number;
+  activeListingsAtPurchase?: number;
+  salesLast30dAtPurchase?: number;
 }
 
 export interface Sale {
@@ -121,6 +128,10 @@ export interface Sale {
   soldAtAskingPrice?: boolean;
   wasCracked?: boolean;
   orderId?: string;
+  // Decision provenance at time of sale
+  saleReason?: string;
+  clValueAtSaleCents?: number;
+  channelFeePctAtSale?: number;
 }
 
 export interface CreateCampaignInput {
@@ -162,4 +173,5 @@ export interface CreateSaleInput {
   daysListed?: number;
   soldAtAskingPrice?: boolean;
   wasCracked?: boolean;
+  saleReason?: string;
 }

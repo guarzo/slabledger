@@ -274,7 +274,7 @@ export function useCreateSale(campaignId: string) {
 export function useCreateBulkSales(campaignId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { saleChannel: string; saleDate: string; items: { purchaseId: string; salePriceCents: number }[] }) =>
+    mutationFn: (data: { saleChannel: string; saleDate: string; items: { purchaseId: string; salePriceCents: number; originalListPriceCents?: number; priceReductions?: number; daysListed?: number; saleReason?: string }[] }) =>
       api.createBulkSales(campaignId, data.saleChannel, data.saleDate, data.items),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.sales(campaignId) });

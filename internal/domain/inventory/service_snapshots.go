@@ -115,22 +115,30 @@ func applyCLCorrection(snapshot *MarketSnapshot, clValueCents int) {
 
 // captureMarketSnapshot performs a best-effort market snapshot lookup and applies it to the receiver.
 // Skips lookup when the set name is generic (e.g. "TCG Cards") to avoid capturing wrong data.
-func (s *service) captureMarketSnapshot(ctx context.Context, r snapshotReceiver, card CardIdentity, grade float64, clValueCents int) {
-	if s.priceProv != nil && card.CardName != "" && grade > 0 && !IsGenericSetName(card.SetName) {
-		snapshot, err := s.priceProv.GetMarketSnapshot(ctx, card, grade)
-		if err != nil {
-			if s.logger != nil {
-				s.logger.Warn(ctx, "captureMarketSnapshot failed",
-					observability.String("card", card.CardName),
-					observability.String("set", card.SetName),
-					observability.Float64("grade", grade),
-					observability.Err(err))
-			}
-			return
-		}
-		applyCLCorrection(snapshot, clValueCents)
-		applyMarketSnapshot(r, snapshot)
+// Returns the fetched snapshot and true only when a snapshot was actually fetched and applied;
+// returns (nil, false) on the skip guard, on provider error, and when the provider returns
+// (nil, nil) — treating a nil snapshot as success would deref nil in applyCLCorrection.
+func (s *service) captureMarketSnapshot(ctx context.Context, r snapshotReceiver, card CardIdentity, grade float64, clValueCents int) (*MarketSnapshot, bool) {
+	if s.priceProv == nil || card.CardName == "" || grade <= 0 || IsGenericSetName(card.SetName) {
+		return nil, false
 	}
+	snapshot, err := s.priceProv.GetMarketSnapshot(ctx, card, grade)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn(ctx, "captureMarketSnapshot failed",
+				observability.String("card", card.CardName),
+				observability.String("set", card.SetName),
+				observability.Float64("grade", grade),
+				observability.Err(err))
+		}
+		return nil, false
+	}
+	if snapshot == nil {
+		return nil, false // provider had no data; not an observed-zero
+	}
+	applyCLCorrection(snapshot, clValueCents)
+	applyMarketSnapshot(r, snapshot)
+	return snapshot, true
 }
 
 // recaptureMarketSnapshot fetches a fresh market snapshot for the given card identity and persists it

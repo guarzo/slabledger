@@ -1,9 +1,114 @@
 package inventory
 
 import (
+	"context"
+	"errors"
 	"math"
 	"testing"
 )
+
+// stubPriceLookup is a minimal in-package PriceLookup test double (Fn-field pattern,
+// mirrors mockPriceLookup in service_test.go which lives in the external _test package).
+type stubPriceLookup struct {
+	getMarketSnapshotFn func(ctx context.Context, card CardIdentity, grade float64) (*MarketSnapshot, error)
+}
+
+func (s *stubPriceLookup) GetLastSoldCents(_ context.Context, _ CardIdentity, _ float64) (int, error) {
+	return 0, nil
+}
+
+func (s *stubPriceLookup) GetMarketSnapshot(ctx context.Context, card CardIdentity, grade float64) (*MarketSnapshot, error) {
+	if s.getMarketSnapshotFn != nil {
+		return s.getMarketSnapshotFn(ctx, card, grade)
+	}
+	return nil, nil
+}
+
+func TestCaptureMarketSnapshot_SignalsSuccess(t *testing.T) {
+	card := CardIdentity{CardName: "Charizard", SetName: "Base Set"}
+
+	tests := []struct {
+		name        string
+		priceProv   PriceLookup
+		wantOK      bool
+		wantNilSnap bool
+	}{
+		{
+			name: "snapshot fetched and applied signals success",
+			priceProv: &stubPriceLookup{
+				getMarketSnapshotFn: func(_ context.Context, _ CardIdentity, _ float64) (*MarketSnapshot, error) {
+					return &MarketSnapshot{
+						MedianCents:        6000,
+						Confidence:         0.8,
+						SourceCountRaw:     3,
+						MarketDataObserved: true,
+					}, nil
+				},
+			},
+			wantOK:      true,
+			wantNilSnap: false,
+		},
+		{
+			name: "provider error signals failure",
+			priceProv: &stubPriceLookup{
+				getMarketSnapshotFn: func(_ context.Context, _ CardIdentity, _ float64) (*MarketSnapshot, error) {
+					return nil, errors.New("boom")
+				},
+			},
+			wantOK:      false,
+			wantNilSnap: true,
+		},
+		{
+			name: "nil snapshot with nil error signals failure without panic",
+			priceProv: &stubPriceLookup{
+				getMarketSnapshotFn: func(_ context.Context, _ CardIdentity, _ float64) (*MarketSnapshot, error) {
+					return nil, nil
+				},
+			},
+			wantOK:      false,
+			wantNilSnap: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &service{priceProv: tc.priceProv}
+			r := &Purchase{}
+
+			var snap *MarketSnapshot
+			var ok bool
+			func() {
+				defer func() {
+					if rec := recover(); rec != nil {
+						t.Fatalf("captureMarketSnapshot panicked: %v", rec)
+					}
+				}()
+				snap, ok = s.captureMarketSnapshot(context.Background(), r, card, 9, 5000)
+			}()
+
+			if ok != tc.wantOK {
+				t.Errorf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if tc.wantNilSnap && snap != nil {
+				t.Errorf("snap = %+v, want nil", snap)
+			}
+			if !tc.wantNilSnap && snap == nil {
+				t.Error("snap = nil, want non-nil")
+			}
+			if tc.wantOK {
+				if r.Confidence != 0.8 {
+					t.Errorf("r.Confidence = %v, want 0.8", r.Confidence)
+				}
+				if r.SourceCountRaw != 3 {
+					t.Errorf("r.SourceCountRaw = %v, want 3", r.SourceCountRaw)
+				}
+				if !r.MarketDataObserved {
+					t.Error("r.MarketDataObserved = false, want true")
+				}
+			}
+		})
+	}
+}
 
 func TestApplyCLCorrection(t *testing.T) {
 	tests := []struct {

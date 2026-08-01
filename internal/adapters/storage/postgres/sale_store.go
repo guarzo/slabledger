@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -26,7 +27,7 @@ var _ inventory.SaleRepository = (*SaleStore)(nil)
 func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
 	query := `
 		INSERT INTO campaign_sales (` + saleColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
 	`
 	_, err := ss.db.ExecContext(ctx, query,
 		s.ID, s.PurchaseID, string(s.SaleChannel), s.SalePriceCents,
@@ -36,6 +37,7 @@ func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
 		s.ActiveListings, s.SalesLast30d, s.Trend30d, s.SnapshotDate, s.SnapshotJSON,
 		s.OriginalListPriceCents, s.PriceReductions, s.DaysListed, s.SoldAtAskingPrice,
 		s.WasCracked, s.OrderID, s.ForcedLiquidation,
+		s.SaleReason, s.CLValueAtSaleCents, s.ChannelFeePctAtSale,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return inventory.ErrDuplicateSale
@@ -138,6 +140,24 @@ func (ss *SaleStore) DeleteSale(ctx context.Context, saleID string) error {
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
+		return inventory.ErrSaleNotFound
+	}
+	return nil
+}
+
+func (ss *SaleStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+	result, err := ss.db.ExecContext(ctx,
+		`UPDATE campaign_sales SET sale_reason = $1, forced_liquidation = ($1 = 'invoice_pressure'), updated_at = $2
+		 WHERE id = $3 AND purchase_id IN (SELECT id FROM campaign_purchases WHERE campaign_id = $4)`,
+		reason, time.Now(), saleID, campaignID)
+	if err != nil {
+		return fmt.Errorf("update sale reason: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update sale reason rows affected: %w", err)
+	}
+	if n == 0 {
 		return inventory.ErrSaleNotFound
 	}
 	return nil

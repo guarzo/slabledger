@@ -126,6 +126,13 @@ type MarketSnapshotData struct {
 	Trend30d          float64 `json:"trend30d,omitempty"`
 	SnapshotDate      string  `json:"snapshotDate,omitempty"`
 	SnapshotJSON      string  `json:"-"` // Full MarketSnapshot serialized as JSON (DB column, not in API)
+
+	// Decision-time provenance: read in-process by the freeze paths and written to
+	// the *_at_purchase columns. Not part of the API wire format (json:"-") — the
+	// frozen snapshots live in dedicated Purchase/Sale fields, not on this embed.
+	Confidence         float64 `json:"-"` // DH pricing confidence
+	SourceCountRaw     int     `json:"-"` // external platform count, pre-CL-correction
+	MarketDataObserved bool    `json:"-"` // true when CardLookup market data was present
 }
 
 func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string) {
@@ -139,6 +146,9 @@ func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string
 	d.SalesLast30d = snapshot.SalesLast30d
 	d.Trend30d = snapshot.Trend30d
 	d.SnapshotDate = date
+	d.Confidence = snapshot.Confidence
+	d.SourceCountRaw = snapshot.SourceCountRaw
+	d.MarketDataObserved = snapshot.MarketDataObserved
 
 	// Persist the full snapshot as JSON for frontend consumption
 	if b, err := json.Marshal(snapshot); err == nil {
@@ -208,6 +218,14 @@ type Purchase struct {
 	CLValueCents           int    `json:"clValueCents"`                     // Current CL market value (scheduler-refreshed; frozen snapshot lives in CLValueAtPurchaseCents)
 	CLValueUpdatedAt       string `json:"clValueUpdatedAt,omitempty"`       // When CL value was last refreshed (RFC3339)
 	CLValueAtPurchaseCents int    `json:"clValueAtPurchaseCents,omitempty"` // CL value at purchase/first-enrichment; set once, never overwritten (0 = no snapshot)
+
+	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
+	CLConfidenceAtPurchase   *int     `json:"clConfidenceAtPurchase,omitempty"`
+	PopulationAtPurchase     *int     `json:"populationAtPurchase,omitempty"`
+	DHConfidenceAtPurchase   *float64 `json:"dhConfidenceAtPurchase,omitempty"`
+	SourceCountAtPurchase    *int     `json:"sourceCountAtPurchase,omitempty"`
+	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
+	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
 
 	// --- Purchase cost & logistics ---
 	BuyCostCents        int     `json:"buyCostCents"`         // Actual cost paid
@@ -395,9 +413,21 @@ type Sale struct {
 	// Crack slab tracking — indicates the card was cracked from its slab and sold raw
 	WasCracked bool `json:"wasCracked,omitempty"`
 
-	// ForcedLiquidation indicates this sale was driven by invoice timing pressure
-	// (heuristic: forced channel within 6 days before an invoice due date; operator-overridable).
+	// ForcedLiquidation indicates this sale was driven by invoice timing pressure.
+	// App-maintained (not a generated/computed column): kept in sync with SaleReason
+	// by freezeSaleProvenance whenever a sale is created.
 	ForcedLiquidation bool `json:"forcedLiquidation"`
+
+	// SaleReason records why this sale happened (discretionary, invoice_pressure,
+	// aging_policy, bulk_lot, show_clearout). Client-supplied when valid; defaulted
+	// via heuristic when empty. Frozen at sale-creation time.
+	SaleReason string `json:"saleReason,omitempty"`
+
+	// CLValueAtSaleCents and ChannelFeePctAtSale freeze the purchase's CL value and
+	// the campaign's effective channel fee at the moment of sale. Server-authoritative:
+	// always overwritten by freezeSaleProvenance, never trusted from client input.
+	CLValueAtSaleCents  int      `json:"clValueAtSaleCents,omitempty"`
+	ChannelFeePctAtSale *float64 `json:"channelFeePctAtSale,omitempty"`
 
 	// Market snapshot at time of sale (best-effort, may be zero)
 	MarketSnapshotData
@@ -405,8 +435,12 @@ type Sale struct {
 
 // BulkSaleInput represents a single item in a bulk sale request.
 type BulkSaleInput struct {
-	PurchaseID     string `json:"purchaseId"`
-	SalePriceCents int    `json:"salePriceCents"`
+	PurchaseID             string `json:"purchaseId"`
+	SalePriceCents         int    `json:"salePriceCents"`
+	OriginalListPriceCents int    `json:"originalListPriceCents,omitempty"`
+	PriceReductions        int    `json:"priceReductions,omitempty"`
+	DaysListed             int    `json:"daysListed,omitempty"`
+	SaleReason             string `json:"saleReason,omitempty"`
 }
 
 // BulkSaleResult summarizes the outcome of a bulk sale operation.

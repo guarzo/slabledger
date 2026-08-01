@@ -57,6 +57,7 @@ type MockInventoryService struct {
 	// Price overrides & AI suggestions
 	GetPriceOverrideStatsFn func(ctx context.Context) (*inventory.PriceOverrideStats, error)
 	UpdateBuyCostFn         func(ctx context.Context, purchaseID string, buyCostCents int) error
+	UpdateSaleReasonFn      func(ctx context.Context, campaignID, saleID, reason string) error
 	SetPriceOverrideFn      func(ctx context.Context, purchaseID string, priceCents int, source string) error
 	SetAISuggestedPriceFn   func(ctx context.Context, purchaseID string, priceCents int) error
 	AcceptAISuggestionFn    func(ctx context.Context, purchaseID string) error
@@ -337,6 +338,13 @@ func (m *MockInventoryService) GetPriceOverrideStats(ctx context.Context) (*inve
 func (m *MockInventoryService) UpdateBuyCost(ctx context.Context, purchaseID string, buyCostCents int) error {
 	if m.UpdateBuyCostFn != nil {
 		return m.UpdateBuyCostFn(ctx, purchaseID, buyCostCents)
+	}
+	return nil
+}
+
+func (m *MockInventoryService) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+	if m.UpdateSaleReasonFn != nil {
+		return m.UpdateSaleReasonFn(ctx, campaignID, saleID, reason)
 	}
 	return nil
 }

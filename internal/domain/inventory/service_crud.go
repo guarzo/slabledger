@@ -57,16 +57,48 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	}
 
 	// Verify campaign exists
-	_, err := s.campaigns.GetCampaign(ctx, p.CampaignID)
+	campaign, err := s.campaigns.GetCampaign(ctx, p.CampaignID)
 	if err != nil {
 		return fmt.Errorf("campaign lookup: %w", err)
+	}
+
+	// Server-authoritative: discard any client-supplied frozen provenance up front.
+	// The HTTP handler decodes the raw request body straight into inventory.Purchase,
+	// so these pointers are attacker-controllable; clearing them here ensures the
+	// freeze logic below can only ever set SERVER-derived values.
+	p.CLConfidenceAtPurchase = nil
+	p.PopulationAtPurchase = nil
+	p.DHConfidenceAtPurchase = nil
+	p.SourceCountAtPurchase = nil
+	p.ActiveListingsAtPurchase = nil
+	p.SalesLast30dAtPurchase = nil
+
+	// (a) creation-time facts, set-once.
+	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
+		p.CLConfidenceAtPurchase = &c
+	}
+	if p.Population > 0 {
+		pop := p.Population
+		p.PopulationAtPurchase = &pop
 	}
 
 	// Skip synchronous market snapshot when the caller has flagged the purchase
 	// for asynchronous background enrichment (e.g. during bulk PSA import).
 	if p.SnapshotStatus != SnapshotStatusPending {
 		// Best-effort: capture market snapshot at time of purchase.
-		s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
+		if snap, ok := s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents); ok {
+			// (b) market-time facts, gated on confirmed capture.
+			conf := snap.Confidence
+			p.DHConfidenceAtPurchase = &conf
+			sc := p.SourceCountRaw // set on the embed by applyMarketSnapshot
+			p.SourceCountAtPurchase = &sc
+			if p.MarketDataObserved {
+				al := p.ActiveListings
+				sl := p.SalesLast30d
+				p.ActiveListingsAtPurchase = &al
+				p.SalesLast30dAtPurchase = &sl
+			}
+		}
 	}
 
 	now := time.Now()
@@ -81,6 +113,30 @@ func (s *service) GetPurchase(ctx context.Context, id string) (*Purchase, error)
 
 func (s *service) ListPurchasesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Purchase, error) {
 	return s.purchases.ListPurchasesByCampaign(ctx, campaignID, limit, offset)
+}
+
+// freezeSaleProvenance validates and defaults SaleReason, then overwrites the
+// derived, server-authoritative provenance fields (CLValueAtSaleCents,
+// ChannelFeePctAtSale, ForcedLiquidation) at sale-creation time. SaleReason
+// itself is legitimate client input and is preserved when valid.
+func freezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
+	if sa.SaleReason != "" && !ValidSaleReason(sa.SaleReason) {
+		return ErrInvalidSaleReason
+	}
+	if sa.SaleReason == "" {
+		if forced {
+			sa.SaleReason = SaleReasonInvoicePressure
+		} else {
+			sa.SaleReason = SaleReasonDiscretionary
+		}
+	}
+	// Server-authoritative: overwrite any client-supplied values.
+	sa.CLValueAtSaleCents = purchase.CLValueCents
+	pct := EffectiveChannelFeePct(sa.SaleChannel, campaign)
+	sa.ChannelFeePctAtSale = &pct
+	// Keep the plain boolean in sync with the reason (app-maintained; not generated).
+	sa.ForcedLiquidation = sa.SaleReason == SaleReasonInvoicePressure
+	return nil
 }
 
 func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, purchase *Purchase) error {
@@ -113,10 +169,12 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	if invErr != nil {
 		invoices = nil // heuristic degrades to false; never block a sale on invoice lookup
 	}
-	sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)
+	if err := freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)); err != nil {
+		return err
+	}
 
 	// Best-effort: capture market snapshot at time of sale
-	s.captureMarketSnapshot(ctx, sa, purchase.ToCardIdentity(), purchase.GradeValue, purchase.CLValueCents)
+	_, _ = s.captureMarketSnapshot(ctx, sa, purchase.ToCardIdentity(), purchase.GradeValue, purchase.CLValueCents)
 
 	now := time.Now()
 	sa.CreatedAt = now
@@ -184,10 +242,14 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			continue
 		}
 		sa := &Sale{
-			PurchaseID:     item.PurchaseID,
-			SaleChannel:    channel,
-			SalePriceCents: item.SalePriceCents,
-			SaleDate:       saleDate,
+			PurchaseID:             item.PurchaseID,
+			SaleChannel:            channel,
+			SalePriceCents:         item.SalePriceCents,
+			SaleDate:               saleDate,
+			OriginalListPriceCents: item.OriginalListPriceCents,
+			PriceReductions:        item.PriceReductions,
+			DaysListed:             item.DaysListed,
+			SaleReason:             item.SaleReason,
 		}
 
 		// Inline sale creation without captureMarketSnapshot to avoid hitting
@@ -217,7 +279,11 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 		}
 
 		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
-		sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, bulkInvoices)
+		if err := freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, bulkInvoices)); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
+			continue
+		}
 
 		now := time.Now()
 		sa.CreatedAt = now
@@ -266,4 +332,11 @@ func (s *service) ReassignPurchase(ctx context.Context, purchaseID string, newCa
 
 	// UpdatePurchaseCampaign atomically rejects the update if a linked sale exists.
 	return s.purchases.UpdatePurchaseCampaign(ctx, purchaseID, newCampaignID, campaign.PSASourcingFeeCents)
+}
+
+func (s *service) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+	if !ValidSaleReasonForPatch(reason) {
+		return ErrInvalidSaleReason
+	}
+	return s.sales.UpdateSaleReason(ctx, campaignID, saleID, reason)
 }

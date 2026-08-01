@@ -20,17 +20,22 @@ func EffectiveFeePct(c *Campaign) float64 {
 	return c.EbayFeePct
 }
 
-// CalculateSaleFee computes marketplace fees for a given channel and sale price.
-func CalculateSaleFee(channel SaleChannel, salePriceCents int, campaign *Campaign) int {
+// EffectiveChannelFeePct returns the fee fraction applied to a sale on the given
+// channel — the same rate CalculateSaleFee uses.
+func EffectiveChannelFeePct(channel SaleChannel, campaign *Campaign) float64 {
 	switch NormalizeChannel(channel) {
 	case SaleChannelEbay:
-		feePct := EffectiveFeePct(campaign)
-		return int(math.Round(float64(salePriceCents) * feePct))
+		return EffectiveFeePct(campaign)
 	case SaleChannelWebsite:
-		return int(math.Round(float64(salePriceCents) * DefaultWebsiteFeePct))
+		return DefaultWebsiteFeePct
 	default:
 		return 0
 	}
+}
+
+// CalculateSaleFee computes marketplace fees for a given channel and sale price.
+func CalculateSaleFee(channel SaleChannel, salePriceCents int, campaign *Campaign) int {
+	return int(math.Round(float64(salePriceCents) * EffectiveChannelFeePct(channel, campaign)))
 }
 
 // CalculateNetProfit computes net profit for a sale.
