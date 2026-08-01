@@ -4,8 +4,8 @@ import "testing"
 
 func TestValidSaleReason(t *testing.T) {
 	tests := []struct {
-		in        string
-		valid     bool
+		in         string
+		valid      bool
 		validPatch bool
 	}{
 		{"discretionary", true, true},

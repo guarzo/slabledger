@@ -59,19 +59,19 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 			}
 
 			sale := &inventory.Sale{
-				ID:                "sale-art-" + time.Now().Format("150405.000000000"),
-				PurchaseID:        p.ID,
-				SaleChannel:       inventory.SaleChannelLocal,
-				SalePriceCents:    5000,
-				SaleFeeCents:      0,
-				SaleDate:          "2026-06-15",
-				DaysToSell:        14,
-				NetProfitCents:      1000,
-				ForcedLiquidation:   tt.forcedLiquidation,
-				SaleReason:          "invoice_pressure",
-				CLValueAtSaleCents:  tt.clValueAtPurchase,
-				CreatedAt:           time.Now().UTC(),
-				UpdatedAt:           time.Now().UTC(),
+				ID:                 "sale-art-" + time.Now().Format("150405.000000000"),
+				PurchaseID:         p.ID,
+				SaleChannel:        inventory.SaleChannelLocal,
+				SalePriceCents:     5000,
+				SaleFeeCents:       0,
+				SaleDate:           "2026-06-15",
+				DaysToSell:         14,
+				NetProfitCents:     1000,
+				ForcedLiquidation:  tt.forcedLiquidation,
+				SaleReason:         "invoice_pressure",
+				CLValueAtSaleCents: tt.clValueAtPurchase,
+				CreatedAt:          time.Now().UTC(),
+				UpdatedAt:          time.Now().UTC(),
 			}
 			if err := ss.CreateSale(ctx, sale); err != nil {
 				t.Fatalf("create sale: %v", err)
