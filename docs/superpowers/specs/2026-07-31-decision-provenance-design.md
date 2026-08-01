@@ -79,10 +79,14 @@ Confirmed by inspection; these change the implementation:
 - **`sale_reason` UX (review #5):** creation **preserves** an explicit valid
   reason and defaults to the heuristic only when the field is empty. PATCH for
   later edits.
-- **`forced_liquidation` back-compat:** `GENERATED ALWAYS AS
-  (sale_reason = 'invoice_pressure') STORED`. Operator setting a non-pressure
-  reason flips the legacy boolean false (correct semantic; changes the "Forced"
-  P&L bucket).
+- **`forced_liquidation` back-compat:** stays a **plain app-maintained boolean**
+  (NOT generated) so the documented image-only rollback stays safe — the previous
+  binary INSERTs the column explicitly. The app + migration + PATCH keep it in
+  sync with `sale_reason` (`forced == reason='invoice_pressure'`), and a
+  `campaign_sales_derive_reason` BEFORE-INSERT/UPDATE trigger fills an empty
+  `sale_reason` from the boolean so legacy-shaped writes during a rollback window
+  are never lost. Operator setting a non-pressure reason flips the boolean false
+  (correct semantic; changes the "Forced" P&L bucket).
 - **Sale-side freeze applies to all three paths**, but for imports these are
   **record-time proxies**, not exact decision-time values (review #9).
 - **Buy-term bucket (review #7):** `buyCost / cl_value_at_purchase_cents` (frozen
@@ -117,20 +121,29 @@ Additive; set-once enforced in Go (INSERT/first-enrichment only).
 
 ### `forced_liquidation` back-compat sequence (up migration)
 
-1. Add `sale_reason` (with CHECK), `cl_value_at_sale_cents`,
-   `channel_fee_pct_at_sale`.
+1. Add `sale_reason` (with CHECK over the 6 allowed values incl. `''`),
+   `cl_value_at_sale_cents`, `channel_fee_pct_at_sale`.
 2. Backfill `sale_reason` (derivable only):
    - `forced_liquidation = TRUE` → `invoice_pressure`
    - in-person channel (`inperson`/`local`/`cardshow`) AND `sale_price_cents <
      0.80 * cl_value_at_purchase_cents` (join purchase; only where
      `cl_value_at_purchase_cents > 0`) → `invoice_pressure` (~36 sales, ~$5.2K)
    - else → `discretionary`
-3. `DROP COLUMN forced_liquidation`.
-4. Re-add `forced_liquidation BOOLEAN GENERATED ALWAYS AS
-   (sale_reason = 'invoice_pressure') STORED`.
+3. Re-sync the existing `forced_liquidation` boolean:
+   `UPDATE ... SET forced_liquidation = (sale_reason = 'invoice_pressure')`.
+   The column is **kept as a plain writable boolean** — NOT dropped, NOT
+   converted to generated — so the previous image (which INSERTs it explicitly)
+   still works after an image-only rollback.
+4. Create a `campaign_sales_derive_reason` BEFORE INSERT/UPDATE trigger that fills
+   an empty `sale_reason` from `forced_liquidation`
+   (`TRUE → 'invoice_pressure'`, else `'discretionary'`). This closes the
+   rollback-window gap: if the old image inserts a sale with only
+   `forced_liquidation` set, the trigger derives a non-empty reason so analysis
+   never silently skips it. The trigger only fills *empty* reasons, so the new
+   image's richer reasons are never clobbered.
 
-**Down migration** reverses: drop generated col → re-add plain boolean → `UPDATE
-... = (sale_reason='invoice_pressure')` → drop 3 sale cols + 6 purchase cols.
+**Down migration** reverses: drop the trigger + function, drop the 3 sale cols +
+6 purchase cols; `forced_liquidation` is left in place (it predates 000022).
 
 ## § 2 — Go domain & adapter layer
 
@@ -147,7 +160,8 @@ Additive; set-once enforced in Go (INSERT/first-enrichment only).
   ⇔ NULL column) so measured-zero ≠ missing. `json:",omitempty"`.
 - `Sale`: add `SaleReason string`, `CLValueAtSaleCents int`,
   `ChannelFeePctAtSale *float64` (nullable — legacy NULL vs real 0.0).
-  `ForcedLiquidation bool` becomes **read-only** (generated).
+  `ForcedLiquidation bool` stays a **plain writable field**, kept in sync with
+  `SaleReason` by the freeze helper (`forced == reason=='invoice_pressure'`).
 - `SaleReason*` const block. Two guards: `ValidSaleReason(s)` (allows `""`, used
   for creation-default fallback) and `ValidSaleReasonForPatch(s)` (rejects `""`).
 
@@ -221,20 +235,25 @@ simply unknown.
   **non-empty invalid** reason with a validation error (`ValidSaleReason` allows
   only the 5 values + `""`); default to `invoice_pressure if
   IsForcedLiquidation(...) else discretionary` only when empty (review #4/#5).
-- Stop setting `ForcedLiquidation`.
+- Set `ForcedLiquidation = (SaleReason == 'invoice_pressure')` in the same freeze
+  helper (plain boolean, app-maintained — not generated).
+- **Clear client-forged provenance:** the HTTP handler decodes the raw body into
+  the domain struct, so `CLValueAtSaleCents`/`ChannelFeePctAtSale` are
+  attacker-controllable. The freeze helper overwrites them unconditionally from
+  server-derived values; never trust the request (review round-5 P1).
 
-### Sale column split (review #4)
-- `saleInsertColumns` — excludes generated `forced_liquidation`; adds the 3 new
-  sale columns; used by all INSERTs.
-- `saleColumns` — full read/scan list, still includes `forced_liquidation` + the
-  3 new columns.
+### Sale column persistence (no split needed)
+Because `forced_liquidation` stays an ordinary writable boolean, a single
+`saleColumns` list serves both INSERT and read — no `saleInsertColumns` split.
+- Extend `saleColumns` with `sale_reason`, `cl_value_at_sale_cents`,
+  `channel_fee_pct_at_sale`.
 - **`saleColumnsAliased`** — the LEFT-JOIN list used by portfolio analysis
   (`analytics_store.go:190`) — currently has only `forced_liquidation` and none
-  of the new fields. **Must** be extended with `sale_reason`,
-  `cl_value_at_sale_cents`, `channel_fee_pct_at_sale`, and `scanPurchaseWithSale`
-  extended to scan them (`sql.Null*`), or `SplitPNL.ByReason` reads nothing
-  (review #4).
-- Update `sale_store.go` INSERT placeholder count; `scanSale`/`scanPurchaseWithSale`.
+  of the new fields. **Must** be extended with the same 3 columns, and
+  `scanPurchaseWithSale` extended to scan them (`sql.Null*`), or
+  `SplitPNL.ByReason` reads nothing (review #4).
+- Update `sale_store.go` INSERT (add the 3 columns + `forced_liquidation` stays
+  in the args) and placeholder count; `scanSale`/`scanPurchaseWithSale`.
 
 ### Operator override (review #6)
 - `PATCH /api/campaigns/{id}/sales/{saleID}` → `ValidSaleReasonForPatch`
@@ -276,9 +295,14 @@ once § 2 extends them.
   Partial-failure retries preserve per-item values because they live on the item.
 
 ### Docs
-- `SCHEMA.md`: new columns (nullable note, CHECK, generated col).
-- `API.md`: PATCH route, `BulkSaleInput` shape change, analysis additions.
-  Document imported `*_at_sale` values as **record-time proxies** (review #9).
+- `SCHEMA.md`: new columns (nullable note, `sale_reason` CHECK), the
+  `campaign_sales_derive_reason` trigger, and that `forced_liquidation` stays a
+  plain app-maintained boolean.
+- `OPERATIONS.md`: 000022 is rollback-safe (additive/nullable cols; boolean
+  unchanged; trigger backfills reason for legacy-shaped writes).
+- `API.md`: PATCH route, `CreateSaleInput.saleReason` + `BulkSaleInput` shape
+  change, analysis additions. Document imported `*_at_sale` values as
+  **record-time proxies** (review #9).
 
 ## Testing
 - `ParseCLConfidenceMin` table (ranges/singles/junk → ok=false).
@@ -302,14 +326,18 @@ once § 2 extends them.
   pointer non-nil on new sales, NULL on legacy rows.
 - Sale freeze across all 3 paths sets cl-at-sale, channel-fee, reason default;
   explicit creation reason is preserved, empty defaults to heuristic, a non-empty
-  invalid reason is rejected with a validation error (review #4).
-- Generated-column INSERT via `saleInsertColumns` succeeds; scan reads
-  `forced_liquidation` back.
+  invalid reason is rejected with a validation error (review #4); client-forged
+  cl-at-sale/channel-fee are overwritten server-side (round-5 P1).
+- Sale INSERT writes the 3 new columns + the plain `forced_liquidation` boolean;
+  scan reads them back. No column split.
+- Rollback-window: a legacy-shaped INSERT (only `forced_liquidation`, no
+  `sale_reason`) gets a derived reason from the `campaign_sales_derive_reason`
+  trigger (round-5 P1).
 - **Analysis JOIN scan:** `saleColumnsAliased` + `scanPurchaseWithSale` return
   `sale_reason` so `ByReason` is populated (regression guard for review #4).
-- `UpdateSaleReason`: rejects `""`, rejects sale not in campaign, reflects into
-  generated boolean.
-- Migration up/down round-trip incl. backfill rules + CHECK.
+- `UpdateSaleReason`: rejects `""`, rejects sale not in campaign, keeps the plain
+  `forced_liquidation` boolean in sync.
+- Migration up/down round-trip incl. backfill rules + CHECK + trigger.
 - Cohort buckets: `<50`/`>=100`/`unknown` boundaries; `confidenceBucket` always a
   string incl. `"unknown"`; buy% uses frozen CL not current.
 

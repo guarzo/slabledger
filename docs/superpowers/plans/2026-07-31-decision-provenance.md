@@ -122,7 +122,33 @@ UPDATE campaign_sales SET sale_reason = 'discretionary' WHERE sale_reason = '';
 -- The app maintains it alongside sale_reason (forced == reason='invoice_pressure').
 -- Re-sync it here to match the just-backfilled reasons.
 UPDATE campaign_sales SET forced_liquidation = (sale_reason = 'invoice_pressure');
+
+-- Rollback-window compatibility: during a rollback to the previous image, that
+-- binary INSERTs rows WITHOUT sale_reason (defaults to ''), setting only
+-- forced_liquidation. Re-deploying the new image does NOT rerun this migration,
+-- so those rows would keep sale_reason='' and analysis would silently skip them.
+-- This trigger derives sale_reason from the boolean on any INSERT/UPDATE that
+-- leaves sale_reason empty, so legacy-shaped writes are never lost.
+CREATE OR REPLACE FUNCTION campaign_sales_derive_reason() RETURNS trigger AS $$
+BEGIN
+    IF NEW.sale_reason IS NULL OR NEW.sale_reason = '' THEN
+        NEW.sale_reason := CASE WHEN NEW.forced_liquidation
+                                THEN 'invoice_pressure' ELSE 'discretionary' END;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER campaign_sales_derive_reason_trg
+    BEFORE INSERT OR UPDATE ON campaign_sales
+    FOR EACH ROW EXECUTE FUNCTION campaign_sales_derive_reason();
 ```
+
+The trigger keeps the invariant "`sale_reason` is never empty for a persisted
+row" true regardless of which binary writes. It only fills an *empty* reason, so
+the new image's explicit richer reasons (`aging_policy` etc.) are never clobbered.
+(No separate CHECK forbidding `''` is added because legacy INSERTs would violate
+it mid-rollback; the trigger enforces the intent without rejecting those writes.)
 
 **Rollback safety note (in the migration file as a comment and in Task 15 docs):**
 because `forced_liquidation` remains an ordinary writable column, the old binary
@@ -138,6 +164,10 @@ a full teardown, not a production rollback.)
 Create `000022_add_decision_provenance.down.sql`:
 
 ```sql
+-- Drop the compatibility trigger first (it references sale_reason).
+DROP TRIGGER IF EXISTS campaign_sales_derive_reason_trg ON campaign_sales;
+DROP FUNCTION IF EXISTS campaign_sales_derive_reason();
+
 -- forced_liquidation is already a plain boolean and is left in place (it existed
 -- pre-000022). Only the columns 000022 added are dropped.
 ALTER TABLE campaign_sales
@@ -199,8 +229,17 @@ func TestMigration000022_SaleReasonBackfill(t *testing.T) {
 	// Assert sale_reason + forced_liquidation for both via SELECT.
 	// (forced_liquidation is a plain column re-synced by the up-migration, not generated.)
 
-	// Round-trip down/up to confirm reversibility (down keeps forced_liquidation,
-	// drops only the 000022-added columns; up re-adds + re-backfills them).
+	// Rollback-window compatibility: simulate the OLD image inserting a sale after
+	// v22 — it writes forced_liquidation only, no sale_reason. The BEFORE trigger
+	// must derive sale_reason from the boolean.
+	//   INSERT a sale S3 with forced_liquidation=TRUE and NO sale_reason column in
+	//   the column list → assert sale_reason == 'invoice_pressure'.
+	//   INSERT a sale S4 with forced_liquidation=FALSE, no sale_reason → 'discretionary'.
+	//   INSERT a sale S5 WITH sale_reason='aging_policy' → preserved (trigger only
+	//   fills empty).
+
+	// Round-trip down/up to confirm reversibility (down drops the trigger+function
+	// and the 000022-added columns, keeps forced_liquidation; up re-adds them).
 	require.NoError(t, m.Steps(-1))
 	require.NoError(t, m.Steps(1))
 }
@@ -741,7 +780,7 @@ In `CreatePurchase` (`service_crud.go`), capture the campaign and freeze. **Firs
 
 - [ ] **Step 4: Run test**
 
-Run: `go test ./internal/domain/inventory/ -run TestCreatePurchase_FreezesCreationFacts -v`
+Run: `go test ./internal/domain/inventory/ -run 'TestCreatePurchase_FreezesCreationFacts|TestCreatePurchase_IgnoresClientForgedProvenance' -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1301,35 +1340,45 @@ git commit -m "feat(portfolio): deterministic confidence×buy cohorts and by-rea
 **Files:**
 - Modify: `web/src/types/campaigns/core.ts` (Sale, Purchase, **CreateSaleInput**)
 - Modify: `web/src/react/pages/campaign-detail/RecordSaleForm.tsx`
+- Create: `web/src/react/pages/campaign-detail/RecordSaleForm.test.tsx`
 - Modify: `docs/SCHEMA.md`, `docs/API.md`, `docs/OPERATIONS.md`
-- Test: frontend build + existing vitest
+- Test: `RecordSaleForm.test.tsx` + frontend build + existing vitest
 
 **Interfaces:**
 - Consumes: Go JSON tags from Tasks 7, 10, 14.
 
-- [ ] **Step 1: Add TS fields + request contract + reason select**
+- [ ] **Step 1: Add TS fields + request contract + reason select + test**
 
 In `core.ts`:
 - Extend `Sale` with `saleReason?: string; clValueAtSaleCents?: number; channelFeePctAtSale?: number;`.
 - Extend `Purchase` with `clConfidenceAtPurchase?: number; populationAtPurchase?: number; dhConfidenceAtPurchase?: number; sourceCountAtPurchase?: number; activeListingsAtPurchase?: number; salesLast30dAtPurchase?: number;`.
 - Extend **`CreateSaleInput`** with `saleReason?: string;` — otherwise the single-sale POST drops the field at the type boundary.
 
-In `RecordSaleForm.tsx`, add a `sale_reason` `<select>` (options: discretionary, invoice_pressure, aging_policy, bulk_lot, show_clearout; default empty = server heuristic) and include `saleReason` in the `CreateSaleInput` payload when non-empty. (The `createSale` api client already forwards the whole `CreateSaleInput`, so no api-client change is needed once the type carries the field.)
+In `RecordSaleForm.tsx`, add a `sale_reason` `<select>` (options: discretionary, invoice_pressure, aging_policy, bulk_lot, show_clearout; default empty = server heuristic) and include `saleReason` in the `CreateSaleInput` payload **only when non-empty** (the empty option must be omitted from the payload so the server applies its heuristic default). (The `createSale` api client already forwards the whole `CreateSaleInput`, so no api-client change is needed once the type carries the field.)
+
+Add `RecordSaleForm.test.tsx` (no test exists yet; use the vitest + testing-library setup from `BulkRecordSaleModal.test.tsx`):
+
+```ts
+// 1. Selecting "aging_policy" and submitting → the createSale mutation is called
+//    with saleReason: "aging_policy" in the payload.
+// 2. Leaving the reason on the empty/default option → the submitted payload has
+//    NO saleReason key (omitted, not "").
+```
 
 - [ ] **Step 2: Update docs**
 
-`docs/SCHEMA.md`: document the 6 nullable purchase columns, the 3 sale columns (note `channel_fee_pct_at_sale` nullable, `sale_reason` CHECK), and that `forced_liquidation` stays a plain app-maintained boolean (kept in sync with `sale_reason`). `docs/OPERATIONS.md`: add a one-line note that 000022 is rollback-safe under the documented image-only rollback (new columns additive/nullable; `forced_liquidation` unchanged in shape). `docs/API.md`: add `PATCH /api/campaigns/{id}/sales/{saleID}`, the `CreateSaleInput.saleReason` + `BulkSaleInput` per-item fields, and the analysis response additions (`pnlByConfidenceBuy`, `pnl.byReason`); note imported `*_at_sale` values are record-time proxies.
+`docs/SCHEMA.md`: document the 6 nullable purchase columns, the 3 sale columns (note `channel_fee_pct_at_sale` nullable; `sale_reason` TEXT with a CHECK over the 6 allowed values incl. `''`), the `campaign_sales_derive_reason` BEFORE-INSERT/UPDATE trigger (fills an empty `sale_reason` from `forced_liquidation`), and that `forced_liquidation` stays a plain app-maintained boolean. `docs/OPERATIONS.md`: note 000022 is rollback-safe under the documented image-only rollback — new columns are additive/nullable, `forced_liquidation` is unchanged in shape, and the compatibility trigger backfills `sale_reason` for any legacy-shaped insert made by the old image during the rollback window. `docs/API.md`: add `PATCH /api/campaigns/{id}/sales/{saleID}`, the `CreateSaleInput.saleReason` + `BulkSaleInput` per-item fields, and the analysis response additions (`pnlByConfidenceBuy`, `pnl.byReason`); note imported `*_at_sale` values are record-time proxies.
 
 - [ ] **Step 3: Build + test frontend**
 
-Run: `cd web && npm run build && npm test`
-Expected: build OK; tests PASS
+Run: `cd web && npm run build && npm test -- RecordSaleForm && npm test`
+Expected: build OK; RecordSaleForm test PASS; full suite PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add web/src/types/campaigns/core.ts web/src/react/pages/campaign-detail/RecordSaleForm.tsx docs/SCHEMA.md docs/API.md docs/OPERATIONS.md
-git commit -m "feat(web/docs): provenance TS types, CreateSaleInput.saleReason, schema/API docs"
+git add web/src/types/campaigns/core.ts web/src/react/pages/campaign-detail/RecordSaleForm.tsx web/src/react/pages/campaign-detail/RecordSaleForm.test.tsx docs/SCHEMA.md docs/API.md docs/OPERATIONS.md
+git commit -m "feat(web/docs): provenance TS types, RecordSaleForm reason select + test, schema/API/ops docs"
 ```
 
 ---
@@ -1377,6 +1426,7 @@ git commit -m "chore: verification fixups for decision-provenance"
 - §3 cohorts in a new `analysis_cohorts.go` (analysis.go is 392 lines), integer-% boundary math, sorted deterministic output, all-5-key ByReason → Task 14. saleColumnsAliased scan → Task 11. Frontend request contracts (`CreateSaleInput.saleReason`, `createBulkSales`/`useCreateBulkSales` item types) + selects + bulk per-item incl. reason + component tests → Tasks 13,15. Docs (incl. OPERATIONS rollback note) → Task 15.
 - Review-round-4 fixes: market presence from `price.Market != nil` not value inference (#1, Task 5); bulk sale_reason end-to-end (#2, Task 13); frontend contracts (#3, Tasks 13,15); mock compile fixes + correct filenames (#4, Task 12); version-stepped migration test (#5, Task 1); bulk/order-import sale-freeze tests (#6, Task 10); deterministic cohorts in new file (#7, Task 14); race-gate at Task 16 + scoped staging (#8, Global Constraints + Task 16).
 - Review-round-5 fixes: forged immutable provenance blocked by server-clears-then-derives on purchase (Task 7 `TestCreatePurchase_IgnoresClientForgedProvenance`) and sale (Task 10 `freezeSaleProvenance` overwrites + `TestCreateSale_IgnoresClientForgedProvenance`) (P1); rollback-safe plain boolean instead of generated column, additive/nullable new cols, OPERATIONS note (Tasks 1,10,11,12,15) (P1); nil-snapshot treated as capture failure, no panic (Task 6) (P1); bulk-modal keyed state + reset + partial-failure retry + a11y component tests (Task 13) (P2).
+- Review-round-6 fixes: rollback-window `sale_reason=''` loss closed by a `campaign_sales_derive_reason` BEFORE INSERT/UPDATE trigger + legacy-insert migration test (Task 1) (P1); reference spec de-staled — plain-boolean/no-split/trigger now consistent between spec and plan (P2); Task 7 verify regex includes the forged-input test (P3); `RecordSaleForm.test.tsx` proves explicit reason sent and empty option omitted (Task 15) (P3).
 - Exclusions (no backfill of provenance, no async creation-fact fallback, source_count = pre-correction platforms) honored: Tasks 7/9 freeze forward-only; Task 5 pre-correction count.
 
 **Placeholder scan:** All code steps contain concrete code or exact instructions with named symbols. Test bodies that reference the existing harness point to the specific existing test/harness to copy (Tasks 1,7,8,9,11 — DB/service harness is pre-existing and per-repo).
