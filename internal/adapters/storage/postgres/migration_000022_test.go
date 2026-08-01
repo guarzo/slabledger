@@ -2,13 +2,11 @@ package postgres
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,20 +16,13 @@ import (
 // rollback-window compatibility trigger derives sale_reason from
 // forced_liquidation for legacy-shaped inserts (no sale_reason column supplied).
 func TestMigration000022_SaleReasonBackfill(t *testing.T) {
-	url := os.Getenv("POSTGRES_TEST_URL")
-	if url == "" {
-		url = "postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable"
-	}
-	logger := mocks.NewMockLogger()
-	db, err := Open(context.Background(), url, logger)
-	if err != nil {
-		t.Skipf("Postgres not reachable at %q: %v (set POSTGRES_TEST_URL to override)", url, err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := requireTestDB(t)
 	ctx := context.Background()
 
+	t.Cleanup(func() { resetSchemaAndMigrate(t, db) })
+
 	// Known baseline.
-	_, err = db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`)
+	_, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`)
 	require.NoError(t, err)
 
 	// Build a migrate instance on the embedded source.

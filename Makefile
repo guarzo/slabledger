@@ -1,6 +1,6 @@
 # SlabLedger - Makefile
 
-.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull db-push ci hooks screenshots screenshots-quick kill
+.PHONY: all help build test test-verbose coverage test-postgres lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull db-push ci hooks screenshots screenshots-quick kill
 
 # Default target
 all: help
@@ -85,6 +85,16 @@ coverage:
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
+# Runs the Postgres adapter package against a DEDICATED throwaway database.
+# That package drops schemas and truncates tables, so it must never point at
+# the development database. Creates slabledger_test on first run.
+test-postgres:
+	@echo "Ensuring slabledger_test database exists..."
+	@psql "$(POSTGRES_ADMIN_URL)" -tc "SELECT 1 FROM pg_database WHERE datname = 'slabledger_test'" \
+		| grep -q 1 || psql "$(POSTGRES_ADMIN_URL)" -c "CREATE DATABASE slabledger_test"
+	@echo "Running Postgres package tests..."
+	POSTGRES_TEST_URL="$(POSTGRES_TEST_DSN)" go test -race ./internal/adapters/storage/postgres/...
+
 # Screenshots of all pages via Playwright (uses real backend + local Postgres).
 # Pulls prod data first via db-pull so pages render with real content.
 # Override SCREENSHOT_DB_URL to point at a non-devcontainer Postgres.
@@ -142,6 +152,8 @@ install:
 # Both can be overridden from the environment.
 PROD_DB_URL  ?= $(SUPABASE_URL)
 LOCAL_DB_URL ?= postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
+POSTGRES_ADMIN_URL ?= postgresql://slabledger:slabledger@postgres:5432/postgres?sslmode=disable
+POSTGRES_TEST_DSN ?= postgresql://slabledger:slabledger@postgres:5432/slabledger_test?sslmode=disable
 
 db-pull:
 	@if [ -f .env ]; then set -a && . ./.env && set +a; fi && \

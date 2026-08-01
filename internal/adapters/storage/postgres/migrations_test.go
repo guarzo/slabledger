@@ -3,13 +3,11 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,22 +22,15 @@ import (
 // guarantee a known baseline. It does NOT use t.Parallel — its schema-drop
 // would interfere with any parallel test that expects state.
 func TestMigrations_UpDownUpRoundtrip(t *testing.T) {
-	url := os.Getenv("POSTGRES_TEST_URL")
-	if url == "" {
-		url = "postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable"
-	}
-
-	logger := mocks.NewMockLogger()
-	db, err := Open(context.Background(), url, logger)
-	if err != nil {
-		t.Skipf("Postgres not reachable at %q: %v (set POSTGRES_TEST_URL to override)", url, err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
+	db := requireTestDB(t)
 	ctx := context.Background()
 
+	// Leave the database usable for other packages even if this test fails
+	// partway through a migration and leaves schema_migrations dirty.
+	t.Cleanup(func() { resetSchemaAndMigrate(t, db) })
+
 	// Guaranteed-empty baseline.
-	_, err = db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`)
+	_, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`)
 	require.NoError(t, err, "reset public schema")
 
 	// UP #1
