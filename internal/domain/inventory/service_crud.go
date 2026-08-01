@@ -242,10 +242,14 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			continue
 		}
 		sa := &Sale{
-			PurchaseID:     item.PurchaseID,
-			SaleChannel:    channel,
-			SalePriceCents: item.SalePriceCents,
-			SaleDate:       saleDate,
+			PurchaseID:             item.PurchaseID,
+			SaleChannel:            channel,
+			SalePriceCents:         item.SalePriceCents,
+			SaleDate:               saleDate,
+			OriginalListPriceCents: item.OriginalListPriceCents,
+			PriceReductions:        item.PriceReductions,
+			DaysListed:             item.DaysListed,
+			SaleReason:             item.SaleReason,
 		}
 
 		// Inline sale creation without captureMarketSnapshot to avoid hitting

@@ -289,6 +289,81 @@ func TestCreateBulkSales_FreezesProvenance(t *testing.T) {
 	}
 }
 
+func TestCreateBulkSales_CopiesPerItemFields(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c, p := setupSaleFixture(t, repo, svc)
+
+	p2 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Pikachu", CertNumber: "PROV03",
+		GradeValue: 10, BuyCostCents: 30000, PurchaseDate: "2026-06-01",
+		CLValueCents: 8000,
+	}
+	if err := svc.CreatePurchase(ctx, p2); err != nil {
+		t.Fatalf("setup purchase 2: %v", err)
+	}
+
+	result, err := svc.CreateBulkSales(ctx, c.ID, inventory.SaleChannelEbay, "2026-06-20", []inventory.BulkSaleInput{
+		{
+			PurchaseID:             p.ID,
+			SalePriceCents:         20000,
+			OriginalListPriceCents: 1500,
+			PriceReductions:        2,
+			DaysListed:             9,
+			SaleReason:             inventory.SaleReasonBulkLot,
+		},
+		{
+			PurchaseID:     p2.ID,
+			SalePriceCents: 15000,
+			SaleReason:     "bogus",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateBulkSales: %v", err)
+	}
+	if result.Created != 1 {
+		t.Fatalf("created = %d, want 1 (errors: %v)", result.Created, result.Errors)
+	}
+	if result.Failed != 1 {
+		t.Fatalf("failed = %d, want 1", result.Failed)
+	}
+	if len(result.Errors) != 1 || result.Errors[0].PurchaseID != p2.ID {
+		t.Fatalf("errors = %+v, want single error for purchase 2", result.Errors)
+	}
+
+	var sale *inventory.Sale
+	salesList, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
+	for i := range salesList {
+		s := &salesList[i]
+		if s.PurchaseID == p.ID {
+			sale = s
+		}
+	}
+	if sale == nil {
+		t.Fatal("expected sale for purchase 1 to exist")
+	}
+	if sale.OriginalListPriceCents != 1500 {
+		t.Errorf("OriginalListPriceCents = %d, want 1500", sale.OriginalListPriceCents)
+	}
+	if sale.PriceReductions != 2 {
+		t.Errorf("PriceReductions = %d, want 2", sale.PriceReductions)
+	}
+	if sale.DaysListed != 9 {
+		t.Errorf("DaysListed = %d, want 9", sale.DaysListed)
+	}
+	if sale.SaleReason != inventory.SaleReasonBulkLot {
+		t.Errorf("SaleReason = %q, want %q", sale.SaleReason, inventory.SaleReasonBulkLot)
+	}
+
+	for i := range salesList {
+		if salesList[i].PurchaseID == p2.ID {
+			t.Fatal("expected no sale to be created for purchase 2 (invalid reason)")
+		}
+	}
+}
+
 func TestConfirmOrdersSales_FreezesProvenance(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
 	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())

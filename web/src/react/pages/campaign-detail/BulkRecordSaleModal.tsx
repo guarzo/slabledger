@@ -18,6 +18,24 @@ interface Props {
   items: AgingItem[];
 }
 
+interface RowDetail {
+  originalListPrice: string;
+  priceReductions: string;
+  daysListed: string;
+  saleReason: string;
+}
+
+const emptyRowDetail: RowDetail = { originalListPrice: '', priceReductions: '', daysListed: '', saleReason: '' };
+
+const saleReasonOptions = [
+  { value: '', label: 'Auto (server heuristic)' },
+  { value: 'discretionary', label: 'Discretionary' },
+  { value: 'invoice_pressure', label: 'Invoice pressure' },
+  { value: 'aging_policy', label: 'Aging policy' },
+  { value: 'bulk_lot', label: 'Bulk lot' },
+  { value: 'show_clearout', label: 'Show clearout' },
+];
+
 export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }: Props) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -30,6 +48,9 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
   const [pendingItems, setPendingItems] = useState<AgingItem[]>(items);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, number | undefined>>({});
+  // Keyed by purchaseId (not array index) so a partial-failure retry that
+  // narrows the item set keeps each row's entered listing-details values.
+  const [rowDetails, setRowDetails] = useState<Record<string, RowDetail>>({});
 
   // Sync pendingItems when the modal opens or the actual item set changes
   useEffect(() => {
@@ -55,6 +76,14 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
     return m;
   }, [pendingItems, computedPrices, overrides]);
 
+  function getRowDetail(purchaseId: string): RowDetail {
+    return rowDetails[purchaseId] ?? emptyRowDetail;
+  }
+
+  function updateRowDetail(purchaseId: string, patch: Partial<RowDetail>) {
+    setRowDetails(prev => ({ ...prev, [purchaseId]: { ...getRowDetail(purchaseId), ...patch } }));
+  }
+
   function reset() {
     setChannel(DEFAULT_SALE_CHANNEL);
     setSaleDate(localToday());
@@ -62,6 +91,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
     setFillValue(0);
     setReviewOpen(false);
     setOverrides({});
+    setRowDetails({});
     setPendingItems(items);
   }
 
@@ -85,13 +115,18 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
 
     setSubmitting(true);
     try {
-      const groups = new Map<string, { purchaseId: string; salePriceCents: number }[]>();
+      const groups = new Map<string, { purchaseId: string; salePriceCents: number; originalListPriceCents?: number; priceReductions?: number; daysListed?: number; saleReason?: string }[]>();
       for (const item of pendingItems) {
         const cid = item.purchase.campaignId;
         if (!groups.has(cid)) groups.set(cid, []);
+        const detail = getRowDetail(item.purchase.id);
         groups.get(cid)!.push({
           purchaseId: item.purchase.id,
           salePriceCents: effectivePrices[item.purchase.id] ?? 0,
+          ...(detail.originalListPrice ? { originalListPriceCents: dollarsToCents(detail.originalListPrice) } : {}),
+          ...(detail.priceReductions ? { priceReductions: parseInt(detail.priceReductions, 10) || 0 } : {}),
+          ...(detail.daysListed ? { daysListed: parseInt(detail.daysListed, 10) || 0 } : {}),
+          ...(detail.saleReason ? { saleReason: detail.saleReason } : {}),
         });
       }
 
@@ -245,8 +280,11 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
             </button>
             {reviewOpen && (
               <div className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                {pendingItems.map(item => (
-                  <div key={item.purchase.id} className="flex items-center gap-3 p-2 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-2)]/20">
+                {pendingItems.map(item => {
+                  const detail = getRowDetail(item.purchase.id);
+                  return (
+                  <div key={item.purchase.id} className="flex flex-col gap-2 p-2 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-2)]/20">
+                    <div className="flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-[var(--text)] truncate">{item.purchase.cardName}</div>
                       <div className="text-xs text-[var(--text-muted)]">
@@ -290,8 +328,52 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                         </button>
                       )}
                     </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        aria-label={`Original list price for ${item.purchase.cardName}`}
+                        placeholder="List $"
+                        value={detail.originalListPrice}
+                        onChange={e => updateRowDetail(item.purchase.id, { originalListPrice: e.target.value })}
+                        className="px-2 py-1 text-xs rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
+                      />
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        aria-label={`Price reductions for ${item.purchase.cardName}`}
+                        placeholder="# drops"
+                        value={detail.priceReductions}
+                        onChange={e => updateRowDetail(item.purchase.id, { priceReductions: e.target.value })}
+                        className="px-2 py-1 text-xs rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
+                      />
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        aria-label={`Days listed for ${item.purchase.cardName}`}
+                        placeholder="Days"
+                        value={detail.daysListed}
+                        onChange={e => updateRowDetail(item.purchase.id, { daysListed: e.target.value })}
+                        className="px-2 py-1 text-xs rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
+                      />
+                      <select
+                        aria-label={`Sale reason for ${item.purchase.cardName}`}
+                        value={detail.saleReason}
+                        onChange={e => updateRowDetail(item.purchase.id, { saleReason: e.target.value })}
+                        className="px-2 py-1 text-xs rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
+                      >
+                        {saleReasonOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

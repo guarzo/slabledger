@@ -35,7 +35,7 @@ declare module './client' {
     listPurchaseOnDH(purchaseId: string): Promise<{ listed: number; synced: number; skipped: number; total: number }>;
 
     // Bulk sales
-    createBulkSales(campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number }[]): Promise<import('../../types/campaigns').BulkSaleResult>;
+    createBulkSales(campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number; originalListPriceCents?: number; priceReductions?: number; daysListed?: number; saleReason?: string }[]): Promise<import('../../types/campaigns').BulkSaleResult>;
 
     // Price hints
     savePriceHint(hint: PriceHint): Promise<{ status: string }>;
@@ -116,7 +116,7 @@ proto.listPurchaseOnDH = async function (this: APIClient, purchaseId: string): P
   return this.post<{ listed: number; synced: number; skipped: number; total: number }>(`/purchases/${encodeURIComponent(purchaseId)}/list-on-dh`);
 };
 
-proto.createBulkSales = async function (this: APIClient, campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number }[]): Promise<import('../../types/campaigns').BulkSaleResult> {
+proto.createBulkSales = async function (this: APIClient, campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number; originalListPriceCents?: number; priceReductions?: number; daysListed?: number; saleReason?: string }[]): Promise<import('../../types/campaigns').BulkSaleResult> {
   return this.post<import('../../types/campaigns').BulkSaleResult>(`/campaigns/${campaignId}/sales/bulk`, { saleChannel, saleDate, items });
 };
 

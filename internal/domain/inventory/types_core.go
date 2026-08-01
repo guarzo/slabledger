@@ -433,8 +433,12 @@ type Sale struct {
 
 // BulkSaleInput represents a single item in a bulk sale request.
 type BulkSaleInput struct {
-	PurchaseID     string `json:"purchaseId"`
-	SalePriceCents int    `json:"salePriceCents"`
+	PurchaseID             string `json:"purchaseId"`
+	SalePriceCents         int    `json:"salePriceCents"`
+	OriginalListPriceCents int    `json:"originalListPriceCents,omitempty"`
+	PriceReductions        int    `json:"priceReductions,omitempty"`
+	DaysListed             int    `json:"daysListed,omitempty"`
+	SaleReason             string `json:"saleReason,omitempty"`
 }
 
 // BulkSaleResult summarizes the outcome of a bulk sale operation.
