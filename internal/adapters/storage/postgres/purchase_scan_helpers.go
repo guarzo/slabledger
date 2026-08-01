@@ -23,7 +23,9 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	gem_rate_id, psa_spec_id,
 	card_player, card_variation, card_category, cl_synced_at, cl_last_error, dh_last_synced_at,
 	mid_price_cents, last_sold_date, dh_unlisted_detected_at,
-	cl_value_at_purchase_cents`
+	cl_value_at_purchase_cents,
+	cl_confidence_at_purchase, population_at_purchase, dh_confidence_at_purchase,
+	source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase`
 
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
 const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number, p.card_number, p.set_name,
@@ -42,7 +44,9 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 		p.gem_rate_id, p.psa_spec_id,
 		p.card_player, p.card_variation, p.card_category, p.cl_synced_at, p.cl_last_error, p.dh_last_synced_at,
 		p.mid_price_cents, p.last_sold_date, p.dh_unlisted_detected_at,
-		p.cl_value_at_purchase_cents`
+		p.cl_value_at_purchase_cents,
+		p.cl_confidence_at_purchase, p.population_at_purchase, p.dh_confidence_at_purchase,
+		p.source_count_at_purchase, p.active_listings_at_purchase, p.sales_last_30d_at_purchase`
 
 // saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
 const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_cents, s.sale_fee_cents,
@@ -99,6 +103,8 @@ func purchaseScanDests(p *inventory.Purchase) []any {
 		&p.CardPlayer, &p.CardVariation, &p.CardCategory, &p.CLSyncedAt, &p.CLLastError, &p.DHLastSyncedAt,
 		&p.MidPriceCents, &p.LastSoldDate, &p.DHUnlistedDetectedAt,
 		&p.CLValueAtPurchaseCents,
+		&p.CLConfidenceAtPurchase, &p.PopulationAtPurchase, &p.DHConfidenceAtPurchase,
+		&p.SourceCountAtPurchase, &p.ActiveListingsAtPurchase, &p.SalesLast30dAtPurchase,
 	}
 }
 
