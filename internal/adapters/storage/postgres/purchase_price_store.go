@@ -253,6 +253,12 @@ func (ps *PurchaseStore) UpdateExternalPurchaseFields(ctx context.Context, id st
 
 // UpdatePurchaseMarketSnapshot persists refreshed market snapshot fields on a purchase.
 func (ps *PurchaseStore) UpdatePurchaseMarketSnapshot(ctx context.Context, id string, snap inventory.MarketSnapshotData) error {
+	// The 4 DH provenance columns (dh_confidence_at_purchase, source_count_at_purchase,
+	// active_listings_at_purchase, sales_last_30d_at_purchase) freeze set-once on first
+	// successful snapshot via IS NULL guard. For purchases predating migration 000022,
+	// this first freeze happens at refresh time, so values are record-time proxies rather
+	// than strict decision-time; this is intentional per spec (only creation-time
+	// confidence/population are strictly decision-time).
 	result, err := ps.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET last_sold_cents = $1, lowest_list_cents = $2, conservative_cents = $3,
 			median_cents = $4, mid_price_cents = $5, last_sold_date = $6,
