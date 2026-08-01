@@ -411,9 +411,21 @@ type Sale struct {
 	// Crack slab tracking — indicates the card was cracked from its slab and sold raw
 	WasCracked bool `json:"wasCracked,omitempty"`
 
-	// ForcedLiquidation indicates this sale was driven by invoice timing pressure
-	// (heuristic: forced channel within 6 days before an invoice due date; operator-overridable).
+	// ForcedLiquidation indicates this sale was driven by invoice timing pressure.
+	// App-maintained (not a generated/computed column): kept in sync with SaleReason
+	// by freezeSaleProvenance whenever a sale is created.
 	ForcedLiquidation bool `json:"forcedLiquidation"`
+
+	// SaleReason records why this sale happened (discretionary, invoice_pressure,
+	// aging_policy, bulk_lot, show_clearout). Client-supplied when valid; defaulted
+	// via heuristic when empty. Frozen at sale-creation time.
+	SaleReason string `json:"saleReason,omitempty"`
+
+	// CLValueAtSaleCents and ChannelFeePctAtSale freeze the purchase's CL value and
+	// the campaign's effective channel fee at the moment of sale. Server-authoritative:
+	// always overwritten by freezeSaleProvenance, never trusted from client input.
+	CLValueAtSaleCents  int      `json:"clValueAtSaleCents,omitempty"`
+	ChannelFeePctAtSale *float64 `json:"channelFeePctAtSale,omitempty"`
 
 	// Market snapshot at time of sale (best-effort, may be zero)
 	MarketSnapshotData

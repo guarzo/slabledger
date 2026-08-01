@@ -115,6 +115,30 @@ func (s *service) ListPurchasesByCampaign(ctx context.Context, campaignID string
 	return s.purchases.ListPurchasesByCampaign(ctx, campaignID, limit, offset)
 }
 
+// freezeSaleProvenance validates and defaults SaleReason, then overwrites the
+// derived, server-authoritative provenance fields (CLValueAtSaleCents,
+// ChannelFeePctAtSale, ForcedLiquidation) at sale-creation time. SaleReason
+// itself is legitimate client input and is preserved when valid.
+func freezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
+	if sa.SaleReason != "" && !ValidSaleReason(sa.SaleReason) {
+		return ErrInvalidSaleReason
+	}
+	if sa.SaleReason == "" {
+		if forced {
+			sa.SaleReason = SaleReasonInvoicePressure
+		} else {
+			sa.SaleReason = SaleReasonDiscretionary
+		}
+	}
+	// Server-authoritative: overwrite any client-supplied values.
+	sa.CLValueAtSaleCents = purchase.CLValueCents
+	pct := EffectiveChannelFeePct(sa.SaleChannel, campaign)
+	sa.ChannelFeePctAtSale = &pct
+	// Keep the plain boolean in sync with the reason (app-maintained; not generated).
+	sa.ForcedLiquidation = sa.SaleReason == SaleReasonInvoicePressure
+	return nil
+}
+
 func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, purchase *Purchase) error {
 	if err := ValidateSale(sa); err != nil {
 		return err
@@ -145,7 +169,9 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	if invErr != nil {
 		invoices = nil // heuristic degrades to false; never block a sale on invoice lookup
 	}
-	sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)
+	if err := freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)); err != nil {
+		return err
+	}
 
 	// Best-effort: capture market snapshot at time of sale
 	_, _ = s.captureMarketSnapshot(ctx, sa, purchase.ToCardIdentity(), purchase.GradeValue, purchase.CLValueCents)
@@ -249,7 +275,11 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 		}
 
 		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
-		sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, bulkInvoices)
+		if err := freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, bulkInvoices)); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
+			continue
+		}
 
 		now := time.Now()
 		sa.CreatedAt = now
