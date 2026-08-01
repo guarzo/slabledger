@@ -127,10 +127,12 @@ type MarketSnapshotData struct {
 	SnapshotDate      string  `json:"snapshotDate,omitempty"`
 	SnapshotJSON      string  `json:"-"` // Full MarketSnapshot serialized as JSON (DB column, not in API)
 
-	// Decision-time provenance (persisted to *_at_purchase columns via the freeze paths).
-	Confidence         float64 `json:"confidence,omitempty"`     // DH pricing confidence
-	SourceCountRaw     int     `json:"sourceCountRaw,omitempty"` // external platform count, pre-CL-correction
-	MarketDataObserved bool    `json:"-"`                        // true when CardLookup market data was present
+	// Decision-time provenance: read in-process by the freeze paths and written to
+	// the *_at_purchase columns. Not part of the API wire format (json:"-") — the
+	// frozen snapshots live in dedicated Purchase/Sale fields, not on this embed.
+	Confidence         float64 `json:"-"` // DH pricing confidence
+	SourceCountRaw     int     `json:"-"` // external platform count, pre-CL-correction
+	MarketDataObserved bool    `json:"-"` // true when CardLookup market data was present
 }
 
 func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string) {
