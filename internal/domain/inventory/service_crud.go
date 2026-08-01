@@ -66,7 +66,7 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	// for asynchronous background enrichment (e.g. during bulk PSA import).
 	if p.SnapshotStatus != SnapshotStatusPending {
 		// Best-effort: capture market snapshot at time of purchase.
-		s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
+		_, _ = s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
 	}
 
 	now := time.Now()
@@ -116,7 +116,7 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)
 
 	// Best-effort: capture market snapshot at time of sale
-	s.captureMarketSnapshot(ctx, sa, purchase.ToCardIdentity(), purchase.GradeValue, purchase.CLValueCents)
+	_, _ = s.captureMarketSnapshot(ctx, sa, purchase.ToCardIdentity(), purchase.GradeValue, purchase.CLValueCents)
 
 	now := time.Now()
 	sa.CreatedAt = now

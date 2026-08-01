@@ -137,7 +137,7 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 			result.Updated++
 			if p.GradeValue > 0 && p.CardName != "" && !IsGenericSetName(p.SetName) {
 				// Use existing for purchase identity (correct ID), p for card identity (updated values)
-				s.captureMarketSnapshot(ctx, existing, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
+				_, _ = s.captureMarketSnapshot(ctx, existing, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
 			}
 			result.Results = append(result.Results, ExternalImportItemResult{
 				CertNumber: certNumber,
@@ -173,7 +173,7 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 
 		result.Imported++
 		if p.GradeValue > 0 && p.CardName != "" && !IsGenericSetName(p.SetName) {
-			s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
+			_, _ = s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
 		}
 		result.Results = append(result.Results, ExternalImportItemResult{
 			CertNumber: certNumber,
