@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -123,5 +124,56 @@ func TestSaleProvenanceRoundtrip(t *testing.T) {
 	}
 	if !got.ForcedLiquidation {
 		t.Errorf("ForcedLiquidation = %v, want true", got.ForcedLiquidation)
+	}
+}
+
+func TestSaleStoreUpdateSaleReason(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ss := NewSaleStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-sale-reason-a', 'Sale Reason Campaign A', 'pending', NOW(), NOW()),
+			('camp-sale-reason-b', 'Sale Reason Campaign B', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaigns: %v", err)
+	}
+
+	p := makeTestPurchase()
+	p.CampaignID = "camp-sale-reason-a"
+	if err := ps.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("create purchase: %v", err)
+	}
+
+	sale := makeTestSale(p.ID)
+	sale.SaleReason = "invoice_pressure"
+	sale.ForcedLiquidation = true
+	if err := ss.CreateSale(ctx, sale); err != nil {
+		t.Fatalf("create sale: %v", err)
+	}
+
+	// Wrong campaign scoping returns ErrSaleNotFound.
+	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-b", sale.ID, "aging_policy"); !errors.Is(err, inventory.ErrSaleNotFound) {
+		t.Fatalf("UpdateSaleReason (wrong campaign) error = %v, want ErrSaleNotFound", err)
+	}
+
+	// Correct campaign updates the reason and flips forced_liquidation to false.
+	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-a", sale.ID, "aging_policy"); err != nil {
+		t.Fatalf("UpdateSaleReason: %v", err)
+	}
+
+	got, err := ss.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get sale: %v", err)
+	}
+	if got.SaleReason != "aging_policy" {
+		t.Errorf("SaleReason = %q, want %q", got.SaleReason, "aging_policy")
+	}
+	if got.ForcedLiquidation {
+		t.Errorf("ForcedLiquidation = true, want false after non-invoice_pressure reason")
 	}
 }

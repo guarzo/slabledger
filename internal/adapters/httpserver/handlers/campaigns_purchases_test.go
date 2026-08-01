@@ -678,6 +678,74 @@ func TestHandleDeleteSale(t *testing.T) {
 	}
 }
 
+// --- HandleUpdateSaleReason ---
+
+func TestHandleUpdateSaleReason(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		body       string
+		wantStatus int
+	}{
+		{
+			name: "empty reason returns 400",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, _, _, _ string) error {
+					return inventory.ErrInvalidSaleReason
+				},
+			},
+			body:       `{"saleReason":""}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid reason returns 400",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, _, _, _ string) error {
+					return inventory.ErrInvalidSaleReason
+				},
+			},
+			body:       `{"saleReason":"bogus"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "valid reason returns 200",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, campaignID, saleID, reason string) error {
+					if campaignID != "c-1" || saleID != "s-1" || reason != "bulk_lot" {
+						t.Fatalf("unexpected args: %s %s %s", campaignID, saleID, reason)
+					}
+					return nil
+				},
+			},
+			body:       `{"saleReason":"bulk_lot"}`,
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "sale not found returns 404",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, _, _, _ string) error {
+					return inventory.ErrSaleNotFound
+				},
+			},
+			body:       `{"saleReason":"bulk_lot"}`,
+			wantStatus: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodPatch, "/api/campaigns/c-1/sales/s-1", strings.NewReader(tt.body))
+			req.SetPathValue("id", "c-1")
+			req.SetPathValue("saleID", "s-1")
+			rec := httptest.NewRecorder()
+			h.HandleUpdateSaleReason(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 // --- HandleQuickAdd ---
 
 func TestHandleQuickAdd(t *testing.T) {

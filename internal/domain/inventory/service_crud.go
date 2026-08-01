@@ -329,3 +329,10 @@ func (s *service) ReassignPurchase(ctx context.Context, purchaseID string, newCa
 	// UpdatePurchaseCampaign atomically rejects the update if a linked sale exists.
 	return s.purchases.UpdatePurchaseCampaign(ctx, purchaseID, newCampaignID, campaign.PSASourcingFeeCents)
 }
+
+func (s *service) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+	if !ValidSaleReasonForPatch(reason) {
+		return ErrInvalidSaleReason
+	}
+	return s.sales.UpdateSaleReason(ctx, campaignID, saleID, reason)
+}

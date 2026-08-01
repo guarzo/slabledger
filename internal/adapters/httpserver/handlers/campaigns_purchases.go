@@ -240,6 +240,40 @@ func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// HandleUpdateSaleReason handles PATCH /api/campaigns/{id}/sales/{saleID}.
+func (h *CampaignsHandler) HandleUpdateSaleReason(w http.ResponseWriter, r *http.Request) {
+	campaignID, ok := pathID(w, r, "id", "Campaign ID")
+	if !ok {
+		return
+	}
+	saleID, ok := pathID(w, r, "saleID", "Sale ID")
+	if !ok {
+		return
+	}
+
+	var req struct {
+		SaleReason string `json:"saleReason"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+
+	if err := h.service.UpdateSaleReason(r.Context(), campaignID, saleID, req.SaleReason); err != nil {
+		if inventory.IsValidationError(err) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if inventory.IsSaleNotFound(err) {
+			writeError(w, http.StatusNotFound, "Sale not found")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to update sale reason", observability.Err(err), observability.String("sale_id", saleID))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleCertLookup handles GET /api/certs/{certNumber}.
 func (h *CampaignsHandler) HandleCertLookup(w http.ResponseWriter, r *http.Request) {
 	certNumber, ok := pathID(w, r, "certNumber", "Cert number")

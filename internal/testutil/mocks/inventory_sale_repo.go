@@ -14,6 +14,7 @@ type SaleRepositoryMock struct {
 	ListSalesByCampaignFn    func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error)
 	DeleteSaleFn             func(ctx context.Context, saleID string) error
 	DeleteSaleByPurchaseIDFn func(ctx context.Context, purchaseID string) error
+	UpdateSaleReasonFn       func(ctx context.Context, campaignID, saleID, reason string) error
 }
 
 var _ inventory.SaleRepository = (*SaleRepositoryMock)(nil)
@@ -56,6 +57,13 @@ func (m *SaleRepositoryMock) DeleteSale(ctx context.Context, saleID string) erro
 func (m *SaleRepositoryMock) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
 	if m.DeleteSaleByPurchaseIDFn != nil {
 		return m.DeleteSaleByPurchaseIDFn(ctx, purchaseID)
+	}
+	return nil
+}
+
+func (m *SaleRepositoryMock) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+	if m.UpdateSaleReasonFn != nil {
+		return m.UpdateSaleReasonFn(ctx, campaignID, saleID, reason)
 	}
 	return nil
 }

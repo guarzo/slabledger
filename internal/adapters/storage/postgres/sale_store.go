@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -139,6 +140,24 @@ func (ss *SaleStore) DeleteSale(ctx context.Context, saleID string) error {
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if rows == 0 {
+		return inventory.ErrSaleNotFound
+	}
+	return nil
+}
+
+func (ss *SaleStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+	result, err := ss.db.ExecContext(ctx,
+		`UPDATE campaign_sales SET sale_reason = $1, forced_liquidation = ($1 = 'invoice_pressure'), updated_at = $2
+		 WHERE id = $3 AND purchase_id IN (SELECT id FROM campaign_purchases WHERE campaign_id = $4)`,
+		reason, time.Now(), saleID, campaignID)
+	if err != nil {
+		return fmt.Errorf("update sale reason: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update sale reason rows affected: %w", err)
+	}
+	if n == 0 {
 		return inventory.ErrSaleNotFound
 	}
 	return nil

@@ -223,6 +223,20 @@ func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) 
 	return ErrSaleNotFound
 }
 
+func (m *mockRepo) UpdateSaleReason(_ context.Context, campaignID, saleID, reason string) error {
+	s, ok := m.sales[saleID]
+	if !ok {
+		return ErrSaleNotFound
+	}
+	p, ok := m.purchases[s.PurchaseID]
+	if !ok || p.CampaignID != campaignID {
+		return ErrSaleNotFound
+	}
+	s.SaleReason = reason
+	s.ForcedLiquidation = reason == "invoice_pressure"
+	return nil
+}
+
 func (m *mockRepo) ListSalesByCampaign(_ context.Context, campaignID string, limit, offset int) ([]Sale, error) {
 	var result []Sale
 	for _, s := range m.sales {
