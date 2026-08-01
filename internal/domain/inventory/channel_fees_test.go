@@ -1,10 +1,36 @@
 package inventory
 
 import (
+	"math"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/constants"
 )
+
+func TestEffectiveChannelFeePct(t *testing.T) {
+	c := &Campaign{EbayFeePct: 0.10}
+	tests := []struct {
+		channel SaleChannel
+		want    float64
+	}{
+		{SaleChannelEbay, 0.10},
+		{SaleChannelTCGPlayer, 0.10},
+		{SaleChannelWebsite, DefaultWebsiteFeePct},
+		{SaleChannelInPerson, 0},
+	}
+	for _, tt := range tests {
+		if got := EffectiveChannelFeePct(tt.channel, c); got != tt.want {
+			t.Errorf("EffectiveChannelFeePct(%s)=%v want %v", tt.channel, got, tt.want)
+		}
+		// Parity: fee cents == round(price * pct) for a sample price.
+		const price = 10000
+		wantFee := CalculateSaleFee(tt.channel, price, c)
+		gotFee := int(math.Round(float64(price) * EffectiveChannelFeePct(tt.channel, c)))
+		if gotFee != wantFee {
+			t.Errorf("parity mismatch %s: pct-derived %d vs CalculateSaleFee %d", tt.channel, gotFee, wantFee)
+		}
+	}
+}
 
 func TestEffectiveFeePct(t *testing.T) {
 	tests := []struct {
