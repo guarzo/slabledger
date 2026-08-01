@@ -91,9 +91,6 @@ func TestCreatePurchaseProvenanceRoundTrip(t *testing.T) {
 		t.Fatalf("seed campaign: %v", err)
 	}
 
-	intPtr := func(v int) *int { return &v }
-	floatPtr := func(v float64) *float64 { return &v }
-
 	tests := []struct {
 		name string
 		set  func(p *inventory.Purchase)

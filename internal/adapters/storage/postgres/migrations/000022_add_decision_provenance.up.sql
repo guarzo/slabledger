@@ -41,7 +41,7 @@ UPDATE campaign_sales SET forced_liquidation = (sale_reason = 'invoice_pressure'
 -- so those rows would keep sale_reason='' and analysis would silently skip them.
 -- This trigger derives sale_reason from the boolean on any INSERT/UPDATE that
 -- leaves sale_reason empty, so legacy-shaped writes are never lost.
-CREATE OR REPLACE FUNCTION campaign_sales_derive_reason() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION public.campaign_sales_derive_reason() RETURNS trigger AS $$
 BEGIN
     IF NEW.sale_reason IS NULL OR NEW.sale_reason = '' THEN
         NEW.sale_reason := CASE WHEN NEW.forced_liquidation
@@ -51,6 +51,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Scope: INSERT (rollback-window: old image inserts with only forced_liquidation)
+-- and UPDATE OF forced_liquidation (legacy boolean writes). NOT a blanket UPDATE,
+-- so a future code path can still intentionally clear sale_reason to '' without
+-- the trigger silently rewriting it.
 CREATE TRIGGER campaign_sales_derive_reason_trg
-    BEFORE INSERT OR UPDATE ON campaign_sales
-    FOR EACH ROW EXECUTE FUNCTION campaign_sales_derive_reason();
+    BEFORE INSERT OR UPDATE OF forced_liquidation ON campaign_sales
+    FOR EACH ROW EXECUTE FUNCTION public.campaign_sales_derive_reason();

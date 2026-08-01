@@ -127,11 +127,13 @@ func computeSplitPNL(rows []inventory.PurchaseWithSale) SplitPNL {
 		b.NetProfitCents += r.Sale.NetProfitCents
 
 		// Legacy/unknown sales (SaleReason == "") still count above but are
-		// skipped from the 5-key reason buckets.
-		if r.Sale.SaleReason == "" {
+		// skipped from the 5-key reason buckets. An unrecognized reason outside
+		// the 5 valid keys is treated the same way — never inserted as a new key,
+		// so the ByReason contract (exactly the 5 keys) always holds.
+		rb, ok := byReason[r.Sale.SaleReason]
+		if !ok {
 			continue
 		}
-		rb := byReason[r.Sale.SaleReason]
 		rb.SoldCount++
 		rb.RevenueCents += r.Sale.SalePriceCents
 		rb.NetProfitCents += r.Sale.NetProfitCents

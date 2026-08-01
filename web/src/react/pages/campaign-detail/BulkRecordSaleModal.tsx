@@ -334,7 +334,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                         type="number"
                         step="0.01"
                         min="0"
-                        aria-label={`Original list price for ${item.purchase.cardName}`}
+                        aria-label={`Original list price for ${item.purchase.cardName} (${item.purchase.id})`}
                         placeholder="List $"
                         value={detail.originalListPrice}
                         onChange={e => updateRowDetail(item.purchase.id, { originalListPrice: e.target.value })}
@@ -344,7 +344,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                         type="number"
                         step="1"
                         min="0"
-                        aria-label={`Price reductions for ${item.purchase.cardName}`}
+                        aria-label={`Price reductions for ${item.purchase.cardName} (${item.purchase.id})`}
                         placeholder="# drops"
                         value={detail.priceReductions}
                         onChange={e => updateRowDetail(item.purchase.id, { priceReductions: e.target.value })}
@@ -354,14 +354,14 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
                         type="number"
                         step="1"
                         min="0"
-                        aria-label={`Days listed for ${item.purchase.cardName}`}
+                        aria-label={`Days listed for ${item.purchase.cardName} (${item.purchase.id})`}
                         placeholder="Days"
                         value={detail.daysListed}
                         onChange={e => updateRowDetail(item.purchase.id, { daysListed: e.target.value })}
                         className="px-2 py-1 text-xs rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
                       />
                       <select
-                        aria-label={`Sale reason for ${item.purchase.cardName}`}
+                        aria-label={`Sale reason for ${item.purchase.cardName} (${item.purchase.id})`}
                         value={detail.saleReason}
                         onChange={e => updateRowDetail(item.purchase.id, { saleReason: e.target.value })}
                         className="px-2 py-1 text-xs rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] focus:outline-none focus:border-[var(--brand-500)]"
