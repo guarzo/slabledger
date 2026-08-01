@@ -76,3 +76,52 @@ func TestSaleForcedLiquidationRoundtrip(t *testing.T) {
 		})
 	}
 }
+
+func TestSaleProvenanceRoundtrip(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ss := NewSaleStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-sale-prov', 'Sale Provenance Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	p := makeTestPurchase()
+	p.CampaignID = "camp-sale-prov"
+	if err := ps.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("create purchase: %v", err)
+	}
+
+	feePct := 0.10
+	sale := makeTestSale(p.ID)
+	sale.SaleReason = "invoice_pressure"
+	sale.CLValueAtSaleCents = 9000
+	sale.ChannelFeePctAtSale = &feePct
+	sale.ForcedLiquidation = true
+	if err := ss.CreateSale(ctx, sale); err != nil {
+		t.Fatalf("create sale: %v", err)
+	}
+
+	got, err := ss.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get sale: %v", err)
+	}
+	if got.SaleReason != "invoice_pressure" {
+		t.Errorf("SaleReason = %q, want %q", got.SaleReason, "invoice_pressure")
+	}
+	if got.CLValueAtSaleCents != 9000 {
+		t.Errorf("CLValueAtSaleCents = %d, want 9000", got.CLValueAtSaleCents)
+	}
+	if got.ChannelFeePctAtSale == nil || *got.ChannelFeePctAtSale != 0.10 {
+		t.Errorf("ChannelFeePctAtSale = %v, want 0.10", got.ChannelFeePctAtSale)
+	}
+	if !got.ForcedLiquidation {
+		t.Errorf("ForcedLiquidation = %v, want true", got.ForcedLiquidation)
+	}
+}

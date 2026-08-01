@@ -53,7 +53,7 @@ const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_ce
 	s.sale_date, s.days_to_sell, s.net_profit_cents, s.created_at, s.updated_at,
 	s.last_sold_cents, s.lowest_list_cents, s.conservative_cents,
 	s.median_cents, s.active_listings, s.sales_last_30d, s.trend_30d, s.snapshot_date, s.snapshot_json,
-	s.forced_liquidation`
+	s.forced_liquidation, s.sale_reason, s.cl_value_at_sale_cents, s.channel_fee_pct_at_sale`
 
 // saleColumns is the canonical column list for campaign_sales queries (no table alias).
 const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_cents,
@@ -61,7 +61,7 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
-	was_cracked, order_id, forced_liquidation`
+	was_cracked, order_id, forced_liquidation, sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale`
 
 // scanner abstracts *sql.Row and *sql.Rows so scanPurchase works with both.
 type scanner interface {
@@ -71,6 +71,11 @@ type scanner interface {
 // scanSale scans a single Sale row matching saleColumns order.
 func scanSale(s scanner) (inventory.Sale, error) {
 	var sale inventory.Sale
+	var (
+		saleReason          sql.NullString
+		clValueAtSaleCents  sql.NullInt64
+		channelFeePctAtSale sql.NullFloat64
+	)
 	err := s.Scan(
 		&sale.ID, &sale.PurchaseID, &sale.SaleChannel, &sale.SalePriceCents, &sale.SaleFeeCents,
 		&sale.SaleDate, &sale.DaysToSell, &sale.NetProfitCents, &sale.CreatedAt, &sale.UpdatedAt,
@@ -78,8 +83,18 @@ func scanSale(s scanner) (inventory.Sale, error) {
 		&sale.ActiveListings, &sale.SalesLast30d, &sale.Trend30d, &sale.SnapshotDate, &sale.SnapshotJSON,
 		&sale.OriginalListPriceCents, &sale.PriceReductions, &sale.DaysListed, &sale.SoldAtAskingPrice,
 		&sale.WasCracked, &sale.OrderID, &sale.ForcedLiquidation,
+		&saleReason, &clValueAtSaleCents, &channelFeePctAtSale,
 	)
-	return sale, err
+	if err != nil {
+		return sale, err
+	}
+	sale.SaleReason = saleReason.String
+	sale.CLValueAtSaleCents = int(clValueAtSaleCents.Int64)
+	if channelFeePctAtSale.Valid {
+		v := channelFeePctAtSale.Float64
+		sale.ChannelFeePctAtSale = &v
+	}
+	return sale, nil
 }
 
 // purchaseScanDests returns the ordered slice of scan destinations for a Purchase.
@@ -139,6 +154,9 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 		sSnapshotDate      sql.NullString
 		sSnapshotJSON      sql.NullString
 		sForcedLiquidation sql.NullBool
+		sSaleReason        sql.NullString
+		sCLValueAtSale     sql.NullInt64
+		sChannelFeePct     sql.NullFloat64
 	)
 
 	// Build combined dest slice: purchase fields + sale fields.
@@ -148,7 +166,7 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 		&sSaleDate, &sDaysToSell, &sNetProfitCents, &sCreatedAt, &sUpdatedAt,
 		&sLastSold, &sLowestList, &sConservative, &sMedian,
 		&sActiveListings, &sSalesLast30d, &sTrend30d, &sSnapshotDate, &sSnapshotJSON,
-		&sForcedLiquidation,
+		&sForcedLiquidation, &sSaleReason, &sCLValueAtSale, &sChannelFeePct,
 	)
 
 	if err := s.Scan(dests...); err != nil {
@@ -187,6 +205,14 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 		}
 		if sSnapshotJSON.Valid {
 			sale.SnapshotJSON = sSnapshotJSON.String
+		}
+		if sSaleReason.Valid {
+			sale.SaleReason = sSaleReason.String
+		}
+		sale.CLValueAtSaleCents = int(sCLValueAtSale.Int64)
+		if sChannelFeePct.Valid {
+			v := sChannelFeePct.Float64
+			sale.ChannelFeePctAtSale = &v
 		}
 		pws.Sale = sale
 	}

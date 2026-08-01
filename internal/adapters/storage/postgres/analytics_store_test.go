@@ -66,10 +66,12 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 				SaleFeeCents:      0,
 				SaleDate:          "2026-06-15",
 				DaysToSell:        14,
-				NetProfitCents:    1000,
-				ForcedLiquidation: tt.forcedLiquidation,
-				CreatedAt:         time.Now().UTC(),
-				UpdatedAt:         time.Now().UTC(),
+				NetProfitCents:      1000,
+				ForcedLiquidation:   tt.forcedLiquidation,
+				SaleReason:          "invoice_pressure",
+				CLValueAtSaleCents:  tt.clValueAtPurchase,
+				CreatedAt:           time.Now().UTC(),
+				UpdatedAt:           time.Now().UTC(),
 			}
 			if err := ss.CreateSale(ctx, sale); err != nil {
 				t.Fatalf("create sale: %v", err)
@@ -102,6 +104,13 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 			if found.Sale.ForcedLiquidation != tt.forcedLiquidation {
 				t.Errorf("ForcedLiquidation = %v, want %v",
 					found.Sale.ForcedLiquidation, tt.forcedLiquidation)
+			}
+			if found.Sale.SaleReason != "invoice_pressure" {
+				t.Errorf("SaleReason = %q, want %q", found.Sale.SaleReason, "invoice_pressure")
+			}
+			if found.Sale.CLValueAtSaleCents != tt.clValueAtPurchase {
+				t.Errorf("CLValueAtSaleCents = %d, want %d",
+					found.Sale.CLValueAtSaleCents, tt.clValueAtPurchase)
 			}
 		})
 	}
