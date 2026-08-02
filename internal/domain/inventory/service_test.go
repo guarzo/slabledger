@@ -485,32 +485,39 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 		t.Fatalf("setup CreateCampaign: %v", err)
 	}
 
-	p := &inventory.Purchase{
-		CampaignID: c.ID, CardName: "Charizard", CertNumber: "88888881",
-		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
-		Population: 50,
+	tests := []struct {
+		name           string
+		certNumber     string
+		population     int
+		wantPopulation *int
+	}{
+		{name: "positive population is frozen", certNumber: "88888881", population: 50, wantPopulation: func() *int { v := 50; return &v }()},
+		{name: "zero population freezes to nil", certNumber: "88888882", population: 0, wantPopulation: nil},
 	}
-	if err := svc.CreatePurchase(ctx, p); err != nil {
-		t.Fatalf("CreatePurchase: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &inventory.Purchase{
+				CampaignID: c.ID, CardName: "Charizard", CertNumber: tt.certNumber,
+				GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+				Population: tt.population,
+			}
+			if err := svc.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("CreatePurchase: %v", err)
+			}
 
-	if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
-		t.Errorf("CLConfidenceAtPurchase = %v, want 2", p.CLConfidenceAtPurchase)
-	}
-	if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != 50 {
-		t.Errorf("PopulationAtPurchase = %v, want 50", p.PopulationAtPurchase)
-	}
-
-	p2 := &inventory.Purchase{
-		CampaignID: c.ID, CardName: "Pikachu", CertNumber: "88888882",
-		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
-		Population: 0,
-	}
-	if err := svc.CreatePurchase(ctx, p2); err != nil {
-		t.Fatalf("CreatePurchase p2: %v", err)
-	}
-	if p2.PopulationAtPurchase != nil {
-		t.Errorf("PopulationAtPurchase = %v, want nil for Population:0", p2.PopulationAtPurchase)
+			if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
+				t.Errorf("CLConfidenceAtPurchase = %v, want 2", p.CLConfidenceAtPurchase)
+			}
+			if tt.wantPopulation == nil {
+				if p.PopulationAtPurchase != nil {
+					t.Errorf("PopulationAtPurchase = %v, want nil for Population:0", p.PopulationAtPurchase)
+				}
+				return
+			}
+			if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != *tt.wantPopulation {
+				t.Errorf("PopulationAtPurchase = %v, want %v", p.PopulationAtPurchase, *tt.wantPopulation)
+			}
+		})
 	}
 }
 
