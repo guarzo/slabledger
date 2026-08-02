@@ -2,12 +2,16 @@ package postgres
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
+
+var testSaleIDCounter atomic.Int64
 
 // TestGetAllPurchasesWithSalesFieldRoundtrip verifies that forced_liquidation and
 // cl_value_at_purchase_cents flow correctly through GetAllPurchasesWithSales.
@@ -31,12 +35,13 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 
 	tests := []struct {
 		name              string
+		saleReason        string
 		clValueAtPurchase int
 		forcedLiquidation bool
 	}{
-		{"forced=true, cl-at-buy=5000", 5000, true},
-		{"forced=false, cl-at-buy=0", 0, false},
-		{"forced=false, cl-at-buy=12000", 12000, false},
+		{"forced by invoice pressure, cl-at-buy=5000", inventory.SaleReasonInvoicePressure, 5000, true},
+		{"discretionary, cl-at-buy=0", inventory.SaleReasonDiscretionary, 0, false},
+		{"aging policy, cl-at-buy=12000", inventory.SaleReasonAgingPolicy, 12000, false},
 	}
 
 	for _, tt := range tests {
@@ -59,7 +64,7 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 			}
 
 			sale := &inventory.Sale{
-				ID:                 "sale-art-" + time.Now().Format("150405.000000000"),
+				ID:                 fmt.Sprintf("sale-art-%d", testSaleIDCounter.Add(1)),
 				PurchaseID:         p.ID,
 				SaleChannel:        inventory.SaleChannelLocal,
 				SalePriceCents:     5000,
@@ -68,7 +73,7 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 				DaysToSell:         14,
 				NetProfitCents:     1000,
 				ForcedLiquidation:  tt.forcedLiquidation,
-				SaleReason:         "invoice_pressure",
+				SaleReason:         tt.saleReason,
 				CLValueAtSaleCents: tt.clValueAtPurchase,
 				CreatedAt:          time.Now().UTC(),
 				UpdatedAt:          time.Now().UTC(),
@@ -105,12 +110,15 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 				t.Errorf("ForcedLiquidation = %v, want %v",
 					found.Sale.ForcedLiquidation, tt.forcedLiquidation)
 			}
-			if found.Sale.SaleReason != "invoice_pressure" {
-				t.Errorf("SaleReason = %q, want %q", found.Sale.SaleReason, "invoice_pressure")
+			if found.Sale.SaleReason != tt.saleReason {
+				t.Errorf("SaleReason = %q, want %q", found.Sale.SaleReason, tt.saleReason)
 			}
 			if found.Sale.CLValueAtSaleCents != tt.clValueAtPurchase {
 				t.Errorf("CLValueAtSaleCents = %d, want %d",
 					found.Sale.CLValueAtSaleCents, tt.clValueAtPurchase)
+			}
+			if found.Sale.ChannelFeePctAtSale != nil {
+				t.Errorf("ChannelFeePctAtSale = %v, want nil for a sale with no stored fee", *found.Sale.ChannelFeePctAtSale)
 			}
 		})
 	}

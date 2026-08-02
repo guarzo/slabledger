@@ -176,4 +176,7 @@ func TestSaleStoreUpdateSaleReason(t *testing.T) {
 	if got.ForcedLiquidation {
 		t.Errorf("ForcedLiquidation = true, want false after non-invoice_pressure reason")
 	}
+	if got.ChannelFeePctAtSale != nil {
+		t.Errorf("ChannelFeePctAtSale = %v, want nil for a sale with no stored fee", *got.ChannelFeePctAtSale)
+	}
 }
