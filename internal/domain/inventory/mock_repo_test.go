@@ -223,7 +223,7 @@ func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) 
 	return ErrSaleNotFound
 }
 
-func (m *mockRepo) UpdateSaleReason(_ context.Context, campaignID, saleID, reason string) error {
+func (m *mockRepo) UpdateSaleReason(_ context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error {
 	s, ok := m.sales[saleID]
 	if !ok {
 		return ErrSaleNotFound
@@ -233,7 +233,7 @@ func (m *mockRepo) UpdateSaleReason(_ context.Context, campaignID, saleID, reaso
 		return ErrSaleNotFound
 	}
 	s.SaleReason = reason
-	s.ForcedLiquidation = reason == "invoice_pressure"
+	s.ForcedLiquidation = forcedLiquidation
 	return nil
 }
 

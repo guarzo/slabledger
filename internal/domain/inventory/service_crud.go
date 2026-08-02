@@ -135,7 +135,7 @@ func freezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forc
 	pct := EffectiveChannelFeePct(sa.SaleChannel, campaign)
 	sa.ChannelFeePctAtSale = &pct
 	// Keep the plain boolean in sync with the reason (app-maintained; not generated).
-	sa.ForcedLiquidation = sa.SaleReason == SaleReasonInvoicePressure
+	sa.ForcedLiquidation = IsForcedReason(sa.SaleReason)
 	return nil
 }
 
@@ -338,5 +338,5 @@ func (s *service) UpdateSaleReason(ctx context.Context, campaignID, saleID, reas
 	if !ValidSaleReasonForPatch(reason) {
 		return ErrInvalidSaleReason
 	}
-	return s.sales.UpdateSaleReason(ctx, campaignID, saleID, reason)
+	return s.sales.UpdateSaleReason(ctx, campaignID, saleID, reason, IsForcedReason(reason))
 }

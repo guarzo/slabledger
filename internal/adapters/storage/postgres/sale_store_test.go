@@ -157,12 +157,12 @@ func TestSaleStoreUpdateSaleReason(t *testing.T) {
 	}
 
 	// Wrong campaign scoping returns ErrSaleNotFound.
-	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-b", sale.ID, "aging_policy"); !errors.Is(err, inventory.ErrSaleNotFound) {
+	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-b", sale.ID, "aging_policy", false); !errors.Is(err, inventory.ErrSaleNotFound) {
 		t.Fatalf("UpdateSaleReason (wrong campaign) error = %v, want ErrSaleNotFound", err)
 	}
 
 	// Correct campaign updates the reason and flips forced_liquidation to false.
-	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-a", sale.ID, "aging_policy"); err != nil {
+	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-a", sale.ID, "aging_policy", false); err != nil {
 		t.Fatalf("UpdateSaleReason: %v", err)
 	}
 
