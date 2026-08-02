@@ -214,3 +214,64 @@ func TestByReasonSplit(t *testing.T) {
 		t.Errorf("Discretionary.SoldCount=%d, want 3 (all 3 sales are non-forced)", result.Campaigns[0].PNL.Discretionary.SoldCount)
 	}
 }
+
+func TestBuyTermsBucketOrdering(t *testing.T) {
+	// purchaseFor builds a Purchase whose buy-cost/CL-value ratio produces
+	// the given percentage (as buyTermsBucket computes it: BuyCostCents*100/
+	// CLValueAtPurchaseCents), or an "unknown" bucket when clCents is 0.
+	purchaseFor := func(pct, clCents int) inventory.Purchase {
+		return inventory.Purchase{BuyCostCents: pct, CLValueAtPurchaseCents: clCents}
+	}
+
+	tests := []struct {
+		name       string
+		bucket     inventory.Purchase
+		wantLabel  string
+		before     inventory.Purchase
+		beforeWant string
+	}{
+		{
+			name:       "below-50 sorts before 50-55",
+			bucket:     purchaseFor(40, 100),
+			wantLabel:  "<50",
+			before:     purchaseFor(52, 100),
+			beforeWant: "50-55",
+		},
+		{
+			name:       "50-55 sorts before 60-65",
+			bucket:     purchaseFor(52, 100),
+			wantLabel:  "50-55",
+			before:     purchaseFor(62, 100),
+			beforeWant: "60-65",
+		},
+		{
+			name:       "90-95 sorts before >=100",
+			bucket:     purchaseFor(92, 100),
+			wantLabel:  "90-95",
+			before:     purchaseFor(100, 100),
+			beforeWant: ">=100",
+		},
+		{
+			name:       ">=100 sorts before unknown",
+			bucket:     purchaseFor(100, 100),
+			wantLabel:  ">=100",
+			before:     purchaseFor(0, 0),
+			beforeWant: "unknown",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buyTermsBucket(tt.bucket)
+			if got.label != tt.wantLabel {
+				t.Fatalf("buyTermsBucket(%+v).label = %q, want %q", tt.bucket, got.label, tt.wantLabel)
+			}
+			before := buyTermsBucket(tt.before)
+			if before.label != tt.beforeWant {
+				t.Fatalf("buyTermsBucket(%+v).label = %q, want %q", tt.before, before.label, tt.beforeWant)
+			}
+			if got.rank >= before.rank {
+				t.Errorf("rank(%q)=%d, want < rank(%q)=%d", got.label, got.rank, before.label, before.rank)
+			}
+		})
+	}
+}
