@@ -105,6 +105,23 @@ func setupSaleFixture(t *testing.T, repo *mocks.InMemoryCampaignStore, svc inven
 	return c, p
 }
 
+// findSaleByPurchaseID returns the sale recorded against purchaseID, failing the
+// test if the campaign has no such sale.
+func findSaleByPurchaseID(t *testing.T, repo *mocks.InMemoryCampaignStore, campaignID, purchaseID string) *inventory.Sale {
+	t.Helper()
+	sales, err := repo.ListSalesByCampaign(context.Background(), campaignID, 100, 0)
+	if err != nil {
+		t.Fatalf("list sales: %v", err)
+	}
+	for i := range sales {
+		if sales[i].PurchaseID == purchaseID {
+			return &sales[i]
+		}
+	}
+	t.Fatalf("no sale found for purchase %s", purchaseID)
+	return nil
+}
+
 func TestCreateSale_FreezesSaleProvenance(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
 	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
@@ -240,17 +257,7 @@ func TestCreateBulkSales_FreezesProvenance(t *testing.T) {
 		t.Fatalf("created = %d, want 1 (errors: %v)", result.Created, result.Errors)
 	}
 
-	var discretionarySale *inventory.Sale
-	salesList, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList {
-		s := &salesList[i]
-		if s.PurchaseID == p.ID {
-			discretionarySale = s
-		}
-	}
-	if discretionarySale == nil {
-		t.Fatal("expected sale for purchase 1 to exist")
-	}
+	discretionarySale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
 	if discretionarySale.SaleReason != inventory.SaleReasonDiscretionary {
 		t.Errorf("SaleReason = %q, want %q", discretionarySale.SaleReason, inventory.SaleReasonDiscretionary)
 	}
@@ -273,17 +280,7 @@ func TestCreateBulkSales_FreezesProvenance(t *testing.T) {
 		t.Fatalf("created = %d, want 1 (errors: %v)", result2.Created, result2.Errors)
 	}
 
-	var forcedSale *inventory.Sale
-	salesList2, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList2 {
-		s := &salesList2[i]
-		if s.PurchaseID == p2.ID {
-			forcedSale = s
-		}
-	}
-	if forcedSale == nil {
-		t.Fatal("expected sale for purchase 2 to exist")
-	}
+	forcedSale := findSaleByPurchaseID(t, repo, c.ID, p2.ID)
 	if forcedSale.SaleReason != inventory.SaleReasonInvoicePressure {
 		t.Errorf("SaleReason = %q, want %q", forcedSale.SaleReason, inventory.SaleReasonInvoicePressure)
 	}
@@ -333,17 +330,8 @@ func TestCreateBulkSales_CopiesPerItemFields(t *testing.T) {
 		t.Fatalf("errors = %+v, want single error for purchase 2", result.Errors)
 	}
 
-	var sale *inventory.Sale
+	sale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
 	salesList, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList {
-		s := &salesList[i]
-		if s.PurchaseID == p.ID {
-			sale = s
-		}
-	}
-	if sale == nil {
-		t.Fatal("expected sale for purchase 1 to exist")
-	}
 	if sale.OriginalListPriceCents != 1500 {
 		t.Errorf("OriginalListPriceCents = %d, want 1500", sale.OriginalListPriceCents)
 	}
@@ -381,17 +369,7 @@ func TestConfirmOrdersSales_FreezesProvenance(t *testing.T) {
 		t.Fatalf("created = %d, want 1 (errors: %v)", result.Created, result.Errors)
 	}
 
-	var sale *inventory.Sale
-	salesList, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList {
-		s := &salesList[i]
-		if s.PurchaseID == p.ID {
-			sale = s
-		}
-	}
-	if sale == nil {
-		t.Fatal("expected sale to exist")
-	}
+	sale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
 	if sale.SaleReason != inventory.SaleReasonDiscretionary {
 		t.Errorf("SaleReason = %q, want %q", sale.SaleReason, inventory.SaleReasonDiscretionary)
 	}
