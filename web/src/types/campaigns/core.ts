@@ -163,6 +163,15 @@ export interface CreatePurchaseInput {
   population?: number;
 }
 
+export interface BulkSaleItemInput {
+  purchaseId: string;
+  salePriceCents: number;
+  originalListPriceCents?: number;
+  priceReductions?: number;
+  daysListed?: number;
+  saleReason?: string;
+}
+
 export interface CreateSaleInput {
   purchaseId: string;
   saleChannel: SaleChannel;
