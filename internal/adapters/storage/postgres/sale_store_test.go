@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 
 // makeTestSale returns a minimal valid Sale for the given purchase.
 func makeTestSale(purchaseID string) *inventory.Sale {
-	id := "sale-" + time.Now().Format("150405.000000000")
+	id := fmt.Sprintf("sale-%d", testSaleIDCounter.Add(1))
 	return &inventory.Sale{
 		ID:             id,
 		PurchaseID:     purchaseID,

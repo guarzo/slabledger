@@ -46,11 +46,14 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// One counter value per case drives every generated identifier, so
+			// IDs stay unique across cases without depending on wall-clock time.
+			seq := testSaleIDCounter.Add(1)
 			p := &inventory.Purchase{
-				ID:                     "analytics-rt-" + time.Now().Format("150405.000000000"),
+				ID:                     fmt.Sprintf("analytics-rt-%d", seq),
 				CampaignID:             "camp-analytics-rt",
 				CardName:               "Charizard",
-				CertNumber:             "CERT-ART-" + time.Now().Format("150405.000000000"),
+				CertNumber:             fmt.Sprintf("CERT-ART-%d", seq),
 				Grader:                 "PSA",
 				GradeValue:             10,
 				BuyCostCents:           4000,
@@ -64,7 +67,7 @@ func TestGetAllPurchasesWithSalesFieldRoundtrip(t *testing.T) {
 			}
 
 			sale := &inventory.Sale{
-				ID:                 fmt.Sprintf("sale-art-%d", testSaleIDCounter.Add(1)),
+				ID:                 fmt.Sprintf("sale-art-%d", seq),
 				PurchaseID:         p.ID,
 				SaleChannel:        inventory.SaleChannelLocal,
 				SalePriceCents:     5000,
