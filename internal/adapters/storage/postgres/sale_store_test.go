@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 
 // makeTestSale returns a minimal valid Sale for the given purchase.
 func makeTestSale(purchaseID string) *inventory.Sale {
-	id := "sale-" + time.Now().Format("150405.000000000")
+	id := fmt.Sprintf("sale-%d", testSaleIDCounter.Add(1))
 	return &inventory.Sale{
 		ID:             id,
 		PurchaseID:     purchaseID,
@@ -143,37 +144,60 @@ func TestSaleStoreUpdateSaleReason(t *testing.T) {
 		t.Fatalf("seed campaigns: %v", err)
 	}
 
-	p := makeTestPurchase()
-	p.CampaignID = "camp-sale-reason-a"
-	if err := ps.CreatePurchase(ctx, p); err != nil {
-		t.Fatalf("create purchase: %v", err)
+	tests := []struct {
+		name           string
+		updateCampaign string // campaign ID passed to UpdateSaleReason
+		wantErr        error
+	}{
+		{
+			name:           "wrong campaign scoping returns ErrSaleNotFound",
+			updateCampaign: "camp-sale-reason-b",
+			wantErr:        inventory.ErrSaleNotFound,
+		},
+		{
+			name:           "correct campaign updates the reason and flips forced_liquidation to false",
+			updateCampaign: "camp-sale-reason-a",
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := makeTestPurchase()
+			p.CampaignID = "camp-sale-reason-a"
+			if err := ps.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("create purchase: %v", err)
+			}
 
-	sale := makeTestSale(p.ID)
-	sale.SaleReason = "invoice_pressure"
-	sale.ForcedLiquidation = true
-	if err := ss.CreateSale(ctx, sale); err != nil {
-		t.Fatalf("create sale: %v", err)
-	}
+			sale := makeTestSale(p.ID)
+			sale.SaleReason = "invoice_pressure"
+			sale.ForcedLiquidation = true
+			if err := ss.CreateSale(ctx, sale); err != nil {
+				t.Fatalf("create sale: %v", err)
+			}
 
-	// Wrong campaign scoping returns ErrSaleNotFound.
-	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-b", sale.ID, "aging_policy"); !errors.Is(err, inventory.ErrSaleNotFound) {
-		t.Fatalf("UpdateSaleReason (wrong campaign) error = %v, want ErrSaleNotFound", err)
-	}
+			err := ss.UpdateSaleReason(ctx, tt.updateCampaign, sale.ID, "aging_policy", false)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("UpdateSaleReason error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateSaleReason: %v", err)
+			}
 
-	// Correct campaign updates the reason and flips forced_liquidation to false.
-	if err := ss.UpdateSaleReason(ctx, "camp-sale-reason-a", sale.ID, "aging_policy"); err != nil {
-		t.Fatalf("UpdateSaleReason: %v", err)
-	}
-
-	got, err := ss.GetSaleByPurchaseID(ctx, p.ID)
-	if err != nil {
-		t.Fatalf("get sale: %v", err)
-	}
-	if got.SaleReason != "aging_policy" {
-		t.Errorf("SaleReason = %q, want %q", got.SaleReason, "aging_policy")
-	}
-	if got.ForcedLiquidation {
-		t.Errorf("ForcedLiquidation = true, want false after non-invoice_pressure reason")
+			got, err := ss.GetSaleByPurchaseID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("get sale: %v", err)
+			}
+			if got.SaleReason != "aging_policy" {
+				t.Errorf("SaleReason = %q, want %q", got.SaleReason, "aging_policy")
+			}
+			if got.ForcedLiquidation {
+				t.Errorf("ForcedLiquidation = true, want false after non-invoice_pressure reason")
+			}
+			if got.ChannelFeePctAtSale != nil {
+				t.Errorf("ChannelFeePctAtSale = %v, want nil for a sale with no stored fee", *got.ChannelFeePctAtSale)
+			}
+		})
 	}
 }

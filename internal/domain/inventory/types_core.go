@@ -424,8 +424,13 @@ type Sale struct {
 	SaleReason string `json:"saleReason,omitempty"`
 
 	// CLValueAtSaleCents and ChannelFeePctAtSale freeze the purchase's CL value and
-	// the campaign's effective channel fee at the moment of sale. Server-authoritative:
-	// always overwritten by freezeSaleProvenance, never trusted from client input.
+	// the channel fee rate in effect at sale time.
+	//
+	// The two use different "unknown" encodings, mirroring the DB: cl_value_at_sale_cents
+	// is NOT NULL DEFAULT 0, so 0 is ambiguous for sales predating migration 000022
+	// (genuinely-zero vs never-recorded are indistinguishable); channel_fee_pct_at_sale
+	// is nullable, so nil is unambiguous. This is why the sale side does not use a
+	// pointer the way the purchase-side *AtPurchase fields do.
 	CLValueAtSaleCents  int      `json:"clValueAtSaleCents,omitempty"`
 	ChannelFeePctAtSale *float64 `json:"channelFeePctAtSale,omitempty"`
 

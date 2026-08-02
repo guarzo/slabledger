@@ -41,6 +41,10 @@ UPDATE campaign_sales SET forced_liquidation = (sale_reason = 'invoice_pressure'
 -- so those rows would keep sale_reason='' and analysis would silently skip them.
 -- This trigger derives sale_reason from the boolean on any INSERT/UPDATE that
 -- leaves sale_reason empty, so legacy-shaped writes are never lost.
+-- NOTE: this duplicates inventory.IsForcedReason (Go) intentionally. The Go
+-- helper is the single source of truth for app writes; this copy exists solely
+-- for the rollback window, when the old image writes rows and no new-image Go
+-- code is running. Keep the two in sync if the rule ever changes.
 CREATE OR REPLACE FUNCTION public.campaign_sales_derive_reason() RETURNS trigger AS $$
 BEGIN
     IF NEW.sale_reason IS NULL OR NEW.sale_reason = '' THEN

@@ -17,24 +17,32 @@ func confidenceBucket(p inventory.Purchase) string {
 	return strconv.Itoa(*p.CLConfidenceAtPurchase)
 }
 
+// buyTermsBucketInfo pairs a buy-terms bucket label with the numeric rank
+// used to sort it, so the rank never has to be recovered by re-parsing the
+// label.
+type buyTermsBucketInfo struct {
+	label string
+	rank  int
+}
+
 // buyTermsBucket buckets buy cost as an integer percentage of the frozen
 // CL-at-purchase snapshot, floored to avoid float boundary drift. Bands are
 // lower-inclusive 5-point-wide bands between 50 and 100; below 50 and at/above
 // 100 get their own catch-all buckets. Purchases without a CL snapshot are
 // "unknown".
-func buyTermsBucket(p inventory.Purchase) string {
+func buyTermsBucket(p inventory.Purchase) buyTermsBucketInfo {
 	if p.CLValueAtPurchaseCents <= 0 {
-		return "unknown"
+		return buyTermsBucketInfo{label: "unknown", rank: 1000}
 	}
 	pct := p.BuyCostCents * 100 / p.CLValueAtPurchaseCents
 	if pct < 50 {
-		return "<50"
+		return buyTermsBucketInfo{label: "<50", rank: -1}
 	}
 	if pct >= 100 {
-		return ">=100"
+		return buyTermsBucketInfo{label: ">=100", rank: 100}
 	}
 	lo := (pct / 5) * 5
-	return fmt.Sprintf("%d-%d", lo, lo+5)
+	return buyTermsBucketInfo{label: fmt.Sprintf("%d-%d", lo, lo+5), rank: lo}
 }
 
 // cohortAccum is the mutable accumulator for one (confidence, buyTerms) cohort
@@ -42,6 +50,7 @@ func buyTermsBucket(p inventory.Purchase) string {
 type cohortAccum struct {
 	confidenceBucket string
 	buyTermsBucket   string
+	buyTermsRank     int
 
 	n         int
 	soldCount int
@@ -70,10 +79,10 @@ func computeConfidenceBuyCohorts(rows []inventory.PurchaseWithSale) []ConfBuyCoh
 	for _, r := range rows {
 		cb := confidenceBucket(r.Purchase)
 		bb := buyTermsBucket(r.Purchase)
-		key := [2]string{cb, bb}
+		key := [2]string{cb, bb.label}
 		acc := byKey[key]
 		if acc == nil {
-			acc = &cohortAccum{confidenceBucket: cb, buyTermsBucket: bb}
+			acc = &cohortAccum{confidenceBucket: cb, buyTermsBucket: bb.label, buyTermsRank: bb.rank}
 			byKey[key] = acc
 		}
 		acc.n++
@@ -100,8 +109,21 @@ func computeConfidenceBuyCohorts(rows []inventory.PurchaseWithSale) []ConfBuyCoh
 		acc.netProfit += r.Sale.NetProfitCents
 	}
 
-	rowsOut := make([]ConfBuyCohortRow, 0, len(byKey))
+	accs := make([]*cohortAccum, 0, len(byKey))
 	for _, acc := range byKey {
+		accs = append(accs, acc)
+	}
+
+	sort.Slice(accs, func(i, j int) bool {
+		a, b := accs[i], accs[j]
+		if a.confidenceBucket != b.confidenceBucket {
+			return confidenceBucketLess(a.confidenceBucket, b.confidenceBucket)
+		}
+		return a.buyTermsRank < b.buyTermsRank
+	})
+
+	rowsOut := make([]ConfBuyCohortRow, 0, len(accs))
+	for _, acc := range accs {
 		row := ConfBuyCohortRow{
 			ConfidenceBucket:    acc.confidenceBucket,
 			BuyTermsBucket:      acc.buyTermsBucket,
@@ -127,14 +149,6 @@ func computeConfidenceBuyCohorts(rows []inventory.PurchaseWithSale) []ConfBuyCoh
 		rowsOut = append(rowsOut, row)
 	}
 
-	sort.Slice(rowsOut, func(i, j int) bool {
-		a, b := rowsOut[i], rowsOut[j]
-		if a.ConfidenceBucket != b.ConfidenceBucket {
-			return confidenceBucketLess(a.ConfidenceBucket, b.ConfidenceBucket)
-		}
-		return buyTermsBucketLess(a.BuyTermsBucket, b.BuyTermsBucket)
-	})
-
 	return rowsOut
 }
 
@@ -153,29 +167,4 @@ func confidenceBucketLess(a, b string) bool {
 		return ai < bi
 	}
 	return a < b
-}
-
-// buyTermsBucketRank gives each buy-terms bucket a sort key: "<50" first,
-// then the 5-point bands by their lower bound, then ">=100", then "unknown"
-// last.
-func buyTermsBucketRank(s string) int {
-	switch s {
-	case "unknown":
-		return 1000
-	case "<50":
-		return -1
-	case ">=100":
-		return 100
-	default:
-		// "NN-MM" — rank by the lower bound.
-		var lo int
-		if _, err := fmt.Sscanf(s, "%d-", &lo); err == nil {
-			return lo
-		}
-		return 999 // unrecognized format sorts just before "unknown"
-	}
-}
-
-func buyTermsBucketLess(a, b string) bool {
-	return buyTermsBucketRank(a) < buyTermsBucketRank(b)
 }

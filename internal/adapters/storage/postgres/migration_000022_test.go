@@ -2,13 +2,11 @@ package postgres
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,20 +16,13 @@ import (
 // rollback-window compatibility trigger derives sale_reason from
 // forced_liquidation for legacy-shaped inserts (no sale_reason column supplied).
 func TestMigration000022_SaleReasonBackfill(t *testing.T) {
-	url := os.Getenv("POSTGRES_TEST_URL")
-	if url == "" {
-		url = "postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable"
-	}
-	logger := mocks.NewMockLogger()
-	db, err := Open(context.Background(), url, logger)
-	if err != nil {
-		t.Skipf("Postgres not reachable at %q: %v (set POSTGRES_TEST_URL to override)", url, err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := requireTestDB(t)
 	ctx := context.Background()
 
+	t.Cleanup(func() { resetSchemaAndMigrate(t, db) })
+
 	// Known baseline.
-	_, err = db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`)
+	_, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`)
 	require.NoError(t, err)
 
 	// Build a migrate instance on the embedded source.
@@ -98,32 +89,60 @@ func TestMigration000022_SaleReasonBackfill(t *testing.T) {
 	require.False(t, forced)
 
 	// Rollback-window compatibility: simulate the OLD image inserting a sale after
-	// v22 — it writes forced_liquidation only, no sale_reason. The BEFORE trigger
-	// must derive sale_reason from the boolean.
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_price_cents, sale_date, forced_liquidation)
-		VALUES ('s3', 'p3', 'inperson', 100, '2026-02-01', TRUE)`)
-	require.NoError(t, err)
-	require.NoError(t, db.QueryRowContext(ctx,
-		`SELECT sale_reason FROM campaign_sales WHERE id = 's3'`).Scan(&reason))
-	require.Equal(t, "invoice_pressure", reason)
+	// v22 — it writes forced_liquidation (and sometimes sale_reason) the way the
+	// pre-000022 app did. The BEFORE trigger must derive sale_reason from the
+	// boolean when it's empty, and preserve an explicit richer reason otherwise.
+	compatCases := []struct {
+		name              string
+		id                string
+		purchaseID        string
+		channel           string
+		priceCents        int
+		saleDate          string
+		forcedLiquidation bool
+		saleReason        string // "" means omit the column
+		wantReason        string
+	}{
+		{
+			name: "forced liquidation with no explicit reason derives invoice_pressure",
+			id:   "s3", purchaseID: "p3", channel: "inperson", priceCents: 100,
+			saleDate: "2026-02-01", forcedLiquidation: true,
+			wantReason: "invoice_pressure",
+		},
+		{
+			name: "not forced with no explicit reason derives discretionary",
+			id:   "s4", purchaseID: "p4", channel: "ebay", priceCents: 6000,
+			saleDate: "2026-02-01", forcedLiquidation: false,
+			wantReason: "discretionary",
+		},
+		{
+			name: "explicit richer reason is preserved (trigger only fills empty)",
+			id:   "s5", purchaseID: "p5", channel: "ebay", priceCents: 9000,
+			saleDate: "2026-02-01", forcedLiquidation: false, saleReason: "aging_policy",
+			wantReason: "aging_policy",
+		},
+	}
+	for _, tc := range compatCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.saleReason == "" {
+				_, err = db.ExecContext(ctx, `
+					INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_price_cents, sale_date, forced_liquidation)
+					VALUES ($1, $2, $3, $4, $5, $6)`,
+					tc.id, tc.purchaseID, tc.channel, tc.priceCents, tc.saleDate, tc.forcedLiquidation)
+			} else {
+				_, err = db.ExecContext(ctx, `
+					INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_price_cents, sale_date, forced_liquidation, sale_reason)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+					tc.id, tc.purchaseID, tc.channel, tc.priceCents, tc.saleDate, tc.forcedLiquidation, tc.saleReason)
+			}
+			require.NoError(t, err)
 
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_price_cents, sale_date, forced_liquidation)
-		VALUES ('s4', 'p4', 'ebay', 6000, '2026-02-01', FALSE)`)
-	require.NoError(t, err)
-	require.NoError(t, db.QueryRowContext(ctx,
-		`SELECT sale_reason FROM campaign_sales WHERE id = 's4'`).Scan(&reason))
-	require.Equal(t, "discretionary", reason)
-
-	// Explicit richer reason must be preserved (trigger only fills empty).
-	_, err = db.ExecContext(ctx, `
-		INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_price_cents, sale_date, forced_liquidation, sale_reason)
-		VALUES ('s5', 'p5', 'ebay', 9000, '2026-02-01', FALSE, 'aging_policy')`)
-	require.NoError(t, err)
-	require.NoError(t, db.QueryRowContext(ctx,
-		`SELECT sale_reason FROM campaign_sales WHERE id = 's5'`).Scan(&reason))
-	require.Equal(t, "aging_policy", reason)
+			var gotReason string
+			require.NoError(t, db.QueryRowContext(ctx,
+				`SELECT sale_reason FROM campaign_sales WHERE id = $1`, tc.id).Scan(&gotReason))
+			require.Equal(t, tc.wantReason, gotReason)
+		})
+	}
 
 	// Round-trip down/up to confirm reversibility (down drops the trigger+function
 	// and the 000022-added columns, keeps forced_liquidation; up re-adds them).

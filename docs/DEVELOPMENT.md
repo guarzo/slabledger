@@ -63,6 +63,19 @@ svc := inventory.NewService(repos, inventory.WithPriceLookup(adapter))
 
 Migrations are in `internal/adapters/storage/postgres/migrations/`. After the April 2026 cutover from SQLite the tree was reset to a single `000001_initial_schema` representing the final-state schema; future changes are additive from `000002` onward. See [docs/SCHEMA.md](SCHEMA.md) for the full schema and [internal/README.md](../internal/README.md) for step-by-step migration creation instructions.
 
+### Postgres adapter tests
+
+Tests in `internal/adapters/storage/postgres/` drop schemas and truncate tables.
+They skip unless `POSTGRES_TEST_URL` is set — there is deliberately no default,
+because the devcontainer's `DATABASE_URL` points at your development database.
+
+Run them against a dedicated throwaway database:
+
+    make test-postgres
+
+This creates `slabledger_test` on first use and points the tests at it. CI sets
+`POSTGRES_TEST_URL` explicitly (`.github/workflows/test.yml`).
+
 ---
 
 ## Cache System

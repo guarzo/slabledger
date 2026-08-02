@@ -145,11 +145,11 @@ func (ss *SaleStore) DeleteSale(ctx context.Context, saleID string) error {
 	return nil
 }
 
-func (ss *SaleStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+func (ss *SaleStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error {
 	result, err := ss.db.ExecContext(ctx,
-		`UPDATE campaign_sales SET sale_reason = $1, forced_liquidation = ($1 = 'invoice_pressure'), updated_at = $2
-		 WHERE id = $3 AND purchase_id IN (SELECT id FROM campaign_purchases WHERE campaign_id = $4)`,
-		reason, time.Now(), saleID, campaignID)
+		`UPDATE campaign_sales SET sale_reason = $1, forced_liquidation = $2, updated_at = $3
+		 WHERE id = $4 AND purchase_id IN (SELECT id FROM campaign_purchases WHERE campaign_id = $5)`,
+		reason, forcedLiquidation, time.Now(), saleID, campaignID)
 	if err != nil {
 		return fmt.Errorf("update sale reason: %w", err)
 	}

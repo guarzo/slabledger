@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import type { AgingItem, SaleChannel } from '../../../types/campaigns';
+import type { AgingItem, SaleChannel, BulkSaleItemInput } from '../../../types/campaigns';
 import { api } from '../../../js/api';
 import { formatCents, localToday, getErrorMessage, dollarsToCents } from '../../utils/formatters';
 import { saleChannelLabels, DEFAULT_SALE_CHANNEL, activeSaleChannels } from '../../utils/campaignConstants';
@@ -10,6 +10,7 @@ import { Button, Input, Select } from '../../ui';
 import { costBasis } from './inventory/utils';
 import { computeSalePrice, type PricingMode } from './saleModal/pricingModes';
 import { invalidateAfterSale } from './saleModal/invalidateAfterSale';
+import { saleReasonOptions } from './saleReasonOptions';
 
 interface Props {
   open: boolean;
@@ -26,15 +27,6 @@ interface RowDetail {
 }
 
 const emptyRowDetail: RowDetail = { originalListPrice: '', priceReductions: '', daysListed: '', saleReason: '' };
-
-const saleReasonOptions = [
-  { value: '', label: 'Auto (server heuristic)' },
-  { value: 'discretionary', label: 'Discretionary' },
-  { value: 'invoice_pressure', label: 'Invoice pressure' },
-  { value: 'aging_policy', label: 'Aging policy' },
-  { value: 'bulk_lot', label: 'Bulk lot' },
-  { value: 'show_clearout', label: 'Show clearout' },
-];
 
 export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }: Props) {
   const toast = useToast();
@@ -115,7 +107,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
 
     setSubmitting(true);
     try {
-      const groups = new Map<string, { purchaseId: string; salePriceCents: number; originalListPriceCents?: number; priceReductions?: number; daysListed?: number; saleReason?: string }[]>();
+      const groups = new Map<string, BulkSaleItemInput[]>();
       for (const item of pendingItems) {
         const cid = item.purchase.campaignId;
         if (!groups.has(cid)) groups.set(cid, []);

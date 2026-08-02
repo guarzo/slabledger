@@ -44,7 +44,7 @@ type InMemoryCampaignStore struct {
 	ListSalesByCampaignFn               func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error)
 	DeleteSaleFn                        func(ctx context.Context, saleID string) error
 	DeleteSaleByPurchaseIDFn            func(ctx context.Context, purchaseID string) error
-	UpdateSaleReasonFn                  func(ctx context.Context, campaignID, saleID, reason string) error
+	UpdateSaleReasonFn                  func(ctx context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error
 	GetCampaignPNLFn                    func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error)
 	GetPNLByChannelFn                   func(ctx context.Context, campaignID string) ([]inventory.ChannelPNL, error)
 	GetDailySpendFn                     func(ctx context.Context, campaignID string, days int) ([]inventory.DailySpend, error)
@@ -708,9 +708,9 @@ func (m *InMemoryCampaignStore) DeleteSaleByPurchaseID(ctx context.Context, purc
 	return inventory.ErrSaleNotFound
 }
 
-func (m *InMemoryCampaignStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+func (m *InMemoryCampaignStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error {
 	if m.UpdateSaleReasonFn != nil {
-		return m.UpdateSaleReasonFn(ctx, campaignID, saleID, reason)
+		return m.UpdateSaleReasonFn(ctx, campaignID, saleID, reason, forcedLiquidation)
 	}
 	s, ok := m.Sales[saleID]
 	if !ok {
@@ -721,7 +721,7 @@ func (m *InMemoryCampaignStore) UpdateSaleReason(ctx context.Context, campaignID
 		return inventory.ErrSaleNotFound
 	}
 	s.SaleReason = reason
-	s.ForcedLiquidation = reason == "invoice_pressure"
+	s.ForcedLiquidation = forcedLiquidation
 	return nil
 }
 

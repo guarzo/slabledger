@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Button, Input, Select } from '../../ui';
 import { costBasis } from './inventory/utils';
 import { invalidateAfterSale } from './saleModal/invalidateAfterSale';
+import { saleReasonOptions } from './saleReasonOptions';
 
 interface RecordSaleFormProps {
   item: AgingItem;
@@ -22,15 +23,6 @@ interface RecordSaleFormProps {
 function prefillPrice(item: AgingItem): number {
   return item.currentMarket?.medianCents || item.purchase.clValueCents || 0;
 }
-
-const saleReasonOptions = [
-  { value: '', label: 'Default (server heuristic)' },
-  { value: 'discretionary', label: 'Discretionary' },
-  { value: 'invoice_pressure', label: 'Invoice pressure' },
-  { value: 'aging_policy', label: 'Aging policy' },
-  { value: 'bulk_lot', label: 'Bulk lot' },
-  { value: 'show_clearout', label: 'Show clearout' },
-];
 
 export default function RecordSaleForm({ item, onSuccess, onCancel, hideItemHeader, title }: RecordSaleFormProps) {
   const toast = useToast();

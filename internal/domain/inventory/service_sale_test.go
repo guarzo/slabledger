@@ -105,102 +105,94 @@ func setupSaleFixture(t *testing.T, repo *mocks.InMemoryCampaignStore, svc inven
 	return c, p
 }
 
-func TestCreateSale_FreezesSaleProvenance(t *testing.T) {
-	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
-	ctx := context.Background()
-
-	c, p := setupSaleFixture(t, repo, svc)
-
-	s := &inventory.Sale{
-		PurchaseID:     p.ID,
-		SaleChannel:    inventory.SaleChannelEbay,
-		SalePriceCents: 20000,
-		SaleDate:       "2026-06-20",
+// findSaleByPurchaseID returns the sale recorded against purchaseID, failing the
+// test if the campaign has no such sale.
+func findSaleByPurchaseID(t *testing.T, repo *mocks.InMemoryCampaignStore, campaignID, purchaseID string) *inventory.Sale {
+	t.Helper()
+	sales, err := repo.ListSalesByCampaign(context.Background(), campaignID, 100, 0)
+	if err != nil {
+		t.Fatalf("list sales: %v", err)
 	}
-	if err := svc.CreateSale(ctx, s, c, p); err != nil {
-		t.Fatalf("CreateSale: %v", err)
+	for i := range sales {
+		if sales[i].PurchaseID == purchaseID {
+			return &sales[i]
+		}
 	}
-
-	if s.CLValueAtSaleCents != 12000 {
-		t.Errorf("CLValueAtSaleCents = %d, want 12000", s.CLValueAtSaleCents)
-	}
-	if s.ChannelFeePctAtSale == nil || *s.ChannelFeePctAtSale != 0.10 {
-		t.Errorf("ChannelFeePctAtSale = %v, want 0.10", s.ChannelFeePctAtSale)
-	}
-	if s.SaleReason != inventory.SaleReasonDiscretionary {
-		t.Errorf("SaleReason = %q, want %q", s.SaleReason, inventory.SaleReasonDiscretionary)
-	}
+	t.Fatalf("no sale found for purchase %s", purchaseID)
+	return nil
 }
 
-func TestCreateSale_PreservesExplicitReason(t *testing.T) {
-	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
-	ctx := context.Background()
-
-	c, p := setupSaleFixture(t, repo, svc)
-
-	s := &inventory.Sale{
-		PurchaseID:     p.ID,
-		SaleChannel:    inventory.SaleChannelEbay,
-		SalePriceCents: 20000,
-		SaleDate:       "2026-06-20",
-		SaleReason:     inventory.SaleReasonAgingPolicy,
+func TestCreateSale_Provenance(t *testing.T) {
+	tests := []struct {
+		name          string
+		inputReason   string
+		forgedCLValue int
+		forgedFeePct  *float64
+		wantReason    string
+		wantErr       error
+	}{
+		{
+			name:       "freezes derived provenance",
+			wantReason: inventory.SaleReasonDiscretionary,
+		},
+		{
+			name:        "preserves explicit reason",
+			inputReason: inventory.SaleReasonAgingPolicy,
+			wantReason:  inventory.SaleReasonAgingPolicy,
+		},
+		{
+			name:        "rejects invalid reason",
+			inputReason: "bogus",
+			wantErr:     inventory.ErrInvalidSaleReason,
+		},
+		{
+			name:          "ignores client-forged provenance",
+			forgedCLValue: 99999999,
+			forgedFeePct:  func() *float64 { v := 0.99; return &v }(),
+			wantReason:    inventory.SaleReasonDiscretionary,
+		},
 	}
-	if err := svc.CreateSale(ctx, s, c, p); err != nil {
-		t.Fatalf("CreateSale: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+			ctx := context.Background()
 
-	if s.SaleReason != inventory.SaleReasonAgingPolicy {
-		t.Errorf("SaleReason = %q, want %q (explicit reason must be preserved)", s.SaleReason, inventory.SaleReasonAgingPolicy)
-	}
-}
+			c, p := setupSaleFixture(t, repo, svc)
 
-func TestCreateSale_RejectsInvalidReason(t *testing.T) {
-	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
-	ctx := context.Background()
+			s := &inventory.Sale{
+				PurchaseID:          p.ID,
+				SaleChannel:         inventory.SaleChannelEbay,
+				SalePriceCents:      20000,
+				SaleDate:            "2026-06-20",
+				SaleReason:          tt.inputReason,
+				CLValueAtSaleCents:  tt.forgedCLValue,
+				ChannelFeePctAtSale: tt.forgedFeePct,
+			}
+			err := svc.CreateSale(ctx, s, c, p)
 
-	c, p := setupSaleFixture(t, repo, svc)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("CreateSale error = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CreateSale: %v", err)
+			}
 
-	s := &inventory.Sale{
-		PurchaseID:     p.ID,
-		SaleChannel:    inventory.SaleChannelEbay,
-		SalePriceCents: 20000,
-		SaleDate:       "2026-06-20",
-		SaleReason:     "bogus",
-	}
-	err := svc.CreateSale(ctx, s, c, p)
-	if !errors.Is(err, inventory.ErrInvalidSaleReason) {
-		t.Fatalf("CreateSale error = %v, want ErrInvalidSaleReason", err)
-	}
-}
-
-func TestCreateSale_IgnoresClientForgedProvenance(t *testing.T) {
-	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
-	ctx := context.Background()
-
-	c, p := setupSaleFixture(t, repo, svc)
-
-	forgedPct := 0.99
-	s := &inventory.Sale{
-		PurchaseID:          p.ID,
-		SaleChannel:         inventory.SaleChannelEbay,
-		SalePriceCents:      20000,
-		SaleDate:            "2026-06-20",
-		CLValueAtSaleCents:  99999999,
-		ChannelFeePctAtSale: &forgedPct,
-	}
-	if err := svc.CreateSale(ctx, s, c, p); err != nil {
-		t.Fatalf("CreateSale: %v", err)
-	}
-
-	if s.CLValueAtSaleCents != 12000 {
-		t.Errorf("CLValueAtSaleCents = %d, want 12000 (forged value must be overwritten)", s.CLValueAtSaleCents)
-	}
-	if s.ChannelFeePctAtSale == nil || *s.ChannelFeePctAtSale != 0.10 {
-		t.Errorf("ChannelFeePctAtSale = %v, want 0.10 (forged value must be overwritten)", s.ChannelFeePctAtSale)
+			if s.SaleReason != tt.wantReason {
+				t.Errorf("SaleReason = %q, want %q", s.SaleReason, tt.wantReason)
+			}
+			// CLValueAtSaleCents and ChannelFeePctAtSale must always reflect the
+			// purchase/campaign's real values, never client input (forged or not).
+			if s.CLValueAtSaleCents != 12000 {
+				t.Errorf("CLValueAtSaleCents = %d, want 12000 (must be server-derived, not the forged/input value)", s.CLValueAtSaleCents)
+			}
+			if s.ChannelFeePctAtSale == nil || *s.ChannelFeePctAtSale != 0.10 {
+				t.Errorf("ChannelFeePctAtSale = %v, want 0.10 (must be server-derived, not the forged/input value)", s.ChannelFeePctAtSale)
+			}
+		})
 	}
 }
 
@@ -240,17 +232,7 @@ func TestCreateBulkSales_FreezesProvenance(t *testing.T) {
 		t.Fatalf("created = %d, want 1 (errors: %v)", result.Created, result.Errors)
 	}
 
-	var discretionarySale *inventory.Sale
-	salesList, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList {
-		s := &salesList[i]
-		if s.PurchaseID == p.ID {
-			discretionarySale = s
-		}
-	}
-	if discretionarySale == nil {
-		t.Fatal("expected sale for purchase 1 to exist")
-	}
+	discretionarySale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
 	if discretionarySale.SaleReason != inventory.SaleReasonDiscretionary {
 		t.Errorf("SaleReason = %q, want %q", discretionarySale.SaleReason, inventory.SaleReasonDiscretionary)
 	}
@@ -273,17 +255,7 @@ func TestCreateBulkSales_FreezesProvenance(t *testing.T) {
 		t.Fatalf("created = %d, want 1 (errors: %v)", result2.Created, result2.Errors)
 	}
 
-	var forcedSale *inventory.Sale
-	salesList2, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList2 {
-		s := &salesList2[i]
-		if s.PurchaseID == p2.ID {
-			forcedSale = s
-		}
-	}
-	if forcedSale == nil {
-		t.Fatal("expected sale for purchase 2 to exist")
-	}
+	forcedSale := findSaleByPurchaseID(t, repo, c.ID, p2.ID)
 	if forcedSale.SaleReason != inventory.SaleReasonInvoicePressure {
 		t.Errorf("SaleReason = %q, want %q", forcedSale.SaleReason, inventory.SaleReasonInvoicePressure)
 	}
@@ -333,17 +305,8 @@ func TestCreateBulkSales_CopiesPerItemFields(t *testing.T) {
 		t.Fatalf("errors = %+v, want single error for purchase 2", result.Errors)
 	}
 
-	var sale *inventory.Sale
+	sale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
 	salesList, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList {
-		s := &salesList[i]
-		if s.PurchaseID == p.ID {
-			sale = s
-		}
-	}
-	if sale == nil {
-		t.Fatal("expected sale for purchase 1 to exist")
-	}
 	if sale.OriginalListPriceCents != 1500 {
 		t.Errorf("OriginalListPriceCents = %d, want 1500", sale.OriginalListPriceCents)
 	}
@@ -381,17 +344,7 @@ func TestConfirmOrdersSales_FreezesProvenance(t *testing.T) {
 		t.Fatalf("created = %d, want 1 (errors: %v)", result.Created, result.Errors)
 	}
 
-	var sale *inventory.Sale
-	salesList, _ := repo.ListSalesByCampaign(ctx, c.ID, 100, 0)
-	for i := range salesList {
-		s := &salesList[i]
-		if s.PurchaseID == p.ID {
-			sale = s
-		}
-	}
-	if sale == nil {
-		t.Fatal("expected sale to exist")
-	}
+	sale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
 	if sale.SaleReason != inventory.SaleReasonDiscretionary {
 		t.Errorf("SaleReason = %q, want %q", sale.SaleReason, inventory.SaleReasonDiscretionary)
 	}

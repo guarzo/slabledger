@@ -25,3 +25,26 @@ func TestValidSaleReason(t *testing.T) {
 		}
 	}
 }
+
+func TestIsForcedReason(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+		want   bool
+	}{
+		{name: "invoice pressure is forced", reason: SaleReasonInvoicePressure, want: true},
+		{name: "discretionary is not forced", reason: SaleReasonDiscretionary, want: false},
+		{name: "aging policy is not forced", reason: SaleReasonAgingPolicy, want: false},
+		{name: "bulk lot is not forced", reason: SaleReasonBulkLot, want: false},
+		{name: "show clearout is not forced", reason: SaleReasonShowClearout, want: false},
+		{name: "empty is not forced", reason: "", want: false},
+		{name: "unknown is not forced", reason: "nonsense", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsForcedReason(tt.reason); got != tt.want {
+				t.Errorf("IsForcedReason(%q) = %v, want %v", tt.reason, got, tt.want)
+			}
+		})
+	}
+}
