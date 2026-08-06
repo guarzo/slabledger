@@ -1,8 +1,8 @@
 # Database Schema Reference
 
-SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (66 pairs, `000001`–`000066`).
+SlabLedger uses Postgres (Supabase in prod, local Postgres in the devcontainer). Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/postgres/migrations/`.
 
-All monetary values are stored in **cents** (integer). Timestamps use `DATETIME`/`TIMESTAMP` as SQLite text in UTC. Boolean columns use `INTEGER` (`0`/`1`).
+All monetary values are stored in **cents** (integer).
 
 ---
 

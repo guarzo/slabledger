@@ -315,23 +315,43 @@ docker run --rm \
 
 ### Manual operator checklist
 
-- [ ] Run the baseline pull once and confirm it **exits zero**. A non-zero exit means at
-      least one campaign's edit-form fetch failed (`TargetingComplete == false`) and that
-      campaign's row was skipped rather than written with blanked-out targeting — re-run
-      until clean before trusting the copy.
+- [ ] Run the baseline pull once and confirm it **exits zero**. A non-zero exit means
+      `runBaselinePull` (`cmd/psa-harvest/baseline.go`) hit at least one of: a linked
+      campaign whose edit-form fetch was incomplete (`TargetingComplete == false`), a
+      linked campaign whose curated spec-list names didn't map to exactly one language
+      (none recognized, or more than one), or a linked campaign that the portal fetch
+      didn't return at all. Any of these leaves that campaign's row unwritten (its
+      pre-baseline targeting is left in place, never blanked out) — re-run until clean
+      before trusting the copy.
 - [ ] For at least one named, currently-linked campaign, open its edit page in the PSA
       portal UI directly and confirm the pulled `target_language` / `subject_filter_mode` /
       `subjects` / `denied_specs` match what the portal UI shows. This is the check for a
       silently wrong translation, not just a successful fetch.
-- [ ] Re-run the baseline a second time against an **unchanged** campaign and confirm the
-      diff it reports for that campaign is **empty**. The list comparison is order-insensitive
-      by design (ids sorted ascending) specifically so re-running the baseline is idempotent;
-      a non-empty diff on an unchanged campaign means list-ordering churn slipped into the
-      comparison and needs to be fixed before this is trusted for six active, money-spending
-      campaigns.
+- [ ] Re-run the baseline a second time against campaigns whose portal targeting you know
+      is unchanged, and confirm the copy is idempotent by diffing a direct snapshot of the
+      affected columns from before and after. `runBaselinePull` has no diff or dedup logic
+      of its own — it unconditionally rewrites `target_language` / `subject_filter_mode` /
+      `subjects` / `denied_specs` on every linked, complete campaign — so this is the only
+      way to catch list-ordering churn before trusting it for six active, money-spending
+      campaigns:
+      ```sql
+      -- Before the second run:
+      SELECT id, target_language, subject_filter_mode, subjects, denied_specs
+      FROM campaigns
+      WHERE psa_campaign_request_id IS NOT NULL AND psa_campaign_request_id <> ''
+      ORDER BY id;
+      -- (save this output, e.g. psql ... > before.txt)
+      ```
+      Run `-baseline-pull` again, then run the identical query into `after.txt` and
+      `diff before.txt after.txt`. For any campaign whose portal targeting genuinely did not
+      change between the two runs, its row must be byte-identical in both snapshots
+      (including subject/denied-spec ordering, since `buildBaselineCampaign` copies the
+      portal's list order verbatim with no sort step). Any difference on such a campaign is
+      a real bug, not a display artifact, and must be fixed before trusting this baseline.
 - [ ] Confirm no portal writes occurred during the baseline: check that every campaign's
       `updatedAt` in the PSA portal UI is unchanged from before the run, and that
-      `psa_campaign_push_queue` gained no new rows.
+      `psa_campaign_push_queue` gained no new rows (`runBaselinePull` never touches that
+      table — only `HandlePSAPropose` on the main server enqueues rows).
 
 ### Deferred: spec discovery
 

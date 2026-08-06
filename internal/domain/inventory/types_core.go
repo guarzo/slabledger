@@ -190,12 +190,12 @@ type Campaign struct {
 	// so a rollback to the previous binary sees a database that still matches
 	// its own model. campaign_store.go derives both from
 	// Subjects/SubjectFilterMode on every write, discarding whatever a caller
-	// sets on these two fields directly. As of this change several call sites
-	// still read them (matching.go, portfolio.go, suggestion_rules.go,
-	// portfolio/analysis.go, demand/campaign_signals.go,
-	// campaign_coverage.go) — Task 4 removes those reads and switches them to
-	// the new axes. Until Task 4 lands, treat this as write-derived-only, not
-	// dead: the mid-migration reads are load-bearing.
+	// sets on these two fields directly. Nothing in the codebase reads them
+	// anymore — matching.go, portfolio.go, suggestion_rules.go,
+	// portfolio/analysis.go, demand/campaign_signals.go, and
+	// campaign_coverage.go were all switched to the new axes in Task 4. They
+	// are write-only at this point, kept solely for the rollback guarantee
+	// above.
 	InclusionList string `json:"inclusionList"`
 	ExclusionMode bool   `json:"exclusionMode"`
 
