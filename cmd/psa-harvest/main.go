@@ -106,6 +106,7 @@ func run() error {
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 		linker := postgres.NewPSACampaignLinker(db.DB)
 
+		// The second return is the curated spec-list catalog; it is not yet persisted.
 		campaigns, _, err := portal.FetchCampaigns(ctx)
 		switch {
 		case err != nil:

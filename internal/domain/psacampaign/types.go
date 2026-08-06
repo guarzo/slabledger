@@ -16,15 +16,21 @@ type PortalCampaign struct {
 	SubjectFilter     CampaignFilter `json:"subjectFilter"`
 	PublisherFilter   CampaignFilter `json:"publisherFilter"`
 	SpecListIDs       []string       `json:"specListIds"`
-	SpecListNames     []string       `json:"specListNames"`
-	DeniedSpecs       []SubjectRef   `json:"deniedSpecs"`
-	CreatedAt         time.Time      `json:"createdAt"`
-	UpdatedAt         time.Time      `json:"updatedAt"`
+	// SpecListNames is display-only: it resolves each id in SpecListIDs
+	// against the curated catalog known at decode time, skipping any id the
+	// catalog does not explain. It is therefore not index-aligned with
+	// SpecListIDs and must not be zipped against it positionally.
+	SpecListNames []string     `json:"specListNames"`
+	DeniedSpecs   []SubjectRef `json:"deniedSpecs"`
+	CreatedAt     time.Time    `json:"createdAt"`
+	UpdatedAt     time.Time    `json:"updatedAt"`
 
 	// TargetingComplete is false when the edit-form fetch for this campaign
-	// failed, meaning the targeting fields above are zero values rather than
-	// portal truth. The baseline pull refuses to write a campaign row from an
-	// incomplete record.
+	// failed, or the fetched edit-form response could not be decoded (missing
+	// or malformed formData, or a decodeFormData error) — in every such case
+	// the targeting fields above are zero values rather than portal truth.
+	// The baseline pull refuses to write a campaign row from an incomplete
+	// record.
 	TargetingComplete bool `json:"targetingComplete"`
 }
 

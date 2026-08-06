@@ -260,3 +260,61 @@ func TestFetchCampaigns_EditFetchFailure_TargetingIncomplete(t *testing.T) {
 		t.Errorf("catalog = %+v, want nil when no edit-form fetch succeeded", catalog)
 	}
 }
+
+// TestFetchCampaigns_AppliesSpecListTargeting exercises the happy path this
+// task exists for: a successful edit-form fetch must land SpecListIDs,
+// SpecListNames (including the catalog's skip-unknown-id branch), and
+// TargetingComplete on the resulting PortalCampaign, and FetchCampaigns must
+// return the catalog it decoded alongside it.
+func TestFetchCampaigns_AppliesSpecListTargeting(t *testing.T) {
+	page := buildListEnvelope(t, []any{campaignItem("id-1", "Targeted")}, 1, 1)
+	editRoot := map[string]any{
+		"formData": map[string]any{
+			// list-missing has no matching catalog entry below, so
+			// specListNames must skip it rather than fail the decode.
+			"prepackagedSpecListIds": []any{"list-en-base", "list-missing"},
+		},
+		"prepackagedSpecLists": []any{
+			map[string]any{"id": "list-en-base", "name": "English Base Set", "status": "ENABLED"},
+		},
+	}
+	packed, err := EncodeRefPacked(editRoot)
+	if err != nil {
+		t.Fatalf("EncodeRefPacked: %v", err)
+	}
+	editEnv, err := json.Marshal(map[string]any{
+		"type": "data",
+		"nodes": []any{
+			map[string]any{"type": "data", "data": packed},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal edit envelope: %v", err)
+	}
+	ff := &fakeFetcher{routes: map[string]string{
+		campaignsListPath:                      string(page),
+		fmt.Sprintf(campaignEditPathF, "id-1"): string(editEnv),
+	}}
+
+	c := New(ff, Config{})
+	got, catalog, err := c.FetchCampaigns(context.Background())
+	if err != nil {
+		t.Fatalf("FetchCampaigns: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 campaign, got %d: %+v", len(got), got)
+	}
+	pc := got[0]
+	if !pc.TargetingComplete {
+		t.Error("TargetingComplete = false, want true on a successful edit-form fetch")
+	}
+	if want := []string{"list-en-base", "list-missing"}; !reflect.DeepEqual(pc.SpecListIDs, want) {
+		t.Errorf("SpecListIDs = %v, want %v", pc.SpecListIDs, want)
+	}
+	if want := []string{"English Base Set"}; !reflect.DeepEqual(pc.SpecListNames, want) {
+		t.Errorf("SpecListNames = %v, want %v (list-missing skipped)", pc.SpecListNames, want)
+	}
+	if len(catalog) != 1 || catalog[0].ID != "list-en-base" {
+		t.Errorf("catalog = %+v, want the single decoded catalog entry", catalog)
+	}
+}
