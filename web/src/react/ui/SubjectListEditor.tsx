@@ -35,7 +35,9 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
   // A never-harvested catalog reads back as { subjects: null, fetchedAt: zero-time }
   // (see PSAPortalCatalogStore.Subjects) rather than an error — treat a missing or
   // empty subjects array the same as "not yet harvested".
-  const catalog = data?.subjects ?? [];
+  // Memoized so the `matches` useMemo below only recomputes when the underlying
+  // data actually changes, not the `?? []` fallback's fresh identity each render.
+  const catalog = useMemo(() => data?.subjects ?? [], [data]);
   const fetchedAt = data?.fetchedAt;
   const isStale = !!fetchedAt && Date.now() - new Date(fetchedAt).getTime() > CATALOG_MAX_AGE_MS;
 
