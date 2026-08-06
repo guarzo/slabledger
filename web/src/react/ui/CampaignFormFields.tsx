@@ -1,10 +1,12 @@
-import type { Phase } from '../../types/campaigns';
-import { useEffect, useState, useId, type ReactNode } from 'react';
-import { Checkbox } from 'radix-ui';
-import { phaseOptions } from '../utils/campaignConstants';
+import type { Phase, SubjectRef } from '../../types/campaigns';
+import { useId, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import { phaseOptions, targetLanguageOptions, subjectFilterModeOptions, SUBJECT_FILTER_EXCLUDE } from '../utils/campaignConstants';
 import { Input, Select } from '../ui';
+import { Segmented } from './Segmented';
 import ConfidenceRating from './ConfidenceRating';
 import GradeRangeSlider from './GradeRangeSlider';
+import SubjectListEditor from './SubjectListEditor';
 
 export interface CampaignFormValues {
   name: string;
@@ -15,8 +17,10 @@ export interface CampaignFormValues {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  inclusionList: string;
-  exclusionMode: boolean;
+  targetLanguage: string;
+  subjectFilterMode: string;
+  subjects: SubjectRef[];
+  deniedSpecs: SubjectRef[];
   psaSourcingFeeCents: number;
   ebayFeePct: number;
   expectedFillRate?: number;
@@ -25,7 +29,7 @@ export interface CampaignFormValues {
 
 interface CampaignFormFieldsProps {
   values: CampaignFormValues;
-  onChange: (field: string, value: string | number | boolean) => void;
+  onChange: (field: string, value: string | number | SubjectRef[]) => void;
   inputSize?: 'sm';
   showPhase?: boolean;
   showFees?: boolean;
@@ -63,7 +67,7 @@ function EconomicsSection({
   values, onChange, inputSize, showFees,
 }: {
   values: CampaignFormValues;
-  onChange: (field: string, value: string | number | boolean) => void;
+  onChange: (field: string, value: string | number | SubjectRef[]) => void;
   inputSize?: 'sm';
   showFees?: boolean;
 }) {
@@ -134,7 +138,7 @@ function EconomicsSection({
 export default function CampaignFormFields({
   values, onChange, inputSize, showPhase, showFees, nameError, onNameBlur,
 }: CampaignFormFieldsProps) {
-  const exclusionModeId = useId();
+  const targetLanguageId = useId();
   return (
     <div className="space-y-4">
       {/* Identity */}
@@ -182,29 +186,41 @@ export default function CampaignFormFields({
           </div>
           <Input label="Price Range" type="text" inputSize={inputSize} placeholder="e.g. 250-1500" value={values.priceRange}
             onChange={e => onChange('priceRange', e.target.value)} />
-          <div className="md:col-span-2 space-y-2">
-            <Input label={values.exclusionMode ? 'Exclusion List' : 'Inclusion List'} type="text" inputSize={inputSize} placeholder="e.g. charizard pikachu blastoise" value={values.inclusionList}
-              onChange={e => onChange('inclusionList', e.target.value)} />
-            <label htmlFor={exclusionModeId} className="inline-flex items-center gap-2.5 text-sm text-[var(--text-muted)] cursor-pointer group select-none">
-              <Checkbox.Root id={exclusionModeId} checked={values.exclusionMode}
-                onCheckedChange={(checked) => onChange('exclusionMode', checked === true)}
-                className="flex items-center justify-center w-4 h-4 rounded
-                           border border-[var(--surface-3)] bg-[var(--surface-2)] transition-colors
-                           data-[state=checked]:bg-[var(--brand-500)] data-[state=checked]:border-[var(--brand-500)]
-                           focus-visible:ring-2 focus-visible:ring-[var(--brand-500)]/40
-                           focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface-1)]
-                           group-hover:border-[var(--brand-500)]/50">
-                <Checkbox.Indicator className="text-white">
-                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3"
-                       viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"
-                       aria-hidden="true" focusable="false">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </Checkbox.Indicator>
-              </Checkbox.Root>
-              Use as exclusion list
-            </label>
+          <Select id={targetLanguageId} label="Language" selectSize={inputSize} value={values.targetLanguage}
+            onChange={e => onChange('targetLanguage', e.target.value)}
+            options={[...targetLanguageOptions]} />
+          <div className="space-y-1.5">
+            <span className="block text-xs text-[var(--text-muted)] mb-1">Subject Mode</span>
+            <Segmented
+              ariaLabel="Subject filter mode"
+              options={subjectFilterModeOptions}
+              value={(values.subjectFilterMode || 'Target') as 'Target' | 'Exclude'}
+              onChange={(v) => onChange('subjectFilterMode', v)}
+            />
           </div>
+          <div className="md:col-span-2">
+            <SubjectListEditor
+              label={values.subjectFilterMode === SUBJECT_FILTER_EXCLUDE ? 'Excluded Subjects' : 'Targeted Subjects'}
+              value={values.subjects}
+              onChange={(next) => onChange('subjects', next)}
+              inputSize={inputSize}
+            />
+          </div>
+          {values.deniedSpecs.length > 0 && (
+            <div className="md:col-span-2 space-y-1.5">
+              <span className="block text-xs text-[var(--text-muted)] mb-1">
+                Denied Specs (portal-managed — add or remove in the PSA portal)
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {values.deniedSpecs.map((spec, i) => (
+                  <span key={`${spec.id}-${spec.name}-${i}`} title={`id: ${spec.id}`}
+                    className="inline-flex items-center rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] text-xs px-2.5 py-1">
+                    {spec.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </FormSection>
 
