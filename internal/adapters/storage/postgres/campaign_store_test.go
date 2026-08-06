@@ -49,8 +49,10 @@ func TestCampaignStore_CampaignCRUD(t *testing.T) {
 	// ExclusionMode/InclusionList are now a legacy mirror derived from
 	// Subjects/SubjectFilterMode by the store, not from whatever the caller
 	// set directly (see TestCampaignStore_TargetingAxesRoundTrip). No
-	// Subjects are set here, so the mirror derives to Target/false.
+	// Subjects are set here, so the mirror derives to Target/false/"" —
+	// the caller-supplied InclusionList above is discarded, not stored.
 	assert.Equal(t, false, got.ExclusionMode)
+	assert.Equal(t, "", got.InclusionList)
 	assert.Equal(t, "psa-req-123", got.PSACampaignRequestID)
 
 	list, err := repo.ListCampaigns(ctx, false)
@@ -134,4 +136,38 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 	got, err = repo.GetCampaign(ctx, "camp-axes")
 	require.NoError(t, err)
 	assert.Equal(t, inventory.SubjectFilterTarget, got.SubjectFilterMode)
+
+	// Open-net case: an empty TargetLanguage is a legitimate, unfiltered
+	// campaign, not an error — and a nil Subjects/DeniedSpecs slice must
+	// round-trip through ListCampaigns as well as GetCampaign.
+	c2 := &inventory.Campaign{
+		ID:            "camp-axes-open",
+		Name:          "Unlinked Legacy Campaign",
+		Sport:         "Pokemon",
+		BuyTermsCLPct: 0.80,
+		Phase:         inventory.PhaseActive,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	require.NoError(t, repo.CreateCampaign(ctx, c2))
+
+	got2, err := repo.GetCampaign(ctx, "camp-axes-open")
+	require.NoError(t, err)
+	assert.Equal(t, "", got2.TargetLanguage)
+	assert.Equal(t, inventory.SubjectFilterTarget, got2.SubjectFilterMode)
+	assert.Empty(t, got2.Subjects)
+	assert.Empty(t, got2.DeniedSpecs)
+
+	list, err := repo.ListCampaigns(ctx, false)
+	require.NoError(t, err)
+	var listed *inventory.Campaign
+	for i := range list {
+		if list[i].ID == "camp-axes-open" {
+			listed = &list[i]
+		}
+	}
+	require.NotNil(t, listed, "camp-axes-open must appear in ListCampaigns")
+	assert.Equal(t, "", listed.TargetLanguage)
+	assert.Empty(t, listed.Subjects)
+	assert.Empty(t, listed.DeniedSpecs)
 }

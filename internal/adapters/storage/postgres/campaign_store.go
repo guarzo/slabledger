@@ -29,6 +29,18 @@ var _ inventory.CampaignRepository = (*CampaignStore)(nil)
 // store is the sole writer of both legacy columns; the mirror exists only so
 // a rollback to the previous binary sees a correct database — nothing in the
 // current binary reads it back.
+//
+// The mirror is inherently lossy for multi-word subject names: it joins
+// names with "," here, but inventory.SplitInclusionList (matching.go)
+// re-splits the stored string on comma-or-whitespace runs, so "Crystal
+// Golem" becomes the two separate tokens "Crystal" and "Golem" to that
+// legacy reader. Other legacy readers don't agree with each other either —
+// e.g. portfolio/analysis.go splits on comma only — so the same stored
+// inclusion_list string can mean different things to different legacy
+// consumers. This is a pre-existing limitation of the string format itself,
+// not something this store can fix without changing what those readers
+// expect; do not "fix" the join delimiter here without also auditing every
+// legacy reader's split logic.
 func deriveLegacyMirror(c *inventory.Campaign) (inclusionList string, exclusionMode bool) {
 	names := make([]string, 0, len(c.Subjects))
 	for _, s := range c.Subjects {

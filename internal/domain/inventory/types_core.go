@@ -188,9 +188,14 @@ type Campaign struct {
 
 	// InclusionList and ExclusionMode are a legacy mirror kept for one release
 	// so a rollback to the previous binary sees a database that still matches
-	// its own model. Nothing reads them after this change — campaign_store.go
-	// derives both from Subjects/SubjectFilterMode on every write; they are
-	// never read back into matching or coverage logic.
+	// its own model. campaign_store.go derives both from
+	// Subjects/SubjectFilterMode on every write, discarding whatever a caller
+	// sets on these two fields directly. As of this change several call sites
+	// still read them (matching.go, portfolio.go, suggestion_rules.go,
+	// portfolio/analysis.go, demand/campaign_signals.go,
+	// campaign_coverage.go) — Task 4 removes those reads and switches them to
+	// the new axes. Until Task 4 lands, treat this as write-derived-only, not
+	// dead: the mid-migration reads are load-bearing.
 	InclusionList string `json:"inclusionList"`
 	ExclusionMode bool   `json:"exclusionMode"`
 
