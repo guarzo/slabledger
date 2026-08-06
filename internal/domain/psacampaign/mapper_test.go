@@ -427,6 +427,55 @@ func TestTranslateToDiff_EmptyLocalSubjectsProposesClearingPortalList(t *testing
 	}
 }
 
+// TestTranslateToDiff_ErrorSurface pins TranslateToDiff's own error paths —
+// distinct from TranslateToCreate's, since mapper.go:86 (spec-list resolve)
+// and the toSubjectRefs propagations at :67/:74 are separate fmt.Errorf call
+// sites on the diff side. Every other TranslateToDiff test asserts err == nil,
+// so without this, a %w -> %v regression here would silently degrade Task 9's
+// 4xx classification to a 500 while the rest of the suite stayed green.
+func TestTranslateToDiff_ErrorSurface(t *testing.T) {
+	base := func() (inventory.Campaign, PortalCampaign) {
+		internal := inventory.Campaign{
+			BuyTermsCLPct: 0.75, DailySpendCapCents: 400000,
+			GradeRange: "9-10", YearRange: "2020-2024", PriceRange: "100-3000", CLConfidence: "3-4",
+			TargetLanguage: "english", SubjectFilterMode: "Target",
+		}
+		portal := PortalCampaign{
+			BuyPercentClv: 75, DailyBudgetCents: 400000,
+			BuyBox: CampaignBuyBox{
+				GradeMin: "9", GradeMax: "10", YearMin: 2020, YearMax: 2024,
+				PriceMinCents: 10000, PriceMaxCents: 300000, ClvConfidenceMin: 3,
+			},
+			SubjectFilter: CampaignFilter{Type: "Target"},
+		}
+		return internal, portal
+	}
+
+	t.Run("unmapped language token fails", func(t *testing.T) {
+		internal, portal := base()
+		internal.TargetLanguage = "korean"
+		_, err := TranslateToDiff(internal, portal, englishResolver())
+		if err == nil || !strings.Contains(err.Error(), "resolve spec list") {
+			t.Fatalf("err = %v, want containing %q", err, "resolve spec list")
+		}
+		if !errors.Is(err, ErrUnknownSpecList) {
+			t.Fatalf("errors.Is(err, ErrUnknownSpecList) = false, err = %v", err)
+		}
+	})
+
+	t.Run("unresolvable subject name fails naming the subject", func(t *testing.T) {
+		internal, portal := base()
+		internal.Subjects = []inventory.TargetSubject{{Name: "Mewtwo"}}
+		_, err := TranslateToDiff(internal, portal, englishResolver())
+		if err == nil || !strings.Contains(err.Error(), "Mewtwo") {
+			t.Fatalf("err = %v, want containing %q", err, "Mewtwo")
+		}
+		if !errors.Is(err, ErrUnknownSubject) {
+			t.Fatalf("errors.Is(err, ErrUnknownSubject) = false, err = %v", err)
+		}
+	})
+}
+
 func TestTranslateToDiff_EmptyTargetLanguageSkipsSpecListAxis(t *testing.T) {
 	r := englishResolver()
 	internal := inventory.Campaign{
