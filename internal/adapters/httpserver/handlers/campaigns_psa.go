@@ -195,6 +195,14 @@ func (h *CampaignsHandler) HandlePSAPropose(w http.ResponseWriter, r *http.Reque
 
 	diff, err := psacampaign.TranslateToDiff(*c, *portal, resolver)
 	if err != nil {
+		// ErrUnknownSubject/ErrUnknownSpecList mean an operator-entered
+		// name (or campaign language) hasn't been reconciled with the portal
+		// catalog yet — an expected, actionable 400 naming the offender, not
+		// a server fault. Anything else is unanticipated and stays a 500.
+		if errors.Is(err, psacampaign.ErrUnknownSubject) || errors.Is(err, psacampaign.ErrUnknownSpecList) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		h.logger.Error(r.Context(), "failed to translate campaign diff", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return

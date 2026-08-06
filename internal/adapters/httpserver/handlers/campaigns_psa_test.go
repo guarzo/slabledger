@@ -40,6 +40,21 @@ func freshCatalog(specLists []psacampaign.SpecListRef, subjects []psacampaign.Su
 	}
 }
 
+// staleCatalog returns a CatalogStoreMock whose fetchedAt is well past
+// psacampaign.CatalogMaxAge, so buildResolver returns psacampaign.ErrCatalogStale
+// and the caller must map that to a 503 naming the harvester.
+func staleCatalog(specLists []psacampaign.SpecListRef, subjects []psacampaign.SubjectRef) *mocks.CatalogStoreMock {
+	stale := time.Now().Add(-2 * psacampaign.CatalogMaxAge)
+	return &mocks.CatalogStoreMock{
+		SpecListsFn: func(ctx context.Context) ([]psacampaign.SpecListRef, time.Time, error) {
+			return specLists, stale, nil
+		},
+		SubjectsFn: func(ctx context.Context, categoryID int) ([]psacampaign.SubjectRef, time.Time, error) {
+			return subjects, stale, nil
+		},
+	}
+}
+
 func TestHandleGetPSASubjects_NoStore(t *testing.T) {
 	h := NewCampaignsHandler(nil, nil, nil, nil, observability.NewNoopLogger(), context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/api/psa/subjects", nil)
