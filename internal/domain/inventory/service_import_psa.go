@@ -101,14 +101,18 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 		}
 
 		// New purchase — find matching campaign (use float64 grade for half-grade support)
-		match := FindMatchingCampaign(
-			gradeValue,
-			buyCostCents,
-			meta.CardName,
-			meta.SetName,
-			meta.CardYear,
-			matchingCampaigns,
-		)
+		match := FindMatchingCampaign(MatchInput{
+			Grade:        gradeValue,
+			BuyCostCents: buyCostCents,
+			CardName:     meta.CardName,
+			SetName:      meta.SetName,
+			CardNumber:   meta.CardNumber,
+			CardYear:     meta.CardYear,
+			// PSASpecID is left at its zero value here: the CSV-title parse
+			// path has no CL spec id yet — cert lookups that resolve it run
+			// asynchronously after import completes (see the comment two
+			// lines above this call site).
+		}, matchingCampaigns)
 		var campaign *Campaign
 		if match.Status == "matched" {
 			campaign = campaignMap[match.CampaignID]
