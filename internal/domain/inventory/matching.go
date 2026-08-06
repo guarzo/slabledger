@@ -218,24 +218,6 @@ func specDenyKey(setName, cardNumber string) string {
 	return normSet + " " + cardNumber
 }
 
-// SplitInclusionList splits an inclusion/exclusion list string into individual
-// entries. It supports both comma-separated ("charizard,pikachu") and
-// space-separated ("charizard pikachu") formats, as well as mixed usage.
-func SplitInclusionList(s string) []string {
-	// First split by commas
-	parts := strings.Split(s, ",")
-	var entries []string
-	for _, part := range parts {
-		// Then split each part by whitespace
-		for _, word := range strings.Fields(part) {
-			if word != "" {
-				entries = append(entries, word)
-			}
-		}
-	}
-	return entries
-}
-
 // MatchResult describes the outcome of matching a purchase against all inventory.
 type MatchResult struct {
 	CampaignID string   // Set when exactly one campaign matches

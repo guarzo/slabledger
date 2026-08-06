@@ -8,10 +8,10 @@ ALTER TABLE campaigns
 UPDATE campaigns
 SET subject_filter_mode = CASE WHEN exclusion_mode THEN 'Exclude' ELSE 'Target' END;
 
--- Backfill: subjects from inclusion_list, split on the same rule as
--- inventory.SplitInclusionList (comma-or-whitespace runs, empty entries
--- dropped). Ids are placeholders (0) — the operator resolves them via a
--- baseline pull or the getSubjects resolver; see design doc §7.
+-- Backfill: subjects from inclusion_list, split on comma-or-whitespace runs
+-- with empty entries dropped. Ids are placeholders (0) — the operator
+-- resolves them via a baseline pull or the getSubjects resolver; see design
+-- doc §7.
 UPDATE campaigns c
 SET subjects = COALESCE(
     (
