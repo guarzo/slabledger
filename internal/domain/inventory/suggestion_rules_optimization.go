@@ -162,8 +162,9 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 				Confidence: "medium",
 				DataPoints: insights.DataSummary.TotalPurchases,
 				SuggestedParams: CampaignSuggestionParams{
-					Name:     c.Name,
-					Subjects: removes,
+					Name:           c.Name,
+					Subjects:       removes,
+					SubjectsAction: SubjectsActionRemove,
 				},
 				ExpectedMetrics: ExpectedMetrics{
 					// Removing a segment — expected improvement is directional only.
@@ -195,8 +196,9 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 				Confidence: "medium",
 				DataPoints: insights.DataSummary.TotalPurchases,
 				SuggestedParams: CampaignSuggestionParams{
-					Name:     c.Name,
-					Subjects: adds,
+					Name:           c.Name,
+					Subjects:       adds,
+					SubjectsAction: SubjectsActionAdd,
 				},
 				ExpectedMetrics: ExpectedMetrics{
 					ExpectedROI:       expectedROI,

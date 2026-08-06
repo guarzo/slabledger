@@ -75,9 +75,19 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 		if s.Type == "adjust" {
 			if s.Title == "Remove underperformers from Test Campaign" {
 				foundRemove = true
+				// SubjectsAction must disambiguate polarity: a client applying
+				// suggestedParams programmatically has only Subjects + this
+				// field to know whether to add or remove from the campaign's
+				// existing targeting list.
+				if s.SuggestedParams.SubjectsAction != SubjectsActionRemove {
+					t.Errorf("expected SubjectsAction %q on remove suggestion, got %q", SubjectsActionRemove, s.SuggestedParams.SubjectsAction)
+				}
 			}
 			if s.Title == "Add top performers to Test Campaign" {
 				foundAdd = true
+				if s.SuggestedParams.SubjectsAction != SubjectsActionAdd {
+					t.Errorf("expected SubjectsAction %q on add suggestion, got %q", SubjectsActionAdd, s.SuggestedParams.SubjectsAction)
+				}
 				// ExpectedMetrics should be propagated from Charizard (top-ROI add).
 				if math.Abs(s.ExpectedMetrics.ExpectedROI-0.30) > 1e-6 {
 					t.Errorf("expected ExpectedROI ~0.30 from Charizard, got %f", s.ExpectedMetrics.ExpectedROI)

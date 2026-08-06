@@ -21,8 +21,21 @@ type CampaignSuggestionParams struct {
 	BuyTermsCLPctOptimistic float64  `json:"buyTermsCLPctOptimistic,omitempty"`
 	DailySpendCapCents      int      `json:"dailySpendCapCents,omitempty"`
 	Subjects                []string `json:"subjects,omitempty"`
-	PrimaryExit             string   `json:"primaryExit,omitempty"`
+	// SubjectsAction is the polarity of Subjects on an "adjust" suggestion
+	// for an *existing* campaign: SubjectsActionAdd means these subjects
+	// should be added to the campaign's targeting list, SubjectsActionRemove
+	// means they should be removed from it. Empty for "new"/"gap" suggestions,
+	// where Subjects is the full initial targeting list for a brand-new
+	// campaign and there is no existing list to add to or remove from.
+	SubjectsAction string `json:"subjectsAction,omitempty"`
+	PrimaryExit    string `json:"primaryExit,omitempty"`
 }
+
+// Values for CampaignSuggestionParams.SubjectsAction.
+const (
+	SubjectsActionAdd    = "add"
+	SubjectsActionRemove = "remove"
+)
 
 // ExpectedMetrics are projected performance based on historical data.
 type ExpectedMetrics struct {
