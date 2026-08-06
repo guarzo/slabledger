@@ -26,6 +26,50 @@ func newTestPSAHandler(snap *mocks.SnapshotStoreMock, queue *mocks.PushQueueStor
 	return NewCampaignsHandler(nil, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 }
 
+// freshCatalog returns a CatalogStoreMock whose fetchedAt is always "now", so
+// tests exercising propose/create do not trip the new staleness guard.
+func freshCatalog(specLists []psacampaign.SpecListRef, subjects []psacampaign.SubjectRef) *mocks.CatalogStoreMock {
+	now := time.Now()
+	return &mocks.CatalogStoreMock{
+		SpecListsFn: func(ctx context.Context) ([]psacampaign.SpecListRef, time.Time, error) {
+			return specLists, now, nil
+		},
+		SubjectsFn: func(ctx context.Context, categoryID int) ([]psacampaign.SubjectRef, time.Time, error) {
+			return subjects, now, nil
+		},
+	}
+}
+
+func TestHandleGetPSASubjects_NoStore(t *testing.T) {
+	h := NewCampaignsHandler(nil, nil, nil, nil, observability.NewNoopLogger(), context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/api/psa/subjects", nil)
+	rec := httptest.NewRecorder()
+	h.HandleGetPSASubjects(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleGetPSASubjects_Success(t *testing.T) {
+	fetchedAt := time.Now().Add(-time.Hour)
+	catalog := &mocks.CatalogStoreMock{
+		SubjectsFn: func(ctx context.Context, categoryID int) ([]psacampaign.SubjectRef, time.Time, error) {
+			if categoryID != psacampaign.PokemonCategoryID {
+				t.Fatalf("categoryID = %d, want PokemonCategoryID", categoryID)
+			}
+			return []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}}, fetchedAt, nil
+		},
+	}
+	h := NewCampaignsHandler(nil, nil, nil, nil, observability.NewNoopLogger(), context.Background(),
+		WithPSACatalogStore(catalog))
+	req := httptest.NewRequest(http.MethodGet, "/api/psa/subjects", nil)
+	rec := httptest.NewRecorder()
+	h.HandleGetPSASubjects(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandleListPSACampaigns_NoStore(t *testing.T) {
 	h := newTestPSAHandler(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/psa-campaigns", nil)

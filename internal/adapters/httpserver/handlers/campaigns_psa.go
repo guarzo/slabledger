@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -29,6 +30,49 @@ func (h *CampaignsHandler) HandleListPSACampaigns(w http.ResponseWriter, r *http
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"campaigns": campaigns,
+		"fetchedAt": fetchedAt,
+	})
+}
+
+// buildResolver reads the persisted PSA portal catalog and builds a pure
+// Resolver for one translation call. The main server has no portal session —
+// see psacampaign.NewCatalogResolver's doc — so it can only translate against
+// whatever the harvester most recently wrote.
+func (h *CampaignsHandler) buildResolver(ctx context.Context) (psacampaign.Resolver, error) {
+	specLists, specFetchedAt, err := h.psaCatalog.SpecLists(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read spec-list catalog: %w", err)
+	}
+	subjects, subjFetchedAt, err := h.psaCatalog.Subjects(ctx, psacampaign.PokemonCategoryID)
+	if err != nil {
+		return nil, fmt.Errorf("read subject catalog: %w", err)
+	}
+	// Staleness is judged against whichever half of the catalog is older, so
+	// a harvester that stopped updating subjects (say) fails closed even if
+	// spec lists happen to still be fresh.
+	fetchedAt := specFetchedAt
+	if subjFetchedAt.Before(fetchedAt) {
+		fetchedAt = subjFetchedAt
+	}
+	return psacampaign.NewCatalogResolver(specLists, subjects, fetchedAt, time.Now())
+}
+
+// HandleGetPSASubjects handles GET /api/psa/subjects, returning the persisted
+// subject catalog for the frontend's subject-name typeahead. Served entirely
+// from CatalogStore — the main server never calls the portal.
+func (h *CampaignsHandler) HandleGetPSASubjects(w http.ResponseWriter, r *http.Request) {
+	if h.psaCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA campaign sync not enabled")
+		return
+	}
+	subjects, fetchedAt, err := h.psaCatalog.Subjects(r.Context(), psacampaign.PokemonCategoryID)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to get PSA subject catalog", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"subjects":  subjects,
 		"fetchedAt": fetchedAt,
 	})
 }
@@ -134,7 +178,22 @@ func (h *CampaignsHandler) HandlePSAPropose(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	diff, err := psacampaign.TranslateToDiff(*c, *portal)
+	if h.psaCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA catalog not enabled — run the harvester")
+		return
+	}
+	resolver, err := h.buildResolver(r.Context())
+	if err != nil {
+		if errors.Is(err, psacampaign.ErrCatalogStale) {
+			writeError(w, http.StatusServiceUnavailable, "PSA catalog is stale — run the harvester (cmd/psa-harvest) to refresh spec lists and subjects")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to build PSA catalog resolver", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	diff, err := psacampaign.TranslateToDiff(*c, *portal, resolver)
 	if err != nil {
 		h.logger.Error(r.Context(), "failed to translate campaign diff", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
@@ -261,7 +320,22 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 		return
 	}
 
-	fd, err := psacampaign.TranslateToCreate(*c)
+	if h.psaCatalog == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA catalog not enabled — run the harvester")
+		return
+	}
+	resolver, err := h.buildResolver(r.Context())
+	if err != nil {
+		if errors.Is(err, psacampaign.ErrCatalogStale) {
+			writeError(w, http.StatusServiceUnavailable, "PSA catalog is stale — run the harvester (cmd/psa-harvest) to refresh spec lists and subjects")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to build PSA catalog resolver", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	fd, err := psacampaign.TranslateToCreate(*c, resolver)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

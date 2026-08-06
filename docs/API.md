@@ -2807,6 +2807,26 @@ Returns the most recent PSA portal campaign snapshot (written by the harvester).
 
 ---
 
+### `GET /api/psa/subjects`
+
+Auth: required (session)
+
+Returns the persisted PSA subject catalog (Pokemon category) harvested by
+`cmd/psa-harvest`, for the campaign form's subject-name typeahead. Served
+entirely from the database — the main server never contacts psacard.com.
+
+**Response:** `200 OK`
+```json
+{
+  "subjects": [{ "id": 22210, "name": "Machamp" }],
+  "fetchedAt": "2026-08-06T10:00:00Z"
+}
+```
+
+**Errors:** `503` PSA campaign sync not enabled; `500` internal error
+
+---
+
 ### `POST /api/campaigns/{id}/psa-link`
 
 Auth: required (session)

@@ -114,6 +114,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 
 	// PSA portal campaign sync
 	mux.Handle("GET /api/psa-campaigns", authRoute(rt.campaignsHandler.HandleListPSACampaigns))
+	mux.Handle("GET /api/psa/subjects", authRoute(rt.campaignsHandler.HandleGetPSASubjects))
 	mux.Handle("POST /api/campaigns/{id}/psa-link", authRoute(rt.campaignsHandler.HandlePSALink))
 	mux.Handle("POST /api/campaigns/{id}/psa-propose", authRoute(rt.campaignsHandler.HandlePSAPropose))
 	mux.Handle("POST /api/campaigns/{id}/psa-publish", authRoute(rt.campaignsHandler.HandlePSAPublish))

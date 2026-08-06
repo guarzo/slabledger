@@ -186,6 +186,9 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		if deps.PSAPushQueue != nil {
 			opts = append(opts, handlers.WithPSAPushQueue(deps.PSAPushQueue))
 		}
+		if deps.PSACatalogStore != nil {
+			opts = append(opts, handlers.WithPSACatalogStore(deps.PSACatalogStore))
+		}
 		campaignsHandler = handlers.NewCampaignsHandler(
 			deps.CampaignsService,
 			deps.ArbitrageService,

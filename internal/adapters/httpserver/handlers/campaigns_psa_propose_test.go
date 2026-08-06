@@ -124,6 +124,7 @@ func TestHandlePSAPropose(t *testing.T) {
 			if !tt.noQueue {
 				opts = append(opts, WithPSAPushQueue(queue))
 			}
+			opts = append(opts, WithPSACatalogStore(freshCatalog(nil, nil)))
 			h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose", strings.NewReader(`{}`))
@@ -265,8 +266,11 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 	valid := inventory.Campaign{
 		ID: "c1", Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
 		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
-		CLConfidence: "3-4", PSASourcingFeeCents: 300,
+		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguage: "english",
 	}
+	englishCatalog := freshCatalog([]psacampaign.SpecListRef{
+		{ID: "sl-1", Name: "English Pokemon", Status: "ENABLED"},
+	}, nil)
 	tests := []struct {
 		name        string
 		noQueue     bool
@@ -342,6 +346,7 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 			if !tt.noQueue {
 				opts = append(opts, WithPSAPushQueue(queue))
 			}
+			opts = append(opts, WithPSACatalogStore(englishCatalog))
 			h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose-create", strings.NewReader(`{}`))
