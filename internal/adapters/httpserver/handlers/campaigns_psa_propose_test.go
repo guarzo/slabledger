@@ -124,6 +124,7 @@ func TestHandlePSAPropose(t *testing.T) {
 			if !tt.noQueue {
 				opts = append(opts, WithPSAPushQueue(queue))
 			}
+			opts = append(opts, WithPSAResolver(&mocks.ResolverMock{}))
 			h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose", strings.NewReader(`{}`))
@@ -161,15 +162,17 @@ func TestHandlePSAPropose(t *testing.T) {
 	}
 }
 
-func TestHandlePSAPropose_NoSnapshotsOrQueue(t *testing.T) {
+func TestHandlePSAPropose_NoSnapshotsOrQueueOrResolver(t *testing.T) {
 	tests := []struct {
 		name        string
 		noSnapshots bool
 		noQueue     bool
+		noResolver  bool
 	}{
-		{name: "no snapshots store", noSnapshots: true, noQueue: false},
-		{name: "no push queue", noSnapshots: false, noQueue: true},
-		{name: "neither configured", noSnapshots: true, noQueue: true},
+		{name: "no snapshots store", noSnapshots: true},
+		{name: "no push queue", noQueue: true},
+		{name: "no resolver", noResolver: true},
+		{name: "none configured", noSnapshots: true, noQueue: true, noResolver: true},
 	}
 
 	for _, tt := range tests {
@@ -180,6 +183,9 @@ func TestHandlePSAPropose_NoSnapshotsOrQueue(t *testing.T) {
 			}
 			if !tt.noQueue {
 				opts = append(opts, WithPSAPushQueue(&mocks.PushQueueStoreMock{}))
+			}
+			if !tt.noResolver {
+				opts = append(opts, WithPSAResolver(&mocks.ResolverMock{}))
 			}
 			h := NewCampaignsHandler(&mocks.MockInventoryService{}, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 
@@ -266,16 +272,19 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 		ID: "c1", Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
 		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
 		CLConfidence: "3-4", PSASourcingFeeCents: 300,
+		TargetLanguage: "english", SubjectFilterMode: "Target",
 	}
 	tests := []struct {
 		name        string
 		noQueue     bool
+		noResolver  bool
 		campaign    inventory.Campaign
 		queueRows   []psacampaign.PushRow
 		wantStatus  int
 		wantEnqueue bool
 	}{
 		{name: "queue disabled", noQueue: true, campaign: valid, wantStatus: http.StatusServiceUnavailable},
+		{name: "resolver disabled", noResolver: true, campaign: valid, wantStatus: http.StatusServiceUnavailable},
 		{
 			name: "already linked",
 			campaign: func() inventory.Campaign {
@@ -341,6 +350,13 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 			var opts []CampaignsHandlerOption
 			if !tt.noQueue {
 				opts = append(opts, WithPSAPushQueue(queue))
+			}
+			if !tt.noResolver {
+				opts = append(opts, WithPSAResolver(&mocks.ResolverMock{
+					SpecListIDsFn: func(languageToken string) ([]string, error) {
+						return []string{"list-en-1"}, nil
+					},
+				}))
 			}
 			h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 

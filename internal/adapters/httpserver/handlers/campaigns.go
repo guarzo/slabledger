@@ -44,6 +44,7 @@ type CampaignsHandler struct {
 
 	psaSnapshots psacampaign.SnapshotStore  // optional: PSA portal campaign snapshot reader
 	psaQueue     psacampaign.PushQueueStore // optional: PSA propose/publish push queue
+	psaResolver  psacampaign.Resolver       // optional: resolves TargetLanguage/subject names to portal ids
 }
 
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
@@ -82,6 +83,12 @@ func WithPSASnapshotStore(s psacampaign.SnapshotStore) CampaignsHandlerOption {
 // WithPSAPushQueue enables the PSA propose/publish push queue.
 func WithPSAPushQueue(q psacampaign.PushQueueStore) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.psaQueue = q }
+}
+
+// WithPSAResolver enables translation of TargetLanguage/subject names to
+// portal spec-list/subject ids in the propose-diff and propose-create paths.
+func WithPSAResolver(r psacampaign.Resolver) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.psaResolver = r }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.

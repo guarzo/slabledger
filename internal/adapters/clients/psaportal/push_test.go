@@ -90,6 +90,52 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 	}
 }
 
+func TestPushCampaign_ListValuedFieldUsesValueOverNew(t *testing.T) {
+	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	if err != nil {
+		t.Fatalf("fixture missing: %v", err)
+	}
+	routes := bundleRoutes()
+	routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
+	routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
+	ff := &fakeFetcher{routes: routes}
+
+	c := New(ff, Config{})
+	err = c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
+		[]psacampaign.FieldChange{
+			{Field: "selectedSubjects", Old: "1:Old", New: "1:Old", Value: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}}},
+		})
+	if err != nil {
+		t.Fatalf("PushCampaign: %v", err)
+	}
+	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/abc123/updateCampaign"])
+	decoded, err := base64.StdEncoding.DecodeString(payloadStr)
+	if err != nil {
+		t.Fatalf("base64: %v", err)
+	}
+	var packed []json.RawMessage
+	if err := json.Unmarshal(decoded, &packed); err != nil {
+		t.Fatalf("unmarshal packed: %v", err)
+	}
+	resolved, err := DecodeRefPacked(packed)
+	if err != nil {
+		t.Fatalf("DecodeRefPacked: %v", err)
+	}
+	entry := resolved.(map[string]any)
+	formData := entry["formData"].(map[string]any)
+	subjects, ok := formData["selectedSubjects"].([]any)
+	if !ok {
+		t.Fatalf("selectedSubjects = %#v (%T), want a JSON array (from Value, not the New string)", formData["selectedSubjects"], formData["selectedSubjects"])
+	}
+	if len(subjects) != 1 {
+		t.Fatalf("len(subjects) = %d, want 1", len(subjects))
+	}
+	entry0 := subjects[0].(map[string]any)
+	if entry0["id"] != float64(22210) || entry0["name"] != "Machamp" {
+		t.Errorf("subjects[0] = %+v, want {id:22210 name:Machamp}", entry0)
+	}
+}
+
 func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
 	if err != nil {

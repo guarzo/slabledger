@@ -108,6 +108,10 @@ type FieldChange struct {
 	Field string `json:"field"`
 	Old   string `json:"old"`
 	New   string `json:"new"`
+	// Value carries the new value for list-valued fields, where the string
+	// rendering in New is for display and audit only. Scalar fields leave
+	// this nil and push.go falls back to New.
+	Value any `json:"value,omitempty"`
 }
 
 // ProposedDiff is the payload of a queued push. For updates it holds the field
