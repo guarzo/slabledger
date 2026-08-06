@@ -104,3 +104,41 @@ func (m *CampaignLinkerMock) LinkedPSACampaignID(ctx context.Context, internalCa
 	}
 	return "", nil
 }
+
+// CatalogStoreMock implements psacampaign.CatalogStore with the Fn-field pattern.
+type CatalogStoreMock struct {
+	SaveSpecListsFn func(ctx context.Context, lists []psacampaign.SpecListRef) error
+	SaveSubjectsFn  func(ctx context.Context, categoryID int, subjects []psacampaign.SubjectRef) error
+	SpecListsFn     func(ctx context.Context) ([]psacampaign.SpecListRef, time.Time, error)
+	SubjectsFn      func(ctx context.Context, categoryID int) ([]psacampaign.SubjectRef, time.Time, error)
+}
+
+var _ psacampaign.CatalogStore = (*CatalogStoreMock)(nil)
+
+func (m *CatalogStoreMock) SaveSpecLists(ctx context.Context, lists []psacampaign.SpecListRef) error {
+	if m.SaveSpecListsFn != nil {
+		return m.SaveSpecListsFn(ctx, lists)
+	}
+	return nil
+}
+
+func (m *CatalogStoreMock) SaveSubjects(ctx context.Context, categoryID int, subjects []psacampaign.SubjectRef) error {
+	if m.SaveSubjectsFn != nil {
+		return m.SaveSubjectsFn(ctx, categoryID, subjects)
+	}
+	return nil
+}
+
+func (m *CatalogStoreMock) SpecLists(ctx context.Context) ([]psacampaign.SpecListRef, time.Time, error) {
+	if m.SpecListsFn != nil {
+		return m.SpecListsFn(ctx)
+	}
+	return []psacampaign.SpecListRef{}, time.Time{}, nil
+}
+
+func (m *CatalogStoreMock) Subjects(ctx context.Context, categoryID int) ([]psacampaign.SubjectRef, time.Time, error) {
+	if m.SubjectsFn != nil {
+		return m.SubjectsFn(ctx, categoryID)
+	}
+	return []psacampaign.SubjectRef{}, time.Time{}, nil
+}

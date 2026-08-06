@@ -64,6 +64,7 @@ type ServerDependencies struct {
 	PSARowProvider            handlers.RowProvider             // optional: PSA portal fetcher for manual sync
 	PSASnapshotStore          psacampaign.SnapshotStore        // optional: PSA campaign snapshot reader
 	PSAPushQueue              psacampaign.PushQueueStore       // optional: PSA campaign push-queue reader/writer
+	PSACatalogStore           psacampaign.CatalogStore         // optional: PSA portal catalog reader (spec lists + subjects)
 }
 
 // EnvVarValidation holds the result of environment variable validation
