@@ -213,11 +213,23 @@ only if every non-English set in inventory carries a marker. A non-English set
 with no marker would classify as `english` and match an English-targeted
 campaign — buying the wrong language silently.
 
-Run the audit. `SUPABASE_DB_URL` is in `.env`; it contains a password, so do not
-echo it or paste query output that includes it:
+Run the audit. Two things about the connection, both deliberate:
+
+- **Use `SUPABASE_DB_URL`, not `DATABASE_URL`.** This audit must read *production*
+  inventory. `DATABASE_URL` (`.env.example:106`) points at the devcontainer's local
+  Postgres, whose `campaign_purchases` table is empty — running the gate against it
+  returns zero rows and passes vacuously, which is strictly worse than not running
+  it. `SUPABASE_DB_URL` is the prod Supabase connection. Do not "simplify" this to
+  `DATABASE_URL`.
+- **Source the main checkout's `.env`, not the worktree's.** There is no `.env`
+  inside `.worktrees/psa-spec-list-targeting/` — it lives only at the repository
+  root, so `. ./.env` from the worktree fails with "no such file".
+
+`SUPABASE_DB_URL` contains a password, so do not echo it or paste query output that
+includes it:
 
 ```bash
-set -a && . ./.env && set +a
+set -a && . /workspace/.env && set +a
 psql "$SUPABASE_DB_URL" -At -c "
   SELECT DISTINCT set_name
   FROM campaign_purchases
@@ -2900,7 +2912,7 @@ git commit -m "feat: move coverage, demand, portfolio, and suggestion consumers 
 - Create: `internal/adapters/storage/postgres/psa_portal_catalog_store.go`
 - Create: `internal/adapters/storage/postgres/psa_portal_catalog_store_test.go`
 - Modify: `internal/testutil/mocks/psa_campaign_stores.go` (append `CatalogStoreMock`)
-- Modify: `cmd/slabledger/server.go:65-66` (add `PSACatalogStore` dependency field), `cmd/slabledger/server.go:182-187` (wire `WithPSACatalogStore` option — that handler option belongs to another task; this task only adds the `ServerDependencies` field and the `if deps.PSACatalogStore != nil` construction block, matching the existing `PSASnapshotStore`/`PSAPushQueue` shape)
+- Modify: `cmd/slabledger/server.go:65-66` (add `PSACatalogStore` dependency field only), `cmd/slabledger/handlers.go:333-338` (construct `deps.PSACatalogStore` inside the existing `if in.DB != nil` block, alongside `PSASnapshotStore`/`PSAPushQueue`)
 - Modify: `cmd/slabledger/handlers.go:333-339` (construct `postgres.NewPSAPortalCatalogStore(in.DB.DB)` inside the existing `if in.DB != nil` block)
 
 **Interfaces:**
@@ -3480,7 +3492,22 @@ Modify `cmd/slabledger/handlers.go:333-339` — construct it alongside the exist
 	}
 ```
 
-No handler wiring here — a `WithPSACatalogStore` `CampaignsHandlerOption` and the `/api/psa/subjects` endpoint that reads `deps.PSACatalogStore` belong to the frontend/handler task, not this one. This task only makes the store constructible and available on `ServerDependencies`.
+No handler wiring here, and specifically **do not** add the
+`opts = append(opts, handlers.WithPSACatalogStore(deps.PSACatalogStore))` block to
+`cmd/slabledger/server.go:182-187` in this task. `WithPSACatalogStore` is defined by
+Task 9; referencing it here would not compile and would break this task's
+intermediate commit.
+
+This task's half of the seam is exactly two things: the `PSACatalogStore` field on
+`ServerDependencies`, and its construction in `handlers.go`'s existing
+`if in.DB != nil` block. Both compile standalone — an unread struct field is legal
+Go. **Task 9 owns the other half**: it defines `WithPSACatalogStore` *and* appends
+it to `opts` in `server.go`, so producer and consumer land in the same commit.
+
+Without that division the store is constructed and never injected, leaving
+`h.psaCatalog` nil at runtime and making `/api/psa/subjects` and every catalog-backed
+translation return 503 — a failure no unit test in either task would catch, because
+both tasks' tests construct the handler directly with `WithPSACatalogStore` in hand.
 
 - [ ] **Step 13: Add the CatalogStoreMock**
 
@@ -3918,8 +3945,8 @@ func TestFetchSubjects_PostsCategoryIDAndDecodesResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("base64: %v", err)
 	}
-	if decoded != "[16]" {
-		t.Errorf("decoded ref-packed root = %q, want the flat array %q", decoded, "[16]")
+	if decoded != `[[1],16]` {
+		t.Errorf("decoded ref-packed root = %q, want %q", decoded, `[[1],16]`)
 	}
 }
 
@@ -3937,10 +3964,17 @@ func TestFetchSubjects_NonResultEnvelope(t *testing.T) {
 ```
 
 ```go
-// base64Decode decodes a ref-packed payload string and renders slot 0 back to
-// a compact JSON string for a direct literal comparison in the test above.
-// getSubjects takes a bare one-element array argument (no object wrapper),
-// unlike createCampaign's bare-object argument — this pins that shape.
+// base64Decode decodes a ref-packed payload string and renders it back to a
+// compact JSON string for a direct literal comparison in the test above.
+//
+// getSubjects takes a bare one-element array argument — logically
+// `getSubjects([16])` — not the object wrapper createCampaign/updateCampaign
+// use, and this pins that shape. Note the *encoded* form is `[[1],16]`, not
+// `[16]`: EncodeRefPacked reserves one slot for the array (holding the pointer
+// list `[1]`) and a second for the scalar `16` it points at
+// (`svelteref.go:121`, `svelteref.go:146`). Slot 0 is the root. Asserting the
+// literal `[16]` here would fail — that is the decoded *logical* value, not the
+// wire payload the test captures.
 func base64Decode(t *testing.T, payloadStr string) (string, error) {
 	t.Helper()
 	raw, err := stdBase64Decode(payloadStr)
@@ -4077,8 +4111,8 @@ func TestFetchSubjects_PostsCategoryIDAndDecodesResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("base64: %v", err)
 	}
-	if string(decoded) != "[16]" {
-		t.Errorf("decoded ref-packed root = %s, want the flat array [16]", decoded)
+	if string(decoded) != `[[1],16]` {
+		t.Errorf("decoded ref-packed root = %s, want [[1],16]", decoded)
 	}
 }
 
@@ -4767,6 +4801,7 @@ git commit -m "feat(psacampaign): translate spec-list/subject/denied-spec axes v
 - Modify: `docs/API.md` (document `GET /api/psa/subjects`)
 - Modify: `internal/adapters/httpserver/handlers/campaigns_psa_test.go` (`newTestPSAHandler` gains a catalog param; new subjects-endpoint tests)
 - Modify: `internal/adapters/httpserver/handlers/campaigns_psa_propose_test.go` (existing propose/create tests wired with a working `CatalogStoreMock` + `ResolverMock`-backed catalog so they keep passing under the new nil/staleness guards)
+- Modify: `cmd/slabledger/server.go:182-187` (append `handlers.WithPSACatalogStore(deps.PSACatalogStore)` to `opts`, guarded by `if deps.PSACatalogStore != nil`, matching the existing `PSASnapshotStore`/`PSAPushQueue` blocks). Task 5 already added the `ServerDependencies.PSACatalogStore` field and constructs it in `handlers.go`; this task supplies the option it is passed to. Both halves must not be split any further — see Step 7.
 - Test: covered by the modified files above (no new standalone test file)
 
 **Interfaces:**
@@ -4775,7 +4810,7 @@ git commit -m "feat(psacampaign): translate spec-list/subject/denied-spec axes v
   - `SaveSubjects(ctx context.Context, categoryID int, subjects []psacampaign.SubjectRef) error`
   - `SpecLists(ctx context.Context) ([]psacampaign.SpecListRef, time.Time, error)`
   - `Subjects(ctx context.Context, categoryID int) ([]psacampaign.SubjectRef, time.Time, error)`
-- Produces: `func WithPSACatalogStore(s psacampaign.CatalogStore) CampaignsHandlerOption`; `func (h *CampaignsHandler) HandleGetPSASubjects(w http.ResponseWriter, r *http.Request)`; `GET /api/psa/subjects` route — leaves with no further in-plan consumers, but the main server's construction (`cmd/slabledger/server.go`) must pass a real Postgres-backed `CatalogStore` (Task 5's adapter) into `WithPSACatalogStore` for this to work outside tests — that wiring is Task 5/10's responsibility (the `CatalogStore` adapter and its constructor are out of this task's scope; only the handler-side option and its use are produced here).
+- Produces: `func WithPSACatalogStore(s psacampaign.CatalogStore) CampaignsHandlerOption`; `func (h *CampaignsHandler) HandleGetPSASubjects(w http.ResponseWriter, r *http.Request)`; `GET /api/psa/subjects` route; and the `server.go` `opts` append that actually injects the store. This task closes the seam: Task 5 constructs the Postgres-backed `CatalogStore` onto `ServerDependencies` but deliberately does not reference `WithPSACatalogStore` (which does not exist until this task), so this task defines the option **and** wires it in the same commit. Do not defer the `server.go` append to a later task — a constructed-but-uninjected store leaves `h.psaCatalog` nil in the real binary while every test in Tasks 5, 8, and 9 still passes, because they all build the handler directly with the option in hand.
 
 **Judgment call:** both "no catalog dependency configured" and "catalog present but stale" return `503 Service Unavailable`, mirroring the existing `h.psaSnapshots == nil` guard (`campaigns_psa.go:19-23`) rather than inventing a new status code for staleness — both cases mean the same thing operationally ("the harvester needs to run"), and the response body names which.
 
@@ -5041,10 +5076,43 @@ Update `campaigns_psa_propose_test.go`'s existing successful-path cases to pass 
 Run: `go test -race ./internal/adapters/httpserver/... -v`
 Expected: PASS, including the pre-existing `TestHandlePSAPropose` and the create-proposal tests once updated with `freshCatalog`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Inject the catalog store in the real server binary**
+
+Task 5 put `PSACatalogStore` on `ServerDependencies` and constructs it in
+`cmd/slabledger/handlers.go` (inside the existing `if in.DB != nil` block, next to
+`PSASnapshotStore` / `PSAPushQueue`), but deliberately stopped there: the option it
+gets passed to did not exist yet. Close that now, in `cmd/slabledger/server.go`,
+directly after the existing `PSAPushQueue` block at `server.go:185-187`:
+
+```go
+		if deps.PSAPushQueue != nil {
+			opts = append(opts, handlers.WithPSAPushQueue(deps.PSAPushQueue))
+		}
+		if deps.PSACatalogStore != nil {
+			opts = append(opts, handlers.WithPSACatalogStore(deps.PSACatalogStore))
+		}
+```
+
+This is the only line in the plan that makes `h.psaCatalog` non-nil in the running
+binary. Skipping it is invisible to every test in Tasks 5, 8, and 9 — they all build
+the handler directly with `WithPSACatalogStore` — and shows up only in production as
+a 503 from `/api/psa/subjects` and from both translate call sites.
+
+- [ ] **Step 6: Verify the wiring end-to-end**
+
+Run: `go build ./cmd/slabledger/... && go test -race ./internal/adapters/httpserver/... ./cmd/slabledger/...`
+Expected: builds and passes.
+
+Then confirm the injection actually happened rather than trusting the diff:
+
+Run: `grep -n "WithPSACatalogStore" cmd/slabledger/server.go internal/adapters/httpserver/handlers/campaigns.go`
+Expected: exactly two non-test hits — the `opts` append in `server.go` and the option
+definition in `campaigns.go`. One hit means the seam is still open.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add internal/adapters/httpserver/handlers/campaigns.go internal/adapters/httpserver/handlers/campaigns_psa.go internal/adapters/httpserver/handlers/campaigns_psa_test.go internal/adapters/httpserver/handlers/campaigns_psa_propose_test.go internal/adapters/httpserver/routes.go docs/API.md
+git add internal/adapters/httpserver/handlers/campaigns.go internal/adapters/httpserver/handlers/campaigns_psa.go internal/adapters/httpserver/handlers/campaigns_psa_test.go internal/adapters/httpserver/handlers/campaigns_psa_propose_test.go internal/adapters/httpserver/routes.go cmd/slabledger/server.go docs/API.md
 git commit -m "feat(httpserver): wire PSA catalog resolver into propose/create and add subjects endpoint"
 ```
 
@@ -5060,7 +5128,7 @@ git commit -m "feat(httpserver): wire PSA catalog resolver into propose/create a
   - **Assumption (flagged, not in the frozen contract):** `(*psaportal.Client).FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampaign, []psacampaign.SpecListRef, error)` — widened to also return the spec-list catalog. The contract only widens the *private* `fetchCampaignFormData`, but §2a of the design says that widening exists "so the harvester can persist it without a second fetch," and the harvester never calls the private method directly — `FetchCampaigns` is its only entry point. This task therefore assumes `FetchCampaigns` carries the second return value through from its internal `fetchCampaignFormData` loop. If the owning task instead threads the catalog out some other way, only the four lines in `main.go` that call `portal.FetchCampaigns` need to change.
   - **Assumption (flagged, not in the frozen contract):** `postgres.NewPSAPortalCatalogStore(db *sql.DB) *postgres.PSAPortalCatalogStore` implementing `psacampaign.CatalogStore`, backed by migration `000024_psa_portal_catalog`. Per `docs/superpowers/plans/parts/part3-translate.md:901` this concrete adapter is Task 5's responsibility, not this task's — this task only calls its assumed constructor from `main.go`, mirroring the existing `postgres.NewPSACampaignSnapshotStore(db.DB)` / `postgres.NewPSACampaignLinker(db.DB)` call sites already in that file.
 - Produces:
-  - `func parseBaselineFlag(args []string) (baseline bool, rest []string)`
+  - `func parseBaselineFlag(args []string) (baseline bool, rest []string, err error)`
   - `func baselineLanguage(specListNames []string) (string, error)`
   - `func buildBaselineCampaign(existing inventory.Campaign, pc psacampaign.PortalCampaign) (inventory.Campaign, error)`
   - `func runBaselinePull(ctx context.Context, portalCampaigns []psacampaign.PortalCampaign, campaigns inventory.CampaignRepository, logger observability.Logger) error`
@@ -5083,6 +5151,7 @@ func TestParseBaselineFlag(t *testing.T) {
 		args         []string
 		wantBaseline bool
 		wantRest     []string
+		wantErr      bool
 	}{
 		{
 			name:         "no flags",
@@ -5114,10 +5183,34 @@ func TestParseBaselineFlag(t *testing.T) {
 			wantBaseline: true,
 			wantRest:     []string{"-log-level", "debug", "-cache", "/tmp/cache.json"},
 		},
+		{
+			// The safety case: a typo must abort the run, never silently
+			// degrade to the write-enabled mode that drains the push queue.
+			name:    "malformed value is an error, not a fallback to write mode",
+			args:    []string{"-baseline-pull=ture"},
+			wantErr: true,
+		},
+		{
+			name:    "malformed value on the double-dash form is also an error",
+			args:    []string{"--baseline-pull=maybe", "-log-level", "debug"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			baseline, rest := parseBaselineFlag(tt.args)
+			baseline, rest, err := parseBaselineFlag(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseBaselineFlag(%v): got nil error, want error", tt.args)
+				}
+				if baseline {
+					t.Errorf("baseline = true on error, want false — a failed parse must never enable a mode")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseBaselineFlag(%v): unexpected error: %v", tt.args, err)
+			}
 			if baseline != tt.wantBaseline {
 				t.Errorf("baseline = %v, want %v", baseline, tt.wantBaseline)
 			}
@@ -5140,7 +5233,10 @@ Expected: FAIL with `./baseline_test.go:15:12: undefined: parseBaselineFlag` (co
 // cmd/psa-harvest/baseline.go
 package main
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+)
 
 // parseBaselineFlag pulls -baseline-pull out of the raw CLI args before they
 // reach config.Load(args). config.FromFlags (internal/platform/config/loader.go:236-262)
@@ -5149,32 +5245,41 @@ import "strconv"
 // fails with "flag provided but not defined" on anything else, so
 // -baseline-pull must never reach it. rest is every arg config.Load is still
 // allowed to see.
-func parseBaselineFlag(args []string) (baseline bool, rest []string) {
+//
+// A malformed value is a hard error, not a fallback. The tempting reading —
+// "unparseable means false, and false is the safe default" — is backwards here:
+// false is the *write* mode that drains the push queue to the portal. An
+// operator who typed `-baseline-pull=ture` asked for a zero-write baseline pull
+// and would instead get live portal writes, silently. Fail the run.
+func parseBaselineFlag(args []string) (baseline bool, rest []string, err error) {
 	rest = make([]string, 0, len(args))
 	for _, a := range args {
 		switch {
 		case a == "-baseline-pull" || a == "--baseline-pull":
 			baseline = true
 		case len(a) > len("-baseline-pull=") && a[:len("-baseline-pull=")] == "-baseline-pull=":
-			baseline = parseBoolFlag(a[len("-baseline-pull="):])
+			baseline, err = parseBoolFlag(a[len("-baseline-pull="):])
 		case len(a) > len("--baseline-pull=") && a[:len("--baseline-pull=")] == "--baseline-pull=":
-			baseline = parseBoolFlag(a[len("--baseline-pull="):])
+			baseline, err = parseBoolFlag(a[len("--baseline-pull="):])
 		default:
 			rest = append(rest, a)
+			continue
+		}
+		if err != nil {
+			return false, nil, err
 		}
 	}
-	return baseline, rest
+	return baseline, rest, nil
 }
 
-// parseBoolFlag parses a CLI bool value, defaulting to false on garbage input
-// rather than erroring — an operator typo in -baseline-pull=maybe should fall
-// back to the safe (non-baseline, zero-write) mode, not crash the harvester.
-func parseBoolFlag(v string) bool {
+// parseBoolFlag parses a CLI bool value. Garbage is an error: see the note on
+// parseBaselineFlag for why falling back to false is the unsafe choice.
+func parseBoolFlag(v string) (bool, error) {
 	b, err := strconv.ParseBool(v)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid -baseline-pull value %q: want true or false", v)
 	}
-	return b
+	return b, nil
 }
 ```
 
@@ -5481,14 +5586,20 @@ func TestRunBaselinePull(t *testing.T) {
 	}
 	notLinked := psacampaign.PortalCampaign{CampaignRequestID: "req-unlinked", TargetingComplete: true}
 
-	internal := []inventory.Campaign{
+	// The internal fleet is per-case, not a shared fixture: the unobserved-links
+	// check makes the result depend on which internal campaigns exist, so a case
+	// that passes only one portal campaign must also narrow the fleet or it will
+	// (correctly) report the other two as missing from the portal.
+	allThree := []inventory.Campaign{
 		{ID: "camp-1", PSACampaignRequestID: "req-1"},
 		{ID: "camp-2", PSACampaignRequestID: "req-2"},
 		{ID: "camp-3", PSACampaignRequestID: "req-3"},
 	}
+	onlyOne := []inventory.Campaign{{ID: "camp-1", PSACampaignRequestID: "req-1"}}
 
 	tests := []struct {
 		name       string
+		internal   []inventory.Campaign
 		portal     []psacampaign.PortalCampaign
 		updateErr  error
 		wantErr    bool
@@ -5496,20 +5607,33 @@ func TestRunBaselinePull(t *testing.T) {
 	}{
 		{
 			name:       "writes the linked complete campaign, skips the rest, exits non-zero",
+			internal:   allThree,
 			portal:     []psacampaign.PortalCampaign{linkedComplete, linkedIncomplete, linkedAmbiguousLanguage, notLinked},
 			wantErr:    true,
 			wantWrites: 1,
 		},
 		{
 			name:       "all campaigns clean is a nil error",
+			internal:   onlyOne,
 			portal:     []psacampaign.PortalCampaign{linkedComplete},
 			wantErr:    false,
 			wantWrites: 1,
 		},
 		{
 			name:       "an update failure aborts immediately",
+			internal:   onlyOne,
 			portal:     []psacampaign.PortalCampaign{linkedComplete},
 			updateErr:  errors.New("db down"),
+			wantErr:    true,
+			wantWrites: 1,
+		},
+		{
+			// The blind spot the loop cannot see: camp-2 and camp-3 are linked
+			// but the portal never returned them, so they keep stale targeting.
+			// Without the unobserved check this case returns nil and exits 0.
+			name:       "linked campaigns absent from the portal fetch are an error",
+			internal:   allThree,
+			portal:     []psacampaign.PortalCampaign{linkedComplete},
 			wantErr:    true,
 			wantWrites: 1,
 		},
@@ -5519,7 +5643,7 @@ func TestRunBaselinePull(t *testing.T) {
 			writes := 0
 			repo := &mocks.CampaignRepositoryMock{
 				ListCampaignsFn: func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error) {
-					return internal, nil
+					return tt.internal, nil
 				},
 				UpdateCampaignFn: func(ctx context.Context, c *inventory.Campaign) error {
 					writes++
@@ -5554,6 +5678,7 @@ Expected: FAIL with `./baseline_test.go:XX:XX: undefined: runBaselinePull` (comp
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -5568,6 +5693,13 @@ import (
 // makes the whole run return a non-zero-exit error, so a partial baseline is
 // never mistaken for a complete one; the pull is idempotent, so re-running it
 // is the remedy.
+//
+// The loop is driven by the portal's campaigns, so it can only report on rows
+// the portal returned. That leaves one blind spot the loop cannot see by
+// construction: an internal campaign carrying a PSACampaignRequestID that is
+// absent from portalCampaigns is never visited at all, and would keep its stale
+// pre-baseline targeting while the run exits 0. The unobserved-links check
+// after the loop closes it.
 func runBaselinePull(ctx context.Context, portalCampaigns []psacampaign.PortalCampaign, campaigns inventory.CampaignRepository, logger observability.Logger) error {
 	internal, err := campaigns.ListCampaigns(ctx, false)
 	if err != nil {
@@ -5581,11 +5713,13 @@ func runBaselinePull(ctx context.Context, portalCampaigns []psacampaign.PortalCa
 	}
 
 	var skipped []string
+	observed := make(map[string]bool, len(byRequestID))
 	for _, pc := range portalCampaigns {
 		existing, linked := byRequestID[pc.CampaignRequestID]
 		if !linked {
 			continue // no internal campaign to write to; the report step (not this function) flags these for the operator
 		}
+		observed[pc.CampaignRequestID] = true
 		if !pc.TargetingComplete {
 			logger.Warn(ctx, "psa-harvest: baseline skipping campaign, edit-form fetch was incomplete",
 				observability.String("campaignId", existing.ID),
@@ -5612,8 +5746,31 @@ func runBaselinePull(ctx context.Context, portalCampaigns []psacampaign.PortalCa
 			observability.String("targetLanguage", updated.TargetLanguage))
 	}
 
-	if len(skipped) > 0 {
+	// Every internally linked campaign must have appeared in the portal fetch.
+	// One that didn't is either a broken link or a campaign the portal dropped
+	// from its list — both leave stale targeting behind, and neither is
+	// something the operator should learn about from a silent exit 0.
+	var unobserved []string
+	for requestID, c := range byRequestID {
+		if !observed[requestID] {
+			logger.Warn(ctx, "psa-harvest: baseline found no portal campaign for a linked SlabLedger campaign",
+				observability.String("campaignId", c.ID),
+				observability.String("psaCampaignRequestId", requestID))
+			unobserved = append(unobserved, c.ID)
+		}
+	}
+	// Map iteration order is random; sort so the error message and its test
+	// assertion are stable.
+	sort.Strings(unobserved)
+
+	switch {
+	case len(skipped) > 0 && len(unobserved) > 0:
+		return fmt.Errorf("baseline: %d campaign(s) skipped %v and %d linked campaign(s) missing from the portal %v, see warnings above",
+			len(skipped), skipped, len(unobserved), unobserved)
+	case len(skipped) > 0:
 		return fmt.Errorf("baseline: %d campaign(s) skipped, see warnings above: %v", len(skipped), skipped)
+	case len(unobserved) > 0:
+		return fmt.Errorf("baseline: %d linked campaign(s) had no matching portal campaign, see warnings above: %v", len(unobserved), unobserved)
 	}
 	return nil
 }
@@ -5638,7 +5795,10 @@ This step has no new unit test: `cmd/psa-harvest/main.go` has never had one (no 
 ```go
 // cmd/psa-harvest/main.go (replace lines 33-127)
 func main() {
-	baseline, rest := parseBaselineFlag(os.Args[1:])
+	baseline, rest, err := parseBaselineFlag(os.Args[1:])
+	if err != nil {
+		log.Fatalf("psa-harvest: %v", err)
+	}
 	if err := run(baseline, rest); err != nil {
 		log.Fatalf("psa-harvest: %v", err)
 	}
@@ -5716,6 +5876,15 @@ func run(baseline bool, args []string) error {
 		logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
 	}
 
+	// Baseline mode does all its work inside the campaign-sync block below. If
+	// sync is disabled, that block never runs and `run` would return nil — an
+	// exit 0 the operator reads as "baseline complete" when nothing was pulled.
+	// Refuse instead.
+	if baseline && !cfg.PSASync.CampaignSyncEnabled {
+		return fmt.Errorf("baseline: PSA campaign sync is disabled (PSA_CAMPAIGN_SYNC_ENABLED); " +
+			"the baseline pull has nothing to read from — enable it and re-run")
+	}
+
 	if cfg.PSASync.CampaignSyncEnabled {
 		portal := psaportal.New(session, psaportal.Config{}, psaportal.WithLogger(logger))
 		snap := postgres.NewPSACampaignSnapshotStore(db.DB)
@@ -5727,8 +5896,22 @@ func run(baseline bool, args []string) error {
 		campaigns, specLists, err := portal.FetchCampaigns(ctx)
 		switch {
 		case err != nil:
+			// Normal runs tolerate this: the drain below still has value, and
+			// the next hourly run retries. Baseline runs must not — a failed
+			// fetch means `campaigns` is nil, and continuing would hand
+			// runBaselinePull an empty fleet it would report as a clean sweep.
+			if baseline {
+				return fmt.Errorf("baseline: fetch campaigns: %w", err)
+			}
 			logger.Error(ctx, "psa-harvest: fetch campaigns failed", observability.Err(err))
 		case len(campaigns) == 0:
+			// Same reasoning. Zero portal campaigns is a plausible transient
+			// (an auth redirect that still returns 200), and it is
+			// indistinguishable from "the baseline had nothing to do" unless
+			// this path is fatal.
+			if baseline {
+				return fmt.Errorf("baseline: portal returned zero campaigns; refusing to record an empty baseline")
+			}
 			logger.Warn(ctx, "psa-harvest: fetch campaigns returned no rows, skipping snapshot save")
 		default:
 			if err := snap.SaveSnapshot(ctx, campaigns); err != nil {
@@ -5796,7 +5979,21 @@ git commit -m "feat(psa-harvest): persist portal catalog every run, add -baselin
 ./psa-harvest -baseline-pull
 ```
 
-A non-zero exit means at least one linked campaign was skipped (incomplete edit-form fetch, or an unconverted CATEGORY campaign per §8); re-run after fixing the cause. A zero exit with the "baseline pull complete" log line means every linked, complete campaign now carries the portal's live targeting and `DrainPushQueue` was never called.
+A non-zero exit means the baseline is **not** complete and must not be treated as
+one. The causes, all fail-closed by design:
+
+- a malformed `-baseline-pull` value (the run aborts rather than falling back to the
+  write-enabled mode);
+- PSA campaign sync disabled, so there was nothing to read from;
+- the portal campaign fetch failed, or returned zero campaigns;
+- at least one linked campaign was skipped (incomplete edit-form fetch, or an
+  unconverted CATEGORY campaign per §8);
+- at least one linked SlabLedger campaign had no matching portal campaign, so its
+  targeting is still stale.
+
+Re-run after fixing the cause; the pull is idempotent. A zero exit with the
+"baseline pull complete" log line means every linked campaign now carries the
+portal's live targeting and `DrainPushQueue` was never called.
 
 ### Task 11: Frontend — targeting axes editor
 
