@@ -1,6 +1,5 @@
 import type { Phase, SubjectRef } from '../../types/campaigns';
-import { useId, type ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useId, useEffect, useState, type ReactNode } from 'react';
 import { phaseOptions, targetLanguageOptions, subjectFilterModeOptions, SUBJECT_FILTER_EXCLUDE } from '../utils/campaignConstants';
 import { Input, Select } from '../ui';
 import { Segmented } from './Segmented';

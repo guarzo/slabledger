@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -82,11 +83,21 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 				if s.SuggestedParams.SubjectsAction != SubjectsActionRemove {
 					t.Errorf("expected SubjectsAction %q on remove suggestion, got %q", SubjectsActionRemove, s.SuggestedParams.SubjectsAction)
 				}
+				// Pin the payload too, not just the action label: swapping
+				// Subjects between the add/remove branches (while leaving
+				// SubjectsAction untouched) would previously slip past this
+				// test undetected.
+				if !slices.Equal(s.SuggestedParams.Subjects, []string{"Pikachu"}) {
+					t.Errorf("expected Subjects [Pikachu] on remove suggestion, got %v", s.SuggestedParams.Subjects)
+				}
 			}
 			if s.Title == "Add top performers to Test Campaign" {
 				foundAdd = true
 				if s.SuggestedParams.SubjectsAction != SubjectsActionAdd {
 					t.Errorf("expected SubjectsAction %q on add suggestion, got %q", SubjectsActionAdd, s.SuggestedParams.SubjectsAction)
+				}
+				if !slices.Equal(s.SuggestedParams.Subjects, []string{"Charizard"}) {
+					t.Errorf("expected Subjects [Charizard] on add suggestion, got %v", s.SuggestedParams.Subjects)
 				}
 				// ExpectedMetrics should be propagated from Charizard (top-ROI add).
 				if math.Abs(s.ExpectedMetrics.ExpectedROI-0.30) > 1e-6 {

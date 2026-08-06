@@ -107,6 +107,63 @@ func TestValidateAndNormalizeCampaign(t *testing.T) {
 			c:       Campaign{Name: "Test", PriceRange: "500-50"},
 			wantErr: ErrInvalidPriceRange,
 		},
+		// TargetLanguage validation
+		{
+			name:    "empty target language is valid",
+			c:       Campaign{Name: "Test", TargetLanguage: ""},
+			wantErr: nil,
+		},
+		{
+			name:    "english target language is valid",
+			c:       Campaign{Name: "Test", TargetLanguage: "english"},
+			wantErr: nil,
+		},
+		{
+			name:    "japanese target language is valid",
+			c:       Campaign{Name: "Test", TargetLanguage: "japanese"},
+			wantErr: nil,
+		},
+		{
+			name:    "target language wrong case is rejected, not silently accepted",
+			c:       Campaign{Name: "Test", TargetLanguage: "Japanese"},
+			wantErr: nil, // normalized to lowercase before the check — see the assertion below
+		},
+		{
+			name:    "target language chinese is rejected — no curated portal spec list exists for it",
+			c:       Campaign{Name: "Test", TargetLanguage: "chinese"},
+			wantErr: ErrInvalidTargetLanguage,
+		},
+		{
+			name:    "target language garbage is rejected",
+			c:       Campaign{Name: "Test", TargetLanguage: "not-a-language"},
+			wantErr: ErrInvalidTargetLanguage,
+		},
+		// SubjectFilterMode validation
+		{
+			name:    "empty subject filter mode is valid",
+			c:       Campaign{Name: "Test", SubjectFilterMode: ""},
+			wantErr: nil,
+		},
+		{
+			name:    "Target subject filter mode is valid",
+			c:       Campaign{Name: "Test", SubjectFilterMode: SubjectFilterTarget},
+			wantErr: nil,
+		},
+		{
+			name:    "Exclude subject filter mode is valid",
+			c:       Campaign{Name: "Test", SubjectFilterMode: SubjectFilterExclude},
+			wantErr: nil,
+		},
+		{
+			name:    "lowercase exclude typo is rejected, not silently treated as Target",
+			c:       Campaign{Name: "Test", SubjectFilterMode: "exclude"},
+			wantErr: ErrInvalidSubjectFilterMode,
+		},
+		{
+			name:    "garbage subject filter mode is rejected",
+			c:       Campaign{Name: "Test", SubjectFilterMode: "Sometimes"},
+			wantErr: ErrInvalidSubjectFilterMode,
+		},
 	}
 
 	for _, tt := range tests {
@@ -116,6 +173,21 @@ func TestValidateAndNormalizeCampaign(t *testing.T) {
 				t.Errorf("ValidateAndNormalizeCampaign() = %v, want %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestValidateAndNormalizeCampaign_LowercasesTargetLanguage pins the actual
+// stored value, not just whether validation errors: LanguageAxisMatches
+// (matching.go) compares TargetLanguage with `==` against cardutil's
+// lowercase tokens and performs no casing normalization of its own, so a
+// campaign stored with "Japanese" would silently match zero cards forever.
+func TestValidateAndNormalizeCampaign_LowercasesTargetLanguage(t *testing.T) {
+	c := Campaign{Name: "Test", TargetLanguage: "Japanese"}
+	if err := ValidateAndNormalizeCampaign(&c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.TargetLanguage != "japanese" {
+		t.Errorf("TargetLanguage = %q, want normalized %q", c.TargetLanguage, "japanese")
 	}
 }
 

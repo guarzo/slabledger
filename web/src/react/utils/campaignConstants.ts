@@ -66,7 +66,7 @@ export const phaseOptions = [
   { value: 'closed', label: 'Closed' },
 ] as const;
 
-/** Token stored in `Campaign.targetLanguage` / `CreateCampaignInput.targetLanguage`. */
+/** Token stored in `Campaign.subjectFilterMode` / `CreateCampaignInput.subjectFilterMode`. */
 export const SUBJECT_FILTER_TARGET = 'Target';
 export const SUBJECT_FILTER_EXCLUDE = 'Exclude';
 

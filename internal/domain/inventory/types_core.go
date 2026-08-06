@@ -201,7 +201,11 @@ type Campaign struct {
 
 	// TargetLanguage selects the PSA curated spec list the campaign buys from.
 	// "" means unset (a legacy CATEGORY campaign, or a campaign not yet linked).
-	TargetLanguage string `json:"targetLanguage"` // "" | "english" | "japanese" | "chinese" | "korean"
+	// ValidateAndNormalizeCampaign (validation.go) enforces this as a closed set —
+	// "" | "english" | "japanese" only. cardutil.SetLanguage classifies sets as
+	// chinese/korean too, but the portal offers no curated spec list for either,
+	// so those two tokens are rejected here rather than silently stored unmatchable.
+	TargetLanguage string `json:"targetLanguage"` // "" | "english" | "japanese"
 
 	// SubjectFilterMode is the polarity of Subjects: Target buys only the
 	// listed characters, Exclude buys everything except them. Empty is

@@ -55,10 +55,34 @@ func normalizeSubjectFilterMode(mode string) string {
 	return mode
 }
 
+// normalizeTargetSubjects converts a nil slice to an empty one. Defensive on
+// read: the NOT NULL DEFAULT '[]'::jsonb column (migration 000023) should
+// never hold a literal jsonb null, but marshalTargetSubjects only started
+// guarding against that on write after this fix — any row written before it
+// landed would unmarshal a stored "null" back into a nil Go slice, which the
+// TS Campaign type and its consumers (SubjectListEditor, CampaignFormFields)
+// don't expect.
+func normalizeTargetSubjects(subjects []inventory.TargetSubject) []inventory.TargetSubject {
+	if subjects == nil {
+		return []inventory.TargetSubject{}
+	}
+	return subjects
+}
+
 // marshalTargetSubjects marshals a subject list to its JSONB wire form,
 // falling back to an empty array on marshal failure (TargetSubject has no
-// fields that can fail to marshal, so this is defensive only).
+// fields that can fail to marshal, so this is defensive only). A nil slice
+// is normalized to an empty one first — json.Marshal(nil) produces the
+// literal "null", which the NOT NULL DEFAULT '[]'::jsonb column (migration
+// 000023) happily stores as a jsonb null value rather than an empty array,
+// and later round-trips back through json.Unmarshal into a nil Go slice.
+// Every consumer downstream — Campaign.Subjects/DeniedSpecs' non-nullable
+// TS type, CampaignFormFields' deniedSpecs.length check, SubjectListEditor's
+// value.map/value.some — expects `[]`, never `null`.
 func marshalTargetSubjects(subjects []inventory.TargetSubject) string {
+	if subjects == nil {
+		subjects = []inventory.TargetSubject{}
+	}
 	b, err := json.Marshal(subjects)
 	if err != nil {
 		return "[]"
@@ -124,6 +148,8 @@ func (cs *CampaignStore) GetCampaign(ctx context.Context, id string) (*inventory
 	if err := json.Unmarshal([]byte(deniedJSON), &c.DeniedSpecs); err != nil {
 		return nil, fmt.Errorf("unmarshal denied specs: %w", err)
 	}
+	c.Subjects = normalizeTargetSubjects(c.Subjects)
+	c.DeniedSpecs = normalizeTargetSubjects(c.DeniedSpecs)
 	c.SubjectFilterMode = normalizeSubjectFilterMode(c.SubjectFilterMode)
 	return &c, nil
 }
@@ -178,6 +204,8 @@ func (cs *CampaignStore) ListCampaigns(ctx context.Context, activeOnly bool) (re
 		if err := json.Unmarshal([]byte(deniedJSON), &c.DeniedSpecs); err != nil {
 			return nil, fmt.Errorf("unmarshal denied specs: %w", err)
 		}
+		c.Subjects = normalizeTargetSubjects(c.Subjects)
+		c.DeniedSpecs = normalizeTargetSubjects(c.DeniedSpecs)
 		c.SubjectFilterMode = normalizeSubjectFilterMode(c.SubjectFilterMode)
 		result = append(result, c)
 	}

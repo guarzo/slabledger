@@ -12,27 +12,52 @@ const (
 )
 
 var (
-	ErrCampaignNameRequired   = errors.NewAppError(ErrCodeCampaignValidation, "campaign name is required")
-	ErrCampaignNameTooLong    = errors.NewAppError(ErrCodeCampaignValidation, "campaign name exceeds maximum length")
-	ErrInvalidBuyTermsPct     = errors.NewAppError(ErrCodeCampaignValidation, "buyTermsCLPct must be between 0 and 1")
-	ErrInvalidEbayFeePct      = errors.NewAppError(ErrCodeCampaignValidation, "ebayFeePct must be between 0 and 1")
-	ErrInvalidPhase           = errors.NewAppError(ErrCodeCampaignValidation, "invalid campaign phase")
-	ErrInvalidSaleChannel     = errors.NewAppError(ErrCodeCampaignValidation, "invalid sale channel")
-	ErrCardNameRequired       = errors.NewAppError(ErrCodeCampaignValidation, "card name is required")
-	ErrCertNumberRequired     = errors.NewAppError(ErrCodeCampaignValidation, "cert number is required")
-	ErrInvalidGrade           = errors.NewAppError(ErrCodeCampaignValidation, "PSA grade must be between 1 and 10")
-	ErrInvalidGradeValue      = errors.NewAppError(ErrCodeCampaignValidation, "grade value must be between 1 and 10")
-	ErrInvalidAmount          = errors.NewAppError(ErrCodeCampaignValidation, "amount must be positive")
-	ErrPurchaseDateRequired   = errors.NewAppError(ErrCodeCampaignValidation, "purchase date is required")
-	ErrSaleDateRequired       = errors.NewAppError(ErrCodeCampaignValidation, "sale date is required")
-	ErrPurchaseIDRequired     = errors.NewAppError(ErrCodeCampaignValidation, "purchase ID is required")
-	ErrSaleDateBeforePurchase = errors.NewAppError(ErrCodeCampaignValidation, "sale date cannot be before purchase date")
-	ErrInvalidSaleReason      = errors.NewAppError(ErrCodeCampaignValidation, "invalid sale reason")
-	ErrInvalidDailySpend      = errors.NewAppError(ErrCodeCampaignValidation, "daily spend cap must be non-negative")
-	ErrInvalidYearRange       = errors.NewAppError(ErrCodeCampaignValidation, "yearRange must be empty or in format 'startYear-endYear' (e.g. 1999-2003)")
-	ErrInvalidPriceRange      = errors.NewAppError(ErrCodeCampaignValidation, "priceRange must be empty or in format 'min-max' (e.g. 50-500)")
-	ErrInvalidGradeRange      = errors.NewAppError(ErrCodeCampaignValidation, "gradeRange must be empty or in format 'min-max' (e.g. 7-10)")
+	ErrCampaignNameRequired     = errors.NewAppError(ErrCodeCampaignValidation, "campaign name is required")
+	ErrCampaignNameTooLong      = errors.NewAppError(ErrCodeCampaignValidation, "campaign name exceeds maximum length")
+	ErrInvalidBuyTermsPct       = errors.NewAppError(ErrCodeCampaignValidation, "buyTermsCLPct must be between 0 and 1")
+	ErrInvalidEbayFeePct        = errors.NewAppError(ErrCodeCampaignValidation, "ebayFeePct must be between 0 and 1")
+	ErrInvalidPhase             = errors.NewAppError(ErrCodeCampaignValidation, "invalid campaign phase")
+	ErrInvalidSaleChannel       = errors.NewAppError(ErrCodeCampaignValidation, "invalid sale channel")
+	ErrCardNameRequired         = errors.NewAppError(ErrCodeCampaignValidation, "card name is required")
+	ErrCertNumberRequired       = errors.NewAppError(ErrCodeCampaignValidation, "cert number is required")
+	ErrInvalidGrade             = errors.NewAppError(ErrCodeCampaignValidation, "PSA grade must be between 1 and 10")
+	ErrInvalidGradeValue        = errors.NewAppError(ErrCodeCampaignValidation, "grade value must be between 1 and 10")
+	ErrInvalidAmount            = errors.NewAppError(ErrCodeCampaignValidation, "amount must be positive")
+	ErrPurchaseDateRequired     = errors.NewAppError(ErrCodeCampaignValidation, "purchase date is required")
+	ErrSaleDateRequired         = errors.NewAppError(ErrCodeCampaignValidation, "sale date is required")
+	ErrPurchaseIDRequired       = errors.NewAppError(ErrCodeCampaignValidation, "purchase ID is required")
+	ErrSaleDateBeforePurchase   = errors.NewAppError(ErrCodeCampaignValidation, "sale date cannot be before purchase date")
+	ErrInvalidSaleReason        = errors.NewAppError(ErrCodeCampaignValidation, "invalid sale reason")
+	ErrInvalidDailySpend        = errors.NewAppError(ErrCodeCampaignValidation, "daily spend cap must be non-negative")
+	ErrInvalidYearRange         = errors.NewAppError(ErrCodeCampaignValidation, "yearRange must be empty or in format 'startYear-endYear' (e.g. 1999-2003)")
+	ErrInvalidPriceRange        = errors.NewAppError(ErrCodeCampaignValidation, "priceRange must be empty or in format 'min-max' (e.g. 50-500)")
+	ErrInvalidGradeRange        = errors.NewAppError(ErrCodeCampaignValidation, "gradeRange must be empty or in format 'min-max' (e.g. 7-10)")
+	ErrInvalidTargetLanguage    = errors.NewAppError(ErrCodeCampaignValidation, "targetLanguage must be empty, 'english', or 'japanese'")
+	ErrInvalidSubjectFilterMode = errors.NewAppError(ErrCodeCampaignValidation, "subjectFilterMode must be empty, 'Target', or 'Exclude'")
 )
+
+// validTargetLanguages is the closed set ValidateAndNormalizeCampaign accepts
+// for TargetLanguage. This intentionally duplicates (rather than imports)
+// psacampaign's languageListNames map (internal/domain/psacampaign/resolver.go) —
+// psacampaign already imports inventory to build ProposedDiffs, so the reverse
+// import would create a cycle. "" legitimately short-circuits the spec-list
+// axis (psacampaign/mapper.go's TranslateToDiff skips it when unset), so it is
+// valid alongside the two portal-curated tokens. Keep both maps in sync.
+var validTargetLanguages = map[string]bool{
+	"":         true,
+	"english":  true,
+	"japanese": true,
+}
+
+// validSubjectFilterModes is the closed set for SubjectFilterMode. "" is
+// accepted here and normalized to SubjectFilterTarget by
+// normalizeSubjectFilterMode on write/read (campaign_store.go); everything
+// else must be an exact match for one of the two portal-recognized modes.
+var validSubjectFilterModes = map[string]bool{
+	"":                   true,
+	SubjectFilterTarget:  true,
+	SubjectFilterExclude: true,
+}
 
 var validPhases = map[Phase]bool{
 	PhasePending: true,
@@ -85,6 +110,18 @@ func ValidateAndNormalizeCampaign(c *Campaign) error {
 	c.PriceRange = strings.TrimSpace(c.PriceRange)
 	if err := validateRange(c.PriceRange, 0, 1_000_000, ErrInvalidPriceRange); err != nil {
 		return err
+	}
+	// Normalize to lowercase before the closed-set check so "Japanese"/"JAPANESE"
+	// are accepted and stored as the canonical token LanguageAxisMatches compares
+	// with `==` — the matcher itself performs no casing normalization, so this is
+	// the only place that guarantees a stored value it can ever match against.
+	c.TargetLanguage = strings.ToLower(strings.TrimSpace(c.TargetLanguage))
+	if !validTargetLanguages[c.TargetLanguage] {
+		return ErrInvalidTargetLanguage
+	}
+	c.SubjectFilterMode = strings.TrimSpace(c.SubjectFilterMode)
+	if !validSubjectFilterModes[c.SubjectFilterMode] {
+		return ErrInvalidSubjectFilterMode
 	}
 	return nil
 }

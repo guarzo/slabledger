@@ -47,9 +47,11 @@ function validateCampaignForm(values: CreateCampaignInput) {
 // carry portal-issued ids that must never be re-derived from a name (see the
 // design doc's "ids are copied verbatim, never re-resolved" rule) — a text
 // round-trip through paste would reset those ids to 0 and corrupt targeting on
-// the next push for every campaign already linked to the portal. Operators
-// edit targeting through the form's subject editor instead; this paste format
-// stays scoped to scalar economics/range fields, which round-trip safely.
+// the next push for every campaign already linked to the portal. Targeting is
+// set once at campaign creation (CampaignFormFields' subject editor) or by the
+// harvester's baseline pull — there is currently no edit surface for it after
+// that; this paste format stays scoped to scalar economics/range fields, which
+// round-trip safely.
 type ParsedCampaign = Partial<CreateCampaignInput> & { name: string };
 
 function parseExportText(text: string): ParsedCampaign[] {

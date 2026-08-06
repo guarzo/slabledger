@@ -155,8 +155,11 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "", got2.TargetLanguage)
 	assert.Equal(t, inventory.SubjectFilterTarget, got2.SubjectFilterMode)
-	assert.Empty(t, got2.Subjects)
-	assert.Empty(t, got2.DeniedSpecs)
+	// assert.Empty accepts both nil and []; a nil slice here would marshal to
+	// JSON null over the API despite the non-nullable TS Campaign type, so pin
+	// the exact non-nil empty value rather than just "empty".
+	assert.Equal(t, []inventory.TargetSubject{}, got2.Subjects)
+	assert.Equal(t, []inventory.TargetSubject{}, got2.DeniedSpecs)
 
 	list, err := repo.ListCampaigns(ctx, false)
 	require.NoError(t, err)
@@ -168,6 +171,34 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 	}
 	require.NotNil(t, listed, "camp-axes-open must appear in ListCampaigns")
 	assert.Equal(t, "", listed.TargetLanguage)
-	assert.Empty(t, listed.Subjects)
-	assert.Empty(t, listed.DeniedSpecs)
+	assert.Equal(t, []inventory.TargetSubject{}, listed.Subjects)
+	assert.Equal(t, []inventory.TargetSubject{}, listed.DeniedSpecs)
+}
+
+// TestMarshalTargetSubjects_NilEmitsEmptyArray is a fast, DB-free pin on the
+// exact wire form: a nil slice must marshal to the JSON array literal "[]",
+// never the JSON null literal "null". json.Marshal(nil slice) alone produces
+// "null" — this asserts the function's own normalization, not the stdlib's
+// default behavior, so a regression here fails immediately without needing
+// POSTGRES_TEST_URL / `make test-postgres`.
+func TestMarshalTargetSubjects_NilEmitsEmptyArray(t *testing.T) {
+	tests := []struct {
+		name     string
+		subjects []inventory.TargetSubject
+		want     string
+	}{
+		{name: "nil slice", subjects: nil, want: "[]"},
+		{name: "empty slice", subjects: []inventory.TargetSubject{}, want: "[]"},
+		{
+			name:     "populated slice",
+			subjects: []inventory.TargetSubject{{ID: 22210, Name: "Machamp"}},
+			want:     `[{"id":22210,"name":"Machamp"}]`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := marshalTargetSubjects(tt.subjects)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

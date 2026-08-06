@@ -14,7 +14,7 @@ interface SubjectListEditorProps {
 }
 
 export default function SubjectListEditor({ label, value, onChange, inputSize }: SubjectListEditorProps) {
-  const { data } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: queryKeys.psaSubjects.list,
     queryFn: () => api.listPSASubjects(),
     staleTime: 5 * 60 * 1000,
@@ -78,7 +78,15 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
   return (
     <div className="space-y-2" ref={containerRef}>
       <label className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
-      {catalog.length === 0 && (
+      {isLoading && (
+        <p className="text-xs text-[var(--text-muted)]">Loading subject catalog…</p>
+      )}
+      {isError && (
+        <p className="text-xs text-[var(--danger)]">
+          Could not load the subject catalog — try again later.
+        </p>
+      )}
+      {!isLoading && !isError && catalog.length === 0 && (
         <p className="text-xs text-[var(--text-muted)]">
           Subject catalog not yet harvested — run the harvester.
         </p>
