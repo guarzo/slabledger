@@ -1,6 +1,10 @@
 package demand
 
-import "context"
+import (
+	"context"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+)
 
 // Repository persists and retrieves the cached DH demand and analytics rows
 // that back the niche-opportunity leaderboard. The SQLite adapter
@@ -22,11 +26,12 @@ type Repository interface {
 // by the campaign-signals service to correlate per-campaign market data.
 // Kept minimal — only the fields needed to filter characters and grades.
 type ActiveCampaign struct {
-	ID            string // Campaign primary key (UUID for standard campaigns, "external" for the imported bucket).
-	Name          string
-	GradeRange    string // e.g. "9-10"; empty means no grade constraint.
-	InclusionList string // Comma-separated; empty means open-net.
-	ExclusionMode bool   // If true, InclusionList is an exclusion list.
+	ID                string // Campaign primary key (UUID for standard campaigns, "external" for the imported bucket).
+	Name              string
+	GradeRange        string // e.g. "9-10"; empty means no grade constraint.
+	TargetLanguage    string
+	SubjectFilterMode string
+	Subjects          []inventory.TargetSubject
 }
 
 // ActiveCampaignSource is the narrow interface used by CampaignSignals to
@@ -49,9 +54,9 @@ type ActiveCampaignSource interface {
 type CampaignCoverageLookup interface {
 	ActiveCampaignSource
 
-	// CampaignsCovering returns active campaign IDs whose inclusion rules match
-	// the given (character, era, grade) triple. An empty slice means no campaign
-	// currently targets this niche.
+	// CampaignsCovering returns active campaign IDs whose subject-axis rules
+	// match the given (character, era, grade) triple. An empty slice means no
+	// campaign currently targets this niche.
 	CampaignsCovering(ctx context.Context, character, era string, grade int) ([]string, error)
 
 	// UnsoldCountFor returns the count of our unsold inventory matching the

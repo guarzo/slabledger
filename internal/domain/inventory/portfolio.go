@@ -26,7 +26,11 @@ var knownCharacters = []string{
 func ExtractCharacter(cardName string, campaigns []Campaign) string {
 	lower := strings.ToLower(cardName)
 
-	// Build combined character list from known + campaign inclusion lists
+	// Build combined character list from known characters + every campaign's
+	// targeted subjects. Subject names are harvested regardless of
+	// SubjectFilterMode — a denied name is still a legitimate character to
+	// try extracting from a card name; this is a name harvest, not a match
+	// decision, so it does not go through SubjectAxisMatches.
 	chars := make([]string, len(knownCharacters))
 	copy(chars, knownCharacters)
 	seen := make(map[string]bool, len(knownCharacters))
@@ -34,11 +38,8 @@ func ExtractCharacter(cardName string, campaigns []Campaign) string {
 		seen[strings.ToLower(c)] = true
 	}
 	for _, camp := range campaigns {
-		if camp.InclusionList == "" {
-			continue
-		}
-		for _, name := range SplitInclusionList(camp.InclusionList) {
-			name = strings.TrimSpace(name)
+		for _, subj := range camp.Subjects {
+			name := strings.TrimSpace(subj.Name)
 			if name != "" && !seen[strings.ToLower(name)] {
 				seen[strings.ToLower(name)] = true
 				chars = append(chars, name)
@@ -305,18 +306,37 @@ const (
 func DetectCoverageGaps(byCharacter, byGrade []SegmentPerformance, campaigns []Campaign) []CoverageGap {
 	var gaps []CoverageGap
 
-	// Build set of characters covered by active campaigns
-	coveredChars := make(map[string]bool)
+	var activeCampaigns []Campaign
 	for _, c := range campaigns {
-		if c.Phase != PhaseActive {
-			continue
+		if c.Phase == PhaseActive {
+			activeCampaigns = append(activeCampaigns, c)
 		}
-		for _, name := range SplitInclusionList(c.InclusionList) {
-			name = strings.TrimSpace(name)
-			if name != "" {
-				coveredChars[strings.ToLower(name)] = true
+	}
+
+	// isCovered reports whether any active campaign EXPLICITLY names character
+	// on its subject axis.
+	//
+	// This deliberately does NOT delegate to SubjectAxisMatches, and the
+	// asymmetry is intentional — see the judgment call above before
+	// "simplifying" it. SubjectAxisMatches answers "would this campaign accept
+	// this card", where an empty Subjects list is an open net that matches
+	// everything. This function answers a different question: "does any
+	// campaign still need to be pointed at this character". An open-net
+	// campaign names nobody, so it contributes nothing here and gaps keep
+	// surfacing. Routing this through SubjectAxisMatches would make a single
+	// open-net active campaign suppress every gap forever.
+	isCovered := func(character string) bool {
+		for _, c := range activeCampaigns {
+			if c.SubjectFilterMode == SubjectFilterExclude {
+				continue
+			}
+			for _, s := range c.Subjects {
+				if strings.EqualFold(strings.TrimSpace(s.Name), character) {
+					return true
+				}
 			}
 		}
+		return false
 	}
 
 	// Check profitable characters not well-covered
@@ -324,29 +344,23 @@ func DetectCoverageGaps(byCharacter, byGrade []SegmentPerformance, campaigns []C
 		if seg.ROI <= MinCharacterROI || seg.SoldCount < MinCharacterSales || seg.Label == "Other" {
 			continue
 		}
-		if !coveredChars[strings.ToLower(seg.Label)] {
+		if !isCovered(seg.Label) {
 			gaps = append(gaps, CoverageGap{
 				Segment:     seg,
-				Reason:      fmt.Sprintf("%s has %.0f%% ROI across %d sales but is not in any active campaign inclusion list", seg.Label, seg.ROI*100, seg.SoldCount),
+				Reason:      fmt.Sprintf("%s has %.0f%% ROI across %d sales but is not targeted by any active campaign", seg.Label, seg.ROI*100, seg.SoldCount),
 				Opportunity: fmt.Sprintf("Add %s to an existing campaign or create a dedicated campaign", seg.Label),
 			})
 		}
 	}
 
 	// Check profitable grades
-	activeCampaignCount := 0
-	for _, c := range campaigns {
-		if c.Phase == PhaseActive {
-			activeCampaignCount++
-		}
-	}
 	for _, seg := range byGrade {
-		if seg.ROI <= MinGradeROI || seg.SoldCount < MinGradeSales || seg.CampaignCount >= activeCampaignCount {
+		if seg.ROI <= MinGradeROI || seg.SoldCount < MinGradeSales || seg.CampaignCount >= len(activeCampaigns) {
 			continue
 		}
 		gaps = append(gaps, CoverageGap{
 			Segment:     seg,
-			Reason:      fmt.Sprintf("%s has %.0f%% ROI but only appears in %d of %d active campaigns", seg.Label, seg.ROI*100, seg.CampaignCount, activeCampaignCount),
+			Reason:      fmt.Sprintf("%s has %.0f%% ROI but only appears in %d of %d active campaigns", seg.Label, seg.ROI*100, seg.CampaignCount, len(activeCampaigns)),
 			Opportunity: fmt.Sprintf("Expand %s coverage to more campaigns", seg.Label),
 		})
 	}

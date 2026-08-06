@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -22,6 +23,15 @@ var _ demand.CampaignCoverageLookup = (*CampaignCoverageLookup)(nil)
 // isn't mapped to DH's era enum. era is accepted for interface parity and
 // ignored. This is a documented limitation of T5 — when DH era enums are
 // authoritatively mapped to CL year ranges, this implementation can narrow.
+//
+// Coverage evaluates the SUBJECT AXIS ONLY. CampaignsCovering/UnsoldCountFor
+// receive a bare (character, era, grade) triple with no set name and no spec
+// id, so language (TargetLanguage) and card-level denials (DeniedSpecs) have
+// no defined value here and are not evaluated. This is a documented reduction
+// versus inventory.PurchaseMatchesCampaign, not an oversight: the
+// niche-opportunity leaderboard asks a character-level question, and widening
+// CampaignsCovering to carry a language input is deferred until something
+// actually asks a language-scoped coverage question.
 type CampaignCoverageLookup struct {
 	db *sql.DB
 }
@@ -31,19 +41,15 @@ func NewCampaignCoverageLookup(db *sql.DB) *CampaignCoverageLookup {
 	return &CampaignCoverageLookup{db: db}
 }
 
-// CampaignsCovering returns IDs of active campaigns whose inclusion rules
+// CampaignsCovering returns IDs of active campaigns whose subject-axis rules
 // match the given (character, grade) pair. era is ignored — see type docs.
-//
-// Matching logic mirrors inventory.PurchaseMatchesCampaign's inclusion-list
-// semantics: case-insensitive substring match of `character` against the
-// campaign's inclusion_list, combined with a grade-range containment check.
 func (l *CampaignCoverageLookup) CampaignsCovering(ctx context.Context, character, _ string, grade int) ([]string, error) {
 	if strings.TrimSpace(character) == "" {
 		return []string{}, nil
 	}
 
 	rows, err := l.db.QueryContext(ctx,
-		`SELECT id, grade_range, inclusion_list, exclusion_mode
+		`SELECT id, grade_range, subject_filter_mode, subjects
 		 FROM campaigns
 		 WHERE phase = $1 AND id <> $2`,
 		string(inventory.PhaseActive),
@@ -57,19 +63,24 @@ func (l *CampaignCoverageLookup) CampaignsCovering(ctx context.Context, characte
 	var out []string
 	for rows.Next() {
 		var (
-			id            string
-			gradeRange    string
-			inclusionList string
-			exclusionMode bool
+			id                string
+			gradeRange        string
+			subjectFilterMode string
+			subjectsJSON      []byte
 		)
-		if err := rows.Scan(&id, &gradeRange, &inclusionList, &exclusionMode); err != nil {
+		if err := rows.Scan(&id, &gradeRange, &subjectFilterMode, &subjectsJSON); err != nil {
 			return nil, fmt.Errorf("scan campaign: %w", err)
 		}
 
 		if !gradeInRange(grade, gradeRange) {
 			continue
 		}
-		if !characterMatchesInclusion(character, inclusionList, exclusionMode) {
+
+		var subjects []inventory.TargetSubject
+		if err := json.Unmarshal(subjectsJSON, &subjects); err != nil {
+			return nil, fmt.Errorf("unmarshal subjects for campaign %s: %w", id, err)
+		}
+		if !inventory.SubjectAxisMatches(character, subjects, subjectFilterMode) {
 			continue
 		}
 
@@ -129,7 +140,7 @@ func gradeInRange(grade int, rangeStr string) bool {
 // slice when there are no qualifying campaigns.
 func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
 	rows, err := l.db.QueryContext(ctx,
-		`SELECT id, name, grade_range, inclusion_list, exclusion_mode
+		`SELECT id, name, grade_range, target_language, subject_filter_mode, subjects
 		 FROM campaigns
 		 WHERE phase = $1 AND id <> $2`,
 		string(inventory.PhaseActive),
@@ -143,54 +154,33 @@ func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.
 	out := []demand.ActiveCampaign{}
 	for rows.Next() {
 		var (
-			id            string
-			name          string
-			gradeRange    string
-			inclusionList string
-			exclusionMode bool
+			id                string
+			name              string
+			gradeRange        string
+			targetLanguage    string
+			subjectFilterMode string
+			subjectsJSON      []byte
 		)
-		if err := rows.Scan(&id, &name, &gradeRange, &inclusionList, &exclusionMode); err != nil {
+		if err := rows.Scan(&id, &name, &gradeRange, &targetLanguage, &subjectFilterMode, &subjectsJSON); err != nil {
 			return nil, fmt.Errorf("scan campaign: %w", err)
 		}
+
+		var subjects []inventory.TargetSubject
+		if err := json.Unmarshal(subjectsJSON, &subjects); err != nil {
+			return nil, fmt.Errorf("unmarshal subjects for campaign %s: %w", id, err)
+		}
+
 		out = append(out, demand.ActiveCampaign{
-			ID:            id,
-			Name:          name,
-			GradeRange:    gradeRange,
-			InclusionList: inclusionList,
-			ExclusionMode: exclusionMode,
+			ID:                id,
+			Name:              name,
+			GradeRange:        gradeRange,
+			TargetLanguage:    targetLanguage,
+			SubjectFilterMode: subjectFilterMode,
+			Subjects:          subjects,
 		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate campaigns: %w", err)
 	}
 	return out, nil
-}
-
-// characterMatchesInclusion returns true if the campaign's inclusion list
-// allows the given character name. Mirrors
-// inventory.PurchaseMatchesCampaign's inclusion semantics (without set name,
-// because character-level niches don't carry a set): when the list is empty
-// the inclusion/exclusion check is skipped entirely, so the character matches
-// regardless of mode.
-func characterMatchesInclusion(character, inclusionList string, exclusionMode bool) bool {
-	if strings.TrimSpace(inclusionList) == "" {
-		return true
-	}
-	entries := inventory.SplitInclusionList(inclusionList)
-	lowerChar := strings.ToLower(character)
-	matched := false
-	for _, entry := range entries {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		if strings.Contains(lowerChar, strings.ToLower(entry)) {
-			matched = true
-			break
-		}
-	}
-	if exclusionMode {
-		return !matched
-	}
-	return matched
 }

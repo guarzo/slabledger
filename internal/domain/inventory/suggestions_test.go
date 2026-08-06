@@ -31,14 +31,14 @@ func TestGenerateSuggestions_TopCharacterExpansion(t *testing.T) {
 		DataSummary: InsightsDataSummary{TotalPurchases: 50},
 	}
 	campaigns := []Campaign{
-		{Name: "Campaign A", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
+		{Name: "Campaign A", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
-		if s.SuggestedParams.InclusionList == "Charizard" {
+		if len(s.SuggestedParams.Subjects) == 1 && s.SuggestedParams.Subjects[0] == "Charizard" {
 			found = true
 			if s.Confidence != "medium" {
 				t.Errorf("expected medium confidence for 10 sales, got %s", s.Confidence)
@@ -63,7 +63,7 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 		DataSummary: InsightsDataSummary{TotalPurchases: 35},
 	}
 	campaigns := []Campaign{
-		{Name: "Test Campaign", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
+		{Name: "Test Campaign", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
@@ -117,7 +117,7 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 
 	found := false
 	for _, s := range resp.NewCampaigns {
-		if s.Type == "gap" && s.SuggestedParams.InclusionList == "Gengar" {
+		if s.Type == "gap" && len(s.SuggestedParams.Subjects) == 1 && s.SuggestedParams.Subjects[0] == "Gengar" {
 			found = true
 		}
 	}
@@ -414,8 +414,8 @@ func TestDeduplicateSuggestions(t *testing.T) {
 			Confidence: "medium",
 			DataPoints: 20,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:          "Campaign A",
-				InclusionList: "add: Charizard",
+				Name:     "Campaign A",
+				Subjects: []string{"Charizard"},
 			},
 		},
 	}
@@ -506,7 +506,7 @@ func TestPhaseTransition_ActivatePending(t *testing.T) {
 		},
 	}
 	campaigns := []Campaign{
-		{ID: "c1", Name: "Pending Charizard", Phase: PhasePending, InclusionList: "Charizard"},
+		{ID: "c1", Name: "Pending Charizard", Phase: PhasePending, Subjects: []TargetSubject{{Name: "Charizard"}}, SubjectFilterMode: SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)

@@ -13,15 +13,15 @@ type CampaignSuggestion struct {
 
 // CampaignSuggestionParams holds the suggested campaign configuration.
 type CampaignSuggestionParams struct {
-	Name                    string  `json:"name"`
-	YearRange               string  `json:"yearRange,omitempty"`
-	GradeRange              string  `json:"gradeRange,omitempty"`
-	PriceRange              string  `json:"priceRange,omitempty"`
-	BuyTermsCLPct           float64 `json:"buyTermsCLPct,omitempty"`
-	BuyTermsCLPctOptimistic float64 `json:"buyTermsCLPctOptimistic,omitempty"`
-	DailySpendCapCents      int     `json:"dailySpendCapCents,omitempty"`
-	InclusionList           string  `json:"inclusionList,omitempty"`
-	PrimaryExit             string  `json:"primaryExit,omitempty"`
+	Name                    string   `json:"name"`
+	YearRange               string   `json:"yearRange,omitempty"`
+	GradeRange              string   `json:"gradeRange,omitempty"`
+	PriceRange              string   `json:"priceRange,omitempty"`
+	BuyTermsCLPct           float64  `json:"buyTermsCLPct,omitempty"`
+	BuyTermsCLPctOptimistic float64  `json:"buyTermsCLPctOptimistic,omitempty"`
+	DailySpendCapCents      int      `json:"dailySpendCapCents,omitempty"`
+	Subjects                []string `json:"subjects,omitempty"`
+	PrimaryExit             string   `json:"primaryExit,omitempty"`
 }
 
 // ExpectedMetrics are projected performance based on historical data.
