@@ -114,3 +114,9 @@ export interface PSAPushRow {
 export interface ListPSAPushesResponse {
   pushes: PSAPushRow[];
 }
+
+/** Response for GET /api/psa/subjects — served from the persisted catalog. */
+export interface PSASubjectsResponse {
+  subjects: SubjectRef[];
+  fetchedAt: string;
+}
