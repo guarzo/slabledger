@@ -1,6 +1,7 @@
 package psacampaign
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -192,11 +193,12 @@ func TestTranslateToCreate(t *testing.T) {
 
 func TestTranslateToCreate_SpecListAndSubjects(t *testing.T) {
 	tests := []struct {
-		name    string
-		mutate  func(c *inventory.Campaign)
-		r       Resolver
-		wantErr string
-		check   func(t *testing.T, fd CampaignFormData)
+		name      string
+		mutate    func(c *inventory.Campaign)
+		r         Resolver
+		wantErr   string
+		wantErrIs error
+		check     func(t *testing.T, fd CampaignFormData)
 	}{
 		{
 			name:   "spec-list type and resolved subject",
@@ -231,16 +233,18 @@ func TestTranslateToCreate_SpecListAndSubjects(t *testing.T) {
 			wantErr: "target language",
 		},
 		{
-			name:    "unmapped language token fails",
-			mutate:  func(c *inventory.Campaign) { c.TargetLanguage = "korean" },
-			r:       englishResolver(),
-			wantErr: "resolve spec list",
+			name:      "unmapped language token fails",
+			mutate:    func(c *inventory.Campaign) { c.TargetLanguage = "korean" },
+			r:         englishResolver(),
+			wantErr:   "resolve spec list",
+			wantErrIs: ErrUnknownSpecList,
 		},
 		{
-			name:    "unresolvable subject name fails naming the subject",
-			mutate:  func(c *inventory.Campaign) { c.Subjects = []inventory.TargetSubject{{Name: "Mewtwo"}} },
-			r:       englishResolver(),
-			wantErr: "Mewtwo",
+			name:      "unresolvable subject name fails naming the subject",
+			mutate:    func(c *inventory.Campaign) { c.Subjects = []inventory.TargetSubject{{Name: "Mewtwo"}} },
+			r:         englishResolver(),
+			wantErr:   "Mewtwo",
+			wantErrIs: ErrUnknownSubject,
 		},
 	}
 	for _, tt := range tests {
@@ -251,6 +255,9 @@ func TestTranslateToCreate_SpecListAndSubjects(t *testing.T) {
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v, want containing %q", err, tt.wantErr)
+				}
+				if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
+					t.Fatalf("errors.Is(err, %v) = false, err = %v", tt.wantErrIs, err)
 				}
 				return
 			}
@@ -329,6 +336,94 @@ func TestTranslateToDiff_ListAxes(t *testing.T) {
 	refs, ok := found.Value.([]SubjectRef)
 	if !ok || len(refs) != 2 {
 		t.Fatalf("Value = %#v, want []SubjectRef of length 2", found.Value)
+	}
+
+	// Now make the portal's spec-list ids stale relative to the resolver's
+	// mapping for the campaign's TargetLanguage, and assert prepackagedSpecListIds
+	// DOES fire, carrying the resolved (not portal-stale) list as its typed Value.
+	portal.SpecListIDs = []string{"stale-list"}
+	diff3, err := TranslateToDiff(internal, portal, r)
+	if err != nil {
+		t.Fatalf("TranslateToDiff (3): %v", err)
+	}
+	var specListChange *FieldChange
+	for i := range diff3.Changes {
+		if diff3.Changes[i].Field == "prepackagedSpecListIds" {
+			specListChange = &diff3.Changes[i]
+		}
+	}
+	if specListChange == nil {
+		t.Fatal("expected a prepackagedSpecListIds change when portal.SpecListIDs is stale relative to the resolver")
+	}
+	specListIDs, ok := specListChange.Value.([]string)
+	if !ok || len(specListIDs) != 1 || specListIDs[0] != "list-en-1" {
+		t.Fatalf("prepackagedSpecListIds Value = %#v, want []string{\"list-en-1\"}", specListChange.Value)
+	}
+	portal.SpecListIDs = []string{"list-en-1"} // restore before the next assertion
+
+	// Now change a denied spec and assert deniedSpecs DOES fire.
+	internal.DeniedSpecs = []inventory.TargetSubject{{ID: 22301, Name: "Charizard EX"}, {ID: 4807, Name: "Charizard"}}
+	diff4, err := TranslateToDiff(internal, portal, r)
+	if err != nil {
+		t.Fatalf("TranslateToDiff (4): %v", err)
+	}
+	var deniedChange *FieldChange
+	for i := range diff4.Changes {
+		if diff4.Changes[i].Field == "deniedSpecs" {
+			deniedChange = &diff4.Changes[i]
+		}
+	}
+	if deniedChange == nil {
+		t.Fatal("expected a deniedSpecs change after adding Charizard to the denied list")
+	}
+	deniedRefs, ok := deniedChange.Value.([]SubjectRef)
+	if !ok || len(deniedRefs) != 2 {
+		t.Fatalf("deniedSpecs Value = %#v, want []SubjectRef of length 2", deniedChange.Value)
+	}
+}
+
+// TestTranslateToDiff_EmptyLocalSubjectsProposesClearingPortalList pins the
+// (intentional, per design doc) behavior that when SlabLedger's Subjects list
+// is empty but the portal campaign still has a non-empty subject list, the
+// diff proposes clearing it: SlabLedger is authoritative, and the proposal is
+// human-approved via the push queue before anything reaches the portal.
+func TestTranslateToDiff_EmptyLocalSubjectsProposesClearingPortalList(t *testing.T) {
+	r := englishResolver()
+	internal := inventory.Campaign{
+		BuyTermsCLPct: 0.75, DailySpendCapCents: 400000,
+		GradeRange: "9-10", YearRange: "2020-2024", PriceRange: "100-3000", CLConfidence: "3-4",
+		TargetLanguage: "english", SubjectFilterMode: "Target",
+		Subjects: nil, // no locally-tracked subjects
+	}
+	portal := PortalCampaign{
+		BuyPercentClv: 75, DailyBudgetCents: 400000,
+		BuyBox: CampaignBuyBox{
+			GradeMin: "9", GradeMax: "10", YearMin: 2020, YearMax: 2024,
+			PriceMinCents: 10000, PriceMaxCents: 300000, ClvConfidenceMin: 3,
+		},
+		SubjectFilter: CampaignFilter{
+			Type:     "Target",
+			Subjects: []SubjectRef{{ID: 22210, Name: "Machamp"}},
+		},
+		SpecListIDs: []string{"list-en-1"},
+	}
+
+	diff, err := TranslateToDiff(internal, portal, r)
+	if err != nil {
+		t.Fatalf("TranslateToDiff: %v", err)
+	}
+	var found *FieldChange
+	for i := range diff.Changes {
+		if diff.Changes[i].Field == "selectedSubjects" {
+			found = &diff.Changes[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("expected a selectedSubjects change proposing to clear the portal's non-empty subject list")
+	}
+	refs, ok := found.Value.([]SubjectRef)
+	if !ok || len(refs) != 0 {
+		t.Fatalf("selectedSubjects Value = %#v, want an empty []SubjectRef", found.Value)
 	}
 }
 

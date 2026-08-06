@@ -48,6 +48,7 @@ export interface FieldChange {
   field: string;
   old: string;
   new: string;
+  value?: unknown;
 }
 
 export interface ProposedDiff {
