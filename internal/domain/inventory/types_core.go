@@ -158,19 +158,58 @@ func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string
 	}
 }
 
+// TargetSubject is one portal-sourced targeting entity: a character subject or
+// a card-level spec. ID is copied verbatim from the portal and is never
+// re-resolved from Name — live IDs span multiple generations (4xxx, 8xxx,
+// 22xxx) while getSubjects returns only 22xxx.
+type TargetSubject struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// SubjectFilterMode values. Target buys only the listed subjects; Exclude
+// buys everything except them.
+const (
+	SubjectFilterTarget  = "Target"
+	SubjectFilterExclude = "Exclude"
+)
+
 // Campaign represents a PSA Direct Buy campaign with buy parameters and fee configuration.
 type Campaign struct {
-	ID                   string    `json:"id"`
-	Name                 string    `json:"name"`
-	Sport                string    `json:"sport"`
-	YearRange            string    `json:"yearRange"`          // e.g. "1999-2003"
-	GradeRange           string    `json:"gradeRange"`         // e.g. "9-10"
-	PriceRange           string    `json:"priceRange"`         // e.g. "50-500"
-	CLConfidence         string    `json:"clConfidence"`       // CL confidence range, e.g. "2.5-4"
-	BuyTermsCLPct        float64   `json:"buyTermsCLPct"`      // Buy at X% of CL value (0-1)
-	DailySpendCapCents   int       `json:"dailySpendCapCents"` // Max daily spend in cents
-	InclusionList        string    `json:"inclusionList"`      // Comma-separated card names/sets
-	ExclusionMode        bool      `json:"exclusionMode"`      // If true, inclusionList acts as exclusion list
+	ID                 string  `json:"id"`
+	Name               string  `json:"name"`
+	Sport              string  `json:"sport"`
+	YearRange          string  `json:"yearRange"`          // e.g. "1999-2003"
+	GradeRange         string  `json:"gradeRange"`         // e.g. "9-10"
+	PriceRange         string  `json:"priceRange"`         // e.g. "50-500"
+	CLConfidence       string  `json:"clConfidence"`       // CL confidence range, e.g. "2.5-4"
+	BuyTermsCLPct      float64 `json:"buyTermsCLPct"`      // Buy at X% of CL value (0-1)
+	DailySpendCapCents int     `json:"dailySpendCapCents"` // Max daily spend in cents
+
+	// InclusionList and ExclusionMode are a legacy mirror kept for one release
+	// so a rollback to the previous binary sees a database that still matches
+	// its own model. Nothing reads them after this change — campaign_store.go
+	// derives both from Subjects/SubjectFilterMode on every write; they are
+	// never read back into matching or coverage logic.
+	InclusionList string `json:"inclusionList"`
+	ExclusionMode bool   `json:"exclusionMode"`
+
+	// TargetLanguage selects the PSA curated spec list the campaign buys from.
+	// "" means unset (a legacy CATEGORY campaign, or a campaign not yet linked).
+	TargetLanguage string `json:"targetLanguage"` // "" | "english" | "japanese" | "chinese" | "korean"
+
+	// SubjectFilterMode is the polarity of Subjects: Target buys only the
+	// listed characters, Exclude buys everything except them. Empty is
+	// normalized to SubjectFilterTarget on read.
+	SubjectFilterMode string `json:"subjectFilterMode"`
+
+	// Subjects are the characters this campaign targets or excludes. ID is the
+	// PSA subject id and is authoritative — it is never re-derived from Name.
+	Subjects []TargetSubject `json:"subjects"`
+
+	// DeniedSpecs are individual cards excluded regardless of Subjects.
+	DeniedSpecs []TargetSubject `json:"deniedSpecs"`
+
 	Phase                Phase     `json:"phase"`
 	PSASourcingFeeCents  int       `json:"psaSourcingFeeCents"`            // Default 300 ($3)
 	EbayFeePct           float64   `json:"ebayFeePct"`                     // Default 0.1235 (12.35%)

@@ -30,7 +30,6 @@ func TestCampaignStore_CampaignCRUD(t *testing.T) {
 		DailySpendCapCents:   150000,
 		InclusionList:        "charizard pikachu blastoise",
 		Phase:                inventory.PhasePending,
-		ExclusionMode:        true,
 		PSASourcingFeeCents:  300,
 		EbayFeePct:           0.1235,
 		PSACampaignRequestID: "psa-req-123",
@@ -47,7 +46,11 @@ func TestCampaignStore_CampaignCRUD(t *testing.T) {
 	assert.Equal(t, c.Sport, got.Sport)
 	assert.Equal(t, c.BuyTermsCLPct, got.BuyTermsCLPct)
 	assert.Equal(t, c.Phase, got.Phase)
-	assert.Equal(t, true, got.ExclusionMode)
+	// ExclusionMode/InclusionList are now a legacy mirror derived from
+	// Subjects/SubjectFilterMode by the store, not from whatever the caller
+	// set directly (see TestCampaignStore_TargetingAxesRoundTrip). No
+	// Subjects are set here, so the mirror derives to Target/false.
+	assert.Equal(t, false, got.ExclusionMode)
 	assert.Equal(t, "psa-req-123", got.PSACampaignRequestID)
 
 	list, err := repo.ListCampaigns(ctx, false)
@@ -68,4 +71,67 @@ func TestCampaignStore_CampaignCRUD(t *testing.T) {
 
 	_, err = repo.GetCampaign(ctx, "nonexistent")
 	assert.ErrorIs(t, err, inventory.ErrCampaignNotFound)
+}
+
+func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	repo := NewCampaignStore(db.DB, logger)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	c := &inventory.Campaign{
+		ID:                "camp-axes",
+		Name:              "Japanese Pokemon",
+		Sport:             "Pokemon",
+		BuyTermsCLPct:     0.80,
+		Phase:             inventory.PhaseActive,
+		TargetLanguage:    "japanese",
+		SubjectFilterMode: inventory.SubjectFilterExclude,
+		Subjects: []inventory.TargetSubject{
+			{ID: 22210, Name: "Machamp"},
+			{ID: 8105, Name: "Crystal Golem"},
+		},
+		DeniedSpecs: []inventory.TargetSubject{
+			{ID: 4807, Name: "Charizard"},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	require.NoError(t, repo.CreateCampaign(ctx, c))
+
+	got, err := repo.GetCampaign(ctx, "camp-axes")
+	require.NoError(t, err)
+	assert.Equal(t, "japanese", got.TargetLanguage)
+	assert.Equal(t, inventory.SubjectFilterExclude, got.SubjectFilterMode)
+	assert.Equal(t, c.Subjects, got.Subjects)
+	assert.Equal(t, c.DeniedSpecs, got.DeniedSpecs)
+
+	// Legacy mirror is derived from the new fields on write, not from whatever
+	// the caller happened to leave on InclusionList/ExclusionMode.
+	assert.Equal(t, "Machamp,Crystal Golem", got.InclusionList)
+	assert.Equal(t, true, got.ExclusionMode)
+
+	// Update flips polarity and subjects; mirror must be re-derived.
+	c.SubjectFilterMode = inventory.SubjectFilterTarget
+	c.Subjects = []inventory.TargetSubject{{ID: 100, Name: "Pikachu"}}
+	c.UpdatedAt = time.Now().UTC()
+	require.NoError(t, repo.UpdateCampaign(ctx, c))
+
+	got, err = repo.GetCampaign(ctx, "camp-axes")
+	require.NoError(t, err)
+	assert.Equal(t, inventory.SubjectFilterTarget, got.SubjectFilterMode)
+	assert.Equal(t, c.Subjects, got.Subjects)
+	assert.Equal(t, "Pikachu", got.InclusionList)
+	assert.Equal(t, false, got.ExclusionMode)
+
+	// A row with an empty subject_filter_mode (simulating a pre-migration or
+	// otherwise blank row) normalizes to SubjectFilterTarget on read.
+	_, err = db.ExecContext(ctx,
+		`UPDATE campaigns SET subject_filter_mode = '' WHERE id = $1`, "camp-axes")
+	require.NoError(t, err)
+	got, err = repo.GetCampaign(ctx, "camp-axes")
+	require.NoError(t, err)
+	assert.Equal(t, inventory.SubjectFilterTarget, got.SubjectFilterMode)
 }
