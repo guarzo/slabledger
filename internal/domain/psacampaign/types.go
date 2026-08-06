@@ -15,8 +15,17 @@ type PortalCampaign struct {
 	DailySpecLimit    int            `json:"dailySpecLimit"`
 	SubjectFilter     CampaignFilter `json:"subjectFilter"`
 	PublisherFilter   CampaignFilter `json:"publisherFilter"`
+	SpecListIDs       []string       `json:"specListIds"`
+	SpecListNames     []string       `json:"specListNames"`
+	DeniedSpecs       []SubjectRef   `json:"deniedSpecs"`
 	CreatedAt         time.Time      `json:"createdAt"`
 	UpdatedAt         time.Time      `json:"updatedAt"`
+
+	// TargetingComplete is false when the edit-form fetch for this campaign
+	// failed, meaning the targeting fields above are zero values rather than
+	// portal truth. The baseline pull refuses to write a campaign row from an
+	// incomplete record.
+	TargetingComplete bool `json:"targetingComplete"`
 }
 
 // CampaignBuyBox holds the offer bounds. Prices in cents.

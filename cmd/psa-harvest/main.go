@@ -106,7 +106,7 @@ func run() error {
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 		linker := postgres.NewPSACampaignLinker(db.DB)
 
-		campaigns, err := portal.FetchCampaigns(ctx)
+		campaigns, _, err := portal.FetchCampaigns(ctx)
 		switch {
 		case err != nil:
 			logger.Error(ctx, "psa-harvest: fetch campaigns failed", observability.Err(err))

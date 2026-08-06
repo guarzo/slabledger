@@ -3,7 +3,9 @@ package psaportal
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -23,7 +25,7 @@ func TestFetchCampaigns_ParsesListAndEdit(t *testing.T) {
 	}}
 
 	c := New(ff, Config{})
-	got, err := c.FetchCampaigns(context.Background())
+	got, _, err := c.FetchCampaigns(context.Background())
 	if err != nil {
 		t.Fatalf("FetchCampaigns: %v", err)
 	}
@@ -134,7 +136,7 @@ func TestFetchCampaigns_MultiPage(t *testing.T) {
 	pageFetcher := &multiPageFetcher{page1: page1, page2: page2, editEnv: editEnv, calls: &listCalls}
 
 	c := New(pageFetcher, Config{})
-	got, err := c.FetchCampaigns(context.Background())
+	got, _, err := c.FetchCampaigns(context.Background())
 	if err != nil {
 		t.Fatalf("FetchCampaigns: %v", err)
 	}
@@ -176,8 +178,85 @@ func TestFetchCampaigns_InvalidPageSize(t *testing.T) {
 	}}
 
 	c := New(ff, Config{})
-	_, err := c.FetchCampaigns(context.Background())
+	_, _, err := c.FetchCampaigns(context.Background())
 	if err == nil {
 		t.Fatal("expected error for invalid pageSize, got nil")
+	}
+}
+
+func TestFetchCampaignFormData_DecodesSpecListCatalog(t *testing.T) {
+	editRoot := map[string]any{
+		"formData": map[string]any{
+			"prepackagedSpecListIds": []any{"list-en-base", "list-en-holo"},
+		},
+		"prepackagedSpecLists": []any{
+			map[string]any{"id": "list-en-base", "name": "English Base Set", "status": "ENABLED"},
+			map[string]any{"id": "list-en-holo", "name": "English Holo Rares", "status": "ENABLED"},
+			map[string]any{"id": "list-jp-base", "name": "Japanese Base Set", "status": "DISABLED"},
+		},
+	}
+	packed, err := EncodeRefPacked(editRoot)
+	if err != nil {
+		t.Fatalf("EncodeRefPacked: %v", err)
+	}
+	env := map[string]any{
+		"type": "data",
+		"nodes": []any{
+			map[string]any{"type": "data", "data": packed},
+		},
+	}
+	body, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+	ff := &fakeFetcher{routes: map[string]string{
+		fmt.Sprintf(campaignEditPathF, "camp-1"): string(body),
+	}}
+
+	c := New(ff, Config{})
+	fd, specLists, err := c.fetchCampaignFormData(context.Background(), "camp-1")
+	if err != nil {
+		t.Fatalf("fetchCampaignFormData: %v", err)
+	}
+	if want := []string{"list-en-base", "list-en-holo"}; !reflect.DeepEqual(fd.PrepackagedSpecListIDs, want) {
+		t.Errorf("PrepackagedSpecListIDs = %v, want %v", fd.PrepackagedSpecListIDs, want)
+	}
+	if len(specLists) != 3 {
+		t.Fatalf("expected 3 catalog entries, got %d: %+v", len(specLists), specLists)
+	}
+	if specLists[2].ID != "list-jp-base" || specLists[2].Status != "DISABLED" {
+		t.Errorf("specLists[2] = %+v, want {list-jp-base ... DISABLED}", specLists[2])
+	}
+}
+
+func TestFetchCampaigns_EditFetchFailure_TargetingIncomplete(t *testing.T) {
+	page := buildListEnvelope(t, []any{campaignItem("id-1", "Flaky")}, 1, 1)
+	editURL := fmt.Sprintf(campaignEditPathF, "id-1")
+	ff := &fakeFetcher{
+		routes: map[string]string{
+			campaignsListPath: string(page),
+			editURL:           "",
+		},
+		statusFor: map[string]int{
+			editURL: 403,
+		},
+	}
+
+	c := New(ff, Config{})
+	got, catalog, err := c.FetchCampaigns(context.Background())
+	if err != nil {
+		t.Fatalf("FetchCampaigns: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 campaign despite edit-form failure, got %d", len(got))
+	}
+	if got[0].TargetingComplete {
+		t.Error("TargetingComplete = true, want false after edit-form fetch failure")
+	}
+	if len(got[0].SpecListIDs) != 0 {
+		t.Errorf("SpecListIDs = %v, want empty when targeting is incomplete", got[0].SpecListIDs)
+	}
+	if catalog != nil {
+		t.Errorf("catalog = %+v, want nil when no edit-form fetch succeeded", catalog)
 	}
 }
