@@ -295,3 +295,49 @@ at `chromium.launch()` (`Executable doesn't exist … Please update docker image
 which is upstream of login and took the pipeline down for days after a Dependabot bump on
 2026-07-29. `scripts/check-playwright-version.sh` (wired into `make check` and CI) now
 fails loudly on any mismatch, so a future client bump can't ship without the image bump.
+
+## Baseline pull (one-time targeting migration)
+
+`cmd/psa-harvest -baseline-pull` performs the one-time copy of live portal targeting
+(language, subject list, denied specs) into `campaigns.target_language` /
+`subject_filter_mode` / `subjects` / `denied_specs`. It makes **zero portal writes** —
+the flag returns before `DrainPushQueue` runs. Run it once, review the report, and only
+then resume the normal (non-baseline) scheduled harvest.
+
+```bash
+docker run --rm \
+  -e PSA_PORTAL_EMAIL="user@example.com" \
+  -e PSA_PORTAL_PASSWORD="********" \
+  -e ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+  -e DATABASE_URL="$DATABASE_URL" \
+  slabledger-psa-harvest -baseline-pull
+```
+
+### Manual operator checklist
+
+- [ ] Run the baseline pull once and confirm it **exits zero**. A non-zero exit means at
+      least one campaign's edit-form fetch failed (`TargetingComplete == false`) and that
+      campaign's row was skipped rather than written with blanked-out targeting — re-run
+      until clean before trusting the copy.
+- [ ] For at least one named, currently-linked campaign, open its edit page in the PSA
+      portal UI directly and confirm the pulled `target_language` / `subject_filter_mode` /
+      `subjects` / `denied_specs` match what the portal UI shows. This is the check for a
+      silently wrong translation, not just a successful fetch.
+- [ ] Re-run the baseline a second time against an **unchanged** campaign and confirm the
+      diff it reports for that campaign is **empty**. The list comparison is order-insensitive
+      by design (ids sorted ascending) specifically so re-running the baseline is idempotent;
+      a non-empty diff on an unchanged campaign means list-ordering churn slipped into the
+      comparison and needs to be fixed before this is trusted for six active, money-spending
+      campaigns.
+- [ ] Confirm no portal writes occurred during the baseline: check that every campaign's
+      `updatedAt` in the PSA portal UI is unchanged from before the run, and that
+      `psa_campaign_push_queue` gained no new rows.
+
+### Deferred: spec discovery
+
+`deniedSpecs` round-trips (pulled, decoded, diffed, and pushed) but there is no UI in
+SlabLedger to *discover* a new card to deny — the modal that searches PSA's spec catalog
+was never opened during HAR capture, so its request/response shape is unknown. Until a
+capture with that modal open is taken, adding a new denial is done by hand in the PSA
+portal and picked up on the next pull; this is the one intentional exception to "no direct
+data entry in the portal."

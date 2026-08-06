@@ -3922,7 +3922,7 @@ import (
 func TestFetchSubjects_PostsCategoryIDAndDecodesResult(t *testing.T) {
 	routes := bundleRoutes()
 	routes["immutable/chunks/REMOTE.js"] = `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign"),z=_t("abc123/getSubjects")`
-	routes["/buyercampaignmanager/_app/remote/abc123/getSubjects"] = `{"type":"result","result":"[[2,3],{\"id\":22210,\"name\":\"Machamp\"},{\"id\":22301,\"name\":\"Charizard\"}]"}`
+	routes["/buyercampaignmanager/_app/remote/abc123/getSubjects"] = `{"type":"result","result":"[[1,2],{\"id\":22210,\"name\":\"Machamp\"},{\"id\":22301,\"name\":\"Charizard\"}]"}`
 	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})
@@ -4088,7 +4088,7 @@ import (
 func TestFetchSubjects_PostsCategoryIDAndDecodesResult(t *testing.T) {
 	routes := bundleRoutes()
 	routes["immutable/chunks/REMOTE.js"] = `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign"),z=_t("abc123/getSubjects")`
-	routes["/buyercampaignmanager/_app/remote/abc123/getSubjects"] = `{"type":"result","result":"[[2,3],{\"id\":22210,\"name\":\"Machamp\"},{\"id\":22301,\"name\":\"Charizard\"}]"}`
+	routes["/buyercampaignmanager/_app/remote/abc123/getSubjects"] = `{"type":"result","result":"[[1,2],{\"id\":22210,\"name\":\"Machamp\"},{\"id\":22301,\"name\":\"Charizard\"}]"}`
 	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})

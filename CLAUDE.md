@@ -109,7 +109,11 @@ Migration files: `internal/adapters/storage/postgres/migrations/`. `000001_initi
 represents the final-state schema after cutover from SQLite; subsequent migrations are
 incremental (Supabase index/RLS fixes, hot-query indexes, `resolved_at` indexes, DH push
 plumbing, MM grade-mismatch repair, and the dead-code cleanups dropping
-`advisor_cache` (000013) and `psa_exchange_policy` (000014)).
+`advisor_cache` (000013) and `psa_exchange_policy` (000014)); most recently
+`campaign_targeting_axes` (000023 — four new `campaigns` columns replacing the
+inclusion/exclusion model with language, subject-mode, subject-list, and denied-spec axes)
+and `psa_portal_catalog` (000024 — persisted PSA spec-list/subject reference data so the
+main server can resolve portal identifiers without a portal session).
 
 Connection is configured via `DATABASE_URL`. The transaction pooler is used for the app
 runtime; DDL works the same because `db.go` uses `pgx.QueryExecModeExec` (simple protocol).

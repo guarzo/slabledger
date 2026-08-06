@@ -307,8 +307,8 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `cl_confidence` | REAL | NOT NULL DEFAULT 0 | Min CL confidence threshold |
 | `buy_terms_cl_pct` | REAL | NOT NULL DEFAULT 0 | Target buy price as % of CL value |
 | `daily_spend_cap_cents` | INTEGER | NOT NULL DEFAULT 0 | Max daily spend |
-| `inclusion_list` | TEXT | NOT NULL DEFAULT '' | Newline-separated card list filter |
-| `exclusion_mode` | INTEGER | NOT NULL DEFAULT 0 | 1 = treat inclusion_list as exclusions |
+| `inclusion_list` | TEXT | NOT NULL DEFAULT '' | Legacy substring filter. Kept as a derived, write-only mirror of `subjects`/`subject_filter_mode` for one release (nothing reads it) — see migration 000023 |
+| `exclusion_mode` | INTEGER | NOT NULL DEFAULT 0 | Legacy polarity flag mirroring `subject_filter_mode == 'Exclude'`. Same write-only status as `inclusion_list` |
 | `phase` | TEXT | NOT NULL DEFAULT 'pending' | e.g. 'pending','active','paused','closed' |
 | `psa_sourcing_fee_cents` | INTEGER | NOT NULL DEFAULT 300 | Per-card fee ($3.00) |
 | `ebay_fee_pct` | REAL | NOT NULL DEFAULT 0.1235 | eBay/TCGPlayer fee percentage |
@@ -316,6 +316,10 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `psa_campaign_request_id` | TEXT | | Linked PSA portal campaign request ID; added migration 000017 |
+| `target_language` | TEXT | NOT NULL DEFAULT '' | PSA curated spec-list language token: `''` (unset), `'english'`, `'japanese'`; added migration 000023 |
+| `subject_filter_mode` | TEXT | NOT NULL DEFAULT 'Target' | `'Target'` (buy only `subjects`) or `'Exclude'` (buy everything except `subjects`); added migration 000023 |
+| `subjects` | JSONB | NOT NULL DEFAULT '[]' | `[]TargetSubject` (`{id, name}`) — character subjects this campaign targets or excludes, ids copied verbatim from the portal; added migration 000023 |
+| `denied_specs` | JSONB | NOT NULL DEFAULT '[]' | `[]TargetSubject` — individual cards excluded regardless of `subjects`; added migration 000023 |
 
 **Indexes:** none (PK lookup only)
 
@@ -607,6 +611,27 @@ row to `pushed`/`failed` after actually calling PSA's `updateCampaign`.
 **Foreign Keys:** none
 
 **Added:** migration 000017
+
+---
+
+### `psa_portal_catalog`
+Persisted PSA portal reference data (curated spec lists and character subjects) harvested
+by `cmd/psa-harvest`. The main app has no portal session, so it reads this table to build a
+pure `psacampaign.Resolver` at translation time instead of calling the portal — see
+[docs/psa-harvester.md](../docs/psa-harvester.md#baseline-pull-one-time-targeting-migration).
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `kind` | TEXT | PK (composite) | `'spec_lists'` or `'subjects'` |
+| `key` | TEXT | PK (composite) | `''` for spec lists; the category id as text (e.g. `'16'` for Pokemon) for subjects |
+| `payload` | JSONB | NOT NULL | Serialized `[]SpecListRef` or `[]SubjectRef` |
+| `fetched_at` | TIMESTAMPTZ | NOT NULL | When the harvester last wrote this row; `psacampaign.NewCatalogResolver` refuses to build a resolver from a row older than `psacampaign.CatalogMaxAge` (7 days) |
+
+**Indexes:** none (PK lookup only)
+
+**Foreign Keys:** none
+
+**Added:** migration 000024
 
 ---
 
