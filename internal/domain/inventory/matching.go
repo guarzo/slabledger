@@ -123,6 +123,15 @@ func LanguageAxisMatches(setName, targetLanguage string) bool {
 // An empty subjects list is an open net and always matches, regardless of
 // mode. Matching is a case-insensitive substring test of each subject's name
 // against the card name.
+//
+// This is narrower than the legacy inclusionListMatches it replaces, which
+// also matched against the set name. That legacy list is what migration
+// 000023 backfilled into Subjects verbatim, so a legacy list that relied on
+// set-token matches would silently stop matching here. The narrowing is
+// intentional and was verified safe against production on 2026-08-06: 7
+// campaigns, 68 distinct legacy inclusion-list tokens, zero set-like
+// tokens — every token is a Pokemon character name. If a set token is added
+// to Subjects going forward, it will not match under this function.
 func SubjectAxisMatches(cardName string, subjects []TargetSubject, mode string) bool {
 	if len(subjects) == 0 {
 		return true
@@ -150,18 +159,23 @@ func SubjectAxisMatches(cardName string, subjects []TargetSubject, mode string) 
 // is frequently 0 — the ID path is the exception, not the common case.
 //
 // The common-case fallback compares a composite key built from the
-// purchase's normalized set name (cardutil.NormalizeSetNameSimple) and card
-// number against the denied entry's Name. TargetSubject carries only
-// {ID, Name} — there is no separate set/number field on a denied entry to
-// compare against — so this fallback treats a name-only denied entry's Name
-// as recorded in that same "<normalized set name> <card number>" form and
-// requires an exact, case-insensitive match on the whole composite key. That
-// is the most conservative reading available: this plan is defining the
-// convention (there is no existing denied-entry data to reverse-engineer it
-// from), and an exact composite match can only under-deny relative to any
-// substring or fuzzy comparison, never over-deny. If either half of the
-// composite key is missing (empty set name or card number), no key is built
-// and that entry cannot deny by name.
+// purchase's set name — normalized via cardutil.NormalizeSetNameForSearch,
+// which preserves the "JAPANESE " language marker rather than stripping it —
+// and card number against the denied entry's Name. TargetSubject carries
+// only {ID, Name} — there is no separate set/number field on a denied entry
+// to compare against — so this fallback treats a name-only denied entry's
+// Name as recorded in that same "<normalized set name> <card number>" form
+// and requires an exact, case-insensitive match on the whole composite key.
+// Preserving the language marker on the purchase side is required for
+// correctness, not just precision: cardutil.NormalizeSetNameSimple collapses
+// "JAPANESE BASE SET" to "BASE SET", which would make an English deny entry
+// ("Base Set 004") equal-fold-match a Japanese purchase — an over-deny, and
+// the one failure mode this predicate cannot tolerate (see the fail-open
+// rationale below). NormalizeSetNameForSearch keeps the two languages'
+// composite keys distinct, so an exact match can only under-deny relative to
+// a fuzzier comparison, never over-deny. If either half of the composite key
+// is missing (empty set name or card number), no key is built and that entry
+// cannot deny by name.
 //
 // When neither identity — PSASpecID/ID, or the set+number composite — is
 // available, the entry does not deny the purchase. That fail-open direction
@@ -189,11 +203,14 @@ func SpecDenied(in MatchInput, denied []TargetSubject) bool {
 
 // specDenyKey builds the composite fallback identity used by SpecDenied when
 // PSASpecID is unavailable: the set name normalized via
-// cardutil.NormalizeSetNameSimple, plus the card number, space-joined.
-// Returns "" if either half is missing, since a partial key is not a
+// cardutil.NormalizeSetNameForSearch, plus the card number, space-joined.
+// NormalizeSetNameForSearch (not NormalizeSetNameSimple) is deliberate here:
+// it preserves the "JAPANESE " prefix, so a Japanese and an English printing
+// of the same set number produce distinct keys and cannot cross-deny each
+// other. Returns "" if either half is missing, since a partial key is not a
 // reliable identity and must not be allowed to match anything.
 func specDenyKey(setName, cardNumber string) string {
-	normSet := strings.TrimSpace(cardutil.NormalizeSetNameSimple(setName))
+	normSet := strings.TrimSpace(cardutil.NormalizeSetNameForSearch(setName))
 	cardNumber = strings.TrimSpace(cardNumber)
 	if normSet == "" || cardNumber == "" {
 		return ""

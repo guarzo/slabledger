@@ -318,6 +318,18 @@ func TestSpecDenied(t *testing.T) {
 			denied: nil,
 			want:   false,
 		},
+		{
+			name:   "regression: English deny entry does not over-deny a Japanese printing",
+			in:     MatchInput{SetName: "JAPANESE BASE SET", CardNumber: "004"},
+			denied: []TargetSubject{{ID: 0, Name: "Base Set 004"}},
+			want:   false,
+		},
+		{
+			name:   "regression: Japanese deny entry does not over-deny an English printing",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004"},
+			denied: []TargetSubject{{ID: 0, Name: "JAPANESE BASE SET 004"}},
+			want:   false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
