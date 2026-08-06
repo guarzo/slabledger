@@ -90,7 +90,7 @@ type psaProposeResponse struct {
 // diff between the internal campaign and its linked PSA portal campaign and
 // enqueueing it for human approval.
 func (h *CampaignsHandler) HandlePSAPropose(w http.ResponseWriter, r *http.Request) {
-	if h.psaSnapshots == nil || h.psaQueue == nil || h.psaResolver == nil {
+	if h.psaSnapshots == nil || h.psaQueue == nil {
 		writeError(w, http.StatusServiceUnavailable, "PSA campaign sync not enabled")
 		return
 	}
@@ -134,7 +134,7 @@ func (h *CampaignsHandler) HandlePSAPropose(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	diff, err := psacampaign.TranslateToDiff(*c, *portal, h.psaResolver)
+	diff, err := psacampaign.TranslateToDiff(*c, *portal)
 	if err != nil {
 		h.logger.Error(r.Context(), "failed to translate campaign diff", observability.Err(err))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
@@ -217,7 +217,7 @@ type psaProposeCreateResponse struct {
 // enqueueing a create for human approval. The portal campaign is created
 // paused; approval goes through the existing psa-publish endpoint.
 func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http.Request) {
-	if h.psaQueue == nil || h.psaResolver == nil {
+	if h.psaQueue == nil {
 		writeError(w, http.StatusServiceUnavailable, "PSA campaign sync not enabled")
 		return
 	}
@@ -261,7 +261,7 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 		return
 	}
 
-	fd, err := psacampaign.TranslateToCreate(*c, h.psaResolver)
+	fd, err := psacampaign.TranslateToCreate(*c)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
