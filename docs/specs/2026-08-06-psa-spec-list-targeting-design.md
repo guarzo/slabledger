@@ -4,15 +4,33 @@
 **Branch:** `psa-spec-list-targeting` (worktree `.worktrees/psa-spec-list-targeting`)
 **Baseline:** `main` @ `1de9c915`
 
+> **Amended 2026-08-07.** This spec originally modeled `TargetLanguage` as a
+> single token (`"" | "english" | "japanese"`). Shipped code
+> (`docs/plans/2026-08-07-psa-multi-language-axis.md`) replaced it with
+> `TargetLanguages []string`, because every live campaign carries **both**
+> curated language lists at once and a single-token model cannot represent
+> that. This document has been updated throughout to describe the
+> multi-valued axis as shipped, and the curated portal list names have been
+> corrected to their real values: **"Pokemon - English Language Only"** and
+> **"Pokemon - Japanese Language Only"** (the code briefly used the wrong
+> names "English Pokemon"/"Japanese Pokemon" in both pull and push
+> directions; fixed in commit `8b5e2f1e`). This is the authoritative design
+> record for the shipped multi-language axis; the 2026-08-06 and
+> 2026-08-07 plan documents are left as historical execution records and are
+> not mass-corrected — see the corrections note at the top of each.
+
 ---
 
 ## Background
 
 PSA replaced category selection in the Buyer Campaign Manager. Campaigns used to
 be `campaignType=CATEGORY` with `category=POKEMON`; they are now
-`campaignType=SPEC_LIST` with `prepackagedSpecListIds` naming a curated list —
-"Japanese Pokemon" or "English Pokemon". The operator has already converted 6 of
-9 live campaigns; 3 remain on the old shape and are paused.
+`campaignType=SPEC_LIST` with `prepackagedSpecListIds` naming one or more curated
+lists — "Pokemon - Japanese Language Only" and/or "Pokemon - English Language
+Only". The operator has already converted 6 of 9 live campaigns; 3 remain on the
+old shape and are paused. All 6 converted campaigns carry **both** curated
+lists at once, which is why the language axis must be multi-valued rather than
+a single token.
 
 The change is not a serialization detail. Two hard business constraints recorded
 in `docs/private/CAMPAIGN_STRATEGY.md:54` have been lifted:
@@ -125,9 +143,14 @@ Frontend: `web/src/types/campaigns/core.ts`, `.../portfolio.ts`,
 `inventory.Campaign` (`types_core.go:162-182`) gains:
 
 ```go
-// TargetLanguage selects the PSA curated spec list the campaign buys from.
-// "" means unset (a legacy CATEGORY campaign, or a campaign not yet linked).
-TargetLanguage string `json:"targetLanguage"` // "" | "english" | "japanese"
+// TargetLanguages is the set of PSA curated spec lists the campaign buys
+// from, held as stable internal tokens ("english" | "japanese") rather than
+// portal UUIDs (which PSA can re-issue). It is an unordered set.
+//
+// Empty means an open net: the campaign buys any language. Every live
+// campaign carries BOTH "english" and "japanese" — a single-token model
+// cannot represent them.
+TargetLanguages []string `json:"targetLanguages"`
 
 // SubjectFilterMode is the polarity of Subjects: "Target" buys only the
 // listed characters, "Exclude" buys everything except them. An empty
@@ -168,17 +191,17 @@ Migration `000023_campaign_targeting_axes`:
 
 ```sql
 ALTER TABLE campaigns
-  ADD COLUMN target_language      TEXT  NOT NULL DEFAULT '',
-  ADD COLUMN subject_filter_mode  TEXT  NOT NULL DEFAULT 'Target',
-  ADD COLUMN subjects             JSONB NOT NULL DEFAULT '[]'::jsonb,
-  ADD COLUMN denied_specs         JSONB NOT NULL DEFAULT '[]'::jsonb;
+  ADD COLUMN target_languages    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN subject_filter_mode TEXT  NOT NULL DEFAULT 'Target',
+  ADD COLUMN subjects            JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN denied_specs        JSONB NOT NULL DEFAULT '[]'::jsonb;
 ```
 
 `inclusion_list` and `exclusion_mode` are left in place and keep being written
 (see migration strategy). No index is added: the campaigns table holds ~10 rows
 and every consumer scans it whole (`campaign_coverage.go:45-51`, `:131-137`).
 
-#### Why "english"/"japanese" and not the raw UUID
+#### Why "english"/"japanese" tokens, held as a set, and not the raw UUID
 
 `prepackagedSpecListIds` is a `[]string` of PSA UUIDs. SlabLedger stores a
 stable internal token and maps it to the UUID at push time, because:
@@ -193,10 +216,10 @@ stable internal token and maps it to the UUID at push time, because:
 The catalog shape is confirmed from `docs/psa-campaign-edit-raw.json` (node 204):
 27 entries of `{id: uuid, name, status}`, e.g.
 `6a5484fc-366a-4b5a-90c5-87d72cba3b71 | Riftbound | ENABLED`. That capture
-predates this portal change, so it contains **no Pokemon lists** — "Japanese
-Pokemon" and "English Pokemon" are new entries that will appear on the live page.
-The baseline pull is what records their UUIDs; nothing in this design hardcodes
-them.
+predates this portal change, so it contains **no Pokemon lists** — "Pokemon -
+Japanese Language Only" and "Pokemon - English Language Only" are new entries
+that appear on the live page. The baseline pull is what records their UUIDs;
+nothing in this design hardcodes them.
 
 Resolution matches on name and requires `status == "ENABLED"`. If a token has no
 matching enabled list, translation fails loudly rather than emitting an empty
@@ -260,7 +283,7 @@ storage:
 // Resolver maps SlabLedger's stable tokens to PSA portal identifiers. Built
 // from CatalogStore by the caller; the translators never touch storage.
 type Resolver interface {
-	SpecListIDs(languageToken string) ([]string, error)
+	SpecListIDs(languageTokens []string) ([]string, error)
 	SubjectID(name string) (int, error)
 }
 
@@ -306,7 +329,8 @@ A `-baseline-pull` flag on `cmd/psa-harvest`. In that mode the job:
 4. writes a report to stdout and to `psa_campaign_snapshot`;
 5. for each campaign that is **both** linked (`PSACampaignRequestID` set) **and**
    complete (see below), writes the portal's targeting into the campaign row —
-   `target_language`, `subject_filter_mode`, `subjects`, `denied_specs`;
+   `target_languages`, `subject_filter_mode`, `subjects`, `denied_specs`, copying
+   **every** recognized curated language list, not collapsing to one;
 6. **skips `DrainPushQueue` entirely.** Zero portal writes.
 
 Point 6 is the whole safety property, and it is enforced structurally: the flag
@@ -384,15 +408,15 @@ but it is a large enough change to deserve an explicit line in the report.
 ```go
 CampaignType:           "SPEC_LIST",
 Category:               "",
-PrepackagedSpecListIDs: specListIDs,                  // from Resolver (§2a)
+PrepackagedSpecListIDs: specListIDs,                  // from Resolver, all of TargetLanguages (§2a)
 SubjectFilterType:      internal.SubjectFilterMode,
 SelectedSubjects:       toSubjectRefs(internal.Subjects),
 DeniedSpecs:            toSubjectRefs(internal.DeniedSpecs),
 ```
 
 with `createCampaignType`/`createCategory` deleted. A campaign with an empty
-`TargetLanguage`, or one whose language token the resolver cannot map to an
-enabled list, fails translation rather than creating an untargeted campaign.
+`TargetLanguages` set, or one whose language tokens the resolver cannot fully map
+to enabled lists, fails translation rather than creating an untargeted campaign.
 
 `TranslateToDiff` gains three comparisons. Unlike the existing scalar changes,
 these are list-valued, so `FieldChange.Old`/`.New` carry a canonical rendering:
@@ -463,9 +487,10 @@ fields are already on `Purchase` (`types_core.go:211` `CardNumber`, `:287`
 
 The inclusion-list block is replaced by the three axes:
 
-**Language.** If `TargetLanguage != ""`, the purchase's set language must equal
-it. Classification is **marker-based and positive** — never "English is whatever
-isn't Japanese". That negation was in an earlier draft and it is wrong: there are
+**Language.** If `TargetLanguages` is non-empty, the purchase's classified set
+language must be a member of the set (an empty set is an open net — matches any
+language). Classification is **marker-based and positive** — never "English is
+whatever isn't Japanese". That negation was in an earlier draft and it is wrong: there are
 real Simplified Chinese Pokemon certs in this inventory
 (`cardutil/normalization_chain_test.go:134-145`, e.g. `SIMPLIFIED CHINESE CBB1
 C-GEM PACK VOL 1`), and calling them English would make SlabLedger's matching
@@ -556,16 +581,23 @@ the new model has run a full cycle. This is called out explicitly so it is not
 forgotten — the mirror is transitional, not permanent.
 
 Backfill in `000023`: `subject_filter_mode` is set from `exclusion_mode`, and
-`subjects` from `inclusion_list` split on commas with `id = 0` and the token as
-`name`. Those zero ids are placeholders. The baseline pull overwrites them with
-real portal ids on every campaign that carries a `PSACampaignRequestID`; the
-five unlinked campaigns keep placeholders and cannot be pushed until the
-operator resolves them — which the `ID == 0` resolution path in §5 handles.
+`subjects` from `inclusion_list` split on comma-or-whitespace runs with
+`id = inventory.LegacyUnreconciledSubjectID` (`-1`) and the token as `name`.
+That sentinel is deliberately **not** `0` — `id == 0` already means "operator
+typed this name, resolve it by name" (§5), and the two must stay
+distinguishable: a propose issued between deploy and the baseline pull would
+otherwise re-resolve legacy subjects by name and silently swap live 4xxx/8xxx
+portal ids for current-generation 22xxx ids. Push translation refuses outright
+any campaign still carrying a `-1` sentinel (`toSubjectRefs`,
+`ErrLegacySubjectsUnreconciled`) rather than resolving it. The baseline pull
+overwrites sentinel entries with real portal ids on every campaign that carries
+a `PSACampaignRequestID`; the five unlinked campaigns keep sentinels and cannot
+be pushed until the operator resolves them.
 
 ### 8. Conversion path for the 3 remaining CATEGORY campaigns
 
 They are paused, so there is no live money at stake. They are converted by an
-ordinary push once the operator sets `TargetLanguage` on each, with one caveat:
+ordinary push once the operator sets `TargetLanguages` on each, with one caveat:
 `push.go:56` rejects a field absent from the fetched formData. If a CATEGORY-era
 edit form does not carry `prepackagedSpecListIds`, the push fails terminally
 rather than converting.
@@ -581,7 +613,9 @@ three-row problem is not worth it.
 
 `CampaignFormFields.tsx` replaces the inclusion-list textarea with:
 
-- a language select (Unset / English / Japanese);
+- a `LanguageMultiSelect` — multiple languages may be checked at once (empty
+  selection is the open net), since every live campaign carries both English
+  and Japanese;
 - a polarity toggle (Target / Exclude);
 - a subject list editor — add by name with typeahead against a
   `GET /api/psa/subjects` endpoint, chips showing name with the id in the title
@@ -624,7 +658,7 @@ exception to "no direct data entry in the portal", and a narrow one.
 
 | Condition | Behaviour |
 |---|---|
-| `TargetLanguage` empty on create | Translation fails with a named error. Never create an untargeted campaign. |
+| `TargetLanguages` empty on create | Translation fails with a named error. Never create an untargeted campaign. |
 | Language token has no matching curated list | Push fails. Never push an empty `prepackagedSpecListIds` — it would widen the campaign to PSA's whole catalog. |
 | Catalog missing or older than 7 days | Translation fails closed (§2a), naming the stale catalog kind. Never translate against guessed identifiers. |
 | Subject name absent from the persisted catalog | Translation fails, naming the subject. Never silently drop. |
@@ -639,9 +673,10 @@ exception to "no direct data entry in the portal", and a narrow one.
 ## Testing
 
 - **Translators** (`psacampaign/mapper_test.go`): table-driven over the three
-  axes — create with each language, diff with reordered subject lists asserting
-  no spurious change, diff with an actual subject change, empty-language error.
-  Driven by a stub `Resolver`, since the translators no longer touch storage:
+  axes — create with a single language, create with the multi-language set
+  every live campaign carries, diff with reordered subject lists asserting
+  no spurious change, diff with an actual subject change, empty-language-set
+  error. Driven by a stub `Resolver`, since the translators no longer touch storage:
   one case per resolver failure (unknown language token, unknown subject) assert
   the error names the offending token.
 - **Catalog store** (`postgres/psa_portal_catalog_test.go`): round-trip save and

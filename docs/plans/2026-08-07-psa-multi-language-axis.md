@@ -1,5 +1,16 @@
 # PSA Multi-Language Targeting Axis Implementation Plan
 
+> **Correction (2026-08-07):** This plan's curated-list names are wrong —
+> it says "English Pokemon" / "Japanese Pokemon" throughout. The real portal
+> curated-list names are **"Pokemon - English Language Only"** and
+> **"Pokemon - Japanese Language Only"** (confirmed by the operator; fixed in
+> commit `8b5e2f1e`). This plan also references `baselineLanguage` and
+> `errAmbiguousSpecListName`, neither of which exists in the shipped code —
+> the implementation took a different shape than drafted here. This document
+> is left as a historical execution record and is **not** corrected in
+> place — see `docs/specs/2026-08-06-psa-spec-list-targeting-design.md` for
+> the authoritative, amended design.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Change a campaign's curated-spec-list targeting from one language to a set of languages, so the one-time baseline pull can run and pushes stop narrowing what live campaigns buy.

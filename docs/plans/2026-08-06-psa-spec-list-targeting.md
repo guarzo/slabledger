@@ -1,5 +1,16 @@
 # PSA Spec-List Targeting Implementation Plan
 
+> **Correction (2026-08-07):** This plan's curated-list names are wrong —
+> it says "English Pokemon" / "Japanese Pokemon" throughout. The real portal
+> curated-list names are **"Pokemon - English Language Only"** and
+> **"Pokemon - Japanese Language Only"** (confirmed by the operator; fixed in
+> commit `8b5e2f1e`). This plan also models the language axis as a single
+> token, later replaced by a multi-valued `TargetLanguages []string` set (see
+> `docs/plans/2026-08-07-psa-multi-language-axis.md`). This document is left
+> as a historical execution record and is **not** corrected in place — see
+> `docs/specs/2026-08-06-psa-spec-list-targeting-design.md` for the
+> authoritative, amended design.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace SlabLedger's single `InclusionList`/`ExclusionMode` field pair with the three independent targeting axes the PSA portal now exposes — curated spec list (language), character subjects with Target/Exclude polarity, and card-level denied specs — then make SlabLedger the authoritative source that pushes complete campaign config to the portal.
