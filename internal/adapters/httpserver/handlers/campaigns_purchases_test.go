@@ -127,6 +127,59 @@ func TestHandleCreatePurchase_POST_DuplicateCert(t *testing.T) {
 	decodeErrorResponse(t, rec)
 }
 
+func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "forged psa attribution",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"psa","psaCampaignName":"Forged Campaign"}`,
+		},
+		{
+			name: "forged manual attribution",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"manual","psaCampaignName":"x"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got inventory.Purchase
+			svc := &mocks.MockInventoryService{
+				CreatePurchaseFn: func(_ context.Context, p *inventory.Purchase) error {
+					got = *p
+					return nil
+				},
+			}
+			h := newTestHandler(svc)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/purchases", bytes.NewBufferString(tt.body))
+			req.SetPathValue("id", "c1")
+			rec := httptest.NewRecorder()
+			h.HandleCreatePurchase(rec, req)
+
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
+			}
+			if got.AttributionSource != "" {
+				t.Errorf("client-supplied attributionSource reached the service: %q", got.AttributionSource)
+			}
+			if got.PSACampaignName != "" {
+				t.Errorf("client-supplied psaCampaignName reached the service: %q", got.PSACampaignName)
+			}
+			// The response must not echo the forged values back either.
+			var resp inventory.Purchase
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if resp.AttributionSource != "" || resp.PSACampaignName != "" {
+				t.Errorf("response echoed forged attribution: source=%q name=%q",
+					resp.AttributionSource, resp.PSACampaignName)
+			}
+		})
+	}
+}
+
 func TestHandleCreatePurchase_POST_InvalidBody(t *testing.T) {
 	h := newTestHandler(&mocks.MockInventoryService{})
 
