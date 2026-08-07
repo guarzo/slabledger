@@ -206,12 +206,13 @@ export default function CampaignsPage() {
       let fresh: Campaign;
       try {
         fresh = await api.getCampaign(editing.id);
-      } catch {
+      } catch (err) {
         // Fail closed. Saving anyway would reintroduce exactly the race this
         // check exists to close. The message is fixed rather than routed
         // through getErrorMessage: that helper surfaces the raw Error.message
         // when present (e.g. "network down"), which would bury the actionable
         // "nothing was saved" guidance the operator needs here.
+        reportError('Campaign edit staleness check', err);
         toast.error('Could not confirm the campaign is unchanged — nothing was saved');
         return;
       }
