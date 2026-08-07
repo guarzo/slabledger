@@ -26,7 +26,7 @@ declare module './client' {
     getCampaign(id: string): Promise<Campaign>;
     deleteCampaign(id: string): Promise<void>;
     createCampaign(input: CreateCampaignInput): Promise<Campaign>;
-    updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign>;
+    updateCampaign(id: string, data: Partial<Campaign>, ifUnmodifiedSince?: string): Promise<Campaign>;
   }
 }
 
@@ -58,6 +58,17 @@ proto.createCampaign = async function (this: APIClient, input: CreateCampaignInp
   return this.post<Campaign>('/campaigns', input);
 };
 
-proto.updateCampaign = async function (this: APIClient, id: string, data: Partial<Campaign>): Promise<Campaign> {
-  return this.put<Campaign>(`/campaigns/${encodeURIComponent(id)}`, data);
+// Passing ifUnmodifiedSince (the updatedAt of the row this payload was built
+// from) makes the write conditional: the server rejects it with 409 if the row
+// changed in between, instead of overwriting the newer version. Read-modify-write
+// callers should always pass it; the value must come from a fresh read, not from
+// the React Query cache, which cannot observe a psa-harvest write.
+proto.updateCampaign = async function (
+  this: APIClient,
+  id: string,
+  data: Partial<Campaign>,
+  ifUnmodifiedSince?: string,
+): Promise<Campaign> {
+  const qs = ifUnmodifiedSince ? `?ifUnmodifiedSince=${encodeURIComponent(ifUnmodifiedSince)}` : '';
+  return this.put<Campaign>(`/campaigns/${encodeURIComponent(id)}${qs}`, data);
 };

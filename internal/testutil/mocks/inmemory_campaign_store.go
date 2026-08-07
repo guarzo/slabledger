@@ -31,6 +31,7 @@ type InMemoryCampaignStore struct {
 	GetCampaignFn                       func(ctx context.Context, id string) (*inventory.Campaign, error)
 	ListCampaignsFn                     func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
 	UpdateCampaignFn                    func(ctx context.Context, c *inventory.Campaign) error
+	UpdateCampaignIfUnchangedFn         func(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error
 	DeleteCampaignFn                    func(ctx context.Context, id string) error
 	CreatePurchaseFn                    func(ctx context.Context, p *inventory.Purchase) error
 	GetPurchaseFn                       func(ctx context.Context, id string) (*inventory.Purchase, error)
@@ -183,6 +184,24 @@ func (m *InMemoryCampaignStore) UpdateCampaign(ctx context.Context, c *inventory
 	}
 	if _, ok := m.Campaigns[c.ID]; !ok {
 		return inventory.ErrCampaignNotFound
+	}
+	m.Campaigns[c.ID] = c
+	return nil
+}
+
+// UpdateCampaignIfUnchanged mirrors the store's conditional write: it compares
+// against the currently held row rather than the one being written, so a test
+// can reproduce a lost update by mutating m.Campaigns behind the caller's back.
+func (m *InMemoryCampaignStore) UpdateCampaignIfUnchanged(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error {
+	if m.UpdateCampaignIfUnchangedFn != nil {
+		return m.UpdateCampaignIfUnchangedFn(ctx, c, expectedUpdatedAt)
+	}
+	current, ok := m.Campaigns[c.ID]
+	if !ok {
+		return inventory.ErrCampaignNotFound
+	}
+	if !current.UpdatedAt.Equal(expectedUpdatedAt) {
+		return inventory.ErrCampaignConflict
 	}
 	m.Campaigns[c.ID] = c
 	return nil

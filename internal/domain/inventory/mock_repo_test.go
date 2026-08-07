@@ -88,6 +88,18 @@ func (m *mockRepo) UpdateCampaign(_ context.Context, c *Campaign) error {
 	return nil
 }
 
+func (m *mockRepo) UpdateCampaignIfUnchanged(_ context.Context, c *Campaign, expectedUpdatedAt time.Time) error {
+	current, ok := m.campaigns[c.ID]
+	if !ok {
+		return ErrCampaignNotFound
+	}
+	if !current.UpdatedAt.Equal(expectedUpdatedAt) {
+		return ErrCampaignConflict
+	}
+	m.campaigns[c.ID] = c
+	return nil
+}
+
 func (m *mockRepo) CreatePurchase(_ context.Context, p *Purchase) error {
 	if p.Grader == "" {
 		p.Grader = "PSA"

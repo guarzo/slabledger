@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import CampaignsPage from './CampaignsPage';
 import { ToastProvider } from '../contexts/ToastContext';
-import { api } from '../../js/api';
+import { api, APIError } from '../../js/api';
 import type { Campaign } from '../../types/campaigns';
 
 const campaign: Campaign = {
@@ -31,12 +31,18 @@ const campaign: Campaign = {
 } as Campaign;
 
 // Matches the campaign above by name, and carries only scalar economics —
-// the paste format deliberately does not round-trip targeting.
+// the paste format deliberately does not round-trip targeting. The second block
+// matches nothing, so it exercises the create branch and proves the loop keeps
+// going after a failure on the first.
 const pasteText = [
   'Campaign 1 — Vintage Core',
   'SPORT: Pokemon',
   'BUY TERMS: 80.0%',
   'Daily Spend: $750.00',
+  'Campaign 2 — Second Wave',
+  'SPORT: Pokemon',
+  'BUY TERMS: 70.0%',
+  'Daily Spend: $250.00',
 ].join('\n');
 
 vi.mock('../queries/useCampaignQueries', async (orig) => {
@@ -52,6 +58,7 @@ vi.mock('../queries/useCampaignQueries', async (orig) => {
 
 const getCampaign = vi.fn();
 const updateCampaign = vi.fn();
+const createCampaign = vi.fn();
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -69,13 +76,15 @@ function renderPage() {
 beforeEach(() => {
   getCampaign.mockReset();
   updateCampaign.mockReset();
+  createCampaign.mockReset();
   updateCampaign.mockResolvedValue(campaign);
+  createCampaign.mockResolvedValue({ ...campaign, id: 'c2', name: 'Second Wave' });
   // Spying on the real singleton rather than spreading it: `api` is an
   // APIClient instance whose endpoint methods live on the prototype, so
   // `{ ...mod.api }` copies none of them and every endpoint this file does not
   // name becomes undefined. Stubbing fetchWithRetry — the single choke point
   // behind get/post/put/deleteResource — keeps an unstubbed endpoint off the
-  // network. The two local vi.fn()s stay the assertion handles; the spies just
+  // network. The local vi.fn()s stay the assertion handles; the spies just
   // delegate to them, so the mockResolvedValue calls in each test still read
   // the same way.
   vi.spyOn(api, 'fetchWithRetry').mockRejectedValue(
@@ -85,6 +94,7 @@ beforeEach(() => {
   vi.spyOn(api, 'listPSASubjects').mockResolvedValue({ subjects: [], fetchedAt: '2026-08-01T00:00:00Z' });
   vi.spyOn(api, 'getCampaign').mockImplementation(getCampaign);
   vi.spyOn(api, 'updateCampaign').mockImplementation(updateCampaign);
+  vi.spyOn(api, 'createCampaign').mockImplementation(createCampaign);
 });
 
 afterEach(() => {
@@ -170,4 +180,30 @@ it('skips the update when the staleness check itself fails', async () => {
   await waitFor(() => expect(getCampaign).toHaveBeenCalled());
   expect(updateCampaign).not.toHaveBeenCalled();
   expect(await screen.findByText(/could not confirm the campaign is unchanged/i)).toBeInTheDocument();
+});
+
+it('sends the fresh updatedAt as the write precondition', async () => {
+  // The advisory comparison above can be overtaken between the GET and the PUT.
+  // Only this parameter makes the server compare-and-write in one statement, so
+  // its absence would silently reopen the race the guard exists to close.
+  getCampaign.mockResolvedValue(campaign);
+  await clickPaste();
+
+  await waitFor(() => expect(updateCampaign).toHaveBeenCalled());
+  expect(updateCampaign.mock.calls[0][2]).toBe('2026-02-02T00:00:00Z');
+});
+
+it('records a 409 as a per-campaign error and keeps importing the rest', async () => {
+  // Losing the race on one campaign must not abandon the others in the block —
+  // a paste is a batch, and a partial import is the useful outcome.
+  getCampaign.mockResolvedValue(campaign);
+  updateCampaign.mockRejectedValue(new APIError('Campaign changed since it was loaded', 409));
+  await clickPaste();
+
+  await waitFor(() => expect(updateCampaign).toHaveBeenCalled());
+  // 'Second Wave' has no matching campaign, so it takes the create branch and
+  // must still run after the conflict on 'Vintage Core'.
+  await waitFor(() => expect(createCampaign).toHaveBeenCalled());
+  expect(createCampaign.mock.calls[0][0].name).toBe('Second Wave');
+  expect(await screen.findByText(/changed while the update was in flight/i)).toBeInTheDocument();
 });

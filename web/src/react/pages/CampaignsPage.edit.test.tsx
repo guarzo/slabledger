@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import CampaignsPage from './CampaignsPage';
 import { ToastProvider } from '../contexts/ToastContext';
-import { api } from '../../js/api';
+import { api, APIError } from '../../js/api';
 import type { Campaign } from '../../types/campaigns';
 
 const campaign: Campaign = {
@@ -57,7 +57,10 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  updateMutateAsync.mockClear();
+  // mockReset, not mockClear: the conflict test below installs a rejection on
+  // this plain vi.fn(), and restoreAllMocks only reaches vi.spyOn mocks.
+  updateMutateAsync.mockReset();
+  updateMutateAsync.mockResolvedValue(campaign);
   // `api` is a class instance whose endpoint methods live on APIClient.prototype
   // (js/api/*.ts attach them there via declaration merging), so the `{ ...api }`
   // spread this file used to build its mock copied none of them: every endpoint
@@ -145,6 +148,31 @@ it('aborts the save when the staleness check itself fails', async () => {
   await waitFor(() => expect(api.getCampaign).toHaveBeenCalled());
   expect(updateMutateAsync).not.toHaveBeenCalled();
   expect(await screen.findByText(/could not confirm/i)).toBeInTheDocument();
+});
+
+it('sends the fresh updatedAt as the write precondition', async () => {
+  // The comparison in the previous test is advisory: it can be overtaken between
+  // the GET and the PUT. This parameter is what makes the server compare-and-write
+  // in a single statement, so dropping it silently reopens the race.
+  vi.mocked(api.getCampaign).mockResolvedValue(campaign);
+  await openEditAndSave();
+
+  await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
+  expect(updateMutateAsync.mock.calls[0][0].ifUnmodifiedSince).toBe('2026-02-02T00:00:00Z');
+});
+
+it('reports a 409 as a conflict rather than a generic failure', async () => {
+  // The row moved inside the GET→PUT window, so the advisory check passed and
+  // only the server could catch it. The operator needs the same "nothing was
+  // saved, re-open Edit" guidance as the pre-flight rejection.
+  vi.mocked(api.getCampaign).mockResolvedValue(campaign);
+  updateMutateAsync.mockRejectedValue(new APIError('Campaign changed since it was loaded', 409));
+  await openEditAndSave();
+
+  await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
+  expect(await screen.findByText(/changed while the save was in flight/i)).toBeInTheDocument();
+  // The form stays open so the operator does not lose their edits.
+  expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
 });
 
 it('sends the operator-edited name, not just the pre-edit snapshot', async () => {

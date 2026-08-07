@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -293,6 +294,22 @@ func (cs *CampaignStore) DeleteCampaign(ctx context.Context, id string) (retErr 
 }
 
 func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campaign) error {
+	return cs.updateCampaign(ctx, c, nil)
+}
+
+func (cs *CampaignStore) UpdateCampaignIfUnchanged(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error {
+	return cs.updateCampaign(ctx, c, &expectedUpdatedAt)
+}
+
+// updateCampaign runs the full-row UPDATE. When expectedUpdatedAt is non-nil the
+// statement also requires the stored updated_at to still match it, which is what
+// makes the check-then-write atomic: the comparison happens inside the same
+// statement as the write, so a concurrent writer cannot slip in between.
+//
+// updated_at is a bare TIMESTAMP and the expected value always originates from a
+// prior read of this same column, so it is already truncated to the column's
+// microsecond precision and compares exactly.
+func (cs *CampaignStore) updateCampaign(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt *time.Time) error {
 	inclusionList, exclusionMode := deriveLegacyMirror(c)
 	subjectFilterMode := normalizeSubjectFilterMode(c.SubjectFilterMode)
 	subjectsJSON := marshalTargetSubjects(c.Subjects)
@@ -308,13 +325,19 @@ func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campai
 			target_languages = $17, subject_filter_mode = $18, subjects = $19, denied_specs = $20
 		WHERE id = $21
 	`
-	result, err := cs.db.ExecContext(ctx, query,
+	args := []any{
 		c.Name, c.Sport, c.YearRange, c.GradeRange, c.PriceRange,
 		c.CLConfidence, c.BuyTermsCLPct, c.DailySpendCapCents, inclusionList,
 		exclusionMode, string(c.Phase), c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate,
 		c.PSACampaignRequestID, c.UpdatedAt,
 		languagesJSON, subjectFilterMode, subjectsJSON, deniedJSON, c.ID,
-	)
+	}
+	if expectedUpdatedAt != nil {
+		query += ` AND updated_at = $22`
+		args = append(args, *expectedUpdatedAt)
+	}
+
+	result, err := cs.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("update campaign: %w", err)
 	}
@@ -323,6 +346,20 @@ func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campai
 		return fmt.Errorf("check rows affected: %w", err)
 	}
 	if n == 0 {
+		// Zero rows is ambiguous once a precondition is in play: the row may be
+		// gone, or it may be present but newer. Probe so the caller gets 404 vs
+		// 409 rather than one error covering both.
+		if expectedUpdatedAt != nil {
+			var exists bool
+			if err := cs.db.QueryRowContext(ctx,
+				`SELECT EXISTS(SELECT 1 FROM campaigns WHERE id = $1)`, c.ID,
+			).Scan(&exists); err != nil {
+				return fmt.Errorf("check campaign exists: %w", err)
+			}
+			if exists {
+				return inventory.ErrCampaignConflict
+			}
+		}
 		return inventory.ErrCampaignNotFound
 	}
 	return nil

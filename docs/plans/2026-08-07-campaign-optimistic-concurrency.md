@@ -1,10 +1,23 @@
 # Prompt: optimistic concurrency control for campaign update
 
-> **Status:** not started. This file is a *prompt* — a self-contained task
-> briefing to hand to an implementer (human or agent), not an approved plan.
-> The design question below was open when this was written; #544 and #545 have
-> since settled it in favor of `updated_at` CAS. Confirm with the operator
-> before code is written.
+> **Status:** implemented in #549. Kept as the record of the reasoning that led
+> there. Two deliberate deviations from the acceptance criteria below, both
+> argued in that PR:
+>
+> 1. **Transport is a query parameter** (`?ifUnmodifiedSince=<RFC3339>`), not a
+>    body field or `If-Match`. `If-Match`/`If-Unmodified-Since` carry an
+>    HTTP-date, which is second-precision — far too coarse to guard a window
+>    measured in milliseconds. A body field would give `updatedAt` two different
+>    meanings on request and response.
+> 2. **The client-side comparison was kept, not deleted.** The criterion below
+>    treats it as duplication of the server check. It is not: the two compare
+>    against different baselines. The client compares the freshly-read row
+>    against the row as of *form open* or *list load* — a window of minutes. The
+>    server compares against the pre-flight `GET` — a window of milliseconds.
+>    Deleting the client check would make every stale-form save succeed, because
+>    the precondition is taken from the read that just happened. The pre-flight
+>    `GET` is unavoidable regardless, since a full-row `PUT` has to echo the
+>    current targeting back, so the comparison is free.
 
 ---
 

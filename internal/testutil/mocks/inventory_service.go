@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
@@ -21,6 +22,7 @@ type MockInventoryService struct {
 	GetCampaignFn               func(ctx context.Context, id string) (*inventory.Campaign, error)
 	ListCampaignsFn             func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
 	UpdateCampaignFn            func(ctx context.Context, c *inventory.Campaign) error
+	UpdateCampaignIfUnchangedFn func(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error
 	DeleteCampaignFn            func(ctx context.Context, id string) error
 	CreatePurchaseFn            func(ctx context.Context, p *inventory.Purchase) error
 	GetPurchaseFn               func(ctx context.Context, id string) (*inventory.Purchase, error)
@@ -125,6 +127,13 @@ func (m *MockInventoryService) ListCampaigns(ctx context.Context, activeOnly boo
 func (m *MockInventoryService) UpdateCampaign(ctx context.Context, c *inventory.Campaign) error {
 	if m.UpdateCampaignFn != nil {
 		return m.UpdateCampaignFn(ctx, c)
+	}
+	return nil
+}
+
+func (m *MockInventoryService) UpdateCampaignIfUnchanged(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error {
+	if m.UpdateCampaignIfUnchangedFn != nil {
+		return m.UpdateCampaignIfUnchangedFn(ctx, c, expectedUpdatedAt)
 	}
 	return nil
 }
