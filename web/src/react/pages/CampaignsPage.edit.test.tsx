@@ -66,7 +66,10 @@ beforeEach(() => {
   // Spy on the real singleton instead, so unnamed endpoints keep a real method.
   // fetchWithRetry is the single network choke point behind get/post/put/
   // deleteResource — stubbing it keeps an unstubbed endpoint off the network and
-  // makes it fail loudly and immediately rather than silently.
+  // names the cause. It does not make the failure visible: a rejected queryFn
+  // under `retry: false` is swallowed just as quietly as the TypeError was.
+  // What the spy buys is a real method at non-query call sites, hermeticity, a
+  // self-describing message when someone does surface the error, and typing.
   vi.spyOn(api, 'fetchWithRetry').mockRejectedValue(
     new Error('unstubbed API call — add a vi.spyOn for this endpoint'),
   );
