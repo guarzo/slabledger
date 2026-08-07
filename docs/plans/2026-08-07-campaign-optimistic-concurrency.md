@@ -23,13 +23,24 @@ or other aggregates in this change.
 
 ## Why now
 
-`web/src/react/pages/CampaignsPage.tsx` performs a clipboard-import upsert that
-builds a full-object `PUT` from a campaign it found in the react-query-cached
-list. As of commit on branch `form-field-a11y` that path re-reads the campaign
-via `api.getCampaign(existing.id)` immediately before merging, which narrows the
-window — but does not close it. The race is still open between the `GET` and the
-`PUT`, and the re-read is a client-side convention that nothing enforces. The
-server accepts any write from any client at any time.
+Two independent client paths now hand-roll their own concurrency defense, and
+neither can actually enforce it:
+
+1. **The edit form** (`CampaignsPage.tsx:203-233`, added in #545) re-reads over
+   the network and compares `fresh.updatedAt !== editing.updatedAt`, failing
+   closed with a toast. This is a genuine compare-and-swap — implemented
+   entirely in the browser, on the honor system.
+2. **The clipboard-import upsert** (`CampaignsPage.tsx:405-421`) builds a
+   full-object `PUT` from the react-query-cached list. It re-reads before
+   merging, which narrows the window but does not close it: the race is still
+   open between the `GET` and the `PUT`.
+
+Both are client-side conventions that nothing enforces. The server accepts any
+write from any client at any time, so a third caller — or the same caller after
+a refactor — silently reintroduces the lost update. #545 having already picked
+`updatedAt` equality as its comparison basis is the strongest argument for
+resolving the open decision below in favor of `updated_at` CAS: it would make
+the server enforce the check the client already believes it is making.
 
 ---
 
@@ -130,13 +141,25 @@ is chosen.
   a new field on `Campaign` and its TS mirror, and a `version = version + 1`
   in the `UPDATE`.
 
-Recommendation: the `version` column. Raise it with the operator before writing
-code — it changes the migration, the Go struct, the TS type, and the wire shape.
+Recommendation: **`updated_at` CAS**, revised from an earlier preference for the
+`version` column. #545 already ships an `updatedAt` equality check in the edit
+form, so this option makes the server enforce the contract the client already
+asserts, with no new field on the wire and no migration. If the timestamp
+round-trip proves lossy in practice, the spurious-409 failure mode is visible
+and safe, and migrating to a `version` column later is a mechanical change.
+Raise it with the operator before writing code either way.
 
 **Transport of the expected version.** Either a JSON field on the request body
 or an `If-Match` header. `If-Match` is the HTTP-correct answer and keeps the
 body a pure representation; a body field is less ceremony and matches how the
 rest of this API talks. Decide once; do not support both.
+
+**Pre-existing bug in the same statement.** `CampaignsPage.tsx:419` strips
+`expectedFillRate` from the merged object under a "server-owned fields" comment.
+It is not server-owned — the strip zeroes the field on every clipboard-paste
+update. #545 documented this at `CampaignsPage.tsx:240-243` and deferred it;
+this branch left it untouched for the same reason. It is adjacent to, but
+independent of, the concurrency work, and needs its own fix and review.
 
 ---
 
@@ -151,8 +174,11 @@ rest of this API talks. Decide once; do not support both.
       (unconditional overwrite), so `campaigns_psa.go:109` and
       `cmd/psa-harvest/baseline.go:264` need no change beyond compilation.
 - [ ] The frontend surfaces the 409 to the operator as a "changed elsewhere,
-      reload" message rather than a generic failure toast, and the
-      `CampaignsPage.tsx` clipboard upsert forwards the version it just read.
+      reload" message rather than a generic failure toast; the
+      `CampaignsPage.tsx` clipboard upsert forwards the version it just read;
+      and the edit form's hand-rolled client-side check
+      (`CampaignsPage.tsx:203-233`) is replaced by the server's verdict rather
+      than left to duplicate it.
 - [ ] Table-driven tests cover all four server cases above, using mocks from
       `internal/testutil/mocks/` (Fn-field pattern, never inline) and asserting
       sentinels with `errors.Is`.
