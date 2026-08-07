@@ -21,7 +21,7 @@ var (
 	ErrUnknownSpecList = errors.New("psacampaign: no spec list for language")
 	ErrUnknownSubject  = errors.New("psacampaign: no subject id for name")
 	// ErrLegacySubjectsUnreconciled means a campaign still carries subjects
-	// marked by migration 000023's backfill as legacy and never reconciled
+	// marked by migration 000024's backfill as legacy and never reconciled
 	// against the portal. Pushing one would re-resolve a live portal id by
 	// name; the operator must run the baseline pull first.
 	ErrLegacySubjectsUnreconciled = errors.New(

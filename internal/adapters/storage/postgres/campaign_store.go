@@ -56,7 +56,7 @@ func normalizeSubjectFilterMode(mode string) string {
 }
 
 // normalizeTargetSubjects converts a nil slice to an empty one. Defensive on
-// read: the NOT NULL DEFAULT '[]'::jsonb column (migration 000023) should
+// read: the NOT NULL DEFAULT '[]'::jsonb column (migration 000024) should
 // never hold a literal jsonb null, but marshalTargetSubjects only started
 // guarding against that on write after this fix — any row written before it
 // landed would unmarshal a stored "null" back into a nil Go slice, which the
@@ -92,7 +92,7 @@ func marshalTargetSubjects(subjects []inventory.TargetSubject) string {
 
 // normalizeTargetLanguages converts a nil slice to an empty one, mirroring
 // normalizeTargetSubjects. Defensive on read for the same reason: the
-// NOT NULL DEFAULT '[]'::jsonb column (migration 000023) rejects SQL NULL but
+// NOT NULL DEFAULT '[]'::jsonb column (migration 000024) rejects SQL NULL but
 // not the JSON null value, and any writer bypassing this store — a raw SQL
 // fixup, another tool — can leave one behind. A nil slice would reach the API
 // as JSON null, which the non-nullable TS Campaign.targetLanguages type and

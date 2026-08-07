@@ -58,6 +58,13 @@ type PurchaseRepository interface {
 	UpdatePurchaseCampaign(ctx context.Context, purchaseID string, campaignID string, sourcingFeeCents int) error
 	UpdatePurchasePSAFields(ctx context.Context, id string, fields PSAUpdateFields) error
 	UpdatePurchaseBuyCost(ctx context.Context, id string, buyCostCents int) error
+	// ReattributePurchase moves a purchase to a PSA-authoritative campaign and
+	// sets attribution_source='psa'. Returns ErrPurchaseHasSale if a linked sale
+	// exists — sold rows carry frozen sale-side financials that this does not repair.
+	ReattributePurchase(ctx context.Context, purchaseID string, r Reattribution) error
+	// UpdatePurchaseAttributionName records PSA's campaign name and attribution
+	// source without moving the campaign. Safe on sold purchases.
+	UpdatePurchaseAttributionName(ctx context.Context, purchaseID, psaName, source string) error
 
 	// Price overrides & AI suggestions
 	UpdatePurchasePriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error

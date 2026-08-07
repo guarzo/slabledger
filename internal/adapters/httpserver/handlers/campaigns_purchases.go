@@ -34,6 +34,17 @@ func (h *CampaignsHandler) HandleCreatePurchase(w http.ResponseWriter, r *http.R
 		return
 	}
 	p.CampaignID = id
+	// Server-authoritative: campaign attribution is never client-settable. Same
+	// reasoning as the frozen provenance pointers cleared in
+	// service_crud.go CreatePurchase ("these pointers are attacker-controllable"):
+	// the body decodes straight into inventory.Purchase, and both of these fields
+	// carry JSON tags. Letting a caller post attributionSource:"psa" would forge
+	// the column this feature exists to make trustworthy. Cleared here rather
+	// than in the service because the PSA import path legitimately sets 'psa'
+	// through the same service method. PurchaseStore.CreatePurchase defaults the
+	// empty value to 'inferred'.
+	p.AttributionSource = ""
+	p.PSACampaignName = ""
 
 	if err := h.service.CreatePurchase(r.Context(), &p); err != nil {
 		if inventory.IsDuplicateCertNumber(err) {

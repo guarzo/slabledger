@@ -187,7 +187,7 @@ cycle — see the migration section.
 
 #### Persistence
 
-Migration `000023_campaign_targeting_axes`:
+Migration `000024_campaign_targeting_axes`:
 
 ```sql
 ALTER TABLE campaigns
@@ -266,7 +266,7 @@ type CatalogStore interface {
 }
 ```
 
-Migration `000024_psa_portal_catalog`: `(kind TEXT, key TEXT, payload JSONB,
+Migration `000025_psa_portal_catalog`: `(kind TEXT, key TEXT, payload JSONB,
 fetched_at TIMESTAMPTZ)` with `PRIMARY KEY (kind, key)` — `kind` is
 `'spec_lists'` or `'subjects'`, `key` is `''` or the category id. The harvester
 writes it on every run; the server reads it. It wires into `cmd/slabledger` as

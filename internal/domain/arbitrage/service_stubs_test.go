@@ -173,6 +173,14 @@ func (r *stubPurchaseRepo) ListDHPriceDrift(_ context.Context) ([]inventory.Purc
 	return nil, nil
 }
 
+func (r *stubPurchaseRepo) ReattributePurchase(_ context.Context, _ string, _ inventory.Reattribution) error {
+	return nil
+}
+
+func (r *stubPurchaseRepo) UpdatePurchaseAttributionName(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
 type stubAnalyticsRepo struct {
 	data []inventory.PurchaseWithSale
 }

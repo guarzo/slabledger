@@ -20,7 +20,7 @@ const (
 
 // PSAPortalCatalogStore persists PSA portal reference data (curated spec
 // lists, subject lists) as JSONB rows keyed by (kind, key), one row per
-// distinct catalog (migration 000024).
+// distinct catalog (migration 000025).
 type PSAPortalCatalogStore struct {
 	db *sql.DB
 }

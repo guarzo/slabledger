@@ -174,7 +174,7 @@ const (
 	SubjectFilterExclude = "Exclude"
 )
 
-// LegacyUnreconciledSubjectID marks a subject that migration 000023 backfilled
+// LegacyUnreconciledSubjectID marks a subject that migration 000024 backfilled
 // from the legacy inclusion_list string: a name with no portal id behind it
 // and no reconciliation against live portal state yet.
 //
@@ -294,6 +294,10 @@ type Purchase struct {
 	SourceCountAtPurchase    *int     `json:"sourceCountAtPurchase,omitempty"`
 	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
 	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
+
+	// --- Campaign attribution provenance ---
+	PSACampaignName   string `json:"psaCampaignName,omitempty"`   // raw campaign name PSA reported, verbatim
+	AttributionSource string `json:"attributionSource,omitempty"` // psa | inferred | manual
 
 	// --- Purchase cost & logistics ---
 	BuyCostCents        int     `json:"buyCostCents"`         // Actual cost paid

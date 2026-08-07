@@ -17,8 +17,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -129,8 +132,9 @@ func run(baseline bool, args []string) error {
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 		linker := postgres.NewPSACampaignLinker(db.DB)
 		catalog := postgres.NewPSAPortalCatalogStore(db.DB)
-		campaignRepo := postgres.NewCampaignStore(db.DB, logger)
+		campaignStore := postgres.NewCampaignStore(db.DB, logger)
 
+		campaignsFresh := false
 		campaigns, specLists, err := portal.FetchCampaigns(ctx)
 		switch {
 		case err != nil:
@@ -154,6 +158,39 @@ func run(baseline bool, args []string) error {
 		default:
 			if err := snap.SaveSnapshot(ctx, campaigns); err != nil {
 				logger.Error(ctx, "psa-harvest: save snapshot failed", observability.Err(err))
+			} else {
+				campaignsFresh = true
+			}
+		}
+
+		// Only fetch the itemized rows snapshot when the campaign snapshot is
+		// actually fresh — decideReconcileGate would skip on campaignsFresh
+		// alone anyway, so there is nothing to diagnose from rowsErr in that case.
+		var rows []inventory.PSAExportRow
+		var rowsErr error
+		if campaignsFresh {
+			rowProvider := psaportal.NewSnapshotRowProvider(snapshots, logger)
+			rows, rowsErr = rowProvider.FetchRows(ctx)
+		}
+
+		gate := decideReconcileGate(campaignsFresh, rowsErr)
+		if !gate.proceed {
+			if gate.skipErr != nil {
+				logger.Warn(ctx, gate.skipMsg, observability.Err(gate.skipErr))
+			} else {
+				logger.Warn(ctx, gate.skipMsg)
+			}
+		} else {
+			resolver := psaportal.NewCampaignResolver(snap, campaignStore, nil)
+			inv := buildInventoryService(db, logger, campaignStore, inventory.WithPSACampaignResolver(resolver))
+			res, recErr := inv.ReconcilePSAAttribution(ctx, rows)
+			if recErr != nil {
+				logger.Error(ctx, "psa-harvest: attribution reconcile failed", observability.Err(recErr))
+			} else {
+				logger.Info(ctx, "psa-harvest: attribution reconciled",
+					observability.Int("moved", res.Moved),
+					observability.Int("unresolved", res.Unresolved),
+					observability.Int("soldSkipped", res.SoldSkipped))
 			}
 		}
 
@@ -175,7 +212,7 @@ func run(baseline bool, args []string) error {
 			// Zero portal writes: return here, before DrainPushQueue is ever
 			// reached. This is the whole safety property of -baseline-pull,
 			// enforced structurally rather than by hoping the queue is empty.
-			if err := runBaselinePull(ctx, campaigns, campaignRepo, logger); err != nil {
+			if err := runBaselinePull(ctx, campaigns, campaignStore, logger); err != nil {
 				return fmt.Errorf("baseline: %w", err)
 			}
 			logger.Info(ctx, "psa-harvest: baseline pull complete, all linked campaigns had complete targeting")
@@ -188,4 +225,68 @@ func run(baseline bool, args []string) error {
 	}
 
 	return nil
+}
+
+// reconcileGate is the pure freshness decision for whether PSA attribution
+// reconciliation should run this harvest. Separated from decideReconcileGate's
+// callers' I/O (SaveSnapshot, FetchRows) so the gate itself is unit-testable
+// without a live DB/browser session.
+type reconcileGate struct {
+	proceed bool
+	// skipMsg and skipErr are logged at Warn when proceed is false. skipErr is
+	// nil for the "campaign snapshot not refreshed" case, since there is no
+	// error value for that — the campaign fetch/save outcome is a bool by the
+	// time it reaches this gate.
+	skipMsg string
+	skipErr error
+}
+
+// decideReconcileGate decides whether reconciliation may run, given whether
+// the campaign snapshot was actually refreshed this run and the outcome of
+// fetching the itemized rows snapshot (nil rowsErr, or unevaluated, when
+// campaignsFresh is false — the campaign gate alone already skips).
+//
+// Resolving fresh purchases against either a stale campaign list or a stale
+// itemized snapshot risks attributing to a renamed or superseded campaign;
+// reconciliation is idempotent, so skipping only costs one cycle.
+func decideReconcileGate(campaignsFresh bool, rowsErr error) reconcileGate {
+	switch {
+	case !campaignsFresh:
+		return reconcileGate{skipMsg: "psa-harvest: skipping attribution reconcile, campaign snapshot not refreshed"}
+	case rowsErr != nil:
+		return reconcileGate{skipMsg: "psa-harvest: skipping attribution reconcile", skipErr: rowsErr}
+	default:
+		return reconcileGate{proceed: true}
+	}
+}
+
+// buildInventoryService assembles the inventory service for this binary's one
+// use of it: PSA attribution reconciliation. It wires the full set of
+// repositories NewService requires plus the pending-items repository, so an
+// unresolved PSA campaign name still lands in the operator work queue.
+func buildInventoryService(db *postgres.DB, logger observability.Logger, campaignStore *postgres.CampaignStore, opts ...inventory.ServiceOption) inventory.Service {
+	purchaseStore := postgres.NewPurchaseStore(db.DB, logger)
+	saleStore := postgres.NewSaleStore(db.DB, logger)
+	analyticsStore := postgres.NewAnalyticsStore(db.DB, logger)
+	financeStore := postgres.NewFinanceStore(db.DB, logger)
+	pricingStore := postgres.NewPricingStore(db.DB, logger)
+	dhStore := postgres.NewDHStore(db.DB, logger)
+	pendingItemsRepo := postgres.NewPendingItemsRepository(db.DB)
+
+	allOpts := append([]inventory.ServiceOption{
+		inventory.WithLogger(logger),
+		inventory.WithIDGenerator(uuid.NewString),
+		inventory.WithPendingItemRepository(pendingItemsRepo),
+	}, opts...)
+
+	return inventory.NewService(
+		campaignStore,
+		purchaseStore,
+		saleStore,
+		analyticsStore,
+		financeStore,
+		pricingStore,
+		dhStore,
+		allOpts...,
+	)
 }

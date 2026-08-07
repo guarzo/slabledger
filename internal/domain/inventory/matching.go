@@ -140,7 +140,7 @@ func LanguageAxisMatches(setName string, targetLanguages []string) bool {
 //
 // This is narrower than the legacy inclusionListMatches it replaces, which
 // also matched against the set name. That legacy list is what migration
-// 000023 backfilled into Subjects verbatim, so a legacy list that relied on
+// 000024 backfilled into Subjects verbatim, so a legacy list that relied on
 // set-token matches would silently stop matching here. The narrowing is
 // intentional and was verified safe against production on 2026-08-06: 7
 // campaigns, 68 distinct legacy inclusion-list tokens, zero set-like

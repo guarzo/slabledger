@@ -10,6 +10,7 @@ import (
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psa"
+	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
@@ -149,6 +150,16 @@ func initializeCampaignsService(
 	// here is safe even when CL is disabled.
 	pricingEnrichJob := scheduler.NewPricingEnrichJob(purchaseStore, logger)
 	campaignOpts = append(campaignOpts, inventory.WithPricingEnqueuer(pricingEnrichJob))
+
+	// PSA campaign resolver — makes PSA's own attribution authoritative on the
+	// import path (service_import_psa.go), which is what both the PSA sync
+	// scheduler and manual CSV upload run through. Constructed exactly as
+	// cmd/psa-harvest/main.go does. Wired unconditionally: when the campaign
+	// snapshot is missing or stale the resolver returns an error and the import
+	// falls back to inference, which is the pre-existing behavior.
+	campaignOpts = append(campaignOpts, inventory.WithPSACampaignResolver(
+		psaportal.NewCampaignResolver(postgres.NewPSACampaignSnapshotStore(db.DB), campaignStore, nil),
+	))
 
 	campaignsService := inventory.NewService(
 		campaignStore,  // CampaignRepository
