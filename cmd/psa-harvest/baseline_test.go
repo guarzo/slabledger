@@ -96,24 +96,24 @@ func TestBaselineLanguages(t *testing.T) {
 		want          []string
 		wantErr       error
 	}{
-		{name: "japanese only", specListNames: []string{"Japanese Pokemon"}, want: []string{"japanese"}},
-		{name: "english only", specListNames: []string{"English Pokemon"}, want: []string{"english"}},
+		{name: "japanese only", specListNames: []string{"Pokemon - Japanese Language Only"}, want: []string{"japanese"}},
+		{name: "english only", specListNames: []string{"Pokemon - English Language Only"}, want: []string{"english"}},
 		{
 			// The live shape: all six portal campaigns carry both lists. The
 			// old code rejected this as ambiguous, which is why the baseline
 			// pull could not run at all.
 			name:          "both lists is the live shape, not an error",
-			specListNames: []string{"Japanese Pokemon", "English Pokemon"},
+			specListNames: []string{"Pokemon - Japanese Language Only", "Pokemon - English Language Only"},
 			want:          []string{"english", "japanese"},
 		},
 		{
 			name:          "order is normalized, not preserved",
-			specListNames: []string{"English Pokemon", "Japanese Pokemon"},
+			specListNames: []string{"Pokemon - English Language Only", "Pokemon - Japanese Language Only"},
 			want:          []string{"english", "japanese"},
 		},
 		{
 			name:          "duplicates collapse to one token",
-			specListNames: []string{"Japanese Pokemon", "Japanese Pokemon"},
+			specListNames: []string{"Pokemon - Japanese Language Only", "Pokemon - Japanese Language Only"},
 			want:          []string{"japanese"},
 		},
 		{
@@ -140,7 +140,7 @@ func TestBaselineLanguages(t *testing.T) {
 			// we do understand would record a narrower buy scope than the
 			// portal actually has.
 			name:          "unmodelled list alongside modelled ones is still refused",
-			specListNames: []string{"Japanese Pokemon", "English Base Set", "English Pokemon"},
+			specListNames: []string{"Pokemon - Japanese Language Only", "English Base Set", "Pokemon - English Language Only"},
 			wantErr:       errUnrecognizedSpecListName,
 		},
 	}
@@ -169,7 +169,7 @@ func TestBaselineLanguages(t *testing.T) {
 func TestBaselineLanguagesErrorNamesTheList(t *testing.T) {
 	// The operator's only lead on a refused campaign is this message; it must
 	// carry the list name, not just the fact that something was unmodelled.
-	_, err := baselineLanguages([]string{"English Base Set", "Japanese Pokemon"})
+	_, err := baselineLanguages([]string{"English Base Set", "Pokemon - Japanese Language Only"})
 	if err == nil {
 		t.Fatal("baselineLanguages(): got nil error, want error")
 	}
@@ -197,7 +197,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
 				SpecListIDs:       []string{"uuid-jp", "uuid-en"},
-				SpecListNames:     []string{"Japanese Pokemon", "English Pokemon"},
+				SpecListNames:     []string{"Pokemon - Japanese Language Only", "Pokemon - English Language Only"},
 				SubjectFilter: psacampaign.CampaignFilter{
 					Type:     "Target",
 					Subjects: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}, {ID: 8105, Name: "Crystal Golem"}},
@@ -220,7 +220,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
 				SpecListIDs:       []string{"uuid-en"},
-				SpecListNames:     []string{"English Pokemon"},
+				SpecListNames:     []string{"Pokemon - English Language Only"},
 				SubjectFilter:     psacampaign.CampaignFilter{Type: "Exclude"},
 			},
 			want: inventory.Campaign{
@@ -258,7 +258,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
 				SpecListIDs:       []string{"uuid-jp", "uuid-en", "uuid-unknown"},
-				SpecListNames:     []string{"Japanese Pokemon", "English Pokemon"},
+				SpecListNames:     []string{"Pokemon - Japanese Language Only", "Pokemon - English Language Only"},
 				SubjectFilter:     psacampaign.CampaignFilter{Type: "Target"},
 			},
 			wantErr: errUnexplainedSpecListID,
@@ -281,7 +281,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
 				SpecListIDs:       []string{"uuid-en"},
-				SpecListNames:     []string{"English Pokemon"},
+				SpecListNames:     []string{"Pokemon - English Language Only"},
 				SubjectFilter: psacampaign.CampaignFilter{
 					Type:     "Include",
 					Subjects: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}},
@@ -301,7 +301,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
 				SpecListIDs:       []string{"uuid-en"},
-				SpecListNames:     []string{"English Pokemon"},
+				SpecListNames:     []string{"Pokemon - English Language Only"},
 				SubjectFilter: psacampaign.CampaignFilter{
 					Type:     "Target",
 					Subjects: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}},
@@ -358,7 +358,7 @@ func TestRunBaselinePull(t *testing.T) {
 	linkedComplete := psacampaign.PortalCampaign{
 		CampaignRequestID: "req-1", TargetingComplete: true,
 		SpecListIDs:   []string{"uuid-jp", "uuid-en"},
-		SpecListNames: []string{"Japanese Pokemon", "English Pokemon"},
+		SpecListNames: []string{"Pokemon - Japanese Language Only", "Pokemon - English Language Only"},
 		SubjectFilter: psacampaign.CampaignFilter{Type: "Target"},
 	}
 	linkedIncomplete := psacampaign.PortalCampaign{CampaignRequestID: "req-2", TargetingComplete: false}
@@ -371,7 +371,7 @@ func TestRunBaselinePull(t *testing.T) {
 	linkedIncompleteOtherwiseValid := psacampaign.PortalCampaign{
 		CampaignRequestID: "req-1", TargetingComplete: false,
 		SpecListIDs:   []string{"uuid-jp", "uuid-en"},
-		SpecListNames: []string{"Japanese Pokemon", "English Pokemon"},
+		SpecListNames: []string{"Pokemon - Japanese Language Only", "Pokemon - English Language Only"},
 		SubjectFilter: psacampaign.CampaignFilter{Type: "Target"},
 	}
 	linkedNoSpecList := psacampaign.PortalCampaign{
@@ -384,7 +384,7 @@ func TestRunBaselinePull(t *testing.T) {
 	linkedBadFilterType := psacampaign.PortalCampaign{
 		CampaignRequestID: "req-1", TargetingComplete: true,
 		SpecListIDs:   []string{"uuid-en"},
-		SpecListNames: []string{"English Pokemon"},
+		SpecListNames: []string{"Pokemon - English Language Only"},
 		SubjectFilter: psacampaign.CampaignFilter{Type: "Include"},
 	}
 	// The decode-time drop, end to end: the catalog explained neither id.

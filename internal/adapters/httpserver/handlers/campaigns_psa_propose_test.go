@@ -15,10 +15,11 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// englishSpecList is the ENABLED "English Pokemon" curated list, matched by
+// englishSpecList is the ENABLED "Pokemon - English Language Only" curated
+// list, matched by
 // diffCampaign()/noDiffPortal()'s TargetLanguage/SpecListIDs so their scalar
 // fixtures still produce zero diff by default.
-var englishSpecList = []psacampaign.SpecListRef{{ID: "sl-1", Name: "English Pokemon", Status: "ENABLED"}}
+var englishSpecList = []psacampaign.SpecListRef{{ID: "sl-1", Name: "Pokemon - English Language Only", Status: "ENABLED"}}
 
 // noDiffPortal matches the internal campaign fields exactly so
 // psacampaign.TranslateToDiff produces zero changes.
@@ -349,7 +350,7 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguages: []string{"english"},
 	}
 	englishCatalog := freshCatalog([]psacampaign.SpecListRef{
-		{ID: "sl-1", Name: "English Pokemon", Status: "ENABLED"},
+		{ID: "sl-1", Name: "Pokemon - English Language Only", Status: "ENABLED"},
 	}, nil)
 	tests := []struct {
 		name        string

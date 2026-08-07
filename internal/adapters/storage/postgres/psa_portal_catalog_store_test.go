@@ -41,8 +41,8 @@ func TestPSAPortalCatalogStore(t *testing.T) {
 	t.Run("save and read back spec lists", func(t *testing.T) {
 		// Synthetic fixture values — not real portal UUIDs.
 		want := []psacampaign.SpecListRef{
-			{ID: "fixture-uuid-japanese-pokemon", Name: "Japanese Pokemon", Status: "ENABLED"},
-			{ID: "fixture-uuid-english-pokemon", Name: "English Pokemon", Status: "ENABLED"},
+			{ID: "fixture-uuid-japanese-pokemon", Name: "Pokemon - Japanese Language Only", Status: "ENABLED"},
+			{ID: "fixture-uuid-english-pokemon", Name: "Pokemon - English Language Only", Status: "ENABLED"},
 		}
 		require.NoError(t, store.SaveSpecLists(ctx, want))
 

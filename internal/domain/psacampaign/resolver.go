@@ -57,8 +57,8 @@ type Resolver interface {
 // SpecListRef.Name. Only english/japanese are known today — the portal offers
 // no curated Chinese/Korean list at design time.
 var languageListNames = map[string]string{
-	"english":  "English Pokemon",
-	"japanese": "Japanese Pokemon",
+	"english":  "Pokemon - English Language Only",
+	"japanese": "Pokemon - Japanese Language Only",
 }
 
 // catalogResolver is the pure, in-memory Resolver built by NewCatalogResolver.

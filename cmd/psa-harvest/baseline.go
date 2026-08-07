@@ -61,7 +61,8 @@ func parseBoolFlag(v string) (bool, error) {
 // errNoSpecListName means the campaign named no curated spec lists at all.
 // This is the expected shape of the remaining CATEGORY-era campaigns (design
 // doc §8): their edit form predates the curated-list model, so it names no
-// "Japanese Pokemon" / "English Pokemon" list. They are not writable here; the
+// "Pokemon - Japanese Language Only" / "Pokemon - English Language Only" list.
+// They are not writable here; the
 // operator converts them by hand in the portal and re-runs the baseline.
 //
 // Distinct from errUnrecognizedSpecListName: an empty list is an expected,
@@ -103,9 +104,9 @@ func baselineLanguages(specListNames []string) ([]string, error) {
 	var unrecognized []string
 	for _, name := range specListNames {
 		switch name {
-		case "Japanese Pokemon":
+		case "Pokemon - Japanese Language Only":
 			seen[cardutil.LangJapanese] = true
-		case "English Pokemon":
+		case "Pokemon - English Language Only":
 			seen[cardutil.LangEnglish] = true
 		default:
 			unrecognized = append(unrecognized, name)

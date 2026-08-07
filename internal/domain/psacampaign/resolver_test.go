@@ -34,14 +34,14 @@ func TestNewCatalogResolver_Staleness(t *testing.T) {
 }
 
 func TestCatalogResolver_SpecListIDs(t *testing.T) {
-	// Synthetic fixture UUIDs — the real portal UUIDs for "Japanese Pokemon" and
-	// "English Pokemon" are unknown until the baseline pull runs (they are new
-	// portal entries). Do not treat these as real values.
+	// Synthetic fixture UUIDs — the list NAMES are the real portal ones,
+	// confirmed by the operator, but their UUIDs are unknown until the baseline
+	// pull runs (they are new portal entries). Do not treat the ids as real.
 	lists := []SpecListRef{
-		{ID: "fixture-uuid-japanese-pokemon", Name: "Japanese Pokemon", Status: "ENABLED"},
-		{ID: "fixture-uuid-english-pokemon", Name: "English Pokemon", Status: "ENABLED"},
+		{ID: "fixture-uuid-japanese-pokemon", Name: "Pokemon - Japanese Language Only", Status: "ENABLED"},
+		{ID: "fixture-uuid-english-pokemon", Name: "Pokemon - English Language Only", Status: "ENABLED"},
 		{ID: "fixture-uuid-riftbound", Name: "Riftbound", Status: "ENABLED"},
-		{ID: "fixture-uuid-disabled-english", Name: "english pokemon", Status: "DISABLED"},
+		{ID: "fixture-uuid-disabled-english", Name: "pokemon - english language only", Status: "DISABLED"},
 	}
 	now := time.Now()
 	fetchedAt := now.Add(-time.Hour)
@@ -87,7 +87,7 @@ func TestCatalogResolver_SpecListIDs(t *testing.T) {
 
 	t.Run("only disabled match yields ErrUnknownSpecList", func(t *testing.T) {
 		onlyDisabled := []SpecListRef{
-			{ID: "fixture-uuid-disabled-japanese", Name: "Japanese Pokemon", Status: "DISABLED"},
+			{ID: "fixture-uuid-disabled-japanese", Name: "Pokemon - Japanese Language Only", Status: "DISABLED"},
 		}
 		r, err := NewCatalogResolver(onlyDisabled, nil, fetchedAt, now)
 		if err != nil {
