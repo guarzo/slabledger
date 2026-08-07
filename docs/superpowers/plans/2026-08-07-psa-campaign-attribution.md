@@ -331,20 +331,35 @@ func (ps *PurchaseStore) UpdatePurchaseAttributionName(ctx context.Context, purc
 }
 ```
 
-- [ ] **Step 7: Add the columns to every purchase SELECT and scan**
+- [ ] **Step 7: Add the columns to every purchase read AND write path**
 
-Find the shared column list and row scanner in `purchase_store.go` (search for `cl_confidence_at_purchase`) and add `psa_campaign_name` and `attribution_source` to both, scanning into `sql.NullString` and assigning `.String` to the struct fields. Missing this is the most likely source of a silent read-back failure in Task 7.
+Four surfaces, all in `purchase_store.go`. Missing any one produces a silent data loss rather than a compile error:
 
-- [ ] **Step 8: Add the methods to the mock**
+1. **`CreatePurchase`'s INSERT column list** (`:42-100`) — the columns are enumerated explicitly, so a new field is simply not written. Add `psa_campaign_name, attribution_source` to the list, two new `$N` placeholders to the `VALUES` block, and `p.PSACampaignName, p.AttributionSource` to the `ExecContext` args in the same position. Renumbering: the list currently ends at `$61`, so the new ones are `$62, $63`.
+2. **The shared SELECT column list** — search for `cl_confidence_at_purchase` to find it.
+3. **The row scanner** — scan into `sql.NullString` and assign `.String`, matching how neighbouring nullable text columns are handled.
+4. **`GetPurchasesByGraderAndCertNumbers`** (`repository_purchase.go:45`) if it uses its own SELECT rather than the shared one. Task 7 reads `p.AttributionSource` and `p.CampaignID` from exactly this call.
 
-In `internal/testutil/mocks/`, add Fn-field methods to `PurchaseRepositoryMock` following the existing pattern:
+Without (1), Task 5 populates the Go fields correctly and Postgres stores NULL — Task 9's zero-NULL check is what would eventually catch it, long after the import looks like it worked.
+
+- [ ] **Step 8: Add the methods to all three PurchaseRepository implementations**
+
+`PurchaseRepository` has three implementations besides the Postgres store. Adding interface methods breaks all of them at compile time, and two are easy to miss:
+
+1. `mocks.PurchaseRepositoryMock` (`internal/testutil/mocks/inventory_purchase_repo.go:67` asserts conformance) — add Fn fields:
 
 ```go
-	ReattributePurchaseFn          func(ctx context.Context, purchaseID string, r inventory.Reattribution) error
+	ReattributePurchaseFn           func(ctx context.Context, purchaseID string, r inventory.Reattribution) error
 	UpdatePurchaseAttributionNameFn func(ctx context.Context, purchaseID, psaName, source string) error
 ```
 
 with methods that call the Fn if set and return nil otherwise.
+
+2. `mocks.InMemoryCampaignStore` (`internal/testutil/mocks/inmemory_campaign_store.go:100` asserts conformance) — this is the store passed to all seven repository slots in `inventory.NewService` throughout the domain tests (e.g. `internal/domain/inventory/service_test.go:316`). Implement both methods against the in-memory `Purchases` map, including the `ErrPurchaseHasSale` guard, so Task 7's service tests can exercise the sold-skip path without a database.
+
+3. `mockRepo` (`internal/domain/inventory/mock_repo_test.go:10`) — the package-internal test repo. Minimal implementations are fine here.
+
+Task 3's own test command will not compile until all three are updated.
 
 - [ ] **Step 9: Run tests to verify they pass**
 
@@ -354,7 +369,7 @@ Expected: PASS
 - [ ] **Step 10: Commit**
 
 ```bash
-git add internal/domain/inventory/attribution.go internal/domain/inventory/types_core.go internal/domain/inventory/repository_purchase.go internal/adapters/storage/postgres/purchase_store.go internal/adapters/storage/postgres/purchase_store_test.go internal/testutil/mocks/
+git add internal/domain/inventory/attribution.go internal/domain/inventory/types_core.go internal/domain/inventory/repository_purchase.go internal/domain/inventory/mock_repo_test.go internal/adapters/storage/postgres/purchase_store.go internal/adapters/storage/postgres/purchase_store_test.go internal/testutil/mocks/
 git commit -m "feat: add attribution provenance fields and reattribution persistence"
 ```
 
@@ -384,8 +399,8 @@ The port lives in `inventory` and the implementation in the adapter layer. `inve
 ```go
 func TestCampaignResolver_ResolveCampaignID(t *testing.T) {
 	portal := []psacampaign.PortalCampaign{
-		{ID: "req-modern", Name: "Modern"},
-		{ID: "req-crystal", Name: "Crystal"},
+		{CampaignRequestID: "req-modern", Name: "Modern"},
+		{CampaignRequestID: "req-crystal", Name: "Crystal"},
 	}
 	internal := []inventory.Campaign{
 		{ID: "camp-1", Name: "Modern", PSACampaignRequestID: "req-modern"},
@@ -421,7 +436,7 @@ func TestCampaignResolver_ResolveCampaignID(t *testing.T) {
 
 func TestCampaignResolver_RefusesStaleSnapshot(t *testing.T) {
 	stale := time.Now().Add(-27 * time.Hour)
-	r := newTestResolver(t, []psacampaign.PortalCampaign{{ID: "req-modern", Name: "Modern"}},
+	r := newTestResolver(t, []psacampaign.PortalCampaign{{CampaignRequestID: "req-modern", Name: "Modern"}},
 		[]inventory.Campaign{{ID: "camp-1", PSACampaignRequestID: "req-modern"}}, stale)
 	_, _, err := r.ResolveCampaignID(context.Background(), "Modern")
 	if !errors.Is(err, ErrStaleCampaignSnapshot) {
@@ -498,9 +513,11 @@ import (
 // silently fail to resolve names, or resolve them to superseded campaigns.
 var ErrStaleCampaignSnapshot = errors.New("psa campaign snapshot is stale")
 
-// CampaignLister reads internal campaigns and their portal links.
+// CampaignLister reads internal campaigns and their portal links. The signature
+// matches CampaignStore.ListCampaigns (internal/adapters/storage/postgres/campaign_store.go:69)
+// so the existing store satisfies this interface without a shim.
 type CampaignLister interface {
-	ListCampaigns(ctx context.Context) ([]inventory.Campaign, error)
+	ListCampaigns(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
 }
 
 // CampaignResolver implements inventory.PSACampaignResolver over the portal
@@ -538,7 +555,7 @@ func (r *CampaignResolver) ResolveCampaignID(ctx context.Context, psaName string
 	var requestID string
 	for _, pc := range portal {
 		if strings.EqualFold(strings.TrimSpace(pc.Name), name) {
-			requestID = pc.ID
+			requestID = pc.CampaignRequestID
 			break
 		}
 	}
@@ -546,7 +563,9 @@ func (r *CampaignResolver) ResolveCampaignID(ctx context.Context, psaName string
 		return "", false, nil // dead campaign name — expected, not an error
 	}
 
-	all, err := r.campaigns.ListCampaigns(ctx)
+	// activeOnly=false: a purchase can legitimately belong to a paused campaign,
+	// and reconciliation runs over historical rows.
+	all, err := r.campaigns.ListCampaigns(ctx, false)
 	if err != nil {
 		return "", false, fmt.Errorf("list campaigns: %w", err)
 	}
@@ -559,7 +578,7 @@ func (r *CampaignResolver) ResolveCampaignID(ctx context.Context, psaName string
 }
 ```
 
-Verify `psacampaign.PortalCampaign`'s name and ID field names against `internal/domain/psacampaign/` before writing this; adjust if they differ.
+The portal identifier field is `PortalCampaign.CampaignRequestID` (`internal/domain/psacampaign/types.go:6`) — there is no `PortalCampaign.ID`. `Campaign.PSACampaignRequestID` is the internal side of the link (`internal/domain/inventory/types_core.go:178`), read by `CampaignStore.ListCampaigns` as `COALESCE(psa_campaign_request_id, '')`, so unlinked campaigns hold `""` and never match a non-empty `requestID`.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -631,6 +650,28 @@ func TestImportPSA_PrefersPSAAttribution(t *testing.T) {
 
 `runSingleRowImport` builds the service with `inventory.WithPSACampaignResolver(stub)` and an in-memory store (`mocks.NewInMemoryCampaignStore()`), imports one `PSAExportRow`, and returns the created `Purchase`.
 
+Add this regression test alongside it — it is the one that fails if the synthesized `MatchResult` in Step 3 is dropped:
+
+```go
+func TestImportPSA_ResolvedRowIsAllocatedNotPending(t *testing.T) {
+	svc, repo := newPSAImportFixture(t, "camp-psa", true)
+	res, err := svc.ImportPSAExportGlobal(context.Background(),
+		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern", Date: "2026-08-01"}})
+	if err != nil {
+		t.Fatalf("ImportPSAExportGlobal: %v", err)
+	}
+	if res.Allocated != 1 {
+		t.Errorf("Allocated = %d, want 1", res.Allocated)
+	}
+	if got := res.Results[0].Status; got != "allocated" {
+		t.Errorf("Status = %q, want allocated — a zero-value MatchResult falls through to unmatched", got)
+	}
+	if len(repo.PendingItems) != 0 {
+		t.Errorf("pending items = %d, want 0", len(repo.PendingItems))
+	}
+}
+```
+
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/domain/inventory/ -run TestImportPSA_PrefersPSAAttribution -v`
@@ -638,10 +679,11 @@ Expected: FAIL — attribution fields empty
 
 - [ ] **Step 3: Resolve before inferring**
 
-In `service_import_psa.go`, replace the `FindMatchingCampaign` call site (~:104) with:
+In `service_import_psa.go`, replace the `FindMatchingCampaign` call site (~:104-115) with:
 
 ```go
 		// PSA's own attribution wins when it resolves; inference is the fallback.
+		var match MatchResult
 		var campaign *Campaign
 		attributionSource := AttributionSourceInferred
 
@@ -653,25 +695,30 @@ In `service_import_psa.go`, replace the `FindMatchingCampaign` call site (~:104)
 				// inference rather than dropping the row, and say so.
 				if s.logger != nil {
 					s.logger.Warn(ctx, "PSA campaign resolve failed, falling back to inference",
-						observability.String("cert", row.CertNumber),
+						observability.String("certNumber", row.CertNumber),
 						observability.String("psaCampaign", row.PSACampaignName),
 						observability.Err(rErr))
 				}
 			case ok:
-				campaign = campaignMap[campaignID]
-				if campaign != nil {
+				if c := campaignMap[campaignID]; c != nil {
+					campaign = c
+					// handleNewPSAPurchase switches exclusively on match.Status and
+					// falls through to "unmatched" by default. A resolved campaign
+					// must therefore be expressed as a synthesized matched result —
+					// leaving match at its zero value turns every PSA-resolved row
+					// into a pending item, i.e. the exact inverse of this feature.
+					match = MatchResult{Status: "matched", CampaignID: campaignID}
 					attributionSource = AttributionSourcePSA
 				}
 			default:
 				if s.logger != nil {
 					s.logger.Info(ctx, "PSA campaign name did not resolve",
-						observability.String("cert", row.CertNumber),
+						observability.String("certNumber", row.CertNumber),
 						observability.String("psaCampaign", row.PSACampaignName))
 				}
 			}
 		}
 
-		var match CampaignMatch
 		if campaign == nil {
 			match = FindMatchingCampaign(
 				gradeValue,
@@ -687,7 +734,9 @@ In `service_import_psa.go`, replace the `FindMatchingCampaign` call site (~:104)
 		}
 ```
 
-Leave the existing downstream handling of `match` (ambiguous/unmatched → pending items) intact. When PSA resolved the campaign, `match` stays its zero value and the pending-item path is not reached because `campaign != nil`. Verify that against the code below the call site and adjust if the zero `match` is read unconditionally.
+The type is `MatchResult` (`internal/domain/inventory/matching.go:142`), and `FindMatchingCampaign` returns `MatchResult{CampaignID: ..., Status: "matched"}` (`matching.go:164`). The synthesized value must match that shape exactly.
+
+Leave the existing `handleNewPSAPurchase(ctx, row, gradeValue, buyCostCents, meta, match, campaign)` call and all downstream ambiguous/unmatched handling untouched — the synthesized `match` routes a PSA-resolved row through the same `"matched"` branch that inference uses.
 
 - [ ] **Step 4: Set the fields on the new purchase**
 
@@ -744,9 +793,23 @@ The method is `ReassignPurchase(ctx, purchaseID, newCampaignID string) error` at
 Run: `go test ./internal/domain/inventory/ -run TestReassignPurchase_SetsManualSource -v`
 Expected: FAIL — `AttributionSource = "", want "manual"`
 
-- [ ] **Step 3: Set the source in the reassignment path**
+- [ ] **Step 3: Set the source atomically with the campaign move**
 
-After the successful `UpdatePurchaseCampaign` call, add a `UpdatePurchaseAttributionName` call preserving any existing `psa_campaign_name` and setting source to `AttributionSourceManual`. Read the current purchase first so the PSA name is not clobbered.
+Do **not** add a second `UpdatePurchaseAttributionName` call after `UpdatePurchaseCampaign`. The campaign move is a single guarded SQL statement (`purchase_store.go:336`); a follow-up write that fails leaves the purchase in a campaign it was hand-moved to while still claiming `attribution_source = 'inferred'` — a lie in exactly the column this feature exists to make trustworthy.
+
+Instead extend the existing statement. In `purchase_store.go`, add `attribution_source` to `UpdatePurchaseCampaign`'s SET clause:
+
+```go
+		`UPDATE campaign_purchases
+		 SET campaign_id = $1, psa_sourcing_fee_cents = $2, attribution_source = $3, updated_at = $4
+		 WHERE id = $5
+		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $6)`,
+		campaignID, sourcingFeeCents, inventory.AttributionSourceManual, time.Now(), purchaseID, purchaseID,
+```
+
+`UpdatePurchaseCampaign` has exactly one caller — `ReassignPurchase` (`service_crud.go:334`), the hand-assignment path — so hardcoding `manual` here is correct and needs no signature change. `psa_campaign_name` is deliberately left untouched: PSA's claim about this cert remains true and worth keeping even after an operator overrides where the purchase is booked.
+
+If a second caller is ever added, this constant must become a parameter. Note that in the method's doc comment.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -756,7 +819,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/domain/inventory/service_crud.go internal/domain/inventory/service_crud_test.go
+git add internal/domain/inventory/service_crud.go internal/domain/inventory/service_crud_test.go internal/adapters/storage/postgres/purchase_store.go
 git commit -m "feat: mark hand-assigned purchases as manual attribution"
 ```
 
@@ -766,15 +829,18 @@ git commit -m "feat: mark hand-assigned purchases as manual attribution"
 
 **Files:**
 - Create: `internal/domain/inventory/service_reconcile_psa.go`
+- Modify: `internal/domain/inventory/service_interfaces.go:39` (`ImportService`)
 - Test: `internal/domain/inventory/service_reconcile_psa_test.go`
 
 **Interfaces:**
 - Consumes: everything from Tasks 1, 3, 4.
 - Produces:
   - `inventory.ReconcileResult{Agreed, Moved, SoldSkipped, Unresolved, Failed int}`
-  - `Service.ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)`
+  - `ImportService.ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)`
 
 This is the core task. Keep it in its own file — `service_import_psa.go` is already large.
+
+`NewService` returns the exported `Service` interface (`service.go:327`), a composition of five sub-interfaces (`service.go:175`). A method defined only on `*service` is unreachable through it, so Task 8 could not call reconciliation at all. The method must be added to `ImportService` (`service_interfaces.go:39`), which already owns `ImportPSAExportGlobal` and is the natural home.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -886,7 +952,15 @@ func TestReconcilePSAAttribution_CLConfidenceFreezing(t *testing.T) {
 Run: `go test ./internal/domain/inventory/ -run TestReconcilePSAAttribution -v`
 Expected: FAIL — `svc.ReconcilePSAAttribution undefined`
 
-- [ ] **Step 3: Implement reconciliation**
+- [ ] **Step 3: Declare the method on ImportService**
+
+In `internal/domain/inventory/service_interfaces.go`, add to `ImportService` next to `ImportPSAExportGlobal`:
+
+```go
+	ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)
+```
+
+- [ ] **Step 4: Implement reconciliation**
 
 `internal/domain/inventory/service_reconcile_psa.go`:
 
@@ -990,9 +1064,7 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 				res.Failed++
 				s.logReconcileFailure(ctx, row.CertNumber, nErr)
 			}
-			s.logger.Info(ctx, "PSA reconcile: skipped sold purchase",
-				observability.String("cert", row.CertNumber),
-				observability.String("psaCampaign", row.PSACampaignName))
+			s.logSoldSkip(ctx, row.CertNumber, row.PSACampaignName)
 		case err != nil:
 			res.Failed++
 			s.logReconcileFailure(ctx, row.CertNumber, err)
@@ -1002,12 +1074,17 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 		}
 	}
 
-	s.logger.Info(ctx, "PSA attribution reconciled",
-		observability.Int("agreed", res.Agreed),
-		observability.Int("moved", res.Moved),
-		observability.Int("soldSkipped", res.SoldSkipped),
-		observability.Int("unresolved", res.Unresolved),
-		observability.Int("failed", res.Failed))
+	// s.logger is optional — NewService installs no default (service.go:337), and
+	// every other file in this package guards it. An unguarded call panics in any
+	// service constructed without WithLogger, which includes most domain tests.
+	if s.logger != nil {
+		s.logger.Info(ctx, "PSA attribution reconciled",
+			observability.Int("agreed", res.Agreed),
+			observability.Int("moved", res.Moved),
+			observability.Int("soldSkipped", res.SoldSkipped),
+			observability.Int("unresolved", res.Unresolved),
+			observability.Int("failed", res.Failed))
+	}
 	return res, nil
 }
 
@@ -1047,8 +1124,20 @@ func (s *service) recordUnresolvedAttribution(ctx context.Context, p *Purchase, 
 }
 
 func (s *service) logReconcileFailure(ctx context.Context, cert string, err error) {
+	if s.logger == nil {
+		return
+	}
 	s.logger.Error(ctx, "PSA reconcile: row failed",
-		observability.String("cert", cert), observability.Err(err))
+		observability.String("certNumber", cert), observability.Err(err))
+}
+
+func (s *service) logSoldSkip(ctx context.Context, cert, psaName string) {
+	if s.logger == nil {
+		return
+	}
+	s.logger.Info(ctx, "PSA reconcile: skipped sold purchase",
+		observability.String("certNumber", cert),
+		observability.String("psaCampaign", psaName))
 }
 ```
 
@@ -1059,20 +1148,20 @@ Implement `enqueueUnresolvedPendingItem` and `resolveStalePendingItem` against `
 - `SavePendingItems` upserts by `cert_number` and skips resolved items, so re-running a harvest is idempotent.
 - `ResolvePendingItem(ctx, id, campaignID)` takes the pending item's **ID**, not its cert number. `resolveStalePendingItem` must `ListPendingItems` and find the matching `CertNumber` first.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/domain/inventory/ -run TestReconcilePSAAttribution -v`
 Expected: PASS
 
-- [ ] **Step 5: Check the file size**
+- [ ] **Step 6: Check the file size**
 
 Run: `./scripts/check-file-size.sh`
 Expected: no failure for `service_reconcile_psa.go`. If it warns, split the pending-item helpers into `service_reconcile_psa_pending.go`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add internal/domain/inventory/service_reconcile_psa.go internal/domain/inventory/service_reconcile_psa_test.go
+git add internal/domain/inventory/service_reconcile_psa.go internal/domain/inventory/service_interfaces.go internal/domain/inventory/service_reconcile_psa_test.go
 git commit -m "feat: reconcile existing purchases against PSA campaign attribution"
 ```
 
@@ -1086,9 +1175,11 @@ git commit -m "feat: reconcile existing purchases against PSA campaign attributi
 
 **Interfaces:**
 - Consumes: `ReconcilePSAAttribution` (Task 7), `NewCampaignResolver` (Task 4).
-- Produces: reconciliation runs once per harvest, after both snapshots are refreshed.
+- Produces: reconciliation runs once per harvest, gated on the campaign snapshot having actually been refreshed this run.
 
-Ordering matters: reconciliation must run **after** the campaign snapshot save, so it resolves against the freshest campaign list.
+Ordering matters, and the harvest does not guarantee it on its own. Campaign fetch and save failures only log and continue (`cmd/psa-harvest/main.go:109`), and `SnapshotRowProvider.FetchRows` will happily serve a snapshot up to 26 hours old (`snapshotprovider.go:55`). So "after the snapshots refresh" is a sequence in the file, not a condition — reconciliation would otherwise run on a campaign list that this run failed to fetch.
+
+The itemized side is already safe: a >26h snapshot makes `FetchRows` return `ErrStaleSnapshot`, and Task 4's resolver independently refuses a >26h campaign snapshot. The gap is the middle case — a campaign fetch that failed this run against a snapshot still inside its 26h window, where a portal-side rename would resolve to the wrong campaign. Gate on the fetch actually having succeeded.
 
 - [ ] **Step 1: Dump the before-state**
 
@@ -1102,17 +1193,31 @@ Keep it until the reattribution is reviewed and the numbers accepted, then delet
 
 - [ ] **Step 2: Construct the resolver and call reconciliation**
 
-In `cmd/psa-harvest/main.go`, inside the `cfg.PSASync.CampaignSyncEnabled` block, after the snapshot save and before `DrainPushQueue`:
+In `cmd/psa-harvest/main.go`, first record whether the campaign snapshot was actually refreshed. The existing `switch` at `:107-115` already distinguishes the three outcomes — set a flag in its `default` (success) branch:
 
 ```go
-		resolver := psaportal.NewCampaignResolver(snap, campaignStore, nil)
-		rows, rowsErr := rowProvider.FetchRows(ctx)
+		campaignsFresh := false
+		// ... existing switch; in the default branch, after a successful SaveSnapshot:
+		//     campaignsFresh = true
+```
+
+Then, after the snapshot save and before `DrainPushQueue`:
+
+```go
 		switch {
-		case rowsErr != nil:
-			// Stale or missing itemized snapshot: skip reconciliation rather than
-			// reattributing on old data.
-			logger.Warn(ctx, "psa-harvest: skipping attribution reconcile", observability.Err(rowsErr))
+		case !campaignsFresh:
+			// The campaign list this run would resolve against was not refreshed.
+			// Reconciliation is idempotent, so skipping costs one cycle; running on
+			// a stale list risks resolving a renamed campaign to the wrong ID.
+			logger.Warn(ctx, "psa-harvest: skipping attribution reconcile, campaign snapshot not refreshed")
 		default:
+			rows, rowsErr := rowProvider.FetchRows(ctx)
+			if rowsErr != nil {
+				// Stale or missing itemized snapshot: skip rather than reattribute on old data.
+				logger.Warn(ctx, "psa-harvest: skipping attribution reconcile", observability.Err(rowsErr))
+				break
+			}
+			resolver := psaportal.NewCampaignResolver(snap, campaignStore, nil)
 			inv := buildInventoryService(db, logger, inventory.WithPSACampaignResolver(resolver))
 			res, recErr := inv.ReconcilePSAAttribution(ctx, rows)
 			if recErr != nil {
@@ -1126,7 +1231,7 @@ In `cmd/psa-harvest/main.go`, inside the `cfg.PSASync.CampaignSyncEnabled` block
 		}
 ```
 
-Adapt `buildInventoryService` and `campaignStore` to whatever this binary already has available — read the surrounding code and reuse its existing constructors rather than adding new ones.
+Adapt `buildInventoryService`, `campaignStore`, and `rowProvider` to whatever this binary already has available — read the surrounding code and reuse its existing constructors rather than adding new ones. `campaignStore` must satisfy `psaportal.CampaignLister`, which `*postgres.CampaignStore` does (`campaign_store.go:69`).
 
 - [ ] **Step 3: Build and verify**
 
@@ -1215,7 +1320,9 @@ rm -f /tmp/psa-attribution-before.csv
 ## Notes for the implementer
 
 - **The riskiest task is 4.** If `ResolveCampaignID` ends up in `internal/domain/inventory`, `make check` fails and the fix is a rewrite, not a patch. Run `./scripts/check-imports.sh` before committing it.
-- **Task 3 Step 7 is easy to skip and silently breaks Task 7.** If the new columns are not added to the shared SELECT list and row scanner, every read returns empty strings and reconciliation will appear to work while comparing against nothing.
-- **`s.pendingItemRepo` and `s.psaResolver` are both optional and may be nil.** Every path in Task 7 that touches them must nil-check first. The existing optional dependencies in `service.go:200-215` show the convention.
+- **Task 5's synthesized `MatchResult` is load-bearing.** `handleNewPSAPurchase` switches exclusively on `match.Status` and defaults to `"unmatched"` (`service_import_psa.go:241,306`). Drop the synthesized `MatchResult{Status: "matched", ...}` and every PSA-resolved row silently becomes a pending item — the inverse of this feature, with no error anywhere. `TestImportPSA_ResolvedRowIsAllocatedNotPending` is the guard.
+- **Task 3 Step 7 covers four surfaces, not one.** INSERT, SELECT, scanner, and the by-cert query. The INSERT is the dangerous omission: Go fields populate, Postgres stores NULL, and nothing fails until Task 9.
+- **Adding to `PurchaseRepository` breaks three implementations**, two of them easy to miss (`InMemoryCampaignStore`, `mockRepo`). The package will not compile until all three are updated.
+- **`s.logger`, `s.pendingItemRepo`, and `s.psaResolver` are all optional and may be nil.** Guard every one. `NewService` installs no default logger (`service.go:337`) and 39 call sites across this package already guard it.
 - **Do not route around `ErrPurchaseHasSale`.** It is a deliberate guard. Sold purchases keep their inferred campaign permanently until the sale-side provenance repair follow-up is designed.
 - **PSA names are stored verbatim.** Trim only at resolution time. The stored string must be exactly what PSA sent so a portal-side rename or deletion is always recoverable from our data.
