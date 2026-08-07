@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -546,3 +547,39 @@ func TestRunBaselinePull(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildBaselineCampaignStampsUpdatedAt(t *testing.T) {
+	// runBaselinePull writes through CampaignRepository.UpdateCampaign, which
+	// does not stamp UpdatedAt the way inventory.Service.UpdateCampaign does
+	// (service_crud.go:39). Without this assignment a baseline write changes a
+	// row's targeting while leaving updated_at at its pre-baseline value, and
+	// the UI's optimistic-concurrency check cannot see the write it exists to
+	// catch.
+	stale := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	existing := inventory.Campaign{
+		ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1",
+		UpdatedAt: stale,
+	}
+	pc := psacampaign.PortalCampaign{
+		CampaignRequestID: "req-1",
+		SpecListIDs:       []string{"uuid-en"},
+		SpecListNames:     []string{"Pokemon - English Language Only"},
+		SubjectFilter: psacampaign.CampaignFilter{
+			Type:     "Target",
+			Subjects: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}},
+		},
+	}
+
+	before := time.Now()
+	got, err := buildBaselineCampaign(existing, pc)
+	if err != nil {
+		t.Fatalf("buildBaselineCampaign(): unexpected error: %v", err)
+	}
+	if !got.UpdatedAt.After(stale) {
+		t.Errorf("UpdatedAt = %v, want a time after the pre-baseline %v", got.UpdatedAt, stale)
+	}
+	if got.UpdatedAt.Before(before) {
+		t.Errorf("UpdatedAt = %v, want at or after the call time %v", got.UpdatedAt, before)
+	}
+}
+
