@@ -217,7 +217,7 @@ func (s *CardLadderStore) ListMappings(ctx context.Context) ([]CLCardMapping, er
 // Mirrors MMPriceStats so the frontend can render a symmetric panel.
 type CLPriceStats struct {
 	UnsoldTotal  int    `json:"unsoldTotal"`  // Total unsold purchases
-	WithCLValue  int    `json:"withCLValue"`  // Unsold purchases with a CL value
+	WithCLValue  int    `json:"withCLValue"`  // Unsold purchases CardLadder has priced (cl_value_updated_at set)
 	SyncedCount  int    `json:"syncedCount"`  // Unsold purchases pushed to the CL remote collection
 	OldestUpdate string `json:"oldestUpdate"` // Oldest cl_value_updated_at among priced cards
 	NewestUpdate string `json:"newestUpdate"` // Newest cl_value_updated_at
@@ -236,6 +236,17 @@ func (s *CardLadderStore) GetCLFailures(ctx context.Context, sampleLimit int) (*
 // cl_card_mappings (i.e. the card is still in the CL remote collection) — more
 // accurate than cl_synced_at, which is a historical push timestamp that never
 // gets cleared when removeSoldCards prunes the mapping.
+//
+// "Priced" is decided by a non-empty cl_value_updated_at, never by
+// cl_value_cents. (Written that way deliberately: gofmt rewrites a bare
+// two-apostrophe empty-string literal in a doc comment into a typographic
+// quote, so the predicate is spelled out in prose here and in SQL below.)
+// cl_value_cents has a second writer — the Shopify external import in
+// purchase_price_store.go, which never calls CardLadder — so a positive value
+// there is not evidence CardLadder answered. cl_value_updated_at has exactly
+// one writer (purchase_store.go, behind a positive-value guard) and nothing
+// ever clears it, which makes it the sole honest authority. See
+// scripts/cl-coverage.sql for the reference implementation of this predicate.
 func (s *CardLadderStore) GetCLPriceStats(ctx context.Context) (*CLPriceStats, error) {
 	var stats CLPriceStats
 
@@ -243,11 +254,11 @@ func (s *CardLadderStore) GetCLPriceStats(ctx context.Context) (*CLPriceStats, e
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*) AS unsold_total,
-			COALESCE(SUM(CASE WHEN p.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS with_cl_value,
+			COALESCE(SUM(CASE WHEN p.cl_value_updated_at != '' THEN 1 ELSE 0 END), 0) AS with_cl_value,
 			COALESCE(SUM(CASE WHEN m.slab_serial IS NOT NULL THEN 1 ELSE 0 END), 0) AS synced_count,
-			COALESCE(MIN(CASE WHEN p.cl_value_cents > 0 AND p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS oldest_update,
-			COALESCE(MAX(CASE WHEN p.cl_value_cents > 0 AND p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS newest_update,
-			COALESCE(SUM(CASE WHEN p.cl_value_cents > 0 AND (p.cl_value_updated_at = '' OR p.cl_value_updated_at < $1) THEN 1 ELSE 0 END), 0) AS stale_count
+			COALESCE(MIN(CASE WHEN p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS oldest_update,
+			COALESCE(MAX(CASE WHEN p.cl_value_updated_at != '' THEN p.cl_value_updated_at END), '') AS newest_update,
+			COALESCE(SUM(CASE WHEN p.cl_value_updated_at != '' AND p.cl_value_updated_at < $1 THEN 1 ELSE 0 END), 0) AS stale_count
 		FROM campaign_purchases p
 		INNER JOIN campaigns c ON c.id = p.campaign_id
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id

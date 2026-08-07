@@ -259,3 +259,64 @@ func TestRunLoop_WGNil(t *testing.T) {
 		t.Fatal("RunLoop did not exit with nil WG")
 	}
 }
+
+// TestRunLoop_TickPhaseAnchoredToInitialRun pins the tick phase to the initial
+// run rather than to loop start. Callers that derive InitialDelay from a
+// wall-clock target (timeUntilHour in cardladder_refresh, psa_sync and
+// dh_analytics_refresh) depend on this: when the ticker was created before the
+// initial delay it had already fired and buffered a tick by the time the first
+// run finished, so the second run landed immediately and every run thereafter
+// was phase-locked to process start instead of the configured hour.
+//
+// Interval is deliberately shorter than InitialDelay to reproduce that: the
+// ticker would have fired at 40ms, mid-delay. If the phase regresses, the gap
+// between run 1 and run 2 collapses to ~0.
+func TestRunLoop_TickPhaseAnchoredToInitialRun(t *testing.T) {
+	const (
+		initialDelay = 60 * time.Millisecond
+		interval     = 40 * time.Millisecond
+	)
+
+	var mu sync.Mutex
+	var runs []time.Time
+	secondRun := make(chan struct{})
+
+	stopChan := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go RunLoop(ctx, LoopConfig{
+		Name:         "test",
+		Interval:     interval,
+		InitialDelay: initialDelay,
+		StopChan:     stopChan,
+		Logger:       nopLogger{},
+	}, func(_ context.Context) {
+		mu.Lock()
+		defer mu.Unlock()
+		runs = append(runs, time.Now())
+		if len(runs) == 2 {
+			close(secondRun)
+		}
+	})
+
+	select {
+	case <-secondRun:
+	case <-time.After(2 * time.Second):
+		t.Fatal("workFn was not called twice")
+	}
+	close(stopChan)
+
+	mu.Lock()
+	gap := runs[1].Sub(runs[0])
+	mu.Unlock()
+
+	// Assert only the lower bound. A loaded CI box can stretch the gap
+	// arbitrarily, but it can never shrink it below the interval, so an upper
+	// bound would be flaky without testing anything the lower bound misses.
+	// The regression drives this to ~0.
+	if gap < interval/2 {
+		t.Errorf("gap between initial run and first tick = %v, want >= %v "+
+			"(ticker phase regressed to process start)", gap, interval/2)
+	}
+}
