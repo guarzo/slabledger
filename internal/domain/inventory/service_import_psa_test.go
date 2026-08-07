@@ -2,6 +2,7 @@ package inventory_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -25,10 +26,10 @@ func (r stubPSAResolver) ResolveCampaignID(_ context.Context, psaName string) (s
 // newPSAImportFixture builds a service wired with an in-memory campaign store,
 // a stub PSA resolver, and both a PSA-resolvable campaign ("camp-psa") and an
 // inference-only fallback campaign ("camp-inferred").
-func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool) (inventory.Service, *mocks.InMemoryCampaignStore) {
+func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool, resolveErr error) (inventory.Service, *mocks.InMemoryCampaignStore) {
 	t.Helper()
 	repo := mocks.NewInMemoryCampaignStore()
-	resolver := stubPSAResolver{campaignID: resolveTo, ok: resolveOK}
+	resolver := stubPSAResolver{campaignID: resolveTo, ok: resolveOK, err: resolveErr}
 	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
 		withTestIDGen(), withDisabledBackgroundWorkers(),
 		inventory.WithPSACampaignResolver(resolver))
@@ -59,11 +60,12 @@ func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool) (invent
 
 // runSingleRowImport imports a single PSA row with the given raw PSA campaign
 // name and returns the resulting Purchase. The resolver resolves "Modern" to
-// "camp-psa" and rejects everything else, mirroring a PSA name that no longer
+// "camp-psa" (unless resolveErr is set, in which case every lookup fails
+// outright) and rejects everything else, mirroring a PSA name that no longer
 // maps to any known campaign.
-func runSingleRowImport(t *testing.T, psaName string) *inventory.Purchase {
+func runSingleRowImport(t *testing.T, psaName string, resolveErr error) *inventory.Purchase {
 	t.Helper()
-	svc, repo := newPSAImportFixture(t, "camp-psa", psaName == "Modern")
+	svc, repo := newPSAImportFixture(t, "camp-psa", psaName == "Modern", resolveErr)
 	ctx := context.Background()
 
 	row := inventory.PSAExportRow{
@@ -93,16 +95,20 @@ func TestImportPSA_PrefersPSAAttribution(t *testing.T) {
 	tests := []struct {
 		name           string
 		psaName        string
+		resolveErr     error
 		wantCampaignID string
 		wantSource     string
 	}{
-		{"psa resolves", "Modern", "camp-psa", inventory.AttributionSourcePSA},
-		{"psa name dead", "Brady modern", "camp-inferred", inventory.AttributionSourceInferred},
-		{"no psa name", "", "camp-inferred", inventory.AttributionSourceInferred},
+		{"psa resolves", "Modern", nil, "camp-psa", inventory.AttributionSourcePSA},
+		{"psa name dead", "Brady modern", nil, "camp-inferred", inventory.AttributionSourceInferred},
+		{"no psa name", "", nil, "camp-inferred", inventory.AttributionSourceInferred},
+		// Resolver lookup failed outright (e.g. stale snapshot) — must fall back
+		// to inference rather than dropping the row or treating it as PSA-attributed.
+		{"resolver error falls back to inference", "Modern", errors.New("stale snapshot"), "camp-inferred", inventory.AttributionSourceInferred},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := runSingleRowImport(t, tt.psaName)
+			got := runSingleRowImport(t, tt.psaName, tt.resolveErr)
 			if got.CampaignID != tt.wantCampaignID {
 				t.Errorf("CampaignID = %q, want %q", got.CampaignID, tt.wantCampaignID)
 			}
