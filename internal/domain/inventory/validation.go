@@ -44,7 +44,7 @@ var (
 // check rather than accepting them.
 //
 // This intentionally duplicates (rather than imports) psacampaign's
-// languageListNames map (internal/domain/psacampaign/resolver.go:51-54) —
+// languageListNames map (internal/domain/psacampaign/resolver.go:58-61) —
 // psacampaign already imports inventory to build ProposedDiffs, so the reverse
 // import would be a cycle. The same set is also duplicated in
 // cmd/psa-harvest/baseline.go and web/src/react/utils/campaignConstants.ts.

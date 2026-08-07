@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -88,6 +89,12 @@ func NewCatalogResolver(specLists []SpecListRef, subjects []SubjectRef, fetchedA
 // buys — a real-money change, invisible in a diff that shows only the ids that
 // survived. A future curated list SlabLedger does not model yet (Chinese, say)
 // therefore surfaces as a loud, self-explanatory failure.
+//
+// Deduped across tokens: two language tokens should never share a curated
+// list, but the portal catalog is harvested data outside our control, and a
+// duplicate id here would both double up prepackagedSpecListIds on the wire
+// and — since renderStringList sorts but does not dedup — leave the diff
+// against the portal's de-duplicated response perpetually non-empty.
 func (r *catalogResolver) SpecListIDs(languageTokens []string) ([]string, error) {
 	var ids []string
 	for _, token := range languageTokens {
@@ -95,7 +102,11 @@ func (r *catalogResolver) SpecListIDs(languageTokens []string) ([]string, error)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %q", err, token)
 		}
-		ids = append(ids, tokenIDs...)
+		for _, id := range tokenIDs {
+			if !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
+		}
 	}
 	return ids, nil
 }
