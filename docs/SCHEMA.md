@@ -317,7 +317,7 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `psa_campaign_request_id` | TEXT | | Linked PSA portal campaign request ID; added migration 000017 |
 | `target_languages` | JSONB | NOT NULL DEFAULT '[]' | `[]string` — curated PSA spec-list language tokens this campaign buys: any of `'english'`, `'japanese'`. An **empty array is an open net** (buys any language); a non-empty array requires the card's classified language to be a member. Unordered set — order is not meaningful and must not be compared. Added migration 000024 |
-| `subject_filter_mode` | TEXT | NOT NULL DEFAULT 'Target' | `'Target'` (buy only `subjects`) or `'Exclude'` (buy everything except `subjects`); added migration 000024 |
+| `subject_filter_mode` | TEXT | NOT NULL DEFAULT 'Target', CHECK IN ('Target','Exclude','') | `'Target'` (buy only `subjects`) or `'Exclude'` (buy everything except `subjects`); added migration 000024. `''` is permitted because the domain treats it as valid and both read and write paths normalize it to `'Target'` |
 | `subjects` | JSONB | NOT NULL DEFAULT '[]' | `[]TargetSubject` (`{id, name}`) — character subjects this campaign targets or excludes, ids copied verbatim from the portal. Migration 000024's legacy backfill writes id `-1` as a sentinel meaning "legacy name, never reconciled against the portal"; push translation refuses a campaign containing sentinel entries until a baseline pull replaces them. Id `0` is distinct and means "operator-typed name awaiting name-based resolution". Added migration 000024 |
 | `denied_specs` | JSONB | NOT NULL DEFAULT '[]' | `[]TargetSubject` — individual cards excluded regardless of `subjects`; added migration 000024 |
 

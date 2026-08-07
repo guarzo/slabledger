@@ -26,13 +26,19 @@ SET subjects = COALESCE(
 )
 WHERE c.inclusion_list IS NOT NULL AND trim(c.inclusion_list) <> '';
 
--- Constrain subject_filter_mode to the two modes the domain models. The Go
--- write path already normalizes via ValidateAndNormalizeCampaign, so this is
--- defense in depth against a direct SQL write or a future code path that
--- forgets to normalize: an unrecognized mode makes SubjectAxisMatches fall
--- through to Target semantics, silently inverting an Exclude campaign's
--- attribution rather than failing. Added after the backfill above so the
--- constraint validates rows the backfill just wrote.
+-- Constrain subject_filter_mode to the closed set the domain models. Defense in
+-- depth against a direct SQL write or a future code path that skips
+-- normalization: an unrecognized mode makes SubjectAxisMatches fall through to
+-- Target semantics, silently inverting an Exclude campaign's attribution rather
+-- than failing. Added after the backfill above so it validates rows the backfill
+-- just wrote.
+--
+-- The empty string is in the set deliberately. It is a valid domain state, not a
+-- gap: validSubjectFilterModes (inventory/validation.go) accepts it, and both
+-- campaign_store.go's read and write paths run it through
+-- normalizeSubjectFilterMode to Target. Excluding it here would make the
+-- database reject a campaign ValidateAndNormalizeCampaign considers valid — a
+-- constraint stricter than the contract it is meant to defend.
 ALTER TABLE campaigns
   ADD CONSTRAINT campaigns_subject_filter_mode_check
-  CHECK (subject_filter_mode IN ('Target', 'Exclude'));
+  CHECK (subject_filter_mode IN ('Target', 'Exclude', ''));

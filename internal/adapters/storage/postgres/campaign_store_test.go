@@ -129,13 +129,24 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 	assert.Equal(t, false, got.ExclusionMode)
 
 	// A row with an empty subject_filter_mode (simulating a pre-migration or
-	// otherwise blank row) normalizes to SubjectFilterTarget on read.
+	// otherwise blank row) normalizes to SubjectFilterTarget on read. Empty is a
+	// valid domain state per validSubjectFilterModes, so migration 000024's CHECK
+	// constraint permits it alongside the two named modes.
 	_, err = db.ExecContext(ctx,
 		`UPDATE campaigns SET subject_filter_mode = '' WHERE id = $1`, "camp-axes")
 	require.NoError(t, err)
 	got, err = repo.GetCampaign(ctx, "camp-axes")
 	require.NoError(t, err)
 	assert.Equal(t, inventory.SubjectFilterTarget, got.SubjectFilterMode)
+
+	// ...but the constraint still has teeth. Without this case, widening the
+	// CHECK to accept '' is indistinguishable from dropping it: an unrecognized
+	// mode reaches SubjectAxisMatches, which falls through to Target semantics
+	// and silently inverts an Exclude campaign's attribution instead of failing.
+	_, err = db.ExecContext(ctx,
+		`UPDATE campaigns SET subject_filter_mode = 'target' WHERE id = $1`, "camp-axes")
+	require.Error(t, err, "lowercase 'target' is not a recognized mode and must be rejected by the CHECK constraint")
+	assert.Contains(t, err.Error(), "campaigns_subject_filter_mode_check")
 
 	// Open-net case: an empty TargetLanguages is a legitimate, unfiltered
 	// campaign, not an error — and a nil Subjects/DeniedSpecs slice must
