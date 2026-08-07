@@ -237,10 +237,8 @@ export default function CampaignsPage() {
         // and the UPDATE sets every column, so an omitted field is written as
         // its zero value. Spreading `fresh` first is what keeps
         // psaCampaignRequestId and expectedFillRate intact. The bulk-paste path
-        // below strips expectedFillRate under a "server-owned field" comment —
-        // that is a pre-existing bug (it zeroes the field on every paste
-        // update), not a correct pattern to mirror here. Out of scope for this
-        // branch; needs its own fix and review.
+        // below now spreads a freshly-read row the same way, behind the same
+        // updatedAt guard.
         await updateMutation.mutateAsync({ id: editing.id, data: { ...fresh, ...values } });
         setEditing(null);
         toast.success(
@@ -404,20 +402,48 @@ export default function CampaignsPage() {
                 // same mutation overwrite internal state, losing all but one.
                 for (const input of parsed) {
                   try {
-                    const existing = allCampaigns.find(c => c.name.toLowerCase() === input.name.toLowerCase());
-                    if (existing) {
-                      // Re-read before merging. `existing` comes from the cached
-                      // campaign list, and this is a full-object PUT — building it
-                      // from a stale copy silently reverts any field changed
-                      // elsewhere since the last list fetch. A 404 here (campaign
-                      // deleted since the list loaded) is caught below and reported
-                      // against this name rather than overwriting a fresh record.
-                      const fresh = await api.getCampaign(existing.id);
+                    const cached = allCampaigns.find(c => c.name.toLowerCase() === input.name.toLowerCase());
+                    if (cached) {
+                      // Re-read over the network before the full-row PUT, the same
+                      // guard the edit form uses: allCampaigns is React Query data
+                      // held fresh for CAMPAIGN_STALE_TIME, and the racing writer is
+                      // the psa-harvest baseline pull, whose write the cache cannot
+                      // observe. Without this, a paste spreads the cached row and
+                      // writes its stale targeting ids back over a newer baseline.
+                      // This narrows the race to the GET→PUT round-trip; it does not
+                      // close it. Closing it needs a conditional UPDATE keyed on
+                      // updated_at with a 409, which is a domain-interface change the
+                      // edit path would want too — deliberately not done here.
+                      let fresh: Campaign;
+                      try {
+                        fresh = await api.getCampaign(cached.id);
+                      } catch (err) {
+                        // Fail closed, but per campaign: skip this one and keep
+                        // importing the rest of the block.
+                        reportError('Campaign paste staleness check', err);
+                        errors.push(`${input.name}: could not confirm the campaign is unchanged — not updated`);
+                        continue;
+                      }
+                      if (fresh.updatedAt !== cached.updatedAt) {
+                        // No invalidate here — the unconditional one after this loop
+                        // already refreshes the list, so a re-paste sees current data.
+                        errors.push(`${input.name}: changed since the campaign list loaded (most likely the harvester baseline pull) — not updated`);
+                        continue;
+                      }
                       // Only overlay fields that were explicitly in the import text;
-                      // omitted fields (e.g. PSA Sourcing Fee) keep their current values.
-                      // Strip server-owned fields so only mutable data is sent.
-                      const { id: _id, createdAt: _ca, updatedAt: _ua, expectedFillRate: _efr, ...base } = fresh;
-                      await api.updateCampaign(existing.id, { ...base, ...input });
+                      // omitted fields (e.g. PSA Sourcing Fee) keep their current
+                      // values. Everything else rides along verbatim because this is
+                      // a full-row PUT: HandleUpdateCampaign decodes a whole
+                      // inventory.Campaign and the UPDATE sets every column, so an
+                      // omitted field is written as its zero value. That is why
+                      // expectedFillRate is no longer stripped — it is operator-owned
+                      // (campaign_store.go binds c.ExpectedFillRate verbatim and
+                      // nothing derives it), so stripping it zeroed the column on
+                      // every paste update. id/createdAt/updatedAt are the genuinely
+                      // server-owned ones: id comes from the URL, created_at is not in
+                      // the UPDATE, and the service stamps UpdatedAt itself.
+                      const { id: _id, createdAt: _ca, updatedAt: _ua, ...base } = fresh;
+                      await api.updateCampaign(cached.id, { ...base, ...input });
                       updated++;
                     } else {
                       // New campaigns get defaults for any fields not in the text.
