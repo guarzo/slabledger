@@ -1,6 +1,13 @@
 import type { Campaign, CreateCampaignInput } from '../../types/campaigns';
 
 /**
+ * CreateCampaignInput has no `expectedFillRate` key (it isn't set at creation
+ * time), but the edit form renders that field via `showFees` and must seed
+ * and round-trip it like every other server-owned value.
+ */
+export type EditCampaignFormValues = CreateCampaignInput & { expectedFillRate: number };
+
+/**
  * Seeds the campaign edit form from an existing campaign.
  *
  * Every key of CreateCampaignInput is assigned explicitly, `phase` included.
@@ -19,7 +26,7 @@ import type { Campaign, CreateCampaignInput } from '../../types/campaigns';
  * The `?? []` fallbacks are load-bearing: Go marshals a nil slice as JSON null,
  * so a campaign that never had targeting set arrives with null, not [].
  */
-export function toFormValues(c: Campaign): CreateCampaignInput {
+export function toFormValues(c: Campaign): EditCampaignFormValues {
   return {
     name: c.name,
     sport: c.sport,
@@ -35,6 +42,7 @@ export function toFormValues(c: Campaign): CreateCampaignInput {
     deniedSpecs: (c.deniedSpecs ?? []).map(s => ({ ...s })),
     psaSourcingFeeCents: c.psaSourcingFeeCents,
     ebayFeePct: c.ebayFeePct,
+    expectedFillRate: c.expectedFillRate,
     phase: c.phase,
   };
 }

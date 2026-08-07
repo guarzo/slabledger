@@ -7,7 +7,7 @@ import { AuthProvider } from '../../contexts/AuthContext';
 import type { Campaign, CreateCampaignInput } from '../../../types/campaigns';
 import type { PSAPushRow } from '../../../types/campaigns';
 import type { UseFormReturn } from '../../hooks/useForm';
-import { toFormValues } from '../../utils/campaignFormValues';
+import { toFormValues, type EditCampaignFormValues } from '../../utils/campaignFormValues';
 
 vi.mock('../../../js/api', () => ({
   api: { get: vi.fn().mockRejectedValue({ status: 401 }) },
@@ -68,7 +68,7 @@ function renderTab(
   psaPushMap: Record<string, PSAPushRow>,
   opts: {
     editingCampaign?: Campaign | null;
-    editForm?: UseFormReturn<CreateCampaignInput>;
+    editForm?: UseFormReturn<EditCampaignFormValues>;
     onEdit?: (c: Campaign) => void;
   } = {},
 ) {
@@ -88,7 +88,7 @@ function renderTab(
             createMutation={{ isPending: false }}
             onToggleCreate={vi.fn()}
             editingCampaign={editingCampaign}
-            editForm={editFormArg ?? fakeForm}
+            editForm={editFormArg ?? (fakeForm as unknown as UseFormReturn<EditCampaignFormValues>)}
             updateMutation={{ isPending: false }}
             onEdit={onEdit}
             onCancelEdit={vi.fn()}
@@ -181,7 +181,7 @@ it('renders the edit card with the seeded form values when a campaign is being e
   const editForm = {
     ...fakeForm,
     values: toFormValues(campaign),
-  } as unknown as UseFormReturn<CreateCampaignInput>;
+  } as unknown as UseFormReturn<EditCampaignFormValues>;
 
   renderTab([campaign], {}, { editingCampaign: campaign, editForm });
 

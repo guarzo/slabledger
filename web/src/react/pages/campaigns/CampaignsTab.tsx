@@ -6,6 +6,7 @@ import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
 import PSAPublishModal from '../campaign-detail/PSAPublishModal';
 import type { UseFormReturn } from '../../hooks/useForm';
+import type { EditCampaignFormValues } from '../../utils/campaignFormValues';
 import { phaseHexColors } from '../../utils/campaignConstants';
 import { syncState, SYNC_LABELS, SYNC_TONES } from '../../utils/psaPush';
 
@@ -70,7 +71,7 @@ export default function CampaignsTab({
   /** The campaign currently being edited, or null. The parent owns this state
       and the seeded form; the tab only renders and reports intent. */
   editingCampaign: Campaign | null;
-  editForm: UseFormReturn<CreateCampaignInput>;
+  editForm: UseFormReturn<EditCampaignFormValues>;
   updateMutation: { isPending: boolean };
   onEdit: (c: Campaign) => void;
   onCancelEdit: () => void;
@@ -133,7 +134,7 @@ export default function CampaignsTab({
               </div>
               <CampaignFormFields
                 values={editForm.values}
-                onChange={(field, value) => editForm.handleChange(field as keyof CreateCampaignInput, value)}
+                onChange={(field, value) => editForm.handleChange(field as keyof EditCampaignFormValues, value)}
                 nameError={editForm.touched.name ? editForm.errors.name : undefined}
                 onNameBlur={() => editForm.handleBlur('name')}
                 showPhase

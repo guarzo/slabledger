@@ -20,7 +20,7 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
     phase: 'closed',
     psaSourcingFeeCents: 300,
     ebayFeePct: 0.1235,
-    expectedFillRate: 0.42,
+    expectedFillRate: 42,
     psaCampaignRequestId: 'req-1',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-02-02T00:00:00Z',
@@ -35,6 +35,14 @@ describe('toFormValues', () => {
     expect(v.subjectFilterMode).toBe('Exclude');
     expect(v.subjects).toEqual([{ id: 22210, name: 'Machamp' }, { id: 0, name: 'Mewtwo' }]);
     expect(v.deniedSpecs).toEqual([{ id: 4807, name: 'Charizard' }]);
+  });
+
+  it('seeds expectedFillRate from the campaign', () => {
+    // The field renders on the edit form (showFees) but has no key on
+    // CreateCampaignInput; a missing seed here means the form shows a blank
+    // input for a campaign with a real stored value.
+    const v = toFormValues(makeCampaign({ expectedFillRate: 42 }));
+    expect(v.expectedFillRate).toBe(42);
   });
 
   it('preserves portal-issued subject ids exactly', () => {

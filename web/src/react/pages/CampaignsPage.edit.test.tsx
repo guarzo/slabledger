@@ -23,7 +23,7 @@ const campaign: Campaign = {
   phase: 'active',
   psaSourcingFeeCents: 300,
   ebayFeePct: 0.1235,
-  expectedFillRate: 0.42,
+  expectedFillRate: 42,
   psaCampaignRequestId: 'req-1',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-02-02T00:00:00Z',
@@ -94,7 +94,9 @@ it('sends the full campaign so a full-row PUT cannot blank server-owned fields',
   // psaCampaignRequestId silently unlinks the campaign from the portal, and
   // expectedFillRate zeroes an analytics input.
   expect(data.psaCampaignRequestId).toBe('req-1');
-  expect(data.expectedFillRate).toBe(0.42);
+  // Seeded from the campaign by toFormValues (not absent, not zeroed by the
+  // onChange-commits-immediately field) and preserved through the save spread.
+  expect(data.expectedFillRate).toBe(42);
 });
 
 it('round-trips existing portal subject ids byte-for-byte', async () => {
@@ -136,4 +138,28 @@ it('aborts the save when the staleness check itself fails', async () => {
   await waitFor(() => expect(getCampaign).toHaveBeenCalled());
   expect(updateMutateAsync).not.toHaveBeenCalled();
   expect(await screen.findByText(/could not confirm/i)).toBeInTheDocument();
+});
+
+it('sends the operator-edited name, not just the pre-edit snapshot', async () => {
+  // All the other tests here save without touching a field, so
+  // `{ ...fresh, ...values }` and `{ ...values, ...fresh }` at
+  // CampaignsPage.tsx's save handler produce identical payloads either way.
+  // This test changes a field first, so reversing that spread order — which
+  // would silently discard every operator edit while still reporting success
+  // — turns this assertion red.
+  getCampaign.mockResolvedValue(campaign);
+  const user = userEvent.setup();
+  renderPage();
+  await user.click(screen.getByRole('button', { name: /edit vintage core/i }));
+  // The Name Input's label isn't wired to the input via htmlFor/id (a
+  // pre-existing gap in CampaignFormFields, out of scope here), so
+  // getByLabelText can't reach it — select by the seeded display value instead.
+  const nameInput = await screen.findByDisplayValue('Vintage Core');
+  await user.clear(nameInput);
+  await user.type(nameInput, 'Vintage Core Renamed');
+  await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+  await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
+  const { data } = updateMutateAsync.mock.calls[0][0];
+  expect(data.name).toBe('Vintage Core Renamed');
 });

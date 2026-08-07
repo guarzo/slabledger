@@ -19,7 +19,7 @@ import { useCampaigns, useCreateCampaign, useUpdateCampaign, usePortfolioHealth,
 import CampaignsPortfolioHero from './campaigns/CampaignsPortfolioHero';
 import CampaignsTab from './campaigns/CampaignsTab';
 import InvoicesSection from '../components/insights/InvoicesSection';
-import { toFormValues } from '../utils/campaignFormValues';
+import { toFormValues, type EditCampaignFormValues } from '../utils/campaignFormValues';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
 
@@ -194,8 +194,11 @@ export default function CampaignsPage() {
     },
   });
 
-  const editForm = useForm<CreateCampaignInput>({
-    initialValues: { ...defaultCampaignInput },
+  const editForm = useForm<EditCampaignFormValues>({
+    // expectedFillRate is only meaningful once handleEdit seeds real data via
+    // toFormValues; this placeholder is never shown (the edit form only
+    // mounts once `editing` is set, immediately after reset()).
+    initialValues: { ...defaultCampaignInput, expectedFillRate: 0 },
     validate: validateCampaignForm,
     onSubmit: async (values) => {
       if (!editing) return;
@@ -218,6 +221,10 @@ export default function CampaignsPage() {
       }
 
       if (fresh.updatedAt !== editing.updatedAt) {
+        // The toast's "start from current data" advice is only true if the
+        // cache is actually refreshed — otherwise re-opening Edit re-reads
+        // the same stale row from the query cache and fails this check again.
+        await queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
         toast.error(
           'This campaign changed since you opened the form — most likely the harvester baseline pull. ' +
           'Nothing was saved. Close and re-open Edit to start from current data.',
@@ -229,9 +236,11 @@ export default function CampaignsPage() {
         // Full-row PUT: HandleUpdateCampaign decodes a whole inventory.Campaign
         // and the UPDATE sets every column, so an omitted field is written as
         // its zero value. Spreading `fresh` first is what keeps
-        // psaCampaignRequestId and expectedFillRate intact. This is deliberately
-        // NOT the pattern used by the bulk-paste path below, which strips
-        // expectedFillRate — correct there, wrong here.
+        // psaCampaignRequestId and expectedFillRate intact. The bulk-paste path
+        // below strips expectedFillRate under a "server-owned field" comment —
+        // that is a pre-existing bug (it zeroes the field on every paste
+        // update), not a correct pattern to mirror here. Out of scope for this
+        // branch; needs its own fix and review.
         await updateMutation.mutateAsync({ id: editing.id, data: { ...fresh, ...values } });
         setEditing(null);
         toast.success(
