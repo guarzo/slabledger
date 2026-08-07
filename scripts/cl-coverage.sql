@@ -38,7 +38,8 @@ WITH classified AS (
             -- 'pending' forever.
             WHEN c.phase <> 'closed'
                  AND NOT EXISTS (
-                     SELECT 1 FROM campaign_sales s WHERE s.purchase_id = p.id
+                     SELECT 1 FROM campaign_sales s
+                     WHERE s.purchase_id = p.id
                  )                                               THEN 'pending'
             -- Created before CardLadder ever ran, and never touched by it.
             -- The cl_last_error = '' guard matters: a quota-marked row proves

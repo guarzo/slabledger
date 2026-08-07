@@ -2,6 +2,9 @@ package postgres
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +23,35 @@ func TestCLCoverageEraStart_IsPinned(t *testing.T) {
 	assert.Equal(t, "2026-04-13 04:00:13", ts)
 }
 
+// The era literal in scripts/cl-coverage.sql is a hand-maintained copy of
+// CLCoverageEraStart -- the script must run with zero application dependencies
+// during an incident, so it cannot read the constant. This test is what makes
+// that copy enforced rather than merely documented: change the constant without
+// updating the script and this fails.
+func TestCLCoverageScript_MatchesEraStart(t *testing.T) {
+	ts, err := clCoverageEraTimestamp()
+	require.NoError(t, err)
+
+	// Test binaries run in their package directory; the repo root is four up.
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "cl-coverage.sql"))
+	require.NoError(t, err)
+
+	// Comment lines are excluded: the script's header quotes the same literal
+	// while explaining the hand-sync rule, and matching that would let the
+	// executable literal drift while the test stayed green.
+	var stmt strings.Builder
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "--") {
+			continue
+		}
+		stmt.WriteString(line)
+		stmt.WriteString("\n")
+	}
+
+	assert.Contains(t, stmt.String(), "TIMESTAMP '"+ts+"'",
+		"scripts/cl-coverage.sql must carry the CLCoverageEraStart literal")
+}
+
 func TestFoldCLCoverage(t *testing.T) {
 	pct := func(f float64) *float64 { return &f }
 
@@ -27,6 +59,10 @@ func TestFoldCLCoverage(t *testing.T) {
 		name string
 		rows []clCoverageRow
 		want *CLCoverageReport
+		// wantMonthOrder, when set, asserts the month sequence instead of the
+		// full report. Used for the ordering case, where the report body is
+		// uninteresting; want stays nil-able for its own sake elsewhere.
+		wantMonthOrder []string
 	}{
 		{
 			name: "pending and preCL are excluded from the denominator",
@@ -107,7 +143,7 @@ func TestFoldCLCoverage(t *testing.T) {
 				{Month: "2026-07", Cohort: "campaign", Bucket: "resolved", N: 1},
 				{Month: "2026-06", Cohort: "campaign", Bucket: "resolved", N: 1},
 			},
-			want: nil, // asserted separately below
+			wantMonthOrder: []string{"2026-08", "2026-07", "2026-06"},
 		},
 		{
 			name: "no rows yields an empty months slice, not nil",
@@ -119,12 +155,12 @@ func TestFoldCLCoverage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := foldCLCoverage(tt.rows)
-			if tt.want == nil {
+			if tt.wantMonthOrder != nil {
 				var months []string
 				for _, m := range got.Months {
 					months = append(months, m.Month)
 				}
-				assert.Equal(t, []string{"2026-08", "2026-07", "2026-06"}, months)
+				assert.Equal(t, tt.wantMonthOrder, months)
 				return
 			}
 			assert.Equal(t, tt.want, got)
@@ -132,15 +168,18 @@ func TestFoldCLCoverage(t *testing.T) {
 	}
 }
 
+// coverageSeed is one fixture row for seedCoveragePurchase.
+type coverageSeed struct {
+	ID, CampaignID, PurchaseDate, Source, CLUpdatedAt, LastError string
+	CLValueCents                                                 int
+	CreatedAt                                                    time.Time
+}
+
 // seedCoveragePurchase inserts one purchase with the columns this query reads,
 // plus the three NOT NULL columns that have no schema default (card_name,
 // cert_number, purchase_date). cert_number must be distinct per row --
 // UNIQUE(grader, cert_number) at initial_schema:232 -- so it is derived from ID.
-func seedCoveragePurchase(t *testing.T, db *DB, p struct {
-	ID, CampaignID, PurchaseDate, Source, CLUpdatedAt, LastError string
-	CLValueCents                                                 int
-	CreatedAt                                                    time.Time
-}) {
+func seedCoveragePurchase(t *testing.T, db *DB, p coverageSeed) {
 	t.Helper()
 	_, err := db.ExecContext(context.Background(),
 		`INSERT INTO campaign_purchases
@@ -167,13 +206,7 @@ func TestGetCLCoverageByMonth_Classification(t *testing.T) {
 		   ('external', 'External', 'active')`)
 	require.NoError(t, err)
 
-	type seed = struct {
-		ID, CampaignID, PurchaseDate, Source, CLUpdatedAt, LastError string
-		CLValueCents                                                 int
-		CreatedAt                                                    time.Time
-	}
-
-	for _, p := range []seed{
+	for _, p := range []coverageSeed{
 		// resolved: timestamp set, value 0. CL spoke; cl_value_cents is not
 		// the authority.
 		{ID: "r1", CampaignID: "open-camp", PurchaseDate: "2026-06-01", Source: "Grading",
@@ -299,11 +332,7 @@ func TestGetCLCoverageByMonth_ReassignedCohortDrift(t *testing.T) {
 
 	// purchase_source set but campaign_id reassigned to 'external': counts in
 	// the campaign cohort (intake origin wins) AND increments reassigned.
-	seedCoveragePurchase(t, db, struct {
-		ID, CampaignID, PurchaseDate, Source, CLUpdatedAt, LastError string
-		CLValueCents                                                 int
-		CreatedAt                                                    time.Time
-	}{
+	seedCoveragePurchase(t, db, coverageSeed{
 		ID: "x1", CampaignID: "external", PurchaseDate: "2026-05-04", Source: "Vault",
 		CLUpdatedAt: "2026-05-05T00:00:00Z",
 		CreatedAt:   time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC),
