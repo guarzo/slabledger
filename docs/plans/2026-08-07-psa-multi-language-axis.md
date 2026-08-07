@@ -233,31 +233,33 @@ func TestValidateAndNormalizeCampaign_NormalizesTargetLanguages(t *testing.T) {
 
 Add `"slices"` to `validation_test.go`'s import block.
 
-Then replace the language cases in `internal/domain/inventory/matching_test.go` — at `:114` and `:122` the field literal `TargetLanguage: "japanese",` becomes `TargetLanguages: []string{"japanese"},` — and append this new test to that file:
+Then replace the language cases in `internal/domain/inventory/matching_test.go` — at `:114` and `:122` the field literal `TargetLanguage: "japanese",` becomes `TargetLanguages: []string{"japanese"},`. (Task 3 later expands that same region to five cases; this task changes only the two literals it must change to compile.)
+
+Then replace `TestLanguageAxisMatches` at `matching_test.go:215-234` entirely. **This is compile-forced work and cannot be deferred:** the existing test calls `LanguageAxisMatches(tt.setName, tt.targetLanguage)` with a `string` at `:224`, so it stops compiling the moment this task changes the signature, and this task's own gate is `go test ./internal/domain/inventory/...`.
 
 ```go
-// TestLanguageAxisMatches_Set pins the set semantics that make the live fleet
-// workable: every active campaign carries BOTH curated lists, so a two-token
-// set must match cards of either language, and an empty set stays an open net.
-func TestLanguageAxisMatches_Set(t *testing.T) {
+func TestLanguageAxisMatches(t *testing.T) {
 	tests := []struct {
-		name    string
-		setName string
-		langs   []string
-		want    bool
+		name            string
+		setName         string
+		targetLanguages []string
+		want            bool
 	}{
-		{name: "empty set is an open net", setName: "JAPANESE SV4a-SHINY TREASURE ex", langs: nil, want: true},
-		{name: "empty non-nil set is an open net", setName: "CELEBRATIONS CLASSIC COLLECTION", langs: []string{}, want: true},
-		{name: "single token matches", setName: "JAPANESE M1S-MEGA SYMPHONIA", langs: []string{"japanese"}, want: true},
-		{name: "single token rejects other language", setName: "SWSH BLACK STAR PROMO", langs: []string{"japanese"}, want: false},
-		{name: "both tokens match japanese", setName: "JAPANESE M1S-MEGA SYMPHONIA", langs: []string{"english", "japanese"}, want: true},
-		{name: "both tokens match english", setName: "SWSH BLACK STAR PROMO", langs: []string{"english", "japanese"}, want: true},
-		{name: "both tokens still reject chinese", setName: "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", langs: []string{"english", "japanese"}, want: false},
+		{"nil set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", nil, true},
+		{"empty set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{}, true},
+		{"japanese set matches japanese-only set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese"}, true},
+		{"chinese set does not match japanese-only set", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{"japanese"}, false},
+		{"english set matches english-only set", "SWSH BLACK STAR PROMO", []string{"english"}, true},
+		{"english set matches a both-languages set", "SWSH BLACK STAR PROMO", []string{"english", "japanese"}, true},
+		{"japanese set matches a both-languages set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"english", "japanese"}, true},
+		// The set is unordered: reversing the tokens must not change the answer.
+		{"membership is order-insensitive", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese", "english"}, true},
+		{"korean set matches neither token", "KOREAN S1-SWORD SHIELD", []string{"english", "japanese"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := LanguageAxisMatches(tt.setName, tt.langs); got != tt.want {
-				t.Errorf("LanguageAxisMatches(%q, %#v) = %v, want %v", tt.setName, tt.langs, got, tt.want)
+			if got := LanguageAxisMatches(tt.setName, tt.targetLanguages); got != tt.want {
+				t.Errorf("LanguageAxisMatches(%q, %v) = %v, want %v", tt.setName, tt.targetLanguages, got, tt.want)
 			}
 		})
 	}
@@ -266,7 +268,7 @@ func TestLanguageAxisMatches_Set(t *testing.T) {
 
 - [ ] **Step 2: Run the test (expect failure)**
 
-Run: `go test ./internal/domain/inventory/... -run 'TestValidateAndNormalizeCampaign|TestLanguageAxisMatches_Set'`
+Run: `go test ./internal/domain/inventory/... -run 'TestValidateAndNormalizeCampaign|TestLanguageAxisMatches'`
 
 Expected: FAIL to compile — `unknown field TargetLanguages in struct literal of type Campaign`, `undefined: ErrInvalidTargetLanguages`, and `too many arguments in call to LanguageAxisMatches`.
 
@@ -382,25 +384,41 @@ func normalizeTargetLanguages(in []string) ([]string, error) {
 
 Add `"sort"` to `validation.go`'s import block.
 
-In `internal/domain/inventory/matching.go`, replace `LanguageAxisMatches` (`:113-120`):
+Add `"slices"` to the import block at `internal/domain/inventory/matching.go:3-8`:
+
+```go
+import (
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
+)
+```
+
+In `internal/domain/inventory/matching.go`, replace `LanguageAxisMatches` (`:113-120`). **This is the final body — no later task rewrites it:**
 
 ```go
 // LanguageAxisMatches reports whether a set name satisfies the language axis.
-// An empty targetLanguages set is an open net and always matches; otherwise
-// the set name's classified language must be a member. Members are assumed
-// already normalized by ValidateAndNormalizeCampaign — this function does no
-// casing normalization of its own.
+// targetLanguages is an unordered SET of canonical tokens. An empty (or nil)
+// set is an open net and always matches; a non-empty set matches only when the
+// set name's classified language is a member.
+//
+// The set — rather than the single token this replaces — exists because every
+// live portal campaign carries BOTH the "English Pokemon" and "Japanese
+// Pokemon" curated spec lists. A single token could only ever describe half of
+// what those campaigns buy, so the other half's purchases fell through to
+// "unmatched" and were attributed to no campaign.
+//
+// Membership is a plain == comparison per element: cardutil.SetLanguage always
+// returns one of the canonical Lang* tokens, and ValidateAndNormalizeCampaign
+// lowercases every stored token, so this function performs no casing
+// normalization of its own — exactly as the single-token version did not.
 func LanguageAxisMatches(setName string, targetLanguages []string) bool {
 	if len(targetLanguages) == 0 {
 		return true
 	}
-	lang := cardutil.SetLanguage(setName)
-	for _, want := range targetLanguages {
-		if lang == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(targetLanguages, cardutil.SetLanguage(setName))
 }
 ```
 
@@ -414,7 +432,7 @@ And update the call site at `:98`:
 
 Run: `go test ./internal/domain/inventory/... -run 'TestValidateAndNormalizeCampaign|TestLanguageAxisMatches'`
 
-Expected: `ok  	github.com/guarzo/slabledger/internal/domain/inventory` — all `TestValidateAndNormalizeCampaign`, `TestValidateAndNormalizeCampaign_NormalizesTargetLanguages`, `TestLanguageAxisMatches` and `TestLanguageAxisMatches_Set` subtests pass.
+Expected: `ok  	github.com/guarzo/slabledger/internal/domain/inventory` — all `TestValidateAndNormalizeCampaign`, `TestValidateAndNormalizeCampaign_NormalizesTargetLanguages` and `TestLanguageAxisMatches` subtests pass.
 
 - [ ] **Step 5: Rewrite migration 000023 in place**
 
@@ -1001,8 +1019,6 @@ Expected: `.githooks/pre-commit` runs `go vet ./...` and `golangci-lint run --ne
 
 ---
 
----
-
 ### Task 3: Matching + downstream consumers
 
 **Files:**
@@ -1020,15 +1036,15 @@ The language closed set is deliberately duplicated in four places (`internal/dom
 
 | File | Change | Owning task |
 |---|---|---|
-| `internal/domain/inventory/matching_test.go` | `:110-125` two campaign literals take `TargetLanguages: []string{"japanese"}`; three new both-languages cases; `:215-234` `TestLanguageAxisMatches` table field becomes `targetLanguages []string` with a reversed-order case | **Task 3 (this one)** |
-| `internal/adapters/storage/postgres/campaign_coverage_test.go` | drop the `targetLanguage` helper parameter, the `target_language` INSERT column, all six call sites' language argument, and the `:37` assertion | **Task 3 (this one)** |
+| `internal/domain/inventory/matching_test.go` | `:215-234` `TestLanguageAxisMatches` rewritten to a `targetLanguages []string` table — **Task 1**, compile-forced. `:110-125` expanded from two campaign literals to five cases including three both-languages ones — **Task 3 (this one)**. | **Tasks 1 + 3** |
+| `internal/adapters/storage/postgres/campaign_coverage_test.go` | drop the `targetLanguage` helper parameter, the `target_language` INSERT column, all six call sites' language argument, and the `:37` assertion | **Task 2** |
 | `internal/domain/inventory/validation_test.go` | `:110-139` closed-set cases and `:179-191` lowercasing test move to `TargetLanguages []string`, plus a duplicate-token / both-tokens case | Task 1 |
 | `internal/adapters/storage/postgres/campaign_store_test.go` | `:91`, `:108`, `:140-156`, `:173` — round-trip a two-element set and the empty-set open net through JSONB | Task 2 |
 | `internal/domain/psacampaign/mapper_test.go` | `stubResolver`, `englishResolver`, every `TargetLanguage:` literal, plus new multi-language and sentinel tests | Task 4 |
 | `internal/adapters/httpserver/handlers/campaigns_psa_propose_test.go` | `:48` `diffCampaign()`, `:118` korean case, plus a new sentinel-refusal 400 case | Task 4 |
 | `cmd/psa-harvest/baseline_test.go` | `:154`, `:172`, `:199` — `baselineLanguage` returns a set, and the two-recognized-names case stops being an error | Task 5 |
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Add the multi-language match cases**
 
 Replace the two language cases at `internal/domain/inventory/matching_test.go:110-125` with these five (the last three are new — they pin the case the single-token model could not express):
 
@@ -1080,102 +1096,9 @@ Replace the two language cases at `internal/domain/inventory/matching_test.go:11
 		},
 ```
 
-Replace `TestLanguageAxisMatches` at `matching_test.go:215-234` entirely:
+`TestLanguageAxisMatches` at `matching_test.go:215-234` is NOT this task's to write — Task 1 already replaced it, because the old string-argument version stopped compiling the moment Task 1 changed the signature. Do not touch it here. This task's new coverage is the five `PurchaseMatchesCampaign`-level cases above, which exercise the axis through the full match path rather than the helper in isolation.
 
-```go
-func TestLanguageAxisMatches(t *testing.T) {
-	tests := []struct {
-		name            string
-		setName         string
-		targetLanguages []string
-		want            bool
-	}{
-		{"nil set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", nil, true},
-		{"empty set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{}, true},
-		{"japanese set matches japanese-only set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese"}, true},
-		{"chinese set does not match japanese-only set", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{"japanese"}, false},
-		{"english set matches english-only set", "SWSH BLACK STAR PROMO", []string{"english"}, true},
-		{"english set matches a both-languages set", "SWSH BLACK STAR PROMO", []string{"english", "japanese"}, true},
-		{"japanese set matches a both-languages set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"english", "japanese"}, true},
-		// The set is unordered: reversing the tokens must not change the answer.
-		{"membership is order-insensitive", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese", "english"}, true},
-		{"korean set matches neither token", "KOREAN S1-SWORD SHIELD", []string{"english", "japanese"}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := LanguageAxisMatches(tt.setName, tt.targetLanguages); got != tt.want {
-				t.Errorf("LanguageAxisMatches(%q, %v) = %v, want %v", tt.setName, tt.targetLanguages, got, tt.want)
-			}
-		})
-	}
-}
-```
-
-- [ ] **Step 2: Run the test — it must fail**
-
-```bash
-go test ./internal/domain/inventory/ -run 'TestPurchaseMatchesCampaign|TestLanguageAxisMatches' -race
-```
-
-Expected output (compile failure — Task 1 has already added the `TargetLanguages` field, so the break is the predicate's signature):
-
-```
-# github.com/guarzo/slabledger/internal/domain/inventory [github.com/guarzo/slabledger/internal/domain/inventory.test]
-internal/domain/inventory/matching_test.go:229:29: cannot use tt.targetLanguages (variable of type []string) as string value in argument to LanguageAxisMatches
-FAIL	github.com/guarzo/slabledger/internal/domain/inventory [build failed]
-```
-
-- [ ] **Step 3: Implement `LanguageAxisMatches` as set membership**
-
-Add `"slices"` to the import block at `internal/domain/inventory/matching.go:3-8`:
-
-```go
-import (
-	"slices"
-	"strconv"
-	"strings"
-
-	"github.com/guarzo/slabledger/internal/platform/cardutil"
-)
-```
-
-Update the call site at `matching.go:98`:
-
-```go
-	if !LanguageAxisMatches(in.SetName, c.TargetLanguages) {
-		return false
-	}
-```
-
-Replace `LanguageAxisMatches` at `matching.go:113-120`:
-
-```go
-// LanguageAxisMatches reports whether a set name satisfies the language axis.
-// targetLanguages is an unordered SET of canonical tokens. An empty (or nil)
-// set is an open net and always matches; a non-empty set matches only when the
-// set name's classified language is a member.
-//
-// The set — rather than the single token this replaces — exists because every
-// live portal campaign carries BOTH the "English Pokemon" and "Japanese
-// Pokemon" curated spec lists. A single token could only ever describe half of
-// what those campaigns buy, so the other half's purchases fell through to
-// "unmatched" and were attributed to no campaign.
-//
-// Membership is a plain == comparison per element: cardutil.SetLanguage always
-// returns one of the canonical Lang* tokens, and ValidateAndNormalizeCampaign
-// lowercases every stored token, so this function performs no casing
-// normalization of its own — exactly as the single-token version did not.
-func LanguageAxisMatches(setName string, targetLanguages []string) bool {
-	if len(targetLanguages) == 0 {
-		return true
-	}
-	return slices.Contains(targetLanguages, cardutil.SetLanguage(setName))
-}
-```
-
-Note what is preserved: the short-circuit on an empty axis (unchanged in spirit — `""` became `len(...) == 0`), and the ordering of `PurchaseMatchesCampaign`'s checks (year → grade → price → language → subject → deny). `SpecDenied`'s documented fail-open direction (`matching.go:180-187`) is untouched by this task; it never consulted the language axis.
-
-- [ ] **Step 4: Run the test — it must pass**
+- [ ] **Step 2: Run the new cases — they must pass immediately**
 
 ```bash
 go test ./internal/domain/inventory/ -run 'TestPurchaseMatchesCampaign|TestLanguageAxisMatches' -race
@@ -1187,14 +1110,41 @@ Expected output:
 ok  	github.com/guarzo/slabledger/internal/domain/inventory	0.0XXs
 ```
 
-- [ ] **Step 5: `internal/platform/cardutil/normalize_sets.go:357-358`** — comment only, no behavior change:
+**There is deliberately no red step here, and that is not an oversight.** Task 1
+already implemented set membership in `LanguageAxisMatches` — it had to, because
+changing `Campaign.TargetLanguages` breaks the call site at `matching.go:98` and
+the package would not compile otherwise. These five cases are therefore
+*characterization* coverage, not TDD: they pin the multi-language behavior at the
+`PurchaseMatchesCampaign` level, one layer above the helper Task 1 tested in
+isolation, so a later refactor of the match-ordering cannot silently drop the
+language axis.
+
+To confirm the cases are load-bearing rather than vacuous, temporarily change
+`LanguageAxisMatches` to `return len(targetLanguages) == 0` and re-run: the three
+both-languages cases must FAIL. Restore it.
+
+`SpecDenied`'s documented fail-open direction (`matching.go:180-187`) is untouched by this task; it never consulted the language axis.
+
+- [ ] **Step 3: Re-run the full package**
+
+```bash
+go test ./internal/domain/inventory/ -run 'TestPurchaseMatchesCampaign|TestLanguageAxisMatches' -race
+```
+
+Expected output:
+
+```
+ok  	github.com/guarzo/slabledger/internal/domain/inventory	0.0XXs
+```
+
+- [ ] **Step 4: `internal/platform/cardutil/normalize_sets.go:357-358`** — comment only, no behavior change:
 
 ```go
 // Language tokens. These are the canonical values stored in the
 // inventory.Campaign.TargetLanguages set and matched against set names.
 ```
 
-- [ ] **Step 6: Run the affected packages**
+- [ ] **Step 5: Run the affected packages**
 
 ```bash
 go build ./... && go test ./internal/domain/inventory/ ./internal/domain/demand/ ./internal/adapters/storage/postgres/ ./internal/platform/cardutil/ -race
@@ -1209,15 +1159,7 @@ ok  	github.com/guarzo/slabledger/internal/adapters/storage/postgres	0.0XXs [no 
 ok  	github.com/guarzo/slabledger/internal/platform/cardutil	0.0XXs
 ```
 
-Then run the Postgres suite against a throwaway database, which is the only way `campaign_coverage_test.go` actually executes:
-
-```bash
-make test-postgres
-```
-
-Expected: `TestCampaignCoverageLookup_ActiveCampaigns` and `TestCampaignCoverageLookup_CampaignsCovering` both pass against the rewritten `000023`.
-
-- [ ] **Step 7: Architecture checks and commit**
+- [ ] **Step 6: Architecture checks and commit**
 
 ```bash
 scripts/check-imports.sh && scripts/check-file-size.sh && go vet ./...
@@ -1226,10 +1168,7 @@ scripts/check-imports.sh && scripts/check-file-size.sh && go vet ./...
 Expected: both scripts exit 0 (`matching.go` is 249 lines today and this change is roughly net-neutral; nothing new is imported into `internal/domain/**` from `internal/adapters/**` — `slices` is stdlib).
 
 ```bash
-git add internal/domain/inventory/matching.go internal/domain/inventory/matching_test.go \
-        internal/domain/demand/repository.go \
-        internal/adapters/storage/postgres/campaign_coverage.go \
-        internal/adapters/storage/postgres/campaign_coverage_test.go \
+git add internal/domain/inventory/matching_test.go \
         internal/platform/cardutil/normalize_sets.go
 git commit -m "Match the language axis as a set, not a single token"
 ```
