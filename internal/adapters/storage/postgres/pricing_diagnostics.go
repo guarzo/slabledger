@@ -84,13 +84,19 @@ func (r *PricingDiagnosticsRepository) queryMappingCoverage(ctx context.Context,
 	return nil
 }
 
-// queryPriceCoverage counts unsold inventory cards with CL prices.
+// queryPriceCoverage counts unsold inventory cards CardLadder has priced.
 // TotalUnsold is populated by queryMappingCoverage so the widget's per-price
 // ratios share a denominator with the pipeline stages.
+//
+// Keyed on cl_value_updated_at, not cl_value_cents: the latter is also written
+// by the Shopify external import (purchase_price_store.go), which never calls
+// CardLadder, so a positive value there does not mean CardLadder answered.
+// cl_value_updated_at has a single writer and is never cleared. Same predicate
+// as GetCLPriceStats and scripts/cl-coverage.sql — keep the three in step.
 func (r *PricingDiagnosticsRepository) queryPriceCoverage(ctx context.Context, diag *pricing.PricingDiagnostics) error {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT
-			COALESCE(SUM(CASE WHEN cp.cl_value_cents > 0 THEN 1 ELSE 0 END), 0) AS cl_priced
+			COALESCE(SUM(CASE WHEN cp.cl_value_updated_at != '' THEN 1 ELSE 0 END), 0) AS cl_priced
 		FROM campaign_purchases cp
 		JOIN campaigns c ON cp.campaign_id = c.id
 		LEFT JOIN campaign_sales cs ON cp.id = cs.purchase_id
