@@ -17,8 +17,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
@@ -105,7 +108,9 @@ func run() error {
 		snap := postgres.NewPSACampaignSnapshotStore(db.DB)
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 		linker := postgres.NewPSACampaignLinker(db.DB)
+		campaignStore := postgres.NewCampaignStore(db.DB, logger)
 
+		campaignsFresh := false
 		campaigns, err := portal.FetchCampaigns(ctx)
 		switch {
 		case err != nil:
@@ -115,6 +120,35 @@ func run() error {
 		default:
 			if err := snap.SaveSnapshot(ctx, campaigns); err != nil {
 				logger.Error(ctx, "psa-harvest: save snapshot failed", observability.Err(err))
+			} else {
+				campaignsFresh = true
+			}
+		}
+
+		switch {
+		case !campaignsFresh:
+			// The campaign list this run would resolve against was not refreshed.
+			// Reconciliation is idempotent, so skipping costs one cycle; running on
+			// a stale list risks resolving a renamed campaign to the wrong ID.
+			logger.Warn(ctx, "psa-harvest: skipping attribution reconcile, campaign snapshot not refreshed")
+		default:
+			rowProvider := psaportal.NewSnapshotRowProvider(snapshots, logger)
+			rows, rowsErr := rowProvider.FetchRows(ctx)
+			if rowsErr != nil {
+				// Stale or missing itemized snapshot: skip rather than reattribute on old data.
+				logger.Warn(ctx, "psa-harvest: skipping attribution reconcile", observability.Err(rowsErr))
+			} else {
+				resolver := psaportal.NewCampaignResolver(snap, campaignStore, nil)
+				inv := buildInventoryService(db, logger, campaignStore, inventory.WithPSACampaignResolver(resolver))
+				res, recErr := inv.ReconcilePSAAttribution(ctx, rows)
+				if recErr != nil {
+					logger.Error(ctx, "psa-harvest: attribution reconcile failed", observability.Err(recErr))
+				} else {
+					logger.Info(ctx, "psa-harvest: attribution reconciled",
+						observability.Int("moved", res.Moved),
+						observability.Int("unresolved", res.Unresolved),
+						observability.Int("soldSkipped", res.SoldSkipped))
+				}
 			}
 		}
 
@@ -124,4 +158,35 @@ func run() error {
 	}
 
 	return nil
+}
+
+// buildInventoryService assembles the inventory service for this binary's one
+// use of it: PSA attribution reconciliation. It wires the full set of
+// repositories NewService requires plus the pending-items repository, so an
+// unresolved PSA campaign name still lands in the operator work queue.
+func buildInventoryService(db *postgres.DB, logger observability.Logger, campaignStore *postgres.CampaignStore, opts ...inventory.ServiceOption) inventory.Service {
+	purchaseStore := postgres.NewPurchaseStore(db.DB, logger)
+	saleStore := postgres.NewSaleStore(db.DB, logger)
+	analyticsStore := postgres.NewAnalyticsStore(db.DB, logger)
+	financeStore := postgres.NewFinanceStore(db.DB, logger)
+	pricingStore := postgres.NewPricingStore(db.DB, logger)
+	dhStore := postgres.NewDHStore(db.DB, logger)
+	pendingItemsRepo := postgres.NewPendingItemsRepository(db.DB)
+
+	allOpts := append([]inventory.ServiceOption{
+		inventory.WithLogger(logger),
+		inventory.WithIDGenerator(uuid.NewString),
+		inventory.WithPendingItemRepository(pendingItemsRepo),
+	}, opts...)
+
+	return inventory.NewService(
+		campaignStore,
+		purchaseStore,
+		saleStore,
+		analyticsStore,
+		financeStore,
+		pricingStore,
+		dhStore,
+		allOpts...,
+	)
 }
