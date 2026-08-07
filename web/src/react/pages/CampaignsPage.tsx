@@ -15,10 +15,11 @@ import { useToast } from '../contexts/ToastContext';
 import { useForm } from '../hooks/useForm';
 import { defaultCampaignInput } from '../utils/campaignConstants';
 import { Button, SectionErrorBoundary } from '../ui';
-import { useCampaigns, useCreateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
+import { useCampaigns, useCreateCampaign, useUpdateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
 import CampaignsPortfolioHero from './campaigns/CampaignsPortfolioHero';
 import CampaignsTab from './campaigns/CampaignsTab';
 import InvoicesSection from '../components/insights/InvoicesSection';
+import { toFormValues } from '../utils/campaignFormValues';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
 
@@ -48,9 +49,9 @@ function validateCampaignForm(values: CreateCampaignInput) {
 // design doc's "ids are copied verbatim, never re-resolved" rule) — a text
 // round-trip through paste would reset those ids to 0 and corrupt targeting on
 // the next push for every campaign already linked to the portal. Targeting is
-// set once at campaign creation (CampaignFormFields' subject editor) or by the
-// harvester's baseline pull — there is currently no edit surface for it after
-// that; this paste format stays scoped to scalar economics/range fields, which
+// set at campaign creation, edited through the per-row Edit form (which carries
+// SubjectRef ids through untouched), or replaced by the harvester's baseline
+// pull. This paste format stays scoped to scalar economics/range fields, which
 // round-trip safely.
 type ParsedCampaign = Partial<CreateCampaignInput> & { name: string };
 
@@ -166,11 +167,17 @@ function buildExportText(campaigns: Campaign[]): string {
 
 export default function CampaignsPage() {
   const [showCreate, setShowCreate] = useState(false);
+  // The campaign under edit, plus the updatedAt captured when the form opened.
+  // That timestamp is the optimistic-concurrency token: the psa-harvest
+  // baseline pull writes the same targeting fields from a separate process,
+  // and a stale form would put -1 placeholders back over reconciled portal ids.
+  const [editing, setEditing] = useState<{ id: string; updatedAt: string } | null>(null);
   const toast = useToast();
 
   const queryClient = useQueryClient();
   const { data: allCampaigns = [], isLoading } = useCampaigns(false);
   const createMutation = useCreateCampaign();
+  const updateMutation = useUpdateCampaign();
 
   const form = useForm<CreateCampaignInput>({
     initialValues: { ...defaultCampaignInput },
@@ -186,6 +193,68 @@ export default function CampaignsPage() {
       }
     },
   });
+
+  const editForm = useForm<CreateCampaignInput>({
+    initialValues: { ...defaultCampaignInput },
+    validate: validateCampaignForm,
+    onSubmit: async (values) => {
+      if (!editing) return;
+
+      // Re-read over the network, not from the React Query cache: useCampaigns
+      // holds data fresh for CAMPAIGN_STALE_TIME (30s), and the racing writer
+      // is the psa-harvest process, whose write the cache cannot observe.
+      let fresh: Campaign;
+      try {
+        fresh = await api.getCampaign(editing.id);
+      } catch {
+        // Fail closed. Saving anyway would reintroduce exactly the race this
+        // check exists to close. The message is fixed rather than routed
+        // through getErrorMessage: that helper surfaces the raw Error.message
+        // when present (e.g. "network down"), which would bury the actionable
+        // "nothing was saved" guidance the operator needs here.
+        toast.error('Could not confirm the campaign is unchanged — nothing was saved');
+        return;
+      }
+
+      if (fresh.updatedAt !== editing.updatedAt) {
+        toast.error(
+          'This campaign changed since you opened the form — most likely the harvester baseline pull. ' +
+          'Nothing was saved. Close and re-open Edit to start from current data.',
+        );
+        return;
+      }
+
+      try {
+        // Full-row PUT: HandleUpdateCampaign decodes a whole inventory.Campaign
+        // and the UPDATE sets every column, so an omitted field is written as
+        // its zero value. Spreading `fresh` first is what keeps
+        // psaCampaignRequestId and expectedFillRate intact. This is deliberately
+        // NOT the pattern used by the bulk-paste path below, which strips
+        // expectedFillRate — correct there, wrong here.
+        await updateMutation.mutateAsync({ id: editing.id, data: { ...fresh, ...values } });
+        setEditing(null);
+        toast.success(
+          fresh.psaCampaignRequestId
+            ? 'Campaign updated — open PSA on the row to publish the change'
+            : 'Campaign updated',
+        );
+      } catch (err) {
+        toast.error(getErrorMessage(err, 'Failed to update campaign'));
+      }
+    },
+  });
+
+  function handleEdit(c: Campaign) {
+    setShowCreate(false);
+    setEditing({ id: c.id, updatedAt: c.updatedAt });
+    editForm.reset(toFormValues(c));
+  }
+
+  function handleCancelEdit() {
+    setEditing(null);
+  }
+
+  const editingCampaign = editing ? allCampaigns.find(c => c.id === editing.id) ?? null : null;
 
   const pnlQueries = useQueries({
     queries: allCampaigns.map(c => campaignPNLQueryOptions(c.id)),
@@ -371,6 +440,11 @@ export default function CampaignsPage() {
           form={form}
           createMutation={createMutation}
           onToggleCreate={() => setShowCreate(true)}
+          editingCampaign={editingCampaign}
+          editForm={editForm}
+          updateMutation={updateMutation}
+          onEdit={handleEdit}
+          onCancelEdit={handleCancelEdit}
         />
       </SectionErrorBoundary>
 
