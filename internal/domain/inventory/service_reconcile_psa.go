@@ -146,9 +146,20 @@ func clConfidenceForReattribution(purchaseDate string, campaign *Campaign) *int 
 }
 
 func (s *service) recordUnresolvedAttribution(ctx context.Context, p *Purchase, psaName string) error {
-	// Keep the inferred campaign; record PSA's name so a portal-side deletion
+	// Keep the existing campaign; record PSA's name so a portal-side deletion
 	// never loses it again.
-	if err := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, psaName, AttributionSourceInferred); err != nil {
+	//
+	// Attribution source: an unresolvable PSA name is not a usable answer from
+	// PSA, so a prior manual override (a deliberate operator decision) must
+	// survive it rather than being silently downgraded to inferred. Anything
+	// else becomes inferred, since it was never an authoritative source to
+	// begin with. This is a human ruling, not the brief's original text, which
+	// hardcoded inferred for every case.
+	source := AttributionSourceInferred
+	if p.AttributionSource == AttributionSourceManual {
+		source = AttributionSourceManual
+	}
+	if err := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, psaName, source); err != nil {
 		return err
 	}
 	return s.enqueueUnresolvedPendingItem(ctx, p, psaName)
