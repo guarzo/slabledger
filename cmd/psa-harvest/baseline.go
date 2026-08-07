@@ -62,8 +62,8 @@ func parseBoolFlag(v string) (bool, error) {
 // This is the expected shape of the remaining CATEGORY-era campaigns (design
 // doc §8): their edit form predates the curated-list model, so it names no
 // "Pokemon - Japanese Language Only" / "Pokemon - English Language Only" list.
-// They are not writable here; the
-// operator converts them by hand in the portal and re-runs the baseline.
+// They are not writable here; the operator converts them by hand in the portal
+// and re-runs the baseline.
 //
 // Distinct from errUnrecognizedSpecListName: an empty list is an expected,
 // self-explanatory state, while an unmodelled list is a gap in this code.

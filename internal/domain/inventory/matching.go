@@ -119,9 +119,8 @@ func PurchaseMatchesCampaign(in MatchInput, c *Campaign) bool {
 // The set — rather than the single token this replaces — exists because every
 // live portal campaign carries BOTH the "Pokemon - English Language Only" and
 // "Pokemon - Japanese Language Only" curated spec lists. A single token could
-// only ever describe half of
-// what those campaigns buy, so the other half's purchases fell through to
-// "unmatched" and were attributed to no campaign.
+// only ever describe half of what those campaigns buy, so the other half's
+// purchases fell through to "unmatched" and were attributed to no campaign.
 //
 // Membership is a plain == comparison per element: cardutil.SetLanguage always
 // returns one of the canonical Lang* tokens, and ValidateAndNormalizeCampaign
