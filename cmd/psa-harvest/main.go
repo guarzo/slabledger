@@ -125,30 +125,34 @@ func run() error {
 			}
 		}
 
-		switch {
-		case !campaignsFresh:
-			// The campaign list this run would resolve against was not refreshed.
-			// Reconciliation is idempotent, so skipping costs one cycle; running on
-			// a stale list risks resolving a renamed campaign to the wrong ID.
-			logger.Warn(ctx, "psa-harvest: skipping attribution reconcile, campaign snapshot not refreshed")
-		default:
+		// Only fetch the itemized rows snapshot when the campaign snapshot is
+		// actually fresh — decideReconcileGate would skip on campaignsFresh
+		// alone anyway, so there is nothing to diagnose from rowsErr in that case.
+		var rows []inventory.PSAExportRow
+		var rowsErr error
+		if campaignsFresh {
 			rowProvider := psaportal.NewSnapshotRowProvider(snapshots, logger)
-			rows, rowsErr := rowProvider.FetchRows(ctx)
-			if rowsErr != nil {
-				// Stale or missing itemized snapshot: skip rather than reattribute on old data.
-				logger.Warn(ctx, "psa-harvest: skipping attribution reconcile", observability.Err(rowsErr))
+			rows, rowsErr = rowProvider.FetchRows(ctx)
+		}
+
+		gate := decideReconcileGate(campaignsFresh, rowsErr)
+		if !gate.proceed {
+			if gate.skipErr != nil {
+				logger.Warn(ctx, gate.skipMsg, observability.Err(gate.skipErr))
 			} else {
-				resolver := psaportal.NewCampaignResolver(snap, campaignStore, nil)
-				inv := buildInventoryService(db, logger, campaignStore, inventory.WithPSACampaignResolver(resolver))
-				res, recErr := inv.ReconcilePSAAttribution(ctx, rows)
-				if recErr != nil {
-					logger.Error(ctx, "psa-harvest: attribution reconcile failed", observability.Err(recErr))
-				} else {
-					logger.Info(ctx, "psa-harvest: attribution reconciled",
-						observability.Int("moved", res.Moved),
-						observability.Int("unresolved", res.Unresolved),
-						observability.Int("soldSkipped", res.SoldSkipped))
-				}
+				logger.Warn(ctx, gate.skipMsg)
+			}
+		} else {
+			resolver := psaportal.NewCampaignResolver(snap, campaignStore, nil)
+			inv := buildInventoryService(db, logger, campaignStore, inventory.WithPSACampaignResolver(resolver))
+			res, recErr := inv.ReconcilePSAAttribution(ctx, rows)
+			if recErr != nil {
+				logger.Error(ctx, "psa-harvest: attribution reconcile failed", observability.Err(recErr))
+			} else {
+				logger.Info(ctx, "psa-harvest: attribution reconciled",
+					observability.Int("moved", res.Moved),
+					observability.Int("unresolved", res.Unresolved),
+					observability.Int("soldSkipped", res.SoldSkipped))
 			}
 		}
 
@@ -158,6 +162,39 @@ func run() error {
 	}
 
 	return nil
+}
+
+// reconcileGate is the pure freshness decision for whether PSA attribution
+// reconciliation should run this harvest. Separated from decideReconcileGate's
+// callers' I/O (SaveSnapshot, FetchRows) so the gate itself is unit-testable
+// without a live DB/browser session.
+type reconcileGate struct {
+	proceed bool
+	// skipMsg and skipErr are logged at Warn when proceed is false. skipErr is
+	// nil for the "campaign snapshot not refreshed" case, since there is no
+	// error value for that — the campaign fetch/save outcome is a bool by the
+	// time it reaches this gate.
+	skipMsg string
+	skipErr error
+}
+
+// decideReconcileGate decides whether reconciliation may run, given whether
+// the campaign snapshot was actually refreshed this run and the outcome of
+// fetching the itemized rows snapshot (nil rowsErr, or unevaluated, when
+// campaignsFresh is false — the campaign gate alone already skips).
+//
+// Resolving fresh purchases against either a stale campaign list or a stale
+// itemized snapshot risks attributing to a renamed or superseded campaign;
+// reconciliation is idempotent, so skipping only costs one cycle.
+func decideReconcileGate(campaignsFresh bool, rowsErr error) reconcileGate {
+	switch {
+	case !campaignsFresh:
+		return reconcileGate{skipMsg: "psa-harvest: skipping attribution reconcile, campaign snapshot not refreshed"}
+	case rowsErr != nil:
+		return reconcileGate{skipMsg: "psa-harvest: skipping attribution reconcile", skipErr: rowsErr}
+	default:
+		return reconcileGate{proceed: true}
+	}
 }
 
 // buildInventoryService assembles the inventory service for this binary's one
