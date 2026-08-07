@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import CampaignsPage from './CampaignsPage';
 import { ToastProvider } from '../contexts/ToastContext';
+import { api } from '../../js/api';
 import type { Campaign } from '../../types/campaigns';
 
 const campaign: Campaign = {
@@ -42,21 +43,6 @@ vi.mock('../queries/useCampaignQueries', async (orig) => {
   };
 });
 
-const getCampaign = vi.fn();
-
-vi.mock('../../js/api', async (orig) => {
-  const mod = await orig<typeof import('../../js/api')>();
-  return {
-    ...mod,
-    api: {
-      ...mod.api,
-      listPSAPushes: vi.fn().mockResolvedValue({ pushes: [] }),
-      listPSASubjects: vi.fn().mockResolvedValue({ subjects: [], fetchedAt: '2026-08-01T00:00:00Z' }),
-      getCampaign: (...args: unknown[]) => getCampaign(...args),
-    },
-  };
-});
-
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -72,7 +58,25 @@ function renderPage() {
 
 beforeEach(() => {
   updateMutateAsync.mockClear();
-  getCampaign.mockReset();
+  // `api` is a class instance whose endpoint methods live on APIClient.prototype
+  // (js/api/*.ts attach them there via declaration merging), so the `{ ...api }`
+  // spread this file used to build its mock copied none of them: every endpoint
+  // the page touches but the mock did not name became `undefined`, and the
+  // resulting TypeError was swallowed inside its queryFn by `retry: false`.
+  // Spy on the real singleton instead, so unnamed endpoints keep a real method.
+  // fetchWithRetry is the single network choke point behind get/post/put/
+  // deleteResource — stubbing it keeps an unstubbed endpoint off the network and
+  // makes it fail loudly and immediately rather than silently.
+  vi.spyOn(api, 'fetchWithRetry').mockRejectedValue(
+    new Error('unstubbed API call — add a vi.spyOn for this endpoint'),
+  );
+  vi.spyOn(api, 'listPSAPushes').mockResolvedValue({ pushes: [] });
+  vi.spyOn(api, 'listPSASubjects').mockResolvedValue({ subjects: [], fetchedAt: '2026-08-01T00:00:00Z' });
+  vi.spyOn(api, 'getCampaign');
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 async function openEditAndSave() {
@@ -84,7 +88,7 @@ async function openEditAndSave() {
 }
 
 it('sends the full campaign so a full-row PUT cannot blank server-owned fields', async () => {
-  getCampaign.mockResolvedValue(campaign);
+  vi.mocked(api.getCampaign).mockResolvedValue(campaign);
   await openEditAndSave();
 
   await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
@@ -100,7 +104,7 @@ it('sends the full campaign so a full-row PUT cannot blank server-owned fields',
 });
 
 it('round-trips existing portal subject ids byte-for-byte', async () => {
-  getCampaign.mockResolvedValue(campaign);
+  vi.mocked(api.getCampaign).mockResolvedValue(campaign);
   await openEditAndSave();
 
   await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
@@ -113,17 +117,17 @@ it('round-trips existing portal subject ids byte-for-byte', async () => {
 it('checks staleness over the network rather than from cached campaign data', async () => {
   // useCampaigns holds data fresh for 30s and cannot observe a write made by
   // the psa-harvest process, so the guard must actually hit the server.
-  getCampaign.mockResolvedValue(campaign);
+  vi.mocked(api.getCampaign).mockResolvedValue(campaign);
   await openEditAndSave();
 
-  await waitFor(() => expect(getCampaign).toHaveBeenCalledWith('c1'));
+  await waitFor(() => expect(api.getCampaign).toHaveBeenCalledWith('c1'));
 });
 
 it('aborts the save when the campaign changed since the form opened', async () => {
-  getCampaign.mockResolvedValue({ ...campaign, updatedAt: '2026-03-03T00:00:00Z' });
+  vi.mocked(api.getCampaign).mockResolvedValue({ ...campaign, updatedAt: '2026-03-03T00:00:00Z' });
   await openEditAndSave();
 
-  await waitFor(() => expect(getCampaign).toHaveBeenCalled());
+  await waitFor(() => expect(api.getCampaign).toHaveBeenCalled());
   expect(updateMutateAsync).not.toHaveBeenCalled();
   expect(await screen.findByText(/harvester baseline pull/i)).toBeInTheDocument();
   // The form stays open so the operator does not lose their edits.
@@ -132,10 +136,10 @@ it('aborts the save when the campaign changed since the form opened', async () =
 
 it('aborts the save when the staleness check itself fails', async () => {
   // Fail closed: saving anyway would reintroduce the race the check closes.
-  getCampaign.mockRejectedValue(new Error('network down'));
+  vi.mocked(api.getCampaign).mockRejectedValue(new Error('network down'));
   await openEditAndSave();
 
-  await waitFor(() => expect(getCampaign).toHaveBeenCalled());
+  await waitFor(() => expect(api.getCampaign).toHaveBeenCalled());
   expect(updateMutateAsync).not.toHaveBeenCalled();
   expect(await screen.findByText(/could not confirm/i)).toBeInTheDocument();
 });
@@ -147,7 +151,7 @@ it('sends the operator-edited name, not just the pre-edit snapshot', async () =>
   // This test changes a field first, so reversing that spread order — which
   // would silently discard every operator edit while still reporting success
   // — turns this assertion red.
-  getCampaign.mockResolvedValue(campaign);
+  vi.mocked(api.getCampaign).mockResolvedValue(campaign);
   const user = userEvent.setup();
   renderPage();
   await user.click(screen.getByRole('button', { name: /edit vintage core/i }));
