@@ -8,7 +8,7 @@ import (
 
 func TestExtractCharacter(t *testing.T) {
 	campaigns := []Campaign{
-		{InclusionList: "Charizard, Pikachu, Blastoise"},
+		{Subjects: []TargetSubject{{Name: "Charizard"}, {Name: "Pikachu"}, {Name: "Blastoise"}}},
 	}
 
 	tests := []struct {
@@ -147,8 +147,8 @@ func Test_ComputePortfolioInsights(t *testing.T) {
 	}
 
 	campaigns := []Campaign{
-		{ID: "c1", Phase: PhaseActive, InclusionList: "Charizard"},
-		{ID: "c2", Phase: PhaseActive, InclusionList: "Pikachu"},
+		{ID: "c1", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Charizard"}}, SubjectFilterMode: SubjectFilterTarget},
+		{ID: "c2", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Pikachu"}}, SubjectFilterMode: SubjectFilterTarget},
 	}
 
 	channelPNL := []ChannelPNL{
@@ -199,22 +199,53 @@ func TestDetectCoverageGaps(t *testing.T) {
 		{Label: "PSA 9", ROI: 0.18, SoldCount: 10, CampaignCount: 1, Dimension: "grade"},
 	}
 
-	campaigns := []Campaign{
-		{Phase: PhaseActive, InclusionList: "Charizard, Pikachu"},
+	cases := []struct {
+		name          string
+		campaigns     []Campaign
+		wantGapLabels []string
+	}{
+		{
+			name: "Target-mode campaign leaves Gengar uncovered",
+			campaigns: []Campaign{
+				{Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Charizard"}, {Name: "Pikachu"}}, SubjectFilterMode: SubjectFilterTarget},
+			},
+			wantGapLabels: []string{"Gengar"},
+		},
+		{
+			name: "open-net active campaign (no Subjects) covers nothing",
+			campaigns: []Campaign{
+				{Phase: PhaseActive},
+			},
+			wantGapLabels: []string{"Charizard", "Gengar"},
+		},
+		{
+			name: "Exclude-mode campaign does not cover the characters it denies",
+			campaigns: []Campaign{
+				{Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Charizard"}}, SubjectFilterMode: SubjectFilterExclude},
+			},
+			wantGapLabels: []string{"Charizard", "Gengar"},
+		},
 	}
 
-	gaps := DetectCoverageGaps(byCharacter, byGrade, campaigns)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gaps := DetectCoverageGaps(byCharacter, byGrade, tc.campaigns)
 
-	// Gengar is profitable but not in any campaign's inclusion list
-	found := false
-	for _, g := range gaps {
-		if g.Segment.Label == "Gengar" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected Gengar to be identified as a coverage gap")
+			var gotLabels []string
+			for _, g := range gaps {
+				if g.Segment.Dimension == "character" {
+					gotLabels = append(gotLabels, g.Segment.Label)
+				}
+			}
+			if len(gotLabels) != len(tc.wantGapLabels) {
+				t.Fatalf("expected character gaps %v, got %v", tc.wantGapLabels, gotLabels)
+			}
+			for i, want := range tc.wantGapLabels {
+				if gotLabels[i] != want {
+					t.Errorf("expected gap %q, got %q", want, gotLabels[i])
+				}
+			}
+		})
 	}
 }
 

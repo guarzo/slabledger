@@ -71,7 +71,15 @@ export interface CampaignSuggestionParams {
   buyTermsCLPct?: number;
   buyTermsCLPctOptimistic?: number;
   dailySpendCapCents?: number;
-  inclusionList?: string;
+  // Plain subject names for display only — a suggestion is pre-portal and
+  // carries no PSA subject ids to preserve.
+  subjects?: string[];
+  // Polarity of `subjects` on an "adjust" suggestion for an existing
+  // campaign: 'add' means these should be added to the campaign's current
+  // targeting list, 'remove' means removed from it. Absent on "new"/"gap"
+  // suggestions, where `subjects` is the full initial list for a brand-new
+  // campaign rather than a delta against an existing one.
+  subjectsAction?: 'add' | 'remove';
   primaryExit?: string;
 }
 

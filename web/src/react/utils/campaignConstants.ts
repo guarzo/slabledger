@@ -66,6 +66,38 @@ export const phaseOptions = [
   { value: 'closed', label: 'Closed' },
 ] as const;
 
+/** Token stored in `Campaign.subjectFilterMode` / `CreateCampaignInput.subjectFilterMode`. */
+export const SUBJECT_FILTER_TARGET = 'Target';
+export const SUBJECT_FILTER_EXCLUDE = 'Exclude';
+
+/**
+ * Closed set of curated-spec-list language tokens. There is no "unset" entry:
+ * unset is the empty array, expressed by checking nothing.
+ *
+ * DUPLICATED, deliberately. The same set lives in
+ * internal/domain/inventory/validation.go, internal/domain/psacampaign/resolver.go
+ * and cmd/psa-harvest/baseline.go. psacampaign imports inventory, so inventory
+ * can never import psacampaign, and this copy is across a process boundary
+ * anyway. A new token must be added to all four.
+ */
+export const targetLanguageOptions = [
+  { value: 'english', label: 'English' },
+  { value: 'japanese', label: 'Japanese' },
+] as const;
+
+/**
+ * Mirrors Go's inventory.LegacyUnreconciledSubjectID. Migration 000023 backfills
+ * pre-axis subjects with this id to mean "legacy, not yet reconciled with the
+ * portal". Distinct from id 0, which means "operator typed this name, resolve it
+ * by name at push time" — push translation resolves 0 and refuses -1.
+ */
+export const LEGACY_UNRECONCILED_SUBJECT_ID = -1;
+
+export const subjectFilterModeOptions: { value: 'Target' | 'Exclude'; label: string }[] = [
+  { value: SUBJECT_FILTER_TARGET, label: 'Target' },
+  { value: SUBJECT_FILTER_EXCLUDE, label: 'Exclude' },
+];
+
 export const defaultCampaignInput: CreateCampaignInput = {
   name: '',
   sport: 'Pokemon',
@@ -75,8 +107,10 @@ export const defaultCampaignInput: CreateCampaignInput = {
   clConfidence: '',
   buyTermsCLPct: 0.78,
   dailySpendCapCents: 50000,
-  inclusionList: '',
-  exclusionMode: false,
+  targetLanguages: [],
+  subjectFilterMode: SUBJECT_FILTER_TARGET,
+  subjects: [],
+  deniedSpecs: [],
   psaSourcingFeeCents: 300,
   ebayFeePct: 0.1235,
 };

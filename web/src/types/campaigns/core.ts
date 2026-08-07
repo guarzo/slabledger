@@ -2,6 +2,8 @@
  * Core campaign domain types
  */
 
+import type { SubjectRef } from './psaCampaign';
+
 export type Phase = 'pending' | 'active' | 'closed';
 export type SaleChannel = 'ebay' | 'website' | 'inperson' | 'tcgplayer' | 'local' | 'other' | 'gamestop' | 'cardshow' | 'doubleholo';
 
@@ -15,8 +17,12 @@ export interface Campaign {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  inclusionList: string;
-  exclusionMode: boolean;
+  /** Curated-spec-list language tokens; empty = open net (buys any language).
+      Mirrors Go's inventory.Campaign.TargetLanguages (json: targetLanguages). */
+  targetLanguages: string[];
+  subjectFilterMode: string;
+  subjects: SubjectRef[];
+  deniedSpecs: SubjectRef[];
   phase: Phase;
   psaSourcingFeeCents: number;
   ebayFeePct: number;
@@ -147,8 +153,12 @@ export interface CreateCampaignInput {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  inclusionList: string;
-  exclusionMode: boolean;
+  /** Curated-spec-list language tokens; empty = open net (buys any language).
+      Mirrors Go's inventory.Campaign.TargetLanguages (json: targetLanguages). */
+  targetLanguages: string[];
+  subjectFilterMode: string;
+  subjects: SubjectRef[];
+  deniedSpecs: SubjectRef[];
   psaSourcingFeeCents: number;
   ebayFeePct: number;
   phase?: Phase;

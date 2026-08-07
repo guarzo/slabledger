@@ -44,6 +44,7 @@ type CampaignsHandler struct {
 
 	psaSnapshots psacampaign.SnapshotStore  // optional: PSA portal campaign snapshot reader
 	psaQueue     psacampaign.PushQueueStore // optional: PSA propose/publish push queue
+	psaCatalog   psacampaign.CatalogStore   // optional: PSA spec-list/subject catalog reader
 }
 
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
@@ -82,6 +83,12 @@ func WithPSASnapshotStore(s psacampaign.SnapshotStore) CampaignsHandlerOption {
 // WithPSAPushQueue enables the PSA propose/publish push queue.
 func WithPSAPushQueue(q psacampaign.PushQueueStore) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.psaQueue = q }
+}
+
+// WithPSACatalogStore enables the PSA spec-list/subject catalog reader, which
+// the translators need (via a Resolver) to push list-valued targeting.
+func WithPSACatalogStore(s psacampaign.CatalogStore) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.psaCatalog = s }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.

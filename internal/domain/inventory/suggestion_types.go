@@ -13,16 +13,29 @@ type CampaignSuggestion struct {
 
 // CampaignSuggestionParams holds the suggested campaign configuration.
 type CampaignSuggestionParams struct {
-	Name                    string  `json:"name"`
-	YearRange               string  `json:"yearRange,omitempty"`
-	GradeRange              string  `json:"gradeRange,omitempty"`
-	PriceRange              string  `json:"priceRange,omitempty"`
-	BuyTermsCLPct           float64 `json:"buyTermsCLPct,omitempty"`
-	BuyTermsCLPctOptimistic float64 `json:"buyTermsCLPctOptimistic,omitempty"`
-	DailySpendCapCents      int     `json:"dailySpendCapCents,omitempty"`
-	InclusionList           string  `json:"inclusionList,omitempty"`
-	PrimaryExit             string  `json:"primaryExit,omitempty"`
+	Name                    string   `json:"name"`
+	YearRange               string   `json:"yearRange,omitempty"`
+	GradeRange              string   `json:"gradeRange,omitempty"`
+	PriceRange              string   `json:"priceRange,omitempty"`
+	BuyTermsCLPct           float64  `json:"buyTermsCLPct,omitempty"`
+	BuyTermsCLPctOptimistic float64  `json:"buyTermsCLPctOptimistic,omitempty"`
+	DailySpendCapCents      int      `json:"dailySpendCapCents,omitempty"`
+	Subjects                []string `json:"subjects,omitempty"`
+	// SubjectsAction is the polarity of Subjects on an "adjust" suggestion
+	// for an *existing* campaign: SubjectsActionAdd means these subjects
+	// should be added to the campaign's targeting list, SubjectsActionRemove
+	// means they should be removed from it. Empty for "new"/"gap" suggestions,
+	// where Subjects is the full initial targeting list for a brand-new
+	// campaign and there is no existing list to add to or remove from.
+	SubjectsAction string `json:"subjectsAction,omitempty"`
+	PrimaryExit    string `json:"primaryExit,omitempty"`
 }
+
+// Values for CampaignSuggestionParams.SubjectsAction.
+const (
+	SubjectsActionAdd    = "add"
+	SubjectsActionRemove = "remove"
+)
 
 // ExpectedMetrics are projected performance based on historical data.
 type ExpectedMetrics struct {

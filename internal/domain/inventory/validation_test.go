@@ -1,6 +1,8 @@
 package inventory
 
 import (
+	"errors"
+	"slices"
 	"testing"
 )
 
@@ -107,13 +109,140 @@ func TestValidateAndNormalizeCampaign(t *testing.T) {
 			c:       Campaign{Name: "Test", PriceRange: "500-50"},
 			wantErr: ErrInvalidPriceRange,
 		},
+		// TargetLanguages validation
+		{
+			name:    "nil target languages is valid (open net)",
+			c:       Campaign{Name: "Test", TargetLanguages: nil},
+			wantErr: nil,
+		},
+		{
+			name:    "empty target languages is valid (open net)",
+			c:       Campaign{Name: "Test", TargetLanguages: []string{}},
+			wantErr: nil,
+		},
+		{
+			name:    "single english token is valid",
+			c:       Campaign{Name: "Test", TargetLanguages: []string{"english"}},
+			wantErr: nil,
+		},
+		{
+			name:    "both live tokens are valid — every live campaign carries both",
+			c:       Campaign{Name: "Test", TargetLanguages: []string{"japanese", "english"}},
+			wantErr: nil,
+		},
+		{
+			name:    "wrong case is normalized, not rejected",
+			c:       Campaign{Name: "Test", TargetLanguages: []string{"Japanese", " ENGLISH "}},
+			wantErr: nil, // normalized before the closed-set check — see the assertion below
+		},
+		{
+			name:    "chinese is rejected — no curated portal spec list exists for it",
+			c:       Campaign{Name: "Test", TargetLanguages: []string{"chinese"}},
+			wantErr: ErrInvalidTargetLanguages,
+		},
+		{
+			name:    "one bad token poisons the whole set — no partial acceptance",
+			c:       Campaign{Name: "Test", TargetLanguages: []string{"english", "klingon"}},
+			wantErr: ErrInvalidTargetLanguages,
+		},
+		// SubjectFilterMode validation
+		{
+			name:    "empty subject filter mode is valid",
+			c:       Campaign{Name: "Test", SubjectFilterMode: ""},
+			wantErr: nil,
+		},
+		{
+			name:    "Target subject filter mode is valid",
+			c:       Campaign{Name: "Test", SubjectFilterMode: SubjectFilterTarget},
+			wantErr: nil,
+		},
+		{
+			name:    "Exclude subject filter mode is valid",
+			c:       Campaign{Name: "Test", SubjectFilterMode: SubjectFilterExclude},
+			wantErr: nil,
+		},
+		{
+			name:    "lowercase exclude typo is rejected, not silently treated as Target",
+			c:       Campaign{Name: "Test", SubjectFilterMode: "exclude"},
+			wantErr: ErrInvalidSubjectFilterMode,
+		},
+		{
+			name:    "garbage subject filter mode is rejected",
+			c:       Campaign{Name: "Test", SubjectFilterMode: "Sometimes"},
+			wantErr: ErrInvalidSubjectFilterMode,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateAndNormalizeCampaign(&tt.c)
-			if err != tt.wantErr {
+			// errors.Is, not ==: the sentinels are compared through the
+			// project's standard assertion so a future wrapped return
+			// (fmt.Errorf("...: %w", ErrInvalidPhase)) still satisfies the
+			// test instead of silently failing on identity.
+			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("ValidateAndNormalizeCampaign() = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidateAndNormalizeCampaign_NormalizesTargetLanguages pins the stored
+// value, not just whether validation errors: LanguageAxisMatches (matching.go)
+// compares members with `==` against cardutil's lowercase tokens and performs
+// no casing normalization of its own, so a campaign stored with "Japanese"
+// would silently match zero cards forever. The sort is not cosmetic either —
+// the set is unordered, and a stable order keeps Postgres round-trips,
+// portal diffs and test assertions deterministic.
+func TestValidateAndNormalizeCampaign_NormalizesTargetLanguages(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{
+			name: "lowercases and trims",
+			in:   []string{" Japanese ", "ENGLISH"},
+			want: []string{"english", "japanese"},
+		},
+		{
+			name: "sorts into a stable order",
+			in:   []string{"japanese", "english"},
+			want: []string{"english", "japanese"},
+		},
+		{
+			name: "dedupes after normalization",
+			in:   []string{"english", "English", " english"},
+			want: []string{"english"},
+		},
+		{
+			name: "drops empty and whitespace-only entries",
+			in:   []string{"english", "", "   "},
+			want: []string{"english"},
+		},
+		{
+			name: "nil becomes a non-nil empty slice",
+			in:   nil,
+			want: []string{},
+		},
+		{
+			name: "an all-empty set collapses to the open net",
+			in:   []string{"", "  "},
+			want: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := Campaign{Name: "Test", TargetLanguages: tt.in}
+			if err := ValidateAndNormalizeCampaign(&c); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if c.TargetLanguages == nil {
+				t.Fatal("TargetLanguages is nil; must be a non-nil empty slice so it marshals to [] not null")
+			}
+			if !slices.Equal(c.TargetLanguages, tt.want) {
+				t.Errorf("TargetLanguages = %#v, want %#v", c.TargetLanguages, tt.want)
 			}
 		})
 	}

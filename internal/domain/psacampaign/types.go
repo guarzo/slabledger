@@ -15,8 +15,23 @@ type PortalCampaign struct {
 	DailySpecLimit    int            `json:"dailySpecLimit"`
 	SubjectFilter     CampaignFilter `json:"subjectFilter"`
 	PublisherFilter   CampaignFilter `json:"publisherFilter"`
-	CreatedAt         time.Time      `json:"createdAt"`
-	UpdatedAt         time.Time      `json:"updatedAt"`
+	SpecListIDs       []string       `json:"specListIds"`
+	// SpecListNames is display-only: it resolves each id in SpecListIDs
+	// against the curated catalog known at decode time, skipping any id the
+	// catalog does not explain. It is therefore not index-aligned with
+	// SpecListIDs and must not be zipped against it positionally.
+	SpecListNames []string     `json:"specListNames"`
+	DeniedSpecs   []SubjectRef `json:"deniedSpecs"`
+	CreatedAt     time.Time    `json:"createdAt"`
+	UpdatedAt     time.Time    `json:"updatedAt"`
+
+	// TargetingComplete is false when the edit-form fetch for this campaign
+	// failed, or the fetched edit-form response could not be decoded (missing
+	// or malformed formData, or a decodeFormData error) — in every such case
+	// the targeting fields above are zero values rather than portal truth.
+	// The baseline pull refuses to write a campaign row from an incomplete
+	// record.
+	TargetingComplete bool `json:"targetingComplete"`
 }
 
 // CampaignBuyBox holds the offer bounds. Prices in cents.
@@ -93,6 +108,10 @@ type FieldChange struct {
 	Field string `json:"field"`
 	Old   string `json:"old"`
 	New   string `json:"new"`
+	// Value carries the new value for list-valued fields, where the string
+	// rendering in New is for display and audit only. Scalar fields leave
+	// this nil and push.go falls back to New.
+	Value any `json:"value,omitempty"`
 }
 
 // ProposedDiff is the payload of a queued push. For updates it holds the field

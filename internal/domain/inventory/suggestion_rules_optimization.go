@@ -131,31 +131,24 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 	})
 
 	for _, c := range campaigns {
-		if c.Phase != PhaseActive || c.InclusionList == "" {
+		if c.Phase != PhaseActive || len(c.Subjects) == 0 {
 			continue
 		}
 
 		var removes []string
 		var adds []string
-		inclChars := SplitInclusionList(c.InclusionList)
 
 		for _, seg := range sorted {
 			if seg.Label == "Other" || seg.PurchaseCount < suggMinSoldForConfidence {
 				continue
 			}
-			inList := false
-			for _, name := range inclChars {
-				if strings.EqualFold(strings.TrimSpace(name), seg.Label) {
-					inList = true
-					break
-				}
-			}
+			targeted := SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode)
 
-			if inList && seg.ROI < suggUnderperformingROI && seg.SoldCount >= suggMinSoldForRemoval {
+			if targeted && seg.ROI < suggUnderperformingROI && seg.SoldCount >= suggMinSoldForRemoval {
 				removes = append(removes, seg.Label)
 			}
 
-			if !inList && seg.ROI > suggMinROIExpansion && seg.SoldCount >= suggMinSoldForConfidence && len(adds) < suggMaxCampaignsPerCharacter {
+			if !targeted && seg.ROI > suggMinROIExpansion && seg.SoldCount >= suggMinSoldForConfidence && len(adds) < suggMaxCampaignsPerCharacter {
 				adds = append(adds, seg.Label)
 			}
 		}
@@ -164,13 +157,14 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 			suggestions = append(suggestions, CampaignSuggestion{
 				Type:  "adjust",
 				Title: fmt.Sprintf("Remove underperformers from %s", c.Name),
-				Rationale: fmt.Sprintf("Characters %s have underperforming ROI in campaign %s. Consider removing from inclusion list.",
+				Rationale: fmt.Sprintf("Characters %s have underperforming ROI in campaign %s. Consider removing from targeting.",
 					strings.Join(removes, ", "), c.Name),
 				Confidence: "medium",
 				DataPoints: insights.DataSummary.TotalPurchases,
 				SuggestedParams: CampaignSuggestionParams{
-					Name:          c.Name,
-					InclusionList: fmt.Sprintf("remove: %s", strings.Join(removes, ", ")),
+					Name:           c.Name,
+					Subjects:       removes,
+					SubjectsAction: SubjectsActionRemove,
 				},
 				ExpectedMetrics: ExpectedMetrics{
 					// Removing a segment — expected improvement is directional only.
@@ -202,8 +196,9 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 				Confidence: "medium",
 				DataPoints: insights.DataSummary.TotalPurchases,
 				SuggestedParams: CampaignSuggestionParams{
-					Name:          c.Name,
-					InclusionList: fmt.Sprintf("add: %s", strings.Join(adds, ", ")),
+					Name:           c.Name,
+					Subjects:       adds,
+					SubjectsAction: SubjectsActionAdd,
 				},
 				ExpectedMetrics: ExpectedMetrics{
 					ExpectedROI:       expectedROI,
@@ -259,18 +254,15 @@ func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, cam
 		}
 
 		// PhasePending activation uses insights.ByCharacter directly — no metrics needed
-		if c.Phase == PhasePending && c.InclusionList != "" {
+		if c.Phase == PhasePending && len(c.Subjects) > 0 {
 			var profitableChars []string
 			var bestROI float64
-			inclNames := SplitInclusionList(c.InclusionList)
 			for _, seg := range insights.ByCharacter {
 				if seg.ROI > suggActivateMinROI && seg.SoldCount >= suggMinSoldForConfidence {
-					for _, name := range inclNames {
-						if strings.EqualFold(strings.TrimSpace(name), seg.Label) {
-							profitableChars = append(profitableChars, fmt.Sprintf("%s (%.0f%% ROI)", seg.Label, seg.ROI*100))
-							if seg.ROI > bestROI {
-								bestROI = seg.ROI
-							}
+					if SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode) {
+						profitableChars = append(profitableChars, fmt.Sprintf("%s (%.0f%% ROI)", seg.Label, seg.ROI*100))
+						if seg.ROI > bestROI {
+							bestROI = seg.ROI
 						}
 					}
 				}

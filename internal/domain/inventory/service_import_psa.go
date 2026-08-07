@@ -138,14 +138,19 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 		}
 
 		if campaign == nil {
-			match = FindMatchingCampaign(
-				gradeValue,
-				buyCostCents,
-				meta.CardName,
-				meta.SetName,
-				meta.CardYear,
-				matchingCampaigns,
-			)
+			// Inference fallback (use float64 grade for half-grade support).
+			match = FindMatchingCampaign(MatchInput{
+				Grade:        gradeValue,
+				BuyCostCents: buyCostCents,
+				CardName:     meta.CardName,
+				SetName:      meta.SetName,
+				CardNumber:   meta.CardNumber,
+				CardYear:     meta.CardYear,
+				// PSASpecID is left at its zero value here: the CSV-title parse
+				// path has no CL spec id yet — cert lookups that resolve it run
+				// asynchronously after import completes (see the metadata-parse
+				// comment above).
+			}, matchingCampaigns)
 			if match.Status == "matched" {
 				campaign = campaignMap[match.CampaignID]
 			}

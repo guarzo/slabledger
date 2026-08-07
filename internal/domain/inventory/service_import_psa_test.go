@@ -35,11 +35,13 @@ func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool, resolve
 		inventory.WithPSACampaignResolver(resolver))
 	ctx := context.Background()
 
-	// The PSA-resolved campaign. Its inclusion list intentionally cannot match
+	// The PSA-resolved campaign. Its subject axis intentionally cannot match
 	// the test row's card name, so the fallback scenarios are unambiguous.
 	psaCampaign := &inventory.Campaign{
 		ID: "camp-psa", Name: "PSA-resolved campaign", Sport: "Pokemon",
-		Phase: inventory.PhaseActive, GradeRange: "8-10", InclusionList: "ZZZNoMatch",
+		Phase: inventory.PhaseActive, GradeRange: "8-10",
+		SubjectFilterMode: inventory.SubjectFilterTarget,
+		Subjects:          []inventory.TargetSubject{{Name: "ZZZNoMatch"}},
 	}
 	if err := svc.CreateCampaign(ctx, psaCampaign); err != nil {
 		t.Fatalf("CreateCampaign(psa): %v", err)
@@ -49,7 +51,9 @@ func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool, resolve
 	// can match against the test row's Umbreon listing title.
 	inferredCampaign := &inventory.Campaign{
 		ID: "camp-inferred", Name: "Inferred campaign", Sport: "Pokemon",
-		Phase: inventory.PhaseActive, GradeRange: "8-10", InclusionList: "Umbreon",
+		Phase: inventory.PhaseActive, GradeRange: "8-10",
+		SubjectFilterMode: inventory.SubjectFilterTarget,
+		Subjects:          []inventory.TargetSubject{{Name: "Umbreon"}},
 	}
 	if err := svc.CreateCampaign(ctx, inferredCampaign); err != nil {
 		t.Fatalf("CreateCampaign(inferred): %v", err)

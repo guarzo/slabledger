@@ -1,8 +1,8 @@
 # Database Schema Reference
 
-SlabLedger uses SQLite in WAL mode. Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/sqlite/migrations/` (66 pairs, `000001`–`000066`).
+SlabLedger uses Postgres (Supabase in prod, local Postgres in the devcontainer). Migrations are embedded in the binary and run automatically on startup. Migration files live in `internal/adapters/storage/postgres/migrations/`.
 
-All monetary values are stored in **cents** (integer). Timestamps use `DATETIME`/`TIMESTAMP` as SQLite text in UTC. Boolean columns use `INTEGER` (`0`/`1`).
+All monetary values are stored in **cents** (integer).
 
 ---
 
@@ -307,8 +307,8 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `cl_confidence` | REAL | NOT NULL DEFAULT 0 | Min CL confidence threshold |
 | `buy_terms_cl_pct` | REAL | NOT NULL DEFAULT 0 | Target buy price as % of CL value |
 | `daily_spend_cap_cents` | INTEGER | NOT NULL DEFAULT 0 | Max daily spend |
-| `inclusion_list` | TEXT | NOT NULL DEFAULT '' | Newline-separated card list filter |
-| `exclusion_mode` | INTEGER | NOT NULL DEFAULT 0 | 1 = treat inclusion_list as exclusions |
+| `inclusion_list` | TEXT | NOT NULL DEFAULT '' | Legacy substring filter. Kept as a derived, write-only mirror of `subjects`/`subject_filter_mode` for one release (nothing reads it) — see migration 000024 |
+| `exclusion_mode` | INTEGER | NOT NULL DEFAULT 0 | Legacy polarity flag mirroring `subject_filter_mode == 'Exclude'`. Same write-only status as `inclusion_list` |
 | `phase` | TEXT | NOT NULL DEFAULT 'pending' | e.g. 'pending','active','paused','closed' |
 | `psa_sourcing_fee_cents` | INTEGER | NOT NULL DEFAULT 300 | Per-card fee ($3.00) |
 | `ebay_fee_pct` | REAL | NOT NULL DEFAULT 0.1235 | eBay/TCGPlayer fee percentage |
@@ -316,6 +316,10 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `psa_campaign_request_id` | TEXT | | Linked PSA portal campaign request ID; added migration 000017 |
+| `target_languages` | JSONB | NOT NULL DEFAULT '[]' | `[]string` — curated PSA spec-list language tokens this campaign buys: any of `'english'`, `'japanese'`. An **empty array is an open net** (buys any language); a non-empty array requires the card's classified language to be a member. Unordered set — order is not meaningful and must not be compared. Added migration 000024 |
+| `subject_filter_mode` | TEXT | NOT NULL DEFAULT 'Target', CHECK IN ('Target','Exclude','') | `'Target'` (buy only `subjects`) or `'Exclude'` (buy everything except `subjects`); added migration 000024. `''` is permitted because the domain treats it as valid and both read and write paths normalize it to `'Target'` |
+| `subjects` | JSONB | NOT NULL DEFAULT '[]' | `[]TargetSubject` (`{id, name}`) — character subjects this campaign targets or excludes, ids copied verbatim from the portal. Migration 000024's legacy backfill writes id `-1` as a sentinel meaning "legacy name, never reconciled against the portal"; push translation refuses a campaign containing sentinel entries until a baseline pull replaces them. Id `0` is distinct and means "operator-typed name awaiting name-based resolution". Added migration 000024 |
+| `denied_specs` | JSONB | NOT NULL DEFAULT '[]' | `[]TargetSubject` — individual cards excluded regardless of `subjects`; added migration 000024 |
 
 **Indexes:** none (PK lookup only)
 
@@ -607,6 +611,27 @@ row to `pushed`/`failed` after actually calling PSA's `updateCampaign`.
 **Foreign Keys:** none
 
 **Added:** migration 000017
+
+---
+
+### `psa_portal_catalog`
+Persisted PSA portal reference data (curated spec lists and character subjects) harvested
+by `cmd/psa-harvest`. The main app has no portal session, so it reads this table to build a
+pure `psacampaign.Resolver` at translation time instead of calling the portal — see
+[docs/psa-harvester.md](../docs/psa-harvester.md#baseline-pull-one-time-targeting-migration).
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `kind` | TEXT | PK (composite) | `'spec_lists'` or `'subjects'` |
+| `key` | TEXT | PK (composite) | `''` for spec lists; the category id as text (e.g. `'16'` for Pokemon) for subjects |
+| `payload` | JSONB | NOT NULL | Serialized `[]SpecListRef` or `[]SubjectRef` |
+| `fetched_at` | TIMESTAMPTZ | NOT NULL | When the harvester last wrote this row; `psacampaign.NewCatalogResolver` refuses to build a resolver from a row older than `psacampaign.CatalogMaxAge` (7 days) |
+
+**Indexes:** none (PK lookup only)
+
+**Foreign Keys:** none
+
+**Added:** migration 000025
 
 ---
 

@@ -336,6 +336,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	if in.DB != nil {
 		deps.PSASnapshotStore = postgres.NewPSACampaignSnapshotStore(in.DB.DB)
 		deps.PSAPushQueue = postgres.NewPSACampaignPushQueueStore(in.DB.DB)
+		deps.PSACatalogStore = postgres.NewPSAPortalCatalogStore(in.DB.DB)
 	}
 
 	out := handlerOutputs{

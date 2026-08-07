@@ -44,4 +44,5 @@ export const queryKeys = {
   },
   psaCampaigns: { list: ['psa-campaigns', 'list'] as const },
   psaPushes: { list: ['psa-pushes', 'list'] as const },
+  psaSubjects: { list: ['psa-subjects', 'list'] as const },
 } as const;

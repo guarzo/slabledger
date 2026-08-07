@@ -1,8 +1,8 @@
 /**
- * PSA portal campaign sync API methods (Task 8 endpoints).
+ * PSA portal campaign sync API methods (Task 8 endpoints) and catalog reads.
  */
 
-import type { Campaign, ListPSACampaignsResponse, PSAProposeResponse, PSAProposeCreateResponse, PSAPublishResponse, ListPSAPushesResponse } from '../../types/campaigns';
+import type { Campaign, ListPSACampaignsResponse, PSAProposeResponse, PSAProposeCreateResponse, PSAPublishResponse, ListPSAPushesResponse, PSASubjectsResponse } from '../../types/campaigns';
 import type { APIClient } from './client';
 
 declare module './client' {
@@ -13,6 +13,7 @@ declare module './client' {
     psaProposeCreate(id: string): Promise<PSAProposeCreateResponse>;
     psaPublish(id: string, pushId: string): Promise<PSAPublishResponse>;
     listPSAPushes(): Promise<ListPSAPushesResponse>;
+    listPSASubjects(): Promise<PSASubjectsResponse>;
   }
 }
 
@@ -41,4 +42,10 @@ proto.psaPublish = async function (this: APIClient, id: string, pushId: string):
 
 proto.listPSAPushes = async function (this: APIClient): Promise<ListPSAPushesResponse> {
   return this.get<ListPSAPushesResponse>('/psa-pushes');
+};
+
+// Served from the persisted PSA portal catalog (CatalogStore), not a live portal
+// call — the main server has no portal session. See docs/psa-harvester.md.
+proto.listPSASubjects = async function (this: APIClient): Promise<PSASubjectsResponse> {
+  return this.get<PSASubjectsResponse>('/psa/subjects');
 };

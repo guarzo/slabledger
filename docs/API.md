@@ -428,6 +428,10 @@ Lists campaigns.
     "dailySpendCapCents": 1000000,
     "inclusionList": "",
     "exclusionMode": false,
+    "targetLanguages": ["english"],
+    "subjectFilterMode": "Target",
+    "subjects": [{ "id": 22210, "name": "Machamp" }],
+    "deniedSpecs": [],
     "phase": "active",
     "psaSourcingFeeCents": 300,
     "ebayFeePct": 0.1235,
@@ -2844,6 +2848,26 @@ Returns the most recent PSA portal campaign snapshot (written by the harvester).
     }
   ],
   "fetchedAt": "2025-01-15T10:00:00Z"
+}
+```
+
+**Errors:** `503` PSA campaign sync not enabled; `500` internal error
+
+---
+
+### `GET /api/psa/subjects`
+
+Auth: required (session)
+
+Returns the persisted PSA subject catalog (Pokemon category) harvested by
+`cmd/psa-harvest`, for the campaign form's subject-name typeahead. Served
+entirely from the database — the main server never contacts psacard.com.
+
+**Response:** `200 OK`
+```json
+{
+  "subjects": [{ "id": 22210, "name": "Machamp" }],
+  "fetchedAt": "2026-08-06T10:00:00Z"
 }
 ```
 

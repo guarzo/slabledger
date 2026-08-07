@@ -41,8 +41,18 @@ function validateCampaignForm(values: CreateCampaignInput) {
 
 
 // Parsed campaign: only fields explicitly present in the text are set.
-// inclusionList + exclusionMode are always included — absent line = cleared.
-type ParsedCampaign = Partial<CreateCampaignInput> & { name: string; inclusionList: string; exclusionMode: boolean };
+//
+// Targeting (targetLanguages, subjectFilterMode, subjects, deniedSpecs) is
+// deliberately NOT part of this bulk paste format. Subjects and denied specs
+// carry portal-issued ids that must never be re-derived from a name (see the
+// design doc's "ids are copied verbatim, never re-resolved" rule) — a text
+// round-trip through paste would reset those ids to 0 and corrupt targeting on
+// the next push for every campaign already linked to the portal. Targeting is
+// set once at campaign creation (CampaignFormFields' subject editor) or by the
+// harvester's baseline pull — there is currently no edit surface for it after
+// that; this paste format stays scoped to scalar economics/range fields, which
+// round-trip safely.
+type ParsedCampaign = Partial<CreateCampaignInput> & { name: string };
 
 function parseExportText(text: string): ParsedCampaign[] {
   // Split at campaign boundaries (before "Campaign N — ..." lines) instead of
@@ -62,17 +72,15 @@ function parseExportText(text: string): ParsedCampaign[] {
     // Only set fields that actually appear in the text. When updating an
     // existing campaign, omitted fields (e.g. PSA Sourcing Fee, eBay Fee)
     // keep their current values instead of being reset to defaults.
-    // Conditionally-emitted string filters (year, grade, price, clConfidence,
-    // inclusionList) default to '' so an absent line clears the filter —
-    // buildExportText only emits these when non-empty.
+    // Conditionally-emitted string filters (year, grade, price, clConfidence)
+    // default to '' so an absent line clears the filter — buildExportText
+    // only emits these when non-empty.
     const input: ParsedCampaign = {
       name: headerMatch[1].trim(),
       yearRange: '',
       gradeRange: '',
       priceRange: '',
       clConfidence: '',
-      inclusionList: '',
-      exclusionMode: false,
     };
 
     for (let i = 1; i < lines.length; i++) {
@@ -115,14 +123,6 @@ function parseExportText(text: string): ParsedCampaign[] {
           if (!isNaN(dollars)) input.dailySpendCapCents = Math.round(dollars * 100);
           break;
         }
-        case 'INCLUSION':
-          input.inclusionList = val;
-          input.exclusionMode = false;
-          break;
-        case 'EXCLUSION':
-          input.inclusionList = val;
-          input.exclusionMode = true;
-          break;
         case 'PSA SOURCING FEE': {
           const dollars = parseFloat(val.replace(/[$,]/g, ''));
           if (!isNaN(dollars)) input.psaSourcingFeeCents = Math.round(dollars * 100);
@@ -133,6 +133,8 @@ function parseExportText(text: string): ParsedCampaign[] {
           if (!isNaN(pct)) input.ebayFeePct = pct / 100;
           break;
         }
+        // 'INCLUSION'/'EXCLUSION' lines from the pre-spec-list format are no
+        // longer recognized — see the comment on ParsedCampaign above.
       }
     }
 
@@ -158,10 +160,6 @@ function buildExportText(campaigns: Campaign[]): string {
     lines.push(`Daily Spend: ${formatCents(c.dailySpendCapCents)}`);
     lines.push(`PSA Sourcing Fee: ${formatCents(c.psaSourcingFeeCents)}`);
     lines.push(`eBay Fee: ${formatPct(c.ebayFeePct)}`);
-    if (c.inclusionList) {
-      const label = c.exclusionMode ? 'Exclusion' : 'Inclusion';
-      lines.push(`${label}: ${c.inclusionList}`);
-    }
     return lines.join('\n');
   }).join('\n\n');
 }

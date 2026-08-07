@@ -166,9 +166,8 @@ func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 }
 
 // collectContributors returns the signalEntry values from idx that belong to
-// the given campaign's character slice. Matching mirrors
-// characterMatchesInclusion in campaign_coverage.go: case-insensitive
-// substring check when an inclusion list is set; all entries when open-net.
+// the given campaign's subject axis, delegating to inventory.SubjectAxisMatches
+// so subject matching has exactly one implementation across the codebase.
 //
 // GradeRange is intentionally not applied here: the character cache aggregates
 // velocity across all grades, so grade-range filtering would require
@@ -176,53 +175,9 @@ func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 // the campaign's character universe regardless of targeted grades.
 func collectContributors(c ActiveCampaign, idx map[string]signalEntry) []signalEntry {
 	var out []signalEntry
-	trimmed := strings.TrimSpace(c.InclusionList)
-
-	if trimmed == "" {
-		// Open-net: every indexed character contributes. An empty InclusionList
-		// means "match all" regardless of ExclusionMode, matching the behaviour
-		// of characterMatchesInclusion in campaign_coverage.go. For very large
-		// caches (>~10k entries) the full traversal may be worth bounding with
-		// a per-campaign cap; acceptable at current cache sizes.
-		for _, entry := range idx {
+	for _, entry := range idx {
+		if inventory.SubjectAxisMatches(entry.displayName, c.Subjects, c.SubjectFilterMode) {
 			out = append(out, entry)
-		}
-		return out
-	}
-
-	// Precompute the lowercased inclusion tokens once. SplitInclusionList
-	// already trims whitespace and drops empty entries, so we only need to
-	// lowercase here. If parsing yields zero tokens (e.g. ",," — all
-	// separators), treat the campaign as open-net rather than silently
-	// matching nothing.
-	entries := inventory.SplitInclusionList(trimmed)
-	if len(entries) == 0 {
-		for _, entry := range idx {
-			out = append(out, entry)
-		}
-		return out
-	}
-	normalized := make([]string, len(entries))
-	for i, e := range entries {
-		normalized[i] = strings.ToLower(e)
-	}
-
-	for key, entry := range idx {
-		matched := false
-		for _, token := range normalized {
-			if strings.Contains(key, token) {
-				matched = true
-				break
-			}
-		}
-		if c.ExclusionMode {
-			if !matched {
-				out = append(out, entry)
-			}
-		} else {
-			if matched {
-				out = append(out, entry)
-			}
 		}
 	}
 	return out

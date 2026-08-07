@@ -336,8 +336,9 @@ func mondayOf(t time.Time) time.Time {
 //   - GradeRange: GradeValue ∈ [min, max]
 //   - PriceRange: BuyCostCents ∈ [min*100, max*100]  (range stored in dollars)
 //   - YearRange:  CardYear (int) ∈ [min, max]; skipped if CardYear is empty or non-numeric
-//   - InclusionList non-empty, ExclusionMode=false: CardPlayer (case-insensitive) must be in list
-//   - InclusionList non-empty, ExclusionMode=true:  CardPlayer must NOT be in list
+//   - Subjects: CardPlayer must satisfy inventory.SubjectAxisMatches against the
+//     campaign's Subjects/SubjectFilterMode — the same subject-axis predicate
+//     PurchaseMatchesCampaign uses, so an empty Subjects list is an open net.
 func inScope(c inventory.Campaign, p inventory.Purchase) bool {
 	if minG, maxG, ok := parseRange(c.GradeRange); ok {
 		if p.GradeValue < minG || p.GradeValue > maxG {
@@ -361,21 +362,8 @@ func inScope(c inventory.Campaign, p inventory.Purchase) bool {
 		}
 	}
 
-	if c.InclusionList != "" {
-		playerLower := strings.ToLower(p.CardPlayer)
-		inList := false
-		for _, part := range strings.Split(c.InclusionList, ",") {
-			if strings.TrimSpace(strings.ToLower(part)) == playerLower {
-				inList = true
-				break
-			}
-		}
-		if !c.ExclusionMode && !inList {
-			return false
-		}
-		if c.ExclusionMode && inList {
-			return false
-		}
+	if !inventory.SubjectAxisMatches(p.CardPlayer, c.Subjects, c.SubjectFilterMode) {
+		return false
 	}
 
 	return true

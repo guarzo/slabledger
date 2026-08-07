@@ -354,6 +354,62 @@ func IsChineseSet(setName string) bool {
 	return strings.HasPrefix(lower, "cn ") || strings.Contains(lower, "chinese")
 }
 
+// Language tokens. These are the canonical values stored in the
+// inventory.Campaign.TargetLanguages set and matched against set names.
+const (
+	LangEnglish  = "english"
+	LangJapanese = "japanese"
+	LangChinese  = "chinese"
+	LangKorean   = "korean"
+)
+
+// IsJapaneseSet returns true if the set name carries PSA's "Japanese " marker
+// prefix. This mirrors the unexported check already used inside
+// normalizeSetNameBase (normalize_sets.go:116), exported here so matching can
+// use it as a positive language marker instead of a negation.
+func IsJapaneseSet(setName string) bool {
+	return strings.HasPrefix(strings.ToLower(setName), "japanese ")
+}
+
+// IsKoreanSet returns true if the set name carries a "Korean " marker prefix,
+// or contains "korean" anywhere, mirroring the shape of IsChineseSet. There is
+// no Korean-marked cert anywhere in this repo today to confirm PSA's exact
+// convention, so this follows the same prefix-or-contains pattern PSA already
+// uses for Japanese and Chinese sets.
+func IsKoreanSet(setName string) bool {
+	lower := strings.ToLower(setName)
+	return strings.HasPrefix(lower, "korean ") || strings.Contains(lower, "korean")
+}
+
+// SetLanguage classifies a set name into one of the Lang* tokens. Order
+// matters: japanese, then chinese, then korean are checked first because each
+// carries its own positive marker; english is the fallback only once all
+// three are ruled out — it is never derived by negating a single marker,
+// which is the bug this function fixes (a Simplified Chinese set is not
+// merely "not Japanese").
+//
+// The english default is a measured tail, not a blind assumption: a
+// 2026-08-06 audit of production campaign_purchases.set_name found 234
+// distinct set names falling through to this branch, of which 6 (11 rows)
+// carry a non-English, non-Japanese/Chinese/Korean marker (FRENCH, FRENCH
+// JUNGLE, GERMAN, SPANISH, PORTUGUESE SSP PT-SURGING SPARKS, Pokemon
+// Indonesian Sv-P Promo). No token was added for these: the portal only
+// offers Japanese/English curated lists, so none of the four canonical
+// tokens fit them any better, and widening the marker set would be scope
+// expansion beyond what any consumer of SetLanguage can act on today.
+func SetLanguage(setName string) string {
+	switch {
+	case IsJapaneseSet(setName):
+		return LangJapanese
+	case IsChineseSet(setName):
+		return LangChinese
+	case IsKoreanSet(setName):
+		return LangKorean
+	default:
+		return LangEnglish
+	}
+}
+
 // IsChineseGemPackSet returns true if the set name matches a known Chinese Gem Pack volume
 // (CBB1/Vol 1, CBB2/Vol 2, CBB3/Vol 3). Only these volumes have species-based numbering
 // in marketplace databases. Requires the set to also be Chinese to avoid false positives on

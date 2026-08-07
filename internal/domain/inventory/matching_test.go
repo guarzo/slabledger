@@ -1,8 +1,6 @@
 package inventory
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestParseRange(t *testing.T) {
 	tests := []struct {
@@ -38,352 +36,340 @@ func TestParseRange(t *testing.T) {
 
 func TestPurchaseMatchesCampaign(t *testing.T) {
 	tests := []struct {
-		name         string
-		grade        float64
-		buyCostCents int
-		cardName     string
-		setName      string
-		campaign     Campaign
-		want         bool
+		name     string
+		in       MatchInput
+		campaign Campaign
+		want     bool
 	}{
 		{
-			name:         "no filters set - matches anything",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{},
-			want:         true,
+			name:     "no filters set - matches anything",
+			in:       MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			campaign: Campaign{},
+			want:     true,
 		},
 		{
-			name:         "grade in range",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{GradeRange: "9-10"},
-			want:         true,
+			name:     "grade in range",
+			in:       MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			campaign: Campaign{GradeRange: "9-10"},
+			want:     true,
 		},
 		{
-			name:         "grade out of range",
-			grade:        7,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{GradeRange: "9-10"},
-			want:         false,
+			name:     "grade out of range",
+			in:       MatchInput{Grade: 7, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			campaign: Campaign{GradeRange: "9-10"},
+			want:     false,
 		},
 		{
-			name:         "grade at lower boundary",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{GradeRange: "9-10"},
-			want:         true,
+			name:     "half-grade 9.5 in range 9-10",
+			in:       MatchInput{Grade: 9.5, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			campaign: Campaign{GradeRange: "9-10"},
+			want:     true,
 		},
 		{
-			name:         "grade at upper boundary",
-			grade:        10,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{GradeRange: "9-10"},
-			want:         true,
+			name:     "price in range",
+			in:       MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			campaign: Campaign{PriceRange: "50-500"},
+			want:     true,
 		},
 		{
-			name:         "price in range",
-			grade:        9,
-			buyCostCents: 15000, // $150
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{PriceRange: "50-500"},
-			want:         true,
+			name:     "price below range",
+			in:       MatchInput{Grade: 9, BuyCostCents: 2000, CardName: "Charizard", SetName: "Base Set"},
+			campaign: Campaign{PriceRange: "50-500"},
+			want:     false,
 		},
 		{
-			name:         "price below range",
-			grade:        9,
-			buyCostCents: 2000, // $20
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{PriceRange: "50-500"},
-			want:         false,
+			name:     "price range scaled by buy terms - in range",
+			in:       MatchInput{Grade: 10, BuyCostCents: 19799, CardName: "Umbreon EX", SetName: "Pokemon"},
+			campaign: Campaign{PriceRange: "200-500", BuyTermsCLPct: 0.78},
+			want:     true, // effective range: $156-$390
 		},
 		{
-			name:         "price above range",
-			grade:        9,
-			buyCostCents: 60000, // $600
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{PriceRange: "50-500"},
-			want:         false,
+			name:     "price range scaled by buy terms - below range",
+			in:       MatchInput{Grade: 10, BuyCostCents: 10000, CardName: "Umbreon EX", SetName: "Pokemon"},
+			campaign: Campaign{PriceRange: "200-500", BuyTermsCLPct: 0.78},
+			want:     false,
 		},
 		{
-			name:         "price at lower boundary",
-			grade:        9,
-			buyCostCents: 5000, // $50 exactly
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{PriceRange: "50-500"},
-			want:         true,
+			name:     "malformed grade range rejects match",
+			in:       MatchInput{Grade: 7, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			campaign: Campaign{GradeRange: "bad"},
+			want:     false,
 		},
 		{
-			name:         "price at upper boundary",
-			grade:        9,
-			buyCostCents: 50000, // $500 exactly
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{PriceRange: "50-500"},
-			want:         true,
+			name:     "cardYear inside campaign year range",
+			in:       MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set", CardYear: 2000},
+			campaign: Campaign{YearRange: "1999-2003"},
+			want:     true,
 		},
 		{
-			name:         "inclusion list matches card name",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard VMAX PSA 9",
-			setName:      "Vivid Voltage",
-			campaign:     Campaign{InclusionList: "Charizard,Pikachu"},
-			want:         true,
+			name:     "cardYear outside campaign year range",
+			in:       MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard", SetName: "Vivid Voltage", CardYear: 2020},
+			campaign: Campaign{YearRange: "1999-2003"},
+			want:     false,
 		},
 		{
-			name:         "inclusion list matches set name",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Some Card",
-			setName:      "Base Set",
-			campaign:     Campaign{InclusionList: "Base Set"},
-			want:         true,
-		},
-		{
-			name:         "inclusion list no match",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Blastoise",
-			setName:      "Jungle",
-			campaign:     Campaign{InclusionList: "Charizard,Pikachu"},
-			want:         false,
-		},
-		{
-			name:         "inclusion list case insensitive",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "charizard vmax",
-			setName:      "Base Set",
-			campaign:     Campaign{InclusionList: "CHARIZARD"},
-			want:         true,
-		},
-		{
-			name:         "exclusion mode - card matches exclusion list",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard VMAX",
-			setName:      "Base Set",
-			campaign:     Campaign{InclusionList: "Charizard", ExclusionMode: true},
-			want:         false,
-		},
-		{
-			name:         "exclusion mode - card does not match exclusion list",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Pikachu VMAX",
-			setName:      "Vivid Voltage",
-			campaign:     Campaign{InclusionList: "Charizard", ExclusionMode: true},
-			want:         true,
-		},
-		{
-			name:         "all criteria match",
-			grade:        10,
-			buyCostCents: 25000, // $250
-			cardName:     "Charizard VMAX",
-			setName:      "Base Set",
+			name: "language axis rejects mismatched set",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "SWSH BLACK STAR PROMO"},
 			campaign: Campaign{
-				GradeRange:    "9-10",
-				PriceRange:    "100-500",
-				InclusionList: "Charizard",
-			},
-			want: true,
-		},
-		{
-			name:         "grade matches but price fails",
-			grade:        10,
-			buyCostCents: 8000, // $80
-			cardName:     "Charizard VMAX",
-			setName:      "Base Set",
-			campaign: Campaign{
-				GradeRange:    "9-10",
-				PriceRange:    "100-500",
-				InclusionList: "Charizard",
+				TargetLanguages: []string{"japanese"},
 			},
 			want: false,
 		},
 		{
-			name:         "malformed grade range rejects match",
-			grade:        7,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{GradeRange: "bad"},
-			want:         false,
+			name: "language axis accepts matching set",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "JAPANESE M1S-MEGA SYMPHONIA"},
+			campaign: Campaign{
+				TargetLanguages: []string{"japanese"},
+			},
+			want: true,
 		},
 		{
-			name:         "malformed price range rejects match",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{PriceRange: "bad"},
-			want:         false,
+			// The shape of all six live campaigns: BOTH curated spec lists are
+			// selected on the portal. The single-token model could not express
+			// this, so it rejected half of what these campaigns actually buy.
+			name: "both languages selected accepts an english printing",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "SWSH BLACK STAR PROMO"},
+			campaign: Campaign{
+				TargetLanguages: []string{"english", "japanese"},
+			},
+			want: true,
 		},
 		{
-			name:         "empty entries in inclusion list are skipped",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{InclusionList: ",,Charizard,,"},
-			want:         true,
+			name: "both languages selected accepts a japanese printing",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "JAPANESE M1S-MEGA SYMPHONIA"},
+			campaign: Campaign{
+				TargetLanguages: []string{"english", "japanese"},
+			},
+			want: true,
 		},
 		{
-			name:         "price range scaled by buy terms - in range",
-			grade:        10,
-			buyCostCents: 19799, // $197.99 paid, market value ~$253.83 at 78%
-			cardName:     "Umbreon EX",
-			setName:      "Pokemon",
-			campaign:     Campaign{PriceRange: "200-500", BuyTermsCLPct: 0.78},
-			want:         true, // effective range: $156-$390
+			// A set is still a closed net, not a wildcard: chinese is in neither
+			// token, so it must not match even with both tokens selected.
+			name: "both languages selected still rejects a chinese printing",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Pikachu", SetName: "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1"},
+			campaign: Campaign{
+				TargetLanguages: []string{"english", "japanese"},
+			},
+			want: false,
 		},
 		{
-			name:         "price range scaled by buy terms - below range",
-			grade:        10,
-			buyCostCents: 10000, // $100 paid
-			cardName:     "Umbreon EX",
-			setName:      "Pokemon",
-			campaign:     Campaign{PriceRange: "200-500", BuyTermsCLPct: 0.78},
-			want:         false, // effective range: $156-$390, $100 < $156
+			name: "subject axis Target mode - matches",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard VMAX", SetName: "Base Set"},
+			campaign: Campaign{
+				SubjectFilterMode: SubjectFilterTarget,
+				Subjects:          []TargetSubject{{ID: 100, Name: "Charizard"}},
+			},
+			want: true,
 		},
 		{
-			name:         "price range with zero buy terms defaults to 1",
-			grade:        9,
-			buyCostCents: 25000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{PriceRange: "50-500", BuyTermsCLPct: 0},
-			want:         true,
+			name: "subject axis Target mode - no match",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Blastoise", SetName: "Jungle"},
+			campaign: Campaign{
+				SubjectFilterMode: SubjectFilterTarget,
+				Subjects:          []TargetSubject{{ID: 100, Name: "Charizard"}},
+			},
+			want: false,
 		},
 		{
-			name:         "space-separated inclusion list matches",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard VMAX PSA 9",
-			setName:      "Vivid Voltage",
-			campaign:     Campaign{InclusionList: "pikachu charizard mewtwo"},
-			want:         true,
+			name: "subject axis Exclude mode - excluded card rejected",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard VMAX", SetName: "Base Set"},
+			campaign: Campaign{
+				SubjectFilterMode: SubjectFilterExclude,
+				Subjects:          []TargetSubject{{ID: 100, Name: "Charizard"}},
+			},
+			want: false,
 		},
 		{
-			name:         "space-separated inclusion list no match",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Blastoise",
-			setName:      "Jungle",
-			campaign:     Campaign{InclusionList: "pikachu charizard mewtwo"},
-			want:         false,
+			name: "subject axis Exclude mode - other card accepted",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Pikachu VMAX", SetName: "Vivid Voltage"},
+			campaign: Campaign{
+				SubjectFilterMode: SubjectFilterExclude,
+				Subjects:          []TargetSubject{{ID: 100, Name: "Charizard"}},
+			},
+			want: true,
 		},
 		{
-			name:         "mixed comma and space separated inclusion list",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Umbreon VMAX",
-			setName:      "Evolving Skies",
-			campaign:     Campaign{InclusionList: "pikachu charizard,umbreon mewtwo"},
-			want:         true,
+			name: "empty subjects is an open net regardless of mode",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Anything", SetName: "Any Set"},
+			campaign: Campaign{
+				SubjectFilterMode: SubjectFilterExclude,
+			},
+			want: true,
 		},
 		{
-			name:         "half-grade 9.5 in range 9-10",
-			grade:        9.5,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{GradeRange: "9-10"},
-			want:         true,
+			name: "denied spec by PSASpecID overrides a subject match",
+			in: MatchInput{
+				Grade: 9, BuyCostCents: 15000, CardName: "Charizard VMAX", SetName: "Base Set", CardNumber: "004", PSASpecID: 4807,
+			},
+			campaign: Campaign{
+				Subjects:    []TargetSubject{{ID: 100, Name: "Charizard"}},
+				DeniedSpecs: []TargetSubject{{ID: 4807, Name: "Base Set 004"}},
+			},
+			want: false,
 		},
 		{
-			name:         "half-grade 8.5 below range 9-10",
-			grade:        8.5,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			campaign:     Campaign{GradeRange: "9-10"},
-			want:         false,
+			name: "denied spec by set+number fallback when PSASpecID is 0",
+			in: MatchInput{
+				Grade: 9, BuyCostCents: 15000, CardName: "Charizard VMAX", SetName: "Base Set", CardNumber: "004",
+			},
+			campaign: Campaign{
+				Subjects:    []TargetSubject{{ID: 100, Name: "Charizard"}},
+				DeniedSpecs: []TargetSubject{{ID: 0, Name: "Base Set 004"}},
+			},
+			want: false,
+		},
+		{
+			name: "no deny when neither identity is available (card number missing)",
+			in: MatchInput{
+				Grade: 9, BuyCostCents: 15000, CardName: "Charizard VMAX", SetName: "Base Set",
+			},
+			campaign: Campaign{
+				Subjects:    []TargetSubject{{ID: 100, Name: "Charizard"}},
+				DeniedSpecs: []TargetSubject{{ID: 0, Name: "Base Set 004"}},
+			},
+			want: true, // fail-open: PSASpecID/ID both 0, and CardNumber is empty so no composite key can be built
 		},
 	}
 
-	// Add year-range test cases with non-zero cardYear
-	yearTests := []struct {
-		name         string
-		grade        float64
-		buyCostCents int
-		cardName     string
-		setName      string
-		cardYear     int
-		campaign     Campaign
-		want         bool
-	}{
-		{
-			name:         "cardYear inside campaign year range",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			cardYear:     2000,
-			campaign:     Campaign{YearRange: "1999-2003"},
-			want:         true,
-		},
-		{
-			name:         "cardYear outside campaign year range",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Vivid Voltage",
-			cardYear:     2020,
-			campaign:     Campaign{YearRange: "1999-2003"},
-			want:         false,
-		},
-		{
-			name:         "cardYear at lower boundary",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			cardYear:     1999,
-			campaign:     Campaign{YearRange: "1999-2003"},
-			want:         true,
-		},
-		{
-			name:         "cardYear at upper boundary",
-			grade:        9,
-			buyCostCents: 15000,
-			cardName:     "Charizard",
-			setName:      "Base Set",
-			cardYear:     2003,
-			campaign:     Campaign{YearRange: "1999-2003"},
-			want:         true,
-		},
-	}
-
-	for _, tt := range yearTests {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := PurchaseMatchesCampaign(tt.grade, tt.buyCostCents, tt.cardName, tt.setName, tt.cardYear, &tt.campaign)
+			got := PurchaseMatchesCampaign(tt.in, &tt.campaign)
 			if got != tt.want {
 				t.Errorf("PurchaseMatchesCampaign() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+}
 
+func TestLanguageAxisMatches(t *testing.T) {
+	tests := []struct {
+		name            string
+		setName         string
+		targetLanguages []string
+		want            bool
+	}{
+		{"nil set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", nil, true},
+		{"empty set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{}, true},
+		{"japanese set matches japanese-only set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese"}, true},
+		{"chinese set does not match japanese-only set", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{"japanese"}, false},
+		{"english set matches english-only set", "SWSH BLACK STAR PROMO", []string{"english"}, true},
+		{"english set matches a both-languages set", "SWSH BLACK STAR PROMO", []string{"english", "japanese"}, true},
+		{"japanese set matches a both-languages set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"english", "japanese"}, true},
+		// The set is unordered: reversing the tokens must not change the answer.
+		{"membership is order-insensitive", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese", "english"}, true},
+		{"korean set matches neither token", "KOREAN S1-SWORD SHIELD", []string{"english", "japanese"}, false},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := PurchaseMatchesCampaign(tt.grade, tt.buyCostCents, tt.cardName, tt.setName, 0, &tt.campaign)
-			if got != tt.want {
-				t.Errorf("PurchaseMatchesCampaign() = %v, want %v", got, tt.want)
+			if got := LanguageAxisMatches(tt.setName, tt.targetLanguages); got != tt.want {
+				t.Errorf("LanguageAxisMatches(%q, %v) = %v, want %v", tt.setName, tt.targetLanguages, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSubjectAxisMatches(t *testing.T) {
+	tests := []struct {
+		name     string
+		cardName string
+		subjects []TargetSubject
+		mode     string
+		want     bool
+	}{
+		{"empty list is open net in Target mode", "Charizard", nil, SubjectFilterTarget, true},
+		{"empty list is open net in Exclude mode", "Charizard", nil, SubjectFilterExclude, true},
+		{"Target mode matches", "Charizard VMAX", []TargetSubject{{ID: 1, Name: "Charizard"}}, SubjectFilterTarget, true},
+		{"Target mode no match", "Blastoise", []TargetSubject{{ID: 1, Name: "Charizard"}}, SubjectFilterTarget, false},
+		{"Exclude mode rejects listed", "Charizard VMAX", []TargetSubject{{ID: 1, Name: "Charizard"}}, SubjectFilterExclude, false},
+		{"Exclude mode accepts unlisted", "Pikachu", []TargetSubject{{ID: 1, Name: "Charizard"}}, SubjectFilterExclude, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SubjectAxisMatches(tt.cardName, tt.subjects, tt.mode); got != tt.want {
+				t.Errorf("SubjectAxisMatches(%q, %v, %q) = %v, want %v", tt.cardName, tt.subjects, tt.mode, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSpecDenied(t *testing.T) {
+	tests := []struct {
+		name   string
+		in     MatchInput
+		denied []TargetSubject
+		want   bool
+	}{
+		{
+			name:   "denied by matching PSASpecID",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004", PSASpecID: 4807},
+			denied: []TargetSubject{{ID: 4807, Name: "Base Set 004"}},
+			want:   true,
+		},
+		{
+			name:   "not denied when PSASpecID differs",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004", PSASpecID: 100},
+			denied: []TargetSubject{{ID: 4807, Name: "Base Set 004"}},
+			want:   false,
+		},
+		{
+			name:   "falls back to set+number composite when PSASpecID is 0",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004"},
+			denied: []TargetSubject{{ID: 4807, Name: "Base Set 004"}},
+			want:   true,
+		},
+		{
+			name:   "falls back to set+number composite when denied entry id is 0",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004", PSASpecID: 999},
+			denied: []TargetSubject{{ID: 0, Name: "Base Set 004"}},
+			want:   true,
+		},
+		{
+			name:   "composite comparison is case-insensitive",
+			in:     MatchInput{SetName: "base set", CardNumber: "004"},
+			denied: []TargetSubject{{ID: 0, Name: "BASE SET 004"}},
+			want:   true,
+		},
+		{
+			name:   "no match when card number differs",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004"},
+			denied: []TargetSubject{{ID: 0, Name: "Base Set 005"}},
+			want:   false,
+		},
+		{
+			name:   "fail-open when card number is missing (no composite key can be built)",
+			in:     MatchInput{SetName: "Base Set"},
+			denied: []TargetSubject{{ID: 0, Name: "Base Set 004"}},
+			want:   false,
+		},
+		{
+			name:   "fail-open when set name is missing (no composite key can be built)",
+			in:     MatchInput{CardNumber: "004"},
+			denied: []TargetSubject{{ID: 0, Name: "Base Set 004"}},
+			want:   false,
+		},
+		{
+			name:   "empty deny list never denies",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004", PSASpecID: 4807},
+			denied: nil,
+			want:   false,
+		},
+		{
+			name:   "regression: English deny entry does not over-deny a Japanese printing",
+			in:     MatchInput{SetName: "JAPANESE BASE SET", CardNumber: "004"},
+			denied: []TargetSubject{{ID: 0, Name: "Base Set 004"}},
+			want:   false,
+		},
+		{
+			name:   "regression: Japanese deny entry does not over-deny an English printing",
+			in:     MatchInput{SetName: "Base Set", CardNumber: "004"},
+			denied: []TargetSubject{{ID: 0, Name: "JAPANESE BASE SET 004"}},
+			want:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SpecDenied(tt.in, tt.denied); got != tt.want {
+				t.Errorf("SpecDenied(%+v, %v) = %v, want %v", tt.in, tt.denied, got, tt.want)
 			}
 		})
 	}
@@ -403,9 +389,10 @@ func TestFindMatchingCampaign(t *testing.T) {
 		PriceRange: "10-100",
 	}
 	campaignC := Campaign{
-		ID:            "campaign-c",
-		Name:          "Pokemon Only",
-		InclusionList: "Charizard,Pikachu,Mewtwo",
+		ID:                "campaign-c",
+		Name:              "Pokemon Only",
+		SubjectFilterMode: SubjectFilterTarget,
+		Subjects:          []TargetSubject{{ID: 1, Name: "Charizard"}, {ID: 2, Name: "Pikachu"}, {ID: 3, Name: "Mewtwo"}},
 	}
 	campaignNoFilters := Campaign{
 		ID:   "campaign-none",
@@ -413,7 +400,10 @@ func TestFindMatchingCampaign(t *testing.T) {
 	}
 
 	t.Run("single match by grade and price", func(t *testing.T) {
-		result := FindMatchingCampaign(9.0, 15000, "Charizard", "Base Set", 0, []Campaign{campaignA, campaignB})
+		result := FindMatchingCampaign(
+			MatchInput{Grade: 9.0, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			[]Campaign{campaignA, campaignB},
+		)
 		if result.Status != "matched" {
 			t.Fatalf("expected matched, got %s", result.Status)
 		}
@@ -423,7 +413,10 @@ func TestFindMatchingCampaign(t *testing.T) {
 	})
 
 	t.Run("single match to campaign B", func(t *testing.T) {
-		result := FindMatchingCampaign(7.0, 5000, "Blastoise", "Base Set", 0, []Campaign{campaignA, campaignB})
+		result := FindMatchingCampaign(
+			MatchInput{Grade: 7.0, BuyCostCents: 5000, CardName: "Blastoise", SetName: "Base Set"},
+			[]Campaign{campaignA, campaignB},
+		)
 		if result.Status != "matched" {
 			t.Fatalf("expected matched, got %s", result.Status)
 		}
@@ -433,16 +426,20 @@ func TestFindMatchingCampaign(t *testing.T) {
 	})
 
 	t.Run("no match", func(t *testing.T) {
-		// Grade 5 doesn't match either campaign
-		result := FindMatchingCampaign(5.0, 15000, "Charizard", "Base Set", 0, []Campaign{campaignA, campaignB})
+		result := FindMatchingCampaign(
+			MatchInput{Grade: 5.0, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			[]Campaign{campaignA, campaignB},
+		)
 		if result.Status != "unmatched" {
 			t.Fatalf("expected unmatched, got %s", result.Status)
 		}
 	})
 
 	t.Run("ambiguous match", func(t *testing.T) {
-		// Grade 9, Charizard matches both campaignA (grade+price) and campaignC (inclusion list)
-		result := FindMatchingCampaign(9.0, 15000, "Charizard", "Base Set", 0, []Campaign{campaignA, campaignC})
+		result := FindMatchingCampaign(
+			MatchInput{Grade: 9.0, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			[]Campaign{campaignA, campaignC},
+		)
 		if result.Status != "ambiguous" {
 			t.Fatalf("expected ambiguous, got %s", result.Status)
 		}
@@ -452,7 +449,10 @@ func TestFindMatchingCampaign(t *testing.T) {
 	})
 
 	t.Run("campaign with no filters matches everything", func(t *testing.T) {
-		result := FindMatchingCampaign(9.0, 15000, "Charizard", "Base Set", 0, []Campaign{campaignNoFilters})
+		result := FindMatchingCampaign(
+			MatchInput{Grade: 9.0, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			[]Campaign{campaignNoFilters},
+		)
 		if result.Status != "matched" {
 			t.Fatalf("expected matched, got %s", result.Status)
 		}
@@ -461,22 +461,18 @@ func TestFindMatchingCampaign(t *testing.T) {
 		}
 	})
 
-	t.Run("no-filter campaign causes ambiguity with specific campaign", func(t *testing.T) {
-		result := FindMatchingCampaign(9.0, 15000, "Charizard", "Base Set", 0, []Campaign{campaignA, campaignNoFilters})
-		if result.Status != "ambiguous" {
-			t.Fatalf("expected ambiguous, got %s", result.Status)
-		}
-	})
-
 	t.Run("empty campaign list", func(t *testing.T) {
-		result := FindMatchingCampaign(9.0, 15000, "Charizard", "Base Set", 0, nil)
+		result := FindMatchingCampaign(MatchInput{Grade: 9.0, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"}, nil)
 		if result.Status != "unmatched" {
 			t.Fatalf("expected unmatched, got %s", result.Status)
 		}
 	})
 
 	t.Run("half-grade 9.5 matches range 9-10", func(t *testing.T) {
-		result := FindMatchingCampaign(9.5, 15000, "Charizard", "Base Set", 0, []Campaign{campaignA})
+		result := FindMatchingCampaign(
+			MatchInput{Grade: 9.5, BuyCostCents: 15000, CardName: "Charizard", SetName: "Base Set"},
+			[]Campaign{campaignA},
+		)
 		if result.Status != "matched" {
 			t.Fatalf("expected matched, got %s", result.Status)
 		}

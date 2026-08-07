@@ -23,6 +23,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
+	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
@@ -32,15 +33,20 @@ import (
 // TokenRepository (read+write) and SnapshotWriter contracts.
 var _ psaportal.TokenRepository = (*postgres.PSAPortalTokenStore)(nil)
 var _ psaportal.SnapshotWriter = (*postgres.PSAPortalSnapshotStore)(nil)
+var _ psacampaign.CatalogStore = (*postgres.PSAPortalCatalogStore)(nil)
 
 func main() {
-	if err := run(); err != nil {
+	baseline, rest, err := parseBaselineFlag(os.Args[1:])
+	if err != nil {
+		log.Fatalf("psa-harvest: %v", err)
+	}
+	if err := run(baseline, rest); err != nil {
 		log.Fatalf("psa-harvest: %v", err)
 	}
 }
 
-func run() error {
-	cfg, err := config.Load(os.Args[1:])
+func run(baseline bool, args []string) error {
+	cfg, err := config.Load(args)
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
@@ -49,7 +55,15 @@ func run() error {
 	// inherit this deadline, so a hung login or navigation kills the process
 	// instead of leaving the scheduled machine blocked (and auto-restarting)
 	// forever. The in-script Playwright steps time out well inside this.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Baseline mode fetches the edit form for every campaign in the fleet
+	// rather than relying on the incremental snapshot, so it gets a longer
+	// budget; it is still bounded, and it is a one-time, operator-invoked run
+	// rather than the hourly schedule.
+	timeout := 5 * time.Minute
+	if baseline {
+		timeout = 20 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	switch {
@@ -103,19 +117,43 @@ func run() error {
 		logger.Info(ctx, "psa-harvest: token and rows snapshot refreshed")
 	}
 
+	// Baseline mode does all its work inside the campaign-sync block below. If
+	// sync is disabled, that block never runs and `run` would return nil — an
+	// exit 0 the operator reads as "baseline complete" when nothing was pulled.
+	// Refuse instead.
+	if baseline && !cfg.PSASync.CampaignSyncEnabled {
+		return fmt.Errorf("baseline: PSA campaign sync is disabled (PSA_CAMPAIGN_SYNC_ENABLED); " +
+			"the baseline pull has nothing to read from — enable it and re-run")
+	}
+
 	if cfg.PSASync.CampaignSyncEnabled {
 		portal := psaportal.New(session, psaportal.Config{}, psaportal.WithLogger(logger))
 		snap := postgres.NewPSACampaignSnapshotStore(db.DB)
 		queue := postgres.NewPSACampaignPushQueueStore(db.DB)
 		linker := postgres.NewPSACampaignLinker(db.DB)
+		catalog := postgres.NewPSAPortalCatalogStore(db.DB)
 		campaignStore := postgres.NewCampaignStore(db.DB, logger)
 
 		campaignsFresh := false
-		campaigns, err := portal.FetchCampaigns(ctx)
+		campaigns, specLists, err := portal.FetchCampaigns(ctx)
 		switch {
 		case err != nil:
+			// Normal runs tolerate this: the drain below still has value, and
+			// the next hourly run retries. Baseline runs must not — a failed
+			// fetch means `campaigns` is nil, and continuing would hand
+			// runBaselinePull an empty fleet it would report as a clean sweep.
+			if baseline {
+				return fmt.Errorf("baseline: fetch campaigns: %w", err)
+			}
 			logger.Error(ctx, "psa-harvest: fetch campaigns failed", observability.Err(err))
 		case len(campaigns) == 0:
+			// Same reasoning. Zero portal campaigns is a plausible transient
+			// (an auth redirect that still returns 200), and it is
+			// indistinguishable from "the baseline had nothing to do" unless
+			// this path is fatal.
+			if baseline {
+				return fmt.Errorf("baseline: portal returned zero campaigns; refusing to record an empty baseline")
+			}
 			logger.Warn(ctx, "psa-harvest: fetch campaigns returned no rows, skipping snapshot save")
 		default:
 			if err := snap.SaveSnapshot(ctx, campaigns); err != nil {
@@ -154,6 +192,31 @@ func run() error {
 					observability.Int("unresolved", res.Unresolved),
 					observability.Int("soldSkipped", res.SoldSkipped))
 			}
+		}
+
+		// Persist the portal reference catalog on every run, baseline or not:
+		// this is what keeps the main server's translation Resolver inside
+		// psacampaign.CatalogMaxAge without needing its own portal session.
+		if len(specLists) > 0 {
+			if err := catalog.SaveSpecLists(ctx, specLists); err != nil {
+				logger.Error(ctx, "psa-harvest: save spec-list catalog failed", observability.Err(err))
+			}
+		}
+		if subjects, err := portal.FetchSubjects(ctx, psacampaign.PokemonCategoryID); err != nil {
+			logger.Error(ctx, "psa-harvest: fetch subjects failed", observability.Err(err))
+		} else if err := catalog.SaveSubjects(ctx, psacampaign.PokemonCategoryID, subjects); err != nil {
+			logger.Error(ctx, "psa-harvest: save subject catalog failed", observability.Err(err))
+		}
+
+		if baseline {
+			// Zero portal writes: return here, before DrainPushQueue is ever
+			// reached. This is the whole safety property of -baseline-pull,
+			// enforced structurally rather than by hoping the queue is empty.
+			if err := runBaselinePull(ctx, campaigns, campaignStore, logger); err != nil {
+				return fmt.Errorf("baseline: %w", err)
+			}
+			logger.Info(ctx, "psa-harvest: baseline pull complete, all linked campaigns had complete targeting")
+			return nil
 		}
 
 		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, linker, logger)
