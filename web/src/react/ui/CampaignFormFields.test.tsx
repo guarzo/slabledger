@@ -17,7 +17,7 @@ function baseValues(): CampaignFormValues {
     clConfidence: '',
     buyTermsCLPct: 0.7,
     dailySpendCapCents: 50000,
-    targetLanguage: '',
+    targetLanguages: [],
     subjectFilterMode: 'Target',
     subjects: [],
     deniedSpecs: [],
@@ -37,10 +37,49 @@ function renderFields(values: CampaignFormValues, onChange = vi.fn()) {
 }
 
 describe('CampaignFormFields targeting section', () => {
-  it('changing the language select calls onChange with the token', () => {
+  it('checking a language adds its token to the set', () => {
     const onChange = renderFields(baseValues());
-    fireEvent.change(screen.getByLabelText(/language/i), { target: { value: 'japanese' } });
-    expect(onChange).toHaveBeenCalledWith('targetLanguage', 'japanese');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Japanese' }));
+    expect(onChange).toHaveBeenCalledWith('targetLanguages', ['japanese']);
+  });
+
+  it('checking a second language keeps the first — the live campaigns carry both', () => {
+    const onChange = renderFields({ ...baseValues(), targetLanguages: ['english'] });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Japanese' }));
+    expect(onChange).toHaveBeenCalledWith('targetLanguages', ['english', 'japanese']);
+  });
+
+  it('unchecking a language removes only that token', () => {
+    const onChange = renderFields({ ...baseValues(), targetLanguages: ['english', 'japanese'] });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'English' }));
+    expect(onChange).toHaveBeenCalledWith('targetLanguages', ['japanese']);
+  });
+
+  it('reflects the current selection in the checkbox states', () => {
+    renderFields({ ...baseValues(), targetLanguages: ['japanese'] });
+    expect(screen.getByRole('checkbox', { name: 'Japanese' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'English' })).not.toBeChecked();
+  });
+
+  it('reads an empty selection as an open net, not as an unfilled field', () => {
+    renderFields(baseValues());
+    expect(screen.getByText(/open net/i)).toBeInTheDocument();
+    expect(screen.getByText(/buys any language/i)).toBeInTheDocument();
+  });
+
+  it('describes a non-empty selection in plain words', () => {
+    renderFields({ ...baseValues(), targetLanguages: ['english', 'japanese'] });
+    expect(screen.getByText(/Buys English and Japanese cards only\./)).toBeInTheDocument();
+  });
+
+  it('surfaces a token outside the known set instead of silently keeping it', () => {
+    // Defensive: the backend closed set is {english, japanese} today. If a
+    // future token arrives before this copy of the set is updated, it must be
+    // visible — and toggling a known box must not drop it (see toggleLanguage).
+    const onChange = renderFields({ ...baseValues(), targetLanguages: ['chinese'] });
+    expect(screen.getByText(/Unrecognized language token: chinese/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'English' }));
+    expect(onChange).toHaveBeenCalledWith('targetLanguages', ['chinese', 'english']);
   });
 
   it('toggling the subject mode segmented control calls onChange with Exclude', () => {

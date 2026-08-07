@@ -57,7 +57,7 @@ describe('api module', () => {
     });
 
     it('GET request parses JSON response', async () => {
-      const mockCampaigns: Campaign[] = [{ id: '1', name: 'Test', sport: '', yearRange: '', gradeRange: '', priceRange: '', clConfidence: '', buyTermsCLPct: 0, dailySpendCapCents: 0, targetLanguage: '', subjectFilterMode: 'Target', subjects: [], deniedSpecs: [], phase: 'pending', psaSourcingFeeCents: 0, ebayFeePct: 0, expectedFillRate: 0, createdAt: '', updatedAt: '' }];
+      const mockCampaigns: Campaign[] = [{ id: '1', name: 'Test', sport: '', yearRange: '', gradeRange: '', priceRange: '', clConfidence: '', buyTermsCLPct: 0, dailySpendCapCents: 0, targetLanguages: [], subjectFilterMode: 'Target', subjects: [], deniedSpecs: [], phase: 'pending', psaSourcingFeeCents: 0, ebayFeePct: 0, expectedFillRate: 0, createdAt: '', updatedAt: '' }];
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(mockCampaigns),

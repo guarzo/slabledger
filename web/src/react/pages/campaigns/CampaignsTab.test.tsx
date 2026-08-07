@@ -25,7 +25,7 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
     clConfidence: '',
     buyTermsCLPct: 0.7,
     dailySpendCapCents: 100000,
-    targetLanguage: '',
+    targetLanguages: [],
     subjectFilterMode: 'Target',
     subjects: [],
     deniedSpecs: [],

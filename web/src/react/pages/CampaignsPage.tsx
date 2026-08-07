@@ -42,7 +42,7 @@ function validateCampaignForm(values: CreateCampaignInput) {
 
 // Parsed campaign: only fields explicitly present in the text are set.
 //
-// Targeting (targetLanguage, subjectFilterMode, subjects, deniedSpecs) is
+// Targeting (targetLanguages, subjectFilterMode, subjects, deniedSpecs) is
 // deliberately NOT part of this bulk paste format. Subjects and denied specs
 // carry portal-issued ids that must never be re-derived from a name (see the
 // design doc's "ids are copied verbatim, never re-resolved" rule) — a text

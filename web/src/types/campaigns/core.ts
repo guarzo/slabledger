@@ -17,7 +17,9 @@ export interface Campaign {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  targetLanguage: string;
+  /** Curated-spec-list language tokens; empty = open net (buys any language).
+      Mirrors Go's inventory.Campaign.TargetLanguages (json: targetLanguages). */
+  targetLanguages: string[];
   subjectFilterMode: string;
   subjects: SubjectRef[];
   deniedSpecs: SubjectRef[];
@@ -147,7 +149,9 @@ export interface CreateCampaignInput {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  targetLanguage: string;
+  /** Curated-spec-list language tokens; empty = open net (buys any language).
+      Mirrors Go's inventory.Campaign.TargetLanguages (json: targetLanguages). */
+  targetLanguages: string[];
   subjectFilterMode: string;
   subjects: SubjectRef[];
   deniedSpecs: SubjectRef[];

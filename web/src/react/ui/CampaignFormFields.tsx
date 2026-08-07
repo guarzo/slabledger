@@ -16,7 +16,7 @@ export interface CampaignFormValues {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  targetLanguage: string;
+  targetLanguages: string[];
   subjectFilterMode: string;
   subjects: SubjectRef[];
   deniedSpecs: SubjectRef[];
@@ -28,7 +28,7 @@ export interface CampaignFormValues {
 
 interface CampaignFormFieldsProps {
   values: CampaignFormValues;
-  onChange: (field: string, value: string | number | SubjectRef[]) => void;
+  onChange: (field: string, value: string | number | string[] | SubjectRef[]) => void;
   inputSize?: 'sm';
   showPhase?: boolean;
   showFees?: boolean;
@@ -66,7 +66,7 @@ function EconomicsSection({
   values, onChange, inputSize, showFees,
 }: {
   values: CampaignFormValues;
-  onChange: (field: string, value: string | number | SubjectRef[]) => void;
+  onChange: (field: string, value: string | number | string[] | SubjectRef[]) => void;
   inputSize?: 'sm';
   showFees?: boolean;
 }) {
@@ -134,10 +134,65 @@ function EconomicsSection({
   );
 }
 
+function LanguageMultiSelect({
+  value, onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const groupId = useId();
+  const selected = new Set(value);
+  const known = new Set<string>(targetLanguageOptions.map(o => o.value));
+  // Tokens the backend sent that this copy of the closed set doesn't know.
+  // They are preserved through every toggle rather than silently dropped —
+  // dropping one would narrow what a live, money-spending campaign buys.
+  const unknown = value.filter(t => !known.has(t));
+
+  function toggleLanguage(token: string) {
+    onChange(selected.has(token) ? value.filter(t => t !== token) : [...value, token]);
+  }
+
+  const labels = value
+    .filter(t => known.has(t))
+    .map(t => targetLanguageOptions.find(o => o.value === t)?.label ?? t);
+  const summary = labels.length === 0
+    ? 'None selected — open net: this campaign buys any language.'
+    : `Buys ${labels.join(' and ')} cards only.`;
+
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="block text-xs text-[var(--text-muted)] mb-1">Languages</legend>
+      <div className="flex flex-wrap items-center gap-4">
+        {targetLanguageOptions.map(o => (
+          <label
+            key={o.value}
+            htmlFor={`${groupId}-${o.value}`}
+            className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer"
+          >
+            <input
+              id={`${groupId}-${o.value}`}
+              type="checkbox"
+              checked={selected.has(o.value)}
+              onChange={() => toggleLanguage(o.value)}
+              className="rounded border-[var(--surface-2)]"
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-[var(--text-subtle)]">{summary}</p>
+      {unknown.map(t => (
+        <p key={t} className="text-xs text-[var(--warning)]">
+          Unrecognized language token: {t} — kept as-is and still pushed.
+        </p>
+      ))}
+    </fieldset>
+  );
+}
+
 export default function CampaignFormFields({
   values, onChange, inputSize, showPhase, showFees, nameError, onNameBlur,
 }: CampaignFormFieldsProps) {
-  const targetLanguageId = useId();
   return (
     <div className="space-y-4">
       {/* Identity */}
@@ -185,9 +240,10 @@ export default function CampaignFormFields({
           </div>
           <Input label="Price Range" type="text" inputSize={inputSize} placeholder="e.g. 250-1500" value={values.priceRange}
             onChange={e => onChange('priceRange', e.target.value)} />
-          <Select id={targetLanguageId} label="Language" selectSize={inputSize} value={values.targetLanguage}
-            onChange={e => onChange('targetLanguage', e.target.value)}
-            options={[...targetLanguageOptions]} />
+          <LanguageMultiSelect
+            value={values.targetLanguages}
+            onChange={(next) => onChange('targetLanguages', next)}
+          />
           <div className="space-y-1.5">
             <span className="block text-xs text-[var(--text-muted)] mb-1">Subject Mode</span>
             <Segmented
