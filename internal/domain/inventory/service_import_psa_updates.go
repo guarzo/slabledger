@@ -12,12 +12,21 @@ import (
 // and repairs card metadata if the set name is generic or the card number is missing.
 func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purchase, row PSAExportRow) PSAImportItemResult {
 	fields := PSAUpdateFields{
-		PSAShipDate:    row.ShipDate,
-		InvoiceDate:    row.InvoiceDate,
-		WasRefunded:    row.WasRefunded,
-		FrontImageURL:  row.FrontImageURL,
-		BackImageURL:   row.BackImageURL,
-		PurchaseSource: row.PurchaseSource,
+		PSAShipDate:   row.ShipDate,
+		InvoiceDate:   row.InvoiceDate,
+		WasRefunded:   row.WasRefunded,
+		FrontImageURL: row.FrontImageURL,
+		BackImageURL:  row.BackImageURL,
+	}
+	// Only update PurchaseSource when the import provides one. A PSA export
+	// missing the column would otherwise clear the field on every matched row,
+	// and purchase_source is what the CL coverage endpoint uses to classify
+	// intake cohort — wiping it silently reassigns rows from campaign to
+	// external. Same guard, same reason, as PSAListingTitle below.
+	if row.PurchaseSource != "" {
+		fields.PurchaseSource = row.PurchaseSource
+	} else {
+		fields.PurchaseSource = existing.PurchaseSource
 	}
 	// Only update PSAListingTitle when the import provides one — avoid wiping
 	// a previously stored title that the pricing pipeline uses as a fallback.
