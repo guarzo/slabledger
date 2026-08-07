@@ -45,7 +45,7 @@ func diffCampaign() inventory.Campaign {
 		YearRange:            "2020-2024",
 		PriceRange:           "100-3000",
 		CLConfidence:         "3-4",
-		TargetLanguage:       "english",
+		TargetLanguages:      []string{"english"},
 	}
 }
 
@@ -115,7 +115,7 @@ func TestHandlePSAPropose(t *testing.T) {
 			name: "unresolved target language maps to 400 not 500",
 			campaign: func() *inventory.Campaign {
 				c := diffCampaign()
-				c.TargetLanguage = "korean"
+				c.TargetLanguages = []string{"korean"}
 				return &c
 			}(),
 			portalRows: []psacampaign.PortalCampaign{noDiffPortal()},
@@ -332,7 +332,7 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 	valid := inventory.Campaign{
 		ID: "c1", Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
 		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
-		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguage: "english",
+		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguages: []string{"english"},
 	}
 	englishCatalog := freshCatalog([]psacampaign.SpecListRef{
 		{ID: "sl-1", Name: "English Pokemon", Status: "ENABLED"},
@@ -461,7 +461,7 @@ func TestHandlePSAProposeCreate_CatalogStale(t *testing.T) {
 	c := inventory.Campaign{
 		ID: "c1", Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
 		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
-		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguage: "english",
+		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguages: []string{"english"},
 	}
 	svc := &mocks.MockInventoryService{
 		GetCampaignFn: func(ctx context.Context, id string) (*inventory.Campaign, error) {

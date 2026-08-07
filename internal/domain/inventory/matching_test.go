@@ -111,7 +111,7 @@ func TestPurchaseMatchesCampaign(t *testing.T) {
 			name: "language axis rejects mismatched set",
 			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "SWSH BLACK STAR PROMO"},
 			campaign: Campaign{
-				TargetLanguage: "japanese",
+				TargetLanguages: []string{"japanese"},
 			},
 			want: false,
 		},
@@ -119,7 +119,7 @@ func TestPurchaseMatchesCampaign(t *testing.T) {
 			name: "language axis accepts matching set",
 			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "JAPANESE M1S-MEGA SYMPHONIA"},
 			campaign: Campaign{
-				TargetLanguage: "japanese",
+				TargetLanguages: []string{"japanese"},
 			},
 			want: true,
 		},
@@ -214,20 +214,26 @@ func TestPurchaseMatchesCampaign(t *testing.T) {
 
 func TestLanguageAxisMatches(t *testing.T) {
 	tests := []struct {
-		name           string
-		setName        string
-		targetLanguage string
-		want           bool
+		name            string
+		setName         string
+		targetLanguages []string
+		want            bool
 	}{
-		{"empty target is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", "", true},
-		{"japanese set matches japanese target", "JAPANESE M1S-MEGA SYMPHONIA", "japanese", true},
-		{"chinese set does not match japanese target", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", "japanese", false},
-		{"english set matches english target", "SWSH BLACK STAR PROMO", "english", true},
+		{"nil set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", nil, true},
+		{"empty set is open net", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{}, true},
+		{"japanese set matches japanese-only set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese"}, true},
+		{"chinese set does not match japanese-only set", "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1", []string{"japanese"}, false},
+		{"english set matches english-only set", "SWSH BLACK STAR PROMO", []string{"english"}, true},
+		{"english set matches a both-languages set", "SWSH BLACK STAR PROMO", []string{"english", "japanese"}, true},
+		{"japanese set matches a both-languages set", "JAPANESE M1S-MEGA SYMPHONIA", []string{"english", "japanese"}, true},
+		// The set is unordered: reversing the tokens must not change the answer.
+		{"membership is order-insensitive", "JAPANESE M1S-MEGA SYMPHONIA", []string{"japanese", "english"}, true},
+		{"korean set matches neither token", "KOREAN S1-SWORD SHIELD", []string{"english", "japanese"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := LanguageAxisMatches(tt.setName, tt.targetLanguage); got != tt.want {
-				t.Errorf("LanguageAxisMatches(%q, %q) = %v, want %v", tt.setName, tt.targetLanguage, got, tt.want)
+			if got := LanguageAxisMatches(tt.setName, tt.targetLanguages); got != tt.want {
+				t.Errorf("LanguageAxisMatches(%q, %v) = %v, want %v", tt.setName, tt.targetLanguages, got, tt.want)
 			}
 		})
 	}

@@ -17,12 +17,16 @@ type stubResolver struct {
 	subjects  map[string]int
 }
 
-func (s stubResolver) SpecListIDs(languageToken string) ([]string, error) {
-	ids, ok := s.specLists[languageToken]
-	if !ok {
-		return nil, ErrUnknownSpecList
+func (s stubResolver) SpecListIDs(languageTokens []string) ([]string, error) {
+	out := make([]string, 0, len(languageTokens))
+	for _, token := range languageTokens {
+		ids, ok := s.specLists[token]
+		if !ok {
+			return nil, ErrUnknownSpecList
+		}
+		out = append(out, ids...)
 	}
-	return ids, nil
+	return out, nil
 }
 
 func (s stubResolver) SubjectID(name string) (int, error) {
@@ -84,7 +88,7 @@ func baseCreateCampaign() inventory.Campaign {
 		Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
 		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
 		CLConfidence: "3-4", PSASourcingFeeCents: 300,
-		TargetLanguage: "english", SubjectFilterMode: "Target",
+		TargetLanguages: []string{"english"}, SubjectFilterMode: "Target",
 	}
 }
 
@@ -228,13 +232,13 @@ func TestTranslateToCreate_SpecListAndSubjects(t *testing.T) {
 		},
 		{
 			name:    "empty target language fails",
-			mutate:  func(c *inventory.Campaign) { c.TargetLanguage = "" },
+			mutate:  func(c *inventory.Campaign) { c.TargetLanguages = nil },
 			r:       englishResolver(),
 			wantErr: "target language",
 		},
 		{
 			name:      "unmapped language token fails",
-			mutate:    func(c *inventory.Campaign) { c.TargetLanguage = "korean" },
+			mutate:    func(c *inventory.Campaign) { c.TargetLanguages = []string{"korean"} },
 			r:         englishResolver(),
 			wantErr:   "resolve spec list",
 			wantErrIs: ErrUnknownSpecList,
@@ -274,7 +278,7 @@ func TestTranslateToDiff_ListAxes(t *testing.T) {
 	internal := inventory.Campaign{
 		BuyTermsCLPct: 0.75, DailySpendCapCents: 400000,
 		GradeRange: "9-10", YearRange: "2020-2024", PriceRange: "100-3000", CLConfidence: "3-4",
-		TargetLanguage: "english", SubjectFilterMode: "Exclude",
+		TargetLanguages: []string{"english"}, SubjectFilterMode: "Exclude",
 		Subjects:    []inventory.TargetSubject{{ID: 22210, Name: "Machamp"}, {ID: 4807, Name: "Charizard"}},
 		DeniedSpecs: []inventory.TargetSubject{{ID: 22301, Name: "Charizard EX"}},
 	}
@@ -392,7 +396,7 @@ func TestTranslateToDiff_EmptyLocalSubjectsProposesClearingPortalList(t *testing
 	internal := inventory.Campaign{
 		BuyTermsCLPct: 0.75, DailySpendCapCents: 400000,
 		GradeRange: "9-10", YearRange: "2020-2024", PriceRange: "100-3000", CLConfidence: "3-4",
-		TargetLanguage: "english", SubjectFilterMode: "Target",
+		TargetLanguages: []string{"english"}, SubjectFilterMode: "Target",
 		Subjects: nil, // no locally-tracked subjects
 	}
 	portal := PortalCampaign{
@@ -438,7 +442,7 @@ func TestTranslateToDiff_ErrorSurface(t *testing.T) {
 		internal := inventory.Campaign{
 			BuyTermsCLPct: 0.75, DailySpendCapCents: 400000,
 			GradeRange: "9-10", YearRange: "2020-2024", PriceRange: "100-3000", CLConfidence: "3-4",
-			TargetLanguage: "english", SubjectFilterMode: "Target",
+			TargetLanguages: []string{"english"}, SubjectFilterMode: "Target",
 		}
 		portal := PortalCampaign{
 			BuyPercentClv: 75, DailyBudgetCents: 400000,
@@ -453,7 +457,7 @@ func TestTranslateToDiff_ErrorSurface(t *testing.T) {
 
 	t.Run("unmapped language token fails", func(t *testing.T) {
 		internal, portal := base()
-		internal.TargetLanguage = "korean"
+		internal.TargetLanguages = []string{"korean"}
 		_, err := TranslateToDiff(internal, portal, englishResolver())
 		if err == nil || !strings.Contains(err.Error(), "resolve spec list") {
 			t.Fatalf("err = %v, want containing %q", err, "resolve spec list")
@@ -476,12 +480,12 @@ func TestTranslateToDiff_ErrorSurface(t *testing.T) {
 	})
 }
 
-func TestTranslateToDiff_EmptyTargetLanguageSkipsSpecListAxis(t *testing.T) {
+func TestTranslateToDiff_EmptyTargetLanguagesSkipsSpecListAxis(t *testing.T) {
 	r := englishResolver()
 	internal := inventory.Campaign{
 		BuyTermsCLPct: 0.75, DailySpendCapCents: 400000,
 		GradeRange: "9-10", YearRange: "2020-2024", PriceRange: "100-3000", CLConfidence: "3-4",
-		TargetLanguage: "", SubjectFilterMode: "Target",
+		TargetLanguages: nil, SubjectFilterMode: "Target",
 	}
 	portal := PortalCampaign{
 		BuyPercentClv: 75, DailyBudgetCents: 400000,
@@ -494,11 +498,11 @@ func TestTranslateToDiff_EmptyTargetLanguageSkipsSpecListAxis(t *testing.T) {
 	}
 	diff, err := TranslateToDiff(internal, portal, r)
 	if err != nil {
-		t.Fatalf("TranslateToDiff: %v (empty TargetLanguage must not error the whole diff)", err)
+		t.Fatalf("TranslateToDiff: %v (empty TargetLanguages must not error the whole diff)", err)
 	}
 	for _, c := range diff.Changes {
 		if c.Field == "prepackagedSpecListIds" {
-			t.Fatalf("did not expect a prepackagedSpecListIds change with an unset TargetLanguage: %+v", c)
+			t.Fatalf("did not expect a prepackagedSpecListIds change with an unset TargetLanguages: %+v", c)
 		}
 	}
 }

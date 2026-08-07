@@ -88,7 +88,7 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 		Sport:             "Pokemon",
 		BuyTermsCLPct:     0.80,
 		Phase:             inventory.PhaseActive,
-		TargetLanguage:    "japanese",
+		TargetLanguages:   []string{"english", "japanese"},
 		SubjectFilterMode: inventory.SubjectFilterExclude,
 		Subjects: []inventory.TargetSubject{
 			{ID: 22210, Name: "Machamp"},
@@ -105,7 +105,7 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 
 	got, err := repo.GetCampaign(ctx, "camp-axes")
 	require.NoError(t, err)
-	assert.Equal(t, "japanese", got.TargetLanguage)
+	assert.Equal(t, []string{"english", "japanese"}, got.TargetLanguages)
 	assert.Equal(t, inventory.SubjectFilterExclude, got.SubjectFilterMode)
 	assert.Equal(t, c.Subjects, got.Subjects)
 	assert.Equal(t, c.DeniedSpecs, got.DeniedSpecs)
@@ -137,7 +137,7 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, inventory.SubjectFilterTarget, got.SubjectFilterMode)
 
-	// Open-net case: an empty TargetLanguage is a legitimate, unfiltered
+	// Open-net case: an empty TargetLanguages is a legitimate, unfiltered
 	// campaign, not an error — and a nil Subjects/DeniedSpecs slice must
 	// round-trip through ListCampaigns as well as GetCampaign.
 	c2 := &inventory.Campaign{
@@ -153,7 +153,7 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 
 	got2, err := repo.GetCampaign(ctx, "camp-axes-open")
 	require.NoError(t, err)
-	assert.Equal(t, "", got2.TargetLanguage)
+	assert.Equal(t, []string{}, got2.TargetLanguages)
 	assert.Equal(t, inventory.SubjectFilterTarget, got2.SubjectFilterMode)
 	// assert.Empty accepts both nil and []; a nil slice here would marshal to
 	// JSON null over the API despite the non-nullable TS Campaign type, so pin
@@ -170,7 +170,7 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 		}
 	}
 	require.NotNil(t, listed, "camp-axes-open must appear in ListCampaigns")
-	assert.Equal(t, "", listed.TargetLanguage)
+	assert.Equal(t, []string{}, listed.TargetLanguages)
 	assert.Equal(t, []inventory.TargetSubject{}, listed.Subjects)
 	assert.Equal(t, []inventory.TargetSubject{}, listed.DeniedSpecs)
 }
@@ -199,6 +199,81 @@ func TestMarshalTargetSubjects_NilEmitsEmptyArray(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := marshalTargetSubjects(tt.subjects)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestCampaignStore_JSONNullNormalizesToEmpty pins the read-path guard that
+// turns a stored JSON null into an empty slice. NOT NULL on a jsonb column
+// forbids SQL NULL, not the JSON null *value*, so the UPDATE below is legal —
+// and this package already contains raw-SQL writers that bypass the store's
+// marshaller (campaign_coverage_test.go:16-21). Without the guard these
+// columns reach the API as null, contradicting the non-nullable TS Campaign
+// type and crashing SubjectListEditor's value.map.
+//
+// Requires a real database: run `make test-postgres`. Plain `go test` skips.
+func TestCampaignStore_JSONNullNormalizesToEmpty(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	repo := NewCampaignStore(db.DB, logger)
+	ctx := context.Background()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, repo.CreateCampaign(ctx, &inventory.Campaign{
+		ID:              "camp-json-null",
+		Name:            "JSON Null Row",
+		Phase:           inventory.PhaseActive,
+		TargetLanguages: []string{"english"},
+		Subjects:        []inventory.TargetSubject{{ID: 22210, Name: "Machamp"}},
+		DeniedSpecs:     []inventory.TargetSubject{{ID: 4807, Name: "Charizard"}},
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}))
+
+	_, err := db.ExecContext(ctx,
+		`UPDATE campaigns
+		 SET subjects = 'null'::jsonb, denied_specs = 'null'::jsonb, target_languages = 'null'::jsonb
+		 WHERE id = $1`, "camp-json-null")
+	require.NoError(t, err)
+
+	got, err := repo.GetCampaign(ctx, "camp-json-null")
+	require.NoError(t, err)
+	assert.Equal(t, []inventory.TargetSubject{}, got.Subjects)
+	assert.Equal(t, []inventory.TargetSubject{}, got.DeniedSpecs)
+	assert.Equal(t, []string{}, got.TargetLanguages)
+
+	list, err := repo.ListCampaigns(ctx, false)
+	require.NoError(t, err)
+	var listed *inventory.Campaign
+	for i := range list {
+		if list[i].ID == "camp-json-null" {
+			listed = &list[i]
+		}
+	}
+	require.NotNil(t, listed, "camp-json-null must appear in ListCampaigns")
+	assert.Equal(t, []inventory.TargetSubject{}, listed.Subjects)
+	assert.Equal(t, []inventory.TargetSubject{}, listed.DeniedSpecs)
+	assert.Equal(t, []string{}, listed.TargetLanguages)
+}
+
+// TestMarshalTargetLanguages_NilEmitsEmptyArray is the DB-free half of the
+// same contract, mirroring TestMarshalTargetSubjects_NilEmitsEmptyArray: a nil
+// slice must marshal to "[]", never "null". json.Marshal(nil slice) alone
+// produces "null", so this asserts the function's own normalization and fails
+// immediately without needing POSTGRES_TEST_URL.
+func TestMarshalTargetLanguages_NilEmitsEmptyArray(t *testing.T) {
+	tests := []struct {
+		name  string
+		langs []string
+		want  string
+	}{
+		{name: "nil slice", langs: nil, want: "[]"},
+		{name: "empty slice", langs: []string{}, want: "[]"},
+		{name: "both live tokens", langs: []string{"english", "japanese"}, want: `["english","japanese"]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, marshalTargetLanguages(tt.langs))
 		})
 	}
 }

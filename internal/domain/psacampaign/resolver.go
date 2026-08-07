@@ -3,6 +3,7 @@ package psacampaign
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 )
@@ -40,7 +41,7 @@ type CatalogStore interface {
 
 // Resolver maps SlabLedger's internal targeting vocabulary onto portal ids.
 type Resolver interface {
-	SpecListIDs(languageToken string) ([]string, error)
+	SpecListIDs(languageTokens []string) ([]string, error)
 	SubjectID(name string) (int, error)
 }
 
@@ -70,30 +71,40 @@ func NewCatalogResolver(specLists []SpecListRef, subjects []SubjectRef, fetchedA
 	return &catalogResolver{specLists: specLists, subjects: subjects}, nil
 }
 
-// SpecListIDs maps a language token to the portal UUID(s) of the matching
-// list(s) whose Name equals the token's curated list name (case-insensitive)
+// SpecListIDs maps a set of language tokens to the union of the portal
+// UUID(s) whose Name equals each token's curated list name (case-insensitive)
 // and whose Status is "ENABLED". Lists with any other status are skipped even
 // when the name matches, since the portal can retire a list without removing
 // it from the catalog payload.
-func (r *catalogResolver) SpecListIDs(languageToken string) ([]string, error) {
-	wantName, ok := languageListNames[languageToken]
-	if !ok {
-		return nil, ErrUnknownSpecList
-	}
-	var ids []string
-	for _, l := range r.specLists {
-		if !strings.EqualFold(l.Name, wantName) {
-			continue
+//
+// Every token must resolve to at least one enabled list; one that does not
+// returns ErrUnknownSpecList and no ids at all. A campaign carrying both
+// curated lists must push both or push nothing.
+//
+// Task 4 hardens this: dedup ordering, and an error that names every
+// unresolvable token at once rather than stopping at the first.
+func (r *catalogResolver) SpecListIDs(languageTokens []string) ([]string, error) {
+	out := make([]string, 0, len(languageTokens))
+	for _, token := range languageTokens {
+		wantName, ok := languageListNames[token]
+		if !ok {
+			return nil, ErrUnknownSpecList
 		}
-		if l.Status != "ENABLED" {
-			continue
+		matched := 0
+		for _, l := range r.specLists {
+			if !strings.EqualFold(l.Name, wantName) || l.Status != "ENABLED" {
+				continue
+			}
+			matched++
+			if !slices.Contains(out, l.ID) {
+				out = append(out, l.ID)
+			}
 		}
-		ids = append(ids, l.ID)
+		if matched == 0 {
+			return nil, ErrUnknownSpecList
+		}
 	}
-	if len(ids) == 0 {
-		return nil, ErrUnknownSpecList
-	}
-	return ids, nil
+	return out, nil
 }
 
 // SubjectID resolves a subject name to its portal id, case-insensitively.

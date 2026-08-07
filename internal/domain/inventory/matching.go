@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -95,7 +96,7 @@ func PurchaseMatchesCampaign(in MatchInput, c *Campaign) bool {
 		}
 	}
 
-	if !LanguageAxisMatches(in.SetName, c.TargetLanguage) {
+	if !LanguageAxisMatches(in.SetName, c.TargetLanguages) {
 		return false
 	}
 
@@ -111,12 +112,25 @@ func PurchaseMatchesCampaign(in MatchInput, c *Campaign) bool {
 }
 
 // LanguageAxisMatches reports whether a set name satisfies the language axis.
-// An empty targetLanguage is an open net and always matches.
-func LanguageAxisMatches(setName, targetLanguage string) bool {
-	if targetLanguage == "" {
+// targetLanguages is an unordered SET of canonical tokens. An empty (or nil)
+// set is an open net and always matches; a non-empty set matches only when the
+// set name's classified language is a member.
+//
+// The set — rather than the single token this replaces — exists because every
+// live portal campaign carries BOTH the "English Pokemon" and "Japanese
+// Pokemon" curated spec lists. A single token could only ever describe half of
+// what those campaigns buy, so the other half's purchases fell through to
+// "unmatched" and were attributed to no campaign.
+//
+// Membership is a plain == comparison per element: cardutil.SetLanguage always
+// returns one of the canonical Lang* tokens, and ValidateAndNormalizeCampaign
+// lowercases every stored token, so this function performs no casing
+// normalization of its own — exactly as the single-token version did not.
+func LanguageAxisMatches(setName string, targetLanguages []string) bool {
+	if len(targetLanguages) == 0 {
 		return true
 	}
-	return cardutil.SetLanguage(setName) == targetLanguage
+	return slices.Contains(targetLanguages, cardutil.SetLanguage(setName))
 }
 
 // SubjectAxisMatches reports whether a card name satisfies the subject axis.

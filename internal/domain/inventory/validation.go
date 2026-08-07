@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -32,19 +33,23 @@ var (
 	ErrInvalidYearRange         = errors.NewAppError(ErrCodeCampaignValidation, "yearRange must be empty or in format 'startYear-endYear' (e.g. 1999-2003)")
 	ErrInvalidPriceRange        = errors.NewAppError(ErrCodeCampaignValidation, "priceRange must be empty or in format 'min-max' (e.g. 50-500)")
 	ErrInvalidGradeRange        = errors.NewAppError(ErrCodeCampaignValidation, "gradeRange must be empty or in format 'min-max' (e.g. 7-10)")
-	ErrInvalidTargetLanguage    = errors.NewAppError(ErrCodeCampaignValidation, "targetLanguage must be empty, 'english', or 'japanese'")
+	ErrInvalidTargetLanguages   = errors.NewAppError(ErrCodeCampaignValidation, "targetLanguages entries must be 'english' or 'japanese'")
 	ErrInvalidSubjectFilterMode = errors.NewAppError(ErrCodeCampaignValidation, "subjectFilterMode must be empty, 'Target', or 'Exclude'")
 )
 
 // validTargetLanguages is the closed set ValidateAndNormalizeCampaign accepts
-// for TargetLanguage. This intentionally duplicates (rather than imports)
-// psacampaign's languageListNames map (internal/domain/psacampaign/resolver.go) —
+// as members of TargetLanguages. Unlike the single-token model it replaces,
+// "" is NOT a member — an open net is the empty SET, not a set containing an
+// empty string, so normalizeTargetLanguages drops empty entries before this
+// check rather than accepting them.
+//
+// This intentionally duplicates (rather than imports) psacampaign's
+// languageListNames map (internal/domain/psacampaign/resolver.go:51-54) —
 // psacampaign already imports inventory to build ProposedDiffs, so the reverse
-// import would create a cycle. "" legitimately short-circuits the spec-list
-// axis (psacampaign/mapper.go's TranslateToDiff skips it when unset), so it is
-// valid alongside the two portal-curated tokens. Keep both maps in sync.
+// import would be a cycle. The same set is also duplicated in
+// cmd/psa-harvest/baseline.go and web/src/react/utils/campaignConstants.ts.
+// All four must stay in sync.
 var validTargetLanguages = map[string]bool{
-	"":         true,
 	"english":  true,
 	"japanese": true,
 }
@@ -111,19 +116,47 @@ func ValidateAndNormalizeCampaign(c *Campaign) error {
 	if err := validateRange(c.PriceRange, 0, 1_000_000, ErrInvalidPriceRange); err != nil {
 		return err
 	}
-	// Normalize to lowercase before the closed-set check so "Japanese"/"JAPANESE"
-	// are accepted and stored as the canonical token LanguageAxisMatches compares
-	// with `==` — the matcher itself performs no casing normalization, so this is
-	// the only place that guarantees a stored value it can ever match against.
-	c.TargetLanguage = strings.ToLower(strings.TrimSpace(c.TargetLanguage))
-	if !validTargetLanguages[c.TargetLanguage] {
-		return ErrInvalidTargetLanguage
+	langs, err := normalizeTargetLanguages(c.TargetLanguages)
+	if err != nil {
+		return err
 	}
+	c.TargetLanguages = langs
 	c.SubjectFilterMode = strings.TrimSpace(c.SubjectFilterMode)
 	if !validSubjectFilterModes[c.SubjectFilterMode] {
 		return ErrInvalidSubjectFilterMode
 	}
 	return nil
+}
+
+// normalizeTargetLanguages lowercases and trims every entry, drops empties,
+// rejects anything outside the closed set, dedupes, and sorts. It always
+// returns a non-nil slice: a nil TargetLanguages marshals to JSON null, and
+// the TS Campaign type declares the field non-nullable.
+//
+// Lowercasing is not cosmetic. LanguageAxisMatches compares members with `==`
+// against cardutil's lowercase tokens and normalizes nothing itself, so a
+// campaign stored with "Japanese" would silently match zero cards forever.
+// Rejection is all-or-nothing: a set containing one unknown token is a
+// mistake to surface, not a set to silently narrow.
+func normalizeTargetLanguages(in []string) ([]string, error) {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		token := strings.ToLower(strings.TrimSpace(raw))
+		if token == "" {
+			continue
+		}
+		if !validTargetLanguages[token] {
+			return nil, ErrInvalidTargetLanguages
+		}
+		if seen[token] {
+			continue
+		}
+		seen[token] = true
+		out = append(out, token)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // validateRange checks that s is empty or matches "min-max" where both are integers

@@ -174,6 +174,19 @@ const (
 	SubjectFilterExclude = "Exclude"
 )
 
+// LegacyUnreconciledSubjectID marks a subject that migration 000023 backfilled
+// from the legacy inclusion_list string: a name with no portal id behind it
+// and no reconciliation against live portal state yet.
+//
+// It exists because id 0 is already taken. An operator who types a new
+// subject name in the UI creates it with id 0 (SubjectListEditor.tsx), and
+// TranslateToCreate/TranslateToDiff deliberately resolve those by name. If
+// backfilled legacy subjects also carried 0, a push issued between deploy and
+// the baseline pull would re-resolve them by name and swap the live 4xxx/8xxx
+// portal ids on six money-spending campaigns for current-generation 22xxx
+// ids. -1 cannot collide with either case: portal-issued ids are positive.
+const LegacyUnreconciledSubjectID = -1
+
 // Campaign represents a PSA Direct Buy campaign with buy parameters and fee configuration.
 type Campaign struct {
 	ID                 string  `json:"id"`
@@ -199,13 +212,20 @@ type Campaign struct {
 	InclusionList string `json:"inclusionList"`
 	ExclusionMode bool   `json:"exclusionMode"`
 
-	// TargetLanguage selects the PSA curated spec list the campaign buys from.
-	// "" means unset (a legacy CATEGORY campaign, or a campaign not yet linked).
-	// ValidateAndNormalizeCampaign (validation.go) enforces this as a closed set —
-	// "" | "english" | "japanese" only. cardutil.SetLanguage classifies sets as
-	// chinese/korean too, but the portal offers no curated spec list for either,
-	// so those two tokens are rejected here rather than silently stored unmatchable.
-	TargetLanguage string `json:"targetLanguage"` // "" | "english" | "japanese"
+	// TargetLanguages is the set of PSA curated spec lists the campaign buys
+	// from, held as stable internal tokens rather than portal UUIDs (which PSA
+	// can re-issue). It is an unordered set; ValidateAndNormalizeCampaign
+	// (validation.go) sorts it so persistence and diffs stay deterministic.
+	//
+	// Empty means an open net: the campaign buys any language. Every live
+	// campaign carries BOTH "english" and "japanese" — the single-token model
+	// this replaced could not represent them.
+	//
+	// The closed set is "english" | "japanese" only. cardutil.SetLanguage
+	// classifies chinese and korean sets too, but the portal offers no curated
+	// spec list for either, so those tokens are rejected rather than stored
+	// unmatchable.
+	TargetLanguages []string `json:"targetLanguages"`
 
 	// SubjectFilterMode is the polarity of Subjects: Target buys only the
 	// listed characters, Exclude buys everything except them. Empty is

@@ -9,15 +9,15 @@ import "github.com/guarzo/slabledger/internal/domain/psacampaign"
 // (resolver.go:99-102). Callers rely on this: a bogus id headed for the live
 // portal is worse than a test failing loudly for forgetting to set the Fn.
 type ResolverMock struct {
-	SpecListIDsFn func(languageToken string) ([]string, error)
+	SpecListIDsFn func(languageTokens []string) ([]string, error)
 	SubjectIDFn   func(name string) (int, error)
 }
 
 var _ psacampaign.Resolver = (*ResolverMock)(nil)
 
-func (m *ResolverMock) SpecListIDs(languageToken string) ([]string, error) {
+func (m *ResolverMock) SpecListIDs(languageTokens []string) ([]string, error) {
 	if m.SpecListIDsFn != nil {
-		return m.SpecListIDsFn(languageToken)
+		return m.SpecListIDsFn(languageTokens)
 	}
 	return nil, psacampaign.ErrUnknownSpecList
 }

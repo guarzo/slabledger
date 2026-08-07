@@ -25,11 +25,15 @@ type Repository interface {
 // ActiveCampaign describes a single active campaign's targeting rules, used
 // by the campaign-signals service to correlate per-campaign market data.
 // Kept minimal — only the fields needed to filter characters and grades.
+//
+// The language axis is deliberately absent: signals are keyed by character and
+// grade with no set name to classify, so a language set has no defined meaning
+// here. See postgres.CampaignCoverageLookup's type doc for the same reduction
+// on the coverage side.
 type ActiveCampaign struct {
 	ID                string // Campaign primary key (UUID for standard campaigns, "external" for the imported bucket).
 	Name              string
 	GradeRange        string // e.g. "9-10"; empty means no grade constraint.
-	TargetLanguage    string
 	SubjectFilterMode string
 	Subjects          []inventory.TargetSubject
 }

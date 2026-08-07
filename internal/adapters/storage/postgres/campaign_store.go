@@ -90,18 +90,48 @@ func marshalTargetSubjects(subjects []inventory.TargetSubject) string {
 	return string(b)
 }
 
+// normalizeTargetLanguages converts a nil slice to an empty one, mirroring
+// normalizeTargetSubjects. Defensive on read for the same reason: the
+// NOT NULL DEFAULT '[]'::jsonb column (migration 000023) rejects SQL NULL but
+// not the JSON null value, and any writer bypassing this store — a raw SQL
+// fixup, another tool — can leave one behind. A nil slice would reach the API
+// as JSON null, which the non-nullable TS Campaign.targetLanguages type and
+// the CampaignFormFields language multi-select do not accept.
+func normalizeTargetLanguages(langs []string) []string {
+	if langs == nil {
+		return []string{}
+	}
+	return langs
+}
+
+// marshalTargetLanguages marshals the language set to its JSONB wire form.
+// A nil slice is normalized to empty first — json.Marshal(nil) produces the
+// literal "null", which the jsonb column stores happily as a JSON null and
+// later round-trips back into a nil Go slice.
+func marshalTargetLanguages(langs []string) string {
+	if langs == nil {
+		langs = []string{}
+	}
+	b, err := json.Marshal(langs)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
 func (cs *CampaignStore) CreateCampaign(ctx context.Context, c *inventory.Campaign) error {
 	inclusionList, exclusionMode := deriveLegacyMirror(c)
 	subjectFilterMode := normalizeSubjectFilterMode(c.SubjectFilterMode)
 	subjectsJSON := marshalTargetSubjects(c.Subjects)
 	deniedJSON := marshalTargetSubjects(c.DeniedSpecs)
+	languagesJSON := marshalTargetLanguages(c.TargetLanguages)
 
 	query := `
 		INSERT INTO campaigns (id, name, sport, year_range, grade_range, price_range,
 			cl_confidence, buy_terms_cl_pct, daily_spend_cap_cents, inclusion_list,
 			exclusion_mode, phase, psa_sourcing_fee_cents, ebay_fee_pct, expected_fill_rate,
 			psa_campaign_request_id, created_at, updated_at,
-			target_language, subject_filter_mode, subjects, denied_specs)
+			target_languages, subject_filter_mode, subjects, denied_specs)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
 			$19, $20, $21, $22)
 	`
@@ -110,7 +140,7 @@ func (cs *CampaignStore) CreateCampaign(ctx context.Context, c *inventory.Campai
 		c.CLConfidence, c.BuyTermsCLPct, c.DailySpendCapCents, inclusionList,
 		exclusionMode, string(c.Phase), c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate,
 		c.PSACampaignRequestID, c.CreatedAt, c.UpdatedAt,
-		c.TargetLanguage, subjectFilterMode, subjectsJSON, deniedJSON,
+		languagesJSON, subjectFilterMode, subjectsJSON, deniedJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("create campaign: %w", err)
@@ -124,17 +154,17 @@ func (cs *CampaignStore) GetCampaign(ctx context.Context, id string) (*inventory
 			cl_confidence, buy_terms_cl_pct, daily_spend_cap_cents, inclusion_list,
 			exclusion_mode, phase, psa_sourcing_fee_cents, ebay_fee_pct, expected_fill_rate,
 			COALESCE(psa_campaign_request_id, ''), created_at, updated_at,
-			target_language, subject_filter_mode, subjects, denied_specs
+			target_languages, subject_filter_mode, subjects, denied_specs
 		FROM campaigns WHERE id = $1
 	`
 	var c inventory.Campaign
-	var subjectsJSON, deniedJSON string
+	var subjectsJSON, deniedJSON, languagesJSON string
 	err := cs.db.QueryRowContext(ctx, query, id).Scan(
 		&c.ID, &c.Name, &c.Sport, &c.YearRange, &c.GradeRange, &c.PriceRange,
 		&c.CLConfidence, &c.BuyTermsCLPct, &c.DailySpendCapCents, &c.InclusionList,
 		&c.ExclusionMode, &c.Phase, &c.PSASourcingFeeCents, &c.EbayFeePct, &c.ExpectedFillRate,
 		&c.PSACampaignRequestID, &c.CreatedAt, &c.UpdatedAt,
-		&c.TargetLanguage, &c.SubjectFilterMode, &subjectsJSON, &deniedJSON,
+		&languagesJSON, &c.SubjectFilterMode, &subjectsJSON, &deniedJSON,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, inventory.ErrCampaignNotFound
@@ -148,8 +178,12 @@ func (cs *CampaignStore) GetCampaign(ctx context.Context, id string) (*inventory
 	if err := json.Unmarshal([]byte(deniedJSON), &c.DeniedSpecs); err != nil {
 		return nil, fmt.Errorf("unmarshal denied specs: %w", err)
 	}
+	if err := json.Unmarshal([]byte(languagesJSON), &c.TargetLanguages); err != nil {
+		return nil, fmt.Errorf("unmarshal target languages: %w", err)
+	}
 	c.Subjects = normalizeTargetSubjects(c.Subjects)
 	c.DeniedSpecs = normalizeTargetSubjects(c.DeniedSpecs)
+	c.TargetLanguages = normalizeTargetLanguages(c.TargetLanguages)
 	c.SubjectFilterMode = normalizeSubjectFilterMode(c.SubjectFilterMode)
 	return &c, nil
 }
@@ -160,7 +194,7 @@ func (cs *CampaignStore) ListCampaigns(ctx context.Context, activeOnly bool) (re
 			cl_confidence, buy_terms_cl_pct, daily_spend_cap_cents, inclusion_list,
 			exclusion_mode, phase, psa_sourcing_fee_cents, ebay_fee_pct, expected_fill_rate,
 			COALESCE(psa_campaign_request_id, ''), created_at, updated_at,
-			target_language, subject_filter_mode, subjects, denied_specs
+			target_languages, subject_filter_mode, subjects, denied_specs
 		FROM campaigns
 	`
 	if activeOnly {
@@ -188,13 +222,13 @@ func (cs *CampaignStore) ListCampaigns(ctx context.Context, activeOnly bool) (re
 		}
 
 		var c inventory.Campaign
-		var subjectsJSON, deniedJSON string
+		var subjectsJSON, deniedJSON, languagesJSON string
 		if err := rows.Scan(
 			&c.ID, &c.Name, &c.Sport, &c.YearRange, &c.GradeRange, &c.PriceRange,
 			&c.CLConfidence, &c.BuyTermsCLPct, &c.DailySpendCapCents, &c.InclusionList,
 			&c.ExclusionMode, &c.Phase, &c.PSASourcingFeeCents, &c.EbayFeePct, &c.ExpectedFillRate,
 			&c.PSACampaignRequestID, &c.CreatedAt, &c.UpdatedAt,
-			&c.TargetLanguage, &c.SubjectFilterMode, &subjectsJSON, &deniedJSON,
+			&languagesJSON, &c.SubjectFilterMode, &subjectsJSON, &deniedJSON,
 		); err != nil {
 			return nil, fmt.Errorf("scan campaign row: %w", err)
 		}
@@ -204,8 +238,12 @@ func (cs *CampaignStore) ListCampaigns(ctx context.Context, activeOnly bool) (re
 		if err := json.Unmarshal([]byte(deniedJSON), &c.DeniedSpecs); err != nil {
 			return nil, fmt.Errorf("unmarshal denied specs: %w", err)
 		}
+		if err := json.Unmarshal([]byte(languagesJSON), &c.TargetLanguages); err != nil {
+			return nil, fmt.Errorf("unmarshal target languages: %w", err)
+		}
 		c.Subjects = normalizeTargetSubjects(c.Subjects)
 		c.DeniedSpecs = normalizeTargetSubjects(c.DeniedSpecs)
+		c.TargetLanguages = normalizeTargetLanguages(c.TargetLanguages)
 		c.SubjectFilterMode = normalizeSubjectFilterMode(c.SubjectFilterMode)
 		result = append(result, c)
 	}
@@ -255,6 +293,7 @@ func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campai
 	subjectFilterMode := normalizeSubjectFilterMode(c.SubjectFilterMode)
 	subjectsJSON := marshalTargetSubjects(c.Subjects)
 	deniedJSON := marshalTargetSubjects(c.DeniedSpecs)
+	languagesJSON := marshalTargetLanguages(c.TargetLanguages)
 
 	query := `
 		UPDATE campaigns SET name = $1, sport = $2, year_range = $3, grade_range = $4,
@@ -262,7 +301,7 @@ func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campai
 			daily_spend_cap_cents = $8, inclusion_list = $9, exclusion_mode = $10, phase = $11,
 			psa_sourcing_fee_cents = $12, ebay_fee_pct = $13, expected_fill_rate = $14,
 			psa_campaign_request_id = $15, updated_at = $16,
-			target_language = $17, subject_filter_mode = $18, subjects = $19, denied_specs = $20
+			target_languages = $17, subject_filter_mode = $18, subjects = $19, denied_specs = $20
 		WHERE id = $21
 	`
 	result, err := cs.db.ExecContext(ctx, query,
@@ -270,7 +309,7 @@ func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campai
 		c.CLConfidence, c.BuyTermsCLPct, c.DailySpendCapCents, inclusionList,
 		exclusionMode, string(c.Phase), c.PSASourcingFeeCents, c.EbayFeePct, c.ExpectedFillRate,
 		c.PSACampaignRequestID, c.UpdatedAt,
-		c.TargetLanguage, subjectFilterMode, subjectsJSON, deniedJSON, c.ID,
+		languagesJSON, subjectFilterMode, subjectsJSON, deniedJSON, c.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update campaign: %w", err)

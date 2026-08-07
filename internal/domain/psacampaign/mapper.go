@@ -76,14 +76,14 @@ func TranslateToDiff(internal inventory.Campaign, portal PortalCampaign, r Resol
 	addList("deniedSpecs",
 		renderSubjectRefs(portal.DeniedSpecs), renderSubjectRefs(deniedSpecs), deniedSpecs)
 
-	// An unset TargetLanguage means this campaign has no spec-list axis to
-	// propose yet (legacy/unlinked campaign) — that must not block every
+	// An empty TargetLanguages set means this campaign has no spec-list axis
+	// to propose yet (legacy/unlinked campaign) — that must not block every
 	// other scalar fix in this diff, so the axis is skipped rather than
 	// erroring the whole call.
-	if internal.TargetLanguage != "" {
-		specListIDs, err := r.SpecListIDs(internal.TargetLanguage)
+	if len(internal.TargetLanguages) > 0 {
+		specListIDs, err := r.SpecListIDs(internal.TargetLanguages)
 		if err != nil {
-			return d, fmt.Errorf("psacampaign: resolve spec list for language %q: %w", internal.TargetLanguage, err)
+			return d, fmt.Errorf("psacampaign: resolve spec lists for languages %v: %w", internal.TargetLanguages, err)
 		}
 		addList("prepackagedSpecListIds",
 			renderStringList(portal.SpecListIDs), renderStringList(specListIDs), specListIDs)
@@ -165,12 +165,12 @@ const createDailySpecLimit = 2
 func TranslateToCreate(internal inventory.Campaign, r Resolver) (CampaignFormData, error) {
 	var fd CampaignFormData
 
-	if internal.TargetLanguage == "" {
-		return fd, fmt.Errorf("psacampaign: campaign has no target language set")
+	if len(internal.TargetLanguages) == 0 {
+		return fd, fmt.Errorf("psacampaign: campaign has no target languages set")
 	}
-	specListIDs, err := r.SpecListIDs(internal.TargetLanguage)
+	specListIDs, err := r.SpecListIDs(internal.TargetLanguages)
 	if err != nil {
-		return fd, fmt.Errorf("psacampaign: resolve spec list for language %q: %w", internal.TargetLanguage, err)
+		return fd, fmt.Errorf("psacampaign: resolve spec lists for languages %v: %w", internal.TargetLanguages, err)
 	}
 
 	gMin, gMax, err := splitRange(internal.GradeRange)

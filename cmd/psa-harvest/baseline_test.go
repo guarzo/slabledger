@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -151,7 +152,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			},
 			want: inventory.Campaign{
 				ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1",
-				TargetLanguage:    "japanese",
+				TargetLanguages:   []string{"japanese"},
 				SubjectFilterMode: "Target",
 				Subjects: []inventory.TargetSubject{
 					{ID: 22210, Name: "Machamp"},
@@ -169,7 +170,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			},
 			want: inventory.Campaign{
 				ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1",
-				TargetLanguage:    "english",
+				TargetLanguages:   []string{"english"},
 				SubjectFilterMode: "Exclude",
 				Subjects:          []inventory.TargetSubject{},
 				DeniedSpecs:       []inventory.TargetSubject{},
@@ -196,7 +197,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildBaselineCampaign(): unexpected error: %v", err)
 			}
-			if got.TargetLanguage != tt.want.TargetLanguage ||
+			if !slices.Equal(got.TargetLanguages, tt.want.TargetLanguages) ||
 				got.SubjectFilterMode != tt.want.SubjectFilterMode ||
 				len(got.Subjects) != len(tt.want.Subjects) ||
 				len(got.DeniedSpecs) != len(tt.want.DeniedSpecs) {

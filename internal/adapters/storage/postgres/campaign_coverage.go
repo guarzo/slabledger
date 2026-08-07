@@ -26,12 +26,12 @@ var _ demand.CampaignCoverageLookup = (*CampaignCoverageLookup)(nil)
 //
 // Coverage evaluates the SUBJECT AXIS ONLY. CampaignsCovering/UnsoldCountFor
 // receive a bare (character, era, grade) triple with no set name and no spec
-// id, so language (TargetLanguage) and card-level denials (DeniedSpecs) have
-// no defined value here and are not evaluated. This is a documented reduction
-// versus inventory.PurchaseMatchesCampaign, not an oversight: the
-// niche-opportunity leaderboard asks a character-level question, and widening
-// CampaignsCovering to carry a language input is deferred until something
-// actually asks a language-scoped coverage question.
+// id, so the language set (TargetLanguages) and card-level denials
+// (DeniedSpecs) have no defined value here and are not evaluated. This is a
+// documented reduction versus inventory.PurchaseMatchesCampaign, not an
+// oversight: the niche-opportunity leaderboard asks a character-level
+// question, and widening CampaignsCovering to carry a language input is
+// deferred until something actually asks a language-scoped coverage question.
 type CampaignCoverageLookup struct {
 	db *sql.DB
 }
@@ -140,7 +140,7 @@ func gradeInRange(grade int, rangeStr string) bool {
 // slice when there are no qualifying campaigns.
 func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.ActiveCampaign, error) {
 	rows, err := l.db.QueryContext(ctx,
-		`SELECT id, name, grade_range, target_language, subject_filter_mode, subjects
+		`SELECT id, name, grade_range, subject_filter_mode, subjects
 		 FROM campaigns
 		 WHERE phase = $1 AND id <> $2`,
 		string(inventory.PhaseActive),
@@ -157,11 +157,10 @@ func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.
 			id                string
 			name              string
 			gradeRange        string
-			targetLanguage    string
 			subjectFilterMode string
 			subjectsJSON      []byte
 		)
-		if err := rows.Scan(&id, &name, &gradeRange, &targetLanguage, &subjectFilterMode, &subjectsJSON); err != nil {
+		if err := rows.Scan(&id, &name, &gradeRange, &subjectFilterMode, &subjectsJSON); err != nil {
 			return nil, fmt.Errorf("scan campaign: %w", err)
 		}
 
@@ -174,7 +173,6 @@ func (l *CampaignCoverageLookup) ActiveCampaigns(ctx context.Context) ([]demand.
 			ID:                id,
 			Name:              name,
 			GradeRange:        gradeRange,
-			TargetLanguage:    targetLanguage,
 			SubjectFilterMode: subjectFilterMode,
 			Subjects:          subjects,
 		})

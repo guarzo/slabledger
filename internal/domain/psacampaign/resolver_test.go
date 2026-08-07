@@ -47,15 +47,16 @@ func TestCatalogResolver_SpecListIDs(t *testing.T) {
 	fetchedAt := now.Add(-time.Hour)
 
 	tests := []struct {
-		name          string
-		languageToken string
-		wantIDs       []string
-		wantErr       error
+		name           string
+		languageTokens []string
+		wantIDs        []string
+		wantErr        error
 	}{
-		{"japanese resolves", "japanese", []string{"fixture-uuid-japanese-pokemon"}, nil},
-		{"english resolves, disabled duplicate skipped", "english", []string{"fixture-uuid-english-pokemon"}, nil},
-		{"unknown token", "korean", nil, ErrUnknownSpecList},
-		{"empty token", "", nil, ErrUnknownSpecList},
+		{"japanese resolves", []string{"japanese"}, []string{"fixture-uuid-japanese-pokemon"}, nil},
+		{"english resolves, disabled duplicate skipped", []string{"english"}, []string{"fixture-uuid-english-pokemon"}, nil},
+		{"both tokens resolve to the union of both ids, not just the first", []string{"english", "japanese"}, []string{"fixture-uuid-english-pokemon", "fixture-uuid-japanese-pokemon"}, nil},
+		{"unknown token", []string{"korean"}, nil, ErrUnknownSpecList},
+		{"empty token", []string{""}, nil, ErrUnknownSpecList},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -63,7 +64,7 @@ func TestCatalogResolver_SpecListIDs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewCatalogResolver() unexpected error = %v", err)
 			}
-			ids, err := r.SpecListIDs(tt.languageToken)
+			ids, err := r.SpecListIDs(tt.languageTokens)
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("SpecListIDs() error = %v, want %v", err, tt.wantErr)
@@ -92,7 +93,7 @@ func TestCatalogResolver_SpecListIDs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewCatalogResolver() unexpected error = %v", err)
 		}
-		if _, err := r.SpecListIDs("japanese"); !errors.Is(err, ErrUnknownSpecList) {
+		if _, err := r.SpecListIDs([]string{"japanese"}); !errors.Is(err, ErrUnknownSpecList) {
 			t.Fatalf("SpecListIDs() error = %v, want %v", err, ErrUnknownSpecList)
 		}
 	})

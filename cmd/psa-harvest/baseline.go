@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -109,7 +110,7 @@ func buildBaselineCampaign(existing inventory.Campaign, pc psacampaign.PortalCam
 	}
 
 	updated := existing
-	updated.TargetLanguage = lang
+	updated.TargetLanguages = []string{lang}
 	updated.SubjectFilterMode = pc.SubjectFilter.Type
 	updated.Subjects = toTargetSubjects(pc.SubjectFilter.Subjects)
 	updated.DeniedSpecs = toTargetSubjects(pc.DeniedSpecs)
@@ -186,7 +187,7 @@ func runBaselinePull(ctx context.Context, portalCampaigns []psacampaign.PortalCa
 		}
 		logger.Info(ctx, "psa-harvest: baseline wrote campaign targeting",
 			observability.String("campaignId", existing.ID),
-			observability.String("targetLanguage", updated.TargetLanguage))
+			observability.String("targetLanguages", strings.Join(updated.TargetLanguages, ",")))
 	}
 
 	// Every internally linked campaign must have appeared in the portal fetch.
