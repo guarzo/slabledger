@@ -23,6 +23,7 @@ declare module './client' {
   interface APIClient {
     // Campaign CRUD
     listCampaigns(activeOnly?: boolean): Promise<Campaign[]>;
+    getCampaign(id: string): Promise<Campaign>;
     deleteCampaign(id: string): Promise<void>;
     createCampaign(input: CreateCampaignInput): Promise<Campaign>;
     updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign>;
@@ -42,8 +43,12 @@ proto.listCampaigns = async function (this: APIClient, activeOnly = false): Prom
   return this.get<Campaign[]>(`/campaigns${params}`);
 };
 
+proto.getCampaign = async function (this: APIClient, id: string): Promise<Campaign> {
+  return this.get<Campaign>(`/campaigns/${encodeURIComponent(id)}`);
+};
+
 proto.deleteCampaign = async function (this: APIClient, id: string): Promise<void> {
-  await this.deleteResource(`/campaigns/${id}`);
+  await this.deleteResource(`/campaigns/${encodeURIComponent(id)}`);
 };
 
 proto.createCampaign = async function (this: APIClient, input: CreateCampaignInput): Promise<Campaign> {
@@ -51,5 +56,5 @@ proto.createCampaign = async function (this: APIClient, input: CreateCampaignInp
 };
 
 proto.updateCampaign = async function (this: APIClient, id: string, data: Partial<Campaign>): Promise<Campaign> {
-  return this.put<Campaign>(`/campaigns/${id}`, data);
+  return this.put<Campaign>(`/campaigns/${encodeURIComponent(id)}`, data);
 };

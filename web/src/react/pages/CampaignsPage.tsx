@@ -305,10 +305,17 @@ export default function CampaignsPage() {
                   try {
                     const existing = allCampaigns.find(c => c.name.toLowerCase() === input.name.toLowerCase());
                     if (existing) {
+                      // Re-read before merging. `existing` comes from the cached
+                      // campaign list, and this is a full-object PUT — building it
+                      // from a stale copy silently reverts any field changed
+                      // elsewhere since the last list fetch. A 404 here (campaign
+                      // deleted since the list loaded) is caught below and reported
+                      // against this name rather than overwriting a fresh record.
+                      const fresh = await api.getCampaign(existing.id);
                       // Only overlay fields that were explicitly in the import text;
                       // omitted fields (e.g. PSA Sourcing Fee) keep their current values.
                       // Strip server-owned fields so only mutable data is sent.
-                      const { id: _id, createdAt: _ca, updatedAt: _ua, expectedFillRate: _efr, ...base } = existing;
+                      const { id: _id, createdAt: _ca, updatedAt: _ua, expectedFillRate: _efr, ...base } = fresh;
                       await api.updateCampaign(existing.id, { ...base, ...input });
                       updated++;
                     } else {
