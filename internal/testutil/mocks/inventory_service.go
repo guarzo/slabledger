@@ -40,6 +40,7 @@ type MockInventoryService struct {
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
+	ReconcilePSAAttributionFn   func(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error)
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
 	// Capital & Invoice
@@ -259,6 +260,13 @@ func (m *MockInventoryService) ImportPSAExportGlobal(ctx context.Context, rows [
 		return m.ImportPSAExportGlobalFn(ctx, rows)
 	}
 	return &inventory.PSAImportResult{}, nil
+}
+
+func (m *MockInventoryService) ReconcilePSAAttribution(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error) {
+	if m.ReconcilePSAAttributionFn != nil {
+		return m.ReconcilePSAAttributionFn(ctx, rows)
+	}
+	return inventory.ReconcileResult{}, nil
 }
 
 func (m *MockInventoryService) ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error {

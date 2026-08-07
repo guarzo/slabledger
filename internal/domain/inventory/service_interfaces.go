@@ -38,6 +38,7 @@ type AnalyticsService interface {
 // ImportService handles CSV imports, cert entry, and external data ingestion.
 type ImportService interface {
 	ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error)
+	ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)
 
 	EnsureExternalCampaign(ctx context.Context) (*Campaign, error)
 	ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow) (*ExternalImportResult, error)
