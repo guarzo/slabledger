@@ -356,7 +356,7 @@ func TestTranslateToDiff_ListAxes(t *testing.T) {
 	}
 
 	// Now make the portal's spec-list ids stale relative to the resolver's
-	// mapping for the campaign's TargetLanguage, and assert prepackagedSpecListIds
+	// mapping for the campaign's TargetLanguages, and assert prepackagedSpecListIds
 	// DOES fire, carrying the resolved (not portal-stale) list as its typed Value.
 	portal.SpecListIDs = []string{"stale-list"}
 	diff3, err := TranslateToDiff(internal, portal, r)

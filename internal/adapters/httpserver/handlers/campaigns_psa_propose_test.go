@@ -17,7 +17,7 @@ import (
 
 // englishSpecList is the ENABLED "Pokemon - English Language Only" curated
 // list, matched by
-// diffCampaign()/noDiffPortal()'s TargetLanguage/SpecListIDs so their scalar
+// diffCampaign()/noDiffPortal()'s TargetLanguages/SpecListIDs so their scalar
 // fixtures still produce zero diff by default.
 var englishSpecList = []psacampaign.SpecListRef{{ID: "sl-1", Name: "Pokemon - English Language Only", Status: "ENABLED"}}
 
