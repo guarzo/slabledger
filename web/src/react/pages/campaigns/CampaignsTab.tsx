@@ -6,6 +6,7 @@ import CardShell from '../../ui/CardShell';
 import CampaignFormFields from '../../ui/CampaignFormFields';
 import PSAPublishModal from '../campaign-detail/PSAPublishModal';
 import type { UseFormReturn } from '../../hooks/useForm';
+import type { EditCampaignFormValues } from '../../utils/campaignFormValues';
 import { phaseHexColors } from '../../utils/campaignConstants';
 import { syncState, SYNC_LABELS, SYNC_TONES } from '../../utils/psaPush';
 
@@ -53,6 +54,11 @@ export default function CampaignsTab({
   form,
   createMutation,
   onToggleCreate,
+  editingCampaign,
+  editForm,
+  updateMutation,
+  onEdit,
+  onCancelEdit,
 }: {
   campaigns: Campaign[];
   pnlMap: Record<string, CampaignPNL>;
@@ -62,6 +68,13 @@ export default function CampaignsTab({
   form: UseFormReturn<CreateCampaignInput>;
   createMutation: { isPending: boolean };
   onToggleCreate: () => void;
+  /** The campaign currently being edited, or null. The parent owns this state
+      and the seeded form; the tab only renders and reports intent. */
+  editingCampaign: Campaign | null;
+  editForm: UseFormReturn<EditCampaignFormValues>;
+  updateMutation: { isPending: boolean };
+  onEdit: (c: Campaign) => void;
+  onCancelEdit: () => void;
 }) {
   const [psaModalCampaignId, setPsaModalCampaignId] = useState<string | null>(null);
   const psaModalCampaign = campaigns.find(c => c.id === psaModalCampaignId) ?? null;
@@ -101,6 +114,37 @@ export default function CampaignsTab({
               />
               <div className="mt-5 flex justify-end">
                 <Button type="submit" loading={form.isSubmitting || createMutation.isPending}>Create Campaign</Button>
+              </div>
+            </form>
+          </CardShell>
+        </div>
+      )}
+
+      {editingCampaign && (
+        <div className="mb-6">
+          <CardShell variant="elevated" padding="lg">
+            <form onSubmit={editForm.handleSubmit}>
+              <div className="mb-5">
+                <h2 className="text-lg font-semibold text-[var(--text)]">
+                  Edit {editingCampaign.name}
+                </h2>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                  Saves to SlabLedger only. Publish the change to PSA from the campaign&apos;s PSA button.
+                </p>
+              </div>
+              <CampaignFormFields
+                values={editForm.values}
+                onChange={(field, value) => editForm.handleChange(field as keyof EditCampaignFormValues, value)}
+                nameError={editForm.touched.name ? editForm.errors.name : undefined}
+                onNameBlur={() => editForm.handleBlur('name')}
+                showPhase
+                showFees
+              />
+              <div className="mt-5 flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={onCancelEdit}>Cancel</Button>
+                <Button type="submit" loading={editForm.isSubmitting || updateMutation.isPending}>
+                  Save Changes
+                </Button>
               </div>
             </form>
           </CardShell>
@@ -277,6 +321,14 @@ export default function CampaignsTab({
                         <StatusPill tone={SYNC_TONES[sync]} size="xs" title={`PSA sync: ${SYNC_LABELS[sync]}`}>
                           {SYNC_LABELS[sync]}
                         </StatusPill>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Edit ${c.name}`}
+                          onClick={() => onEdit(c)}
+                        >
+                          Edit
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"

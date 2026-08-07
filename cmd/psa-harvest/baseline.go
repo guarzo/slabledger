@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -159,6 +160,13 @@ func buildBaselineCampaign(existing inventory.Campaign, pc psacampaign.PortalCam
 	updated.SubjectFilterMode = pc.SubjectFilter.Type
 	updated.Subjects = toTargetSubjects(pc.SubjectFilter.Subjects)
 	updated.DeniedSpecs = toTargetSubjects(pc.DeniedSpecs)
+	// This writer bypasses inventory.Service.UpdateCampaign (service_crud.go:39),
+	// which is where UpdatedAt is normally stamped, and campaign_store.go:314
+	// binds whatever it is given. Without this, a baseline write changes the
+	// row's targeting while leaving updated_at at its pre-baseline value — and
+	// updated_at is what the UI's edit form compares against to detect that
+	// this pull landed underneath an open form.
+	updated.UpdatedAt = time.Now()
 
 	// SubjectFilter.Type is a raw remote string. inventory.SubjectAxisMatches
 	// (matching.go:150-153) treats anything other than SubjectFilterExclude as

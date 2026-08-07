@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CampaignsTab from './CampaignsTab';
 import { ToastProvider } from '../../contexts/ToastContext';
@@ -7,6 +7,7 @@ import { AuthProvider } from '../../contexts/AuthContext';
 import type { Campaign, CreateCampaignInput } from '../../../types/campaigns';
 import type { PSAPushRow } from '../../../types/campaigns';
 import type { UseFormReturn } from '../../hooks/useForm';
+import { toFormValues, type EditCampaignFormValues } from '../../utils/campaignFormValues';
 
 vi.mock('../../../js/api', () => ({
   api: { get: vi.fn().mockRejectedValue({ status: 401 }) },
@@ -62,7 +63,16 @@ const fakeForm = {
   reset: vi.fn(),
 } as unknown as UseFormReturn<CreateCampaignInput>;
 
-function renderTab(campaigns: Campaign[], psaPushMap: Record<string, PSAPushRow>) {
+function renderTab(
+  campaigns: Campaign[],
+  psaPushMap: Record<string, PSAPushRow>,
+  opts: {
+    editingCampaign?: Campaign | null;
+    editForm?: UseFormReturn<EditCampaignFormValues>;
+    onEdit?: (c: Campaign) => void;
+  } = {},
+) {
+  const { editingCampaign = null, editForm: editFormArg, onEdit = vi.fn() } = opts;
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
@@ -77,6 +87,11 @@ function renderTab(campaigns: Campaign[], psaPushMap: Record<string, PSAPushRow>
             form={fakeForm}
             createMutation={{ isPending: false }}
             onToggleCreate={vi.fn()}
+            editingCampaign={editingCampaign}
+            editForm={editFormArg ?? (fakeForm as unknown as UseFormReturn<EditCampaignFormValues>)}
+            updateMutation={{ isPending: false }}
+            onEdit={onEdit}
+            onCancelEdit={vi.fn()}
           />
         </ToastProvider>
       </AuthProvider>
@@ -142,4 +157,34 @@ describe('CampaignsTab PSA sync indicator', () => {
     expect(screen.getByRole('button', { name: wantLabel })).toBeInTheDocument();
     expect(screen.getByText(wantBadge)).toBeInTheDocument();
   });
+});
+
+it('reports the campaign to edit when Edit is clicked', () => {
+  const onEdit = vi.fn();
+  const campaign = makeCampaign();
+  renderTab([campaign], {}, { onEdit });
+
+  fireEvent.click(screen.getByRole('button', { name: /edit test campaign/i }));
+
+  expect(onEdit).toHaveBeenCalledWith(campaign);
+});
+
+it('offers Edit on a closed campaign', () => {
+  // A closed campaign's targeting is still worth correcting before it is
+  // reopened, so the button is not phase-gated.
+  renderTab([makeCampaign({ phase: 'closed' })], {});
+  expect(screen.getByRole('button', { name: /edit test campaign/i })).toBeInTheDocument();
+});
+
+it('renders the edit card with the seeded form values when a campaign is being edited', () => {
+  const campaign = makeCampaign({ name: 'Vintage Core' });
+  const editForm = {
+    ...fakeForm,
+    values: toFormValues(campaign),
+  } as unknown as UseFormReturn<EditCampaignFormValues>;
+
+  renderTab([campaign], {}, { editingCampaign: campaign, editForm });
+
+  expect(screen.getByText('Edit Vintage Core')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
 });
