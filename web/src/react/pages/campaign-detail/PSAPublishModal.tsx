@@ -8,6 +8,7 @@ import { Button, Select, StatusPill, CardShell, SectionEyebrow } from '../../ui'
 import type { Campaign, ProposedDiff, CampaignFormData, PSAPushRow } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 import { classifyPushStatus, syncState, SYNC_LABELS, SYNC_TONES } from '../../utils/psaPush';
+import SpecListChangeRow, { SPEC_LIST_FIELD } from './SpecListChangeRow';
 
 /** Tinted status banner (icon + text), matching StatusPill's tone tokens.
     Used for push-lifecycle messages that need more room than a pill. */
@@ -321,14 +322,22 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                 <CardShell variant="data" padding="sm">
                   <div className="flex flex-col gap-2 text-xs">
                     {effectiveDiff.changes.map((change) => (
-                      <div key={change.field} className="flex items-baseline justify-between gap-3">
-                        <span className="text-[var(--text-subtle)] whitespace-nowrap">{change.field}</span>
-                        <span className="tabular-nums text-right">
-                          <span className="text-[var(--text-muted)]">{change.old}</span>
-                          <span className="text-[var(--text-subtle)] mx-1.5">&rarr;</span>
-                          <span className="text-[var(--text)] font-medium">{change.new}</span>
-                        </span>
-                      </div>
+                      change.field === SPEC_LIST_FIELD ? (
+                        <SpecListChangeRow
+                          key={change.field}
+                          change={change}
+                          targetLanguages={campaign.targetLanguages}
+                        />
+                      ) : (
+                        <div key={change.field} className="flex items-baseline justify-between gap-3">
+                          <span className="text-[var(--text-subtle)] whitespace-nowrap">{change.field}</span>
+                          <span className="tabular-nums text-right">
+                            <span className="text-[var(--text-muted)]">{change.old}</span>
+                            <span className="text-[var(--text-subtle)] mx-1.5">&rarr;</span>
+                            <span className="text-[var(--text)] font-medium">{change.new}</span>
+                          </span>
+                        </div>
+                      )
                     ))}
                   </div>
                 </CardShell>

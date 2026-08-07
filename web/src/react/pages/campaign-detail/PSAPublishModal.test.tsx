@@ -162,6 +162,85 @@ describe('PSAPublishModal', () => {
       expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-create-1');
     });
   });
+
+  // Two real-shaped portal UUIDs. mapper.go renders list changes sorted and
+  // comma-joined with no spaces (renderStringList), which is what the modal parses.
+  const ENGLISH_LIST = '1c0f4e6a-1111-4111-8111-111111111111';
+  const JAPANESE_LIST = '2d1a5f7b-2222-4222-8222-222222222222';
+
+  it('renders a dropped curated spec list as an explicit removal, not a wall of UUIDs', async () => {
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-2',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: `${ENGLISH_LIST},${JAPANESE_LIST}`,
+          new: ENGLISH_LIST,
+          value: [ENGLISH_LIST],
+        }],
+      },
+    });
+
+    renderModal(makeCampaign({ targetLanguages: ['english'] }));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Curated spec lists')).toBeInTheDocument();
+    });
+    expect(screen.getByText('1 curated list will be REMOVED from this campaign.')).toBeInTheDocument();
+    expect(screen.getByText('Target languages: English')).toBeInTheDocument();
+    expect(screen.getByText(`Removed ${JAPANESE_LIST}`)).toBeInTheDocument();
+    expect(screen.getByText('1 unchanged')).toBeInTheDocument();
+    // The raw field name and blob rendering are gone for this field.
+    expect(screen.queryByText('prepackagedSpecListIds')).not.toBeInTheDocument();
+    expect(screen.queryByText(`${ENGLISH_LIST},${JAPANESE_LIST}`)).not.toBeInTheDocument();
+  });
+
+  it('renders an added curated spec list without a removal warning', async () => {
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-3',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: ENGLISH_LIST,
+          new: `${ENGLISH_LIST},${JAPANESE_LIST}`,
+          value: [ENGLISH_LIST, JAPANESE_LIST],
+        }],
+      },
+    });
+
+    renderModal(makeCampaign({ targetLanguages: ['english', 'japanese'] }));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(`Added ${JAPANESE_LIST}`)).toBeInTheDocument();
+    });
+    expect(screen.getByText('Target languages: English, Japanese')).toBeInTheDocument();
+    expect(screen.queryByText(/will be REMOVED/)).not.toBeInTheDocument();
+  });
+
+  it('describes an open-net campaign as such in the spec-list caption', async () => {
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-4',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: '',
+          new: ENGLISH_LIST,
+          value: [ENGLISH_LIST],
+        }],
+      },
+    });
+
+    renderModal(makeCampaign({ targetLanguages: [] }));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Target languages: any language (open net)')).toBeInTheDocument();
+    });
+    expect(screen.getByText(`Added ${ENGLISH_LIST}`)).toBeInTheDocument();
+    expect(screen.queryByText(/unchanged/)).not.toBeInTheDocument();
+  });
 });
 
 describe('PSAPublishModal with a queued push row', () => {
