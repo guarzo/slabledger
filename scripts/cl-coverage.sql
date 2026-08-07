@@ -7,6 +7,12 @@
 -- expression below and the one in that file MUST stay identical; if you change
 -- one, change both.
 --
+-- The `TIMESTAMP '2026-04-13 04:00:13'` literal in the 'pre_cl' arm below is a
+-- hardcoded copy of CLCoverageEraStart (cl_coverage_store.go:22). It is NOT
+-- read from that constant -- this script must run with zero application
+-- dependencies during an incident -- so if CLCoverageEraStart ever changes,
+-- update this literal by hand in the same change.
+--
 -- Coverage is measured on cl_value_updated_at, NOT cl_value_cents. The latter
 -- has a second writer (the Shopify external import) that never calls
 -- CardLadder, so 339 production rows carry a positive cl_value_cents that
