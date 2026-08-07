@@ -582,4 +582,3 @@ func TestBuildBaselineCampaignStampsUpdatedAt(t *testing.T) {
 		t.Errorf("UpdatedAt = %v, want at or after the call time %v", got.UpdatedAt, before)
 	}
 }
-
