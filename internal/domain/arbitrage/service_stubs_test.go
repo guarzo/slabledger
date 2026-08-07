@@ -24,7 +24,10 @@ func (r *stubCampaignRepo) ListCampaigns(_ context.Context, _ bool) ([]inventory
 	return nil, nil
 }
 func (r *stubCampaignRepo) UpdateCampaign(_ context.Context, _ *inventory.Campaign) error { return nil }
-func (r *stubCampaignRepo) DeleteCampaign(_ context.Context, _ string) error              { return nil }
+func (r *stubCampaignRepo) UpdateCampaignIfUnchanged(_ context.Context, _ *inventory.Campaign, _ time.Time) error {
+	return nil
+}
+func (r *stubCampaignRepo) DeleteCampaign(_ context.Context, _ string) error { return nil }
 
 type stubPurchaseRepo struct {
 	unsold []inventory.Purchase

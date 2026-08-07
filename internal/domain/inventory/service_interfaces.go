@@ -1,6 +1,9 @@
 package inventory
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // CRUDService handles campaign, purchase, and sale CRUD operations.
 type CRUDService interface {
@@ -8,6 +11,9 @@ type CRUDService interface {
 	GetCampaign(ctx context.Context, id string) (*Campaign, error)
 	ListCampaigns(ctx context.Context, activeOnly bool) ([]Campaign, error)
 	UpdateCampaign(ctx context.Context, c *Campaign) error
+	// UpdateCampaignIfUnchanged is UpdateCampaign for read-modify-write callers;
+	// see CampaignRepository for why both exist.
+	UpdateCampaignIfUnchanged(ctx context.Context, c *Campaign, expectedUpdatedAt time.Time) error
 	DeleteCampaign(ctx context.Context, id string) error
 
 	CreatePurchase(ctx context.Context, p *Purchase) error

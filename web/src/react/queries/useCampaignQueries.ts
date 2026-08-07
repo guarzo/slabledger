@@ -137,8 +137,8 @@ export function useCreateCampaign() {
 export function useUpdateCampaign() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Campaign> }) =>
-      api.updateCampaign(id, data),
+    mutationFn: ({ id, data, ifUnmodifiedSince }: { id: string; data: Partial<Campaign>; ifUnmodifiedSince?: string }) =>
+      api.updateCampaign(id, data, ifUnmodifiedSince),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
     },

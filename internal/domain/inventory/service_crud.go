@@ -40,6 +40,16 @@ func (s *service) UpdateCampaign(ctx context.Context, c *Campaign) error {
 	return s.campaigns.UpdateCampaign(ctx, c)
 }
 
+func (s *service) UpdateCampaignIfUnchanged(ctx context.Context, c *Campaign, expectedUpdatedAt time.Time) error {
+	if err := ValidateAndNormalizeCampaign(c); err != nil {
+		return err
+	}
+	// The new stamp and the precondition are different values: UpdatedAt is what
+	// the row becomes, expectedUpdatedAt is what it must currently be.
+	c.UpdatedAt = time.Now()
+	return s.campaigns.UpdateCampaignIfUnchanged(ctx, c, expectedUpdatedAt)
+}
+
 func (s *service) DeleteCampaign(ctx context.Context, id string) error {
 	return s.campaigns.DeleteCampaign(ctx, id)
 }

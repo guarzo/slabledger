@@ -5,7 +5,7 @@
  */
 import { useEffect, useState, useMemo } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../js/api';
+import { api, isAPIError } from '../../js/api';
 import { reportError } from '../../js/errors';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase, PSAPushRow } from '../../types/campaigns';
 import { queryKeys } from '../queries/queryKeys';
@@ -22,6 +22,13 @@ import InvoicesSection from '../components/insights/InvoicesSection';
 import { toFormValues, type EditCampaignFormValues } from '../utils/campaignFormValues';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
+
+// The server answers 409 when a conditional update's ifUnmodifiedSince no longer
+// matches the stored row. Both write paths here treat that as "someone else got
+// there first", not as a generic failure.
+function isConflict(err: unknown): boolean {
+  return isAPIError(err) && err.status === 409;
+}
 
 function sortCampaigns(campaigns: Campaign[]): Campaign[] {
   return [...campaigns].sort((a, b) => {
@@ -239,7 +246,16 @@ export default function CampaignsPage() {
         // psaCampaignRequestId and expectedFillRate intact. The bulk-paste path
         // below now spreads a freshly-read row the same way, behind the same
         // updatedAt guard.
-        await updateMutation.mutateAsync({ id: editing.id, data: { ...fresh, ...values } });
+        //
+        // ifUnmodifiedSince re-states the check above as a precondition inside
+        // the UPDATE itself, which is what actually closes the race: the
+        // comparison above can still be overtaken between the GET and the PUT,
+        // and only the server can compare-and-write in one statement.
+        await updateMutation.mutateAsync({
+          id: editing.id,
+          data: { ...fresh, ...values },
+          ifUnmodifiedSince: fresh.updatedAt,
+        });
         setEditing(null);
         toast.success(
           fresh.psaCampaignRequestId
@@ -247,6 +263,15 @@ export default function CampaignsPage() {
             : 'Campaign updated',
         );
       } catch (err) {
+        if (isConflict(err)) {
+          // Lost the race inside the GET→PUT window. Same remedy as above.
+          await queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
+          toast.error(
+            'This campaign changed while the save was in flight — most likely the harvester baseline pull. ' +
+            'Nothing was saved. Close and re-open Edit to start from current data.',
+          );
+          return;
+        }
         toast.error(getErrorMessage(err, 'Failed to update campaign'));
       }
     },
@@ -410,10 +435,10 @@ export default function CampaignsPage() {
                       // the psa-harvest baseline pull, whose write the cache cannot
                       // observe. Without this, a paste spreads the cached row and
                       // writes its stale targeting ids back over a newer baseline.
-                      // This narrows the race to the GET→PUT round-trip; it does not
-                      // close it. Closing it needs a conditional UPDATE keyed on
-                      // updated_at with a 409, which is a domain-interface change the
-                      // edit path would want too — deliberately not done here.
+                      // The read is still needed for the payload — a full-row PUT has
+                      // to echo the current targeting back — but the comparison below
+                      // is only a fast path for a nicer message; ifUnmodifiedSince on
+                      // the PUT is what actually closes the GET→PUT window.
                       let fresh: Campaign;
                       try {
                         fresh = await api.getCampaign(cached.id);
@@ -443,7 +468,7 @@ export default function CampaignsPage() {
                       // server-owned ones: id comes from the URL, created_at is not in
                       // the UPDATE, and the service stamps UpdatedAt itself.
                       const { id: _id, createdAt: _ca, updatedAt: _ua, ...base } = fresh;
-                      await api.updateCampaign(cached.id, { ...base, ...input });
+                      await api.updateCampaign(cached.id, { ...base, ...input }, fresh.updatedAt);
                       updated++;
                     } else {
                       // New campaigns get defaults for any fields not in the text.
@@ -451,6 +476,12 @@ export default function CampaignsPage() {
                       created++;
                     }
                   } catch (err) {
+                    if (isConflict(err)) {
+                      // Lost the race inside the GET→PUT window. Recorded per
+                      // campaign so the rest of the block still imports.
+                      errors.push(`${input.name}: changed while the update was in flight (most likely the harvester baseline pull) — not updated`);
+                      continue;
+                    }
                     errors.push(`${input.name}: ${getErrorMessage(err, 'failed')}`);
                   }
                 }
