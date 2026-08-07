@@ -35,6 +35,13 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 	if p.Grader == "" {
 		p.Grader = "PSA"
 	}
+	// Non-PSA creation defaults to 'inferred' (see migration 000023 and
+	// campaign_purchases_attribution_source_check): every write path must set
+	// attribution_source, and callers outside the PSA-authoritative paths
+	// (ReattributePurchase, UpdatePurchaseAttributionName) have no stronger claim.
+	if p.AttributionSource == "" {
+		p.AttributionSource = inventory.AttributionSourceInferred
+	}
 	// Snapshot CL value at creation when known; set-once (never overwritten later).
 	if p.CLValueAtPurchaseCents == 0 && p.CLValueCents > 0 {
 		p.CLValueAtPurchaseCents = p.CLValueCents
