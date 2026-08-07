@@ -137,15 +137,16 @@ describe('switching directly from one campaign to another', () => {
     // instance across the switch and its removedLegacyNames set leaks: a name
     // blocked on Alpha stays unaddable on Beta, where it is legitimate.
     const user = userEvent.setup();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPage();
 
     await user.click(screen.getByRole('button', { name: /edit alpha/i }));
     await screen.findByRole('region', { name: /edit alpha/i });
 
     // Remove the legacy chip on Alpha — this is what registers the block.
+    // Removing a legacy subject goes through ConfirmDialog rather than
+    // window.confirm, so the block registers on the dialog's confirm.
     await user.click(screen.getByRole('button', { name: /remove pikachu/i }));
-    expect(window.confirm).toHaveBeenCalled();
+    await user.click(await screen.findByRole('button', { name: 'Remove' }));
 
     // Still on Alpha, the catalog no longer offers the name back.
     const alphaInput = within(editCard('Alpha')).getByPlaceholderText(/add a subject by name/i);
