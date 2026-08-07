@@ -197,9 +197,13 @@ func (h *CampaignsHandler) HandlePSAPropose(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		// ErrUnknownSubject/ErrUnknownSpecList mean an operator-entered
 		// name (or campaign language) hasn't been reconciled with the portal
-		// catalog yet — an expected, actionable 400 naming the offender, not
-		// a server fault. Anything else is unanticipated and stays a 500.
-		if errors.Is(err, psacampaign.ErrUnknownSubject) || errors.Is(err, psacampaign.ErrUnknownSpecList) {
+		// catalog yet. ErrLegacySubjectsUnreconciled means migration 000023's
+		// legacy backfill hasn't been reconciled by a baseline pull yet. All
+		// three are expected, actionable 400s naming the offender and the fix,
+		// not server faults. Anything else is unanticipated and stays a 500.
+		if errors.Is(err, psacampaign.ErrUnknownSubject) ||
+			errors.Is(err, psacampaign.ErrUnknownSpecList) ||
+			errors.Is(err, psacampaign.ErrLegacySubjectsUnreconciled) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

@@ -3,7 +3,7 @@ package psacampaign
 import (
 	"context"
 	"errors"
-	"slices"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -19,6 +19,12 @@ var (
 	ErrCatalogStale    = errors.New("psacampaign: portal catalog is stale")
 	ErrUnknownSpecList = errors.New("psacampaign: no spec list for language")
 	ErrUnknownSubject  = errors.New("psacampaign: no subject id for name")
+	// ErrLegacySubjectsUnreconciled means a campaign still carries subjects
+	// marked by migration 000023's backfill as legacy and never reconciled
+	// against the portal. Pushing one would re-resolve a live portal id by
+	// name; the operator must run the baseline pull first.
+	ErrLegacySubjectsUnreconciled = errors.New(
+		"psacampaign: campaign carries legacy unreconciled subjects; run the psa-harvest baseline pull to reconcile them against the portal before pushing")
 )
 
 // SpecListRef is one curated ("prepackaged") spec list offered by the portal.
@@ -71,40 +77,53 @@ func NewCatalogResolver(specLists []SpecListRef, subjects []SubjectRef, fetchedA
 	return &catalogResolver{specLists: specLists, subjects: subjects}, nil
 }
 
-// SpecListIDs maps a set of language tokens to the union of the portal
-// UUID(s) whose Name equals each token's curated list name (case-insensitive)
-// and whose Status is "ENABLED". Lists with any other status are skipped even
-// when the name matches, since the portal can retire a list without removing
-// it from the catalog payload.
+// SpecListIDs maps a SET of language tokens to the portal UUIDs of every
+// curated list they name. It is all-or-nothing: if any token has no ENABLED
+// matching list, it returns ErrUnknownSpecList naming that token and NO ids
+// at all.
 //
-// Every token must resolve to at least one enabled list; one that does not
-// returns ErrUnknownSpecList and no ids at all. A campaign carrying both
-// curated lists must push both or push nothing.
-//
-// Task 4 hardens this: dedup ordering, and an error that names every
-// unresolvable token at once rather than stopping at the first.
+// The all-or-nothing contract is the point, not caution. The caller writes the
+// returned slice over a live campaign's entire prepackagedSpecListIds field,
+// so returning the resolvable subset would silently narrow what that campaign
+// buys — a real-money change, invisible in a diff that shows only the ids that
+// survived. A future curated list SlabLedger does not model yet (Chinese, say)
+// therefore surfaces as a loud, self-explanatory failure.
 func (r *catalogResolver) SpecListIDs(languageTokens []string) ([]string, error) {
-	out := make([]string, 0, len(languageTokens))
+	var ids []string
 	for _, token := range languageTokens {
-		wantName, ok := languageListNames[token]
-		if !ok {
-			return nil, ErrUnknownSpecList
+		tokenIDs, err := r.specListIDsForToken(token)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %q", err, token)
 		}
-		matched := 0
-		for _, l := range r.specLists {
-			if !strings.EqualFold(l.Name, wantName) || l.Status != "ENABLED" {
-				continue
-			}
-			matched++
-			if !slices.Contains(out, l.ID) {
-				out = append(out, l.ID)
-			}
-		}
-		if matched == 0 {
-			return nil, ErrUnknownSpecList
-		}
+		ids = append(ids, tokenIDs...)
 	}
-	return out, nil
+	return ids, nil
+}
+
+// specListIDsForToken resolves one language token to the portal UUID(s) of the
+// matching list(s) whose Name equals the token's curated list name
+// (case-insensitive) and whose Status is "ENABLED". Lists with any other
+// status are skipped even when the name matches, since the portal can retire a
+// list without removing it from the catalog payload.
+func (r *catalogResolver) specListIDsForToken(languageToken string) ([]string, error) {
+	wantName, ok := languageListNames[languageToken]
+	if !ok {
+		return nil, ErrUnknownSpecList
+	}
+	var ids []string
+	for _, l := range r.specLists {
+		if !strings.EqualFold(l.Name, wantName) {
+			continue
+		}
+		if l.Status != "ENABLED" {
+			continue
+		}
+		ids = append(ids, l.ID)
+	}
+	if len(ids) == 0 {
+		return nil, ErrUnknownSpecList
+	}
+	return ids, nil
 }
 
 // SubjectID resolves a subject name to its portal id, case-insensitively.

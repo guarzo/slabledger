@@ -121,6 +121,20 @@ func TestHandlePSAPropose(t *testing.T) {
 			portalRows: []psacampaign.PortalCampaign{noDiffPortal()},
 			wantStatus: http.StatusBadRequest,
 		},
+		{
+			// Migration 000023's legacy backfill is unreconciled until the
+			// baseline pull runs. Proposing in that window must refuse with an
+			// actionable 400 rather than silently re-resolving legacy subjects
+			// to current-generation portal ids.
+			name: "legacy unreconciled subject maps to 400 not 500",
+			campaign: func() *inventory.Campaign {
+				c := diffCampaign()
+				c.Subjects = []inventory.TargetSubject{{ID: inventory.LegacyUnreconciledSubjectID, Name: "Charizard"}}
+				return &c
+			}(),
+			portalRows: []psacampaign.PortalCampaign{noDiffPortal()},
+			wantStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {

@@ -76,10 +76,14 @@ func TranslateToDiff(internal inventory.Campaign, portal PortalCampaign, r Resol
 	addList("deniedSpecs",
 		renderSubjectRefs(portal.DeniedSpecs), renderSubjectRefs(deniedSpecs), deniedSpecs)
 
-	// An empty TargetLanguages set means this campaign has no spec-list axis
-	// to propose yet (legacy/unlinked campaign) — that must not block every
-	// other scalar fix in this diff, so the axis is skipped rather than
-	// erroring the whole call.
+	// An empty TargetLanguages set means either that this campaign has no
+	// spec-list axis to propose yet (legacy/unlinked), or that it is a
+	// deliberate open net. The portal can express neither: a SPEC_LIST
+	// campaign must carry at least one curated list, so proposing anything
+	// here would mean proposing an EMPTY prepackagedSpecListIds — clearing
+	// every curated list off a live campaign. The axis is therefore skipped,
+	// which also keeps an unlinked campaign from blocking every other scalar
+	// fix in this diff.
 	if len(internal.TargetLanguages) > 0 {
 		specListIDs, err := r.SpecListIDs(internal.TargetLanguages)
 		if err != nil {
@@ -115,18 +119,30 @@ func renderStringList(ss []string) string {
 }
 
 // toSubjectRefs converts internal.TargetSubject entries to the portal's
-// SubjectRef wire shape. An entry with a non-zero ID is portal-sourced and
+// SubjectRef wire shape. An entry with a positive ID is portal-sourced and
 // passes through verbatim — it is never re-resolved by name, because live
 // portal ids span multiple id generations (4xxx/8xxx/22xxx) that getSubjects
 // cannot reproduce. Only ID == 0 entries (operator-entered names never yet
-// reconciled with the portal) are resolved via r; a resolution failure
-// returns an error naming the subject rather than silently dropping it from
-// what the campaign buys.
+// reconciled with the portal) are resolved via r; a resolution failure returns
+// an error naming the subject rather than silently dropping it from what the
+// campaign buys.
+//
+// inventory.LegacyUnreconciledSubjectID is refused outright. Migration 000023
+// backfills legacy inclusion-list tokens with that sentinel precisely so they
+// are distinguishable from the operator-typed ID == 0 case above: the two were
+// previously identical, so a propose issued between deploy and the baseline
+// pull would have re-resolved legacy subjects by name and swapped live
+// 4xxx/8xxx portal ids for current-generation 22xxx ids. Refusing is the only
+// safe answer, since translation has no portal session with which to reconcile
+// them itself.
 func toSubjectRefs(subjects []inventory.TargetSubject, r Resolver) ([]SubjectRef, error) {
 	out := make([]SubjectRef, 0, len(subjects))
 	for _, s := range subjects {
 		id := s.ID
-		if id == 0 {
+		switch id {
+		case inventory.LegacyUnreconciledSubjectID:
+			return nil, fmt.Errorf("%w (subject %q)", ErrLegacySubjectsUnreconciled, s.Name)
+		case 0:
 			resolved, err := r.SubjectID(s.Name)
 			if err != nil {
 				return nil, fmt.Errorf("psacampaign: resolve subject %q: %w", s.Name, err)
@@ -160,8 +176,8 @@ const createDailySpecLimit = 2
 // campaign. The portal campaign is always created paused (IsActive false);
 // money fields are whole USD on the wire (internal cents / 100). Campaigns
 // are created as SPEC_LIST (the CATEGORY/POKEMON shape PSA has retired) with
-// the spec list resolved from the campaign's TargetLanguage, and the subject
-// filter carries the campaign's Subjects/DeniedSpecs.
+// every curated spec list resolved from the campaign's TargetLanguages set,
+// and the subject filter carries the campaign's Subjects/DeniedSpecs.
 func TranslateToCreate(internal inventory.Campaign, r Resolver) (CampaignFormData, error) {
 	var fd CampaignFormData
 
