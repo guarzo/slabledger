@@ -116,4 +116,31 @@ describe('SubjectListEditor', () => {
     });
     expect(screen.queryByText(/not yet harvested/i)).not.toBeInTheDocument();
   });
+
+  it('flags legacy unreconciled subjects (id -1) without disturbing operator-typed ones (id 0)', async () => {
+    // -1 is inventory.LegacyUnreconciledSubjectID, backfilled by migration
+    // 000023 onto pre-axis subjects. Push translation refuses a campaign that
+    // still carries one, so the reason has to be visible here. id 0 is the
+    // unrelated, fully supported "resolve this name at push time" marker.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderEditor([
+      { id: -1, name: 'Blastoise' },
+      { id: 0, name: 'Mewtwo' },
+      { id: 4807, name: 'Charizard' },
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/baseline pull/i)).toBeInTheDocument();
+    });
+    expect(screen.getByTitle('legacy subject — no portal id yet; run the harvester baseline pull')).toHaveTextContent('Blastoise');
+    expect(screen.getByTitle('id: 0')).toHaveTextContent('Mewtwo');
+    expect(screen.getByTitle('id: 4807')).toHaveTextContent('Charizard');
+
+    // Legacy chips stay removable — removing one is a deliberate operator edit.
+    fireEvent.click(screen.getByRole('button', { name: /remove blastoise/i }));
+    expect(onChange).toHaveBeenCalledWith([{ id: 0, name: 'Mewtwo' }, { id: 4807, name: 'Charizard' }]);
+  });
 });

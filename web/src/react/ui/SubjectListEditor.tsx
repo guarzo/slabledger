@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from '../queries/queryKeys';
 import type { SubjectRef } from '../../types/campaigns';
+import { LEGACY_UNRECONCILED_SUBJECT_ID } from '../utils/campaignConstants';
 
 const CATALOG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -121,24 +122,41 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
           </div>
         )}
       </div>
+      {value.some(s => s.id === LEGACY_UNRECONCILED_SUBJECT_ID) && (
+        <p className="text-xs text-[var(--warning)]">
+          Some subjects were carried over from before portal targeting and have no
+          portal id yet. Publishing is refused until the harvester baseline pull
+          reconciles them.
+        </p>
+      )}
       <div className="flex flex-wrap gap-1.5">
-        {value.map((s, i) => (
-          <span
-            key={`${s.id}-${s.name}-${i}`}
-            title={`id: ${s.id}`}
-            className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-500)]/15 text-[var(--brand-400)] text-xs px-2.5 py-1"
-          >
-            {s.name}
-            <button
-              type="button"
-              onClick={() => removeSubject(i)}
-              aria-label={`Remove ${s.name}`}
-              className="hover:text-[var(--danger)]"
+        {value.map((s, i) => {
+          // -1 (legacy, unreconciled) and 0 (operator-typed, resolved by name at
+          // push time) are different markers with different fates — only the
+          // first one blocks a push, so only it is called out here.
+          const isLegacy = s.id === LEGACY_UNRECONCILED_SUBJECT_ID;
+          return (
+            <span
+              key={`${s.id}-${s.name}-${i}`}
+              title={isLegacy ? 'legacy subject — no portal id yet; run the harvester baseline pull' : `id: ${s.id}`}
+              className={
+                isLegacy
+                  ? 'inline-flex items-center gap-1 rounded-full bg-[var(--warning)]/15 text-[var(--warning)] text-xs px-2.5 py-1'
+                  : 'inline-flex items-center gap-1 rounded-full bg-[var(--brand-500)]/15 text-[var(--brand-400)] text-xs px-2.5 py-1'
+              }
             >
-              ×
-            </button>
-          </span>
-        ))}
+              {s.name}
+              <button
+                type="button"
+                onClick={() => removeSubject(i)}
+                aria-label={`Remove ${s.name}`}
+                className="hover:text-[var(--danger)]"
+              >
+                ×
+              </button>
+            </span>
+          );
+        })}
       </div>
     </div>
   );
