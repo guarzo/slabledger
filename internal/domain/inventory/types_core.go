@@ -227,6 +227,10 @@ type Purchase struct {
 	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
 	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
 
+	// --- Campaign attribution provenance ---
+	PSACampaignName   string `json:"psaCampaignName,omitempty"`   // raw campaign name PSA reported, verbatim
+	AttributionSource string `json:"attributionSource,omitempty"` // psa | inferred | manual
+
 	// --- Purchase cost & logistics ---
 	BuyCostCents        int     `json:"buyCostCents"`         // Actual cost paid
 	PSASourcingFeeCents int     `json:"psaSourcingFeeCents"`  // Fee charged per card

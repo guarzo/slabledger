@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -253,3 +254,110 @@ func TestUpdatePurchaseMarketSnapshotProvenanceSetOnce(t *testing.T) {
 
 func intPtr(v int) *int           { return &v }
 func floatPtr(v float64) *float64 { return &v }
+
+// newStoreWithUnsoldPurchase seeds a campaign and a single unsold purchase,
+// returning the store and the purchase's ID.
+func newStoreWithUnsoldPurchase(t *testing.T) (*PurchaseStore, string) {
+	t.Helper()
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('campaign-b', 'Campaign B', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign-b: %v", err)
+	}
+
+	p := makeTestPurchase()
+	p.CLConfidenceAtPurchase = intPtr(50)
+	if err := ps.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	return ps, p.ID
+}
+
+// newStoreWithSoldPurchase seeds a campaign, a purchase, and a linked sale,
+// returning the store and the purchase's ID.
+func newStoreWithSoldPurchase(t *testing.T) (*PurchaseStore, string) {
+	t.Helper()
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	ctx := context.Background()
+
+	_, err := ps.db.ExecContext(ctx,
+		`INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_price_cents, sale_date, forced_liquidation)
+		 VALUES ($1, $2, 'ebay', 9000, '2026-01-15', FALSE)`,
+		"sale-"+purchaseID, purchaseID,
+	)
+	if err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+	return ps, purchaseID
+}
+
+// mustGetPurchase fetches a purchase by ID, failing the test on error.
+func mustGetPurchase(t *testing.T, ps *PurchaseStore, purchaseID string) *inventory.Purchase {
+	t.Helper()
+	got, err := ps.GetPurchase(context.Background(), purchaseID)
+	if err != nil {
+		t.Fatalf("GetPurchase: %v", err)
+	}
+	return got
+}
+
+func TestReattributePurchase_RefusesWhenSaleExists(t *testing.T) {
+	ps, purchaseID := newStoreWithSoldPurchase(t)
+	err := ps.ReattributePurchase(context.Background(), purchaseID, inventory.Reattribution{
+		CampaignID:          "campaign-b",
+		PSACampaignName:     "Modern High Band",
+		PSASourcingFeeCents: 300,
+	})
+	if !errors.Is(err, inventory.ErrPurchaseHasSale) {
+		t.Fatalf("err = %v, want ErrPurchaseHasSale", err)
+	}
+}
+
+func TestReattributePurchase_NullsCLConfidenceWhenNil(t *testing.T) {
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	err := ps.ReattributePurchase(context.Background(), purchaseID, inventory.Reattribution{
+		CampaignID:             "campaign-b",
+		PSACampaignName:        "Modern",
+		PSASourcingFeeCents:    300,
+		CLConfidenceAtPurchase: nil,
+	})
+	if err != nil {
+		t.Fatalf("ReattributePurchase: %v", err)
+	}
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.CLConfidenceAtPurchase != nil {
+		t.Errorf("CLConfidenceAtPurchase = %v, want nil", *got.CLConfidenceAtPurchase)
+	}
+	if got.AttributionSource != inventory.AttributionSourcePSA {
+		t.Errorf("AttributionSource = %q, want %q", got.AttributionSource, inventory.AttributionSourcePSA)
+	}
+}
+
+func TestUpdatePurchaseAttributionName(t *testing.T) {
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	err := ps.UpdatePurchaseAttributionName(context.Background(), purchaseID, "Modern High Band", inventory.AttributionSourcePSA)
+	if err != nil {
+		t.Fatalf("UpdatePurchaseAttributionName: %v", err)
+	}
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.PSACampaignName != "Modern High Band" {
+		t.Errorf("PSACampaignName = %q, want %q", got.PSACampaignName, "Modern High Band")
+	}
+	if got.AttributionSource != inventory.AttributionSourcePSA {
+		t.Errorf("AttributionSource = %q, want %q", got.AttributionSource, inventory.AttributionSourcePSA)
+	}
+}

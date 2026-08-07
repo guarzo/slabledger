@@ -61,6 +61,8 @@ type InMemoryCampaignStore struct {
 	UpdatePurchaseMarketSnapshotFn      func(ctx context.Context, id string, snap inventory.MarketSnapshotData) error
 	UpdatePurchaseCampaignFn            func(ctx context.Context, purchaseID, campaignID string, sourcingFeeCents int) error
 	UpdatePurchasePSAFieldsFn           func(ctx context.Context, id string, fields inventory.PSAUpdateFields) error
+	ReattributePurchaseFn               func(ctx context.Context, purchaseID string, r inventory.Reattribution) error
+	UpdatePurchaseAttributionNameFn     func(ctx context.Context, purchaseID, psaName, source string) error
 	GetAllPurchasesWithSalesFn          func(ctx context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error)
 	GetGlobalPNLByChannelFn             func(ctx context.Context) ([]inventory.ChannelPNL, error)
 	GetPurchasesByCertNumbersFn         func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
@@ -480,6 +482,43 @@ func (m *InMemoryCampaignStore) UpdatePurchaseCampaign(ctx context.Context, purc
 	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
+	return nil
+}
+
+// ReattributePurchase moves a purchase to a PSA-authoritative campaign and marks
+// attribution_source='psa', refusing when a linked sale exists (mirrors the
+// Postgres store's conditional-update guard).
+func (m *InMemoryCampaignStore) ReattributePurchase(ctx context.Context, purchaseID string, r inventory.Reattribution) error {
+	if m.ReattributePurchaseFn != nil {
+		return m.ReattributePurchaseFn(ctx, purchaseID, r)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	if m.PurchaseSales[purchaseID] {
+		return inventory.ErrPurchaseHasSale
+	}
+	p.CampaignID = r.CampaignID
+	p.PSASourcingFeeCents = r.PSASourcingFeeCents
+	p.CLConfidenceAtPurchase = r.CLConfidenceAtPurchase
+	p.PSACampaignName = r.PSACampaignName
+	p.AttributionSource = inventory.AttributionSourcePSA
+	return nil
+}
+
+// UpdatePurchaseAttributionName records PSA's campaign name and attribution
+// source without moving the campaign. Safe on sold purchases.
+func (m *InMemoryCampaignStore) UpdatePurchaseAttributionName(ctx context.Context, purchaseID, psaName, source string) error {
+	if m.UpdatePurchaseAttributionNameFn != nil {
+		return m.UpdatePurchaseAttributionNameFn(ctx, purchaseID, psaName, source)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	p.PSACampaignName = psaName
+	p.AttributionSource = source
 	return nil
 }
 

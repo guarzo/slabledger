@@ -69,7 +69,9 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			-- provenance snapshot
 			cl_value_at_purchase_cents,
 			cl_confidence_at_purchase, population_at_purchase, dh_confidence_at_purchase,
-			source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase
+			source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
+			-- attribution
+			psa_campaign_name, attribution_source
 		) VALUES (
 			-- identity
 			$1, $2, $3, $4, $5, $6, $7, $8,
@@ -97,7 +99,9 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			$53, $54,
 			-- provenance snapshot
 			$55,
-			$56, $57, $58, $59, $60, $61
+			$56, $57, $58, $59, $60, $61,
+			-- attribution
+			$62, $63
 		)
 	`
 	_, err := ps.db.ExecContext(ctx, query,
@@ -119,6 +123,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.CLValueAtPurchaseCents,
 		p.CLConfidenceAtPurchase, p.PopulationAtPurchase, p.DHConfidenceAtPurchase,
 		p.SourceCountAtPurchase, p.ActiveListingsAtPurchase, p.SalesLast30dAtPurchase,
+		p.PSACampaignName, p.AttributionSource,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return inventory.ErrDuplicateCertNumber
@@ -361,6 +366,52 @@ func (ps *PurchaseStore) UpdatePurchaseCampaign(ctx context.Context, purchaseID 
 		return inventory.ErrPurchaseHasSale
 	}
 	return nil
+}
+
+// ReattributePurchase moves a purchase to a PSA-authoritative campaign, recording
+// PSA's campaign name and marking attribution_source='psa'. Refuses when a linked
+// sale exists, mirroring UpdatePurchaseCampaign's TOCTOU-safe conditional update.
+func (ps *PurchaseStore) ReattributePurchase(ctx context.Context, purchaseID string, r inventory.Reattribution) error {
+	result, err := ps.db.ExecContext(ctx,
+		`UPDATE campaign_purchases
+		 SET campaign_id = $1,
+		     psa_sourcing_fee_cents = $2,
+		     cl_confidence_at_purchase = $3,
+		     psa_campaign_name = $4,
+		     attribution_source = $5,
+		     updated_at = $6
+		 WHERE id = $7
+		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $8)`,
+		r.CampaignID, r.PSASourcingFeeCents, r.CLConfidenceAtPurchase,
+		r.PSACampaignName, inventory.AttributionSourcePSA, time.Now(), purchaseID, purchaseID,
+	)
+	if err != nil {
+		return fmt.Errorf("reattribute purchase: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reattribute purchase: rows affected: %w", err)
+	}
+	if n == 0 {
+		// Distinguish "not found" from "has a linked sale".
+		var exists int
+		if qErr := ps.db.QueryRowContext(ctx,
+			`SELECT 1 FROM campaign_purchases WHERE id = $1`, purchaseID,
+		).Scan(&exists); qErr != nil {
+			return inventory.ErrPurchaseNotFound
+		}
+		return inventory.ErrPurchaseHasSale
+	}
+	return nil
+}
+
+// UpdatePurchaseAttributionName records PSA's campaign name and attribution
+// source without moving the campaign. Safe on sold purchases.
+func (ps *PurchaseStore) UpdatePurchaseAttributionName(ctx context.Context, purchaseID, psaName, source string) error {
+	return ps.execAndExpectRow(ctx, "update attribution name",
+		`UPDATE campaign_purchases SET psa_campaign_name = $1, attribution_source = $2, updated_at = $3 WHERE id = $4`,
+		psaName, source, time.Now(), purchaseID,
+	)
 }
 
 func (ps *PurchaseStore) UpdatePurchaseCardYear(ctx context.Context, id string, year string) error {
