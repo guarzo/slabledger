@@ -133,12 +133,19 @@ func TestHandleCreatePurchase_POST_DuplicateCert(t *testing.T) {
 	decodeErrorResponse(t, rec)
 }
 
-// TestHandleCreatePurchase_POST_DiscardsClientAttribution covers both halves of
-// the handler's attribution rule: whatever the body claims is discarded, and the
+// TestHandleCreatePurchase_POST_DiscardsClientAttribution is the security
+// regression test from d7f11436, updated for the create-path 'manual' rule. It
+// covers both halves: whatever the body claims is discarded, and the
 // server-derived value is 'manual' (the campaign came from the URL path, so an
-// operator chose it). Every case supplies an attributionSource other than
-// 'manual', so asserting 'manual' proves the overwrite happened rather than
-// merely observing a pass-through.
+// operator chose it). The security property is unchanged — the client's value
+// never survives — only the expected post-clear value moved from "" to 'manual'.
+//
+// The first three cases supply an attributionSource other than 'manual', so the
+// source assertion proves the overwrite rather than observing a pass-through.
+// The fourth supplies 'manual' itself, where only the psaCampaignName assertion
+// can discriminate; it is retained because a client-supplied PSA name must still
+// be cleared unconditionally, and that is exactly the case where someone might
+// wrongly assume "source already matches, so nothing needs clearing".
 func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
 	tests := []struct {
 		name string
@@ -155,6 +162,10 @@ func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
 		{
 			name: "value outside the CHECK constraint",
 			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"not-a-source","psaCampaignName":"x"}`,
+		},
+		{
+			name: "forged manual attribution",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"manual","psaCampaignName":"Forged Campaign"}`,
 		},
 	}
 
