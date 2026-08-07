@@ -354,8 +354,8 @@ func IsChineseSet(setName string) bool {
 	return strings.HasPrefix(lower, "cn ") || strings.Contains(lower, "chinese")
 }
 
-// Language tokens. These are the canonical values stored in
-// inventory.Campaign.TargetLanguage and matched against set names.
+// Language tokens. These are the canonical values stored in the
+// inventory.Campaign.TargetLanguages set and matched against set names.
 const (
 	LangEnglish  = "english"
 	LangJapanese = "japanese"

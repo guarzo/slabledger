@@ -124,6 +124,35 @@ func TestPurchaseMatchesCampaign(t *testing.T) {
 			want: true,
 		},
 		{
+			// The shape of all six live campaigns: BOTH curated spec lists are
+			// selected on the portal. The single-token model could not express
+			// this, so it rejected half of what these campaigns actually buy.
+			name: "both languages selected accepts an english printing",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "SWSH BLACK STAR PROMO"},
+			campaign: Campaign{
+				TargetLanguages: []string{"english", "japanese"},
+			},
+			want: true,
+		},
+		{
+			name: "both languages selected accepts a japanese printing",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Mega Gardevoir ex", SetName: "JAPANESE M1S-MEGA SYMPHONIA"},
+			campaign: Campaign{
+				TargetLanguages: []string{"english", "japanese"},
+			},
+			want: true,
+		},
+		{
+			// A set is still a closed net, not a wildcard: chinese is in neither
+			// token, so it must not match even with both tokens selected.
+			name: "both languages selected still rejects a chinese printing",
+			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Pikachu", SetName: "SIMPLIFIED CHINESE CBB1 C-GEM PACK VOL 1"},
+			campaign: Campaign{
+				TargetLanguages: []string{"english", "japanese"},
+			},
+			want: false,
+		},
+		{
 			name: "subject axis Target mode - matches",
 			in:   MatchInput{Grade: 9, BuyCostCents: 15000, CardName: "Charizard VMAX", SetName: "Base Set"},
 			campaign: Campaign{
