@@ -388,6 +388,10 @@ export default function CampaignsPage() {
                       // the psa-harvest baseline pull, whose write the cache cannot
                       // observe. Without this, a paste spreads the cached row and
                       // writes its stale targeting ids back over a newer baseline.
+                      // This narrows the race to the GET→PUT round-trip; it does not
+                      // close it. Closing it needs a conditional UPDATE keyed on
+                      // updated_at with a 409, which is a domain-interface change the
+                      // edit path would want too — deliberately not done here.
                       let fresh: Campaign;
                       try {
                         fresh = await api.getCampaign(cached.id);
