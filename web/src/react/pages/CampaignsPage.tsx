@@ -3,7 +3,7 @@
  *
  * Lists all campaigns with P&L summary info and portfolio summary strip.
  */
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { reportError } from '../../js/errors';
@@ -175,7 +175,7 @@ export default function CampaignsPage() {
   const toast = useToast();
 
   const queryClient = useQueryClient();
-  const { data: allCampaigns = [], isLoading } = useCampaigns(false);
+  const { data: allCampaigns = [], isLoading, isSuccess } = useCampaigns(false);
   const createMutation = useCreateCampaign();
   const updateMutation = useUpdateCampaign();
 
@@ -262,7 +262,29 @@ export default function CampaignsPage() {
     setEditing(null);
   }
 
+  // Create and edit are mutually exclusive in both directions. handleEdit
+  // already closes Create; without the matching clear here, opening Create
+  // while editing stacks two full-height form cards, and it stops being clear
+  // which one a Save applies to.
+  function handleToggleCreate(next: boolean) {
+    setShowCreate(next);
+    if (next) setEditing(null);
+  }
+
   const editingCampaign = editing ? allCampaigns.find(c => c.id === editing.id) ?? null : null;
+
+  // A campaign deleted out from under an open edit form — from another tab, or
+  // the detail page — drops out of the list on the next refetch. Without this,
+  // `editingCampaign` goes null and the card vanishes mid-typing while
+  // `editing` stays set, leaving a save target that can only ever 404. Gate on
+  // isSuccess so a failed refetch (data falls back to []) doesn't read as
+  // "everything was deleted" and discard a valid in-progress edit.
+  useEffect(() => {
+    if (!editing || !isSuccess) return;
+    if (allCampaigns.some(c => c.id === editing.id)) return;
+    setEditing(null);
+    toast.error('That campaign no longer exists — it was deleted while you were editing. Nothing was saved.');
+  }, [editing, allCampaigns, isSuccess, toast]);
 
   const pnlQueries = useQueries({
     queries: allCampaigns.map(c => campaignPNLQueryOptions(c.id)),
@@ -457,7 +479,7 @@ export default function CampaignsPage() {
             title={showCreate ? 'Cancel' : 'New campaign'}
             variant={showCreate ? 'danger' : 'primary'}
             onClick={() => {
-              setShowCreate(!showCreate);
+              handleToggleCreate(!showCreate);
             }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -482,7 +504,7 @@ export default function CampaignsPage() {
           showCreate={showCreate}
           form={form}
           createMutation={createMutation}
-          onToggleCreate={() => setShowCreate(true)}
+          onToggleCreate={() => handleToggleCreate(true)}
           editingCampaign={editingCampaign}
           editForm={editForm}
           updateMutation={updateMutation}

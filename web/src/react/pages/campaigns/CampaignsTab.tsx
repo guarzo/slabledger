@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase, PSAPushRow } from '../../../types/campaigns';
 import { formatCents, formatDollarsWhole, formatPct, formatPriceRange } from '../../utils/formatters';
 import { EmptyState, Button, StatusPill, type StatusTone } from '../../ui';
@@ -42,6 +42,86 @@ function FilterSummary({ c }: { c: Campaign }) {
     <span className="text-xs text-[var(--text-muted)] truncate">
       {parts.join(' / ')}
     </span>
+  );
+}
+
+/**
+ * The inline edit card.
+ *
+ * Split out of CampaignsTab for its mount effect: the caller renders this with
+ * `key={campaign.id}`, so switching straight from editing campaign A to B
+ * unmounts and remounts the whole subtree. That remount is load-bearing twice
+ * over — it re-runs the scroll/focus effect below, and it resets the
+ * component-local state inside CampaignFormFields' SubjectListEditor. That
+ * editor keeps a `removedLegacyNames` set of legacy subjects the operator
+ * confirmed removing, and without the remount the set would leak into the next
+ * campaign, silently refusing a name that is legitimate there.
+ */
+function EditCampaignCard({
+  campaign,
+  editForm,
+  updateMutation,
+  onCancelEdit,
+}: {
+  campaign: Campaign;
+  editForm: UseFormReturn<EditCampaignFormValues>;
+  updateMutation: { isPending: boolean };
+  onCancelEdit: () => void;
+}) {
+  const cardRef = useRef<HTMLElement>(null);
+  const headingId = useId();
+
+  // The card renders above the campaign list, so clicking Edit on a lower row
+  // otherwise changes nothing inside the viewport and reads as a dead button.
+  // Move the viewport to the card, and focus it: focusing a section labelled by
+  // its heading is also what gives screen-reader users the "Edit <name>"
+  // announcement the click otherwise produces no trace of.
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    // scrollIntoView and matchMedia are both absent in jsdom.
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    el.scrollIntoView?.({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    // preventScroll so focus doesn't fight the smooth scroll just started.
+    el.focus({ preventScroll: true });
+  }, []);
+
+  return (
+    <section
+      ref={cardRef}
+      tabIndex={-1}
+      aria-labelledby={headingId}
+      // scroll-mt clears the sticky header, which would otherwise overlap the
+      // card's own heading at block: 'start'.
+      className="mb-6 scroll-mt-16 focus:outline-none"
+    >
+      <CardShell variant="elevated" padding="lg">
+        <form onSubmit={editForm.handleSubmit}>
+          <div className="mb-5">
+            <h2 id={headingId} className="text-lg font-semibold text-[var(--text)]">
+              Edit {campaign.name}
+            </h2>
+            <p className="text-sm text-[var(--text-muted)] mt-1">
+              Saves to SlabLedger only. Publish the change to PSA from the campaign&apos;s PSA button.
+            </p>
+          </div>
+          <CampaignFormFields
+            values={editForm.values}
+            onChange={(field, value) => editForm.handleChange(field as keyof EditCampaignFormValues, value)}
+            nameError={editForm.touched.name ? editForm.errors.name : undefined}
+            onNameBlur={() => editForm.handleBlur('name')}
+            showPhase
+            showFees
+          />
+          <div className="mt-5 flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onCancelEdit}>Cancel</Button>
+            <Button type="submit" loading={editForm.isSubmitting || updateMutation.isPending}>
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </CardShell>
+    </section>
   );
 }
 
@@ -121,34 +201,14 @@ export default function CampaignsTab({
       )}
 
       {editingCampaign && (
-        <div className="mb-6">
-          <CardShell variant="elevated" padding="lg">
-            <form onSubmit={editForm.handleSubmit}>
-              <div className="mb-5">
-                <h2 className="text-lg font-semibold text-[var(--text)]">
-                  Edit {editingCampaign.name}
-                </h2>
-                <p className="text-sm text-[var(--text-muted)] mt-1">
-                  Saves to SlabLedger only. Publish the change to PSA from the campaign&apos;s PSA button.
-                </p>
-              </div>
-              <CampaignFormFields
-                values={editForm.values}
-                onChange={(field, value) => editForm.handleChange(field as keyof EditCampaignFormValues, value)}
-                nameError={editForm.touched.name ? editForm.errors.name : undefined}
-                onNameBlur={() => editForm.handleBlur('name')}
-                showPhase
-                showFees
-              />
-              <div className="mt-5 flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={onCancelEdit}>Cancel</Button>
-                <Button type="submit" loading={editForm.isSubmitting || updateMutation.isPending}>
-                  Save Changes
-                </Button>
-              </div>
-            </form>
-          </CardShell>
-        </div>
+        <EditCampaignCard
+          // Remount on campaign switch — see EditCampaignCard's doc comment.
+          key={editingCampaign.id}
+          campaign={editingCampaign}
+          editForm={editForm}
+          updateMutation={updateMutation}
+          onCancelEdit={onCancelEdit}
+        />
       )}
 
       {campaigns.length === 0 ? (
