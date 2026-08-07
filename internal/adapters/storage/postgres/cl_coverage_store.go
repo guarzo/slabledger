@@ -17,10 +17,10 @@ import (
 // silently migrate rows from pre_cl into pending and rewrite historical months.
 //
 // If CardLadder history is ever re-imported from earlier than this date, update
-// this constant by hand -- AND the hardcoded `TIMESTAMP '...'` literal at
-// scripts/cl-coverage.sql:48, which does not read this constant and will not
-// change with it. TestCLCoverageEraStart_IsPinned asserts the value so the
-// change cannot happen by accident.
+// this constant by hand -- AND the hardcoded `TIMESTAMP '...'` literal in the
+// 'pre_cl' arm of scripts/cl-coverage.sql, which does not read this constant
+// and will not change with it. TestCLCoverageEraStart_IsPinned asserts the
+// value so the change cannot happen by accident.
 const CLCoverageEraStart = "2026-04-13T04:00:13Z"
 
 // Bucket names. These are the only values the coverage query's CASE can emit,
@@ -138,9 +138,9 @@ func foldCLCoverage(rows []clCoverageRow) *CLCoverageReport {
 		m.Reassigned += r.Reassigned
 
 		// No rejection guard here, unlike clKnownBuckets below: the cohort CASE
-		// at line 219 is binary ('campaign' or 'external' -- nothing else it can
-		// emit), so an unrecognized value would mean the SQL itself changed, not
-		// bad data reaching this fold.
+		// in the query's classified CTE is binary ('campaign' or 'external' --
+		// nothing else it can emit), so an unrecognized value would mean the SQL
+		// itself changed, not bad data reaching this fold.
 		cohort := &m.External
 		if r.Cohort == clCohortCampaign {
 			cohort = &m.Campaign
