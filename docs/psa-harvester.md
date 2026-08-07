@@ -299,10 +299,13 @@ fails loudly on any mismatch, so a future client bump can't ship without the ima
 ## Baseline pull (one-time targeting migration)
 
 `cmd/psa-harvest -baseline-pull` performs the one-time copy of live portal targeting
-(language, subject list, denied specs) into `campaigns.target_language` /
-`subject_filter_mode` / `subjects` / `denied_specs`. It makes **zero portal writes** —
-the flag returns before `DrainPushQueue` runs. Run it once, review the report, and only
-then resume the normal (non-baseline) scheduled harvest.
+(languages, subject list, denied specs) into `campaigns.target_languages` /
+`subject_filter_mode` / `subjects` / `denied_specs`. A campaign may carry more than one
+curated language list — all six live campaigns carry both "Pokemon - English Language
+Only" and "Pokemon - Japanese Language Only" — and every recognized list is copied, not
+collapsed to one. It makes **zero portal writes** — the flag returns before
+`DrainPushQueue` runs. Run it once, review the report, and only then resume the normal
+(non-baseline) scheduled harvest.
 
 ```bash
 docker run --rm \
@@ -317,34 +320,44 @@ docker run --rm \
 
 - [ ] Run the baseline pull once and confirm it **exits zero**. A non-zero exit most often
       means `runBaselinePull` (`cmd/psa-harvest/baseline.go`) skipped at least one linked
-      campaign: its edit-form fetch was incomplete (`TargetingComplete == false`), its
-      curated spec-list names didn't map to exactly one language (none recognized, or more
-      than one), or it never appeared in the portal fetch at all. Any of these leaves that
-      campaign's row unwritten (its pre-baseline targeting is left in place, never blanked
-      out) — re-run until clean before trusting the copy. A non-zero exit can also mean the
-      whole run aborted on an ordinary database failure (`ListCampaigns` or `UpdateCampaign`
-      returning an error) rather than a per-campaign skip; check the log line immediately
-      before the exit to tell which case you're in.
+      campaign: its edit-form fetch was incomplete (`TargetingComplete == false`); it
+      carries a curated spec-list name SlabLedger does not model, which is **refused, never
+      silently dropped**, and is named in the log line (add the token in
+      `internal/domain/inventory/validation.go`, `internal/domain/psacampaign/resolver.go`,
+      `cmd/psa-harvest/baseline.go`, and `web/src/react/utils/campaignConstants.ts`
+      together — the closed set is duplicated across all four); it names no recognized
+      curated list at all (the CATEGORY-era shape, converted by hand in the portal); its
+      portal targeting failed validation (e.g. a `subjectFilterType` that is neither
+      `Target` nor `Exclude`); or it never appeared in the portal fetch. Any of these
+      leaves that campaign's row unwritten (its pre-baseline targeting is left in place,
+      never blanked out) — re-run until clean before trusting the copy. A non-zero exit can
+      also mean the whole run aborted on an ordinary database failure (`ListCampaigns` or
+      the campaign write returning an error) rather than a per-campaign skip; check the log
+      line immediately before the exit to tell which case you're in.
 - [ ] For at least one named, currently-linked campaign, open its edit page in the PSA
-      portal UI directly and confirm the pulled `target_language` / `subject_filter_mode` /
-      `subjects` / `denied_specs` match what the portal UI shows. This is the check for a
-      silently wrong translation, not just a successful fetch.
+      portal UI directly and confirm the pulled `target_languages` / `subject_filter_mode` /
+      `subjects` / `denied_specs` match what the portal UI shows — in particular that a
+      campaign showing **both** "Pokemon - English Language Only" and "Pokemon - Japanese
+      Language Only" landed with both tokens, not one. This is the check for a silently
+      wrong translation, not just a successful fetch.
 - [ ] Re-run the baseline a second time against campaigns whose portal targeting you know
       is unchanged, and confirm the copy is idempotent by diffing a direct snapshot of the
       affected columns from before and after. `runBaselinePull` has no diff or dedup logic
-      of its own — it unconditionally rewrites `target_language` / `subject_filter_mode` /
+      of its own — it unconditionally rewrites `target_languages` / `subject_filter_mode` /
       `subjects` / `denied_specs` on every linked, complete campaign — so this is the only
       way to catch a real regression before trusting it for six active, money-spending
       campaigns:
       ```sql
-      -- Before the second run: subjects/denied_specs sorted by id so the comparison is
-      -- order-insensitive, mirroring psacampaign/mapper.go's renderSubjectRefs (which
-      -- exists precisely because "an unordered portal response never produces a spurious
-      -- diff" — the edit-form fetch this baseline reads is not guaranteed order-stable
-      -- across calls either).
+      -- Before the second run: target_languages/subjects/denied_specs are all unordered
+      -- sets, so each is sorted before comparison and the diff is order-insensitive,
+      -- mirroring psacampaign/mapper.go's renderSubjectRefs (which exists precisely because
+      -- "an unordered portal response never produces a spurious diff" — the edit-form fetch
+      -- this baseline reads is not guaranteed order-stable across calls either).
       SELECT
         id,
-        target_language,
+        COALESCE((SELECT jsonb_agg(elem ORDER BY elem #>> '{}')
+                  FROM jsonb_array_elements(target_languages) elem), '[]'::jsonb)
+          AS target_languages_sorted,
         subject_filter_mode,
         COALESCE((SELECT jsonb_agg(elem ORDER BY (elem->>'id')::int)
                   FROM jsonb_array_elements(subjects) elem), '[]'::jsonb) AS subjects_sorted,
@@ -355,13 +368,15 @@ docker run --rm \
       ORDER BY id;
       -- (save this output, e.g. psql ... > before.txt)
       ```
-      Run `-baseline-pull` again, then run the identical query into `after.txt` and
-      `diff before.txt after.txt`. Because both snapshots are sorted by subject/denied-spec
-      id, a plain portal-side reorder of the same id set collapses to identical output and
-      won't show up as a diff — the id *set* is the real signal, not raw array order. Any
-      remaining difference on a campaign whose portal targeting genuinely did not change
-      (added/removed/changed id, or a different `target_language`/`subject_filter_mode`) is
-      a real bug and must be fixed before trusting this baseline.
+      `elem #>> '{}'` extracts each language element as text, since `target_languages`
+      holds bare JSON strings rather than objects with an `id`. Run `-baseline-pull` again,
+      then run the identical query into `after.txt` and `diff before.txt after.txt`.
+      Because all three arrays are sorted in both snapshots, a plain portal-side reorder of
+      the same set collapses to identical output and won't show up as a diff — the *set* is
+      the real signal, not raw array order. Any remaining difference on a campaign whose
+      portal targeting genuinely did not change (added/removed/changed id, a gained or lost
+      language token, or a different `subject_filter_mode`) is a real bug and must be fixed
+      before trusting this baseline.
 - [ ] Confirm no portal writes occurred during the baseline: check that every campaign's
       `updatedAt` in the PSA portal UI is unchanged from before the run, and that
       `psa_campaign_push_queue` gained no new rows (`runBaselinePull` never touches that

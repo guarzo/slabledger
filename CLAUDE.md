@@ -111,7 +111,9 @@ incremental (Supabase index/RLS fixes, hot-query indexes, `resolved_at` indexes,
 plumbing, MM grade-mismatch repair, and the dead-code cleanups dropping
 `advisor_cache` (000013) and `psa_exchange_policy` (000014)); most recently
 `campaign_targeting_axes` (000023 — four new `campaigns` columns replacing the
-inclusion/exclusion model with language, subject-mode, subject-list, and denied-spec axes)
+inclusion/exclusion model with a multi-valued language axis (`target_languages` JSONB,
+empty = open net), subject-mode, subject-list, and denied-spec axes; its legacy subject
+backfill marks unreconciled rows with a negative sentinel id)
 and `psa_portal_catalog` (000024 — persisted PSA spec-list/subject reference data so the
 main server can resolve portal identifiers without a portal session).
 

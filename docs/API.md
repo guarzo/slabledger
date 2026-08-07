@@ -428,7 +428,7 @@ Lists campaigns.
     "dailySpendCapCents": 1000000,
     "inclusionList": "",
     "exclusionMode": false,
-    "targetLanguage": "english",
+    "targetLanguages": ["english"],
     "subjectFilterMode": "Target",
     "subjects": [{ "id": 22210, "name": "Machamp" }],
     "deniedSpecs": [],
