@@ -26,11 +26,15 @@ function baseValues(): CampaignFormValues {
   };
 }
 
-function renderFields(values: CampaignFormValues, onChange = vi.fn()) {
+function renderFields(
+  values: CampaignFormValues,
+  onChange = vi.fn(),
+  props: Partial<{ showFees: boolean; showPhase: boolean }> = {},
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <CampaignFormFields values={values} onChange={onChange} />
+      <CampaignFormFields values={values} onChange={onChange} {...props} />
     </QueryClientProvider>,
   );
   return onChange;
@@ -113,5 +117,58 @@ describe('CampaignFormFields targeting section', () => {
     renderFields({ ...baseValues(), deniedSpecs: [{ id: 999, name: 'Bad Card' }] });
     expect(screen.getByText('Bad Card')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /remove bad card/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('CampaignFormFields label association', () => {
+  // Input/Select derive htmlFor+id from props.id || props.name, and no mount
+  // here passes either — so without the generated fallback these labels bind
+  // to nothing and getByLabelText cannot reach the control at all.
+  it('binds every labelled field to its control', () => {
+    renderFields(baseValues(), vi.fn(), { showFees: true, showPhase: true });
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('Test');
+    expect(screen.getByLabelText(/Year Range/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Price Range/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Buy Terms/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Daily Spend Cap/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/eBay Fee/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/PSA Sourcing Fee/)).toBeInTheDocument();
+  });
+
+  it('gives sibling instances distinct ids rather than colliding on undefined', () => {
+    renderFields(baseValues(), vi.fn(), { showFees: true });
+    const year = screen.getByLabelText(/Year Range/);
+    const price = screen.getByLabelText(/Price Range/);
+    expect(year.id).toBeTruthy();
+    expect(price.id).toBeTruthy();
+    expect(year.id).not.toBe(price.id);
+  });
+});
+
+describe('CampaignFormFields expected fill rate', () => {
+  // Matches its three siblings in the same block: hold a local string while
+  // typing, commit on blur. Committing per-keystroke turned a cleared field
+  // into a real 0 and made intermediate states ("8" on the way to "80") land
+  // in the parent form.
+  it('does not commit while typing', () => {
+    const onChange = renderFields({ ...baseValues(), expectedFillRate: 80 }, vi.fn(), { showFees: true });
+    fireEvent.change(screen.getByLabelText(/Expected Fill Rate/), { target: { value: '7' } });
+    expect(onChange).not.toHaveBeenCalledWith('expectedFillRate', expect.anything());
+  });
+
+  it('commits the parsed value on blur', () => {
+    const onChange = renderFields({ ...baseValues(), expectedFillRate: 80 }, vi.fn(), { showFees: true });
+    const field = screen.getByLabelText(/Expected Fill Rate/);
+    fireEvent.change(field, { target: { value: '72.5' } });
+    fireEvent.blur(field);
+    expect(onChange).toHaveBeenCalledWith('expectedFillRate', 72.5);
+  });
+
+  it('commits 0 for an unparseable value on blur', () => {
+    const onChange = renderFields({ ...baseValues(), expectedFillRate: 80 }, vi.fn(), { showFees: true });
+    const field = screen.getByLabelText(/Expected Fill Rate/);
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.blur(field);
+    expect(onChange).toHaveBeenCalledWith('expectedFillRate', 0);
   });
 });

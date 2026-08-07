@@ -1,4 +1,4 @@
-import { forwardRef, InputHTMLAttributes } from 'react';
+import { forwardRef, useId, InputHTMLAttributes } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { clsx } from 'clsx';
 
@@ -80,7 +80,11 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     ...props
   }, ref) => {
     const inputState = error ? 'error' : state;
-    const inputId = props.id || props.name;
+    // Most mounts pass neither id nor name, which left htmlFor/id undefined —
+    // the label bound to nothing and the error/helper ids collided across
+    // instances. Fall back to a generated id so the association always holds.
+    const fallbackId = useId();
+    const inputId = props.id || props.name || fallbackId;
 
     return (
       <div className="space-y-2">

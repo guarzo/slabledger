@@ -50,7 +50,7 @@ const proto = APIClient.prototype;
 
 // Cert lookup
 proto.lookupCert = async function (this: APIClient, certNumber: string): Promise<CertLookupResult> {
-  return this.get<CertLookupResult>(`/certs/${certNumber}`);
+  return this.get<CertLookupResult>(`/certs/${encodeURIComponent(certNumber)}`);
 };
 
 // Global purchase endpoints (cross-campaign)
@@ -100,7 +100,7 @@ proto.setReviewedPrice = async function (
   this: APIClient, purchaseId: string, priceCents: number, source: string,
 ): Promise<{ success: boolean; reviewedAt: string }> {
   const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/${purchaseId}/review-price`,
+    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/review-price`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -114,7 +114,7 @@ proto.createPriceFlag = async function (
   this: APIClient, purchaseId: string, reason: string,
 ): Promise<{ id: number; flaggedAt: string }> {
   return this.post<{ id: number; flaggedAt: string }>(
-    `/purchases/${purchaseId}/flag`,
+    `/purchases/${encodeURIComponent(purchaseId)}/flag`,
     { reason },
   );
 };
