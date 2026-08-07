@@ -82,6 +82,16 @@ describe('CampaignFormFields targeting section', () => {
     expect(onChange).toHaveBeenCalledWith('targetLanguages', ['chinese', 'english']);
   });
 
+  it('describes an unknown-only selection without asserting an empty buy scope or an open net', () => {
+    // A set of only unrecognized tokens is neither empty (not open net) nor
+    // enumerable in plain words (nothing recognized to name) — the summary
+    // must not degenerate into "Buys  cards only." nor claim "open net".
+    renderFields({ ...baseValues(), targetLanguages: ['chinese'] });
+    expect(screen.getByText(/see warning below/i)).toBeInTheDocument();
+    expect(screen.queryByText(/open net/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Buys\s+cards only\.$/)).not.toBeInTheDocument();
+  });
+
   it('toggling the subject mode segmented control calls onChange with Exclude', () => {
     const onChange = renderFields(baseValues());
     fireEvent.click(screen.getByRole('radio', { name: 'Exclude' }));

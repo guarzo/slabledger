@@ -159,9 +159,17 @@ function LanguageMultiSelect({
   // the set is non-empty, so it is NOT an open net even though no known
   // checkbox is checked. Conflating the two would contradict the warning
   // below for the same state.
-  const summary = value.length === 0
-    ? 'None selected — open net: this campaign buys any language.'
-    : `Buys ${labels.join(' and ')} cards only.`;
+  let summary: string;
+  if (value.length === 0) {
+    summary = 'None selected — open net: this campaign buys any language.';
+  } else if (labels.length === 0) {
+    // Every token in the set is unrecognized — there's nothing to enumerate,
+    // and the set is not open (see above). Point at the warning below rather
+    // than assert an empty buy scope.
+    summary = 'No recognized language selected — see warning below.';
+  } else {
+    summary = `Buys ${labels.join(' and ')} cards only.`;
+  }
 
   return (
     <fieldset className="space-y-1.5">
