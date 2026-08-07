@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import CampaignsPage from './CampaignsPage';
 import { ToastProvider } from '../contexts/ToastContext';
-import { APIError } from '../../js/api';
+import { api, APIError } from '../../js/api';
 import type { Campaign } from '../../types/campaigns';
 
 const campaign: Campaign = {
@@ -60,21 +60,6 @@ const getCampaign = vi.fn();
 const updateCampaign = vi.fn();
 const createCampaign = vi.fn();
 
-vi.mock('../../js/api', async (orig) => {
-  const mod = await orig<typeof import('../../js/api')>();
-  return {
-    ...mod,
-    api: {
-      ...mod.api,
-      listPSAPushes: vi.fn().mockResolvedValue({ pushes: [] }),
-      listPSASubjects: vi.fn().mockResolvedValue({ subjects: [], fetchedAt: '2026-08-01T00:00:00Z' }),
-      getCampaign: (...args: unknown[]) => getCampaign(...args),
-      updateCampaign: (...args: unknown[]) => updateCampaign(...args),
-      createCampaign: (...args: unknown[]) => createCampaign(...args),
-    },
-  };
-});
-
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -94,6 +79,26 @@ beforeEach(() => {
   createCampaign.mockReset();
   updateCampaign.mockResolvedValue(campaign);
   createCampaign.mockResolvedValue({ ...campaign, id: 'c2', name: 'Second Wave' });
+  // Spying on the real singleton rather than spreading it: `api` is an
+  // APIClient instance whose endpoint methods live on the prototype, so
+  // `{ ...mod.api }` copies none of them and every endpoint this file does not
+  // name becomes undefined. Stubbing fetchWithRetry — the single choke point
+  // behind get/post/put/deleteResource — keeps an unstubbed endpoint off the
+  // network. The local vi.fn()s stay the assertion handles; the spies just
+  // delegate to them, so the mockResolvedValue calls in each test still read
+  // the same way.
+  vi.spyOn(api, 'fetchWithRetry').mockRejectedValue(
+    new Error('unstubbed API call — add a vi.spyOn for this endpoint'),
+  );
+  vi.spyOn(api, 'listPSAPushes').mockResolvedValue({ pushes: [] });
+  vi.spyOn(api, 'listPSASubjects').mockResolvedValue({ subjects: [], fetchedAt: '2026-08-01T00:00:00Z' });
+  vi.spyOn(api, 'getCampaign').mockImplementation(getCampaign);
+  vi.spyOn(api, 'updateCampaign').mockImplementation(updateCampaign);
+  vi.spyOn(api, 'createCampaign').mockImplementation(createCampaign);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 async function clickPaste() {

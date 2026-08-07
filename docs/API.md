@@ -480,11 +480,19 @@ Updates a campaign. Full replacement.
 
 **Path params:** `id` (string UUID)
 
+**Query params:** `ifUnmodifiedSince` (optional, RFC3339) — the `updatedAt` of the
+row this payload was built from. Supplying it makes the write conditional: the
+row is written only if its stored `updated_at` still matches, so a
+read-modify-write caller cannot overwrite a change it never saw. Omitting it
+keeps the unconditional overwrite.
+
 **Body:** `Campaign` object
 
 **Response:** `200 OK` — updated `Campaign`
 
-**Errors:** `400` invalid data; `404` not found
+**Errors:** `400` invalid data or unparseable `ifUnmodifiedSince`; `404` not
+found; `409` the row changed since `ifUnmodifiedSince` (nothing was written —
+re-read and retry)
 
 ---
 

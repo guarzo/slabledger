@@ -82,6 +82,9 @@ function EconomicsSection({
   const [psaSourcingFeeInput, setPsaSourcingFeeInput] = useState(() =>
     values.psaSourcingFeeCents == null ? '' : String(values.psaSourcingFeeCents / 100),
   );
+  const [expectedFillRateInput, setExpectedFillRateInput] = useState(() =>
+    values.expectedFillRate == null ? '' : String(values.expectedFillRate),
+  );
 
   // Sync local inputs when parent form values change (e.g. after setForm(campaign))
   useEffect(() => {
@@ -89,7 +92,8 @@ function EconomicsSection({
     setDailySpendCapInput(values.dailySpendCapCents == null ? '' : String(values.dailySpendCapCents / 100));
     setEbayFeeInput(values.ebayFeePct == null ? '' : String(Math.round(values.ebayFeePct * 10000) / 100));
     setPsaSourcingFeeInput(values.psaSourcingFeeCents == null ? '' : String(values.psaSourcingFeeCents / 100));
-  }, [values.buyTermsCLPct, values.dailySpendCapCents, values.ebayFeePct, values.psaSourcingFeeCents]);
+    setExpectedFillRateInput(values.expectedFillRate == null ? '' : String(values.expectedFillRate));
+  }, [values.buyTermsCLPct, values.dailySpendCapCents, values.ebayFeePct, values.psaSourcingFeeCents, values.expectedFillRate]);
 
   return (
     <FormSection
@@ -113,8 +117,10 @@ function EconomicsSection({
           onBlur={() => { const v = parseFloat(dailySpendCapInput); onChange('dailySpendCapCents', Number.isNaN(v) ? 0 : Math.round(v * 100)); }} />
         {showFees && (
           <>
-            <Input label="Expected Fill Rate (%)" type="text" inputMode="decimal" inputSize={inputSize} placeholder="e.g. 80" value={values.expectedFillRate != null ? String(values.expectedFillRate) : ''}
-              onChange={e => { const v = parseFloat(e.target.value); onChange('expectedFillRate', Number.isNaN(v) ? 0 : v); }} />
+            <Input label="Expected Fill Rate (%)" type="text" inputMode="decimal" inputSize={inputSize} placeholder="e.g. 80"
+              value={expectedFillRateInput}
+              onChange={e => setExpectedFillRateInput(e.target.value)}
+              onBlur={() => { const v = parseFloat(expectedFillRateInput); onChange('expectedFillRate', Number.isNaN(v) ? 0 : v); }} />
             <Input label="eBay Fee %" type="text" inputMode="decimal" inputSize={inputSize} placeholder="e.g. 12.35"
               value={ebayFeeInput}
               onChange={e => setEbayFeeInput(e.target.value)}

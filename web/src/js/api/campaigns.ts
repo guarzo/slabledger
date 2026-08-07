@@ -47,11 +47,11 @@ proto.listCampaigns = async function (this: APIClient, activeOnly = false): Prom
 // whether the row changed underneath an open form, and a cache read cannot
 // observe a write made by the psa-harvest process.
 proto.getCampaign = async function (this: APIClient, id: string): Promise<Campaign> {
-  return this.get<Campaign>(`/campaigns/${id}`);
+  return this.get<Campaign>(`/campaigns/${encodeURIComponent(id)}`);
 };
 
 proto.deleteCampaign = async function (this: APIClient, id: string): Promise<void> {
-  await this.deleteResource(`/campaigns/${id}`);
+  await this.deleteResource(`/campaigns/${encodeURIComponent(id)}`);
 };
 
 proto.createCampaign = async function (this: APIClient, input: CreateCampaignInput): Promise<Campaign> {
@@ -70,5 +70,5 @@ proto.updateCampaign = async function (
   ifUnmodifiedSince?: string,
 ): Promise<Campaign> {
   const qs = ifUnmodifiedSince ? `?ifUnmodifiedSince=${encodeURIComponent(ifUnmodifiedSince)}` : '';
-  return this.put<Campaign>(`/campaigns/${id}${qs}`, data);
+  return this.put<Campaign>(`/campaigns/${encodeURIComponent(id)}${qs}`, data);
 };

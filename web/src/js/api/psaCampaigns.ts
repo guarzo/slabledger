@@ -25,19 +25,19 @@ proto.listPSACampaigns = async function (this: APIClient): Promise<ListPSACampai
 };
 
 proto.psaLink = async function (this: APIClient, id: string, psaCampaignRequestId: string): Promise<Campaign> {
-  return this.post<Campaign>(`/campaigns/${id}/psa-link`, { psaCampaignRequestId });
+  return this.post<Campaign>(`/campaigns/${encodeURIComponent(id)}/psa-link`, { psaCampaignRequestId });
 };
 
 proto.psaPropose = async function (this: APIClient, id: string): Promise<PSAProposeResponse> {
-  return this.post<PSAProposeResponse>(`/campaigns/${id}/psa-propose`, {});
+  return this.post<PSAProposeResponse>(`/campaigns/${encodeURIComponent(id)}/psa-propose`, {});
 };
 
 proto.psaProposeCreate = async function (this: APIClient, id: string): Promise<PSAProposeCreateResponse> {
-  return this.post<PSAProposeCreateResponse>(`/campaigns/${id}/psa-propose-create`, {});
+  return this.post<PSAProposeCreateResponse>(`/campaigns/${encodeURIComponent(id)}/psa-propose-create`, {});
 };
 
 proto.psaPublish = async function (this: APIClient, id: string, pushId: string): Promise<PSAPublishResponse> {
-  return this.post<PSAPublishResponse>(`/campaigns/${id}/psa-publish`, { pushId });
+  return this.post<PSAPublishResponse>(`/campaigns/${encodeURIComponent(id)}/psa-publish`, { pushId });
 };
 
 proto.listPSAPushes = async function (this: APIClient): Promise<ListPSAPushesResponse> {
