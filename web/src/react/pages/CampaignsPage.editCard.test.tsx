@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import CampaignsPage from './CampaignsPage';
 import { ToastProvider } from '../contexts/ToastContext';
+import { api } from '../../js/api';
 import type { Campaign } from '../../types/campaigns';
 import { LEGACY_UNRECONCILED_SUBJECT_ID } from '../utils/campaignConstants';
 
@@ -67,23 +68,6 @@ vi.mock('../queries/useCampaignQueries', async (orig) => {
   };
 });
 
-vi.mock('../../js/api', async (orig) => {
-  const mod = await orig<typeof import('../../js/api')>();
-  return {
-    ...mod,
-    api: {
-      ...mod.api,
-      listPSAPushes: vi.fn().mockResolvedValue({ pushes: [] }),
-      listPSASubjects: vi.fn().mockResolvedValue({
-        subjects: [{ id: 777, name: 'Pikachu' }, { id: 888, name: 'Blastoise' }],
-        fetchedAt: new Date().toISOString(),
-      }),
-      getCampaign: vi.fn(),
-      getCampaignPNL: vi.fn().mockResolvedValue(undefined),
-    },
-  };
-});
-
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -105,6 +89,26 @@ function editCard(name: string) {
 beforeEach(() => {
   campaignList = [alpha, beta];
   listIsSuccess = true;
+  // Spying on the real singleton rather than spreading it: `api` is an
+  // APIClient instance whose endpoint methods live on the prototype, so
+  // `{ ...mod.api }` copies none of them and every endpoint this file does not
+  // name becomes undefined. Stubbing fetchWithRetry — the single choke point
+  // behind get/post/put/deleteResource — keeps an unstubbed endpoint off the
+  // network.
+  vi.spyOn(api, 'fetchWithRetry').mockRejectedValue(
+    new Error('unstubbed API call — add a vi.spyOn for this endpoint'),
+  );
+  vi.spyOn(api, 'listPSAPushes').mockResolvedValue({ pushes: [] });
+  vi.spyOn(api, 'listPSASubjects').mockResolvedValue({
+    subjects: [{ id: 777, name: 'Pikachu' }, { id: 888, name: 'Blastoise' }],
+    fetchedAt: new Date().toISOString(),
+  });
+  vi.spyOn(api, 'getCampaign');
+  // getCampaignPNL is deliberately left to the fetchWithRetry stub. The old
+  // mock resolved it to `undefined`, which does not typecheck against
+  // Promise<CampaignPNL> — the spread mock was untyped, so nothing caught it.
+  // Letting it reject leaves the query's `data` undefined either way, which is
+  // all this file's assertions depend on.
   // jsdom implements neither of these; the component calls both optionally.
   Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('matchMedia', undefined);
@@ -112,6 +116,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('opening the edit card', () => {

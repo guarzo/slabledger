@@ -3,17 +3,24 @@ import userEvent from '@testing-library/user-event';
 import CardIntakeTab from './CardIntakeTab';
 import { api } from '../../../js/api';
 
-vi.mock('../../../js/api', async (orig) => {
-  const mod = await orig<typeof import('../../../js/api')>();
-  return { ...mod, api: { ...mod.api, scanCert: vi.fn() } };
-});
-
+// Spying on the real singleton rather than spreading it: `api` is an APIClient
+// instance whose endpoint methods live on the prototype, so `{ ...mod.api }`
+// copies none of them and every endpoint this file does not name becomes
+// undefined. Stubbing fetchWithRetry — the single choke point behind
+// get/post/put/deleteResource — keeps an unstubbed endpoint off the network.
 beforeEach(() => {
   localStorage.clear();
-  (api.scanCert as ReturnType<typeof vi.fn>).mockResolvedValue({
+  vi.spyOn(api, 'fetchWithRetry').mockRejectedValue(
+    new Error('unstubbed API call — add a vi.spyOn for this endpoint'),
+  );
+  vi.spyOn(api, 'scanCert').mockResolvedValue({
     status: 'existing',
     cardName: 'Pikachu',
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 it('Clear all wipes every scanned row after confirmation', async () => {
