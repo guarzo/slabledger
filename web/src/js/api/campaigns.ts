@@ -23,6 +23,7 @@ declare module './client' {
   interface APIClient {
     // Campaign CRUD
     listCampaigns(activeOnly?: boolean): Promise<Campaign[]>;
+    getCampaign(id: string): Promise<Campaign>;
     deleteCampaign(id: string): Promise<void>;
     createCampaign(input: CreateCampaignInput): Promise<Campaign>;
     updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign>;
@@ -40,6 +41,13 @@ const proto = _APIClient.prototype;
 proto.listCampaigns = async function (this: APIClient, activeOnly = false): Promise<Campaign[]> {
   const params = activeOnly ? '?activeOnly=true' : '';
   return this.get<Campaign[]>(`/campaigns${params}`);
+};
+
+// Single-campaign read, deliberately uncached: the edit form uses it to check
+// whether the row changed underneath an open form, and a cache read cannot
+// observe a write made by the psa-harvest process.
+proto.getCampaign = async function (this: APIClient, id: string): Promise<Campaign> {
+  return this.get<Campaign>(`/campaigns/${id}`);
 };
 
 proto.deleteCampaign = async function (this: APIClient, id: string): Promise<void> {
