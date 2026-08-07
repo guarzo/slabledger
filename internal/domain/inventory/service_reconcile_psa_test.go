@@ -15,7 +15,8 @@ import (
 // campaign/purchase state and directly inspect the pending-item work queue.
 type reconcileFixtureRepo struct {
 	*mocks.InMemoryCampaignStore
-	PendingItems []inventory.PendingItem
+	PendingItems    []inventory.PendingItem
+	ListPendingCall int // counts ListPendingItems round trips per reconcile pass
 }
 
 func (r *reconcileFixtureRepo) SavePendingItems(_ context.Context, items []inventory.PendingItem) error {
@@ -24,6 +25,7 @@ func (r *reconcileFixtureRepo) SavePendingItems(_ context.Context, items []inven
 }
 
 func (r *reconcileFixtureRepo) ListPendingItems(_ context.Context) ([]inventory.PendingItem, error) {
+	r.ListPendingCall++
 	return r.PendingItems, nil
 }
 
@@ -303,5 +305,106 @@ func TestReconcilePSAAttribution_CLConfidenceFreezing(t *testing.T) {
 				t.Error("CLConfidenceAtPurchase = nil, want re-derived value")
 			}
 		})
+	}
+}
+
+// addReconcilePurchase adds another PSA purchase on camp-b (so it takes the move
+// path) plus a matching unresolved pending item, and returns its export row.
+func addReconcilePurchase(repo *reconcileFixtureRepo, cert string) inventory.PSAExportRow {
+	repo.Purchases["purchase-"+cert] = &inventory.Purchase{
+		ID: "purchase-" + cert, CampaignID: "camp-b", Grader: "PSA", CertNumber: cert,
+		PurchaseDate: "2026-08-01", GradeValue: 9, BuyCostCents: 1000,
+		AttributionSource: inventory.AttributionSourceInferred,
+	}
+	repo.PendingItems = append(repo.PendingItems, inventory.PendingItem{ID: "pi-" + cert, CertNumber: cert})
+	return inventory.PSAExportRow{CertNumber: cert, PSACampaignName: "Modern"}
+}
+
+// The pending-item queue is scanned once per pass, not once per resolved row —
+// the per-row scan was the query amplification that made a 1500-row reconcile
+// race the harvest deadline. Every cert's pending item must still be cleared.
+func TestReconcilePSAAttribution_PendingItemsScannedOncePerPass(t *testing.T) {
+	svc, repo := newReconcileFixture(t, "camp-a", false, "camp-a", true, nil, inventory.AttributionSourceInferred)
+	repo.PendingItems = []inventory.PendingItem{{ID: "pi-123", CertNumber: "123"}}
+
+	rows := []inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}
+	for _, cert := range []string{"456", "789"} {
+		rows = append(rows, addReconcilePurchase(repo, cert))
+	}
+
+	got, err := svc.ReconcilePSAAttribution(context.Background(), rows)
+	if err != nil {
+		t.Fatalf("ReconcilePSAAttribution: %v", err)
+	}
+	// "123" is already on camp-a (Agreed); the two added rows move.
+	if want := (inventory.ReconcileResult{Agreed: 1, Moved: 2}); got != want {
+		t.Errorf("result = %+v, want %+v", got, want)
+	}
+	if repo.ListPendingCall != 1 {
+		t.Errorf("ListPendingItems called %d times for %d rows, want 1", repo.ListPendingCall, len(rows))
+	}
+	if len(repo.PendingItems) != 0 {
+		t.Errorf("pending items = %+v, want all resolved", repo.PendingItems)
+	}
+}
+
+// The hoisted index must not lose entries: a cert whose pending item exists is
+// still resolved even when other certs in the same pass have none.
+func TestReconcilePSAAttribution_PendingIndexCoversEveryCert(t *testing.T) {
+	svc, repo := newReconcileFixture(t, "camp-a", false, "camp-a", true, nil, inventory.AttributionSourceInferred)
+	rows := []inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}
+	for _, cert := range []string{"456", "789"} {
+		rows = append(rows, addReconcilePurchase(repo, cert))
+	}
+	// Cert "123" deliberately has no pending item.
+	if _, err := svc.ReconcilePSAAttribution(context.Background(), rows); err != nil {
+		t.Fatalf("ReconcilePSAAttribution: %v", err)
+	}
+	if len(repo.PendingItems) != 0 {
+		t.Errorf("unresolved pending items = %+v, want none — index missed an entry", repo.PendingItems)
+	}
+}
+
+// A NULL attribution_source scans as "", which violates the CHECK constraint
+// from migration 000023. The sold-skip path must write 'inferred' instead of
+// failing the row.
+func TestReconcilePSAAttribution_SoldSkipDefaultsEmptySource(t *testing.T) {
+	svc, repo := newReconcileFixture(t, "camp-b", true, "camp-a", true, nil, "")
+	var wroteSource string
+	repo.UpdatePurchaseAttributionNameFn = func(_ context.Context, id, psaName, source string) error {
+		wroteSource = source
+		repo.Purchases[id].PSACampaignName = psaName
+		repo.Purchases[id].AttributionSource = source
+		return nil
+	}
+
+	got, err := svc.ReconcilePSAAttribution(context.Background(),
+		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
+	if err != nil {
+		t.Fatalf("ReconcilePSAAttribution: %v", err)
+	}
+	if wroteSource != inventory.AttributionSourceInferred {
+		t.Errorf("wrote attribution_source = %q, want %q", wroteSource, inventory.AttributionSourceInferred)
+	}
+	if want := (inventory.ReconcileResult{SoldSkipped: 1}); got != want {
+		t.Errorf("result = %+v, want %+v", got, want)
+	}
+}
+
+// One row counts once. A failed name write on the sold-skip path is a failure,
+// not both a skip and a failure.
+func TestReconcilePSAAttribution_SoldSkipCountsRowOnce(t *testing.T) {
+	svc, repo := newReconcileFixture(t, "camp-b", true, "camp-a", true, nil, inventory.AttributionSourceInferred)
+	repo.UpdatePurchaseAttributionNameFn = func(_ context.Context, _, _, _ string) error {
+		return errors.New("write failed")
+	}
+
+	got, err := svc.ReconcilePSAAttribution(context.Background(),
+		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
+	if err != nil {
+		t.Fatalf("ReconcilePSAAttribution: %v", err)
+	}
+	if want := (inventory.ReconcileResult{Failed: 1}); got != want {
+		t.Errorf("result = %+v, want %+v (one row, one count)", got, want)
 	}
 }

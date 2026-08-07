@@ -42,6 +42,12 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 		return res, err
 	}
 
+	// One scan for the whole pass instead of one per agreed/moved row: at ~1500
+	// rows the per-row scan was thousands of extra round trips inside the
+	// harvest's 5-minute budget, and a deadline hit here is a hard stop that
+	// leaves every later row permanently unreconciled.
+	pendingByCert := s.loadPendingItemIDs(ctx)
+
 	for _, row := range rows {
 		p := purchases[row.CertNumber]
 		if p == nil {
@@ -73,7 +79,7 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 				res.Failed++
 				s.logReconcileFailure(ctx, row.CertNumber, err)
 			}
-			s.resolveStalePendingItem(ctx, row.CertNumber, campaignID)
+			s.resolveStalePendingItem(ctx, pendingByCert, row.CertNumber, campaignID)
 			continue
 		}
 
@@ -92,18 +98,29 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 		})
 		switch {
 		case errors.Is(err, ErrPurchaseHasSale):
-			res.SoldSkipped++
-			if nErr := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, row.PSACampaignName, p.AttributionSource); nErr != nil {
+			// p.AttributionSource is "" when the column is NULL (NULL scans to ""
+			// in purchase_scan_helpers.go), and "" violates the CHECK constraint
+			// from migration 000023 — writing it would fail the row instead of
+			// recording PSA's name. 'inferred' is the weaker, safer claim, and is
+			// what the store defaults to on create.
+			source := p.AttributionSource
+			if source == "" {
+				source = AttributionSourceInferred
+			}
+			// Counted once: either the row is recorded as sold-skipped or it failed.
+			if nErr := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, row.PSACampaignName, source); nErr != nil {
 				res.Failed++
 				s.logReconcileFailure(ctx, row.CertNumber, nErr)
+				continue
 			}
+			res.SoldSkipped++
 			s.logSoldSkip(ctx, row.CertNumber, row.PSACampaignName)
 		case err != nil:
 			res.Failed++
 			s.logReconcileFailure(ctx, row.CertNumber, err)
 		default:
 			res.Moved++
-			s.resolveStalePendingItem(ctx, row.CertNumber, campaignID)
+			s.resolveStalePendingItem(ctx, pendingByCert, row.CertNumber, campaignID)
 		}
 	}
 
@@ -208,30 +225,46 @@ func (s *service) enqueueUnresolvedPendingItem(ctx context.Context, p *Purchase,
 	return s.pendingItemRepo.SavePendingItems(ctx, []PendingItem{item})
 }
 
-// resolveStalePendingItem clears any pending item left over from a previous
-// unresolved reconciliation of this cert, now that PSA's name resolves. It is
-// best-effort: failures are logged, never propagated, since the purchase's own
-// attribution has already been corrected by the time this runs.
-func (s *service) resolveStalePendingItem(ctx context.Context, cert, campaignID string) {
+// loadPendingItemIDs indexes the unresolved pending-item queue by cert number,
+// once per reconciliation pass. Best-effort, matching the previous per-row
+// behavior: a failed list logs once and yields an empty index, which only means
+// no stale pending items get cleared this pass.
+//
+// First entry wins, mirroring the old code's "first matching item, then return".
+func (s *service) loadPendingItemIDs(ctx context.Context) map[string]string {
 	if s.pendingItemRepo == nil {
-		return
+		return nil
 	}
 	items, err := s.pendingItemRepo.ListPendingItems(ctx)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn(ctx, "PSA reconcile: failed to list pending items",
-				observability.String("certNumber", cert), observability.Err(err))
+			s.logger.Warn(ctx, "PSA reconcile: failed to list pending items", observability.Err(err))
 		}
+		return nil
+	}
+	byCert := make(map[string]string, len(items))
+	for _, item := range items {
+		if _, seen := byCert[item.CertNumber]; !seen {
+			byCert[item.CertNumber] = item.ID
+		}
+	}
+	return byCert
+}
+
+// resolveStalePendingItem clears any pending item left over from a previous
+// unresolved reconciliation of this cert, now that PSA's name resolves. It is
+// best-effort: failures are logged, never propagated, since the purchase's own
+// attribution has already been corrected by the time this runs.
+func (s *service) resolveStalePendingItem(ctx context.Context, pendingByCert map[string]string, cert, campaignID string) {
+	if s.pendingItemRepo == nil {
 		return
 	}
-	for _, item := range items {
-		if item.CertNumber != cert {
-			continue
-		}
-		if err := s.pendingItemRepo.ResolvePendingItem(ctx, item.ID, campaignID); err != nil && s.logger != nil {
-			s.logger.Warn(ctx, "PSA reconcile: failed to resolve pending item",
-				observability.String("certNumber", cert), observability.Err(err))
-		}
+	itemID, ok := pendingByCert[cert]
+	if !ok {
 		return
+	}
+	if err := s.pendingItemRepo.ResolvePendingItem(ctx, itemID, campaignID); err != nil && s.logger != nil {
+		s.logger.Warn(ctx, "PSA reconcile: failed to resolve pending item",
+			observability.String("certNumber", cert), observability.Err(err))
 	}
 }
