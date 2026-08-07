@@ -67,6 +67,14 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
 
   const [selectedPSAId, setSelectedPSAId] = useState('');
   const [diff, setDiff] = useState<ProposedDiff | null>(null);
+  // The language axis as it stood when `diff` was computed. The spec-list diff
+  // row labels a set of curated-list ids with the languages that justify them,
+  // so reading the live campaign there would caption a stale diff with a newer
+  // axis if the operator edits the campaign in another tab between proposing
+  // and publishing — on the one screen whose whole job is showing exactly what
+  // is about to be pushed. Null means we have no snapshot (the diff came from
+  // an already-queued push row, not from a propose in this session).
+  const [diffLanguages, setDiffLanguages] = useState<string[] | null>(null);
   const [pushId, setPushId] = useState<string | undefined>(undefined);
   const [publishStatus, setPublishStatus] = useState<string | null>(null);
   const [createPreview, setCreatePreview] = useState<CampaignFormData | null>(null);
@@ -92,6 +100,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
     if (publishStatus) setPublishStatus(null);
     if (pushId && rowPushId && rowPushId !== pushId) {
       setDiff(null);
+      setDiffLanguages(null);
       setPushId(undefined);
       setCreatePreview(null);
     }
@@ -120,6 +129,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
     mutationFn: () => api.psaPropose(campaign.id),
     onSuccess: (res) => {
       setDiff(res.diff);
+      setDiffLanguages(campaign.targetLanguages);
       setPushId(res.pushId);
       setPublishStatus(null);
       if ((res.diff.changes?.length ?? 0) === 0) {
@@ -326,7 +336,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                         <SpecListChangeRow
                           key={change.field}
                           change={change}
-                          targetLanguages={campaign.targetLanguages}
+                          targetLanguages={diffLanguages ?? campaign.targetLanguages}
                         />
                       ) : (
                         <div key={change.field} className="flex items-baseline justify-between gap-3">

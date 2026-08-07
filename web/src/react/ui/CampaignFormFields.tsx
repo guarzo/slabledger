@@ -194,11 +194,26 @@ function LanguageMultiSelect({
       </div>
       <p className="text-xs text-[var(--text-subtle)]">{summary}</p>
       {unknown.map(t => (
-        <p key={t} className="text-xs text-[var(--warning)]">
+        <p key={t} className="text-xs text-[var(--warning)] flex flex-wrap items-center gap-1.5">
           {/* normalizeTargetLanguages (validation.go) rejects the whole save on
               the first unknown token — nothing with this token is pushed. */}
-          Unrecognized language token: {t} — not recognized by this UI; the
-          campaign will be rejected on save until it is reconciled.
+          <span>
+            Unrecognized language token: {t} — not recognized by this UI; the
+            campaign will be rejected on save until it is reconciled.
+          </span>
+          {/* Toggling a known checkbox preserves unknown tokens, so without an
+              explicit action here the campaign cannot be saved at all and the
+              operator has no way out of the form. Removing is deliberate and
+              operator-initiated, which is the distinction that matters: the
+              silent drop this component avoids is the one that happens as a
+              side effect of an unrelated toggle. */}
+          <button
+            type="button"
+            onClick={() => onChange(value.filter(v => v !== t))}
+            className="underline underline-offset-2 hover:text-[var(--danger)]"
+          >
+            Remove {t}
+          </button>
         </p>
       ))}
     </fieldset>

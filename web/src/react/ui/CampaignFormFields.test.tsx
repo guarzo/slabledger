@@ -82,6 +82,17 @@ describe('CampaignFormFields targeting section', () => {
     expect(onChange).toHaveBeenCalledWith('targetLanguages', ['chinese', 'english']);
   });
 
+  it('offers an explicit removal for an unknown token, since validation blocks the save', () => {
+    // normalizeTargetLanguages rejects the whole campaign on the first unknown
+    // token, and toggling a known checkbox deliberately preserves unknowns —
+    // so without this button the form is unsaveable with no way out. The
+    // removal must be operator-initiated, never a side effect of an unrelated
+    // toggle (the case above).
+    const onChange = renderFields({ ...baseValues(), targetLanguages: ['chinese', 'english'] });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove chinese' }));
+    expect(onChange).toHaveBeenCalledWith('targetLanguages', ['english']);
+  });
+
   it('describes an unknown-only selection without asserting an empty buy scope or an open net', () => {
     // A set of only unrecognized tokens is neither empty (not open net) nor
     // enumerable in plain words (nothing recognized to name) — the summary

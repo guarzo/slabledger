@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"errors"
 	"slices"
 	"testing"
 )
@@ -175,7 +176,11 @@ func TestValidateAndNormalizeCampaign(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateAndNormalizeCampaign(&tt.c)
-			if err != tt.wantErr {
+			// errors.Is, not ==: the sentinels are compared through the
+			// project's standard assertion so a future wrapped return
+			// (fmt.Errorf("...: %w", ErrInvalidPhase)) still satisfies the
+			// test instead of silently failing on identity.
+			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("ValidateAndNormalizeCampaign() = %v, want %v", err, tt.wantErr)
 			}
 		})

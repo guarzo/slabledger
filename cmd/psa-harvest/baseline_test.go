@@ -482,6 +482,36 @@ func TestRunBaselinePull(t *testing.T) {
 			wantWrites: 1,
 			wantLangs:  []string{"english", "japanese"},
 		},
+		{
+			// Nothing in the schema stops two campaigns from claiming the same
+			// portal campaign (migration 000018 added the column with no unique
+			// index). Whichever one the map kept would get the portal's real
+			// targeting and the other would silently keep its stale targeting,
+			// so the run must refuse before writing anything at all — note
+			// wantWrites is 0 even though the portal record itself is valid.
+			name: "two campaigns claiming the same portal campaign refuse the run",
+			internal: []inventory.Campaign{
+				{ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1"},
+				{ID: "camp-1b", Name: "Vintage Core Dupe", PSACampaignRequestID: "req-1"},
+			},
+			portal:     []psacampaign.PortalCampaign{linkedComplete},
+			wantErr:    true,
+			wantWrites: 0,
+		},
+		{
+			// The guard keys on the link, not on emptiness: unlinked campaigns
+			// all share the "" request id and must not be mistaken for dupes.
+			name: "multiple unlinked campaigns are not a duplicate link",
+			internal: []inventory.Campaign{
+				{ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1"},
+				{ID: "camp-x", Name: "Unlinked A"},
+				{ID: "camp-y", Name: "Unlinked B"},
+			},
+			portal:     []psacampaign.PortalCampaign{linkedComplete},
+			wantErr:    false,
+			wantWrites: 1,
+			wantLangs:  []string{"english", "japanese"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

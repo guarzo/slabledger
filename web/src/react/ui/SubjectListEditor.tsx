@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from '../queries/queryKeys';
@@ -24,6 +24,7 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputId = useId();
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -45,16 +46,26 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
+    // Suppress by id AND by name. Id alone is not enough: an operator-typed
+    // subject carries id 0, so a catalog entry with the same name has a
+    // different id and would still be offered — and accepting it would put
+    // two entries with the same name on the campaign.
     const selectedIds = new Set(value.filter(s => s.id !== 0).map(s => s.id));
+    const selectedNames = new Set(value.map(s => s.name.toLowerCase()));
     return catalog
-      .filter(s => s.name.toLowerCase().includes(q) && !selectedIds.has(s.id))
+      .filter(s => s.name.toLowerCase().includes(q)
+        && !selectedIds.has(s.id)
+        && !selectedNames.has(s.name.toLowerCase()))
       .slice(0, 20);
   }, [query, catalog, value]);
 
   function addSubject(subject: SubjectRef) {
+    // Same two-sided check as `matches`: Enter-to-add can reach this with a
+    // typed name that duplicates an already-selected catalog subject, which
+    // an id-only comparison would let through.
     const alreadyPresent = value.some(s =>
       (subject.id !== 0 && s.id === subject.id) ||
-      (subject.id === 0 && s.name.toLowerCase() === subject.name.toLowerCase()),
+      s.name.toLowerCase() === subject.name.toLowerCase(),
     );
     if (!alreadyPresent) onChange([...value, subject]);
     setQuery('');
@@ -78,7 +89,7 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
 
   return (
     <div className="space-y-2" ref={containerRef}>
-      <label className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
+      <label htmlFor={inputId} className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
       {isLoading && (
         <p className="text-xs text-[var(--text-muted)]">Loading subject catalog…</p>
       )}
@@ -99,6 +110,7 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
       )}
       <div className="relative">
         <input
+          id={inputId}
           type="text"
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true); }}

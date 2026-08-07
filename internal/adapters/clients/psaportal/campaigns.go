@@ -15,7 +15,13 @@ import (
 // psacampaign.CatalogStore without a second portal round trip.
 func (c *Client) FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampaign, []psacampaign.SpecListRef, error) {
 	var out []psacampaign.PortalCampaign
-	var catalog []psacampaign.SpecListRef
+	// Accumulated across every edit-form fetch rather than taken from the last
+	// one: each response carries the catalog as the portal rendered it for that
+	// campaign, and a truncated or partial response would otherwise silently
+	// replace a complete catalog with a smaller one. Merging by ID means the
+	// union always wins and a short response can only fail to add, never remove.
+	catalogByID := make(map[string]psacampaign.SpecListRef)
+	var catalogOrder []string
 	page := 1
 	for {
 		root, err := c.getRefPacked(ctx, fmt.Sprintf("%s%s&page=%d", c.baseURL(), campaignsListPath, page))
@@ -45,8 +51,14 @@ func (c *Client) FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampai
 					observability.String("campaign_id", pc.CampaignRequestID), observability.Err(err))
 			} else {
 				applyFormData(&pc, fd, specLists)
-				if len(specLists) > 0 {
-					catalog = specLists
+				for _, sl := range specLists {
+					if sl.ID == "" {
+						continue
+					}
+					if _, seen := catalogByID[sl.ID]; !seen {
+						catalogOrder = append(catalogOrder, sl.ID)
+					}
+					catalogByID[sl.ID] = sl
 				}
 			}
 			out = append(out, pc)
@@ -55,6 +67,14 @@ func (c *Client) FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampai
 			break
 		}
 		page++
+	}
+	// Rebuild in first-seen order so the persisted catalog is stable across
+	// runs rather than reflecting Go's map iteration order. Stays nil when
+	// nothing was decoded — callers distinguish "no catalog" from "empty
+	// catalog", and the snapshot store's guards key on nil.
+	var catalog []psacampaign.SpecListRef
+	for _, id := range catalogOrder {
+		catalog = append(catalog, catalogByID[id])
 	}
 	return out, catalog, nil
 }

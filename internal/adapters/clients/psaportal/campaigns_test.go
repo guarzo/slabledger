@@ -261,6 +261,81 @@ func TestFetchCampaigns_EditFetchFailure_TargetingIncomplete(t *testing.T) {
 	}
 }
 
+// editEnvelope packs a formData + prepackagedSpecLists pair into a SvelteKit
+// __data.json envelope, the shape fetchCampaignFormData decodes.
+func editEnvelope(t *testing.T, specListIDs []any, catalog []any) string {
+	t.Helper()
+	packed, err := EncodeRefPacked(map[string]any{
+		"formData":             map[string]any{"prepackagedSpecListIds": specListIDs},
+		"prepackagedSpecLists": catalog,
+	})
+	if err != nil {
+		t.Fatalf("EncodeRefPacked: %v", err)
+	}
+	b, err := json.Marshal(map[string]any{
+		"type":  "data",
+		"nodes": []any{map[string]any{"type": "data", "data": packed}},
+	})
+	if err != nil {
+		t.Fatalf("marshal edit envelope: %v", err)
+	}
+	return string(b)
+}
+
+// TestFetchCampaigns_MergesSpecListCatalog pins the merge semantics. Each
+// edit-form response carries the catalog as the portal rendered it for that one
+// campaign, so a truncated or partial response arriving last must not shrink
+// what earlier responses already established — taking the last response's
+// catalog would silently drop entries, and the harvester persists the result as
+// the reference data the main server resolves portal ids against.
+func TestFetchCampaigns_MergesSpecListCatalog(t *testing.T) {
+	page := buildListEnvelope(t, []any{
+		campaignItem("id-1", "Full"),
+		campaignItem("id-2", "Truncated"),
+	}, 2, 2)
+
+	// id-1 sees the whole catalog; id-2's response is short and re-states
+	// list-b under a newer name.
+	full := editEnvelope(t, []any{"list-a"}, []any{
+		map[string]any{"id": "list-a", "name": "A", "status": "ENABLED"},
+		map[string]any{"id": "list-b", "name": "B (stale)", "status": "ENABLED"},
+		// Blank ids are skipped rather than stored under "".
+		map[string]any{"id": "", "name": "Nameless", "status": "ENABLED"},
+	})
+	short := editEnvelope(t, []any{"list-b"}, []any{
+		map[string]any{"id": "list-b", "name": "B (fresh)", "status": "DISABLED"},
+		map[string]any{"id": "list-c", "name": "C", "status": "ENABLED"},
+	})
+
+	ff := &fakeFetcher{routes: map[string]string{
+		campaignsListPath:                      string(page),
+		fmt.Sprintf(campaignEditPathF, "id-1"): full,
+		fmt.Sprintf(campaignEditPathF, "id-2"): short,
+	}}
+
+	c := New(ff, Config{})
+	_, catalog, err := c.FetchCampaigns(context.Background())
+	if err != nil {
+		t.Fatalf("FetchCampaigns: %v", err)
+	}
+
+	// Union, in first-seen order — not id-2's two entries.
+	wantIDs := []string{"list-a", "list-b", "list-c"}
+	gotIDs := make([]string, 0, len(catalog))
+	for _, sl := range catalog {
+		gotIDs = append(gotIDs, sl.ID)
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Errorf("catalog ids = %v, want %v (union in first-seen order)", gotIDs, wantIDs)
+	}
+	// A later response re-stating an id updates its value in place: the portal
+	// is the authority on the current name/status, and the order is what the
+	// merge preserves.
+	if len(catalog) == 3 && (catalog[1].Name != "B (fresh)" || catalog[1].Status != "DISABLED") {
+		t.Errorf("catalog[1] = %+v, want the later response's name and status", catalog[1])
+	}
+}
+
 // TestFetchCampaigns_AppliesSpecListTargeting exercises the happy path this
 // task exists for: a successful edit-form fetch must land SpecListIDs,
 // SpecListNames (including the catalog's skip-unknown-id branch), and

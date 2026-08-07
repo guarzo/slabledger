@@ -201,17 +201,38 @@ func toTargetSubjects(refs []psacampaign.SubjectRef) []inventory.TargetSubject {
 // construction: an internal campaign carrying a PSACampaignRequestID that is
 // absent from portalCampaigns is never visited at all, and would keep its stale
 // pre-baseline targeting while the run exits 0. The unobserved-links check
-// after the loop closes it.
+// after the loop closes it. A second blind spot — two internal campaigns
+// claiming the same portal campaign — is rejected up front, before any write.
 func runBaselinePull(ctx context.Context, portalCampaigns []psacampaign.PortalCampaign, campaigns inventory.CampaignRepository, logger observability.Logger) error {
 	internal, err := campaigns.ListCampaigns(ctx, false)
 	if err != nil {
 		return fmt.Errorf("baseline: list campaigns: %w", err)
 	}
 	byRequestID := make(map[string]inventory.Campaign, len(internal))
+	// A PSACampaignRequestID is a link to exactly one portal campaign, but
+	// nothing in the schema enforces that: migration 000018 added the column as
+	// a plain TEXT with no unique index. If two internal campaigns claim the
+	// same portal campaign, silently keeping whichever ListCampaigns returned
+	// last would write the portal's targeting into an arbitrary one of them and
+	// leave the other holding stale pre-baseline targeting — while the run
+	// exits 0. There is no correct choice to make here, so refuse the whole
+	// run and let the operator break the tie.
+	var dupes []string
 	for _, c := range internal {
-		if c.PSACampaignRequestID != "" {
-			byRequestID[c.PSACampaignRequestID] = c
+		if c.PSACampaignRequestID == "" {
+			continue
 		}
+		if prior, clash := byRequestID[c.PSACampaignRequestID]; clash {
+			dupes = append(dupes, fmt.Sprintf("%s (campaigns %s and %s)", c.PSACampaignRequestID, prior.ID, c.ID))
+			continue
+		}
+		byRequestID[c.PSACampaignRequestID] = c
+	}
+	if len(dupes) > 0 {
+		// Map iteration is not involved here (internal is a slice), but sort
+		// anyway so the message is stable regardless of repository ordering.
+		sort.Strings(dupes)
+		return fmt.Errorf("baseline: %d portal campaign link(s) claimed by more than one SlabLedger campaign, resolve before re-running: %v", len(dupes), dupes)
 	}
 
 	var skipped []string

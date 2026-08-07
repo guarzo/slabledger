@@ -241,6 +241,40 @@ describe('PSAPublishModal', () => {
     expect(screen.getByText(`Added ${ENGLISH_LIST}`)).toBeInTheDocument();
     expect(screen.queryByText(/unchanged/)).not.toBeInTheDocument();
   });
+  it('captions the diff with the language axis as it stood when the diff was computed', async () => {
+    // The spec-list row labels a set of curated-list ids with the languages
+    // that justify them. If the campaign is edited in another tab between
+    // proposing and publishing, reading the live axis here would caption a
+    // stale diff with a newer axis — on the one screen whose entire job is
+    // showing exactly what is about to be pushed.
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-5',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: '',
+          new: ENGLISH_LIST,
+          value: [ENGLISH_LIST],
+        }],
+      },
+    });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onClose = vi.fn();
+    const { rerender } = render(modalTree(makeCampaign({ targetLanguages: ['english'] }), null, qc, onClose));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Target languages: English')).toBeInTheDocument();
+    });
+
+    // The campaign gains Japanese after the diff was computed; the queued push
+    // still carries only the English list, so the caption must not claim
+    // otherwise.
+    rerender(modalTree(makeCampaign({ targetLanguages: ['english', 'japanese'] }), null, qc, onClose));
+    expect(screen.getByText('Target languages: English')).toBeInTheDocument();
+    expect(screen.queryByText('Target languages: English, Japanese')).not.toBeInTheDocument();
+  });
 });
 
 describe('PSAPublishModal with a queued push row', () => {

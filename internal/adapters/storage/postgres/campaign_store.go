@@ -29,14 +29,18 @@ var _ inventory.CampaignRepository = (*CampaignStore)(nil)
 // store is the sole writer of both legacy columns, and nothing left in this
 // tree reads them back — the mirror exists solely so a rollback to the
 // previous binary, which still reads inclusion_list/exclusion_mode directly,
-// sees a database consistent with what it expects.
+// finds populated columns rather than the empty ones it would otherwise
+// inherit. It is a best-effort mirror, not an exact round trip: see the
+// lossiness below, which a rollback would surface as subtly wider matching
+// rather than as an error.
 //
 // The mirror is inherently lossy for multi-word subject names: it joins
 // names with "," here, and the old binary's own comma-or-whitespace splitter
 // would break "Crystal Golem" into the two separate tokens "Crystal" and
-// "Golem". This is a pre-existing limitation of the legacy string format
-// itself, only reachable during the rollback window, and not something this
-// store can fix without changing what the old binary expects.
+// "Golem" — each of which matches more cards than the original name did.
+// This is a pre-existing limitation of the legacy string format itself, only
+// reachable during the rollback window, and not something this store can fix
+// without changing what the old binary expects.
 func deriveLegacyMirror(c *inventory.Campaign) (inclusionList string, exclusionMode bool) {
 	names := make([]string, 0, len(c.Subjects))
 	for _, s := range c.Subjects {

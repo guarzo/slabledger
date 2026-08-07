@@ -576,11 +576,17 @@ change.
 
 This costs a few lines in `campaign_store.go` and buys a rollback: if the new
 model misbehaves in production, reverting the binary leaves a database whose
-legacy columns are still correct. A follow-up migration drops both columns once
-the new model has run a full cycle. This is called out explicitly so it is not
-forgotten — the mirror is transitional, not permanent.
+legacy columns are still populated rather than empty. The mirror is best-effort,
+not an exact round trip — a multi-word subject name such as "Crystal Golem"
+joins into the comma-separated string and the old binary's
+comma-or-whitespace splitter breaks it back into two independent tokens, each
+matching more cards than the original name did. A rollback therefore degrades
+to slightly wider matching, not to no matching; that is the intended tradeoff,
+and `deriveLegacyMirror` documents it at the call site. A follow-up migration
+drops both columns once the new model has run a full cycle. This is called out
+explicitly so it is not forgotten — the mirror is transitional, not permanent.
 
-Backfill in `000023`: `subject_filter_mode` is set from `exclusion_mode`, and
+Backfill in `000024`: `subject_filter_mode` is set from `exclusion_mode`, and
 `subjects` from `inclusion_list` split on comma-or-whitespace runs with
 `id = inventory.LegacyUnreconciledSubjectID` (`-1`) and the token as `name`.
 That sentinel is deliberately **not** `0` — `id == 0` already means "operator

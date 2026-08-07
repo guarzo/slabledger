@@ -25,3 +25,14 @@ SET subjects = COALESCE(
     '[]'::jsonb
 )
 WHERE c.inclusion_list IS NOT NULL AND trim(c.inclusion_list) <> '';
+
+-- Constrain subject_filter_mode to the two modes the domain models. The Go
+-- write path already normalizes via ValidateAndNormalizeCampaign, so this is
+-- defense in depth against a direct SQL write or a future code path that
+-- forgets to normalize: an unrecognized mode makes SubjectAxisMatches fall
+-- through to Target semantics, silently inverting an Exclude campaign's
+-- attribution rather than failing. Added after the backfill above so the
+-- constraint validates rows the backfill just wrote.
+ALTER TABLE campaigns
+  ADD CONSTRAINT campaigns_subject_filter_mode_check
+  CHECK (subject_filter_mode IN ('Target', 'Exclude'));

@@ -85,6 +85,56 @@ describe('SubjectListEditor', () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
+  it('suppresses an already-selected catalog subject from the dropdown', async () => {
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 4807, name: 'Charizard' }, { id: 22210, name: 'Charmander' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    renderEditor([{ id: 4807, name: 'Charizard' }]);
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'char' } });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Charmander' })).toBeInTheDocument();
+    });
+    // The chip's own "Remove Charizard" button is still present; what must be
+    // absent is a bare "Charizard" dropdown option offering to add it twice.
+    expect(screen.queryByRole('button', { name: 'Charizard' })).not.toBeInTheDocument();
+  });
+
+  it('suppresses a catalog subject whose name an operator-typed entry already holds', async () => {
+    // The two-sided check: an operator-typed subject carries id 0, so an
+    // id-only comparison would still offer the catalog's id-4807 "Charizard"
+    // and produce two entries with the same name on one campaign.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 4807, name: 'Charizard' }, { id: 22210, name: 'Charmander' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    renderEditor([{ id: 0, name: 'charizard' }]);
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'char' } });
+    // Charmander proves the catalog loaded and the dropdown opened — without
+    // it, the Charizard assertion below would pass vacuously against a
+    // dropdown that simply hadn't rendered yet.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Charmander' })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: 'Charizard' })).not.toBeInTheDocument();
+  });
+
+  it('does not duplicate on Enter when the typed name is already selected', async () => {
+    // Enter-to-add bypasses the dropdown entirely, so addSubject needs the
+    // same guard `matches` has — case-insensitively.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 4807, name: 'Charizard' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderEditor([{ id: 4807, name: 'Charizard' }]);
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'charizard' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('warns when the catalog is older than 7 days', async () => {
     vi.mocked(api.listPSASubjects).mockResolvedValue({
       subjects: [{ id: 1, name: 'Pikachu' }],
@@ -119,7 +169,7 @@ describe('SubjectListEditor', () => {
 
   it('flags legacy unreconciled subjects (id -1) without disturbing operator-typed ones (id 0)', async () => {
     // -1 is inventory.LegacyUnreconciledSubjectID, backfilled by migration
-    // 000023 onto pre-axis subjects. Push translation refuses a campaign that
+    // 000024 onto pre-axis subjects. Push translation refuses a campaign that
     // still carries one, so the reason has to be visible here. id 0 is the
     // unrelated, fully supported "resolve this name at push time" marker.
     vi.mocked(api.listPSASubjects).mockResolvedValue({
