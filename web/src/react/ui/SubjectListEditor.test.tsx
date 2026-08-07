@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { useState } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SubjectListEditor from './SubjectListEditor';
@@ -14,6 +15,32 @@ function renderEditor(value: { id: number; name: string }[], onChange = vi.fn())
   render(
     <QueryClientProvider client={qc}>
       <SubjectListEditor label="Subjects" value={value} onChange={onChange} />
+    </QueryClientProvider>,
+  );
+  return onChange;
+}
+
+// `renderEditor` pins `value`, so a removal never actually leaves the rendered
+// list. That is fine for display assertions but it masks the removed-legacy
+// block: the duplicate guard in `addSubject` would refuse the re-add on its own
+// and the test would pass with the block deleted. These tests need the removal
+// to be real, so this harness feeds `onChange` back in as state.
+function renderControlledEditor(initial: { id: number; name: string }[]) {
+  const onChange = vi.fn();
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  function Harness() {
+    const [value, setValue] = useState(initial);
+    return (
+      <SubjectListEditor
+        label="Subjects"
+        value={value}
+        onChange={next => { onChange(next); setValue(next); }}
+      />
+    );
+  }
+  render(
+    <QueryClientProvider client={qc}>
+      <Harness />
     </QueryClientProvider>,
   );
   return onChange;
@@ -189,8 +216,188 @@ describe('SubjectListEditor', () => {
     expect(screen.getByTitle('id: 0')).toHaveTextContent('Mewtwo');
     expect(screen.getByTitle('id: 4807')).toHaveTextContent('Charizard');
 
-    // Legacy chips stay removable — removing one is a deliberate operator edit.
+    // Legacy chips stay removable — removing one is a deliberate operator edit,
+    // now behind ConfirmDialog (see the dedicated tests below).
     fireEvent.click(screen.getByRole('button', { name: /remove blastoise/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
     expect(onChange).toHaveBeenCalledWith([{ id: 0, name: 'Mewtwo' }, { id: 4807, name: 'Charizard' }]);
+  });
+
+  it('asks for confirmation before removing a legacy (-1) chip, and keeps it when declined', async () => {
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderEditor([{ id: -1, name: 'Machamp' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove machamp/i }));
+
+    // role=alertdialog, not a native prompt — that's the point of the migration.
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent(/Remove .Machamp./);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onChange).not.toHaveBeenCalled();
+    // The chip survives a decline...
+    expect(screen.getByTitle(/legacy subject/i)).toHaveTextContent('Machamp');
+  });
+
+  it('leaves the name freely addable after a declined removal', async () => {
+    // `removedLegacyNames` must be written only on confirm. If a refactor hoists
+    // that update above the early return, a declined dialog would silently burn
+    // the name for the rest of the session.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }, { id: 4807, name: 'Charizard' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderControlledEditor([{ id: -1, name: 'Machamp' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove machamp/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    onChange.mockClear();
+
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'Gyarados' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenCalledWith([{ id: -1, name: 'Machamp' }, { id: 0, name: 'Gyarados' }]);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('blocks re-adding a confirmed-removed legacy name, in the dropdown and on Enter', async () => {
+    // Remove-then-retype is the hand repair the design forbids: SubjectID
+    // matches names with strings.EqualFold (resolver.go:146), so retyping
+    // "Machamp" would resolve to the unrelated portal subject 22210 and push
+    // wrong targeting — the one failure mode that is silent rather than a 400.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }, { id: 4807, name: 'Charizard' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderControlledEditor([{ id: -1, name: 'Machamp' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove machamp/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    expect(onChange).toHaveBeenCalledWith([]);
+    onChange.mockClear();
+
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'cha' } });
+    // Charizard proves the catalog loaded and the dropdown opened, so the
+    // Machamp assertion below cannot pass vacuously.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Charizard' })).toBeInTheDocument();
+    });
+
+    // Deliberately a case variant, not the string that was removed —
+    // case-insensitivity is the property the whole guard rests on, on both
+    // the dropdown-filter and Enter paths.
+    fireEvent.change(input, { target: { value: 'mAcHaMp' } });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Machamp' })).not.toBeInTheDocument();
+    });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('explains the refusal instead of silently swallowing a blocked name', async () => {
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderControlledEditor([{ id: -1, name: 'Machamp' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove machamp/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    onChange.mockClear();
+
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: 'MACHAMP' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).not.toHaveBeenCalled();
+    // The old behaviour cleared the input and said nothing at all.
+    expect(screen.getByRole('status')).toHaveTextContent(/cannot be added back/i);
+    expect(input).toHaveValue('');
+
+    // ...and the notice clears once the operator types something else.
+    fireEvent.change(input, { target: { value: 'Gyara' } });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('suppresses the same-named catalog subject while a legacy (-1) chip is still present', async () => {
+    // The wart this guard closes: a -1 "Machamp" carries no portal id, so an
+    // id-only comparison would still offer the catalog's 22210 "Machamp" and
+    // leave two same-named entries on one campaign — one of which blocks push.
+    // Repair has to come from the harvester baseline pull, not from adding the
+    // catalog row alongside it.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }, { id: 4807, name: 'Charizard' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderEditor([{ id: -1, name: 'Machamp' }]);
+
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'cha' } });
+    // Charizard proves the catalog loaded and the dropdown opened, so the
+    // Machamp assertion below cannot pass vacuously.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Charizard' })).toBeInTheDocument();
+    });
+
+    fireEvent.change(input, { target: { value: 'machamp' } });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Machamp' })).not.toBeInTheDocument();
+    });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('removes the confirmed subject, not a stale index, when value shifts mid-dialog', async () => {
+    // The decision is asynchronous now, unlike window.confirm. If a parent
+    // refetch reorders `value` while the dialog is open, a remembered index
+    // points at a different subject — and removing the wrong one here is
+    // exactly the silent mis-targeting this whole feature exists to prevent.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function Harness() {
+      const [value, setValue] = useState([
+        { id: -1, name: 'Blastoise' },
+        { id: 4807, name: 'Charizard' },
+      ]);
+      return (
+        <>
+          <button onClick={() => setValue([{ id: 99, name: 'Pikachu' }, ...value])}>prepend</button>
+          <SubjectListEditor label="Subjects" value={value} onChange={onChange} />
+        </>
+      );
+    }
+    render(<QueryClientProvider client={qc}><Harness /></QueryClientProvider>);
+
+    // Grabbed before the dialog opens: Radix marks outside content aria-hidden
+    // while a modal is up, so it is unreachable by role query at that point.
+    const prepend = screen.getByRole('button', { name: 'prepend' });
+
+    // Blastoise is at index 0 when the dialog opens...
+    fireEvent.click(screen.getByRole('button', { name: /remove blastoise/i }));
+    await screen.findByRole('alertdialog');
+    // ...and at index 1 by the time it is confirmed.
+    fireEvent.click(prepend);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(onChange).toHaveBeenCalledWith([{ id: 99, name: 'Pikachu' }, { id: 4807, name: 'Charizard' }]);
+  });
+
+  it('removes a normal chip without a confirmation dialog', () => {
+    const onChange = renderEditor([{ id: 4807, name: 'Charizard' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove charizard/i }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(onChange).toHaveBeenCalledWith([]);
   });
 });

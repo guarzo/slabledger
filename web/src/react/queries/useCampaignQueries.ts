@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
-import type { CreateCampaignInput, CreatePurchaseInput, CreateSaleInput, Purchase, Sale, Invoice, BulkSaleItemInput } from '../../types/campaigns';
+import type { Campaign, CreateCampaignInput, CreatePurchaseInput, CreateSaleInput, Purchase, Sale, Invoice, BulkSaleItemInput } from '../../types/campaigns';
 import { queryKeys } from './queryKeys';
 import { createParamQuery, createStaticQuery } from './createQuery';
 
@@ -128,6 +128,17 @@ export function useCreateCampaign() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateCampaignInput) => api.createCampaign(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
+    },
+  });
+}
+
+export function useUpdateCampaign() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Campaign> }) =>
+      api.updateCampaign(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
     },

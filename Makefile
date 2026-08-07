@@ -71,17 +71,24 @@ web-clean:
 	@rm -rf web/dist web/node_modules/.vite
 
 # Testing
+#
+# -count=1 on every target below disables Go's test cache. This is a
+# correctness requirement, not a style choice: the cache keys on source files,
+# the build, and consulted env vars -- NOT on database contents. A DB-backed
+# suite can therefore report a cached "ok" without ever connecting, which is
+# exactly what happened during #537 (make test-postgres served a stale pass
+# after the database had changed underneath it).
 test:
 	@echo "Running tests..."
-	go test -race ./...
+	go test -race -count=1 ./...
 
 test-verbose:
 	@echo "Running tests (verbose)..."
-	go test -race -v ./...
+	go test -race -count=1 -v ./...
 
 coverage:
 	@echo "Running tests with coverage..."
-	go test -race -coverprofile=coverage.out -covermode=atomic ./...
+	go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
@@ -105,7 +112,7 @@ test-postgres:
 	@psql "$(POSTGRES_ADMIN_URL)" -tc "SELECT 1 FROM pg_database WHERE datname = '$(POSTGRES_TEST_DB)'" \
 		| grep -q 1 || psql "$(POSTGRES_ADMIN_URL)" -c "CREATE DATABASE \"$(POSTGRES_TEST_DB)\""
 	@echo "Running Postgres package tests..."
-	POSTGRES_TEST_URL="$(POSTGRES_TEST_DSN)" go test -race ./internal/adapters/storage/postgres/...
+	POSTGRES_TEST_URL="$(POSTGRES_TEST_DSN)" go test -race -count=1 ./internal/adapters/storage/postgres/...
 
 # Screenshots of all pages via Playwright (uses real backend + local Postgres).
 # Pulls prod data first via db-pull so pages render with real content.

@@ -3,7 +3,7 @@
  *
  * Lists all campaigns with P&L summary info and portfolio summary strip.
  */
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { reportError } from '../../js/errors';
@@ -15,10 +15,11 @@ import { useToast } from '../contexts/ToastContext';
 import { useForm } from '../hooks/useForm';
 import { defaultCampaignInput } from '../utils/campaignConstants';
 import { Button, SectionErrorBoundary } from '../ui';
-import { useCampaigns, useCreateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
+import { useCampaigns, useCreateCampaign, useUpdateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
 import CampaignsPortfolioHero from './campaigns/CampaignsPortfolioHero';
 import CampaignsTab from './campaigns/CampaignsTab';
 import InvoicesSection from '../components/insights/InvoicesSection';
+import { toFormValues, type EditCampaignFormValues } from '../utils/campaignFormValues';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
 
@@ -48,9 +49,9 @@ function validateCampaignForm(values: CreateCampaignInput) {
 // design doc's "ids are copied verbatim, never re-resolved" rule) — a text
 // round-trip through paste would reset those ids to 0 and corrupt targeting on
 // the next push for every campaign already linked to the portal. Targeting is
-// set once at campaign creation (CampaignFormFields' subject editor) or by the
-// harvester's baseline pull — there is currently no edit surface for it after
-// that; this paste format stays scoped to scalar economics/range fields, which
+// set at campaign creation, edited through the per-row Edit form (which carries
+// SubjectRef ids through untouched), or replaced by the harvester's baseline
+// pull. This paste format stays scoped to scalar economics/range fields, which
 // round-trip safely.
 type ParsedCampaign = Partial<CreateCampaignInput> & { name: string };
 
@@ -166,11 +167,17 @@ function buildExportText(campaigns: Campaign[]): string {
 
 export default function CampaignsPage() {
   const [showCreate, setShowCreate] = useState(false);
+  // The campaign under edit, plus the updatedAt captured when the form opened.
+  // That timestamp is the optimistic-concurrency token: the psa-harvest
+  // baseline pull writes the same targeting fields from a separate process,
+  // and a stale form would put -1 placeholders back over reconciled portal ids.
+  const [editing, setEditing] = useState<{ id: string; updatedAt: string } | null>(null);
   const toast = useToast();
 
   const queryClient = useQueryClient();
-  const { data: allCampaigns = [], isLoading } = useCampaigns(false);
+  const { data: allCampaigns = [], isLoading, isSuccess } = useCampaigns(false);
   const createMutation = useCreateCampaign();
+  const updateMutation = useUpdateCampaign();
 
   const form = useForm<CreateCampaignInput>({
     initialValues: { ...defaultCampaignInput },
@@ -186,6 +193,100 @@ export default function CampaignsPage() {
       }
     },
   });
+
+  const editForm = useForm<EditCampaignFormValues>({
+    // expectedFillRate is only meaningful once handleEdit seeds real data via
+    // toFormValues; this placeholder is never shown (the edit form only
+    // mounts once `editing` is set, immediately after reset()).
+    initialValues: { ...defaultCampaignInput, expectedFillRate: 0 },
+    validate: validateCampaignForm,
+    onSubmit: async (values) => {
+      if (!editing) return;
+
+      // Re-read over the network, not from the React Query cache: useCampaigns
+      // holds data fresh for CAMPAIGN_STALE_TIME (30s), and the racing writer
+      // is the psa-harvest process, whose write the cache cannot observe.
+      let fresh: Campaign;
+      try {
+        fresh = await api.getCampaign(editing.id);
+      } catch (err) {
+        // Fail closed. Saving anyway would reintroduce exactly the race this
+        // check exists to close. The message is fixed rather than routed
+        // through getErrorMessage: that helper surfaces the raw Error.message
+        // when present (e.g. "network down"), which would bury the actionable
+        // "nothing was saved" guidance the operator needs here.
+        reportError('Campaign edit staleness check', err);
+        toast.error('Could not confirm the campaign is unchanged — nothing was saved');
+        return;
+      }
+
+      if (fresh.updatedAt !== editing.updatedAt) {
+        // The toast's "start from current data" advice is only true if the
+        // cache is actually refreshed — otherwise re-opening Edit re-reads
+        // the same stale row from the query cache and fails this check again.
+        await queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
+        toast.error(
+          'This campaign changed since you opened the form — most likely the harvester baseline pull. ' +
+          'Nothing was saved. Close and re-open Edit to start from current data.',
+        );
+        return;
+      }
+
+      try {
+        // Full-row PUT: HandleUpdateCampaign decodes a whole inventory.Campaign
+        // and the UPDATE sets every column, so an omitted field is written as
+        // its zero value. Spreading `fresh` first is what keeps
+        // psaCampaignRequestId and expectedFillRate intact. The bulk-paste path
+        // below strips expectedFillRate under a "server-owned field" comment —
+        // that is a pre-existing bug (it zeroes the field on every paste
+        // update), not a correct pattern to mirror here. Out of scope for this
+        // branch; needs its own fix and review.
+        await updateMutation.mutateAsync({ id: editing.id, data: { ...fresh, ...values } });
+        setEditing(null);
+        toast.success(
+          fresh.psaCampaignRequestId
+            ? 'Campaign updated — open PSA on the row to publish the change'
+            : 'Campaign updated',
+        );
+      } catch (err) {
+        toast.error(getErrorMessage(err, 'Failed to update campaign'));
+      }
+    },
+  });
+
+  function handleEdit(c: Campaign) {
+    setShowCreate(false);
+    setEditing({ id: c.id, updatedAt: c.updatedAt });
+    editForm.reset(toFormValues(c));
+  }
+
+  function handleCancelEdit() {
+    setEditing(null);
+  }
+
+  // Create and edit are mutually exclusive in both directions. handleEdit
+  // already closes Create; without the matching clear here, opening Create
+  // while editing stacks two full-height form cards, and it stops being clear
+  // which one a Save applies to.
+  function handleToggleCreate(next: boolean) {
+    setShowCreate(next);
+    if (next) setEditing(null);
+  }
+
+  const editingCampaign = editing ? allCampaigns.find(c => c.id === editing.id) ?? null : null;
+
+  // A campaign deleted out from under an open edit form — from another tab, or
+  // the detail page — drops out of the list on the next refetch. Without this,
+  // `editingCampaign` goes null and the card vanishes mid-typing while
+  // `editing` stays set, leaving a save target that can only ever 404. Gate on
+  // isSuccess so a failed refetch (data falls back to []) doesn't read as
+  // "everything was deleted" and discard a valid in-progress edit.
+  useEffect(() => {
+    if (!editing || !isSuccess) return;
+    if (allCampaigns.some(c => c.id === editing.id)) return;
+    setEditing(null);
+    toast.error('That campaign no longer exists — it was deleted while you were editing. Nothing was saved.');
+  }, [editing, allCampaigns, isSuccess, toast]);
 
   const pnlQueries = useQueries({
     queries: allCampaigns.map(c => campaignPNLQueryOptions(c.id)),
@@ -352,7 +453,7 @@ export default function CampaignsPage() {
             title={showCreate ? 'Cancel' : 'New campaign'}
             variant={showCreate ? 'danger' : 'primary'}
             onClick={() => {
-              setShowCreate(!showCreate);
+              handleToggleCreate(!showCreate);
             }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -377,7 +478,12 @@ export default function CampaignsPage() {
           showCreate={showCreate}
           form={form}
           createMutation={createMutation}
-          onToggleCreate={() => setShowCreate(true)}
+          onToggleCreate={() => handleToggleCreate(true)}
+          editingCampaign={editingCampaign}
+          editForm={editForm}
+          updateMutation={updateMutation}
+          onEdit={handleEdit}
+          onCancelEdit={handleCancelEdit}
         />
       </SectionErrorBoundary>
 
