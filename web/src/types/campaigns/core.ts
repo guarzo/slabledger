@@ -99,6 +99,10 @@ export interface Purchase {
   sourceCountAtPurchase?: number;
   activeListingsAtPurchase?: number;
   salesLast30dAtPurchase?: number;
+  // Campaign attribution provenance
+  /** Raw campaign name PSA reported, verbatim. */
+  psaCampaignName?: string;
+  attributionSource?: 'psa' | 'inferred' | 'manual';
 }
 
 export interface Sale {

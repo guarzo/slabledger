@@ -1,7 +1,9 @@
 package inventory
 
 // Attribution source values for Purchase.AttributionSource. Every write path
-// must set one; a null value after migration 000023 is a defect, not a state.
+// must set one. A NULL in the column is not a reliable detector for a write
+// path that forgot: PurchaseStore.CreatePurchase defaults an empty value to
+// 'inferred', so only writes that bypass that store method can leave a NULL.
 const (
 	// AttributionSourcePSA means PSA's own campaign name resolved to this campaign.
 	AttributionSourcePSA = "psa"
