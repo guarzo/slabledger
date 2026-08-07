@@ -24,18 +24,19 @@ type QuickAddRequest struct {
 
 // PSAExportRow represents a single row parsed from a PSA communication spreadsheet.
 type PSAExportRow struct {
-	Date           string  // Purchase date (YYYY-MM-DD after conversion)
-	Category       string  // Sport/set category
-	CertNumber     string  // PSA cert number
-	ListingTitle   string  // Full card listing title
-	Grade          float64 // PSA grade (1-10, supports half-grades like 8.5)
-	PricePaid      float64 // Price paid in dollars
-	PurchaseSource string  // Where the card was sourced
-	ShipDate       string  // PSA ship date (YYYY-MM-DD after conversion)
-	InvoiceDate    string  // Invoice date (YYYY-MM-DD after conversion)
-	WasRefunded    bool    // Whether the purchase was refunded
-	FrontImageURL  string  // Front card image URL
-	BackImageURL   string  // Back card image URL
+	Date            string  // Purchase date (YYYY-MM-DD after conversion)
+	Category        string  // Sport/set category
+	CertNumber      string  // PSA cert number
+	ListingTitle    string  // Full card listing title
+	Grade           float64 // PSA grade (1-10, supports half-grades like 8.5)
+	PricePaid       float64 // Price paid in dollars
+	PurchaseSource  string  // Where the card was sourced
+	ShipDate        string  // PSA ship date (YYYY-MM-DD after conversion)
+	InvoiceDate     string  // Invoice date (YYYY-MM-DD after conversion)
+	WasRefunded     bool    // Whether the purchase was refunded
+	FrontImageURL   string  // Front card image URL
+	BackImageURL    string  // Back card image URL
+	PSACampaignName string  // PSA's own campaign attribution ("adjusted_description"); "" when absent
 }
 
 // CampaignImportSummary counts allocations within a single campaign during an import.

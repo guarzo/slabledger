@@ -318,6 +318,10 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 	return result, nil
 }
 
+// ReassignPurchase hand-moves a purchase to a different campaign, which
+// UpdatePurchaseCampaign records as attribution_source='manual'. PSA's claim
+// about the cert (psa_campaign_name) is left untouched: it remains true and
+// worth keeping even after an operator overrides where the purchase is booked.
 func (s *service) ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error {
 	// Verify purchase exists
 	if _, err := s.purchases.GetPurchase(ctx, purchaseID); err != nil {

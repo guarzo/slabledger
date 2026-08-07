@@ -443,6 +443,33 @@ func (m *mockRepo) UpdatePurchaseCampaign(_ context.Context, purchaseID string, 
 	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
+	p.AttributionSource = AttributionSourceManual
+	return nil
+}
+
+func (m *mockRepo) ReattributePurchase(_ context.Context, purchaseID string, r Reattribution) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	if m.purchaseSales[purchaseID] {
+		return ErrPurchaseHasSale
+	}
+	p.CampaignID = r.CampaignID
+	p.PSASourcingFeeCents = r.PSASourcingFeeCents
+	p.CLConfidenceAtPurchase = r.CLConfidenceAtPurchase
+	p.PSACampaignName = r.PSACampaignName
+	p.AttributionSource = AttributionSourcePSA
+	return nil
+}
+
+func (m *mockRepo) UpdatePurchaseAttributionName(_ context.Context, purchaseID, psaName, source string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.PSACampaignName = psaName
+	p.AttributionSource = source
 	return nil
 }
 

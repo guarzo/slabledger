@@ -10,17 +10,18 @@ import (
 // Lightdash "Itemized Purchases" field keys (confirmed via live spike — see
 // docs/private/2026-06-22-psa-portal-spike-findings.md).
 const (
-	colCert       = "fct_instantoffers_offers_cert_number"
-	colTitle      = "marketplace_listings_listing_title"
-	colGrade      = "fct_instantoffers_offers_grade_value"
-	colPricePaid  = "marketplace_listings_total_listing_final_price_metric"
-	colSource     = "fct_instantoffers_offers_origination_source"
-	colDate       = "marketplace_listings_buyer_payment_date_pst_day"
-	colShipDate   = "vault_withdrawal_items_shipment_date_day"
-	colRefunded   = "fct_instantoffers_offers_is_offer_refunded"
-	colCategory   = "dim_ims_inventory_set_sport_detailed"
-	colFrontImage = "dim_ims_inventory_front_image_url"
-	colBackImage  = "dim_ims_inventory_back_image_url"
+	colCert         = "fct_instantoffers_offers_cert_number"
+	colTitle        = "marketplace_listings_listing_title"
+	colGrade        = "fct_instantoffers_offers_grade_value"
+	colPricePaid    = "marketplace_listings_total_listing_final_price_metric"
+	colSource       = "fct_instantoffers_offers_origination_source"
+	colDate         = "marketplace_listings_buyer_payment_date_pst_day"
+	colShipDate     = "vault_withdrawal_items_shipment_date_day"
+	colRefunded     = "fct_instantoffers_offers_is_offer_refunded"
+	colCategory     = "dim_ims_inventory_set_sport_detailed"
+	colFrontImage   = "dim_ims_inventory_front_image_url"
+	colBackImage    = "dim_ims_inventory_back_image_url"
+	colCampaignName = "adjusted_description"
 )
 
 // mapRow converts one flattened Lightdash row into a PSAExportRow.
@@ -30,16 +31,17 @@ const (
 // the next 1st-or-15th on or after it (see invoiceDateFor).
 func mapRow(r map[string]string) (inventory.PSAExportRow, error) {
 	row := inventory.PSAExportRow{
-		CertNumber:     inventory.NormalizePSACert(r[colCert]),
-		ListingTitle:   r[colTitle],
-		PurchaseSource: r[colSource],
-		Category:       r[colCategory],
-		Date:           normalizeDate(r[colDate]),
-		ShipDate:       normalizeDate(r[colShipDate]),
-		InvoiceDate:    invoiceDateFor(r[colDate]),
-		FrontImageURL:  r[colFrontImage],
-		BackImageURL:   r[colBackImage],
-		WasRefunded:    isTruthy(r[colRefunded]),
+		CertNumber:      inventory.NormalizePSACert(r[colCert]),
+		ListingTitle:    r[colTitle],
+		PurchaseSource:  r[colSource],
+		Category:        r[colCategory],
+		Date:            normalizeDate(r[colDate]),
+		ShipDate:        normalizeDate(r[colShipDate]),
+		InvoiceDate:     invoiceDateFor(r[colDate]),
+		FrontImageURL:   r[colFrontImage],
+		BackImageURL:    r[colBackImage],
+		WasRefunded:     isTruthy(r[colRefunded]),
+		PSACampaignName: r[colCampaignName],
 	}
 	if g := r[colGrade]; g != "" {
 		v, err := strconv.ParseFloat(g, 64)
