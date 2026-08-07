@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
@@ -168,4 +169,103 @@ func foldCLCoverage(rows []clCoverageRow) *CLCoverageReport {
 		report.Months = append(report.Months, *m)
 	}
 	return report
+}
+
+// clKnownBuckets is the set of bucket values GetCLCoverageByMonth's query can
+// emit. foldCLCoverage's switch has no default arm, so a bucket outside this
+// set would silently vanish from every counter but Rows -- validated here,
+// at the boundary where the value is first read back from the database,
+// rather than left to go unnoticed downstream.
+var clKnownBuckets = map[string]bool{
+	clBucketResolved:   true,
+	clBucketUnresolved: true,
+	clBucketPending:    true,
+	clBucketStranded:   true,
+	clBucketPreCL:      true,
+}
+
+// GetCLCoverageByMonth reports CardLadder value coverage per purchase month and
+// intake cohort.
+//
+// Coverage is measured on cl_value_updated_at, NOT cl_value_cents. The latter
+// has a second writer -- the Shopify external import (purchase_price_store.go:231)
+// -- which never calls CardLadder, so 339 production rows carry a positive
+// cl_value_cents CardLadder never produced. cl_value_updated_at has exactly one
+// writer (purchase_store.go:269) reachable only past a positive-value guard, and
+// nothing ever clears it.
+//
+// Months are grouped by purchase_date, so a backdated bulk import lands in the
+// month the purchase happened. created_at is used only for the era comparison,
+// where import time is the correct notion.
+//
+// Kept in sync with scripts/cl-coverage.sql -- change the bucket CASE in one and
+// you must change it in the other.
+func (s *CardLadderStore) GetCLCoverageByMonth(ctx context.Context) (*CLCoverageReport, error) {
+	eraStart, err := clCoverageEraTimestamp()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		WITH classified AS (
+		    SELECT
+		        left(p.purchase_date, 7) AS month,
+		        CASE WHEN p.purchase_source <> '' THEN 'campaign' ELSE 'external' END AS cohort,
+		        CASE
+		            WHEN p.cl_value_updated_at <> ''                    THEN 'resolved'
+		            WHEN p.cl_last_error NOT IN ('', 'quota_exhausted') THEN 'unresolved'
+		            WHEN c.phase <> 'closed'
+		                 AND NOT EXISTS (
+		                     SELECT 1 FROM campaign_sales s WHERE s.purchase_id = p.id
+		                 )                                              THEN 'pending'
+		            WHEN p.cl_last_error = ''
+		                 AND p.created_at < $1::timestamp               THEN 'pre_cl'
+		            ELSE 'stranded'
+		        END AS bucket,
+		        p.cl_last_error AS reason,
+		        CASE
+		            WHEN p.purchase_source <> '' AND p.campaign_id = 'external'
+		            THEN 1 ELSE 0
+		        END AS reassigned
+		    FROM campaign_purchases p
+		    INNER JOIN campaigns c ON c.id = p.campaign_id
+		    -- NOTE: both filters from GetCLPriceStats (s.id IS NULL, phase != 'closed')
+		    -- are deliberately ABSENT. This query covers ALL purchases, including sold
+		    -- ones -- 1,473 of 1,542 priced rows are already sold, which is precisely
+		    -- why the freshness panel could not have caught the original incident. The
+		    -- join and the NOT EXISTS above are used to LABEL rows, not to exclude
+		    -- them. Do not "fix" this by adding a WHERE clause.
+		)
+		SELECT
+		    month,
+		    cohort,
+		    bucket,
+		    CASE WHEN bucket = 'unresolved' THEN reason ELSE '' END AS reason,
+		    count(*) AS n,
+		    COALESCE(sum(reassigned), 0) AS reassigned
+		FROM classified
+		GROUP BY month, cohort, bucket, CASE WHEN bucket = 'unresolved' THEN reason ELSE '' END
+		ORDER BY month DESC, cohort
+	`, eraStart)
+	if err != nil {
+		return nil, fmt.Errorf("cl coverage by month: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []clCoverageRow
+	for rows.Next() {
+		var r clCoverageRow
+		if err := rows.Scan(&r.Month, &r.Cohort, &r.Bucket, &r.Reason, &r.N, &r.Reassigned); err != nil {
+			return nil, fmt.Errorf("scan cl coverage row: %w", err)
+		}
+		if !clKnownBuckets[r.Bucket] {
+			return nil, fmt.Errorf("cl coverage: unknown bucket %q for month %s cohort %s", r.Bucket, r.Month, r.Cohort)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate cl coverage rows: %w", err)
+	}
+
+	return foldCLCoverage(out), nil
 }
