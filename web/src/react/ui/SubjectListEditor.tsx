@@ -23,6 +23,13 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
 
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  // Names of legacy (-1) subjects the operator confirmed removing, lower-cased.
+  // Blocking re-entry is what keeps "remove then retype" from becoming a hand
+  // repair: a retyped name resolves case-insensitively at push time
+  // (resolver.go:146) and can land on a *different* portal subject that happens
+  // to share the name. Session-scoped by design — see the design doc's
+  // "Known limit".
+  const [removedLegacyNames, setRemovedLegacyNames] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const inputId = useId();
 
@@ -55,11 +62,19 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
     return catalog
       .filter(s => s.name.toLowerCase().includes(q)
         && !selectedIds.has(s.id)
-        && !selectedNames.has(s.name.toLowerCase()))
+        && !selectedNames.has(s.name.toLowerCase())
+        && !removedLegacyNames.has(s.name.toLowerCase()))
       .slice(0, 20);
-  }, [query, catalog, value]);
+  }, [query, catalog, value, removedLegacyNames]);
 
   function addSubject(subject: SubjectRef) {
+    // Enter-to-add bypasses the dropdown, so the removed-legacy block needs
+    // enforcing here as well as in `matches`.
+    if (removedLegacyNames.has(subject.name.toLowerCase())) {
+      setQuery('');
+      setOpen(false);
+      return;
+    }
     // Same two-sided check as `matches`: Enter-to-add can reach this with a
     // typed name that duplicates an already-selected catalog subject, which
     // an id-only comparison would let through.
@@ -73,6 +88,17 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
   }
 
   function removeSubject(index: number) {
+    const subject = value[index];
+    if (subject?.id === LEGACY_UNRECONCILED_SUBJECT_ID) {
+      const ok = window.confirm(
+        `Remove "${subject.name}"?\n\n` +
+        'This subject has no portal id yet, so removing it drops that targeting — ' +
+        'it does not repair it. A real portal id can only come from the harvester ' +
+        'baseline pull, and this name cannot be added back on this form.',
+      );
+      if (!ok) return;
+      setRemovedLegacyNames(prev => new Set(prev).add(subject.name.toLowerCase()));
+    }
     onChange(value.filter((_, i) => i !== index));
   }
 

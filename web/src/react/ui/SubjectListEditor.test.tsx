@@ -189,8 +189,70 @@ describe('SubjectListEditor', () => {
     expect(screen.getByTitle('id: 0')).toHaveTextContent('Mewtwo');
     expect(screen.getByTitle('id: 4807')).toHaveTextContent('Charizard');
 
-    // Legacy chips stay removable — removing one is a deliberate operator edit.
+    // Legacy chips stay removable — removing one is a deliberate operator edit,
+    // now behind a confirmation (see the dedicated tests below).
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: /remove blastoise/i }));
     expect(onChange).toHaveBeenCalledWith([{ id: 0, name: 'Mewtwo' }, { id: 4807, name: 'Charizard' }]);
+    confirmSpy.mockRestore();
+  });
+
+  it('asks for confirmation before removing a legacy (-1) chip, and keeps it when declined', async () => {
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onChange = renderEditor([{ id: -1, name: 'Machamp' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove machamp/i }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('blocks re-adding a confirmed-removed legacy name, in the dropdown and on Enter', async () => {
+    // Remove-then-retype is the hand repair the design forbids: SubjectID
+    // matches names with strings.EqualFold (resolver.go:146), so retyping
+    // "Machamp" would resolve to the unrelated portal subject 22210 and push
+    // wrong targeting — the one failure mode that is silent rather than a 400.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }, { id: 4807, name: 'Charizard' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onChange = renderEditor([{ id: -1, name: 'Machamp' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove machamp/i }));
+    expect(onChange).toHaveBeenCalledWith([]);
+    onChange.mockClear();
+
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'cha' } });
+    // Charizard proves the catalog loaded and the dropdown opened, so the
+    // Machamp assertion below cannot pass vacuously.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Charizard' })).toBeInTheDocument();
+    });
+
+    fireEvent.change(input, { target: { value: 'Machamp' } });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Machamp' })).not.toBeInTheDocument();
+    });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('does not confirm when removing a normal chip', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onChange = renderEditor([{ id: 4807, name: 'Charizard' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove charizard/i }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith([]);
+    confirmSpy.mockRestore();
   });
 });
