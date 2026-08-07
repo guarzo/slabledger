@@ -345,15 +345,19 @@ func (ps *PurchaseStore) UpdatePurchaseBuyCost(ctx context.Context, id string, b
 	)
 }
 
+// UpdatePurchaseCampaign moves a purchase to a hand-picked campaign and marks
+// attribution_source='manual', since its sole caller (service.ReassignPurchase)
+// is the operator hand-assignment path. If a second caller is ever added, the
+// source must become a parameter instead of being hardcoded here.
 func (ps *PurchaseStore) UpdatePurchaseCampaign(ctx context.Context, purchaseID string, campaignID string, sourcingFeeCents int) error {
 	// Conditional update: only reassign if no linked sale exists.
 	// This prevents a TOCTOU race between checking for sales and updating the campaign.
 	result, err := ps.db.ExecContext(ctx,
 		`UPDATE campaign_purchases
-		 SET campaign_id = $1, psa_sourcing_fee_cents = $2, updated_at = $3
-		 WHERE id = $4
-		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $5)`,
-		campaignID, sourcingFeeCents, time.Now(), purchaseID, purchaseID,
+		 SET campaign_id = $1, psa_sourcing_fee_cents = $2, attribution_source = $3, updated_at = $4
+		 WHERE id = $5
+		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $6)`,
+		campaignID, sourcingFeeCents, inventory.AttributionSourceManual, time.Now(), purchaseID, purchaseID,
 	)
 	if err != nil {
 		return fmt.Errorf("update campaign: %w", err)

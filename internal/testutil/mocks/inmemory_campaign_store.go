@@ -482,6 +482,7 @@ func (m *InMemoryCampaignStore) UpdatePurchaseCampaign(ctx context.Context, purc
 	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
+	p.AttributionSource = inventory.AttributionSourceManual
 	return nil
 }
 

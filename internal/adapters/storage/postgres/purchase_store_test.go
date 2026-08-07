@@ -347,6 +347,49 @@ func TestReattributePurchase_NullsCLConfidenceWhenNil(t *testing.T) {
 	}
 }
 
+func TestUpdatePurchaseCampaign_SetsManualAttribution(t *testing.T) {
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	ctx := context.Background()
+
+	before := mustGetPurchase(t, ps, purchaseID)
+	if before.AttributionSource != inventory.AttributionSourceInferred {
+		t.Fatalf("precondition: AttributionSource = %q, want %q", before.AttributionSource, inventory.AttributionSourceInferred)
+	}
+
+	if err := ps.UpdatePurchaseCampaign(ctx, purchaseID, "campaign-b", 300); err != nil {
+		t.Fatalf("UpdatePurchaseCampaign: %v", err)
+	}
+
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.CampaignID != "campaign-b" {
+		t.Errorf("CampaignID = %q, want %q", got.CampaignID, "campaign-b")
+	}
+	if got.PSASourcingFeeCents != 300 {
+		t.Errorf("PSASourcingFeeCents = %d, want 300", got.PSASourcingFeeCents)
+	}
+	if got.AttributionSource != inventory.AttributionSourceManual {
+		t.Errorf("AttributionSource = %q, want %q", got.AttributionSource, inventory.AttributionSourceManual)
+	}
+}
+
+func TestUpdatePurchaseCampaign_RefusesWhenSaleExists(t *testing.T) {
+	ps, purchaseID := newStoreWithSoldPurchase(t)
+	ctx := context.Background()
+
+	err := ps.UpdatePurchaseCampaign(ctx, purchaseID, "campaign-b", 300)
+	if !errors.Is(err, inventory.ErrPurchaseHasSale) {
+		t.Fatalf("err = %v, want ErrPurchaseHasSale", err)
+	}
+
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.CampaignID != "camp-1" {
+		t.Errorf("CampaignID = %q, want unchanged %q", got.CampaignID, "camp-1")
+	}
+	if got.AttributionSource == inventory.AttributionSourceManual {
+		t.Errorf("AttributionSource = %q, want unchanged (not manual) since the guard should have blocked the update", got.AttributionSource)
+	}
+}
+
 func TestUpdatePurchaseAttributionName(t *testing.T) {
 	ps, purchaseID := newStoreWithUnsoldPurchase(t)
 	err := ps.UpdatePurchaseAttributionName(context.Background(), purchaseID, "Modern High Band", inventory.AttributionSourcePSA)

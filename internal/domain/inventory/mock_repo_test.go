@@ -443,6 +443,7 @@ func (m *mockRepo) UpdatePurchaseCampaign(_ context.Context, purchaseID string, 
 	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
+	p.AttributionSource = AttributionSourceManual
 	return nil
 }
 
