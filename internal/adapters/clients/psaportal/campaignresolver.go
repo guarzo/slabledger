@@ -23,27 +23,41 @@ type CampaignLister interface {
 	ListCampaigns(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
 }
 
+// memoTTL bounds how long the resolver serves a memoized read. It must be long
+// enough to cover a single import/reconcile pass (~1500 rows against a bounded
+// deadline) so a pass does one read of each store rather than one per row, and
+// short enough that a long-lived resolver self-heals: the app builds one
+// resolver at startup (cmd/slabledger/init_inventory_services.go) and reuses it
+// for the process's whole uptime, so a latched snapshot would age past
+// maxSnapshotAge and disable PSA attribution until restart.
+const memoTTL = 2 * time.Minute
+
 // CampaignResolver implements inventory.PSACampaignResolver over the portal
 // campaign snapshot and the internal campaign list.
 //
-// Both reads are memoized for the resolver's lifetime. One run constructs one
-// resolver (cmd/psa-harvest builds it per harvest; the app builds it at
-// startup and its imports resolve against the same snapshot the scheduler just
-// wrote), and neither the stored snapshot nor the campaign list changes under
-// a running reconcile — so re-reading both on every row only multiplied round
-// trips against a bounded deadline. Not concurrency-safe by design: the
-// resolver is called from a single reconcile/import loop.
+// Both reads are memoized for memoTTL. Neither the stored snapshot nor the
+// campaign list changes under a running reconcile, so re-reading both on every
+// row only multiplied round trips against a bounded deadline; bounding the
+// memo by time keeps that win while letting a long-lived resolver pick up
+// later snapshot refreshes and newly created campaigns. Not concurrency-safe
+// by design: the resolver is called from a single reconcile/import loop.
 type CampaignResolver struct {
 	snap      psacampaign.SnapshotStore
 	campaigns CampaignLister
 	now       func() time.Time // test seam
 
-	portal        []psacampaign.PortalCampaign
-	portalFetched time.Time
-	portalLoaded  bool
+	portal         []psacampaign.PortalCampaign
+	portalFetched  time.Time
+	portalLoadedAt time.Time
 
-	campaignList   []inventory.Campaign
-	campaignLoaded bool
+	campaignList     []inventory.Campaign
+	campaignLoadedAt time.Time
+}
+
+// memoValid reports whether a value loaded at loadedAt is still fresh enough to
+// serve. A zero loadedAt means nothing has been loaded yet.
+func (r *CampaignResolver) memoValid(loadedAt time.Time) bool {
+	return !loadedAt.IsZero() && r.now().Sub(loadedAt) <= memoTTL
 }
 
 func NewCampaignResolver(snap psacampaign.SnapshotStore, campaigns CampaignLister, now func() time.Time) *CampaignResolver {
@@ -94,32 +108,32 @@ func (r *CampaignResolver) ResolveCampaignID(ctx context.Context, psaName string
 	return "", false, nil
 }
 
-// loadSnapshot reads the portal campaign snapshot once per resolver. A failed
-// read is not memoized, so a transient DB error does not poison the whole run.
+// loadSnapshot reads the portal campaign snapshot at most once per memoTTL. A
+// failed read is not memoized, so a transient DB error does not poison the run.
 func (r *CampaignResolver) loadSnapshot(ctx context.Context) ([]psacampaign.PortalCampaign, time.Time, error) {
-	if r.portalLoaded {
+	if r.memoValid(r.portalLoadedAt) {
 		return r.portal, r.portalFetched, nil
 	}
 	portal, fetchedAt, err := r.snap.GetSnapshot(ctx)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	r.portal, r.portalFetched, r.portalLoaded = portal, fetchedAt, true
+	r.portal, r.portalFetched, r.portalLoadedAt = portal, fetchedAt, r.now()
 	return r.portal, r.portalFetched, nil
 }
 
-// loadCampaigns lists internal campaigns once per resolver.
+// loadCampaigns lists internal campaigns at most once per memoTTL.
 //
 // activeOnly=false: a purchase can legitimately belong to a paused campaign,
 // and reconciliation runs over historical rows.
 func (r *CampaignResolver) loadCampaigns(ctx context.Context) ([]inventory.Campaign, error) {
-	if r.campaignLoaded {
+	if r.memoValid(r.campaignLoadedAt) {
 		return r.campaignList, nil
 	}
 	all, err := r.campaigns.ListCampaigns(ctx, false)
 	if err != nil {
 		return nil, err
 	}
-	r.campaignList, r.campaignLoaded = all, true
+	r.campaignList, r.campaignLoadedAt = all, r.now()
 	return r.campaignList, nil
 }
