@@ -66,6 +66,10 @@ func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req Q
 		BuyCostCents: req.BuyCostCents,
 		CLValueCents: req.CLValueCents,
 		PurchaseDate: purchaseDate,
+		// campaignID is the campaign an operator opened in the UI, not a heuristic
+		// match, so this is a manual attribution. The store would otherwise default
+		// it to 'inferred', which ReconcilePSAAttribution is free to overwrite.
+		AttributionSource: AttributionSourceManual,
 	}
 
 	campaign, err := s.campaigns.GetCampaign(ctx, campaignID)

@@ -41,9 +41,15 @@ func (h *CampaignsHandler) HandleCreatePurchase(w http.ResponseWriter, r *http.R
 	// carry JSON tags. Letting a caller post attributionSource:"psa" would forge
 	// the column this feature exists to make trustworthy. Cleared here rather
 	// than in the service because the PSA import path legitimately sets 'psa'
-	// through the same service method. PurchaseStore.CreatePurchase defaults the
-	// empty value to 'inferred'.
-	p.AttributionSource = ""
+	// through the same service method.
+	//
+	// The unconditional overwrite below is the clear: whatever the body carried is
+	// discarded. 'manual' is the correct server-derived value here — the campaign
+	// came from the URL path, so an operator picked it and no heuristic ran.
+	// Leaving it empty would let the store default to 'inferred', and
+	// ReconcilePSAAttribution's recordUnresolvedAttribution only protects 'manual'
+	// from being overwritten when PSA later names a campaign we cannot resolve.
+	p.AttributionSource = inventory.AttributionSourceManual
 	p.PSACampaignName = ""
 
 	if err := h.service.CreatePurchase(r.Context(), &p); err != nil {

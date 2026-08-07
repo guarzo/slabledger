@@ -171,16 +171,26 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// A pending item exists precisely because the automated paths could not decide:
+	// FindMatchingCampaign returned "ambiguous"/"unmatched", or PSA named a campaign
+	// that did not resolve. Whichever campaign the operator posts — one of the
+	// suggested candidates or something else entirely — a human broke a tie the
+	// machine refused to break, so 'manual' is the honest source. The request body
+	// carries only campaignId, so this handler cannot distinguish "accepted a
+	// suggestion" from "overrode it" — and it does not need to, since both are a
+	// human decision. Note for anyone reading attribution_source analytically:
+	// 'manual' here means "a person decided", not "a person disagreed with us".
 	purchase := &inventory.Purchase{
-		CampaignID:   body.CampaignID,
-		CertNumber:   item.CertNumber,
-		CardName:     item.CardName,
-		SetName:      item.SetName,
-		CardNumber:   item.CardNumber,
-		Grader:       "PSA",
-		GradeValue:   item.Grade,
-		BuyCostCents: item.BuyCostCents,
-		PurchaseDate: item.PurchaseDate,
+		CampaignID:        body.CampaignID,
+		CertNumber:        item.CertNumber,
+		CardName:          item.CardName,
+		SetName:           item.SetName,
+		CardNumber:        item.CardNumber,
+		Grader:            "PSA",
+		GradeValue:        item.Grade,
+		BuyCostCents:      item.BuyCostCents,
+		PurchaseDate:      item.PurchaseDate,
+		AttributionSource: inventory.AttributionSourceManual,
 	}
 
 	if h.service == nil {
