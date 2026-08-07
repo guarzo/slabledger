@@ -446,17 +446,17 @@ func IsMyError(err error) bool { return errors.HasErrorCode(err, ErrCodeMyError)
 
 ### Example: Adding a New Migration
 
-**Scenario**: Add a schema change to SQLite.
+**Scenario**: Add a schema change to Postgres.
 
 **Step 1**: Check the highest existing migration number:
 ```bash
-ls internal/adapters/storage/sqlite/migrations/ | sort -n | tail -2
+ls internal/adapters/storage/postgres/migrations/ | sort -n | tail -2
 ```
 
 **Step 2**: Create the pair (zero-pad to 6 digits):
 ```bash
-touch internal/adapters/storage/sqlite/migrations/000022_description.up.sql
-touch internal/adapters/storage/sqlite/migrations/000022_description.down.sql
+touch internal/adapters/storage/postgres/migrations/000026_description.up.sql
+touch internal/adapters/storage/postgres/migrations/000026_description.down.sql
 ```
 
 **Step 3**: Write the SQL. The `.up.sql` applies the change, `.down.sql` reverts it.
@@ -464,6 +464,26 @@ touch internal/adapters/storage/sqlite/migrations/000022_description.down.sql
 **Step 4**: Update `docs/SCHEMA.md` with the new table/column.
 
 **Step 5**: Update the migration count in `CLAUDE.md`'s Database section.
+
+**Step 6**: Verify with `make test-postgres`.
+
+#### Editing an existing migration file
+
+Add a new numbered migration instead, whenever the change has already shipped —
+golang-migrate records versions, not file contents, so an edit to a migration a
+database has already applied never runs there. Any environment past that version
+keeps the old schema silently, and `schema_migrations` still reports success.
+
+Editing in place is only safe for a migration that has not yet merged. Even then,
+the local test database has probably already recorded the version from an earlier
+run. `TestMain` in `internal/adapters/storage/postgres/testhelper_test.go` drops
+and re-migrates the schema before every package run precisely so this cannot
+produce a false green — do not weaken it. If you apply migrations by hand
+anywhere else, drop the schema first:
+
+```bash
+psql "$POSTGRES_TEST_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+```
 
 ---
 
