@@ -155,7 +155,11 @@ function LanguageMultiSelect({
   const labels = value
     .filter(t => known.has(t))
     .map(t => targetLanguageOptions.find(o => o.value === t)?.label ?? t);
-  const summary = labels.length === 0
+  // Derived from value.length, not labels.length: an unrecognized token means
+  // the set is non-empty, so it is NOT an open net even though no known
+  // checkbox is checked. Conflating the two would contradict the warning
+  // below for the same state.
+  const summary = value.length === 0
     ? 'None selected — open net: this campaign buys any language.'
     : `Buys ${labels.join(' and ')} cards only.`;
 
@@ -183,7 +187,10 @@ function LanguageMultiSelect({
       <p className="text-xs text-[var(--text-subtle)]">{summary}</p>
       {unknown.map(t => (
         <p key={t} className="text-xs text-[var(--warning)]">
-          Unrecognized language token: {t} — kept as-is and still pushed.
+          {/* normalizeTargetLanguages (validation.go) rejects the whole save on
+              the first unknown token — nothing with this token is pushed. */}
+          Unrecognized language token: {t} — not recognized by this UI; the
+          campaign will be rejected on save until it is reconciled.
         </p>
       ))}
     </fieldset>

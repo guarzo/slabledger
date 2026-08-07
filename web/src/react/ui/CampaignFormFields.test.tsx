@@ -72,7 +72,7 @@ describe('CampaignFormFields targeting section', () => {
     expect(screen.getByText(/Buys English and Japanese cards only\./)).toBeInTheDocument();
   });
 
-  it('surfaces a token outside the known set instead of silently keeping it', () => {
+  it('surfaces an unknown token and preserves it through an unrelated toggle', () => {
     // Defensive: the backend closed set is {english, japanese} today. If a
     // future token arrives before this copy of the set is updated, it must be
     // visible — and toggling a known box must not drop it (see toggleLanguage).
