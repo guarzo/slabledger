@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"slices"
+	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -89,61 +89,112 @@ func TestParseBaselineFlag(t *testing.T) {
 	}
 }
 
-func TestBaselineLanguage(t *testing.T) {
+func TestBaselineLanguages(t *testing.T) {
 	tests := []struct {
 		name          string
 		specListNames []string
-		want          string
-		wantErr       bool
+		want          []string
+		wantErr       error
 	}{
-		{name: "japanese", specListNames: []string{"Japanese Pokemon"}, want: "japanese"},
-		{name: "english", specListNames: []string{"English Pokemon"}, want: "english"},
-		{name: "no recognized name", specListNames: []string{}, wantErr: true},
-		{name: "unrecognized name only", specListNames: []string{"Something Else"}, wantErr: true},
+		{name: "japanese only", specListNames: []string{"Japanese Pokemon"}, want: []string{"japanese"}},
+		{name: "english only", specListNames: []string{"English Pokemon"}, want: []string{"english"}},
 		{
-			name:          "both recognized names is ambiguous",
+			// The live shape: all six portal campaigns carry both lists. The
+			// old code rejected this as ambiguous, which is why the baseline
+			// pull could not run at all.
+			name:          "both lists is the live shape, not an error",
 			specListNames: []string{"Japanese Pokemon", "English Pokemon"},
-			wantErr:       true,
+			want:          []string{"english", "japanese"},
 		},
 		{
-			name:          "duplicate of the same name is not ambiguous",
+			name:          "order is normalized, not preserved",
+			specListNames: []string{"English Pokemon", "Japanese Pokemon"},
+			want:          []string{"english", "japanese"},
+		},
+		{
+			name:          "duplicates collapse to one token",
 			specListNames: []string{"Japanese Pokemon", "Japanese Pokemon"},
-			want:          "japanese",
+			want:          []string{"japanese"},
+		},
+		{
+			// CATEGORY-era campaign: names no curated list at all. Expected,
+			// and distinct from an unmodelled list.
+			name:          "no names at all is the CATEGORY-era case",
+			specListNames: []string{},
+			wantErr:       errNoSpecListName,
+		},
+		{
+			name:          "nil names is the CATEGORY-era case",
+			specListNames: nil,
+			wantErr:       errNoSpecListName,
+		},
+		{
+			// Locked decision 4: a curated list SlabLedger does not model is
+			// refused, never silently dropped.
+			name:          "unmodelled list alone is refused",
+			specListNames: []string{"English Base Set"},
+			wantErr:       errUnrecognizedSpecListName,
+		},
+		{
+			// The dangerous case: baselining this campaign from the two names
+			// we do understand would record a narrower buy scope than the
+			// portal actually has.
+			name:          "unmodelled list alongside modelled ones is still refused",
+			specListNames: []string{"Japanese Pokemon", "English Base Set", "English Pokemon"},
+			wantErr:       errUnrecognizedSpecListName,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := baselineLanguage(tt.specListNames)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("baselineLanguage(%v) = %q, nil; want error", tt.specListNames, got)
+			got, err := baselineLanguages(tt.specListNames)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("baselineLanguages(%v) error = %v, want errors.Is(_, %v)", tt.specListNames, err, tt.wantErr)
+				}
+				if got != nil {
+					t.Errorf("baselineLanguages(%v) = %v on error, want nil", tt.specListNames, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("baselineLanguage(%v): unexpected error: %v", tt.specListNames, err)
+				t.Fatalf("baselineLanguages(%v): unexpected error: %v", tt.specListNames, err)
 			}
-			if got != tt.want {
-				t.Errorf("baselineLanguage(%v) = %q, want %q", tt.specListNames, got, tt.want)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("baselineLanguages(%v) = %v, want %v", tt.specListNames, got, tt.want)
 			}
 		})
 	}
 }
 
+func TestBaselineLanguagesErrorNamesTheList(t *testing.T) {
+	// The operator's only lead on a refused campaign is this message; it must
+	// carry the list name, not just the fact that something was unmodelled.
+	_, err := baselineLanguages([]string{"English Base Set", "Japanese Pokemon"})
+	if err == nil {
+		t.Fatal("baselineLanguages(): got nil error, want error")
+	}
+	if !strings.Contains(err.Error(), "English Base Set") {
+		t.Errorf("error %q does not name the unrecognized list", err)
+	}
+}
+
 func TestBuildBaselineCampaign(t *testing.T) {
+	// Name is required: buildBaselineCampaign now runs the result through
+	// inventory.ValidateAndNormalizeCampaign, which rejects an empty Name.
 	existing := inventory.Campaign{ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1"}
 
 	tests := []struct {
 		name    string
 		pc      psacampaign.PortalCampaign
 		want    inventory.Campaign
-		wantErr bool
+		wantErr error
 	}{
 		{
-			name: "japanese target campaign copies subjects and denied specs verbatim",
+			name: "both curated lists, subjects and denied specs copied verbatim",
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
-				SpecListNames:     []string{"Japanese Pokemon"},
+				SpecListIDs:       []string{"uuid-jp", "uuid-en"},
+				SpecListNames:     []string{"Japanese Pokemon", "English Pokemon"},
 				SubjectFilter: psacampaign.CampaignFilter{
 					Type:     "Target",
 					Subjects: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}, {ID: 8105, Name: "Crystal Golem"}},
@@ -152,7 +203,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			},
 			want: inventory.Campaign{
 				ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1",
-				TargetLanguages:   []string{"japanese"},
+				TargetLanguages:   []string{"english", "japanese"},
 				SubjectFilterMode: "Target",
 				Subjects: []inventory.TargetSubject{
 					{ID: 22210, Name: "Machamp"},
@@ -165,6 +216,7 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			name: "exclude with zero subjects is an open net, not an error",
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
+				SpecListIDs:       []string{"uuid-en"},
 				SpecListNames:     []string{"English Pokemon"},
 				SubjectFilter:     psacampaign.CampaignFilter{Type: "Exclude"},
 			},
@@ -177,41 +229,90 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			},
 		},
 		{
-			name: "unmappable language is an error, existing campaign untouched",
+			name: "no curated list is the CATEGORY-era skip",
 			pc: psacampaign.PortalCampaign{
 				CampaignRequestID: "req-1",
+				SpecListIDs:       []string{},
 				SpecListNames:     []string{},
 			},
-			wantErr: true,
+			wantErr: errNoSpecListName,
+		},
+		{
+			// The catalog explained neither id, so SpecListNames came back
+			// empty and baselineLanguages would have reported the harmless
+			// CATEGORY-era case for a campaign that in fact buys two lists.
+			name: "spec-list ids the catalog could not explain are refused",
+			pc: psacampaign.PortalCampaign{
+				CampaignRequestID: "req-1",
+				SpecListIDs:       []string{"uuid-unknown-a", "uuid-unknown-b"},
+				SpecListNames:     []string{},
+				SubjectFilter:     psacampaign.CampaignFilter{Type: "Target"},
+			},
+			wantErr: errUnexplainedSpecListID,
+		},
+		{
+			name: "one unexplained id alongside two explained ones is refused",
+			pc: psacampaign.PortalCampaign{
+				CampaignRequestID: "req-1",
+				SpecListIDs:       []string{"uuid-jp", "uuid-en", "uuid-unknown"},
+				SpecListNames:     []string{"Japanese Pokemon", "English Pokemon"},
+				SubjectFilter:     psacampaign.CampaignFilter{Type: "Target"},
+			},
+			wantErr: errUnexplainedSpecListID,
+		},
+		{
+			name: "unmodelled curated list is refused",
+			pc: psacampaign.PortalCampaign{
+				CampaignRequestID: "req-1",
+				SpecListIDs:       []string{"uuid-en-base"},
+				SpecListNames:     []string{"English Base Set"},
+				SubjectFilter:     psacampaign.CampaignFilter{Type: "Target"},
+			},
+			wantErr: errUnrecognizedSpecListName,
+		},
+		{
+			// The unvalidated-remote-string hole: anything but "Exclude" was
+			// read as Target semantics by SubjectAxisMatches, so this string
+			// used to reach a live buy decision unchecked.
+			name: "unknown subject filter type is rejected by validation, not silently treated as Target",
+			pc: psacampaign.PortalCampaign{
+				CampaignRequestID: "req-1",
+				SpecListIDs:       []string{"uuid-en"},
+				SpecListNames:     []string{"English Pokemon"},
+				SubjectFilter: psacampaign.CampaignFilter{
+					Type:     "Include",
+					Subjects: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}},
+				},
+			},
+			wantErr: inventory.ErrInvalidSubjectFilterMode,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := buildBaselineCampaign(existing, tt.pc)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("buildBaselineCampaign(): got nil error, want error")
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("buildBaselineCampaign() error = %v, want errors.Is(_, %v)", err, tt.wantErr)
+				}
+				if !reflect.DeepEqual(got, inventory.Campaign{}) {
+					t.Errorf("buildBaselineCampaign() = %+v on error, want zero Campaign", got)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("buildBaselineCampaign(): unexpected error: %v", err)
 			}
-			if !slices.Equal(got.TargetLanguages, tt.want.TargetLanguages) ||
-				got.SubjectFilterMode != tt.want.SubjectFilterMode ||
-				len(got.Subjects) != len(tt.want.Subjects) ||
-				len(got.DeniedSpecs) != len(tt.want.DeniedSpecs) {
-				t.Fatalf("buildBaselineCampaign() = %+v, want %+v", got, tt.want)
+			if !reflect.DeepEqual(got.TargetLanguages, tt.want.TargetLanguages) {
+				t.Errorf("TargetLanguages = %v, want %v", got.TargetLanguages, tt.want.TargetLanguages)
 			}
-			for i := range tt.want.Subjects {
-				if got.Subjects[i] != tt.want.Subjects[i] {
-					t.Errorf("Subjects[%d] = %+v, want %+v", i, got.Subjects[i], tt.want.Subjects[i])
-				}
+			if got.SubjectFilterMode != tt.want.SubjectFilterMode {
+				t.Errorf("SubjectFilterMode = %q, want %q", got.SubjectFilterMode, tt.want.SubjectFilterMode)
 			}
-			for i := range tt.want.DeniedSpecs {
-				if got.DeniedSpecs[i] != tt.want.DeniedSpecs[i] {
-					t.Errorf("DeniedSpecs[%d] = %+v, want %+v", i, got.DeniedSpecs[i], tt.want.DeniedSpecs[i])
-				}
+			if !reflect.DeepEqual(got.Subjects, tt.want.Subjects) {
+				t.Errorf("Subjects = %+v, want %+v", got.Subjects, tt.want.Subjects)
+			}
+			if !reflect.DeepEqual(got.DeniedSpecs, tt.want.DeniedSpecs) {
+				t.Errorf("DeniedSpecs = %+v, want %+v", got.DeniedSpecs, tt.want.DeniedSpecs)
 			}
 			if got.ID != tt.want.ID || got.Name != tt.want.Name || got.PSACampaignRequestID != tt.want.PSACampaignRequestID {
 				t.Errorf("existing campaign fields altered: got %+v", got)
@@ -223,23 +324,42 @@ func TestBuildBaselineCampaign(t *testing.T) {
 func TestRunBaselinePull(t *testing.T) {
 	linkedComplete := psacampaign.PortalCampaign{
 		CampaignRequestID: "req-1", TargetingComplete: true,
-		SpecListNames: []string{"Japanese Pokemon"},
+		SpecListIDs:   []string{"uuid-jp", "uuid-en"},
+		SpecListNames: []string{"Japanese Pokemon", "English Pokemon"},
 		SubjectFilter: psacampaign.CampaignFilter{Type: "Target"},
 	}
 	linkedIncomplete := psacampaign.PortalCampaign{CampaignRequestID: "req-2", TargetingComplete: false}
-	// Same shape as linkedComplete (a cleanly resolvable language and subject
-	// filter) except for TargetingComplete, so a case built from it isolates
-	// the TargetingComplete guard: if that guard were ever bypassed, this
-	// fixture would resolve and write instead of skip, unlike linkedIncomplete
-	// (which also fails on empty SpecListNames and would mask the bypass).
+	// Same shape as linkedComplete (a cleanly resolvable language set and
+	// subject filter) except for TargetingComplete, so a case built from it
+	// isolates the TargetingComplete guard: if that guard were ever bypassed,
+	// this fixture would resolve and write instead of skip, unlike
+	// linkedIncomplete (which also fails on empty SpecListNames and would mask
+	// the bypass).
 	linkedIncompleteOtherwiseValid := psacampaign.PortalCampaign{
 		CampaignRequestID: "req-1", TargetingComplete: false,
-		SpecListNames: []string{"Japanese Pokemon"},
+		SpecListIDs:   []string{"uuid-jp", "uuid-en"},
+		SpecListNames: []string{"Japanese Pokemon", "English Pokemon"},
 		SubjectFilter: psacampaign.CampaignFilter{Type: "Target"},
 	}
-	linkedAmbiguousLanguage := psacampaign.PortalCampaign{
+	linkedNoSpecList := psacampaign.PortalCampaign{
 		CampaignRequestID: "req-3", TargetingComplete: true,
-		SpecListNames: []string{}, // no recognized name -> unconverted CATEGORY campaign, §8
+		SpecListIDs:   []string{},
+		SpecListNames: []string{}, // no curated list -> unconverted CATEGORY campaign, §8
+	}
+	// The mode hole, end to end: a raw portal string that is neither Target nor
+	// Exclude must never reach the database.
+	linkedBadFilterType := psacampaign.PortalCampaign{
+		CampaignRequestID: "req-1", TargetingComplete: true,
+		SpecListIDs:   []string{"uuid-en"},
+		SpecListNames: []string{"English Pokemon"},
+		SubjectFilter: psacampaign.CampaignFilter{Type: "Include"},
+	}
+	// The decode-time drop, end to end: the catalog explained neither id.
+	linkedUnexplainedIDs := psacampaign.PortalCampaign{
+		CampaignRequestID: "req-1", TargetingComplete: true,
+		SpecListIDs:   []string{"uuid-unknown"},
+		SpecListNames: []string{},
+		SubjectFilter: psacampaign.CampaignFilter{Type: "Target"},
 	}
 	notLinked := psacampaign.PortalCampaign{CampaignRequestID: "req-unlinked", TargetingComplete: true}
 
@@ -247,12 +367,15 @@ func TestRunBaselinePull(t *testing.T) {
 	// check makes the result depend on which internal campaigns exist, so a case
 	// that passes only one portal campaign must also narrow the fleet or it will
 	// (correctly) report the other two as missing from the portal.
+	//
+	// Name is populated on every row because buildBaselineCampaign now runs the
+	// result through inventory.ValidateAndNormalizeCampaign, which requires it.
 	allThree := []inventory.Campaign{
-		{ID: "camp-1", PSACampaignRequestID: "req-1"},
-		{ID: "camp-2", PSACampaignRequestID: "req-2"},
-		{ID: "camp-3", PSACampaignRequestID: "req-3"},
+		{ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1"},
+		{ID: "camp-2", Name: "Modern Slabs", PSACampaignRequestID: "req-2"},
+		{ID: "camp-3", Name: "Legacy Category", PSACampaignRequestID: "req-3"},
 	}
-	onlyOne := []inventory.Campaign{{ID: "camp-1", PSACampaignRequestID: "req-1"}}
+	onlyOne := []inventory.Campaign{{ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1"}}
 
 	tests := []struct {
 		name       string
@@ -261,20 +384,25 @@ func TestRunBaselinePull(t *testing.T) {
 		updateErr  error
 		wantErr    bool
 		wantWrites int
+		wantLangs  []string // asserted on the first write, when wantWrites > 0
 	}{
 		{
 			name:       "writes the linked complete campaign, skips the rest, exits non-zero",
 			internal:   allThree,
-			portal:     []psacampaign.PortalCampaign{linkedComplete, linkedIncomplete, linkedAmbiguousLanguage, notLinked},
+			portal:     []psacampaign.PortalCampaign{linkedComplete, linkedIncomplete, linkedNoSpecList, notLinked},
 			wantErr:    true,
 			wantWrites: 1,
+			wantLangs:  []string{"english", "japanese"},
 		},
 		{
-			name:       "all campaigns clean is a nil error",
+			// The whole point of the change: a campaign carrying both curated
+			// lists is the live shape and must write cleanly, exit 0.
+			name:       "both curated lists writes cleanly and exits zero",
 			internal:   onlyOne,
 			portal:     []psacampaign.PortalCampaign{linkedComplete},
 			wantErr:    false,
 			wantWrites: 1,
+			wantLangs:  []string{"english", "japanese"},
 		},
 		{
 			name:       "an update failure aborts immediately",
@@ -283,6 +411,7 @@ func TestRunBaselinePull(t *testing.T) {
 			updateErr:  errors.New("db down"),
 			wantErr:    true,
 			wantWrites: 1,
+			wantLangs:  []string{"english", "japanese"},
 		},
 		{
 			// Isolates the TargetingComplete guard from every other skip
@@ -296,6 +425,20 @@ func TestRunBaselinePull(t *testing.T) {
 			wantWrites: 0,
 		},
 		{
+			name:       "an unvalidatable subject filter type skips rather than writing",
+			internal:   onlyOne,
+			portal:     []psacampaign.PortalCampaign{linkedBadFilterType},
+			wantErr:    true,
+			wantWrites: 0,
+		},
+		{
+			name:       "spec-list ids the catalog could not explain skip rather than writing",
+			internal:   onlyOne,
+			portal:     []psacampaign.PortalCampaign{linkedUnexplainedIDs},
+			wantErr:    true,
+			wantWrites: 0,
+		},
+		{
 			// The blind spot the loop cannot see: camp-2 and camp-3 are linked
 			// but the portal never returned them, so they keep stale targeting.
 			// Without the unobserved check this case returns nil and exits 0.
@@ -304,16 +447,21 @@ func TestRunBaselinePull(t *testing.T) {
 			portal:     []psacampaign.PortalCampaign{linkedComplete},
 			wantErr:    true,
 			wantWrites: 1,
+			wantLangs:  []string{"english", "japanese"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			writes := 0
+			var firstWritten inventory.Campaign
 			repo := &mocks.CampaignRepositoryMock{
 				ListCampaignsFn: func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error) {
 					return tt.internal, nil
 				},
 				UpdateCampaignFn: func(ctx context.Context, c *inventory.Campaign) error {
+					if writes == 0 {
+						firstWritten = *c
+					}
 					writes++
 					return tt.updateErr
 				},
@@ -328,6 +476,9 @@ func TestRunBaselinePull(t *testing.T) {
 			}
 			if writes != tt.wantWrites {
 				t.Errorf("UpdateCampaign called %d times, want %d", writes, tt.wantWrites)
+			}
+			if tt.wantLangs != nil && !reflect.DeepEqual(firstWritten.TargetLanguages, tt.wantLangs) {
+				t.Errorf("first written TargetLanguages = %v, want %v", firstWritten.TargetLanguages, tt.wantLangs)
 			}
 		})
 	}

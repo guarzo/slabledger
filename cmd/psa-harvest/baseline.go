@@ -58,42 +58,75 @@ func parseBoolFlag(v string) (bool, error) {
 	return b, nil
 }
 
-// errNoSpecListName means none of the campaign's curated spec-list names
-// mapped to a language token. This is the expected shape of the remaining
-// CATEGORY-era campaigns (design doc §8): their edit form predates the
-// curated-list model, so it names no "Japanese Pokemon" / "English Pokemon"
-// list. They are not writable here; the operator converts them by hand in
-// the portal and re-runs the baseline.
-var errNoSpecListName = errors.New("no recognized curated spec-list name (see design §8: conversion path for CATEGORY campaigns)")
+// errNoSpecListName means the campaign named no curated spec lists at all.
+// This is the expected shape of the remaining CATEGORY-era campaigns (design
+// doc §8): their edit form predates the curated-list model, so it names no
+// "Japanese Pokemon" / "English Pokemon" list. They are not writable here; the
+// operator converts them by hand in the portal and re-runs the baseline.
+//
+// Distinct from errUnrecognizedSpecListName: an empty list is an expected,
+// self-explanatory state, while an unmodelled list is a gap in this code.
+var errNoSpecListName = errors.New("no curated spec-list name (see design §8: conversion path for CATEGORY campaigns)")
 
-// errAmbiguousSpecListName means more than one distinct language mapped —
-// writing either guess would be a coin flip on a live buying campaign.
-var errAmbiguousSpecListName = errors.New("multiple recognized curated spec-list names present")
+// errUnrecognizedSpecListName means the portal campaign carries a curated list
+// this code has no language token for. Baselining from only the lists we do
+// understand would record a narrower buy scope than the campaign actually has,
+// and the next push would then shrink the live campaign to match. Refuse, and
+// name the list so the operator knows what to add.
+//
+// The token set is duplicated in internal/domain/inventory/validation.go,
+// internal/domain/psacampaign/resolver.go (languageListNames), and
+// web/src/react/utils/campaignConstants.ts — psacampaign imports inventory, so
+// a single shared constant would be an import cycle. Adding a token here means
+// adding it in all four places.
+var errUnrecognizedSpecListName = errors.New("unrecognized curated spec-list name")
 
-// baselineLanguage maps a portal campaign's curated spec-list names to the
-// language token stored in inventory.Campaign.TargetLanguage. Exactly one
-// distinct recognized name must be present.
-func baselineLanguage(specListNames []string) (string, error) {
-	token := ""
+// errUnexplainedSpecListID means the portal campaign referenced curated
+// spec-list ids that the harvested catalog could not name. specListNames
+// (internal/adapters/clients/psaportal/campaigns.go:189-201) drops those ids
+// silently rather than failing the decode, so SpecListNames is a partial view
+// and the count mismatch is the only surviving evidence. Refusing here is
+// deliberately strict — a partial catalog fetch fails every campaign — because
+// the alternative is baselining a live buying campaign from an incomplete
+// picture of what it buys.
+var errUnexplainedSpecListID = errors.New("curated spec-list ids the harvested catalog could not name")
+
+// baselineLanguages maps a portal campaign's curated spec-list names to the
+// set of language tokens stored in inventory.Campaign.TargetLanguages. The
+// result is deduplicated and sorted, so the stored value, the log line, and
+// the test assertions are all stable regardless of portal ordering.
+//
+// Carrying more than one list is the normal live shape — every active campaign
+// targets both English and Japanese Pokemon — not an ambiguity to resolve.
+func baselineLanguages(specListNames []string) ([]string, error) {
+	seen := make(map[string]bool, len(specListNames))
+	var unrecognized []string
 	for _, name := range specListNames {
-		var candidate string
 		switch name {
 		case "Japanese Pokemon":
-			candidate = cardutil.LangJapanese
+			seen[cardutil.LangJapanese] = true
 		case "English Pokemon":
-			candidate = cardutil.LangEnglish
+			seen[cardutil.LangEnglish] = true
 		default:
-			continue
+			unrecognized = append(unrecognized, name)
 		}
-		if token != "" && token != candidate {
-			return "", errAmbiguousSpecListName
-		}
-		token = candidate
 	}
-	if token == "" {
-		return "", errNoSpecListName
+	// Report every unmodelled list at once: the operator's remedy is a code
+	// change, and learning about the second list only after shipping the first
+	// fix costs another deploy.
+	if len(unrecognized) > 0 {
+		sort.Strings(unrecognized)
+		return nil, fmt.Errorf("%w: %q", errUnrecognizedSpecListName, unrecognized)
 	}
-	return token, nil
+	if len(seen) == 0 {
+		return nil, errNoSpecListName
+	}
+	tokens := make([]string, 0, len(seen))
+	for token := range seen {
+		tokens = append(tokens, token)
+	}
+	sort.Strings(tokens)
+	return tokens, nil
 }
 
 // buildBaselineCampaign copies one portal campaign's targeting onto a copy of
@@ -103,17 +136,39 @@ func baselineLanguage(specListNames []string) (string, error) {
 // see (*psaportal.Client).FetchSubjects) returns only 22xxx ids, so
 // name-based resolution here would silently rewrite ids on active,
 // money-spending campaigns on the very next push.
+//
+// Every failure returns a zero Campaign so a caller cannot mistake a partial
+// build for a writable one.
 func buildBaselineCampaign(existing inventory.Campaign, pc psacampaign.PortalCampaign) (inventory.Campaign, error) {
-	lang, err := baselineLanguage(pc.SpecListNames)
+	// Check coverage before reading names: SpecListNames omits every id the
+	// catalog could not explain, so an unmodelled list can look like the
+	// harmless CATEGORY-era empty case.
+	if len(pc.SpecListIDs) != len(pc.SpecListNames) {
+		return inventory.Campaign{}, fmt.Errorf("%w: %d id(s), %d named",
+			errUnexplainedSpecListID, len(pc.SpecListIDs), len(pc.SpecListNames))
+	}
+
+	langs, err := baselineLanguages(pc.SpecListNames)
 	if err != nil {
 		return inventory.Campaign{}, err
 	}
 
 	updated := existing
-	updated.TargetLanguages = []string{lang}
+	updated.TargetLanguages = langs
 	updated.SubjectFilterMode = pc.SubjectFilter.Type
 	updated.Subjects = toTargetSubjects(pc.SubjectFilter.Subjects)
 	updated.DeniedSpecs = toTargetSubjects(pc.DeniedSpecs)
+
+	// SubjectFilter.Type is a raw remote string. inventory.SubjectAxisMatches
+	// (matching.go:150-153) treats anything other than SubjectFilterExclude as
+	// Target semantics, so an unexpected portal value would reach a live buy
+	// decision unchecked. Validation is the gate rather than a hand-written
+	// string comparison here: it also enforces the language-token closed set,
+	// and runBaselinePull writes through CampaignRepository.UpdateCampaign,
+	// which applies no validation of its own.
+	if err := inventory.ValidateAndNormalizeCampaign(&updated); err != nil {
+		return inventory.Campaign{}, fmt.Errorf("validate baselined targeting: %w", err)
+	}
 	return updated, nil
 }
 
@@ -133,7 +188,9 @@ func toTargetSubjects(refs []psacampaign.SubjectRef) []inventory.TargetSubject {
 // reaching DrainPushQueue. Campaigns are skipped (not written) when they are
 // not linked to a portal campaign, when the edit-form fetch that produced pc
 // failed (TargetingComplete == false), or when the campaign's curated
-// spec-list names don't map to exactly one language. Any skip is logged and
+// spec-list names don't map cleanly onto the internal targeting model (an
+// unmodelled curated list, an id the catalog could not name, or a subject
+// filter mode validation rejects). Any skip is logged and
 // makes the whole run return a non-zero-exit error, so a partial baseline is
 // never mistaken for a complete one; the pull is idempotent, so re-running it
 // is the remedy.
