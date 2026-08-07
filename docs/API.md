@@ -2528,6 +2528,50 @@ Returns a breakdown of per-purchase Card Ladder mapping/sync failures for the ad
 
 **Errors:** `500` internal error
 
+### `GET /api/admin/cardladder/coverage`
+
+Auth: RequireAdmin
+
+Reports CardLadder value coverage by purchase month and intake cohort.
+
+Unlike `/status`, which summarizes freshness over live unsold inventory, this covers **all** purchases including sold ones and rows in closed campaigns.
+
+Coverage is measured on `cl_value_updated_at`, not `cl_value_cents` — the latter is also written by the Shopify external import without ever calling CardLadder.
+
+Buckets, evaluated in order:
+
+| Bucket | Meaning |
+|---|---|
+| `resolved` | CardLadder returned a positive value at least once |
+| `unresolved` | CardLadder was asked and failed (today: always `no_value`) |
+| `pending` | Skipped at the quota wall, or not yet swept and still sweep-eligible |
+| `stranded` | Created after CardLadder went live, never priced, and no longer reachable by the sweep (sold, or campaign closed). Non-zero is a data-quality alarm |
+| `preCL` | Created before CardLadder existed (before `eraStart`); will never be swept |
+
+`pct` is `resolved / (resolved + unresolved)`. `pending`, `stranded` and `preCL` are excluded from the denominator, so `rows` is a full total and does not equal it. `pct` is `null`, not `0`, when the denominator is empty.
+
+`reassigned` counts rows whose `purchase_source` is set but whose `campaign_id` is `external` — the two possible cohort definitions disagreeing. It is reported so drift is visible.
+
+**Response:** `200 OK` — `CLCoverageReport`
+```json
+{
+  "eraStart": "2026-04-13T04:00:13Z",
+  "months": [
+    {
+      "month": "2026-07",
+      "reassigned": 0,
+      "campaign": {"rows": 20, "resolved": 20, "unresolved": 0, "pending": 0, "stranded": 0, "preCL": 0, "pct": 100.0},
+      "external": {"rows": 71, "resolved": 56, "unresolved": 15, "pending": 0, "stranded": 0, "preCL": 0, "pct": 78.9},
+      "unresolvedByReason": {"no_value": 15}
+    }
+  ]
+}
+```
+
+**Errors:** `500` internal error
+
+The same query is available offline as `scripts/cl-coverage.sql`.
+
 ---
 
 ## Admin — Market Movers

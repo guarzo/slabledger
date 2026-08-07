@@ -68,6 +68,7 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 			mux.Handle("POST /api/admin/cardladder/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleRefresh)))
 			mux.Handle("POST /api/admin/cardladder/add-card", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleAddCard)))
 			mux.Handle("POST /api/admin/cardladder/sync-to-cl", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSyncToCardLadder)))
+			mux.Handle("GET /api/admin/cardladder/coverage", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleCoverage)))
 		}
 		if rt.psaSyncHandler != nil {
 			mux.Handle("GET /api/admin/psa-sync/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleStatus)))
