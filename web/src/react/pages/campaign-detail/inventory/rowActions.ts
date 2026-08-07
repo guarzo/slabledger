@@ -113,13 +113,16 @@ export function resolveOverflowActions(
     out.push({ key: 'dismiss', label: ACTION_LABELS.dismiss, onSelect: handlers.onDismiss });
   }
   if (handlers.onDelete) {
+    // This confirm is the *only* prompt on the delete path — `handleDelete` used
+    // to raise a second, native one on top of it. Naming the card and the sale
+    // here is what let that redundant window.confirm go.
     out.push({
       key: 'delete',
       label: ACTION_LABELS.delete,
       onSelect: handlers.onDelete,
       confirm: {
-        title: 'Delete this item?',
-        message: 'This cannot be undone.',
+        title: `Delete "${item.purchase.cardName || 'this card'}"?`,
+        message: 'This permanently removes the purchase and any associated sale. This cannot be undone.',
         confirmLabel: 'Delete',
         variant: 'danger',
       },

@@ -168,9 +168,10 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     invalidateInventory();
   }
 
+  // No confirm here: every route to this handler is the row `delete` action,
+  // which RowActions already gates behind ConfirmDialog (rowActions.ts).
   const handleDelete = useCallback(async (item: AgingItem) => {
     const name = item.purchase.cardName || 'this card';
-    if (!window.confirm(`Delete "${name}"? This will permanently remove it and any associated sale.`)) return;
     try {
       await api.deletePurchase(item.purchase.campaignId, item.purchase.id);
       toast.success(`Deleted "${name}"`);

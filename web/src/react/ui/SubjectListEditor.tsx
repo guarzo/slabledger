@@ -4,6 +4,7 @@ import { api } from '../../js/api';
 import { queryKeys } from '../queries/queryKeys';
 import type { SubjectRef } from '../../types/campaigns';
 import { LEGACY_UNRECONCILED_SUBJECT_ID } from '../utils/campaignConstants';
+import ConfirmDialog from './ConfirmDialog';
 
 const CATALOG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -30,6 +31,14 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
   // to share the name. Session-scoped by design — see the design doc's
   // "Known limit".
   const [removedLegacyNames, setRemovedLegacyNames] = useState<Set<string>>(new Set());
+  // Legacy chip awaiting confirmation. The subject is snapshotted alongside the
+  // index because the decision is now asynchronous: `value` can change while the
+  // dialog is open (a parent refetch), and a stale index would silently remove a
+  // different subject than the one the operator was asked about.
+  const [pendingRemoval, setPendingRemoval] = useState<{ index: number; subject: SubjectRef } | null>(null);
+  // Set when an add is refused because the name is blocked. Without this the
+  // Enter path clears the input and does nothing, which reads as a dead key.
+  const [blockedName, setBlockedName] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputId = useId();
 
@@ -71,6 +80,7 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
     // Enter-to-add bypasses the dropdown, so the removed-legacy block needs
     // enforcing here as well as in `matches`.
     if (removedLegacyNames.has(subject.name.toLowerCase())) {
+      setBlockedName(subject.name);
       setQuery('');
       setOpen(false);
       return;
@@ -83,23 +93,36 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
       s.name.toLowerCase() === subject.name.toLowerCase(),
     );
     if (!alreadyPresent) onChange([...value, subject]);
+    setBlockedName(null);
     setQuery('');
     setOpen(false);
   }
 
   function removeSubject(index: number) {
     const subject = value[index];
+    // Removing a legacy chip is one-way — it also burns the name for this
+    // session — so it goes through ConfirmDialog. Everything else removes
+    // straight away. `removedLegacyNames` is updated only on confirm, which is
+    // what leaves the name freely addable after a decline.
     if (subject?.id === LEGACY_UNRECONCILED_SUBJECT_ID) {
-      const ok = window.confirm(
-        `Remove "${subject.name}"?\n\n` +
-        'This subject has no portal id yet, so removing it drops that targeting — ' +
-        'it does not repair it. A real portal id can only come from the harvester ' +
-        'baseline pull, and this name cannot be added back on this form.',
-      );
-      if (!ok) return;
-      setRemovedLegacyNames(prev => new Set(prev).add(subject.name.toLowerCase()));
+      setPendingRemoval({ index, subject });
+      return;
     }
     onChange(value.filter((_, i) => i !== index));
+  }
+
+  function confirmRemoval() {
+    if (!pendingRemoval) return;
+    const { index, subject } = pendingRemoval;
+    const matches = (s: SubjectRef | undefined) => !!s && s.id === subject.id && s.name === subject.name;
+    // Trust the index only while it still points at the subject the operator
+    // confirmed; otherwise re-find it. -1 means it is already gone, so there is
+    // nothing left to remove — but the name stays burned either way, because
+    // the operator did confirm that intent.
+    const target = matches(value[index]) ? index : value.findIndex(s => matches(s));
+    setRemovedLegacyNames(prev => new Set(prev).add(subject.name.toLowerCase()));
+    if (target !== -1) onChange(value.filter((_, i) => i !== target));
+    setPendingRemoval(null);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -139,7 +162,7 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
           id={inputId}
           type="text"
           value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onChange={e => { setQuery(e.target.value); setOpen(true); setBlockedName(null); }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Add a subject by name…"
@@ -160,6 +183,13 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
           </div>
         )}
       </div>
+      {blockedName && (
+        <p role="status" className="text-xs text-[var(--warning)]">
+          “{blockedName}” was removed as an unreconciled legacy subject and cannot be
+          added back here. Re-typing the name would not restore its portal id — only
+          the harvester baseline pull can.
+        </p>
+      )}
       {value.some(s => s.id === LEGACY_UNRECONCILED_SUBJECT_ID) && (
         <p className="text-xs text-[var(--warning)]">
           Some subjects were carried over from before portal targeting and have no
@@ -196,6 +226,19 @@ export default function SubjectListEditor({ label, value, onChange, inputSize }:
           );
         })}
       </div>
+      <ConfirmDialog
+        open={!!pendingRemoval}
+        title={pendingRemoval ? `Remove “${pendingRemoval.subject.name}”?` : ''}
+        message={
+          'This subject has no portal id yet, so removing it drops that targeting — ' +
+          'it does not repair it. A real portal id can only come from the harvester ' +
+          'baseline pull, and this name cannot be added back on this form.'
+        }
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={confirmRemoval}
+        onCancel={() => setPendingRemoval(null)}
+      />
     </div>
   );
 }
