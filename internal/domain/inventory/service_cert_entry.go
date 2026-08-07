@@ -214,6 +214,10 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 		}
 
 		receivedStr := now.Format(time.RFC3339)
+		// AttributionSource is deliberately left unset (the store defaults it to
+		// 'inferred'): ExternalCampaignID is a fixed sentinel bucket for cards that
+		// belong to no campaign, not a campaign the operator chose. Recording
+		// 'manual' here would assert an attribution decision nobody made.
 		purchase := &Purchase{
 			ID:                  s.idGen(),
 			CampaignID:          ExternalCampaignID,

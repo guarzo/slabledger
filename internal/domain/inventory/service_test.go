@@ -369,6 +369,14 @@ func TestService_QuickAddPurchase(t *testing.T) {
 	if purchase.PSASourcingFeeCents != 300 {
 		t.Errorf("PSASourcingFeeCents = %d", purchase.PSASourcingFeeCents)
 	}
+	// The campaign is a parameter chosen by the operator in the UI, not a
+	// heuristic match, so quick-add is a manual attribution. The in-memory store
+	// applies no attribution default, so this only passes if QuickAddPurchase
+	// sets it.
+	if purchase.AttributionSource != inventory.AttributionSourceManual {
+		t.Errorf("AttributionSource = %q, want %q",
+			purchase.AttributionSource, inventory.AttributionSourceManual)
+	}
 }
 
 func TestService_CreateSale_ComputesFieldsLocal(t *testing.T) {

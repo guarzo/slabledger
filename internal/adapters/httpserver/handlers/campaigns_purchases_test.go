@@ -90,6 +90,12 @@ func TestHandleCreatePurchase_POST_Success(t *testing.T) {
 			if p.GradeValue != 9.5 {
 				t.Errorf("expected gradeValue=9.5, got %g", p.GradeValue)
 			}
+			// The body carries no attributionSource; the handler must supply
+			// 'manual' because the campaign came from the URL path.
+			if p.AttributionSource != inventory.AttributionSourceManual {
+				t.Errorf("expected attributionSource=%q, got %q",
+					inventory.AttributionSourceManual, p.AttributionSource)
+			}
 			p.ID = "new-purchase"
 			return nil
 		},
@@ -127,6 +133,19 @@ func TestHandleCreatePurchase_POST_DuplicateCert(t *testing.T) {
 	decodeErrorResponse(t, rec)
 }
 
+// TestHandleCreatePurchase_POST_DiscardsClientAttribution is the security
+// regression test from d7f11436, updated for the create-path 'manual' rule. It
+// covers both halves: whatever the body claims is discarded, and the
+// server-derived value is 'manual' (the campaign came from the URL path, so an
+// operator chose it). The security property is unchanged — the client's value
+// never survives — only the expected post-clear value moved from "" to 'manual'.
+//
+// The first three cases supply an attributionSource other than 'manual', so the
+// source assertion proves the overwrite rather than observing a pass-through.
+// The fourth supplies 'manual' itself, where only the psaCampaignName assertion
+// can discriminate; it is retained because a client-supplied PSA name must still
+// be cleared unconditionally, and that is exactly the case where someone might
+// wrongly assume "source already matches, so nothing needs clearing".
 func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
 	tests := []struct {
 		name string
@@ -137,8 +156,16 @@ func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
 			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"psa","psaCampaignName":"Forged Campaign"}`,
 		},
 		{
+			name: "forged inferred attribution",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"inferred","psaCampaignName":"x"}`,
+		},
+		{
+			name: "value outside the CHECK constraint",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"not-a-source","psaCampaignName":"x"}`,
+		},
+		{
 			name: "forged manual attribution",
-			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"manual","psaCampaignName":"x"}`,
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"manual","psaCampaignName":"Forged Campaign"}`,
 		},
 	}
 
@@ -161,8 +188,9 @@ func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
 			if rec.Code != http.StatusCreated {
 				t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
 			}
-			if got.AttributionSource != "" {
-				t.Errorf("client-supplied attributionSource reached the service: %q", got.AttributionSource)
+			if got.AttributionSource != inventory.AttributionSourceManual {
+				t.Errorf("AttributionSource reaching the service = %q, want %q",
+					got.AttributionSource, inventory.AttributionSourceManual)
 			}
 			if got.PSACampaignName != "" {
 				t.Errorf("client-supplied psaCampaignName reached the service: %q", got.PSACampaignName)
@@ -172,7 +200,7 @@ func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
-			if resp.AttributionSource != "" || resp.PSACampaignName != "" {
+			if resp.AttributionSource != inventory.AttributionSourceManual || resp.PSACampaignName != "" {
 				t.Errorf("response echoed forged attribution: source=%q name=%q",
 					resp.AttributionSource, resp.PSACampaignName)
 			}

@@ -141,45 +141,73 @@ func TestPSASyncHandler_HandleListPendingItems(t *testing.T) {
 	}
 }
 
+// TestPSASyncHandler_HandleAssignPendingItem covers both shapes of operator
+// resolution — accepting one of the suggested candidates and picking a campaign
+// that was never suggested. Both must record attribution_source='manual': the
+// request body carries only campaignId, so the handler cannot tell the two apart,
+// and a pending item exists only because no automated path could decide.
 func TestPSASyncHandler_HandleAssignPendingItem(t *testing.T) {
-	resolved := false
-	pendingRepo := &mocks.MockPendingItemRepository{
-		GetPendingItemByIDFn: func(ctx context.Context, id string) (*inventory.PendingItem, error) {
-			if id == "pi-1" {
-				return &inventory.PendingItem{
-					ID: "pi-1", CertNumber: "CERT001", CardName: "Charizard",
-					Grade: 10, BuyCostCents: 1500, PurchaseDate: "2026-03-15",
-					Status: "ambiguous", Candidates: []string{"c1", "c2"},
-				}, nil
+	tests := []struct {
+		name       string
+		campaignID string
+	}{
+		{name: "accepts a suggested candidate", campaignID: "c1"},
+		{name: "overrides with an unsuggested campaign", campaignID: "c9"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved := false
+			var created *inventory.Purchase
+			pendingRepo := &mocks.MockPendingItemRepository{
+				GetPendingItemByIDFn: func(ctx context.Context, id string) (*inventory.PendingItem, error) {
+					if id == "pi-1" {
+						return &inventory.PendingItem{
+							ID: "pi-1", CertNumber: "CERT001", CardName: "Charizard",
+							Grade: 10, BuyCostCents: 1500, PurchaseDate: "2026-03-15",
+							Status: "ambiguous", Candidates: []string{"c1", "c2"},
+						}, nil
+					}
+					return nil, inventory.ErrPendingItemNotFound
+				},
+				ResolvePendingItemFn: func(ctx context.Context, id, campaignID string) error {
+					resolved = true
+					return nil
+				},
 			}
-			return nil, inventory.ErrPendingItemNotFound
-		},
-		ResolvePendingItemFn: func(ctx context.Context, id, campaignID string) error {
-			resolved = true
-			return nil
-		},
-	}
-	svc := &mocks.MockInventoryService{
-		CreatePurchaseFn: func(ctx context.Context, p *inventory.Purchase) error {
-			p.ID = "new-purchase"
-			return nil
-		},
-	}
-	h := handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
-		PendingRepo: pendingRepo,
-		Service:     svc,
-		Logger:      mocks.NewMockLogger(),
-	})
-	body := `{"campaignId": "c1"}`
-	req := httptest.NewRequest("POST", "/api/purchases/psa-pending/pi-1/assign", strings.NewReader(body))
-	req.SetPathValue("id", "pi-1")
-	rr := httptest.NewRecorder()
-	h.HandleAssignPendingItem(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if !resolved {
-		t.Error("expected pending item to be resolved")
+			svc := &mocks.MockInventoryService{
+				CreatePurchaseFn: func(ctx context.Context, p *inventory.Purchase) error {
+					created = p
+					p.ID = "new-purchase"
+					return nil
+				},
+			}
+			h := handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
+				PendingRepo: pendingRepo,
+				Service:     svc,
+				Logger:      mocks.NewMockLogger(),
+			})
+			body := `{"campaignId": "` + tt.campaignID + `"}`
+			req := httptest.NewRequest("POST", "/api/purchases/psa-pending/pi-1/assign", strings.NewReader(body))
+			req.SetPathValue("id", "pi-1")
+			rr := httptest.NewRecorder()
+			h.HandleAssignPendingItem(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+			}
+			if !resolved {
+				t.Error("expected pending item to be resolved")
+			}
+			if created == nil {
+				t.Fatal("expected a purchase to be created")
+			}
+			if created.CampaignID != tt.campaignID {
+				t.Errorf("CampaignID = %q, want %q", created.CampaignID, tt.campaignID)
+			}
+			if created.AttributionSource != inventory.AttributionSourceManual {
+				t.Errorf("AttributionSource = %q, want %q",
+					created.AttributionSource, inventory.AttributionSourceManual)
+			}
+		})
 	}
 }
 
