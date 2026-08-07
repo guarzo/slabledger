@@ -245,6 +245,34 @@ describe('SubjectListEditor', () => {
     confirmSpy.mockRestore();
   });
 
+  it('suppresses the same-named catalog subject while a legacy (-1) chip is still present', async () => {
+    // The wart this guard closes: a -1 "Machamp" carries no portal id, so an
+    // id-only comparison would still offer the catalog's 22210 "Machamp" and
+    // leave two same-named entries on one campaign — one of which blocks push.
+    // Repair has to come from the harvester baseline pull, not from adding the
+    // catalog row alongside it.
+    vi.mocked(api.listPSASubjects).mockResolvedValue({
+      subjects: [{ id: 22210, name: 'Machamp' }, { id: 4807, name: 'Charizard' }],
+      fetchedAt: '2026-08-01T00:00:00Z',
+    });
+    const onChange = renderEditor([{ id: -1, name: 'Machamp' }]);
+
+    const input = await screen.findByPlaceholderText(/add a subject/i);
+    fireEvent.change(input, { target: { value: 'cha' } });
+    // Charizard proves the catalog loaded and the dropdown opened, so the
+    // Machamp assertion below cannot pass vacuously.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Charizard' })).toBeInTheDocument();
+    });
+
+    fireEvent.change(input, { target: { value: 'machamp' } });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Machamp' })).not.toBeInTheDocument();
+    });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('does not confirm when removing a normal chip', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onChange = renderEditor([{ id: 4807, name: 'Charizard' }]);
