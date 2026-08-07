@@ -182,3 +182,20 @@ func (h *CardLadderHandler) HandleFailures(w http.ResponseWriter, r *http.Reques
 	}
 	writeJSON(w, http.StatusOK, report)
 }
+
+// HandleCoverage returns CardLadder value coverage by purchase month and intake
+// cohort.
+//
+// Distinct from HandleStatus, which reports freshness over live unsold
+// inventory. This endpoint covers ALL purchases including sold ones, and
+// excludes never-answered rows from the coverage percentage, so a query run
+// mid-sweep reports "N pending" rather than a coverage collapse.
+func (h *CardLadderHandler) HandleCoverage(w http.ResponseWriter, r *http.Request) {
+	report, err := h.store.GetCLCoverageByMonth(r.Context())
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to compute CL coverage", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "failed to compute coverage")
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
