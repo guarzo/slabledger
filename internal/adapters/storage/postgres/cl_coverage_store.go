@@ -212,14 +212,31 @@ func (s *CardLadderStore) GetCLCoverageByMonth(ctx context.Context) (*CLCoverage
 		        left(p.purchase_date, 7) AS month,
 		        CASE WHEN p.purchase_source <> '' THEN 'campaign' ELSE 'external' END AS cohort,
 		        CASE
+		            -- CardLadder returned a positive value at least once.
 		            WHEN p.cl_value_updated_at <> ''                    THEN 'resolved'
+		            -- Asked and failed for a real reason (today: always 'no_value').
 		            WHEN p.cl_last_error NOT IN ('', 'quota_exhausted') THEN 'unresolved'
+		            -- Still reachable by the sweep: no linked sale, campaign open.
+		            -- Matches ListAllUnsoldPurchases (purchase_store.go:177-183).
+		            -- Tested BEFORE both the quota arm and the era cutoff, because
+		            -- eligibility is what actually decides whether a row will ever be
+		            -- answered. A quota-marked row that is still eligible is pending;
+		            -- one that has since been sold or closed is NOT -- the sweep can
+		            -- no longer see it, and nothing clears cl_last_error on sale
+		            -- (sale_store.go writes no CL column; purchase_store.go:284 is the
+		            -- sole writer). Ordering quota first would park such a row in
+		            -- 'pending' forever.
 		            WHEN c.phase <> 'closed'
 		                 AND NOT EXISTS (
 		                     SELECT 1 FROM campaign_sales s WHERE s.purchase_id = p.id
 		                 )                                              THEN 'pending'
+		            -- Created before CardLadder ever ran, and never touched by it.
+		            -- The cl_last_error = '' guard matters: a quota-marked row proves
+		            -- the sweep DID reach it, so it can never honestly be pre_cl no
+		            -- matter how old it is.
 		            WHEN p.cl_last_error = ''
 		                 AND p.created_at < $1::timestamp               THEN 'pre_cl'
+		            -- Never answered and no longer reachable by the sweep.
 		            ELSE 'stranded'
 		        END AS bucket,
 		        p.cl_last_error AS reason,

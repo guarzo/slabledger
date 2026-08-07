@@ -202,11 +202,31 @@ func TestGetCLCoverageByMonth_Classification(t *testing.T) {
 		{ID: "q1", CampaignID: "open-camp", PurchaseDate: "2026-06-01",
 			LastError: "quota_exhausted", CreatedAt: postEra},
 
-		// pending via quota, PRE-era. Asserts an old row that the sweep has
-		// demonstrably reached is never filed as pre_cl: eligibility is tested
-		// before the era cutoff, and the pre_cl arm additionally requires
-		// cl_last_error = ''. Drop either guard and this row becomes pre_cl.
+		// pending via quota, PRE-era. NOTE: this row is classified 'pending' by
+		// eligibility alone (open campaign, unsold) -- it does NOT, by itself,
+		// pin either the eligibility-before-era-cutoff ordering or the
+		// cl_last_error = '' guard on the pre_cl arm, because eligibility
+		// catches it before either mutation could matter. It is kept as a
+		// sanity check that a quota-marked pre-era row still reads as pending
+		// while it remains sweep-reachable. gapA and gapB below are the rows
+		// that actually discriminate the ordering and the guard.
 		{ID: "q2", CampaignID: "open-camp", PurchaseDate: "2026-06-01",
+			LastError: "quota_exhausted", CreatedAt: preEra},
+
+		// gapA: pins eligibility-before-era-cutoff. Open campaign, unsold,
+		// cl_last_error '', created before the era. Under the committed
+		// classifier eligibility is tested first, so this reads 'pending'.
+		// If the eligibility and era-cutoff arms were swapped, the era check
+		// would fire first and this row would misclassify as 'pre_cl'.
+		{ID: "gapA", CampaignID: "open-camp", PurchaseDate: "2026-06-01", CreatedAt: preEra},
+
+		// gapB: pins the cl_last_error = '' guard on the pre_cl arm. Sold (so
+		// ineligible for the sweep), cl_last_error 'quota_exhausted', created
+		// before the era. Under the committed classifier the guard rejects it
+		// from pre_cl, so it falls to 'stranded'. If the guard were dropped,
+		// this row would misclassify as 'pre_cl' even though the sweep
+		// demonstrably reached it.
+		{ID: "gapB", CampaignID: "open-camp", PurchaseDate: "2026-06-01",
 			LastError: "quota_exhausted", CreatedAt: preEra},
 
 		// pending: post-era, no trace, still sweep-eligible.
@@ -231,14 +251,15 @@ func TestGetCLCoverageByMonth_Classification(t *testing.T) {
 		seedCoveragePurchase(t, db, p)
 	}
 
-	// Sales for p1, s2 and s3. Also proves sold rows stay IN the report --
+	// Sales for p1, s2, s3 and gapB. Also proves sold rows stay IN the report --
 	// GetCLPriceStats would drop them. sale_channel is NOT NULL with no default,
 	// and campaign_sales carries UNIQUE(purchase_id), so one row per purchase.
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_date, sale_price_cents)
 		 VALUES ('sale-1', 's2', 'ebay', '2026-06-15', 5000),
 		        ('sale-2', 's3', 'ebay', '2026-06-16', 6000),
-		        ('sale-3', 'p1', 'ebay', '2026-06-17', 7000)`)
+		        ('sale-3', 'p1', 'ebay', '2026-06-17', 7000),
+		        ('sale-4', 'gapB', 'ebay', '2026-06-18', 8000)`)
 	require.NoError(t, err)
 
 	got, err := store.GetCLCoverageByMonth(ctx)
@@ -253,12 +274,12 @@ func TestGetCLCoverageByMonth_Classification(t *testing.T) {
 	assert.Equal(t, 1, m.Campaign.Rows)
 	assert.Equal(t, 1, m.Campaign.Resolved)
 
-	// external cohort = the other eight.
-	assert.Equal(t, 8, m.External.Rows)
+	// external cohort = the other ten (eight originals + gapA + gapB).
+	assert.Equal(t, 10, m.External.Rows)
 	assert.Equal(t, 0, m.External.Resolved)
 	assert.Equal(t, 1, m.External.Unresolved, "u1")
-	assert.Equal(t, 3, m.External.Pending, "q1, q2, n1")
-	assert.Equal(t, 3, m.External.Stranded, "s1 closed, s2 sold, s3 quota+sold")
+	assert.Equal(t, 4, m.External.Pending, "q1, q2, n1, gapA")
+	assert.Equal(t, 4, m.External.Stranded, "s1 closed, s2 sold, s3 quota+sold, gapB quota+sold+pre-era")
 	assert.Equal(t, 1, m.External.PreCL, "p1 -- Shopify value, never CL-priced")
 
 	// Denominator excludes pending/stranded/preCL: 0 resolved of 1 judged.
