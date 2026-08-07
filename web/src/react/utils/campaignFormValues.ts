@@ -2,8 +2,9 @@ import type { Campaign, CreateCampaignInput } from '../../types/campaigns';
 
 /**
  * CreateCampaignInput has no `expectedFillRate` key (it isn't set at creation
- * time), but the edit form renders that field via `showFees` and must seed
- * and round-trip it like every other server-owned value.
+ * time), but the edit form renders that field via `showFees`. It is operator-
+ * owned, not server-derived — nothing in the service or store recomputes it —
+ * so the form has to seed it or the full-row PUT writes a zero over it.
  */
 export type EditCampaignFormValues = CreateCampaignInput & { expectedFillRate: number };
 
