@@ -184,10 +184,13 @@ func TestBuildBaselineCampaign(t *testing.T) {
 	existing := inventory.Campaign{ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1"}
 
 	tests := []struct {
-		name    string
-		pc      psacampaign.PortalCampaign
-		want    inventory.Campaign
-		wantErr error
+		name string
+		// existingSubjects overrides existing.Subjects for this case only; nil
+		// means use the shared existing fixture's (empty) Subjects.
+		existingSubjects []inventory.TargetSubject
+		pc               psacampaign.PortalCampaign
+		want             inventory.Campaign
+		wantErr          error
 	}{
 		{
 			name: "both curated lists, subjects and denied specs copied verbatim",
@@ -286,10 +289,40 @@ func TestBuildBaselineCampaign(t *testing.T) {
 			},
 			wantErr: inventory.ErrInvalidSubjectFilterMode,
 		},
+		{
+			// The remedy this task names: a campaign carrying migration
+			// 000023's -1 placeholder (inventory.LegacyUnreconciledSubjectID)
+			// must come out the other side with only portal-supplied ids.
+			// buildBaselineCampaign replaces Subjects wholesale rather than
+			// merging into the existing slice, so the -1 placeholder cannot
+			// survive a successful baseline pull.
+			name:             "legacy unreconciled subject placeholder is replaced, not merged",
+			existingSubjects: []inventory.TargetSubject{{ID: inventory.LegacyUnreconciledSubjectID, Name: "Charizard"}},
+			pc: psacampaign.PortalCampaign{
+				CampaignRequestID: "req-1",
+				SpecListIDs:       []string{"uuid-en"},
+				SpecListNames:     []string{"English Pokemon"},
+				SubjectFilter: psacampaign.CampaignFilter{
+					Type:     "Target",
+					Subjects: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}},
+				},
+			},
+			want: inventory.Campaign{
+				ID: "camp-1", Name: "Vintage Core", PSACampaignRequestID: "req-1",
+				TargetLanguages:   []string{"english"},
+				SubjectFilterMode: "Target",
+				Subjects:          []inventory.TargetSubject{{ID: 22210, Name: "Machamp"}},
+				DeniedSpecs:       []inventory.TargetSubject{},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildBaselineCampaign(existing, tt.pc)
+			e := existing
+			if tt.existingSubjects != nil {
+				e.Subjects = tt.existingSubjects
+			}
+			got, err := buildBaselineCampaign(e, tt.pc)
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("buildBaselineCampaign() error = %v, want errors.Is(_, %v)", err, tt.wantErr)
