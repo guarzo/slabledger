@@ -163,16 +163,28 @@ func TestCampaignStore_TargetingAxesRoundTrip(t *testing.T) {
 
 	list, err := repo.ListCampaigns(ctx, false)
 	require.NoError(t, err)
-	var listed *inventory.Campaign
+	var listed, listedPopulated *inventory.Campaign
 	for i := range list {
-		if list[i].ID == "camp-axes-open" {
+		switch list[i].ID {
+		case "camp-axes-open":
 			listed = &list[i]
+		case "camp-axes":
+			listedPopulated = &list[i]
 		}
 	}
 	require.NotNil(t, listed, "camp-axes-open must appear in ListCampaigns")
 	assert.Equal(t, []string{}, listed.TargetLanguages)
 	assert.Equal(t, []inventory.TargetSubject{}, listed.Subjects)
 	assert.Equal(t, []inventory.TargetSubject{}, listed.DeniedSpecs)
+
+	// ListCampaigns unmarshals and normalizes the targeting columns in code
+	// separate from GetCampaign's, so a POPULATED set needs its own assertion
+	// here: the empty and JSON-null cases above would still pass if List's copy
+	// diverged only on non-empty input.
+	require.NotNil(t, listedPopulated, "camp-axes must appear in ListCampaigns")
+	assert.Equal(t, []string{"english", "japanese"}, listedPopulated.TargetLanguages)
+	assert.Equal(t, c.Subjects, listedPopulated.Subjects)
+	assert.Equal(t, c.DeniedSpecs, listedPopulated.DeniedSpecs)
 }
 
 // TestMarshalTargetSubjects_NilEmitsEmptyArray is a fast, DB-free pin on the
