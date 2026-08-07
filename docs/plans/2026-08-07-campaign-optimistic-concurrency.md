@@ -2,8 +2,9 @@
 
 > **Status:** not started. This file is a *prompt* — a self-contained task
 > briefing to hand to an implementer (human or agent), not an approved plan.
-> The design decision in "Open decision" below is deliberately left open and
-> must be settled with the operator before code is written.
+> The design question below was open when this was written; #544 and #545 have
+> since settled it in favor of `updated_at` CAS. Confirm with the operator
+> before code is written.
 
 ---
 
@@ -23,24 +24,31 @@ or other aggregates in this change.
 
 ## Why now
 
-Two independent client paths now hand-roll their own concurrency defense, and
+Two independent client paths now hand-roll the same concurrency defense, and
 neither can actually enforce it:
 
-1. **The edit form** (`CampaignsPage.tsx:203-233`, added in #545) re-reads over
-   the network and compares `fresh.updatedAt !== editing.updatedAt`, failing
-   closed with a toast. This is a genuine compare-and-swap — implemented
-   entirely in the browser, on the honor system.
-2. **The clipboard-import upsert** (`CampaignsPage.tsx:405-421`) builds a
-   full-object `PUT` from the react-query-cached list. It re-reads before
-   merging, which narrows the window but does not close it: the race is still
-   open between the `GET` and the `PUT`.
+1. **The edit form** (`CampaignsPage.tsx:203-233`, #545) re-reads over the
+   network and compares `fresh.updatedAt !== editing.updatedAt`, failing closed
+   with a toast.
+2. **The clipboard-import upsert** (`CampaignsPage.tsx:405-450`, #544) does the
+   same, per campaign, skipping the stale one and continuing the block.
 
-Both are client-side conventions that nothing enforces. The server accepts any
-write from any client at any time, so a third caller — or the same caller after
-a refactor — silently reintroduces the lost update. #545 having already picked
-`updatedAt` equality as its comparison basis is the strongest argument for
-resolving the open decision below in favor of `updated_at` CAS: it would make
-the server enforce the check the client already believes it is making.
+Both are genuine compare-and-swaps implemented entirely in the browser, on the
+honor system. Each narrows the race to its own `GET`→`PUT` round-trip; neither
+closes it. The server accepts any write from any client at any time, so a third
+caller — or either of these after a refactor — silently reintroduces the lost
+update. The duplication is itself a cost: the same guard, with the same failure
+semantics, is now maintained in two places and will drift.
+
+#544 says so in the code it shipped (`CampaignsPage.tsx:429-432`):
+
+> This narrows the race to the GET→PUT round-trip; it does not close it.
+> Closing it needs a conditional UPDATE keyed on `updated_at` with a 409, which
+> is a domain-interface change the edit path would want too — deliberately not
+> done here.
+
+That is this task, and it settles the design question below: the basis is
+`updated_at`, chosen independently by both shipped client paths.
 
 ---
 
@@ -120,13 +128,14 @@ Style reference for an `ALTER TABLE ADD COLUMN` + backfill + commented migration
 
 **Frontend already carries the field it would need.**
 `web/src/types/campaigns/core.ts:31-32` declares `createdAt: string;
-updatedAt: string;`. `CampaignsPage.tsx` currently destructures `updatedAt`
-*away* before the `PUT` — that destructure must be revisited by whatever design
-is chosen.
+updatedAt: string;`. Both client paths already read `updatedAt` off a
+freshly-fetched row and compare it; they then destructure it *away* before the
+`PUT`. That destructure is what must instead carry the expected version to the
+server.
 
 ---
 
-## Open decision (settle before implementing)
+## Design basis (settled by #544/#545 — confirm, do not re-litigate)
 
 **`version BIGINT` column vs. `updated_at` compare-and-swap.**
 
@@ -141,25 +150,18 @@ is chosen.
   a new field on `Campaign` and its TS mirror, and a `version = version + 1`
   in the `UPDATE`.
 
-Recommendation: **`updated_at` CAS**, revised from an earlier preference for the
-`version` column. #545 already ships an `updatedAt` equality check in the edit
-form, so this option makes the server enforce the contract the client already
-asserts, with no new field on the wire and no migration. If the timestamp
-round-trip proves lossy in practice, the spurious-409 failure mode is visible
-and safe, and migrating to a `version` column later is a mechanical change.
-Raise it with the operator before writing code either way.
+Decision: **`updated_at` CAS**, effectively settled by #544 and #545 rather than
+open. Both shipped client paths already compare `updatedAt`, so this makes the
+server enforce the contract the clients already assert, with no new field on the
+wire and no migration. If the timestamp round-trip proves lossy in practice the
+spurious-409 failure mode is visible and safe, and moving to a `version` column
+later is mechanical. Confirm with the operator before writing code, but treat
+the `version` column as the fallback, not the default.
 
 **Transport of the expected version.** Either a JSON field on the request body
 or an `If-Match` header. `If-Match` is the HTTP-correct answer and keeps the
 body a pure representation; a body field is less ceremony and matches how the
 rest of this API talks. Decide once; do not support both.
-
-**Pre-existing bug in the same statement.** `CampaignsPage.tsx:419` strips
-`expectedFillRate` from the merged object under a "server-owned fields" comment.
-It is not server-owned — the strip zeroes the field on every clipboard-paste
-update. #545 documented this at `CampaignsPage.tsx:240-243` and deferred it;
-this branch left it untouched for the same reason. It is adjacent to, but
-independent of, the concurrency work, and needs its own fix and review.
 
 ---
 
@@ -174,11 +176,11 @@ independent of, the concurrency work, and needs its own fix and review.
       (unconditional overwrite), so `campaigns_psa.go:109` and
       `cmd/psa-harvest/baseline.go:264` need no change beyond compilation.
 - [ ] The frontend surfaces the 409 to the operator as a "changed elsewhere,
-      reload" message rather than a generic failure toast; the
-      `CampaignsPage.tsx` clipboard upsert forwards the version it just read;
-      and the edit form's hand-rolled client-side check
-      (`CampaignsPage.tsx:203-233`) is replaced by the server's verdict rather
-      than left to duplicate it.
+      reload" message rather than a generic failure toast, and **both**
+      hand-rolled client checks — the edit form (`CampaignsPage.tsx:203-233`)
+      and the clipboard upsert (`CampaignsPage.tsx:405-450`) — defer to the
+      server's verdict instead of duplicating it. Deleting that duplication is
+      part of the deliverable, not a follow-up.
 - [ ] Table-driven tests cover all four server cases above, using mocks from
       `internal/testutil/mocks/` (Fn-field pattern, never inline) and asserting
       sentinels with `errors.Is`.
@@ -195,5 +197,4 @@ independent of, the concurrency work, and needs its own fix and review.
 - Server-side merge / three-way reconciliation. A conflict is reported, not
   resolved.
 - Real-time notification of concurrent edits (websockets, polling).
-- The `CampaignsPage.tsx` edit-form anomaly noted during the `form-field-a11y`
-  work; explicitly deferred by the operator.
+- The `expectedFillRate` strip bug in the clipboard upsert — fixed in #544.
