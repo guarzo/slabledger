@@ -152,6 +152,13 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 	return item
 }
 
+// MarketDriftThreshold is the price-change fraction at which a card is classified as
+// appreciating or depreciating rather than stable.
+//
+// Lives in the hub because two packages apply it: the market-signal classification
+// below, and internal/domain/tuning's ComputeMarketAlignment.
+const MarketDriftThreshold = 0.05
+
 // buildEnrichedSnapshot constructs a MarketSnapshot from purchase data, incorporating CL signals.
 func (s *service) buildEnrichedSnapshot(p *Purchase) *MarketSnapshot {
 	snap := SnapshotFromPurchase(p)
@@ -178,10 +185,10 @@ func (s *service) computeMarketSignal(p *Purchase, snap *MarketSnapshot, item *A
 	direction := "stable"
 	rec := "Either channel — local for speed, eBay for margin"
 
-	if deltaPct >= marketDriftThreshold {
+	if deltaPct >= MarketDriftThreshold {
 		direction = "rising"
 		rec = "Consider eBay/TCGPlayer — market ahead of valuations"
-	} else if deltaPct <= -marketDriftThreshold {
+	} else if deltaPct <= -MarketDriftThreshold {
 		direction = "falling"
 		rec = "Consider local (GameStop at 90% CL) — lock in before drop"
 	}

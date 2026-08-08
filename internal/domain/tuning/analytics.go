@@ -1,28 +1,30 @@
-package inventory
+package tuning
 
 import (
 	"fmt"
 	"math"
 	"sort"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // computePriceTierPerformance computes P&L segmented by cost basis tiers.
 // Returns two views: fixed dollar buckets and campaign-relative quartiles.
-func ComputePriceTierPerformance(data []PurchaseWithSale) (fixed []PriceTierPerformance, relative []PriceTierPerformance) {
+func ComputePriceTierPerformance(data []inventory.PurchaseWithSale) (fixed []PriceTierPerformance, relative []PriceTierPerformance) {
 	fixed = computeTiersForBuckets(data, fixedTierBuckets())
 	relative = computeTiersForBuckets(data, quartileBuckets(data))
 	return fixed, relative
 }
 
 func fixedTierBuckets() []tierBucket {
-	buckets := make([]tierBucket, len(fixedTiers))
-	for i, t := range fixedTiers {
+	buckets := make([]tierBucket, len(inventory.FixedPriceTiers))
+	for i, t := range inventory.FixedPriceTiers {
 		buckets[i] = tierBucket{Label: t.Label, MinCents: t.MinCents, MaxCents: t.MaxCents}
 	}
 	return buckets
 }
 
-func quartileBuckets(data []PurchaseWithSale) []tierBucket {
+func quartileBuckets(data []inventory.PurchaseWithSale) []tierBucket {
 	if len(data) == 0 {
 		return nil
 	}
@@ -50,7 +52,7 @@ type tierBucket struct {
 	MaxCents int
 }
 
-func computeTiersForBuckets(data []PurchaseWithSale, buckets []tierBucket) []PriceTierPerformance {
+func computeTiersForBuckets(data []inventory.PurchaseWithSale, buckets []tierBucket) []PriceTierPerformance {
 	result := make([]PriceTierPerformance, len(buckets))
 	for i, b := range buckets {
 		result[i] = PriceTierPerformance{
@@ -76,7 +78,7 @@ func computeTiersForBuckets(data []PurchaseWithSale, buckets []tierBucket) []Pri
 	return result
 }
 
-func accumulateTier(t *PriceTierPerformance, d PurchaseWithSale) {
+func accumulateTier(t *PriceTierPerformance, d inventory.PurchaseWithSale) {
 	t.PurchaseCount++
 	spend := d.Purchase.BuyCostCents + d.Purchase.PSASourcingFeeCents
 	t.TotalSpendCents += spend
@@ -107,7 +109,7 @@ func finalizeTierMetrics(t *PriceTierPerformance) {
 
 // computeCardPerformance ranks cards by realized/unrealized P&L.
 // Returns top N and bottom N performers.
-func ComputeCardPerformance(data []PurchaseWithSale, limit int) (top []CardPerformance, bottom []CardPerformance) {
+func ComputeCardPerformance(data []inventory.PurchaseWithSale, limit int) (top []CardPerformance, bottom []CardPerformance) {
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -163,7 +165,7 @@ func effectivePnL(cp CardPerformance) int {
 }
 
 // computeBuyThresholdAnalysis computes the empirical optimal BuyTermsCLPct.
-func ComputeBuyThresholdAnalysis(data []PurchaseWithSale, currentPct float64) *BuyThresholdAnalysis {
+func ComputeBuyThresholdAnalysis(data []inventory.PurchaseWithSale, currentPct float64) *BuyThresholdAnalysis {
 	// Filter to purchases with valid CL values
 	var points []BuyThresholdDataPoint
 	for _, d := range data {
@@ -262,7 +264,7 @@ func ComputeBuyThresholdAnalysis(data []PurchaseWithSale, currentPct float64) *B
 }
 
 // computeMarketAlignment assesses how the campaign's segment is trending.
-func ComputeMarketAlignment(data []PurchaseWithSale, currentSnapshots map[string]*MarketSnapshot) *MarketAlignment {
+func ComputeMarketAlignment(data []inventory.PurchaseWithSale, currentSnapshots map[string]*inventory.MarketSnapshot) *MarketAlignment {
 	ma := &MarketAlignment{}
 	driftSamples := 0
 
@@ -287,9 +289,9 @@ func ComputeMarketAlignment(data []PurchaseWithSale, currentSnapshots map[string
 			drift := float64(snap.MedianCents-d.Purchase.MedianCents) / float64(d.Purchase.MedianCents)
 			ma.AvgSnapshotDrift += drift
 			driftSamples++
-			if drift > marketDriftThreshold {
+			if drift > inventory.MarketDriftThreshold {
 				ma.AppreciatingCount++
-			} else if drift < -marketDriftThreshold {
+			} else if drift < -inventory.MarketDriftThreshold {
 				ma.DepreciatingCount++
 			} else {
 				ma.StableCount++
@@ -337,7 +339,7 @@ func ComputeMarketAlignment(data []PurchaseWithSale, currentSnapshots map[string
 }
 
 // enrichCardPerformance sets CurrentMarket and recalculates UnrealizedPnL using live market data.
-func EnrichCardPerformance(cards []CardPerformance, snapshots map[string]*MarketSnapshot) {
+func EnrichCardPerformance(cards []CardPerformance, snapshots map[string]*inventory.MarketSnapshot) {
 	for i := range cards {
 		if cards[i].Sale != nil {
 			continue
