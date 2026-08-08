@@ -17,6 +17,9 @@ func TestDisambiguate(t *testing.T) {
 	}{
 		{"exact match single", candidates, "234", 277},
 		{"leading zero match", candidates, "0199", 269},
+		{"denominator form matches bare candidate", candidates, "199/165", 269},
+		{"denominator plus leading zeros", candidates, "0234/091", 277},
+		{"denominator form no match", candidates, "999/165", 0},
 		{"no match", candidates, "999", 0},
 		{"empty card number", candidates, "", 0},
 		{"nil candidates", nil, "234", 0},

@@ -3,13 +3,15 @@ package dh
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
+
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // Disambiguate attempts to select a single candidate from an ambiguous cert
 // resolution using the submitted card_number hint. Returns the matching
 // candidate's DHCardID if exactly one candidate's card_number matches
-// (after stripping leading zeros), or 0 if disambiguation fails.
+// (after normalizing away any denominator and leading zeros), or 0 if
+// disambiguation fails.
 func Disambiguate(candidates []CertResolutionCandidate, cardNumber string) int {
 	normalized := normalizeCardNumber(cardNumber)
 	if normalized == "" || len(candidates) == 0 {
@@ -31,14 +33,14 @@ func Disambiguate(candidates []CertResolutionCandidate, cardNumber string) int {
 	return 0
 }
 
-// normalizeCardNumber strips leading zeros, preserving a single "0" for
-// all-zero inputs (e.g. "000" → "0").
+// normalizeCardNumber reduces a collector number to its comparable form:
+// the denominator is dropped and leading zeros are stripped, preserving a
+// single "0" for all-zero inputs (e.g. "199/165" → "199", "000" → "0").
+// Purchase card numbers parsed from PSA listing titles carry the
+// "199/165" shape, while DH candidates report bare integers, so both sides
+// must go through the same normalizer for disambiguation to match.
 func normalizeCardNumber(s string) string {
-	n := strings.TrimLeft(s, "0")
-	if n == "" && len(s) > 0 {
-		return "0"
-	}
-	return n
+	return cardutil.NormalizeCardNumber(s)
 }
 
 // ResolveAmbiguous tries card-number disambiguation on ambiguous candidates.
