@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/constants"
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 func isInvalidCardNumber(num string) bool {
@@ -40,7 +41,7 @@ func ExtractCardNumberFromPSATitle(title string) string {
 	return ""
 }
 
-var gradeRegex = regexp.MustCompile(`(?i)\bPSA\s*(\d{1,2}(?:\.\d+)?)\b`)
+var gradeRegex = regexp.MustCompile(`(?i)\bPSA\s*(` + cardutil.GradePattern + `)\b`)
 
 // ExtractGrade attempts to extract a PSA grade from a card title string.
 // Returns 0 if no grade is found. Preserves half-grades (e.g. 8.5, 9.5).

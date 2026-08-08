@@ -429,17 +429,26 @@ func (w *MyWorker) Run(ctx context.Context) {
 }
 ```
 
-**Step 3**: Register the worker in `BuildGroup()` with any prerequisite checks
+**Step 3**: Add a `buildMyWorkerScheduler` helper in `internal/adapters/scheduler/builder_schedulers.go` that returns `nil` when the worker's prerequisites are unmet, then call it from `BuildGroup` in `builder.go`
 ```go
-// internal/adapters/scheduler/group.go
-if cfg.MyWorkerEnabled {
-    g.workers = append(g.workers, &MyWorker{
-        service: svc,
-        logger:  logger,
+// internal/adapters/scheduler/builder_schedulers.go
+func buildMyWorkerScheduler(cfg *config.Config, deps BuildDeps) *MyWorker {
+    if !cfg.MyWorkerEnabled || deps.MyService == nil {
+        return nil
+    }
+    return &MyWorker{
+        service: deps.MyService,
+        logger:  deps.Logger,
         cfg:     MyWorkerConfig{Interval: cfg.MyWorkerInterval},
-    })
+    }
+}
+
+// internal/adapters/scheduler/builder.go, inside BuildGroup
+if s := buildMyWorkerScheduler(cfg, deps); s != nil {
+    schedulers = append(schedulers, s)
 }
 ```
+Return the concrete `*MyWorker`, not `Scheduler` — a nil `*MyWorker` stored in a `Scheduler` interface compares non-nil, and the group would then call `Start` on it. If callers outside the group need the instance (as PSA sync and cert enrichment do), also add a field for it on `BuildResult`.
 
 **Step 4**: If the scheduler needs a domain type that doesn't match an existing adapter directly, add a thin wrapper in `main.go` to convert between types before passing the service in.
 

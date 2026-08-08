@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useLocalStorage } from '../../hooks';
 import { splitByH2 } from './splitByH2';
 
 const remarkPlugins = [remarkGfm];
@@ -108,7 +109,9 @@ export default function SectionedReport({ markdown, schema, cacheKey }: Sectione
 }
 
 function SectionCard({ heading, icon, body, cacheKey }: { heading: string; icon?: string; body: string; cacheKey: string }) {
-  const [collapsed, setCollapsed] = useLocalStorageBool(cacheKey, false);
+  // Key prefix preserved from the previous local helper so already-persisted
+  // collapse state survives; both encodings write "true"/"false".
+  const [collapsed, setCollapsed] = useLocalStorage<boolean>(`sectioned-report-collapsed:${cacheKey}`, false);
   const isMissing = body.length === 0;
 
   return (
@@ -161,24 +164,4 @@ function SectionCard({ heading, icon, body, cacheKey }: { heading: string; icon?
       )}
     </section>
   );
-}
-
-function useLocalStorageBool(key: string, initial: boolean): [boolean, (updater: (prev: boolean) => boolean) => void] {
-  const storageKey = `sectioned-report-collapsed:${key}`;
-  const [value, setValue] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      return stored === null ? initial : stored === 'true';
-    } catch {
-      return initial;
-    }
-  });
-  const update = (updater: (prev: boolean) => boolean) => {
-    setValue(prev => {
-      const next = updater(prev);
-      try { localStorage.setItem(storageKey, String(next)); } catch { /* noop */ }
-      return next;
-    });
-  };
-  return [value, update];
 }

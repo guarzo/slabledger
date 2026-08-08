@@ -165,6 +165,68 @@ describe('useInventoryState — handleBulkListOnDH', () => {
   });
 });
 
+// Both callbacks below clear the expanded row through `setExpandedId`, which is
+// reached via the `selection` sub-hook. These lock in that reconciliation so a
+// future change to how `selection` members are read cannot silently drop it.
+describe('useInventoryState — expanded row reconciliation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('handleReviewed collapses the expanded row and invalidates inventory', async () => {
+    const { wrapper, queryClient } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+
+    act(() => {
+      result.current.setExpandedId('purchase-1');
+    });
+    expect(result.current.expandedId).toBe('purchase-1');
+
+    act(() => {
+      result.current.handleReviewed();
+    });
+
+    expect(result.current.expandedId).toBeNull();
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['campaigns', 'camp-1', 'inventory'] });
+  });
+
+  it('handleDelete collapses the row when the deleted item is the expanded one', async () => {
+    vi.mocked(api.deletePurchase).mockResolvedValue(undefined as never);
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+
+    act(() => {
+      result.current.setExpandedId('purchase-1');
+    });
+
+    await act(async () => {
+      await result.current.handleDelete(mockItem({ id: 'purchase-1', campaignId: 'camp-1' }));
+    });
+
+    expect(api.deletePurchase).toHaveBeenCalledWith('camp-1', 'purchase-1');
+    expect(result.current.expandedId).toBeNull();
+  });
+
+  it('handleDelete leaves a different row expanded', async () => {
+    vi.mocked(api.deletePurchase).mockResolvedValue(undefined as never);
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+
+    act(() => {
+      result.current.setExpandedId('purchase-1');
+    });
+
+    await act(async () => {
+      await result.current.handleDelete(mockItem({ id: 'purchase-2', campaignId: 'camp-1' }));
+    });
+
+    expect(result.current.expandedId).toBe('purchase-1');
+  });
+});
+
 describe('useInventoryState — sorting and price-band counts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
