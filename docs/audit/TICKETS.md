@@ -1273,7 +1273,7 @@ Delete the `### advisor_cache`, `### sell_sheet_items`, and `### mm_card_mapping
 
 **Subject:** `{'kind': 'table', 'identity': 'docs/SCHEMA.md (wrong migration provenance)'}`
 
-**Verifier correction (already applied to this ticket):** Nothing material. One cosmetic note for the fixer's acceptance criteria: the second criterion, "grep -n 'Added: migration 000017' docs/SCHEMA.md no longer matches either section", is vacuously satisfiable — that literal pattern already matches nothing today, because the file's text is '**Added:** migration 000017' with bold markers. The criterion should be written against the real text (e.g. grep -n '\\*\\*Added:\\*\\* migration 000017' docs/SCHEMA.md) so it can actually fail before the fix and pass after. This does not affect the verdict; the defect and the fix are both correct as stated.
+**Verifier correction (already applied to this ticket):** Nothing material. One cosmetic note for the fixer's acceptance criteria: the second criterion, "grep -n 'Added: migration 000017' docs/SCHEMA.md no longer matches either section", is vacuously satisfiable — that literal pattern already matches nothing today, because the file's text is '**Added:** migration 000017' with bold markers. The criterion should be written against the real text (e.g. `grep -n '\*\*Added:\*\* migration 000017' docs/SCHEMA.md`) so it can actually fail before the fix and pass after. This does not affect the verdict; the defect and the fix are both correct as stated.
 
 ### Evidence
 
