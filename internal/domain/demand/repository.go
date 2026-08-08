@@ -13,7 +13,6 @@ type Repository interface {
 	// Card cache
 	UpsertCardCache(ctx context.Context, row CardCache) error
 	GetCardCache(ctx context.Context, cardID, window string) (*CardCache, error)
-	ListCardCacheByDemandScore(ctx context.Context, window string, limit int) ([]CardCache, error)
 	CardDataQualityStats(ctx context.Context, window string) (QualityStats, error)
 	// ListCardsMissingCharacter returns card IDs in the window whose cached row
 	// has no character attribution yet, oldest-cached first, capped at limit.

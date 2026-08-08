@@ -1,9 +1,10 @@
 // Package demand defines the domain types, repository contract, and service
 // that compute niche-opportunity leaderboards from DoubleHolo (DH) market
 // analytics and demand signals. It is a flat sibling under internal/domain/
-// and does not import any adapter or other domain-sibling packages — DH JSON
-// payloads are parsed here into domain-local structs so the scoring logic
-// stays decoupled from the wire format.
+// and does not import any adapter or other domain-sibling packages. DH JSON
+// payloads are decoded by the postgres adapter into the exported structs in
+// payloads.go, so the scoring logic here depends only on those domain types,
+// not the wire format.
 package demand
 
 import "time"
@@ -13,32 +14,48 @@ import "time"
 // CardCache is the domain view of a dh_card_cache row. Nullable SQL columns
 // map to pointer fields so callers can distinguish NULL from the zero value.
 type CardCache struct {
-	CardID                string
-	Window                string  // "7d" or "30d"
-	CharacterName         *string // DH character this card belongs to; nil until attributed
-	DemandScore           *float64
-	DemandDataQuality     *string // "proxy" | "full"
-	DemandJSON            *string
-	VelocityJSON          *string
-	TrendJSON             *string
-	SaturationJSON        *string
-	PriceDistributionJSON *string
-	AnalyticsComputedAt   *time.Time
-	DemandComputedAt      *time.Time
-	FetchedAt             time.Time
+	CardID              string
+	Window              string  // "7d" or "30d"
+	CharacterName       *string // DH character this card belongs to; nil until attributed
+	DemandScore         *float64
+	DemandDataQuality   *string // "proxy" | "full"
+	AnalyticsComputedAt *time.Time
+	DemandComputedAt    *time.Time
+	FetchedAt           time.Time
 }
 
 // CharacterCache is the domain view of a dh_character_cache row.
 type CharacterCache struct {
 	Character           string
 	Window              string
-	DemandJSON          *string
-	VelocityJSON        *string
-	SaturationJSON      *string
+	Demand              *CharacterDemand
+	Velocity            *CharacterVelocity
+	Saturation          *CharacterSaturation
 	DemandComputedAt    *time.Time
 	AnalyticsComputedAt *time.Time
 	FetchedAt           time.Time
+	// MalformedPayloads records payload columns that were present but failed
+	// to decode, with the decode error preserved. See postgres.scanCharacterCacheRow.
+	MalformedPayloads []MalformedPayload
 }
+
+// MalformedPayload names a payload column that failed to decode and carries
+// the error, so the domain can log the same diagnostic the adapter cannot.
+type MalformedPayload struct {
+	// Column is one of the MalformedColumn* constants below.
+	Column string
+	Err    error
+}
+
+// MalformedPayload.Column values. These are the coupling between the
+// postgres adapter (which produces MalformedPayload entries) and the domain
+// (which reads them) — keep the string values stable, they are not
+// serialized but do appear in test fixtures.
+const (
+	MalformedColumnDemand     = "demand"
+	MalformedColumnVelocity   = "velocity"
+	MalformedColumnSaturation = "saturation"
+)
 
 // QualityStats summarises demand_data_quality distribution for a given
 // window, used by the refresh scheduler for observability.

@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"testing"
@@ -236,6 +235,31 @@ func TestDHAnalyticsRefresh_HappyPath(t *testing.T) {
 	if client.topCharactersCalls != 1+len(defaultAnalyticsEras) {
 		t.Fatalf("expected %d top_characters calls (overall + per-era), got %d",
 			1+len(defaultAnalyticsEras), client.topCharactersCalls)
+	}
+
+	var charizard, pikachu *demand.CharacterCache
+	for i := range upsertCharacters {
+		switch upsertCharacters[i].Character {
+		case "Charizard":
+			charizard = &upsertCharacters[i]
+		case "Pikachu":
+			pikachu = &upsertCharacters[i]
+		}
+	}
+	if pikachu == nil || pikachu.Saturation == nil {
+		t.Fatalf("expected Pikachu row with a Saturation payload; got %+v", pikachu)
+	}
+	if pikachu.Saturation.ActiveListingCount != 42 {
+		t.Fatalf("want Pikachu ActiveListingCount=42 (active_listing_count written and read flat); got %d", pikachu.Saturation.ActiveListingCount)
+	}
+	if charizard == nil || charizard.Velocity == nil {
+		t.Fatalf("expected Charizard row with a Velocity payload; got %+v", charizard)
+	}
+	if charizard.Velocity.MedianDaysToSell == nil || *charizard.Velocity.MedianDaysToSell != 14.5 {
+		t.Fatalf("want Charizard MedianDaysToSell=14.5; got %v", charizard.Velocity.MedianDaysToSell)
+	}
+	if charizard.Velocity.SampleSize != 120 {
+		t.Fatalf("want Charizard SampleSize=120; got %d", charizard.Velocity.SampleSize)
 	}
 }
 
@@ -572,9 +596,9 @@ func makeSatPage(startIdx, count, perPage, totalCount int) *dh.CharacterSaturati
 // TestDHAnalyticsRefresh_CharacterComputedAt asserts that the computed_at
 // carried by TopCharactersResponse is threaded into both the persisted demand
 // blob and CharacterCache.DemandComputedAt. Overall and per-era responses each
-// carry their own computed_at; when a character appears in both, the per-era
-// entry wins (indexDemand is last-write-wins) and its timestamp must travel
-// with it.
+// carry their own computed_at; when a character appears in both, indexDemand
+// keeps the overall entry as the base, so the overall response's timestamp is
+// the one that must travel with it while the era still contributes a bucket.
 func TestDHAnalyticsRefresh_CharacterComputedAt(t *testing.T) {
 	const (
 		overallStamp = "2026-04-15T00:00:00Z"
@@ -595,7 +619,8 @@ func TestDHAnalyticsRefresh_CharacterComputedAt(t *testing.T) {
 			if era != defaultAnalyticsEras[0] {
 				return &dh.TopCharactersResponse{}, nil
 			}
-			// Mewtwo appears in both; the per-era entry overwrites the overall one.
+			// Mewtwo appears in both; the overall entry stays the base and the
+			// era-scoped one folds in as a by_era bucket.
 			return &dh.TopCharactersResponse{
 				ComputedAt: eraStamp,
 				CharacterDemand: []dh.CharacterDemandEntry{
@@ -623,9 +648,10 @@ func TestDHAnalyticsRefresh_CharacterComputedAt(t *testing.T) {
 	tests := []struct {
 		character string
 		want      string
+		wantEras  map[string]int // era -> expected bucket CardCount
 	}{
 		{character: "Charizard", want: overallStamp},
-		{character: "Mewtwo", want: eraStamp},
+		{character: "Mewtwo", want: overallStamp, wantEras: map[string]int{defaultAnalyticsEras[0]: 4}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.character, func(t *testing.T) {
@@ -643,21 +669,27 @@ func TestDHAnalyticsRefresh_CharacterComputedAt(t *testing.T) {
 			if !row.DemandComputedAt.Equal(wantTime) {
 				t.Errorf("DemandComputedAt = %s; want %s", row.DemandComputedAt, tc.want)
 			}
-			if row.DemandJSON == nil {
-				t.Fatalf("DemandJSON is nil")
+			if row.Demand == nil {
+				t.Fatalf("Demand is nil")
 			}
-			var blob struct {
-				CharacterName string `json:"character_name"`
-				ComputedAt    string `json:"computed_at"`
+			if row.Demand.ComputedAt != tc.want {
+				t.Errorf("Demand.ComputedAt = %q; want %q", row.Demand.ComputedAt, tc.want)
 			}
-			if err := json.Unmarshal([]byte(*row.DemandJSON), &blob); err != nil {
-				t.Fatalf("unmarshal demand blob: %v", err)
+			if row.Demand.CharacterName != tc.character {
+				t.Errorf("Demand.CharacterName = %q; want %q", row.Demand.CharacterName, tc.character)
 			}
-			if blob.ComputedAt != tc.want {
-				t.Errorf("blob computed_at = %q; want %q", blob.ComputedAt, tc.want)
+			if len(row.Demand.ByEra) != len(tc.wantEras) {
+				t.Fatalf("Demand.ByEra = %+v; want %d entries", row.Demand.ByEra, len(tc.wantEras))
 			}
-			if blob.CharacterName != tc.character {
-				t.Errorf("blob character_name = %q; want %q", blob.CharacterName, tc.character)
+			for era, wantCount := range tc.wantEras {
+				got, ok := row.Demand.ByEra[era]
+				if !ok {
+					t.Errorf("Demand.ByEra missing era %q", era)
+					continue
+				}
+				if got.CardCount != wantCount {
+					t.Errorf("Demand.ByEra[%q].CardCount = %d; want %d", era, got.CardCount, wantCount)
+				}
 			}
 		})
 	}

@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sort"
 	"strconv"
@@ -82,26 +81,20 @@ func newAttributionRepo(seed ...demand.CardCache) *attributionRepo {
 	return r
 }
 
-// blobQuality extracts data_quality from a character cache row's demand blob.
-// Reports false when the key is omitted. A missing character row is a test
-// failure rather than a false return, so "the key is absent" assertions cannot
-// pass just because the character was never upserted at all.
-func blobQuality(t *testing.T, repo *attributionRepo, character string) (string, bool) {
+// demandQuality reads data_quality off a character cache row's typed demand
+// payload. Reports false when it is empty. A missing character row is a test
+// failure rather than a false return, so "the value is absent" assertions
+// cannot pass just because the character was never upserted at all.
+func demandQuality(t *testing.T, repo *attributionRepo, character string) (string, bool) {
 	t.Helper()
 	row, ok := repo.characters[character]
 	if !ok {
 		t.Fatalf("no character cache row upserted for %q", character)
 	}
-	if row.DemandJSON == nil {
+	if row.Demand == nil {
 		return "", false
 	}
-	var blob struct {
-		DataQuality string `json:"data_quality"`
-	}
-	if err := json.Unmarshal([]byte(*row.DemandJSON), &blob); err != nil {
-		t.Fatalf("unmarshal demand blob for %q: %v", character, err)
-	}
-	return blob.DataQuality, blob.DataQuality != ""
+	return row.Demand.DataQuality, row.Demand.DataQuality != ""
 }
 
 // analyticsClientFor builds a client that attributes cards per cardToCharacter
@@ -177,8 +170,8 @@ func TestDHAnalyticsRefresh_CharacterDataQuality(t *testing.T) {
 		cardToCharacter map[int]string
 		cardToQuality   map[int]string
 		extraCharacters []string          // on the leaderboard, but own none of our cards
-		wantQuality     map[string]string // character -> expected blob data_quality
-		wantAbsent      []string          // characters whose blob must omit data_quality
+		wantQuality     map[string]string // character -> expected payload data_quality
+		wantAbsent      []string          // characters whose payload must omit data_quality
 	}{
 		{
 			name:            "a single full card makes its character full",
@@ -239,7 +232,7 @@ func TestDHAnalyticsRefresh_CharacterDataQuality(t *testing.T) {
 			sched.refresh(context.Background())
 
 			for character, want := range tt.wantQuality {
-				got, ok := blobQuality(t, repo, character)
+				got, ok := demandQuality(t, repo, character)
 				if !ok {
 					t.Fatalf("character %q has no data_quality in its demand blob; want %q", character, want)
 				}
@@ -248,7 +241,7 @@ func TestDHAnalyticsRefresh_CharacterDataQuality(t *testing.T) {
 				}
 			}
 			for _, character := range tt.wantAbsent {
-				if got, ok := blobQuality(t, repo, character); ok {
+				if got, ok := demandQuality(t, repo, character); ok {
 					t.Errorf("character %q data_quality = %q; want the key omitted", character, got)
 				}
 			}
@@ -269,7 +262,7 @@ func TestDHAnalyticsRefresh_AttributionIsCachedAcrossRuns(t *testing.T) {
 	if afterFirst != 1 {
 		t.Fatalf("first run made %d character_demand calls; want 1", afterFirst)
 	}
-	if got, _ := blobQuality(t, repo, "Charizard"); got != demand.QualityFull {
+	if got, _ := demandQuality(t, repo, "Charizard"); got != demand.QualityFull {
 		t.Fatalf("after first run data_quality = %q; want %q", got, demand.QualityFull)
 	}
 
@@ -288,7 +281,7 @@ func TestDHAnalyticsRefresh_AttributionIsCachedAcrossRuns(t *testing.T) {
 	if *row.CharacterName != "Charizard" {
 		t.Errorf("card 1 character = %q; want %q", *row.CharacterName, "Charizard")
 	}
-	if got, _ := blobQuality(t, repo, "Charizard"); got != demand.QualityFull {
+	if got, _ := demandQuality(t, repo, "Charizard"); got != demand.QualityFull {
 		t.Errorf("after second run data_quality = %q; want %q", got, demand.QualityFull)
 	}
 }

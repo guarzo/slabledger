@@ -2,6 +2,7 @@ package demand_test
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strconv"
 	"testing"
@@ -12,39 +13,36 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// velocityJSON builds a velocity_json blob matching the CharacterVelocityFields
-// stored format: all numeric fields are JSON numbers (not strings).
-func velocityJSON(medianDays, vChangePct float64, sample int) string {
-	return `{
-		"median_days_to_sell": ` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `,
-		"sell_through": {},
-		"sample_size": ` + strconv.Itoa(sample) + `,
-		"velocity_change_pct": ` + strconv.FormatFloat(vChangePct, 'f', -1, 64) + `
-	}`
+// velocityPayload builds a CharacterVelocity payload matching the
+// CharacterVelocityFields stored format.
+func velocityPayload(medianDays, vChangePct float64, sample int) *demand.CharacterVelocity {
+	return &demand.CharacterVelocity{
+		MedianDaysToSell:  f64Ptr(medianDays),
+		SampleSize:        sample,
+		VelocityChangePct: f64Ptr(vChangePct),
+	}
 }
 
-// velocityJSONNoChange omits velocity_change_pct — used to verify the service
-// excludes characters with no change metric from contributors.
-func velocityJSONNoChange() string {
-	return `{"median_days_to_sell": 10, "sell_through": {}, "sample_size": 5}`
+// velocityPayloadNoChange omits VelocityChangePct — used to verify the
+// service excludes characters with no change metric from contributors.
+func velocityPayloadNoChange() *demand.CharacterVelocity {
+	return &demand.CharacterVelocity{MedianDaysToSell: f64Ptr(10), SampleSize: 5}
 }
 
 func charRow(name string, medianDays, vChangePct float64, sample int, computed time.Time) demand.CharacterCache {
-	vj := velocityJSON(medianDays, vChangePct, sample)
 	return demand.CharacterCache{
 		Character:           name,
 		Window:              "30d",
-		VelocityJSON:        &vj,
+		Velocity:            velocityPayload(medianDays, vChangePct, sample),
 		AnalyticsComputedAt: &computed,
 	}
 }
 
 func charRowNoChange(name string, computed time.Time) demand.CharacterCache {
-	vj := velocityJSONNoChange()
 	return demand.CharacterCache{
 		Character:           name,
 		Window:              "30d",
-		VelocityJSON:        &vj,
+		Velocity:            velocityPayloadNoChange(),
 		AnalyticsComputedAt: &computed,
 	}
 }
@@ -278,6 +276,73 @@ func TestCampaignSignals_MedianVelocity(t *testing.T) {
 			// precision we care about for a percentage-point metric.
 			if math.Abs(got-tc.wantMedian) > 1e-9 {
 				t.Errorf("want median=%v, got %v", tc.wantMedian, got)
+			}
+		})
+	}
+}
+
+// TestCampaignSignals_MalformedVelocityCountsAsSkipped pins which malformed
+// column feeds SkippedRows: only the velocity payload does, because that is
+// the one CampaignSignals actually reads. A demand-column failure on an
+// otherwise unrelated row must not inflate the count.
+func TestCampaignSignals_MalformedVelocityCountsAsSkipped(t *testing.T) {
+	computed := time.Date(2026, 4, 15, 3, 15, 0, 0, time.UTC)
+
+	malformed := func(character, column string) demand.CharacterCache {
+		return demand.CharacterCache{
+			Character:           character,
+			Window:              "30d",
+			AnalyticsComputedAt: &computed,
+			MalformedPayloads: []demand.MalformedPayload{
+				{Column: column, Err: errors.New("unexpected end of JSON input")},
+			},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		rows        []demand.CharacterCache
+		wantSkipped int
+		wantSignals int
+	}{
+		{
+			name: "only the velocity-column failure counts",
+			rows: []demand.CharacterCache{
+				charRow("Pikachu", 11, 22.1, 34, computed),
+				malformed("Charizard", demand.MalformedColumnVelocity),
+				malformed("Umbreon", demand.MalformedColumnDemand),
+			},
+			wantSkipped: 1,
+			wantSignals: 1,
+		},
+		{
+			name:        "no malformed payloads skips nothing",
+			rows:        []demand.CharacterCache{charRow("Pikachu", 11, 22.1, 34, computed)},
+			wantSkipped: 0,
+			wantSignals: 1,
+		},
+	}
+
+	campaigns := []demand.ActiveCampaign{{
+		ID:                "c1",
+		Name:              "Vintage Core",
+		SubjectFilterMode: inventory.SubjectFilterTarget,
+		Subjects:          []inventory.TargetSubject{{ID: 1, Name: "Pikachu"}},
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := demand.NewService(newRepoWithRows(tc.rows), campaignLookupWith(campaigns))
+
+			resp, err := svc.CampaignSignals(context.Background())
+			if err != nil {
+				t.Fatalf("CampaignSignals: %v", err)
+			}
+			if resp.SkippedRows != tc.wantSkipped {
+				t.Errorf("SkippedRows = %d, want %d", resp.SkippedRows, tc.wantSkipped)
+			}
+			if len(resp.Signals) != tc.wantSignals {
+				t.Fatalf("len(Signals) = %d, want %d", len(resp.Signals), tc.wantSignals)
 			}
 		})
 	}

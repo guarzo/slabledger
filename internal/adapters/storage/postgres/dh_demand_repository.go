@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -34,32 +35,23 @@ func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row demand.Car
 			card_id, "window",
 			character_name,
 			demand_score, demand_data_quality,
-			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
 			analytics_computed_at, demand_computed_at, fetched_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT(card_id, "window") DO UPDATE SET
 			-- Character attribution is sticky: the analytics refresh rewrites every
 			-- row each run without knowing the character, and a plain
 			-- excluded.character_name would wipe the attribution we paid a
 			-- per-card API call for. COALESCE lets a new value overwrite but
 			-- never lets a NULL clear one (SLA-63).
-			character_name          = COALESCE(excluded.character_name, dh_card_cache.character_name),
-			demand_score            = excluded.demand_score,
-			demand_data_quality     = excluded.demand_data_quality,
-			demand_json             = excluded.demand_json,
-			velocity_json           = excluded.velocity_json,
-			trend_json              = excluded.trend_json,
-			saturation_json         = excluded.saturation_json,
-			price_distribution_json = excluded.price_distribution_json,
-			analytics_computed_at   = excluded.analytics_computed_at,
-			demand_computed_at      = excluded.demand_computed_at,
-			fetched_at              = excluded.fetched_at`,
+			character_name        = COALESCE(excluded.character_name, dh_card_cache.character_name),
+			demand_score          = excluded.demand_score,
+			demand_data_quality   = excluded.demand_data_quality,
+			analytics_computed_at = excluded.analytics_computed_at,
+			demand_computed_at    = excluded.demand_computed_at,
+			fetched_at            = excluded.fetched_at`,
 		row.CardID, row.Window,
 		nullStringFromPtr(row.CharacterName),
 		nullFloat64FromPtr(row.DemandScore), nullStringFromPtr(row.DemandDataQuality),
-		nullStringFromPtr(row.DemandJSON), nullStringFromPtr(row.VelocityJSON),
-		nullStringFromPtr(row.TrendJSON), nullStringFromPtr(row.SaturationJSON),
-		nullStringFromPtr(row.PriceDistributionJSON),
 		nullTimeFromPtr(row.AnalyticsComputedAt), nullTimeFromPtr(row.DemandComputedAt),
 		row.FetchedAt,
 	)
@@ -75,7 +67,6 @@ func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window st
 		`SELECT card_id, "window",
 			character_name,
 			demand_score, demand_data_quality,
-			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
 			analytics_computed_at, demand_computed_at, fetched_at
 		FROM dh_card_cache
 		WHERE card_id = $1 AND "window" = $2`,
@@ -89,42 +80,6 @@ func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window st
 		return nil, fmt.Errorf("get dh_card_cache: %w", err)
 	}
 	return result, nil
-}
-
-// ListCardCacheByDemandScore returns rows for the given window ordered by
-// demand_score DESC. Rows with a NULL demand_score are excluded — they
-// cannot be ranked meaningfully.
-func (r *DHDemandRepository) ListCardCacheByDemandScore(ctx context.Context, window string, limit int) (_ []demand.CardCache, err error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT card_id, "window",
-			character_name,
-			demand_score, demand_data_quality,
-			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
-			analytics_computed_at, demand_computed_at, fetched_at
-		FROM dh_card_cache
-		WHERE "window" = $1 AND demand_score IS NOT NULL
-		ORDER BY demand_score DESC
-		LIMIT $2`,
-		window, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query dh_card_cache by demand_score: %w", err)
-	}
-	defer func() {
-		if cerr := rows.Close(); err == nil && cerr != nil {
-			err = cerr
-		}
-	}()
-
-	results := make([]demand.CardCache, 0, limit)
-	for rows.Next() {
-		r, scanErr := scanCardCacheRow(rows)
-		if scanErr != nil {
-			return nil, fmt.Errorf("scan dh_card_cache row: %w", scanErr)
-		}
-		results = append(results, *r)
-	}
-	return results, rows.Err()
 }
 
 // CardDataQualityStats returns the distribution of demand_data_quality values
@@ -214,7 +169,20 @@ func (r *DHDemandRepository) ListCardCharacterQuality(ctx context.Context, windo
 // --- Character cache CRUD ---
 // UpsertCharacterCache inserts or updates a dh_character_cache row keyed by (character, window).
 func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row demand.CharacterCache) error {
-	_, err := r.db.ExecContext(ctx,
+	demandBlob, err := marshalPayload(row.Demand)
+	if err != nil {
+		return fmt.Errorf("encode dh_character_cache demand payload: %w", err)
+	}
+	velocityBlob, err := marshalPayload(row.Velocity)
+	if err != nil {
+		return fmt.Errorf("encode dh_character_cache velocity payload: %w", err)
+	}
+	saturationBlob, err := marshalPayload(row.Saturation)
+	if err != nil {
+		return fmt.Errorf("encode dh_character_cache saturation payload: %w", err)
+	}
+
+	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO dh_character_cache (
 			character, "window",
 			demand_json, velocity_json, saturation_json,
@@ -228,8 +196,7 @@ func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row deman
 			analytics_computed_at = excluded.analytics_computed_at,
 			fetched_at            = excluded.fetched_at`,
 		row.Character, row.Window,
-		nullStringFromPtr(row.DemandJSON), nullStringFromPtr(row.VelocityJSON),
-		nullStringFromPtr(row.SaturationJSON),
+		demandBlob, velocityBlob, saturationBlob,
 		nullTimeFromPtr(row.DemandComputedAt), nullTimeFromPtr(row.AnalyticsComputedAt),
 		row.FetchedAt,
 	)
@@ -282,11 +249,11 @@ func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window stri
 
 	results := make([]demand.CharacterCache, 0, 32)
 	for rows.Next() {
-		r, scanErr := scanCharacterCacheRow(rows)
+		row, scanErr := scanCharacterCacheRow(rows)
 		if scanErr != nil {
 			return nil, fmt.Errorf("scan dh_character_cache row: %w", scanErr)
 		}
-		results = append(results, *r)
+		results = append(results, *row)
 	}
 	return results, rows.Err()
 }
@@ -295,24 +262,18 @@ func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window stri
 
 func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 	var (
-		row                   demand.CardCache
-		characterName         sql.NullString
-		demandScore           sql.NullFloat64
-		demandDataQuality     sql.NullString
-		demandJSON            sql.NullString
-		velocityJSON          sql.NullString
-		trendJSON             sql.NullString
-		saturationJSON        sql.NullString
-		priceDistributionJSON sql.NullString
-		analyticsComputedAt   sql.NullTime
-		demandComputedAt      sql.NullTime
+		row                 demand.CardCache
+		characterName       sql.NullString
+		demandScore         sql.NullFloat64
+		demandDataQuality   sql.NullString
+		analyticsComputedAt sql.NullTime
+		demandComputedAt    sql.NullTime
 	)
 
 	if err := s.Scan(
 		&row.CardID, &row.Window,
 		&characterName,
 		&demandScore, &demandDataQuality,
-		&demandJSON, &velocityJSON, &trendJSON, &saturationJSON, &priceDistributionJSON,
 		&analyticsComputedAt, &demandComputedAt, &row.FetchedAt,
 	); err != nil {
 		return nil, err
@@ -321,11 +282,6 @@ func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 	row.CharacterName = nullStringToPtr(characterName)
 	row.DemandScore = nullFloat64ToPtr(demandScore)
 	row.DemandDataQuality = nullStringToPtr(demandDataQuality)
-	row.DemandJSON = nullStringToPtr(demandJSON)
-	row.VelocityJSON = nullStringToPtr(velocityJSON)
-	row.TrendJSON = nullStringToPtr(trendJSON)
-	row.SaturationJSON = nullStringToPtr(saturationJSON)
-	row.PriceDistributionJSON = nullStringToPtr(priceDistributionJSON)
 	row.AnalyticsComputedAt = nullTimeToPtr(analyticsComputedAt)
 	row.DemandComputedAt = nullTimeToPtr(demandComputedAt)
 	return &row, nil
@@ -349,12 +305,51 @@ func scanCharacterCacheRow(s scanner) (*demand.CharacterCache, error) {
 		return nil, err
 	}
 
-	row.DemandJSON = nullStringToPtr(demandJSON)
-	row.VelocityJSON = nullStringToPtr(velocityJSON)
-	row.SaturationJSON = nullStringToPtr(saturationJSON)
+	if v, decErr := unmarshalPayload[demand.CharacterDemand](demandJSON); decErr != nil {
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: demand.MalformedColumnDemand, Err: decErr})
+	} else {
+		row.Demand = v
+	}
+	if v, decErr := unmarshalPayload[demand.CharacterVelocity](velocityJSON); decErr != nil {
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: demand.MalformedColumnVelocity, Err: decErr})
+	} else {
+		row.Velocity = v
+	}
+	if v, decErr := unmarshalPayload[demand.CharacterSaturation](saturationJSON); decErr != nil {
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: demand.MalformedColumnSaturation, Err: decErr})
+	} else {
+		row.Saturation = v
+	}
+
 	row.DemandComputedAt = nullTimeToPtr(demandComputedAt)
 	row.AnalyticsComputedAt = nullTimeToPtr(analyticsComputedAt)
 	return &row, nil
+}
+
+// marshalPayload encodes a payload struct into a nullable column value. A nil
+// pointer maps to SQL NULL.
+func marshalPayload[T any](p *T) (sql.NullString, error) {
+	if p == nil {
+		return sql.NullString{}, nil
+	}
+	blob, err := json.Marshal(p)
+	if err != nil {
+		return sql.NullString{}, err
+	}
+	return sql.NullString{String: string(blob), Valid: true}, nil
+}
+
+// unmarshalPayload decodes a nullable column value into a payload struct. A
+// NULL column maps to a nil pointer with no error.
+func unmarshalPayload[T any](n sql.NullString) (*T, error) {
+	if !n.Valid {
+		return nil, nil
+	}
+	var v T
+	if err := json.Unmarshal([]byte(n.String), &v); err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // --- pointer <-> sql.Null* helpers ---

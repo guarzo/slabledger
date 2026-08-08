@@ -838,16 +838,20 @@ Per-card DH enterprise analytics + demand cache. Populated by the daily DH analy
 | `window` | TEXT | PK part | `'7d'` or `'30d'` |
 | `demand_score` | REAL | nullable | From `/market/demand_signals`; NULL when card lacked demand data |
 | `demand_data_quality` | TEXT | nullable | `'proxy'` \| `'full'` \| NULL |
-| `demand_json` | TEXT | nullable | Full demand_signals response blob |
-| `velocity_json` | TEXT | nullable | velocity subtree from batch_analytics |
-| `trend_json` | TEXT | nullable | trend subtree |
-| `saturation_json` | TEXT | nullable | saturation subtree |
-| `price_distribution_json` | TEXT | nullable | price_distribution subtree |
+| `demand_json` | TEXT | nullable | **Dead since SLA-41** — no longer read or written |
+| `velocity_json` | TEXT | nullable | **Dead since SLA-41** — no longer read or written |
+| `trend_json` | TEXT | nullable | **Dead since SLA-41** — no longer read or written |
+| `saturation_json` | TEXT | nullable | **Dead since SLA-41** — no longer read or written |
+| `price_distribution_json` | TEXT | nullable | **Dead since SLA-41** — no longer read or written |
 | `analytics_computed_at` | TIMESTAMP | nullable | DH's `computed_at` for analytics; NULL = not computed (404) |
 | `demand_computed_at` | TIMESTAMP | nullable | DH's `computed_at` for demand |
 | `fetched_at` | TIMESTAMP | NOT NULL | When we last upserted the row |
 
 **Indexes:** none — `idx_card_cache_demand_score` was dropped in migration 000003 (see "Dropped indexes" below).
+
+**Note:** SLA-41 narrowed this table's read/write path to seven columns. The five
+`*_json` columns above are retained only so an image rollback past SLA-41 still
+finds the schema it expects; a follow-up release drops them.
 
 **Foreign Keys:** none (DH card IDs aren't FK'd to our tables)
 
@@ -868,6 +872,12 @@ Per-character DH analytics + demand cache. Populated by the same scheduler as `d
 | `fetched_at` | TIMESTAMP | NOT NULL | |
 
 **Indexes:** none (PK lookup + full scan for leaderboard)
+
+**Note:** the three `*_json` columns are still read and written, but since SLA-41
+they decode into named domain structs (`demand.CharacterDemand`,
+`CharacterVelocity`, `CharacterSaturation`) inside the postgres adapter rather
+than being handed to the domain as opaque strings. A column that fails to decode
+is recorded per-column and does not fail the row scan.
 
 **Foreign Keys:** none
 

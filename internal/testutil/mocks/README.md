@@ -154,6 +154,8 @@ store.Purchases["p1"] = &inventory.Purchase{ID: "p1", CampaignID: "c1"}
 | `MockHTTPClient` | `httpx.Client` |
 | `MockAuthRepository` | `auth.Repository` |
 | `MockCertLookup` | cert lookup interface |
+| `RowScanner` | postgres package's unexported `scanner` interface (`Scan(dest ...any) error`) |
+| `CapturingLogger` | `observability.Logger` (records calls instead of discarding them) |
 
 ## Error Assertions
 

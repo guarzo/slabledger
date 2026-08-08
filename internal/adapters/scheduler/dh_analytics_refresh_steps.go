@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -73,7 +72,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context, qua
 		}
 		for _, e := range resp.CharacterDemand {
 			addCharacter(e.CharacterName)
-			eraEntries = append(eraEntries, stampedDemandEntry{Entry: e, ComputedAt: resp.ComputedAt})
+			eraEntries = append(eraEntries, stampedDemandEntry{Entry: e, ComputedAt: resp.ComputedAt, Era: era})
 		}
 	}
 
@@ -122,34 +121,19 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context, qua
 			FetchedAt: now,
 		}
 		if entry, ok := demandByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry.blob(qualityByChar[name])); encErr == nil {
-				str := string(blob)
-				row.DemandJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal character demand JSON", observability.String("character", name), observability.Err(encErr))
-			}
+			row.Demand = mapCharacterDemand(entry, qualityByChar[name])
 			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
 				row.DemandComputedAt = &t
 			}
 		}
 		if entry, ok := velocityByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry.Velocity); encErr == nil {
-				str := string(blob)
-				row.VelocityJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal character velocity JSON", observability.String("character", name), observability.Err(encErr))
-			}
+			row.Velocity = mapCharacterVelocity(entry.Velocity)
 			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
 				row.AnalyticsComputedAt = &t
 			}
 		}
 		if entry, ok := saturationByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry); encErr == nil {
-				str := string(blob)
-				row.SaturationJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal character saturation JSON", observability.String("character", name), observability.Err(encErr))
-			}
+			row.Saturation = mapCharacterSaturation(entry)
 			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
 				row.AnalyticsComputedAt = &t
 			}
@@ -239,38 +223,6 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 			Window:    s.config.Window,
 			FetchedAt: now,
 		}
-		if row.Velocity != nil {
-			if blob, encErr := json.Marshal(row.Velocity); encErr == nil {
-				str := string(blob)
-				cache.VelocityJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal card velocity JSON", observability.Int("card_id", cardID), observability.Err(encErr))
-			}
-		}
-		if row.Trend != nil {
-			if blob, encErr := json.Marshal(row.Trend); encErr == nil {
-				str := string(blob)
-				cache.TrendJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal card trend JSON", observability.Int("card_id", cardID), observability.Err(encErr))
-			}
-		}
-		if row.Saturation != nil {
-			if blob, encErr := json.Marshal(row.Saturation); encErr == nil {
-				str := string(blob)
-				cache.SaturationJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal card saturation JSON", observability.Int("card_id", cardID), observability.Err(encErr))
-			}
-		}
-		if row.PriceDistribution != nil {
-			if blob, encErr := json.Marshal(row.PriceDistribution); encErr == nil {
-				str := string(blob)
-				cache.PriceDistributionJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal card price distribution JSON", observability.Int("card_id", cardID), observability.Err(encErr))
-			}
-		}
 		if t, tErr := parseDHTimestamp(row.ComputedAt); tErr == nil {
 			cache.AnalyticsComputedAt = &t
 		}
@@ -311,12 +263,6 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 		cache.DemandScore = &score
 		quality := ds.DataQuality
 		cache.DemandDataQuality = &quality
-		if blob, encErr := json.Marshal(ds); encErr == nil {
-			str := string(blob)
-			cache.DemandJSON = &str
-		} else {
-			s.logger.Warn(ctx, "marshal card demand JSON", observability.Int("card_id", cardID), observability.Err(encErr))
-		}
 		cache.DemandComputedAt = &now
 		cache.FetchedAt = now
 		if err := s.repo.UpsertCardCache(ctx, *cache); err != nil {
@@ -331,53 +277,166 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 // --- helpers ---
 
 // stampedDemandEntry pairs a character demand entry with the computed_at of
-// the TopCharacters response it arrived in. DH reports computed_at once per
-// response rather than per entry, so the timestamp has to be carried alongside
-// the entry to survive the overall/per-era merge in indexDemand.
+// the TopCharacters response it arrived in, and with the era that response was
+// filtered to ("" for the unfiltered overall call). DH reports computed_at
+// once per response rather than per entry, and does not echo the era onto the
+// entries at all, so both have to be carried alongside the entry to survive
+// the overall/per-era merge in indexDemand.
 type stampedDemandEntry struct {
 	Entry      dh.CharacterDemandEntry
 	ComputedAt string
+	Era        string
 }
 
-// characterDemandBlob is the persisted shape of a character's demand payload:
-// the DH entry's own fields plus the response-level computed_at and the
-// data quality aggregated from the character's cards. The embedded struct is
-// anonymous so encoding/json inlines its fields, keeping the blob
-// byte-identical to the previous shape apart from the two added keys.
+// mapCharacterDemand converts a DH character-demand entry into the domain
+// payload persisted on CharacterCache.Demand.
 //
-// DataQuality does not come from DH: data_quality is reported per card
+// dataQuality does not come from DH: data_quality is reported per card
 // (dh.DemandSignal) and never per character. It is rolled up by
 // demand.AggregateCharacterQuality over the cards we have attributed, and is
-// omitted when we have attributed none of a character's cards — an absent key
-// reads as "unknown" downstream, which is correct, whereas defaulting to
-// "proxy" or "full" would assert something we did not measure.
-type characterDemandBlob struct {
-	dh.CharacterDemandEntry
-	DataQuality string `json:"data_quality,omitempty"`
-	ComputedAt  string `json:"computed_at,omitempty"`
+// left "" when we have attributed none of a character's cards — an empty
+// value reads as "unknown" downstream, which is correct, whereas defaulting
+// to "proxy" or "full" would assert something we did not measure.
+//
+// ComputedAt is the response-level timestamp carried on the stamped entry, so
+// the stored payload always describes the response it came from.
+func mapCharacterDemand(stamped stampedDemandEntry, dataQuality string) *demand.CharacterDemand {
+	entry := stamped.Entry
+	out := &demand.CharacterDemand{
+		CharacterName:     entry.CharacterName,
+		CardCount:         entry.CardCount,
+		AvgDemandScore:    entry.AvgDemandScore,
+		TotalViews:        entry.TotalViews,
+		TotalSearchClicks: entry.TotalSearchClicks,
+		TotalWishlistAdds: entry.TotalWishlistAdds,
+		DataQuality:       dataQuality,
+		ComputedAt:        stamped.ComputedAt,
+	}
+	if len(entry.ByEra) > 0 {
+		out.ByEra = make(map[string]demand.ByEraDemand, len(entry.ByEra))
+		for era, e := range entry.ByEra {
+			out.ByEra[era] = demand.ByEraDemand{
+				CardCount:         e.CardCount,
+				AvgDemandScore:    e.AvgDemandScore,
+				TotalViews:        e.TotalViews,
+				TotalSearchClicks: e.TotalSearchClicks,
+				TotalWishlistAdds: e.TotalWishlistAdds,
+			}
+		}
+	}
+	return out
 }
 
-func (s stampedDemandEntry) blob(dataQuality string) characterDemandBlob {
-	return characterDemandBlob{
-		CharacterDemandEntry: s.Entry,
-		DataQuality:          dataQuality,
-		ComputedAt:           s.ComputedAt,
+// mapCharacterVelocity converts DH's flat velocity block into the domain
+// payload. AvgDaysToSell and SellThrough are the two accepted losses (see
+// the SLA-41 design doc, "Accepted losses") — nothing in the domain reads
+// them, so they are not carried into demand.CharacterVelocity.
+func mapCharacterVelocity(v dh.CharacterVelocityFields) *demand.CharacterVelocity {
+	out := &demand.CharacterVelocity{
+		MedianDaysToSell:   v.MedianDaysToSell,
+		SampleSize:         v.SampleSize,
+		VelocityChangePct:  v.VelocityChangePct,
+		AvgDailySales:      v.AvgDailySales,
+		SellThroughRate30d: v.SellThroughRate30d,
+		SalesVolume7d:      v.SalesVolume7d,
+		SalesVolume30d:     v.SalesVolume30d,
+		SupplyCount:        v.SupplyCount,
+	}
+	if len(v.ByGrade) > 0 {
+		out.ByGrade = make(map[string]demand.VelocityTierStat, len(v.ByGrade))
+		for tier, stat := range v.ByGrade {
+			out.ByGrade[tier] = demand.VelocityTierStat{MedianDays: stat.MedianDays, SampleSize: stat.SampleSize}
+		}
+	}
+	if len(v.ByPriceTier) > 0 {
+		out.ByPriceTier = make(map[string]demand.VelocityTierStat, len(v.ByPriceTier))
+		for tier, stat := range v.ByPriceTier {
+			out.ByPriceTier[tier] = demand.VelocityTierStat{MedianDays: stat.MedianDays, SampleSize: stat.SampleSize}
+		}
+	}
+	return out
+}
+
+// mapCharacterSaturation converts DH's nested saturation entry into the flat
+// domain payload. active_listing_count is written flat here and parsed flat
+// by the reader; reading entry.Saturation.ActiveListingCount directly is an
+// explicit assignment the compiler checks, so the nested wire shape never
+// reaches storage.
+func mapCharacterSaturation(entry dh.CharacterSaturationEntry) *demand.CharacterSaturation {
+	return &demand.CharacterSaturation{
+		ActiveListingCount: entry.Saturation.ActiveListingCount,
+		ComputedAt:         entry.ComputedAt,
 	}
 }
 
+// indexDemand folds every TopCharacters entry for a character into a single
+// record: the overall (era-unfiltered) entry supplies the character-level
+// totals and timestamp, and every entry contributes era buckets.
+//
+// Overwriting instead of merging lost real data. defaultAnalyticsEras holds
+// ten eras, so the last one iterated replaced both the character's overall
+// totals and every earlier era's buckets — at most one era survived a run.
+//
+// DH's top_characters endpoint takes `era` as a filter, so an era-filtered
+// entry is itself that era's aggregate and carries no by_era map of its own.
+// In that case the entry is keyed under the era we asked for. When an entry
+// does carry by_era, that map is merged instead, so a response shape that
+// starts reporting the breakdown directly wins over our inference.
 func indexDemand(entries []stampedDemandEntry) map[string]stampedDemandEntry {
 	m := make(map[string]stampedDemandEntry, len(entries))
 	for _, e := range entries {
-		if e.Entry.CharacterName == "" {
+		name := e.Entry.CharacterName
+		if name == "" {
 			continue
 		}
-		// Later entries (per-era) overwrite earlier (overall) so the cached
-		// blob carries by_era when available. The entry's own computed_at
-		// travels with it, so the stored timestamp always describes the
-		// stored payload.
-		m[e.Entry.CharacterName] = e
+		cur, seen := m[name]
+		switch {
+		case !seen:
+			// First sighting seeds the record. ByEra is cleared rather than
+			// aliased so merging never mutates the response we were handed;
+			// mergeByEra rebuilds it from this same entry below.
+			cur = e
+			cur.Entry.ByEra = nil
+		case e.Era == "" && cur.Era != "":
+			// The overall entry outranks an era-scoped one for the
+			// character-level totals, whichever order they arrive in. Buckets
+			// accumulated so far carry over.
+			buckets := cur.Entry.ByEra
+			cur = e
+			cur.Entry.ByEra = buckets
+		}
+		cur.Entry.ByEra = mergeByEra(cur.Entry.ByEra, e)
+		m[name] = cur
 	}
 	return m
+}
+
+// mergeByEra folds one entry's era buckets into dst and returns the (possibly
+// newly allocated) map. An era already present is left alone, matching the
+// order-of-first-appearance rule the rest of the refresh uses.
+func mergeByEra(dst map[string]dh.ByEraEntry, e stampedDemandEntry) map[string]dh.ByEraEntry {
+	src := e.Entry.ByEra
+	if len(src) == 0 && e.Era != "" {
+		src = map[string]dh.ByEraEntry{e.Era: {
+			CardCount:         e.Entry.CardCount,
+			AvgDemandScore:    e.Entry.AvgDemandScore,
+			TotalViews:        e.Entry.TotalViews,
+			TotalSearchClicks: e.Entry.TotalSearchClicks,
+			TotalWishlistAdds: e.Entry.TotalWishlistAdds,
+		}}
+	}
+	if len(src) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = make(map[string]dh.ByEraEntry, len(src))
+	}
+	for era, bucket := range src {
+		if _, exists := dst[era]; !exists {
+			dst[era] = bucket
+		}
+	}
+	return dst
 }
 
 func indexVelocity(entries []dh.CharacterVelocityEntry) map[string]dh.CharacterVelocityEntry {

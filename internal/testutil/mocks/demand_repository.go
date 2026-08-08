@@ -9,15 +9,14 @@ import (
 // DemandRepositoryMock is a Fn-field mock of demand.Repository.
 // Unset Fn fields return zero values + nil error.
 type DemandRepositoryMock struct {
-	UpsertCardCacheFn            func(ctx context.Context, row demand.CardCache) error
-	GetCardCacheFn               func(ctx context.Context, cardID, window string) (*demand.CardCache, error)
-	ListCardCacheByDemandScoreFn func(ctx context.Context, window string, limit int) ([]demand.CardCache, error)
-	CardDataQualityStatsFn       func(ctx context.Context, window string) (demand.QualityStats, error)
-	ListCardsMissingCharacterFn  func(ctx context.Context, window string, limit int) ([]string, error)
-	ListCardCharacterQualityFn   func(ctx context.Context, window string) ([]demand.CardCharacterQuality, error)
-	UpsertCharacterCacheFn       func(ctx context.Context, row demand.CharacterCache) error
-	GetCharacterCacheFn          func(ctx context.Context, character, window string) (*demand.CharacterCache, error)
-	ListCharacterCacheFn         func(ctx context.Context, window string) ([]demand.CharacterCache, error)
+	UpsertCardCacheFn           func(ctx context.Context, row demand.CardCache) error
+	GetCardCacheFn              func(ctx context.Context, cardID, window string) (*demand.CardCache, error)
+	CardDataQualityStatsFn      func(ctx context.Context, window string) (demand.QualityStats, error)
+	ListCardsMissingCharacterFn func(ctx context.Context, window string, limit int) ([]string, error)
+	ListCardCharacterQualityFn  func(ctx context.Context, window string) ([]demand.CardCharacterQuality, error)
+	UpsertCharacterCacheFn      func(ctx context.Context, row demand.CharacterCache) error
+	GetCharacterCacheFn         func(ctx context.Context, character, window string) (*demand.CharacterCache, error)
+	ListCharacterCacheFn        func(ctx context.Context, window string) ([]demand.CharacterCache, error)
 }
 
 var _ demand.Repository = (*DemandRepositoryMock)(nil)
@@ -32,13 +31,6 @@ func (m *DemandRepositoryMock) UpsertCardCache(ctx context.Context, row demand.C
 func (m *DemandRepositoryMock) GetCardCache(ctx context.Context, cardID, window string) (*demand.CardCache, error) {
 	if m.GetCardCacheFn != nil {
 		return m.GetCardCacheFn(ctx, cardID, window)
-	}
-	return nil, nil
-}
-
-func (m *DemandRepositoryMock) ListCardCacheByDemandScore(ctx context.Context, window string, limit int) ([]demand.CardCache, error) {
-	if m.ListCardCacheByDemandScoreFn != nil {
-		return m.ListCardCacheByDemandScoreFn(ctx, window, limit)
 	}
 	return nil, nil
 }
