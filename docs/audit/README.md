@@ -8,14 +8,21 @@ Read-only audit. No code was changed by this process; tickets are the output.
 
 | Directory | Contents |
 |---|---|
+| `METHODOLOGY.md` | **How to run this audit again** — topology, gates, failure modes |
 | `PREAMBLE.md` | Rules prepended to every agent prompt |
+| `LENS-BRIEF.md` | Phase 2 lens instructions, including the three traps |
+| `VERIFIER-BRIEF.md` | Phase 3 adversarial-verification instructions |
+| `ADJUDICATIONS.md` | Controller rulings; binding over any finding or verdict |
 | `schema/` | JSON Schemas for scout reports and findings |
 | `scripts/validate.sh` | Completeness gate validator |
+| `scripts/build-report.py` | Deterministic `REPORT.md` generator (holds the cluster map) |
+| `scripts/build-tickets.py` | Deterministic `TICKETS.md` generator (reuses that map) |
 | `maps/` | Phase 1 reference maps (data, not judgments) |
 | `findings/` | Phase 2 lens findings |
 | `verdicts/` | Phase 3 adversarial verdicts |
 | `REPORT.md` | Consolidated ranked findings |
 | `TICKETS.md` | Ticket bodies as filed |
+| `linear-ids.json` | Fix unit → filed Linear issue |
 
 ## How to read a finding
 
