@@ -140,3 +140,5 @@ Key frontend libraries: React, TanStack React Query, Radix UI, TanStack React Vi
 ## License
 
 MIT
+
+<!-- skip-path verification, will be discarded -->
