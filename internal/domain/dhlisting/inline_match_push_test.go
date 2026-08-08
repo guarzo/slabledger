@@ -40,7 +40,7 @@ func (p *purchaseLookupByCert) GetPurchasesByCertNumbers(_ context.Context, cert
 // the inline-push tests only care about the pre-list path.
 type noopLister struct{}
 
-func (noopLister) UpdateInventoryStatus(_ context.Context, _ int, _ dhlisting.DHInventoryStatusUpdate) (int, error) {
+func (noopLister) UpdateInventoryStatus(_ context.Context, _ int, _ inventory.DHInventoryStatusUpdate) (int, error) {
 	return 0, nil
 }
 func (noopLister) SyncChannels(_ context.Context, _ int, _ []string) error { return nil }

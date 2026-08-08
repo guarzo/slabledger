@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -112,7 +111,7 @@ func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) Sync
 		return res
 	}
 
-	newDHPrice, err := s.updater.UpdateInventoryStatus(ctx, p.DHInventoryID, dhlisting.DHInventoryStatusUpdate{
+	newDHPrice, err := s.updater.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHInventoryStatusUpdate{
 		Status:            status,
 		ListingPriceCents: reviewed,
 	})

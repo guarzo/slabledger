@@ -92,12 +92,26 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 - **Channel fees**: eBay/TCGPlayer use campaign's `ebayFeePct`; local/other = 0%
 
 ### Sibling sub-packages (flat siblings under `internal/domain/`, no cross-imports between them)
+
+Membership is **derived, not listed**: a sibling is any directory under
+`internal/domain/` with a non-test `.go` file importing `internal/domain/inventory`.
+`scripts/check-imports.sh` computes this set from the tree on every `make check`,
+so adding a new inventory-importing package puts it under the rule automatically —
+no list to update here or in the script.
+
+Siblings may depend on `inventory` (the hub) and on leaf packages such as `errors`
+and `observability`, but never on each other. The derived set as of 2026-08-08:
+
 - **arbitrage**: Acquisition targets, expected value, Monte Carlo projection
-- **portfolio**: Inventory aging, price signals, portfolio health analysis
-- **tuning**: Campaign parameter optimization, tuning suggestions and analytics
-- **finance**: Invoices, cashflow forecasting, capital tracking, revocation flags
-- **export**: Sell sheet generation
+- **demand**: Demand signals
 - **dhlisting**: DH listing push pipeline coordination
+- **dhpricing**: DH listing price reconciliation
+- **export**: Sell sheet generation
+- **finance**: Invoices, cashflow forecasting, capital tracking, revocation flags
+- **portfolio**: Inventory aging, price signals, portfolio health analysis
+- **pricing/lookup**: PriceLookup adapter over PriceProvider
+- **psacampaign**: PSA campaign targeting
+- **tuning**: Campaign parameter optimization, tuning suggestions and analytics
 
 ## Database
 
@@ -179,7 +193,7 @@ DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapte
 ## Quality Checks
 
 - `make check` — runs lint + architecture import check + file size check
-- `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces flat sibling rule between inventory sub-packages
+- `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces the flat sibling rule against a package set derived from the tree, and fails closed if that derivation yields fewer than two packages
 - `scripts/check-file-size.sh` — warns at 500 lines, fails at 600 lines (excludes test files and mocks)
 
 ## Adding New Components

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -49,7 +48,7 @@ type fakeUpdater struct {
 	err              error
 }
 
-func (f *fakeUpdater) UpdateInventoryStatus(_ context.Context, invID int, update dhlisting.DHInventoryStatusUpdate) (int, error) {
+func (f *fakeUpdater) UpdateInventoryStatus(_ context.Context, invID int, update inventory.DHInventoryStatusUpdate) (int, error) {
 	f.calls = append(f.calls, updaterCall{invID, update.Status, update.ListingPriceCents})
 	if f.err != nil {
 		return 0, f.err
@@ -352,7 +351,7 @@ type fakeUpdaterFn struct {
 	fn func(ctx context.Context, inventoryID int, status string, price int) (int, error)
 }
 
-func (f *fakeUpdaterFn) UpdateInventoryStatus(ctx context.Context, inventoryID int, update dhlisting.DHInventoryStatusUpdate) (int, error) {
+func (f *fakeUpdaterFn) UpdateInventoryStatus(ctx context.Context, inventoryID int, update inventory.DHInventoryStatusUpdate) (int, error) {
 	return f.fn(ctx, inventoryID, update.Status, update.ListingPriceCents)
 }
 
