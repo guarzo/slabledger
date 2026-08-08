@@ -8,7 +8,9 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
-// SnapshotEnrichService is the subset of inventory.Service needed by the enrichment scheduler.
+// SnapshotEnrichService is narrower than inventory.SnapshotService: the
+// enrichment scheduler drives the two batch loops but never refreshes a single
+// purchase, so it does not take RefreshPurchaseSnapshot.
 type SnapshotEnrichService interface {
 	ProcessPendingSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error)
 	RetryFailedSnapshots(ctx context.Context, limit int) (processed, skipped, failed int, err error)

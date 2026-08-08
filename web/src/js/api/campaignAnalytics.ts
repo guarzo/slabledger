@@ -6,7 +6,6 @@ import type {
   CampaignPNL, InventoryResult,
   EVPortfolio,
   CapitalSummary, Invoice, PortfolioHealth,
-  ChannelVelocity, PortfolioInsights,
   WeeklyReviewSummary,
 } from '../../types/campaigns';
 import { APIClient } from './client';
@@ -15,7 +14,6 @@ declare module './client' {
   interface APIClient {
     // Campaign analytics
     getCampaignPNL(campaignId: string): Promise<CampaignPNL>;
-    getInventory(campaignId: string): Promise<InventoryResult>;
     getGlobalInventory(): Promise<InventoryResult>;
 
     // Capital & Invoices
@@ -25,8 +23,6 @@ declare module './client' {
 
     // Portfolio
     getPortfolioHealth(): Promise<PortfolioHealth>;
-    getPortfolioChannelVelocity(): Promise<ChannelVelocity[]>;
-    getPortfolioInsights(): Promise<PortfolioInsights>;
     getWeeklyReview(): Promise<WeeklyReviewSummary>;
 
     // Expected value
@@ -39,10 +35,6 @@ const proto = APIClient.prototype;
 // Campaign analytics endpoints
 proto.getCampaignPNL = async function (this: APIClient, campaignId: string): Promise<CampaignPNL> {
   return this.get<CampaignPNL>(`/campaigns/${encodeURIComponent(campaignId)}/pnl`);
-};
-
-proto.getInventory = async function (this: APIClient, campaignId: string): Promise<InventoryResult> {
-  return this.get<InventoryResult>(`/campaigns/${encodeURIComponent(campaignId)}/inventory`);
 };
 
 proto.getGlobalInventory = async function (this: APIClient): Promise<InventoryResult> {
@@ -65,14 +57,6 @@ proto.updateInvoice = async function (this: APIClient, id: string, data: Partial
 // Portfolio health
 proto.getPortfolioHealth = async function (this: APIClient): Promise<PortfolioHealth> {
   return this.get<PortfolioHealth>('/portfolio/health');
-};
-
-proto.getPortfolioChannelVelocity = async function (this: APIClient): Promise<ChannelVelocity[]> {
-  return this.get<ChannelVelocity[]>('/portfolio/channel-velocity');
-};
-
-proto.getPortfolioInsights = async function (this: APIClient): Promise<PortfolioInsights> {
-  return this.get<PortfolioInsights>('/portfolio/insights');
 };
 
 proto.getWeeklyReview = async function (this: APIClient): Promise<WeeklyReviewSummary> {

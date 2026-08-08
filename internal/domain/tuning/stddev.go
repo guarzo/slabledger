@@ -1,6 +1,10 @@
-package inventory
+package tuning
 
-import "math"
+import (
+	"math"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+)
 
 // ComputeROIStats returns population stddev and CV for a slice of per-sale ROI values.
 // Returns (0, 0) if fewer than 2 values are provided.
@@ -32,7 +36,7 @@ func ComputeROIStats(rois []float64) (stddev, cv float64) {
 // per-sale net-profit-over-total-cost intent). The top tier is expected to carry
 // TierMaxCents == math.MaxInt (as emitted by ComputePriceTierPerformance); there is
 // no special case for TierMaxCents == 0.
-func EnrichPriceTierStddev(tiers []PriceTierPerformance, data []PurchaseWithSale) {
+func EnrichPriceTierStddev(tiers []PriceTierPerformance, data []inventory.PurchaseWithSale) {
 	if len(tiers) == 0 {
 		return
 	}

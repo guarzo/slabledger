@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/intelligence"
@@ -168,18 +169,43 @@ type CertInfo struct {
 	PopHigher  int     `json:"popHigher"`
 }
 
-// Service is the full campaigns API — a composition of all sub-interfaces.
-// Consumers that only need a subset should depend on the narrower interface
-// (e.g. AnalyticsService, ImportService) to follow the Interface Segregation Principle.
-// Sub-interfaces are defined in service_interfaces.go.
+// Service is the full campaigns API. It is the contract for consumers that
+// genuinely need most of it — CampaignsHandler alone calls roughly forty of
+// these methods, so narrowing it would buy nothing. Consumers that need less
+// depend on one of the sub-interfaces in service_interfaces.go instead; each of
+// those has at least one such consumer.
+//
+// Campaign/purchase/sale CRUD is declared inline here rather than as a
+// sub-interface because no consumer wants it on its own.
 type Service interface {
-	CRUDService
 	AnalyticsService
 	ImportService
 	PricingService
 	CertLookupService
 	SnapshotService
 	DHService
+
+	CreateCampaign(ctx context.Context, c *Campaign) error
+	GetCampaign(ctx context.Context, id string) (*Campaign, error)
+	ListCampaigns(ctx context.Context, activeOnly bool) ([]Campaign, error)
+	UpdateCampaign(ctx context.Context, c *Campaign) error
+	// UpdateCampaignIfUnchanged is UpdateCampaign for read-modify-write callers;
+	// see CampaignRepository for why both exist.
+	UpdateCampaignIfUnchanged(ctx context.Context, c *Campaign, expectedUpdatedAt time.Time) error
+	DeleteCampaign(ctx context.Context, id string) error
+
+	CreatePurchase(ctx context.Context, p *Purchase) error
+	GetPurchase(ctx context.Context, id string) (*Purchase, error)
+	DeletePurchase(ctx context.Context, id string) error
+	ListPurchasesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Purchase, error)
+
+	CreateSale(ctx context.Context, s *Sale, campaign *Campaign, purchase *Purchase) error
+	CreateBulkSales(ctx context.Context, campaignID string, channel SaleChannel, saleDate string, items []BulkSaleInput) (*BulkSaleResult, error)
+	ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error)
+	DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error
+	UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error
+
+	ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error
 
 	// Close shuts down background workers.
 	Close()
@@ -368,7 +394,6 @@ func (s *service) Close() {
 // Compile-time checks: service satisfies Service and each sub-interface.
 var (
 	_ Service           = (*service)(nil)
-	_ CRUDService       = (*service)(nil)
 	_ AnalyticsService  = (*service)(nil)
 	_ ImportService     = (*service)(nil)
 	_ PricingService    = (*service)(nil)

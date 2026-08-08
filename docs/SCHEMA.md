@@ -358,11 +358,13 @@ OAuth access/refresh tokens, scoped to a session.
 | `token_type` | TEXT | DEFAULT 'Bearer' | |
 | `expires_at` | TIMESTAMP | NOT NULL | |
 | `scope` | TEXT | | OAuth scopes |
-| `session_id` | TEXT | REFERENCES user_sessions(id) ON DELETE CASCADE | |
+| `session_id` | TEXT | NOT NULL, UNIQUE, REFERENCES user_sessions(id) ON DELETE CASCADE | `StoreTokens` writes the SHA-256 hash of the session id, matching `user_sessions.id`. NOT NULL + UNIQUE added migration 000031 |
 | `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 
-**Indexes:** none — all four were dropped in migration 000003 (see "Dropped indexes" below). Note that `idx_user_tokens_session_unique` was a UNIQUE index; dropping it removed the one-token-per-session guarantee at the database level.
+**Indexes:** `user_tokens_session_id_key` UNIQUE on `session_id` — the implicit index behind the constraint migration 000031 added.
+
+000001's four indexes were all dropped in migration 000003 (see "Dropped indexes" below). One of them, `idx_user_tokens_session_unique`, was UNIQUE, and dropping it removed the one-token-per-session guarantee at the database level. `AuthRepository.StoreTokens` upserts with `ON CONFLICT(session_id)`, which Postgres resolves against a unique index or constraint and otherwise rejects outright with SQLSTATE 42P10 — so from 000003 until 000031 every token write failed, silently, because the sole caller only logs a warning (SLA-57). 000031 restores the guarantee as a **named constraint** rather than a bare index, so the intent is visible in `\d` and an index advisor cannot recommend dropping it a second time. The `NOT NULL` is part of the fix: a UNIQUE constraint permits unlimited NULLs, which would let NULL-session rows bypass the conflict target and accumulate.
 
 **Foreign Keys:**
 - `user_id → users(id)` ON DELETE CASCADE
@@ -1114,6 +1116,13 @@ Four more indexes went away with the object they belonged to rather than by an e
 in 000007), `idx_advisor_cache_type` (dropped with its table in 000013), and
 `idx_campaign_purchases_mm_value_cents` and `idx_mm_sales_comps_lookup` (removed by
 000021 with their column and table).
+
+One entry above has since been undone. `idx_user_tokens_session_unique` was not a
+performance index — it enforced one-token-per-session, which is exactly what a UNIQUE
+index looks like to an advisor scanning for unused indexes, since enforcement is not a
+scan. Dropping it broke `StoreTokens`' `ON CONFLICT(session_id)` upsert on every call
+(SQLSTATE 42P10, SLA-57). Migration 000031 restores the guarantee as the named
+constraint `user_tokens_session_id_key`; see the `user_tokens` section above.
 
 ---
 

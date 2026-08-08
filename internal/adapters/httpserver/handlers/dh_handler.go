@@ -121,13 +121,6 @@ type DHPSAImporter interface {
 	PSAImport(ctx context.Context, items []dh.PSAImportItem) (*dh.PSAImportResponse, error)
 }
 
-// DHApproveService approves held DH push items and manages push config.
-type DHApproveService interface {
-	ApproveDHPush(ctx context.Context, purchaseID string) error
-	GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfig, error)
-	SaveDHPushConfig(ctx context.Context, cfg *inventory.DHPushConfig) error
-}
-
 // DHCountsFetcher retrieves inventory and order counts from DH.
 type DHCountsFetcher interface {
 	ListInventory(ctx context.Context, filters dh.InventoryFilters) (*dh.InventoryListResponse, error)
@@ -172,15 +165,15 @@ type DHHandler struct {
 	suggestCounter    DHSuggestionsCounter
 	logger            observability.Logger
 	baseCtx           context.Context
-	healthReporter    DHHealthReporter  // optional: API health metrics
-	countsFetcher     DHCountsFetcher   // optional: DH inventory/order counts
-	dhApproveService  DHApproveService  // optional: approve held pushes + push config
-	matchConfirmer    DHMatchConfirmer  // optional: confirms matches with DH for learning
-	psaImporter       DHPSAImporter     // optional: PSA import fallback for retry-match
-	ordersIngester    DHOrdersIngester  // optional: POST /api/dh/ingest-orders manual trigger
-	eventRec          dhevents.Recorder // optional: records DH state-change events
-	syncStateReader   SyncStateReader   // optional: reads dh_orders_last_poll timestamp
-	eventCountsStore  EventCountsStore  // optional: 24h event counts for orders ingest health
+	healthReporter    DHHealthReporter    // optional: API health metrics
+	countsFetcher     DHCountsFetcher     // optional: DH inventory/order counts
+	dhApproveService  inventory.DHService // optional: approve held pushes + push config
+	matchConfirmer    DHMatchConfirmer    // optional: confirms matches with DH for learning
+	psaImporter       DHPSAImporter       // optional: PSA import fallback for retry-match
+	ordersIngester    DHOrdersIngester    // optional: POST /api/dh/ingest-orders manual trigger
+	eventRec          dhevents.Recorder   // optional: records DH state-change events
+	syncStateReader   SyncStateReader     // optional: reads dh_orders_last_poll timestamp
+	eventCountsStore  EventCountsStore    // optional: 24h event counts for orders ingest health
 
 	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
 
@@ -224,7 +217,7 @@ type DHHandlerDeps struct {
 	BaseCtx           context.Context
 	HealthReporter    DHHealthReporter     // optional: API health metrics
 	CountsFetcher     DHCountsFetcher      // optional: DH inventory/order counts
-	DHApproveService  DHApproveService     // optional: approve held pushes + push config
+	DHApproveService  inventory.DHService  // optional: approve held pushes + push config
 	MatchConfirmer    DHMatchConfirmer     // optional: confirms matches with DH for learning
 	PSAImporter       DHPSAImporter        // optional: PSA import fallback for retry-match
 	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation

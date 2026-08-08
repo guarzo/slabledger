@@ -205,9 +205,19 @@ func (h *AuthHandlers) HandleGoogleCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Store tokens (encrypted in database, linked to session for multi-device support)
+	//
+	// Deliberately non-fatal: the session cookie is already usable without a
+	// token row, so a write failure here degrades rather than blocks login.
+	//
+	// That tolerance has a cost worth stating. Between migrations 000003 and
+	// 000031 this call failed on *every* login with SQLSTATE 42P10 -- 000003
+	// dropped the unique index the upsert's ON CONFLICT(session_id) infers
+	// against -- and because the error is only warned about, nothing surfaced
+	// and user_tokens was never written (SLA-57). If this warning appears on
+	// every login rather than occasionally, suspect the schema, not the network.
 	if err := h.authService.StoreTokens(ctx, user.ID, session.ID, tokens); err != nil {
 		h.logger.Warn(ctx, "failed to store tokens", observability.Err(err))
-		// Continue - user can still use the app, just won't have token refresh
+		// Continue - login succeeds; only the stored token row is lost.
 	}
 
 	// Set session cookie with lifetime derived from session expiry

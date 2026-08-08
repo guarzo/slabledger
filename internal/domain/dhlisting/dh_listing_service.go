@@ -2,13 +2,10 @@ package dhlisting
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
-	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -210,221 +207,35 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	listed, synced, skipped := 0, 0, 0
 	failedCerts := map[string]error{}
 	for _, cn := range sortedCerts {
-		p := purchases[cn]
-		// Hard gate: never put an item live on DH unless it has at least left
-		// PSA (received in hand, or PSA-shipped). The push scheduler enforces
-		// this via GetPurchasesByDHPushStatus, but the inline/manual/auto-list
-		// paths reach ListPurchases directly and previously bypassed it — a
-		// price review on a not-yet-received card would inline-push and list it.
-		if !p.IsReceivedOrShipped() {
-			s.logger.Warn(ctx, "dh listing: purchase not received or shipped; refusing to list",
-				observability.String("cert", p.CertNumber),
-				observability.String("purchaseID", p.ID))
-			failedCerts[cn] = errors.New("not received or shipped by PSA; cannot list on DH")
-			skipped++
-			continue
-		}
-		// If pending DH push, do inline match + push first.
-		if p.DHInventoryID == 0 && p.DHPushStatus == inventory.DHPushStatusPending {
-			if s.psaImporter == nil {
-				skipped++
-				continue // no DH match client — skip
-			}
-			invID := s.inlineMatchAndPush(ctx, p)
-			if invID == 0 {
-				failedCerts[cn] = errors.New("inline match/push failed")
-				skipped++
-				continue // unmatched or failed — skip listing
-			}
-			p.DHInventoryID = invID
-		}
-
-		if p.DHInventoryID == 0 {
-			// Not yet pushed to DH and not eligible for inline push. This used
-			// to silently drop the row; log so stranded purchases are visible.
-			s.logger.Warn(ctx, "dh listing: purchase not enrolled in push pipeline; skipping",
-				observability.String("cert", p.CertNumber),
-				observability.String("purchaseID", p.ID),
-				observability.String("dhPushStatus", string(p.DHPushStatus)))
-			failedCerts[cn] = fmt.Errorf("not enrolled in DH push pipeline (status %s)", p.DHPushStatus)
-			skipped++
-			continue
-		}
-
-		// Gate: require a human-committed price (reviewed or override)
-		// before flipping an item to listed on DH. DH honors
-		// listing_price_cents as-is, so sending anything not human-approved
-		// (e.g. a stale CL value) risks listing at the wrong price. Without
-		// one, skip and leave the item in_stock.
-		listingPrice := ResolveListingPriceCents(p)
-		if listingPrice == 0 {
-			s.logger.Warn(ctx, "dh listing: no committed price; skipping list transition",
-				observability.String("cert", p.CertNumber),
-				observability.String("purchaseID", p.ID))
-			failedCerts[cn] = errors.New("no committed price; skipped list transition")
-			skipped++
-			continue
-		}
-
-		// DH's inventory_upsert_service cancels+recreates MarketOrders on
-		// every PATCH regardless of whether values changed, so skip the call
-		// when status/price/channels are already in the target state. Empty
-		// DHChannelsJSON means no prior successful sync on record — fall
-		// through in that case even if status/price look correct.
-		if p.DHStatus == inventory.DHStatusListed &&
-			p.DHListingPriceCents == listingPrice &&
-			p.DHChannelsJSON != "" {
+		outcome, failErr := s.listOnePurchase(ctx, purchases[cn])
+		switch outcome {
+		case outcomeListed:
+			listed++
 			synced++
-			continue
-		}
-
-		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHInventoryStatusUpdate{
-			Status:            inventory.DHStatusListed,
-			ListingPriceCents: listingPrice,
-			CertImageURLFront: p.FrontImageURL,
-			CertImageURLBack:  p.BackImageURL,
-		})
-		if err != nil {
-			if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) {
-				s.logger.Error(ctx, "dh listing: stale inventory ID — resetting for re-push",
-					observability.String("cert", p.CertNumber),
-					observability.String("purchaseID", p.ID),
-					observability.Int("staleDHInventoryID", p.DHInventoryID),
-					observability.Err(err))
-				if s.resetter != nil {
-					if resetErr := s.resetter.ResetDHFieldsForRepush(ctx, p.ID); resetErr != nil {
-						s.logger.Warn(ctx, "dh listing: failed to reset stale DH fields",
-							observability.String("cert", p.CertNumber),
-							observability.Err(resetErr))
-					}
-				}
-				failedCerts[cn] = err
-			} else if errors.Is(err, ErrPSAKeysExhausted) {
-				s.logger.Warn(ctx, "dh listing: PSA keys exhausted — deferring list",
-					observability.String("cert", p.CertNumber),
-					observability.String("purchaseID", p.ID),
-					observability.Err(err))
-				s.recordEvent(ctx, dhevents.Event{
-					PurchaseID:    p.ID,
-					CertNumber:    p.CertNumber,
-					Type:          dhevents.TypeListDeferred,
-					DHInventoryID: p.DHInventoryID,
-					DHCardID:      p.DHCardID,
-					Source:        dhevents.SourceDHListing,
-					Notes:         "psa_auth_exhausted",
-				})
-				// Short-circuit the batch: rotation state is shared across
-				// all purchases in this call, so retrying subsequent items
-				// would just re-exhaust and spam events. Count the current
-				// purchase plus every untouched one as skipped so the result
-				// invariant Listed + Synced + Skipped == Total holds.
-				return DHListingResult{
-					Listed:      listed,
-					Synced:      synced,
-					Skipped:     len(purchases) - listed - synced,
-					Total:       len(purchases),
-					Error:       err,
-					FailedCerts: nilIfEmpty(failedCerts),
-				}
-			} else {
-				s.logger.Warn(ctx, "dh listing: status update failed",
-					observability.String("cert", p.CertNumber),
-					observability.Int("inventoryID", p.DHInventoryID),
-					observability.Err(err))
-				failedCerts[cn] = err
-			}
+		case outcomeAlreadyInSync:
+			synced++
+		case outcomeSyncedNotPersisted:
+			synced++
 			skipped++
-			continue
-		}
-		listed++
-
-		defaultChannels := DefaultListingChannels
-		if err := s.lister.SyncChannels(ctx, p.DHInventoryID, defaultChannels); err != nil {
-			s.logger.Warn(ctx, "dh listing: channel sync failed, reverting to in_stock",
-				observability.String("cert", p.CertNumber),
-				observability.Int("inventoryID", p.DHInventoryID),
-				observability.Err(err))
-			failedCerts[cn] = err
-			// Revert status so the item doesn't stay "listed" without channel sync.
-			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHInventoryStatusUpdate{
-				Status: inventory.DHStatusInStock,
-			}); revertErr != nil {
-				s.logger.Error(ctx, "dh listing: failed to revert status after sync failure",
-					observability.String("cert", p.CertNumber),
-					observability.Int("inventoryID", p.DHInventoryID),
-					observability.Err(revertErr))
-			} else if s.fieldsUpdater != nil {
-				// Persist reverted status locally so readers don't see stale data.
-				if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
-					CardID:      p.DHCardID,
-					InventoryID: p.DHInventoryID,
-					CertStatus:  DHCertStatusMatched,
-					DHStatus:    inventory.DHStatusInStock,
-				}); persistErr != nil {
-					s.logger.Warn(ctx, "dh listing: failed to persist reverted status",
-						observability.String("cert", p.CertNumber), observability.Err(persistErr))
-				}
-			}
-			listed-- // revert the listed count
+		case outcomeSkipped:
 			skipped++
-			continue
+		case outcomeAborted:
+			// Short-circuit the batch: rotation state is shared across all
+			// purchases in this call, so retrying subsequent items would just
+			// re-exhaust and spam events. The aborting purchase plus every
+			// untouched one are folded into Skipped by subtraction, and the
+			// aborting error is reported in Error, not FailedCerts.
+			return DHListingResult{
+				Listed:      listed,
+				Synced:      synced,
+				Skipped:     len(purchases) - listed - synced,
+				Total:       len(purchases),
+				Error:       failErr,
+				FailedCerts: nilIfEmpty(failedCerts),
+			}
 		}
-		synced++
-
-		// Persist listed status and channel info locally.
-		if s.fieldsUpdater != nil {
-			channelsJSON, marshalErr := json.Marshal(defaultChannels)
-			if marshalErr != nil {
-				s.logger.Error(ctx, "dh listing: failed to marshal channels",
-					observability.String("cert", p.CertNumber),
-					observability.Err(marshalErr))
-				failedCerts[cn] = marshalErr
-				listed--
-				skipped++
-				continue
-			}
-			if persistErr := s.fieldsUpdater.UpdatePurchaseDHFields(ctx, p.ID, inventory.DHFieldsUpdate{
-				CardID:            p.DHCardID,
-				InventoryID:       p.DHInventoryID,
-				CertStatus:        DHCertStatusMatched,
-				DHStatus:          inventory.DHStatusListed,
-				ChannelsJSON:      string(channelsJSON),
-				ListingPriceCents: dhListingPrice,
-			}); persistErr != nil {
-				s.logger.Error(ctx, "dh listing: failed to persist listed status — decrementing listed count",
-					observability.String("cert", p.CertNumber), observability.Err(persistErr))
-				failedCerts[cn] = persistErr
-				listed--
-				skipped++
-				continue
-			}
-			s.recordEvent(ctx, dhevents.Event{
-				PurchaseID:    p.ID,
-				CertNumber:    p.CertNumber,
-				Type:          dhevents.TypeListed,
-				NewDHStatus:   string(inventory.DHStatusListed),
-				DHInventoryID: p.DHInventoryID,
-				DHCardID:      p.DHCardID,
-				Source:        dhevents.SourceDHListing,
-			})
-			s.recordEvent(ctx, dhevents.Event{
-				PurchaseID:    p.ID,
-				CertNumber:    p.CertNumber,
-				Type:          dhevents.TypeChannelSynced,
-				Notes:         string(channelsJSON),
-				DHInventoryID: p.DHInventoryID,
-				Source:        dhevents.SourceDHListing,
-			})
-
-			// Best-effort: clear the "unlisted on DH" badge now that the item
-			// is listed again. A failure here must not abort the listing.
-			if s.unlistedClearer != nil {
-				if clearErr := s.unlistedClearer.ClearDHUnlistedDetectedAt(ctx, p.ID); clearErr != nil {
-					s.logger.Warn(ctx, "dh listing: failed to clear dh_unlisted_detected_at",
-						observability.String("purchaseID", p.ID),
-						observability.Err(clearErr))
-				}
-			}
+		if failErr != nil {
+			failedCerts[cn] = failErr
 		}
 	}
 

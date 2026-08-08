@@ -125,6 +125,55 @@ func (s *service) ListPurchasesByCampaign(ctx context.Context, campaignID string
 	return s.purchases.ListPurchasesByCampaign(ctx, campaignID, limit, offset)
 }
 
+func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req QuickAddRequest) (*Purchase, error) {
+	if s.certLookup == nil {
+		return nil, ErrCertLookupNotConfigured
+	}
+
+	info, err := s.certLookup.LookupCert(ctx, req.CertNumber)
+	if err != nil {
+		return nil, fmt.Errorf("cert lookup: %w", err)
+	}
+
+	purchaseDate := req.PurchaseDate
+	if purchaseDate == "" {
+		purchaseDate = time.Now().Format("2006-01-02")
+	}
+
+	setName := ResolvePSACategory(info.Category)
+	if IsGenericSetName(setName) {
+		setName = info.Category // keep original if resolved is still generic
+	}
+
+	p := &Purchase{
+		CampaignID:   campaignID,
+		CardName:     info.CardName,
+		CertNumber:   req.CertNumber,
+		CardNumber:   info.CardNumber,
+		SetName:      setName,
+		Grader:       "PSA",
+		GradeValue:   info.Grade,
+		BuyCostCents: req.BuyCostCents,
+		CLValueCents: req.CLValueCents,
+		PurchaseDate: purchaseDate,
+		// campaignID is the campaign an operator opened in the UI, not a heuristic
+		// match, so this is a manual attribution. The store would otherwise default
+		// it to 'inferred', which ReconcilePSAAttribution is free to overwrite.
+		AttributionSource: AttributionSourceManual,
+	}
+
+	campaign, err := s.campaigns.GetCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, fmt.Errorf("campaign lookup: %w", err)
+	}
+	p.PSASourcingFeeCents = campaign.PSASourcingFeeCents
+
+	if err := s.CreatePurchase(ctx, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
 // freezeSaleProvenance validates and defaults SaleReason, then overwrites the
 // derived, server-authoritative provenance fields (CLValueAtSaleCents,
 // ChannelFeePctAtSale, ForcedLiquidation) at sale-creation time. SaleReason
