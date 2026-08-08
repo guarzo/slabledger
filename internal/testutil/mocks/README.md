@@ -2,6 +2,14 @@
 
 Centralized mock implementations for all domain interfaces.
 
+The tables below cover the mocks you reach for most often; they are **not** an exhaustive
+roster, and a table that tries to be one goes stale silently. For the current set, derive
+it from the tree:
+
+```bash
+grep -rho '^type [A-Za-z]*Mock[A-Za-z]*' internal/testutil/mocks | awk '{print $2}' | sort -u
+```
+
 ## Pattern
 
 All mocks use the **Fn-field pattern**: every interface method has a corresponding `Fn` field.
@@ -51,12 +59,9 @@ Default when `Fn` is nil:
 ### inventory.FinanceRepository → `FinanceRepositoryMock`
 ### inventory.PricingRepository → `PricingRepositoryMock`
 ### inventory.DHRepository → `DHRepositoryMock`
+### inventory.PendingItemRepository → `MockPendingItemRepository`
 
 All follow the same Fn-field pattern. Unset methods return zero values or empty slices.
-
-### picks.Repository → `MockPicksRepository`
-### picks.ProfitabilityProvider → `MockProfitabilityProvider`
-### picks.InventoryProvider → `MockInventoryProvider`
 
 ## Service Mocks
 
@@ -84,8 +89,6 @@ svc := &mocks.MockInventoryService{
 | `export.Service` | `MockExportService` |
 | `dhlisting.Service` | `MockDHListingService` |
 | `advisor.Service` | `MockAdvisorService` |
-| `social.Service` | `MockSocialService` |
-| `picks.Service` | `MockPicksService` |
 
 Each follows the same pattern: set the `*Fn` field to override a method.
 
@@ -110,9 +113,13 @@ svc := inventory.NewService(
     store, // FinanceRepository
     store, // PricingRepository
     store, // DHRepository
-    logger,
+    inventory.WithIDGenerator(func() string { return "test-id" }),
 )
 ```
+
+`WithIDGenerator` is not optional — `NewService` panics without it. Everything else
+(logger, price lookup, cert lookup, …) is a `ServiceOption`; see `WithLogger` and friends
+in `internal/domain/inventory/service.go`.
 
 ### Fn-fields on InMemoryCampaignStore
 
@@ -144,12 +151,10 @@ store.Purchases["p1"] = &inventory.Purchase{ID: "p1", CampaignID: "c1"}
 
 | Type | Interface |
 |------|-----------|
-| `MockCardProvider` | `cards.CardProvider` |
 | `MockPriceProvider` | `pricing.PriceProvider` |
 | `MockHTTPClient` | `httpx.Client` |
 | `MockAuthRepository` | `auth.Repository` |
 | `MockCertLookup` | cert lookup interface |
-| `MockSocialService` | `social.Service` |
 
 ## Error Assertions
 
