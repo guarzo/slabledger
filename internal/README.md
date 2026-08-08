@@ -20,15 +20,12 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 │    internal/adapters/                           │
 │    ├── httpserver/      (inbound: web API)      │
 │    ├── clients/         (outbound: APIs)        │
-│    │   ├── cardutil/       (card utilities)     │
 │    │   ├── dhprice/        (DH pricing)         │
 │    │   ├── google/         (Google OAuth)       │
 │    │   ├── httpx/          (shared HTTP client) │
-│    │   ├── tcgdex/         (card metadata)      │
-│    │   ├── pricelookup/    (PriceLookup adapter)│
 │    │   └── psa/            (PSA data)           │
 │    ├── scheduler/       (background jobs)       │
-│    └── storage/sqlite/  (SQLite persistence)    │
+│    └── storage/postgres/ (Postgres persistence) │
 └───────────────────┬─────────────────────────────┘
                     │ (implements interfaces)
                     ▼
@@ -38,15 +35,12 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │    ├── inventory/      (campaigns, purchases)   │
  │    ├── arbitrage/      (acquisition targets, EV) │
  │    ├── auth/           (authentication)         │
- │    ├── cards/          (card interfaces)        │
  │    ├── constants/      (shared constants)       │
  │    ├── export/         (sell sheet generation)  │
- │    ├── favorites/      (favorites management)   │
  │    ├── finance/        (invoices, cashflow)     │
  │    ├── intelligence/   (DH market data)         │
  │    ├── mathutil/       (math utilities)         │
  │    ├── observability/  (logger interfaces)      │
- │    ├── picks/          (acquisition watchlist)  │
  │    ├── pricing/        (price interfaces/models)│
  │    ├── scoring/        (price scoring factors)  │
  │    └── storage/        (storage interfaces)     │
@@ -57,6 +51,7 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 │      PLATFORM (Infrastructure)                  │
 │    internal/platform/                           │
 │    ├── cache/          (type-safe caching)      │
+│    ├── cardutil/       (card normalization)     │
 │    ├── config/         (configuration)          │
 │    ├── crypto/         (AES encryption)         │
 │    ├── errors/         (error types)            │
@@ -84,22 +79,19 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 - Domain interfaces (ports)
 - Business rules and algorithms
 
-**Packages**:
+**Packages** (partial — run `go list ./internal/domain/...` for the current set):
 
 | Package | Purpose |
 |---------|---------|
 | `auth/` | Authentication interfaces |
 | `inventory/` | Campaign tracking, purchases, sales, P&L, analytics, CSV import |
 | `arbitrage/` | Acquisition targets, expected value, Monte Carlo |
-| `cards/` | `CardRepository` interface for card metadata |
 | `constants/` | Shared application constants |
 | `export/` | Sell sheet generation |
-| `favorites/` | Favorites management |
 | `finance/` | Invoices, cashflow, capital tracking, revocation flags |
 | `intelligence/` | DH market intelligence repository and types |
 | `mathutil/` | Math utility functions |
 | `observability/` | Logger, MetricsRecorder interfaces |
-| `picks/` | AI-driven acquisition watchlist service |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
 | `scoring/` | Price scoring factors and profiles |
 | `storage/` | Storage interfaces |
@@ -153,15 +145,12 @@ internal/adapters/
 │   ├── middleware/       # Authentication, CORS, etc.
 │   └── router.go        # Route configuration
 ├── clients/             # Outbound: External APIs
-│   ├── cardutil/        # Card utility functions
 │   ├── dhprice/         # DH (DoubleHolo) pricing
 │   ├── google/          # Google OAuth client
 │   ├── httpx/           # Shared HTTP client (retry, circuit breaker)
-│   ├── tcgdex/          # TCGdex.dev card/set metadata (EN + JA)
-│   ├── pricelookup/     # PriceLookup adapter (wraps PriceProvider for campaigns)
 │   └── psa/             # PSA data client
 ├── scheduler/           # Background jobs (price refresh, session cleanup)
-└── storage/sqlite/      # SQLite persistence + migrations
+└── storage/postgres/    # Postgres persistence + migrations
 ```
 
 **Rules**:
@@ -268,7 +257,7 @@ Is it business logic?
 ├─ Is it an external integration?
 │   ├─ Inbound (HTTP)?     → /internal/adapters/httpserver/
 │   ├─ Outbound (API)?     → /internal/adapters/clients/
-│   ├─ Persistence (DB)?   → /internal/adapters/storage/sqlite/
+│   ├─ Persistence (DB)?   → /internal/adapters/storage/postgres/
 │   └─ Background job?     → /internal/adapters/scheduler/
 │
 ├─ Is it infrastructure?
@@ -574,12 +563,25 @@ func TestProvider_GetPrice(t *testing.T) {
 
 ## Large File Awareness
 
-Several files in this codebase exceed 500 lines of code. Before adding code to any of them, consider whether the new logic belongs in a separate file.
+Several files in this codebase exceed 500 lines of code. Before adding code to any of them, consider whether the new logic belongs in a separate file. `scripts/check-file-size.sh` warns at 500 lines and fails at 600.
+
+The table below is a snapshot, not the source of truth — regenerate it rather than
+trusting it:
+
+```bash
+find internal/ cmd/ -name '*.go' ! -name '*_test.go' ! -path '*/testutil/*' \
+  ! -path 'cmd/slabledger/main.go' -type f -exec wc -l {} + \
+  | sort -rn | awk '$1>500 && $2!="total"'
+```
+
+As of 2026-08-08:
 
 | File | LOC | Why it's large |
 |------|-----|----------------|
-| `domain/arbitrage/service.go` | 530 | Acquisition, EV, Monte Carlo computation |
-| `domain/inventory/service_analytics.go` | ~330 | Campaign analytics computations |
+| `domain/inventory/types_core.go` | 562 | Core domain types: Campaign, Purchase, Sale, Phase, DH status |
+| `domain/portfolio/service.go` | 540 | Portfolio health, insights, capital timeline, weekly review |
+| `adapters/scheduler/cardladder_refresh.go` | 525 | CardLadder refresh job: options, wiring, single-purchase pricing |
+| `adapters/httpserver/handlers/campaigns_purchases.go` | 520 | Purchase and sale CRUD handlers, price overrides, cert lookup |
 
 ---
 
