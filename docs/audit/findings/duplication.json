@@ -1,0 +1,171 @@
+[
+  {
+    "id": "DUP-001",
+    "lens": "duplication",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "dhprice.dollarsToCents, handlers.centsToDollars vs mathutil.ToCentsInt/ToDollars"
+    },
+    "category": "duplication",
+    "title": "Two local cents<->dollars conversion functions reimplement mathutil.ToCentsInt/ToDollars instead of calling it",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "internal/domain/mathutil is the established, widely-used single implementation of dollar<->cent conversion (23+ call sites across adapters, scheduler, and inventory).",
+        "command": "grep -n 'func ToCents\\|func ToCentsInt\\|func ToDollars' internal/domain/mathutil/mathutil.go",
+        "output": "15:func ToCents(dollars float64) int64 {\n21:func ToCentsInt(dollars float64) int {\n26:func ToDollars(cents int64) float64 {",
+        "file_line": "internal/domain/mathutil/mathutil.go:15-27"
+      },
+      {
+        "claim": "mathutil.ToCents/ToCentsInt is already called from many packages, including the same dhprice package (provider.go) as the offending file (batch_adapter.go).",
+        "command": "grep -n 'mathutil\\.ToCents\\|mathutil\\.ToDollars\\|mathutil\\.ToCentsInt' internal/adapters/clients/dhprice/provider.go internal/adapters/clients/dh/convert.go internal/adapters/scheduler/card_trajectory_refresh.go internal/domain/inventory/parse_ebay.go",
+        "output": "internal/adapters/clients/dhprice/provider.go:270:\t\tcents := mathutil.ToCents(med)\ninternal/adapters/clients/dhprice/provider.go:277:\t\t\t\tLowCents:   mathutil.ToCents(lo),\ninternal/adapters/clients/dh/convert.go:40:\t\t\tPredictedPriceCents: mathutil.ToCents(resp.PriceForecast.PredictedPrice),\ninternal/adapters/scheduler/card_trajectory_refresh.go:179:\t\tMedianCents: mathutil.ToCentsInt(resp.MedianPrice),\ninternal/domain/inventory/parse_ebay.go:121:\t\t\tSalePriceCents: mathutil.ToCentsInt(price),",
+        "file_line": "internal/adapters/clients/dhprice/provider.go:13"
+      },
+      {
+        "claim": "batch_adapter.go, in the same dhprice package, defines its own dollarsToCents that reimplements mathutil.ToCentsInt's exact body (int(math.Round(dollars*100))) instead of calling the shared helper.",
+        "command": "sed -n '89,91p' internal/adapters/clients/dhprice/batch_adapter.go",
+        "output": "func dollarsToCents(dollars float64) int {\n\treturn int(math.Round(dollars * 100))\n}",
+        "file_line": "internal/adapters/clients/dhprice/batch_adapter.go:89-91"
+      },
+      {
+        "claim": "pricing_api.go defines its own centsToDollars that reimplements mathutil.ToDollars's exact body (float64(cents) / 100) instead of calling the shared helper.",
+        "command": "sed -n '56,60p' internal/adapters/httpserver/handlers/pricing_api.go",
+        "output": "// centsToDollars converts cents to dollars.\n// Integer cents always produce at most 2 decimal places.\nfunc centsToDollars(cents int) float64 {\n\treturn float64(cents) / 100\n}",
+        "file_line": "internal/adapters/httpserver/handlers/pricing_api.go:58-60"
+      },
+      {
+        "claim": "Neither local function is exported or has its own test file, and each has exactly one call site pattern confined to its own file.",
+        "command": "grep -rn 'dollarsToCents\\|centsToDollars' --include='*.go' .",
+        "output": "internal/adapters/clients/dhprice/batch_adapter.go:77-80 (4 call sites) and :89 (definition)\ninternal/adapters/httpserver/handlers/pricing_api.go:66,75,82 (3 call sites) and :58 (definition)",
+        "file_line": "internal/adapters/clients/dhprice/batch_adapter.go:77"
+      }
+    ],
+    "searched_universe": "git ls-files '*.go' (676 files); grep for cents/dollars conversion function definitions and mathutil.To* call sites across the whole tree",
+    "exclusions": ["_test.go files were checked for existing coverage of the two local functions; none found"],
+    "proposed_fix": "Delete dollarsToCents in internal/adapters/clients/dhprice/batch_adapter.go and centsToDollars in internal/adapters/httpserver/handlers/pricing_api.go; replace their call sites with mathutil.ToCentsInt and mathutil.ToDollars respectively (note ToDollars takes int64, so pricing_api.go call sites need an int64 cast or a small int-accepting wrapper if that conversion is undesirable).",
+    "blast_radius": [
+      "internal/adapters/clients/dhprice/batch_adapter.go",
+      "internal/adapters/httpserver/handlers/pricing_api.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "go build ./... succeeds with dollarsToCents and centsToDollars removed and their call sites replaced with mathutil.ToCentsInt / mathutil.ToDollars",
+      "go test ./internal/adapters/clients/dhprice/... ./internal/adapters/httpserver/handlers/... passes unchanged",
+      "grep -rn 'func dollarsToCents\\|func centsToDollars' --include='*.go' . returns no results"
+    ]
+  },
+  {
+    "id": "DUP-002",
+    "lens": "duplication",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "inventory.ExtractGrade vs inventory.ExtractGraderAndGrade (grader-and-grade regex)"
+    },
+    "category": "duplication",
+    "title": "Two independently-maintained grader/grade regexes accept different fractional-grade formats for the same concept",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "ExtractGrade (PSA-only, used by the PSA CSV import path and cert enrichment) accepts a multi-digit fractional grade component.",
+        "command": "sed -n '43,49p' internal/domain/inventory/import_parsing.go",
+        "output": "var gradeRegex = regexp.MustCompile(`(?i)\\bPSA\\s*(\\d{1,2}(?:\\.\\d+)?)\\b`)\n\n// ExtractGrade attempts to extract a PSA grade from a card title string.\n...\nfunc ExtractGrade(title string) float64 {",
+        "file_line": "internal/domain/inventory/import_parsing.go:43,49"
+      },
+      {
+        "claim": "ExtractGraderAndGrade (4-grader, used by the Shopify import path) is documented as the multi-grader counterpart to ExtractGrade but only accepts a single-digit fractional grade component -- the two regexes were clearly copy-derived (same '\\bGRADER\\s*(\\d{1,2}...)\\b' shape, same 1-10 range check) but have diverged in decimal precision.",
+        "command": "sed -n '164,168p' internal/domain/inventory/import_types.go; grep -n 'For multi-grader support' internal/domain/inventory/import_parsing.go",
+        "output": "var graderGradeRegex = regexp.MustCompile(`(?i)\\b(CGC|BGS|PSA|SGC)\\s*(\\d{1,2}(?:\\.\\d)?)\\b`)\n\n// ExtractGraderAndGrade extracts a grading company and numeric grade from a title string.\nfunc ExtractGraderAndGrade(title string) (string, float64) {\n48:// NOTE: This function is PSA-only -- it matches the pattern \"PSA <grade>\".\n49:// For multi-grader support (CGC, BGS, SGC), use ExtractGraderAndGrade instead.",
+        "file_line": "internal/domain/inventory/import_types.go:164,168"
+      },
+      {
+        "claim": "Concretely demonstrated divergence: a title containing 'PSA 9.55' matches ExtractGrade's regex in full but ExtractGraderAndGrade's regex only matches the truncated 'PSA 9', producing grade 9 instead of 9.55 for the same input string.",
+        "command": "python3 -c \"import re; r1=re.compile(r'(?i)\\bPSA\\s*(\\d{1,2}(?:\\.\\d+)?)\\b'); r2=re.compile(r'(?i)\\b(CGC|BGS|PSA|SGC)\\s*(\\d{1,2}(?:\\.\\d)?)\\b'); t='Charizard PSA 9.55'; print(r1.search(t)); print(r2.search(t))\"",
+        "output": "<re.Match object; span=(10, 18), match='PSA 9.55'>\n<re.Match object; span=(10, 15), match='PSA 9'>",
+        "file_line": "internal/domain/inventory/import_parsing.go:43"
+      },
+      {
+        "claim": "A third, independently-defined grader regex exists in cardutil for suffix stripping (not extraction) and also uses the single-digit fractional form, confirming the pattern was copied a third time rather than shared.",
+        "command": "grep -n 'PSAGradeSuffixRegex' internal/platform/cardutil/normalize.go",
+        "output": "internal/platform/cardutil/normalize.go:30:var PSAGradeSuffixRegex = regexp.MustCompile(`\\s+(?:PSA|BGS|CGC|SGC)\\s+\\d{1,2}(?:\\.\\d)?\\s*$`)",
+        "file_line": "internal/platform/cardutil/normalize.go:30"
+      }
+    ],
+    "searched_universe": "git ls-files '*.go' (676 files); grep for regex literals combining PSA|BGS|CGC|SGC grader tokens with a digit-grade capture group",
+    "exclusions": ["PSA grades in production PSA-sourced CSV data are effectively always single-decimal (X or X.5), so the practical trigger rate for this divergence is low; this is flagged as a latent inconsistency rather than an active production bug"],
+    "proposed_fix": "Which regex is correct is undetermined -- no test or documented spec fixes the intended fractional-grade precision. ExtractGrade has exactly one test (TestService_ImportPSAExportGlobal_ExtractGrade, internal/domain/inventory/service_test.go:919) and it only exercises the whole-number case \"PSA 9\"; ExtractGraderAndGrade has zero test coverage. A fixer must first decide the intended fractional-grade format (consult production PSA-title data for any multi-digit-fraction grades before assuming ExtractGrade's more permissive `\\d{1,2}(?:\\.\\d+)?` form is the one to standardize on) and only then hoist a single shared grade-fraction regex fragment (or helper function) used by ExtractGrade, ExtractGraderAndGrade, and cardutil.PSAGradeSuffixRegex, so future grade-format changes only need to happen once.",
+    "blast_radius": [
+      "internal/domain/inventory/import_parsing.go",
+      "internal/domain/inventory/import_types.go",
+      "internal/platform/cardutil/normalize.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "A single shared regex fragment or helper defines the grader+grade pattern; ExtractGrade, ExtractGraderAndGrade, and PSAGradeSuffixRegex all derive from it",
+      "go test ./internal/domain/inventory/... ./internal/platform/cardutil/... passes unchanged",
+      "A new table-driven test case confirms 'PSA 9.55'-style multi-digit fractional grades are handled identically by ExtractGrade and ExtractGraderAndGrade (either both accept or both reject, by explicit decision)"
+    ]
+  },
+  {
+    "id": "DUP-003",
+    "lens": "duplication",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "dh.normalizeCardNumber vs cardutil.NormalizeCardNumber"
+    },
+    "category": "duplication",
+    "title": "DH cert-disambiguation's local card-number normalizer doesn't strip denominators, unlike cardutil's shared version, causing silent disambiguation misses",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "dh.normalizeCardNumber only strips leading zeros; it does not strip a '/denominator' suffix the way cardutil.NormalizeCardNumber does.",
+        "command": "sed -n '34,40p' internal/adapters/clients/dh/disambiguate.go",
+        "output": "// normalizeCardNumber strips leading zeros, preserving a single \"0\" for\n// all-zero inputs (e.g. \"000\" → \"0\").\nfunc normalizeCardNumber(s string) string {\n\tn := strings.TrimLeft(s, \"0\")\n\tif n == \"\" && len(s) > 0 {\n\t\treturn \"0\"\n\t}\n\treturn n\n}",
+        "file_line": "internal/adapters/clients/dh/disambiguate.go:34-40"
+      },
+      {
+        "claim": "cardutil.NormalizeCardNumber explicitly strips a denominator ('006/165' -> '6') before stripping leading zeros -- the two functions solve the same 'normalize a collector number for comparison' problem but cardutil's is a superset of dh's.",
+        "command": "sed -n '186,213p' internal/platform/cardutil/normalize_cards.go",
+        "output": "// NormalizeCardNumber converts Pokemon TCG API format numbers to simple collector numbers.\n// Examples:\n//   - \"006/165\" -> \"6\" (removes leading zeros and denominator)\n//   - \"GG42/GG70\" -> \"GG42\" (keeps prefix, removes denominator)\nfunc NormalizeCardNumber(number string) string {\n\tif number == \"\" {\n\t\treturn \"\"\n\t}\n\t// Remove denominator if present (e.g., \"006/165\" -> \"006\")\n\tif idx := strings.Index(number, \"/\"); idx > 0 {\n\t\tnumber = number[:idx]\n\t}\n\t...",
+        "file_line": "internal/platform/cardutil/normalize_cards.go:186-196"
+      },
+      {
+        "claim": "The purchase card number fed into dh.Disambiguate (via dh.ResolveAmbiguous) genuinely can carry the denominator format -- ParsePSAListingTitle's own inline comment cites '199/165' as a real collector-number token it extracts and returns as the parsed card number, which becomes inventory.Purchase.CardNumber.",
+        "command": "grep -n '199/165' internal/domain/inventory/import_parsing.go",
+        "output": "100:\t// Iterating backwards ensures later collector numbers (e.g., \"199/165\") win over\n101:\t// earlier numeric set names (e.g., \"151\" in \"Pokemon 151 Pikachu 199/165\").",
+        "file_line": "internal/domain/inventory/import_parsing.go:100-101"
+      },
+      {
+        "claim": "The call chain confirms p.CardNumber (which can be '199/165'-shaped) flows directly into dh.ResolveAmbiguous -> dh.Disambiguate -> dh.normalizeCardNumber, while DH's own candidate.CardNumber values are bare integers (per the existing unit test fixtures for CertResolutionCandidate, e.g. '199', '234', '96', '0', '5' -- never a denominator form).",
+        "command": "grep -n 'dh.ResolveAmbiguous(resp.Candidates, p.CardNumber' internal/adapters/httpserver/handlers/dh_match_handler.go; grep -n 'CardNumber:' internal/adapters/clients/dh/disambiguate_test.go",
+        "output": "internal/adapters/httpserver/handlers/dh_match_handler.go:251:\tdhCardID, resolveErr := dh.ResolveAmbiguous(resp.Candidates, p.CardNumber, saveFn)\ninternal/adapters/clients/dh/disambiguate_test.go:8:\t\t{DHCardID: 269, CardName: \"Charizard ex\", SetName: \"Pokemon 151\", CardNumber: \"199\"},\ninternal/adapters/clients/dh/disambiguate_test.go:9:\t\t{DHCardID: 277, CardName: \"Charizard ex\", SetName: \"Pokemon Paldean Fates\", CardNumber: \"234\"},\ninternal/adapters/clients/dh/disambiguate_test.go:10:\t\t{DHCardID: 283, CardName: \"Charizard ex\", SetName: \"Pokemon Obsidian Flames\", CardNumber: \"228\"}",
+        "file_line": "internal/adapters/httpserver/handlers/dh_match_handler.go:251"
+      },
+      {
+        "claim": "Concretely demonstrated divergence: for a purchase card number '199/165' against a DH candidate with bare card number '199' (the shapes both sides actually produce per the evidence above), dh.normalizeCardNumber leaves the two unequal ('199/165' != '199', match fails) while cardutil.NormalizeCardNumber reduces both to '199' (match succeeds). Reproduced by transcribing each function's exact logic (both are simple, fully deterministic string operations with no external dependencies).",
+        "command": "python3 -c \"\ndef normalize_dh(s):\n    n = s.lstrip('0')\n    return '0' if n=='' and len(s)>0 else n\ndef normalize_cardutil(number):\n    if '/' in number:\n        number = number[:number.index('/')]\n    i = next((i for i,c in enumerate(number) if c.isdigit()), None)\n    if i is None: return number\n    prefix, num = number[:i], number[i:].lstrip('0') or '0'\n    return prefix+num\npurchase, candidate = '199/165', '199'\nprint('dh match:', normalize_dh(purchase) == normalize_dh(candidate))\nprint('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(candidate))\n\"",
+        "output": "dh match: False\ncardutil match: True",
+        "file_line": "internal/adapters/clients/dh/disambiguate.go:36"
+      }
+    ],
+    "searched_universe": "git ls-files '*.go' (676 files); grep for 'func [Nn]ormalize' definitions outside internal/platform/cardutil, then traced the one structurally similar hit (dh.normalizeCardNumber) through its call chain and input data shape",
+    "exclusions": ["Not verified against a live DH API response -- candidate.CardNumber's bare-integer shape is established from disambiguate_test.go's fixtures and the JSON field's other usages, not a captured production payload. If DH's API itself ever returns a denominator-form card_number for a candidate, the specific reproduction above would need re-checking, though the underlying regex/behavior gap (dh.normalizeCardNumber never strips '/...') would remain true regardless."],
+    "proposed_fix": "Replace the body of internal/adapters/clients/dh/disambiguate.go's normalizeCardNumber with a call to cardutil.NormalizeCardNumber (or otherwise delegate to it), so denominator-bearing purchase card numbers (e.g. from ParsePSAListingTitle) can still be matched against bare-integer DH candidate numbers during ambiguous-cert resolution.",
+    "blast_radius": [
+      "internal/adapters/clients/dh/disambiguate.go",
+      "internal/adapters/httpserver/handlers/dh_match_handler.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "go build ./... succeeds with dh.normalizeCardNumber delegating to cardutil.NormalizeCardNumber",
+      "go test ./internal/adapters/clients/dh/... passes, including the existing disambiguate_test.go table plus a new case asserting Disambiguate matches a '199/165'-shaped input against a bare '199' candidate",
+      "go test ./internal/adapters/httpserver/handlers/... passes unchanged"
+    ]
+  }
+]
