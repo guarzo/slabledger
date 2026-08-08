@@ -56,8 +56,11 @@ func (c *Client) ResolveCertsBatch(ctx context.Context, certs []CertResolveReque
 
 // ConfirmMatch confirms the correct card match for a cert that was unmatched
 // or incorrectly matched. This teaches the DH system for future lookups.
+//
+// Single and batch share one URL; DH switches on body shape (a "confirmations"
+// key selects the batch branch). This branch returns 422 on error.
 func (c *Client) ConfirmMatch(ctx context.Context, req ConfirmMatchRequest) (*ConfirmMatchResponse, error) {
-	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/confirm_match", c.baseURL)
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/dev/certs/confirm_match", c.baseURL)
 
 	var resp ConfirmMatchResponse
 	if err := c.postEnterprise(ctx, fullURL, req, &resp); err != nil {
@@ -67,11 +70,15 @@ func (c *Client) ConfirmMatch(ctx context.Context, req ConfirmMatchRequest) (*Co
 }
 
 // ConfirmMatchBatch confirms correct card matches for up to 500 certs at once.
+//
+// Same URL as ConfirmMatch — the "confirmations" key is what selects DH's batch
+// branch. That branch answers 200 even when every item failed, so read
+// Failed/Results[].Status rather than inferring success from the status code.
 func (c *Client) ConfirmMatchBatch(ctx context.Context, confirmations []ConfirmMatchRequest) (*ConfirmMatchBatchResponse, error) {
 	if len(confirmations) > 500 {
 		return nil, fmt.Errorf("ConfirmMatchBatch: %d confirmations exceeds maximum of 500", len(confirmations))
 	}
-	fullURL := fmt.Sprintf("%s/api/v1/enterprise/certs/confirm_match", c.baseURL)
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/dev/certs/confirm_match", c.baseURL)
 	body := ConfirmMatchBatchRequest{Confirmations: confirmations}
 
 	var resp ConfirmMatchBatchResponse
