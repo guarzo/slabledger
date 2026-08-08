@@ -32,8 +32,6 @@ type Router struct {
 	priceHintsHandler         *handlers.PriceHintsHandler
 	pricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	pricingAPIHandler         *handlers.PricingAPIHandler
-	advisorHandler            *handlers.AdvisorHandler
-	aiUsageHandler            *handlers.AIStatusHandler
 	priceFlagsHandler         *handlers.PriceFlagsHandler
 	cardLadderHandler         *handlers.CardLadderHandler
 	opportunitiesHandler      *handlers.OpportunitiesHandler
@@ -70,8 +68,6 @@ type RouterConfig struct {
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	PricingAPIKey             string                         // Bearer token; empty = pricing API disabled
 	CampaignsRepo             handlers.CertPriceLookup       // For pricing API handler
-	AdvisorHandler            *handlers.AdvisorHandler       // AI advisor; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler      // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler    // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler    // Card Ladder admin; nil = disabled
 	OpportunitiesHandler      *handlers.OpportunitiesHandler // Arbitrage opportunities; nil = disabled
@@ -143,14 +139,6 @@ func NewRouter(cfg RouterConfig) *Router {
 		}
 		rt.authMW.WithLocalAPIToken(token)
 		rt.logger.Info(context.Background(), "local API token authentication enabled")
-	}
-
-	if cfg.AdvisorHandler != nil {
-		rt.advisorHandler = cfg.AdvisorHandler
-	}
-
-	if cfg.AIStatusHandler != nil {
-		rt.aiUsageHandler = cfg.AIStatusHandler
 	}
 
 	if cfg.PriceFlagsHandler != nil {
@@ -262,9 +250,6 @@ func (rt *Router) Setup() http.Handler {
 
 	// Campaign endpoints (includes sell sheet, inventory, portfolio, etc.)
 	rt.registerCampaignRoutes(mux)
-
-	// AI Advisor routes
-	rt.registerAdvisorRoutes(mux)
 
 	// Arbitrage opportunities routes
 	rt.registerOpportunitiesRoutes(mux)

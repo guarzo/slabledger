@@ -21,12 +21,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
-	"github.com/guarzo/slabledger/internal/adapters/advisortool"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
-	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/dhpricing"
@@ -306,33 +304,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	// Sync state repository (for delta poll timestamps)
 	syncStateRepo := postgres.NewSyncStateRepository(db.DB)
 
-	// AI call tracking
-	aiCallRepo := postgres.NewAICallRepository(db)
-
-	// Build advisor tool options — inject intelligence repos.
-	gapStore := postgres.NewGapStore(db.DB)
-	advisorToolOpts := []advisortool.ExecutorOption{
-		advisortool.WithIntelligenceRepo(intelRepo),
-		advisortool.WithSuggestionsRepo(suggestionsRepo),
-		advisortool.WithGapStore(gapStore),
-		advisortool.WithArbitrageService(arbSvc),
-		advisortool.WithPortfolioService(portSvc),
-		advisortool.WithTuningService(tuningSvc),
-		advisortool.WithFinanceService(financeService),
-		advisortool.WithExportService(exportService),
-	}
-
-	azureAIClient, advisorService, err := initializeAdvisorService(
-		ctx, cfg, logger, db, aiCallRepo, campaignsService,
-		[]scoringadapter.ProviderOption{
-			scoringadapter.WithTuningService(tuningSvc),
-		},
-		advisorToolOpts...,
-	)
-	if err != nil {
-		return err
-	}
-
 	// Initialize Card Ladder
 	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
 	var clSalesStore *postgres.CLSalesStore
@@ -385,8 +356,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		CertLookup:                 certLookup,
 		CertEnrichJob:              campaignsInit.certEnrichJob,
 		PricingEnrichJob:           campaignsInit.pricingEnrichJob,
-		AdvisorService:             advisorService,
-		AICallRepo:                 aiCallRepo,
 		CardLadderClient:           clClient,
 		CardLadderStore:            clStore,
 		CardLadderSalesStore:       clSalesStore,
@@ -401,7 +370,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		DHCompCacheStore:           campaignsInit.dhCompStore,
 		DHPriceSyncService:         dhPriceSyncService,
 		DHTombstoneStore:           dhTombstoneStore,
-		GapStore:                   gapStore,
 	}
 	if psaRowProvider != nil {
 		sDeps.PSARowProvider = psaRowProvider
@@ -429,9 +397,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		TrajectoryRepo:       trajectoryRepo,
 		SuggestionsRepo:      suggestionsRepo,
 		DemandRepo:           demandRepo,
-		AdvisorService:       advisorService,
-		AzureAIClient:        azureAIClient,
-		AICallRepo:           aiCallRepo,
 		CLClient:             clClient,
 		CLStore:              clStore,
 		DHClient:             dhClient,

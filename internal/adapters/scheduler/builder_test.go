@@ -151,9 +151,6 @@ func TestBuildGroup_MinimalDeps(t *testing.T) {
 		t.Error("access log cleanup is enabled by default but is missing")
 	}
 
-	if hasSchedulerOfType[*GapCleanupScheduler](result.Group) {
-		t.Error("gap cleanup was built without a GapStore")
-	}
 	if hasSchedulerOfType[*InventoryRefreshScheduler](result.Group) {
 		t.Error("inventory refresh was built without its dependencies")
 	}
@@ -212,7 +209,6 @@ func fullyGatedDeps() BuildDeps {
 	purchaseRepo := &mocks.PurchaseRepositoryMock{}
 	return BuildDeps{
 		Logger:                logger,
-		GapStore:              mocks.NewMockGapStore(),
 		InventoryLister:       builderStubInventoryLister{},
 		SnapshotRefresher:     builderStubSnapshotRefresher{},
 		SnapshotEnrichService: builderStubSnapshotEnrichService{},
@@ -240,7 +236,6 @@ func TestBuildGroup_DependencyGates(t *testing.T) {
 		name    string
 		present func(*Group) bool
 	}{
-		{"gap cleanup", hasSchedulerOfType[*GapCleanupScheduler]},
 		{"inventory refresh", hasSchedulerOfType[*InventoryRefreshScheduler]},
 		{"snapshot enrich", hasSchedulerOfType[*SnapshotEnrichScheduler]},
 		{"dh price sync", hasSchedulerOfType[*DHPriceSyncScheduler]},

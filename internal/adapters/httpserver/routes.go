@@ -54,9 +54,6 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		if rt.campaignsHandler != nil {
 			mux.Handle("GET /api/admin/price-override-stats", rt.authMW.RequireAdmin(http.HandlerFunc(rt.campaignsHandler.HandlePriceOverrideStats)))
 		}
-		if rt.aiUsageHandler != nil {
-			mux.Handle("GET /api/admin/ai-usage", rt.authMW.RequireAdmin(http.HandlerFunc(rt.aiUsageHandler.HandleAIUsage)))
-		}
 		if rt.priceFlagsHandler != nil {
 			mux.Handle("GET /api/admin/price-flags", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleListPriceFlags)))
 			mux.Handle("PATCH /api/admin/price-flags/{flagId}/resolve", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleResolvePriceFlag)))
@@ -203,17 +200,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/suggestions", rt.spaHandler.HandleIndex)
 
 	rt.logger.Info(context.Background(), "campaign routes registered")
-}
-
-// registerAdvisorRoutes wires the AI advisor endpoints.
-func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
-	if rt.advisorHandler == nil || rt.authMW == nil {
-		return
-	}
-	mux.Handle("POST /api/advisor/digest", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleDigest)))
-	mux.Handle("POST /api/advisor/liquidation-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleLiquidationAnalysis)))
-	mux.HandleFunc("/advisor", rt.spaHandler.HandleIndex)
-	rt.logger.Info(context.Background(), "AI advisor routes registered")
 }
 
 // registerPricingAPIRoutes wires the public pricing API endpoints (bearer token auth).

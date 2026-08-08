@@ -82,16 +82,6 @@ export function usePricingDiagnostics(options?: AdminQueryOptions) {
   });
 }
 
-export function useAIUsage(options?: AdminQueryOptions) {
-  return useQuery({
-    queryKey: queryKeys.admin.aiUsage,
-    queryFn: () => api.getAIUsage(),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-    enabled: options?.enabled ?? true,
-  });
-}
-
 export function usePriceFlags(status: 'open' | 'resolved' | 'all', options?: AdminQueryOptions) {
   return useQuery({
     queryKey: queryKeys.admin.priceFlags(status),

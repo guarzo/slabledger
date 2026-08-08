@@ -109,26 +109,9 @@ Log of every outbound pricing API call for observability and rate analysis.
 
 ---
 
-### `ai_calls`
-Log of every AI (Azure OpenAI) call including token usage and estimated cost.
+### ~~`ai_calls`~~ — DROPPED (migration 000035)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `operation` | TEXT | NOT NULL, CHECK IN ('digest','campaign_analysis','liquidation','purchase_assessment','social_caption','social_suggestion') | |
-| `status` | TEXT | NOT NULL, CHECK IN ('success','error','rate_limited') | |
-| `error_message` | TEXT | DEFAULT '' | |
-| `latency_ms` | INTEGER | NOT NULL DEFAULT 0 | |
-| `tool_rounds` | INTEGER | NOT NULL DEFAULT 0 | Number of tool-use iterations |
-| `input_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
-| `output_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
-| `total_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
-| `cost_estimate_cents` | INTEGER | NOT NULL DEFAULT 0 | Added in migration 000001 |
-| `timestamp` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-
-**Indexes:** none — both were dropped in migration 000003 (see "Dropped indexes" below).
-
-**Foreign Keys:** none
+Dropped in migration 000035 with the removal of the Azure AI advisor. Logged every LLM call — operation, status, latency, tool rounds, token counts, and estimated cost in cents. Its two indexes were already gone (dropped in migration 000003, listed under "Dropped indexes" below).
 
 ---
 
@@ -409,7 +392,7 @@ Individual graded cards bought under a campaign.
 | `snapshot_json` | TEXT | NOT NULL DEFAULT '' | Full market snapshot blob |
 | `snapshot_status` | TEXT | NOT NULL DEFAULT '', CHECK IN ('','pending','failed','exhausted') | |
 | `snapshot_retry_count` | INTEGER | NOT NULL DEFAULT 0 | |
-| `psa_listing_title` | TEXT | NOT NULL DEFAULT '' | Raw PSA title for LLM fallback; added migration 000001 |
+| `psa_listing_title` | TEXT | NOT NULL DEFAULT '' | Raw PSA title used for DH card matching; added migration 000001 |
 | `override_price_cents` | INTEGER | NOT NULL DEFAULT 0, CHECK >= 0 | User-set price override; added migration 000001 |
 | `override_source` | TEXT | NOT NULL DEFAULT '' | Source label for override; added migration 000001 |
 | `override_set_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of override; added migration 000001 |
@@ -803,24 +786,9 @@ Daily buy/sell suggestions from DoubleHolo.
 
 ---
 
-### `scoring_data_gaps`
-Records of missing data encountered during scoring/analytics.
+### ~~`scoring_data_gaps`~~ — DROPPED (migration 000035)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `factor_name` | TEXT | NOT NULL | Scoring factor that had missing data |
-| `reason` | TEXT | NOT NULL | Why data was missing |
-| `entity_type` | TEXT | NOT NULL | e.g. 'purchase', 'campaign' |
-| `entity_id` | TEXT | NOT NULL | |
-| `card_name` | TEXT | NOT NULL DEFAULT '' | |
-| `set_name` | TEXT | NOT NULL DEFAULT '' | |
-| `recorded_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-
-**Indexes:**
-- `idx_scoring_gaps_recorded` on `(recorded_at)`
-
-**Foreign Keys:** none
+Dropped in migration 000035 with the removal of the scoring domain. Recorded missing data encountered during scoring — factor name, reason, entity type and id, card and set name. Its surviving index `idx_scoring_gaps_recorded` went with the table; `idx_scoring_gaps_factor` had already been dropped in migration 000003.
 
 ---
 
@@ -1082,11 +1050,11 @@ Sessions where `expires_at > now()`, joined to `users` for username/google_id, w
 ### `expired_sessions`
 Session IDs where `expires_at <= now()`, used by the session-cleanup scheduler.
 
-### `ai_usage_summary`
-Aggregate AI call statistics for the last 7 days: total calls, success/error/rate-limited counts, token totals, and estimated cost.
+### ~~`ai_usage_summary`~~ — DROPPED (migration 000035)
+Dropped in migration 000035 with `ai_calls`. Aggregated AI call statistics for the last 7 days: total calls, success/error/rate-limited counts, token totals, and estimated cost.
 
-### `ai_usage_by_operation`
-Per-operation breakdown of AI call counts, error rates, latency, token usage, and cost for the last 7 days.
+### ~~`ai_usage_by_operation`~~ — DROPPED (migration 000035)
+Dropped in migration 000035 with `ai_calls`. Per-operation breakdown of AI call counts, error rates, latency, token usage, and cost for the last 7 days.
 
 ---
 
@@ -1163,7 +1131,6 @@ campaigns
 
 ── Standalone tables (no FK dependencies) ──
 api_calls
-ai_calls
 card_access_log
 card_id_mappings
 card_price_trajectory
@@ -1180,7 +1147,6 @@ dh_suggestions
 dh_state_events
 dh_card_tombstones
 dh_comp_cache
-scoring_data_gaps
 scheduler_run_stats
 dh_push_config
 dh_card_cache
