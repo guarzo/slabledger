@@ -103,6 +103,45 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 - ❌ NO direct API calls or database queries
 - ❌ NO framework dependencies (gin, echo, etc.)
 
+#### Leaf and non-leaf packages
+
+Which domain packages may import which is decided by one derived test (SLA-48):
+
+> A package under `internal/domain/` is a **leaf** if its transitive import closure within
+> `internal/domain/` excludes `internal/domain/inventory`. It is **non-leaf** otherwise —
+> the hub itself, plus every package that depends on it directly or transitively.
+>
+> Any domain package may import a **leaf**, or the **hub**. Importing any other non-leaf
+> is a violation.
+
+Derived, never listed — a hardcoded roster is the failure mode SLA-12 removed. To see the
+current partition:
+
+```bash
+for p in $(go list ./internal/domain/...); do
+  go list -deps "$p" | grep -q '/internal/domain/inventory$' \
+    && echo "non-leaf: $p" || echo "leaf:     $p"
+done
+```
+
+**This is already enforced; no separate check exists or is needed.** `scripts/check-imports.sh`
+derives its governed set as the *direct* hub importers, while the taxonomy's non-leaf set is
+the *transitive* ones. The two differ only for a package reaching the hub through another
+non-leaf — and that package imports a governed sibling, which the checker already flags. So
+on any tree that passes, `governed sibling ≡ non-leaf minus the hub`, and the target-side
+scan is exactly "no domain package may import a non-leaf other than the hub."
+
+A corollary worth knowing before you propose strengthening the checker: making membership
+transitive is a **no-op**. Closure can only add a package that imports an already-governed
+one, which is itself a violation, so the fixed point is reached at iteration zero wherever
+the checker passes.
+
+Edges that look like exceptions but are not — each target is a leaf, so all are legal:
+`advisor → ai`, `advisor → scoring`, `dhlisting → dhevents`, `pricing/lookup → pricing`,
+`inventory → dhevents`, `inventory → intelligence`.
+
+Full reasoning: `docs/specs/2026-08-08-domain-leaf-taxonomy-design.md`.
+
 **Adding New Domain Logic**:
 ```go
 // 1. Define interface in domain layer

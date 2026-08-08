@@ -92,13 +92,13 @@ SLA-45's target-side scan had been implementing it all along.
 
 The argument is an identity between two sets:
 
-1. `check-imports.sh:63-81` derives the governed set as the packages importing the hub
+1. `check-imports.sh:74-92` derives the governed set as the packages importing the hub
    **directly**.
 2. The taxonomy's non-leaf set is the packages depending on the hub **transitively**,
    minus the hub itself.
 
 These differ only for a package that reaches the hub *through another non-leaf* — and such
-a package imports a governed sibling, which `check-imports.sh:125-155` already flags. So on
+a package imports a governed sibling, which `check-imports.sh:136-166` already flags. So on
 any tree that **passes** the checker the two sets are identical, and on any tree where they
 diverge the checker is already failing. `governed sibling ≡ non-leaf minus the hub` holds
 exactly where it needs to.
