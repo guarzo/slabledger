@@ -12,11 +12,6 @@ type ModeConfig struct {
 	TrustProxy        bool // Trust X-Forwarded-For and X-Real-IP headers (default: false)
 }
 
-// CacheConfig controls cache behavior and refresh operations
-type CacheConfig struct {
-	Path string // Cache file location
-}
-
 // ServerConfig contains HTTP server configuration
 type ServerConfig struct {
 	ListenAddr               string        // HTTP listen address (default: 127.0.0.1:8080)
@@ -154,7 +149,6 @@ func (c *InventoryRefreshConfig) ApplyDefaults() {
 // Config holds all application configuration organized into logical groups
 type Config struct {
 	Mode               ModeConfig
-	Cache              CacheConfig
 	Server             ServerConfig
 	Logging            LoggingConfig
 	Database           DatabaseConfig

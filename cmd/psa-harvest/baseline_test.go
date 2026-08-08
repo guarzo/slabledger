@@ -48,9 +48,9 @@ func TestParseBaselineFlag(t *testing.T) {
 		},
 		{
 			name:         "baseline flag mixed with unrelated flags config.Load must still see",
-			args:         []string{"-log-level", "debug", "-baseline-pull", "-cache", "/tmp/cache.json"},
+			args:         []string{"-log-level", "debug", "-baseline-pull", "-database-url", "postgres://localhost/db"},
 			wantBaseline: true,
-			wantRest:     []string{"-log-level", "debug", "-cache", "/tmp/cache.json"},
+			wantRest:     []string{"-log-level", "debug", "-database-url", "postgres://localhost/db"},
 		},
 		{
 			// The safety case: a typo must abort the run, never silently

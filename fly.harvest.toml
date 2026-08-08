@@ -4,13 +4,20 @@
 # psa-harvest binary to completion — it logs into the PSA portal, writes a fresh
 # encrypted access token to the shared Postgres, and exits. It has no HTTP service.
 #
-# It is NOT a long-running server: the actual run cadence comes from a *scheduled
-# machine* created with `fly machine run --schedule hourly` (see docs/psa-harvester.md).
-# `fly deploy` here only builds/pushes the image; it does NOT update an already-running
-# scheduled machine. The [vm]/primary_region blocks below apply to `fly deploy`, but
-# `fly machine run` does NOT reliably inherit them — pass --region/--vm-* explicitly
-# there. After a code change: rebuild, then `fly machine update <id> --image ...
-# --schedule hourly` so the hourly runs use the new image (see docs/psa-harvester.md).
+# It is NOT a long-running server. The run cadence lives outside this file: an hourly
+# GitHub Actions cron (.github/workflows/psa-harvest-cron.yml) starts the machine, with
+# Fly's own on-machine `--schedule hourly` as a second layer. See docs/psa-harvester.md,
+# which is the source of truth for cadence and for post-deploy verification.
+#
+# This app is set up for auto-deploy, and a deploy rolls the harvester machine onto the
+# new image on its own — a merge is enough to ship harvester code; you do not hand-roll
+# the image onto the machine. What a deploy does NOT guarantee is that the machine keeps
+# firing: a deploy that recreates the machine has silently killed the Fly-side schedule
+# before (2026-07-16). After a deploy, verify a run actually happened — see "Updating the
+# harvester after a code change" in docs/psa-harvester.md.
+#
+# The [vm]/primary_region blocks below apply to `fly deploy`, but a manual one-off
+# `fly machine run` does NOT reliably inherit them — pass --region/--vm-* explicitly there.
 
 app = 'slabledger-psa-harvest'
 primary_region = 'iad'
