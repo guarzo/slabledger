@@ -75,6 +75,9 @@ checks_performed == Σ_files ( n_siblings − [owner ∈ siblings] )
 ```
 
 Asserting equality (not merely `> 0`) still catches a traversal that lost files midway.
+Both sums read the same file list, so this catches divergence *between* the two passes;
+truncation of the list itself is caught upstream, where the `find` runs in a plain
+command substitution (`set -e` aborts on failure) and an empty result is rejected.
 The `n_siblings ≥ 2` guard is retained — below that the rule cannot mean anything.
 
 ### 3. Self-test (`scripts/check-imports-test.sh`)
@@ -95,6 +98,12 @@ Cases:
 | 2 | Classic sibling → sibling | exit ≠ 0 |
 | 3 | Clean tree (siblings import only the hub) | exit 0 |
 | 4 | Fewer than 2 siblings | exit ≠ 0 (fail-closed guard) |
+| 5 | Nested governed sibling (`nest/deep`) importing a flat sibling | exit ≠ 0, offender named `nest/deep` |
+
+Case 5 pins owner resolution for multi-segment package paths — the `pricing/lookup`
+shape. Enforcement resolves a file's owner with the same `${dir#internal/domain/}`
+formula membership derivation uses, so the two agree by construction; the case is what
+keeps them in step.
 
 Each failing case also asserts the **message names the offending edge**, so a script that
 dies for an unrelated reason cannot score a pass.
@@ -130,7 +139,7 @@ opened to remove.
 
 ## Verification
 
-- `bash scripts/check-imports-test.sh` — all four cases pass
+- `bash scripts/check-imports-test.sh` — all cases pass
 - `make check` passes
 - `go test -race ./...` passes
 - Escape-hatch probe from the ticket reproduced against the *old* script (exits 0, the

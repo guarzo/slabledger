@@ -44,7 +44,7 @@ Used by verification steps. Re-derive if the tree changed.
 
 ### Task 1: Self-test harness that demonstrates the bug
 
-Written against the **current** checker. Three cases pass immediately; the escape-hatch case fails. That failure is the bug SLA-45 reports, made executable.
+Written against the **current** checker. Four cases pass immediately; the escape-hatch case fails. That failure is the bug SLA-45 reports, made executable.
 
 **Files:**
 - Create: `scripts/check-imports-test.sh`
@@ -151,12 +151,14 @@ fixture_sibling_to_sibling() {
   mkpkg "$root" beta inventory
 }
 
-# Case 3 — clean tree: siblings import only the hub.
+# Case 3 — clean tree: siblings import only the hub. Includes a nested package
+# (the pricing/lookup shape) to prove nesting alone is not a violation.
 fixture_clean() {
   local root=$1
   mkpkg "$root" inventory
   mkpkg "$root" alpha inventory
   mkpkg "$root" beta inventory
+  mkpkg "$root" nest/deep inventory
 }
 
 # Case 4 — fail-closed guard: fewer than two siblings.
@@ -165,6 +167,18 @@ fixture_one_sibling() {
   mkpkg "$root" inventory
   mkpkg "$root" alpha inventory
   mkpkg "$root" leafpkg
+}
+
+# Case 5 — nested governed sibling importing a flat sibling.
+# Pins owner resolution for multi-segment package paths: the offender must be
+# named "nest/deep", not "deep" and not "nest". Membership derivation
+# (check-imports.sh:67-70) uses the same ${dir#internal/domain/} formula, so
+# this case is what keeps the two in step.
+fixture_nested_violation() {
+  local root=$1
+  mkpkg "$root" inventory
+  mkpkg "$root" beta inventory
+  mkpkg "$root" nest/deep inventory beta
 }
 
 run_case "escape hatch: non-hub importer of a governed sibling is flagged" \
@@ -182,6 +196,10 @@ run_case "clean tree passes" \
 run_case "fail-closed: fewer than two siblings is an error" \
   nonzero "At least 2 are required" \
   fixture_one_sibling
+
+run_case "nested sibling importing a flat sibling names the full package path" \
+  nonzero "internal/domain/nest/deep imports sibling internal/domain/beta" \
+  fixture_nested_violation
 
 echo ""
 if [ "$failures" -ne 0 ]; then
@@ -201,7 +219,7 @@ chmod +x scripts/check-imports-test.sh
 
 Run: `bash scripts/check-imports-test.sh`
 
-Expected: exit 1, with **case 1 FAIL and cases 2–4 PASS**:
+Expected: exit 1, with **case 1 FAIL and cases 2–5 PASS**:
 
 ```
 FAIL: escape hatch: non-hub importer of a governed sibling is flagged
@@ -209,6 +227,7 @@ FAIL: escape hatch: non-hub importer of a governed sibling is flagged
 PASS: classic: sibling importing a sibling is flagged
 PASS: clean tree passes
 PASS: fail-closed: fewer than two siblings is an error
+PASS: nested sibling importing a flat sibling names the full package path
 ```
 
 If any case other than #1 fails, **stop** — the harness is wrong, not the checker. Fix the harness before continuing.
@@ -219,7 +238,7 @@ If any case other than #1 fails, **stop** — the harness is wrong, not the chec
 git add scripts/check-imports-test.sh
 git commit -m "test: add check-imports self-test, demonstrating the SLA-45 escape hatch
 
-Four fixture cases against the real checker. Case 1 fails on the current
+Five fixture cases against the real checker. Case 1 fails on the current
 script: a package that does not import the hub is never scanned, so its
 imports of governed siblings go unenforced."
 ```
@@ -263,9 +282,15 @@ is_sibling() {
 }
 
 # Pass 1: compute the expected check count independently of the pass that
-# performs the checks. Deriving both in one loop would let a truncated
-# traversal lower expectation and actual together — exactly the failure this
+# performs the checks. Deriving both in one loop would let a scan that dropped
+# files midway lower expectation and actual together — exactly the failure this
 # accounting exists to catch.
+#
+# Scope: both passes read the same $domain_files, so this catches divergence
+# BETWEEN the passes, not a truncated `find`. Truncation upstream of
+# $domain_files is covered separately — the find runs in a plain command
+# substitution so set -e aborts on traversal failure, and an empty result is
+# rejected outright (check-imports.sh:46-56).
 expected_checks=0
 while IFS= read -r file; do
   dir=${file%/*}
@@ -309,9 +334,9 @@ while IFS= read -r file; do
   done
 done <<< "$domain_files"
 
-# Fail closed: a scan that performed a different number of checks than its own
-# derivation implies has lost or gained files midway. Assert equality, not
-# merely > 0, so divergence in either direction is caught.
+# Fail closed: a scan that performed a different number of checks than pass 1
+# implies has lost or gained files midway. Assert equality, not merely > 0, so
+# divergence in either direction is caught.
 if [ "$checks_performed" -ne "$expected_checks" ]; then
   echo "ERROR: flat sibling check performed $checks_performed checks, expected $expected_checks."
   echo ""
@@ -360,6 +385,7 @@ PASS: escape hatch: non-hub importer of a governed sibling is flagged
 PASS: classic: sibling importing a sibling is flagged
 PASS: clean tree passes
 PASS: fail-closed: fewer than two siblings is an error
+PASS: nested sibling importing a flat sibling names the full package path
 
 check-imports self-test: all cases passed.
 ```
@@ -466,7 +492,7 @@ Replace `CLAUDE.md:197` with:
 
 ```markdown
 - `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces the flat sibling rule, deriving membership from the tree and enforcing on the target side, and fails closed if fewer than two siblings are derived or if the scan performs an unexpected number of checks
-- `scripts/check-imports-test.sh` — self-test for the above; four fixture cases, run first by `make check`
+- `scripts/check-imports-test.sh` — self-test for the above; five fixture cases, run first by `make check`
 ```
 
 - [ ] **Step 4: Verify the whole gate**
@@ -502,7 +528,7 @@ should report as broken, not as a clean tree."
 
 | Spec requirement | Covered by |
 |---|---|
-| `bash scripts/check-imports-test.sh` — all four cases pass | Task 2, Step 3 |
+| `bash scripts/check-imports-test.sh` — all cases pass | Task 2, Step 3 |
 | `make check` passes | Task 3, Step 4 |
 | `go test -race ./...` passes | Task 3, Step 5 |
 | Probe reproduced against old script (exit 0, the bug) | Task 1, Step 3 — case 1 fails on the unmodified checker |
