@@ -122,7 +122,10 @@ expired OAuth states), and the RLS retrofit
 (000027 — enables row-level security on the six tables created after the 000003 blanket
 pass, with policies scoped `TO service_role` and grants revoked from `anon`/`authenticated`;
 those role-dependent statements are guarded on `pg_roles` so the migration also applies to
-a local Postgres, where Supabase's roles do not exist).
+a local Postgres, where Supabase's roles do not exist) and its follow-up (000028 — applies
+the same tightening to the 36 tables and 7 views 000003 covered, whose `USING (true)`
+policies carried no `TO` clause and therefore defaulted to `TO PUBLIC`, passing
+`anon`/`authenticated`; after it, no policy in `public` is `TO PUBLIC`).
 
 Connection is configured via `DATABASE_URL`. The transaction pooler is used for the app
 runtime; DDL works the same because `db.go` uses `pgx.QueryExecModeExec` (simple protocol).
