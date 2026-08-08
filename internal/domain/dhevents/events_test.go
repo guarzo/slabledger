@@ -29,3 +29,27 @@ func TestTypeAndSourceConstantsAreDistinct(t *testing.T) {
 		seenSrc[s] = true
 	}
 }
+
+func TestClampHistoryLimit(t *testing.T) {
+	tests := []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{name: "zero uses the default", limit: 0, want: DefaultHistoryLimit},
+		{name: "negative uses the default", limit: -5, want: DefaultHistoryLimit},
+		{name: "one is honoured", limit: 1, want: 1},
+		{name: "in-range value passes through", limit: 250, want: 250},
+		{name: "max is honoured", limit: MaxHistoryLimit, want: MaxHistoryLimit},
+		{name: "over max is capped", limit: MaxHistoryLimit + 1, want: MaxHistoryLimit},
+		{name: "far over max is capped", limit: 1_000_000, want: MaxHistoryLimit},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClampHistoryLimit(tt.limit); got != tt.want {
+				t.Errorf("ClampHistoryLimit(%d) = %d, want %d", tt.limit, got, tt.want)
+			}
+		})
+	}
+}
