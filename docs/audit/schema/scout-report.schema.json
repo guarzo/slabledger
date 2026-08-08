@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Scout report",
+  "type": "object",
+  "required": ["scout", "revision", "status", "declared_totals", "records"],
+  "properties": {
+    "scout":    {"type": "string"},
+    "revision": {"type": "string", "const": "740976ecf80a4f2ccdaa611d7790ccaa95b48773"},
+    "status":   {"enum": ["complete", "partial", "failed"]},
+    "declared_totals": {
+      "type": "object",
+      "description": "Counts this scout claims to have covered; reconciled against baseline.",
+      "additionalProperties": {"type": "integer"}
+    },
+    "gaps":    {"type": "array", "items": {"type": "string"}},
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["identity", "kind", "defined_at", "command"],
+        "properties": {
+          "identity":        {"type": "string"},
+          "kind":            {"type": "string"},
+          "defined_at":      {"type": "string"},
+          "external_refs":   {"type": "integer", "minimum": 0},
+          "ref_sites":       {"type": "array", "items": {"type": "string"}},
+          "build_tags":      {"type": "array", "items": {"type": "string"}},
+          "registration_sites": {"type": "array", "items": {"type": "string"}},
+          "command":         {"type": "string"}
+        }
+      }
+    }
+  }
+}

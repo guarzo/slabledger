@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Audit finding",
+  "type": "object",
+  "required": ["id", "lens", "revision", "subject", "category", "title",
+               "severity", "confidence", "evidence", "searched_universe",
+               "proposed_fix", "blast_radius", "effort", "acceptance_criteria"],
+  "properties": {
+    "id":       {"type": "string", "pattern": "^[A-Z]+-[0-9]{3}$"},
+    "lens":     {"type": "string"},
+    "revision": {"type": "string", "const": "740976ecf80a4f2ccdaa611d7790ccaa95b48773"},
+    "subject": {
+      "type": "object",
+      "required": ["kind", "identity"],
+      "properties": {
+        "kind":     {"enum": ["symbol", "package", "table", "column", "index",
+                              "env", "config", "component", "hook", "type",
+                              "route", "claim", "test", "migration"]},
+        "identity": {"type": "string", "minLength": 1}
+      }
+    },
+    "category": {"enum": ["dead-code", "naming", "architecture", "duplication",
+                          "size", "db", "frontend", "docs"]},
+    "title":      {"type": "string", "minLength": 1},
+    "severity":   {"enum": ["high", "medium", "low"]},
+    "confidence": {"enum": ["mechanical", "strong", "suspected"]},
+    "evidence": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["claim", "command", "output"],
+        "properties": {
+          "claim":     {"type": "string"},
+          "command":   {"type": "string"},
+          "output":    {"type": "string"},
+          "file_line": {"type": "string"}
+        }
+      }
+    },
+    "searched_universe": {"type": "string", "minLength": 1},
+    "exclusions": {"type": "array", "items": {"type": "string"}},
+    "build_tags": {"type": "array", "items": {"type": "string"}},
+    "runtime_checks": {
+      "type": "object",
+      "description": "Required when confidence is mechanical. All nine answered.",
+      "properties": {
+        "interface_satisfaction": {"type": "string"},
+        "functional_options":     {"type": "string"},
+        "embedding":              {"type": "string"},
+        "serialization":          {"type": "string"},
+        "go_embed":               {"type": "string"},
+        "build_tags":             {"type": "string"},
+        "registration":           {"type": "string"},
+        "init_side_effects":      {"type": "string"},
+        "reflection_or_string":   {"type": "string"}
+      }
+    },
+    "proposed_fix":        {"type": "string", "minLength": 1},
+    "blast_radius":        {"type": "array", "items": {"type": "string"}},
+    "effort":              {"enum": ["S", "M", "L"]},
+    "acceptance_criteria": {"type": "array", "minItems": 1,
+                            "items": {"type": "string"}},
+    "verifier": {
+      "type": "object",
+      "properties": {
+        "verdict":   {"enum": ["confirmed", "refuted", "uncertain"]},
+        "rationale": {"type": "string"}
+      }
+    }
+  },
+  "allOf": [{
+    "if":   {"properties": {"confidence": {"const": "mechanical"}}},
+    "then": {"required": ["runtime_checks", "build_tags", "exclusions"]}
+  }]
+}
