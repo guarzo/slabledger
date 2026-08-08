@@ -38,12 +38,16 @@ jobs:
       if: github.event_name == 'pull_request'
       id: filter
       with:
+        # No '!' exclusions here. In dorny/paths-filter these are picomatch
+        # negations OR'd with the other patterns, not exclusions like GitHub's
+        # native `paths:` -- '!web/*.md' matches every path that ISN'T web/*.md,
+        # so it made the filter true for every change. Markdown-only edits under
+        # web/ therefore run the frontend suite; that costs a few minutes and is
+        # the safe direction to err.
         filters: |
           web:
             - 'web/**'
             - '.github/workflows/frontend-ci.yml'
-            - '!web/*.md'
-            - '!web/**/*.md'
 
     - name: Resolve result
       # Pushes to main deploy to production, so main gets the full suite unfiltered.
