@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -20,7 +21,7 @@ func TestDHOrdersPoll_NoOrders(t *testing.T) {
 		},
 	}
 	syncStore := newMockSyncStateStore()
-	svc := &mocks.MockInventoryService{}
+	svc := &mocks.MockImportService{}
 
 	s := NewDHOrdersPollScheduler(client, syncStore, svc, nil, mocks.NewMockLogger(), DHOrdersPollConfig{
 		Enabled:  true,
@@ -56,10 +57,10 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 	}
 	syncStore := newMockSyncStateStore()
 
-	var capturedConfirmItems []inventory.OrdersConfirmItem
+	var capturedConfirmItems []csvimport.OrdersConfirmItem
 
-	svc := &mocks.MockInventoryService{
-		ImportOrdersSalesFn: func(_ context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
+	svc := &mocks.MockImportService{
+		ImportOrdersSalesFn: func(_ context.Context, rows []csvimport.OrdersExportRow) (*csvimport.OrdersImportResult, error) {
 			require.Len(t, rows, 1)
 			assert.Equal(t, "99998888", rows[0].CertNumber)
 			assert.Equal(t, "2026-04-02", rows[0].Date)
@@ -68,8 +69,8 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 			assert.Equal(t, "PSA", rows[0].Grader)
 			assert.Equal(t, float64(10), rows[0].Grade)
 
-			return &inventory.OrdersImportResult{
-				Matched: []inventory.OrdersImportMatch{
+			return &csvimport.OrdersImportResult{
+				Matched: []csvimport.OrdersImportMatch{
 					{
 						CertNumber:     "99998888",
 						ProductTitle:   "Charizard PSA 10",
@@ -86,7 +87,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 				},
 			}, nil
 		},
-		ConfirmOrdersSalesFn: func(_ context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
+		ConfirmOrdersSalesFn: func(_ context.Context, items []csvimport.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
 			capturedConfirmItems = items
 			return &inventory.BulkSaleResult{Created: len(items)}, nil
 		},
@@ -114,7 +115,7 @@ func TestDHOrdersPoll_Disabled(t *testing.T) {
 	s := NewDHOrdersPollScheduler(
 		&mocks.MockDHOrdersClient{},
 		newMockSyncStateStore(),
-		&mocks.MockInventoryService{},
+		&mocks.MockImportService{},
 		nil,
 		mocks.NewMockLogger(),
 		DHOrdersPollConfig{Enabled: false},
@@ -167,7 +168,7 @@ func TestDHOrdersPoll_RunOnce_HonorsCallerSince(t *testing.T) {
 	// Pre-seed a different value in sync state to prove RunOnce ignores it.
 	require.NoError(t, syncStore.Set(context.Background(), syncStateKeyDHOrdersPoll, "2020-01-01T00:00:00Z"))
 
-	s := NewDHOrdersPollScheduler(client, syncStore, &mocks.MockInventoryService{},
+	s := NewDHOrdersPollScheduler(client, syncStore, &mocks.MockImportService{},
 		nil, mocks.NewMockLogger(), DHOrdersPollConfig{Enabled: true, Interval: 1 * time.Hour})
 
 	summary, err := s.RunOnce(context.Background(), "2025-06-01T00:00:00Z")
@@ -215,11 +216,11 @@ func TestDHOrdersPoll_MalformedGrade_FallsBackToZero(t *testing.T) {
 				},
 			}
 			var capturedGrade float64
-			svc := &mocks.MockInventoryService{
-				ImportOrdersSalesFn: func(_ context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
+			svc := &mocks.MockImportService{
+				ImportOrdersSalesFn: func(_ context.Context, rows []csvimport.OrdersExportRow) (*csvimport.OrdersImportResult, error) {
 					require.Len(t, rows, 1)
 					capturedGrade = rows[0].Grade
-					return &inventory.OrdersImportResult{}, nil
+					return &csvimport.OrdersImportResult{}, nil
 				},
 			}
 
@@ -249,15 +250,15 @@ func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 			}, nil
 		},
 	}
-	svc := &mocks.MockInventoryService{
-		ImportOrdersSalesFn: func(_ context.Context, _ []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
-			return &inventory.OrdersImportResult{
-				Matched:     []inventory.OrdersImportMatch{{CertNumber: "c-matched", PurchaseID: "pur-matched", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-04-02", SalePriceCents: 7500}},
-				NotFound:    []inventory.OrdersImportSkip{{CertNumber: "c-orphan"}},
-				AlreadySold: []inventory.OrdersImportSkip{{CertNumber: "c-already"}},
+	svc := &mocks.MockImportService{
+		ImportOrdersSalesFn: func(_ context.Context, _ []csvimport.OrdersExportRow) (*csvimport.OrdersImportResult, error) {
+			return &csvimport.OrdersImportResult{
+				Matched:     []csvimport.OrdersImportMatch{{CertNumber: "c-matched", PurchaseID: "pur-matched", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-04-02", SalePriceCents: 7500}},
+				NotFound:    []csvimport.OrdersImportSkip{{CertNumber: "c-orphan"}},
+				AlreadySold: []csvimport.OrdersImportSkip{{CertNumber: "c-already"}},
 			}, nil
 		},
-		ConfirmOrdersSalesFn: func(_ context.Context, _ []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
+		ConfirmOrdersSalesFn: func(_ context.Context, _ []csvimport.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
 			return &inventory.BulkSaleResult{Created: 1}, nil
 		},
 	}

@@ -295,6 +295,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		ctx, cfg, logger, db, priceProvImpl, intelRepo, dhClient, eventStore, cardIDMappingRepo,
 	)
 	campaignsService := campaignsInit.service
+	importService := campaignsInit.importService
 	certLookup := campaignsInit.certLookup
 	arbSvc := campaignsInit.arbSvc
 	portSvc := campaignsInit.portSvc
@@ -380,6 +381,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PurchaseStore:              campaignsInit.purchaseStore,
 		DHStore:                    campaignsInit.dhStore,
 		CampaignsService:           campaignsService,
+		ImportService:              importService,
 		CertLookup:                 certLookup,
 		CertEnrichJob:              campaignsInit.certEnrichJob,
 		PricingEnrichJob:           campaignsInit.pricingEnrichJob,
@@ -414,6 +416,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		PriceRepo:            priceRepo,
 		AuthService:          authService,
 		CampaignsService:     campaignsService,
+		ImportService:        importService,
 		ArbitrageService:     arbSvc,
 		PortfolioService:     portSvc,
 		TuningService:        tuningSvc,
@@ -444,7 +447,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 	})
 	serverErr := startWebServer(ctx, deps)
 
-	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, campaignsService, cfg.Server.SchedulerShutdownTimeout)
+	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, campaignsService, importService, cfg.Server.SchedulerShutdownTimeout)
 
 	return serverErr
 }

@@ -104,3 +104,11 @@ type ResolveCertResult struct {
 	Category   string  `json:"category"`
 	Subject    string  `json:"subject"`
 }
+
+// QuickAddRequest contains the minimal data needed to create a purchase from a cert number.
+type QuickAddRequest struct {
+	CertNumber   string `json:"certNumber"`
+	BuyCostCents int    `json:"buyCostCents"`
+	CLValueCents int    `json:"clValueCents,omitempty"`
+	PurchaseDate string `json:"purchaseDate,omitempty"` // defaults to today
+}

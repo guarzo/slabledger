@@ -1,19 +1,37 @@
-package inventory
+package csvimport_test
 
 import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
+// newOrdersImportService builds an import service straight over the shared
+// in-memory store. The orders paths seed purchases directly and never reach back
+// through inventory.IntakeSupportService, so unlike the PSA import tests these
+// need no inventory service wired alongside.
+func newOrdersImportService(repo *mocks.InMemoryCampaignStore, idGen func() string) csvimport.Service {
+	return csvimport.NewService(csvimport.Deps{
+		Campaigns: repo,
+		Purchases: repo,
+		Sales:     repo,
+		Finance:   repo,
+		IDGen:     idGen,
+	})
+}
+
 func TestImportOrdersSales(t *testing.T) {
-	repo := newMockRepo()
+	repo := mocks.NewInMemoryCampaignStore()
 
 	// Set up a campaign and purchases
-	campaign := &Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
-	repo.campaigns["camp-1"] = campaign
+	campaign := &inventory.Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
+	repo.Campaigns["camp-1"] = campaign
 
-	repo.purchases["purch-1"] = &Purchase{
+	repo.Purchases["purch-1"] = &inventory.Purchase{
 		ID:                  "purch-1",
 		CampaignID:          "camp-1",
 		CertNumber:          "111111",
@@ -23,7 +41,7 @@ func TestImportOrdersSales(t *testing.T) {
 		GradeValue:          9,
 		PurchaseDate:        "2026-01-01",
 	}
-	repo.purchases["purch-2"] = &Purchase{
+	repo.Purchases["purch-2"] = &inventory.Purchase{
 		ID:                  "purch-2",
 		CampaignID:          "camp-1",
 		CertNumber:          "222222",
@@ -34,7 +52,7 @@ func TestImportOrdersSales(t *testing.T) {
 		PurchaseDate:        "2026-01-01",
 	}
 	// purch-3 already sold
-	repo.purchases["purch-3"] = &Purchase{
+	repo.Purchases["purch-3"] = &inventory.Purchase{
 		ID:                  "purch-3",
 		CampaignID:          "camp-1",
 		CertNumber:          "333333",
@@ -44,16 +62,16 @@ func TestImportOrdersSales(t *testing.T) {
 		GradeValue:          8,
 		PurchaseDate:        "2026-01-01",
 	}
-	repo.sales["sale-3"] = &Sale{ID: "sale-3", PurchaseID: "purch-3"}
-	repo.purchaseSales["purch-3"] = true
+	repo.Sales["sale-3"] = &inventory.Sale{ID: "sale-3", PurchaseID: "purch-3"}
+	repo.PurchaseSales["purch-3"] = true
 
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string { return "gen-id" }))
+	svc := newOrdersImportService(repo, func() string { return "gen-id" })
 	defer svc.Close()
 
-	rows := []OrdersExportRow{
-		{CertNumber: "111111", Date: "2026-03-10", SalesChannel: SaleChannelEbay, ProductTitle: "Charizard PSA 9", UnitPrice: 200.00},
-		{CertNumber: "333333", Date: "2026-03-11", SalesChannel: SaleChannelEbay, ProductTitle: "Blastoise PSA 8", UnitPrice: 150.00},
-		{CertNumber: "999999", Date: "2026-03-12", SalesChannel: SaleChannelWebsite, ProductTitle: "Unknown PSA 10", UnitPrice: 50.00},
+	rows := []csvimport.OrdersExportRow{
+		{CertNumber: "111111", Date: "2026-03-10", SalesChannel: inventory.SaleChannelEbay, ProductTitle: "Charizard PSA 9", UnitPrice: 200.00},
+		{CertNumber: "333333", Date: "2026-03-11", SalesChannel: inventory.SaleChannelEbay, ProductTitle: "Blastoise PSA 8", UnitPrice: 150.00},
+		{CertNumber: "999999", Date: "2026-03-12", SalesChannel: inventory.SaleChannelWebsite, ProductTitle: "Unknown PSA 10", UnitPrice: 50.00},
 	}
 
 	result, err := svc.ImportOrdersSales(context.Background(), rows)
@@ -102,12 +120,12 @@ func TestImportOrdersSales(t *testing.T) {
 }
 
 func TestConfirmOrdersSales(t *testing.T) {
-	repo := newMockRepo()
+	repo := mocks.NewInMemoryCampaignStore()
 
-	campaign := &Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
-	repo.campaigns["camp-1"] = campaign
+	campaign := &inventory.Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
+	repo.Campaigns["camp-1"] = campaign
 
-	repo.purchases["purch-1"] = &Purchase{
+	repo.Purchases["purch-1"] = &inventory.Purchase{
 		ID:                  "purch-1",
 		CampaignID:          "camp-1",
 		CertNumber:          "111111",
@@ -119,15 +137,15 @@ func TestConfirmOrdersSales(t *testing.T) {
 	}
 
 	idCounter := 0
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+	svc := newOrdersImportService(repo, func() string {
 		idCounter++
 		return fmt.Sprintf("sale-%d", idCounter)
-	}))
+	})
 	defer svc.Close()
 
-	items := []OrdersConfirmItem{
-		{PurchaseID: "purch-1", SaleChannel: SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 20000},
-		{PurchaseID: "purch-bad", SaleChannel: SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 5000},
+	items := []csvimport.OrdersConfirmItem{
+		{PurchaseID: "purch-1", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 20000},
+		{PurchaseID: "purch-bad", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 5000},
 	}
 
 	result, err := svc.ConfirmOrdersSales(context.Background(), items)
@@ -143,18 +161,18 @@ func TestConfirmOrdersSales(t *testing.T) {
 	}
 
 	// Verify the sale was actually created
-	if _, exists := repo.sales["sale-1"]; !exists {
+	if _, exists := repo.Sales["sale-1"]; !exists {
 		t.Error("expected sale-1 to exist in repo")
 	}
 }
 
 func TestConfirmOrdersSales_UpdatesDHStatusForInventoriedItems(t *testing.T) {
-	repo := newMockRepo()
-	campaign := &Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
-	repo.campaigns["camp-1"] = campaign
+	repo := mocks.NewInMemoryCampaignStore()
+	campaign := &inventory.Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
+	repo.Campaigns["camp-1"] = campaign
 
 	// Purchase with DH state (DHInventoryID != 0)
-	repo.purchases["purch-dh"] = &Purchase{
+	repo.Purchases["purch-dh"] = &inventory.Purchase{
 		ID:            "purch-dh",
 		CampaignID:    "camp-1",
 		CertNumber:    "111111",
@@ -162,21 +180,21 @@ func TestConfirmOrdersSales_UpdatesDHStatusForInventoriedItems(t *testing.T) {
 		BuyCostCents:  10000,
 		GradeValue:    9,
 		PurchaseDate:  "2026-01-01",
-		DHStatus:      DHStatusListed,
+		DHStatus:      inventory.DHStatusListed,
 		DHInventoryID: 12345,
 		DHCardID:      54321,
 		DHCertStatus:  "verified",
 	}
 
 	idCounter := 0
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+	svc := newOrdersImportService(repo, func() string {
 		idCounter++
 		return fmt.Sprintf("sale-%d", idCounter)
-	}))
+	})
 	defer svc.Close()
 
-	items := []OrdersConfirmItem{
-		{PurchaseID: "purch-dh", SaleChannel: SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 20000},
+	items := []csvimport.OrdersConfirmItem{
+		{PurchaseID: "purch-dh", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 20000},
 	}
 
 	result, err := svc.ConfirmOrdersSales(context.Background(), items)
@@ -189,19 +207,19 @@ func TestConfirmOrdersSales_UpdatesDHStatusForInventoriedItems(t *testing.T) {
 	}
 
 	// Verify the purchase's DHStatus was updated to "sold"
-	p := repo.purchases["purch-dh"]
-	if p.DHStatus != DHStatusSold {
-		t.Errorf("purchase DHStatus: got %q, want %q", p.DHStatus, DHStatusSold)
+	p := repo.Purchases["purch-dh"]
+	if p.DHStatus != inventory.DHStatusSold {
+		t.Errorf("purchase DHStatus: got %q, want %q", p.DHStatus, inventory.DHStatusSold)
 	}
 }
 
 func TestConfirmOrdersSales_SkipsDHStatusForNonInventoriedItems(t *testing.T) {
-	repo := newMockRepo()
-	campaign := &Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
-	repo.campaigns["camp-1"] = campaign
+	repo := mocks.NewInMemoryCampaignStore()
+	campaign := &inventory.Campaign{ID: "camp-1", Name: "Test Campaign", EbayFeePct: 0.1235}
+	repo.Campaigns["camp-1"] = campaign
 
 	// Purchase without DH state (DHInventoryID == 0)
-	repo.purchases["purch-no-dh"] = &Purchase{
+	repo.Purchases["purch-no-dh"] = &inventory.Purchase{
 		ID:            "purch-no-dh",
 		CampaignID:    "camp-1",
 		CertNumber:    "222222",
@@ -209,19 +227,19 @@ func TestConfirmOrdersSales_SkipsDHStatusForNonInventoriedItems(t *testing.T) {
 		BuyCostCents:  5000,
 		GradeValue:    10,
 		PurchaseDate:  "2026-01-01",
-		DHStatus:      DHStatusListed,
+		DHStatus:      inventory.DHStatusListed,
 		DHInventoryID: 0, // No DH inventory
 	}
 
 	idCounter := 0
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+	svc := newOrdersImportService(repo, func() string {
 		idCounter++
 		return fmt.Sprintf("sale-%d", idCounter)
-	}))
+	})
 	defer svc.Close()
 
-	items := []OrdersConfirmItem{
-		{PurchaseID: "purch-no-dh", SaleChannel: SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 10000},
+	items := []csvimport.OrdersConfirmItem{
+		{PurchaseID: "purch-no-dh", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-03-10", SalePriceCents: 10000},
 	}
 
 	result, err := svc.ConfirmOrdersSales(context.Background(), items)
@@ -234,19 +252,19 @@ func TestConfirmOrdersSales_SkipsDHStatusForNonInventoriedItems(t *testing.T) {
 	}
 
 	// Verify the purchase's DHStatus was NOT changed (still "listed") because DHInventoryID is 0
-	p := repo.purchases["purch-no-dh"]
-	if p.DHStatus != DHStatusListed {
-		t.Errorf("purchase DHStatus: got %q, want %q (should not have changed)", p.DHStatus, DHStatusListed)
+	p := repo.Purchases["purch-no-dh"]
+	if p.DHStatus != inventory.DHStatusListed {
+		t.Errorf("purchase DHStatus: got %q, want %q (should not have changed)", p.DHStatus, inventory.DHStatusListed)
 	}
 }
 
 func TestConfirmOrdersSales_SetsForcedLiquidation(t *testing.T) {
-	repo := newMockRepo()
+	repo := mocks.NewInMemoryCampaignStore()
 	// Seed an invoice due 2026-06-20
-	repo.invoices["inv1"] = &Invoice{ID: "inv1", DueDate: "2026-06-20"}
+	repo.Invoices["inv1"] = &inventory.Invoice{ID: "inv1", DueDate: "2026-06-20"}
 
-	repo.campaigns["camp-1"] = &Campaign{ID: "camp-1", Name: "Test", EbayFeePct: 0.1235}
-	repo.purchases["purch-1"] = &Purchase{
+	repo.Campaigns["camp-1"] = &inventory.Campaign{ID: "camp-1", Name: "Test", EbayFeePct: 0.1235}
+	repo.Purchases["purch-1"] = &inventory.Purchase{
 		ID:           "purch-1",
 		CampaignID:   "camp-1",
 		CertNumber:   "FL100",
@@ -255,7 +273,7 @@ func TestConfirmOrdersSales_SetsForcedLiquidation(t *testing.T) {
 		GradeValue:   9,
 		PurchaseDate: "2026-05-01",
 	}
-	repo.purchases["purch-2"] = &Purchase{
+	repo.Purchases["purch-2"] = &inventory.Purchase{
 		ID:           "purch-2",
 		CampaignID:   "camp-1",
 		CertNumber:   "FL200",
@@ -266,17 +284,17 @@ func TestConfirmOrdersSales_SetsForcedLiquidation(t *testing.T) {
 	}
 
 	var idCounter int
-	svc := NewService(repo, repo, repo, repo, repo, repo, repo, WithIDGenerator(func() string {
+	svc := newOrdersImportService(repo, func() string {
 		idCounter++
 		return fmt.Sprintf("fl-sale-%d", idCounter)
-	}))
+	})
 	defer svc.Close()
 
-	items := []OrdersConfirmItem{
+	items := []csvimport.OrdersConfirmItem{
 		// inperson within 6 days of 2026-06-20 → forced
-		{PurchaseID: "purch-1", SaleChannel: SaleChannelInPerson, SalePriceCents: 20000, SaleDate: "2026-06-16"},
+		{PurchaseID: "purch-1", SaleChannel: inventory.SaleChannelInPerson, SalePriceCents: 20000, SaleDate: "2026-06-16"},
 		// ebay in same window → not forced
-		{PurchaseID: "purch-2", SaleChannel: SaleChannelEbay, SalePriceCents: 20000, SaleDate: "2026-06-16"},
+		{PurchaseID: "purch-2", SaleChannel: inventory.SaleChannelEbay, SalePriceCents: 20000, SaleDate: "2026-06-16"},
 	}
 
 	result, err := svc.ConfirmOrdersSales(context.Background(), items)
@@ -287,8 +305,8 @@ func TestConfirmOrdersSales_SetsForcedLiquidation(t *testing.T) {
 		t.Fatalf("expected 2 created, got %d (errors: %v)", result.Created, result.Errors)
 	}
 
-	var sale1, sale2 *Sale
-	for _, s := range repo.sales {
+	var sale1, sale2 *inventory.Sale
+	for _, s := range repo.Sales {
 		switch s.PurchaseID {
 		case "purch-1":
 			sale1 = s

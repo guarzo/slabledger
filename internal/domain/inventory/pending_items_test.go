@@ -48,7 +48,7 @@ func TestImportSourceFromContext(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := importSourceFromContext(tt.ctx)
+			got := ImportSourceFromContext(tt.ctx)
 			if got != tt.want {
 				t.Errorf("importSourceFromContext() = %q, want %q", got, tt.want)
 			}

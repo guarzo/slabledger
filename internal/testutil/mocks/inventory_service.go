@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
@@ -41,8 +42,6 @@ type MockInventoryService struct {
 	GetInventoryAgingFn         func(ctx context.Context, campaignID string) (*inventory.InventoryResult, error)
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
-	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
-	ReconcilePSAAttributionFn   func(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error)
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
 	// Capital & Invoice
@@ -79,14 +78,10 @@ type MockInventoryService struct {
 	ProcessPendingSnapshotsFn func(ctx context.Context, limit int) (int, int, int, error)
 	RetryFailedSnapshotsFn    func(ctx context.Context, limit int) (int, int, int, error)
 
-	// External purchases
-	EnsureExternalCampaignFn func(ctx context.Context) (*inventory.Campaign, error)
-	ImportExternalCSVFn      func(ctx context.Context, rows []inventory.ShopifyExportRow) (*inventory.ExternalImportResult, error)
-
-	// Orders sales import
-	ImportOrdersSalesFn     func(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error)
-	ImportEbayOrdersSalesFn func(ctx context.Context, rows []inventory.EbayOrderRow) (*inventory.OrdersImportResult, error)
-	ConfirmOrdersSalesFn    func(ctx context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error)
+	// Intake support (used by domain/csvimport)
+	CapturePurchaseSnapshotFn func(ctx context.Context, p *inventory.Purchase, card inventory.CardIdentity, grade float64, clValueCents int)
+	RecordDHEventFn           func(ctx context.Context, e dhevents.Event)
+	BatchResolveCardIDsFn     func(ctx context.Context, certs []string)
 
 	// Cert batch lookup
 	ImportCertsFn               func(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error)
@@ -262,20 +257,6 @@ func (m *MockInventoryService) GetFlaggedInventory(ctx context.Context) ([]inven
 		return m.GetFlaggedInventoryFn(ctx)
 	}
 	return []inventory.AgingItem{}, nil
-}
-
-func (m *MockInventoryService) ImportPSAExportGlobal(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
-	if m.ImportPSAExportGlobalFn != nil {
-		return m.ImportPSAExportGlobalFn(ctx, rows)
-	}
-	return &inventory.PSAImportResult{}, nil
-}
-
-func (m *MockInventoryService) ReconcilePSAAttribution(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error) {
-	if m.ReconcilePSAAttributionFn != nil {
-		return m.ReconcilePSAAttributionFn(ctx, rows)
-	}
-	return inventory.ReconcileResult{}, nil
 }
 
 func (m *MockInventoryService) ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error {
@@ -487,39 +468,28 @@ func (m *MockInventoryService) ResolveCert(ctx context.Context, certNumber strin
 	return nil, nil
 }
 
-func (m *MockInventoryService) EnsureExternalCampaign(ctx context.Context) (*inventory.Campaign, error) {
-	if m.EnsureExternalCampaignFn != nil {
-		return m.EnsureExternalCampaignFn(ctx)
+// --- inventory.IntakeSupportService ---
+//
+// These are the hooks csvimport reaches back through; they are side-effecting
+// and return nothing, so the mock records the calls rather than defaulting a
+// return value.
+
+func (m *MockInventoryService) CapturePurchaseSnapshot(ctx context.Context, p *inventory.Purchase, card inventory.CardIdentity, grade float64, clValueCents int) {
+	if m.CapturePurchaseSnapshotFn != nil {
+		m.CapturePurchaseSnapshotFn(ctx, p, card, grade, clValueCents)
 	}
-	return &inventory.Campaign{ID: inventory.ExternalCampaignID, Name: inventory.ExternalCampaignName}, nil
 }
 
-func (m *MockInventoryService) ImportExternalCSV(ctx context.Context, rows []inventory.ShopifyExportRow) (*inventory.ExternalImportResult, error) {
-	if m.ImportExternalCSVFn != nil {
-		return m.ImportExternalCSVFn(ctx, rows)
+func (m *MockInventoryService) RecordDHEvent(ctx context.Context, e dhevents.Event) {
+	if m.RecordDHEventFn != nil {
+		m.RecordDHEventFn(ctx, e)
 	}
-	return &inventory.ExternalImportResult{}, nil
 }
 
-func (m *MockInventoryService) ImportOrdersSales(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error) {
-	if m.ImportOrdersSalesFn != nil {
-		return m.ImportOrdersSalesFn(ctx, rows)
+func (m *MockInventoryService) BatchResolveCardIDs(ctx context.Context, certs []string) {
+	if m.BatchResolveCardIDsFn != nil {
+		m.BatchResolveCardIDsFn(ctx, certs)
 	}
-	return &inventory.OrdersImportResult{}, nil
-}
-
-func (m *MockInventoryService) ImportEbayOrdersSales(ctx context.Context, rows []inventory.EbayOrderRow) (*inventory.OrdersImportResult, error) {
-	if m.ImportEbayOrdersSalesFn != nil {
-		return m.ImportEbayOrdersSalesFn(ctx, rows)
-	}
-	return &inventory.OrdersImportResult{}, nil
-}
-
-func (m *MockInventoryService) ConfirmOrdersSales(ctx context.Context, items []inventory.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
-	if m.ConfirmOrdersSalesFn != nil {
-		return m.ConfirmOrdersSalesFn(ctx, items)
-	}
-	return &inventory.BulkSaleResult{}, nil
 }
 
 func (m *MockInventoryService) ImportCerts(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error) {

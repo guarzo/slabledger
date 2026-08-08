@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -51,7 +51,7 @@ func NewSnapshotRowProvider(store SnapshotStore, logger observability.Logger) *S
 }
 
 // FetchRows returns the mapped rows from the stored snapshot.
-func (p *SnapshotRowProvider) FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error) {
+func (p *SnapshotRowProvider) FetchRows(ctx context.Context) ([]csvimport.PSAExportRow, error) {
 	raw, fetchedAt, err := p.store.CurrentSnapshot(ctx)
 	if err != nil {
 		return nil, err

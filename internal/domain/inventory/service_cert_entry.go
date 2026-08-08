@@ -74,7 +74,7 @@ func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertI
 	}
 
 	// Ensure external campaign exists
-	_, err := s.EnsureExternalCampaign(ctx)
+	_, err := EnsureExternalCampaign(ctx, s.campaigns)
 	if err != nil {
 		return nil, fmt.Errorf("ensure external campaign: %w", err)
 	}

@@ -4,7 +4,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/guarzo/slabledger/internal/domain/constants"
 )
@@ -47,7 +46,7 @@ var variantPatterns = func() []variantPattern {
 }()
 
 // stripVariantTokens removes variant marker phrases from a set name so they
-// aren't duplicated when parseCardMetadataFromTitle appends them via
+// aren't duplicated when ParseCardMetadataFromTitle appends them via
 // extractVariantFromTitle. Uses word-boundary matching to avoid corrupting
 // names that contain variant substrings (e.g., "HOLO" in "HOLON").
 func stripVariantTokens(setName string) string {
@@ -79,10 +78,10 @@ func extractCardNameFromPSATitle(title string) string {
 	return ""
 }
 
-// parseCardMetadataFromTitle extracts card name, card number, set name, and year
+// ParseCardMetadataFromTitle extracts card name, card number, set name, and year
 // from a PSA listing title and CSV category. This is the fast path used during
 // import (no API calls). Cert lookup enrichment happens asynchronously after import.
-func parseCardMetadataFromTitle(listingTitle, category string) PSACardMetadata {
+func ParseCardMetadataFromTitle(listingTitle, category string) PSACardMetadata {
 	meta := PSACardMetadata{
 		SetName:  category,
 		CardYear: extractYearFromTitle(listingTitle),
@@ -110,7 +109,7 @@ func parseCardMetadataFromTitle(listingTitle, category string) PSACardMetadata {
 	// Strip promo collection suffixes from card names — PSA cert Subject
 	// often includes collection info (e.g., "UMBREON EX PRISMATIC EVOLUTIONS
 	// PREMIUM FIGURE COLLECTION") which pollutes pricing queries.
-	meta.CardName = stripCollectionSuffix(meta.CardName)
+	meta.CardName = StripCollectionSuffix(meta.CardName)
 
 	// Append variant keywords (1ST EDITION, SHADOWLESS) to card name
 	if v := extractVariantFromTitle(listingTitle); v != "" {
@@ -156,62 +155,8 @@ func resolveSetName(titleSet, category string) (string, string) {
 	return resolved, warning
 }
 
-// stripCollectionSuffix removes promo collection names from card names using
-// the pre-partitioned anywhereSuffixes / trailingSuffixes slices.
-// PSA cert Subject includes these but they pollute pricing queries.
-// E.g., "UMBREON EX PRISMATIC EVOLUTIONS PREMIUM FIGURE COLLECTION" → "UMBREON EX"
-func stripCollectionSuffix(name string) string {
-	upper := strings.ToUpper(name)
-
-	// Anywhere suffixes: find the leftmost match across all patterns.
-	// We scan all patterns and pick the earliest match position to avoid order-dependent
-	// behavior where a later-registered but earlier-occurring pattern would be missed.
-	minIdx := -1
-	for _, cs := range anywhereSuffixes {
-		if idx := strings.Index(upper, " "+cs.Pattern); idx > 0 {
-			if minIdx < 0 || idx < minIdx {
-				minIdx = idx
-			}
-		}
-	}
-	if minIdx > 0 {
-		stripped := strings.TrimSpace(name[:minIdx])
-		if stripped != "" {
-			return stripped
-		}
-	}
-
-	// Trailing-only suffixes: only strip when at the very end.
-	// Loop until no more match so stacked suffixes are fully removed.
-	// Recompute upper after each strip to keep byte offsets in sync
-	// (strings.ToUpper can change byte length for non-ASCII runes).
-	const maxSuffixIterations = 100
-	for iter := 0; iter < maxSuffixIterations; iter++ {
-		matched := false
-		for _, cs := range trailingSuffixes {
-			pat := " " + cs.Pattern
-			if strings.HasSuffix(upper, pat) {
-				runeCount := utf8.RuneCountInString(pat)
-				nameRunes := []rune(name)
-				stripped := strings.TrimSpace(string(nameRunes[:len(nameRunes)-runeCount]))
-				if stripped == "" {
-					break
-				}
-				name = stripped
-				upper = strings.ToUpper(name)
-				matched = true
-				break // restart outer loop with updated name
-			}
-		}
-		if !matched {
-			break
-		}
-	}
-	return name
-}
-
 func ExportParseCardMetadataFromTitle(listingTitle, category string) (string, string, string) {
-	meta := parseCardMetadataFromTitle(listingTitle, category)
+	meta := ParseCardMetadataFromTitle(listingTitle, category)
 	return meta.CardName, meta.CardNumber, meta.SetName
 }
 
@@ -248,4 +193,14 @@ func extractVariantFromTitle(title string) string {
 		}
 	}
 	return ""
+}
+
+// PSACardMetadata bundles card identity fields parsed from a PSA listing title.
+// Passed through the import pipeline to avoid multi-return and many-parameter functions.
+type PSACardMetadata struct {
+	CardName     string
+	CardNumber   string
+	SetName      string
+	CardYear     int
+	ParseWarning string // non-empty when fallback parsing was used
 }

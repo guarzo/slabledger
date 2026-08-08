@@ -14,6 +14,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
@@ -37,6 +38,7 @@ type exportReaderComposite struct {
 // campaignsInitResult holds all values returned by initializeCampaignsService.
 type campaignsInitResult struct {
 	service          inventory.Service
+	importService    csvimport.Service
 	campaignStore    *postgres.CampaignStore
 	purchaseStore    *postgres.PurchaseStore
 	saleStore        *postgres.SaleStore
@@ -92,6 +94,9 @@ func initializeCampaignsService(
 	// PSA cert lookup (optional)
 	var certLookup inventory.CertLookup
 	var certEnrichJobForSvc *scheduler.CertEnrichJob
+	// Held as an interface as well, so a nil job stays a nil interface when it is
+	// passed to csvimport.Deps rather than a typed-nil that defeats its nil checks.
+	var certEnrichQueue inventory.CertEnrichEnqueuer
 	if cfg.Adapters.PSAToken != "" {
 		psaClient := psa.NewClient(cfg.Adapters.PSAToken, logger)
 		certAdapter := psa.NewCertAdapter(psaClient)
@@ -100,6 +105,7 @@ func initializeCampaignsService(
 		// CertEnrichJob must be created before NewService so it can be injected via
 		// WithCertEnrichEnqueuer. It will also be registered with the scheduler group below.
 		certEnrichJobForSvc = scheduler.NewCertEnrichJob(certAdapter, purchaseStore, logger)
+		certEnrichQueue = certEnrichJobForSvc
 		campaignOpts = append(campaignOpts, inventory.WithCertEnrichEnqueuer(certEnrichJobForSvc))
 		logger.Info(ctx, "PSA cert lookup and cert enrichment enabled")
 
@@ -130,18 +136,18 @@ func initializeCampaignsService(
 	}
 
 	// DH sold notifier — retires items on DH when a sale is recorded locally.
+	var dhSoldNotifier inventory.DHSoldNotifier
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		campaignOpts = append(campaignOpts,
-			inventory.WithDHSoldNotifier(dhlistingadapter.NewInventoryAdapter(dhClient)),
-		)
+		dhSoldNotifier = dhlistingadapter.NewInventoryAdapter(dhClient)
+		campaignOpts = append(campaignOpts, inventory.WithDHSoldNotifier(dhSoldNotifier))
 	}
 
 	// DH cert → card_id resolver. Feeds batchResolveCardIDs in the inventory
 	// service after PSA/CL imports so dh_card_id gets persisted.
+	var cardIDResolver inventory.CardIDResolver
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		campaignOpts = append(campaignOpts,
-			inventory.WithCardIDResolver(newDHCardIDResolverAdapter(dhClient, logger)),
-		)
+		cardIDResolver = newDHCardIDResolverAdapter(dhClient, logger)
+		campaignOpts = append(campaignOpts, inventory.WithCardIDResolver(cardIDResolver))
 	}
 
 	// Pricing enrichment job — on-demand CL pricing triggered by intake.
@@ -157,9 +163,8 @@ func initializeCampaignsService(
 	// cmd/psa-harvest/main.go does. Wired unconditionally: when the campaign
 	// snapshot is missing or stale the resolver returns an error and the import
 	// falls back to inference, which is the pre-existing behavior.
-	campaignOpts = append(campaignOpts, inventory.WithPSACampaignResolver(
-		psaportal.NewCampaignResolver(postgres.NewPSACampaignSnapshotStore(db.DB), campaignStore, nil),
-	))
+	psaResolver := psaportal.NewCampaignResolver(postgres.NewPSACampaignSnapshotStore(db.DB), campaignStore, nil)
+	campaignOpts = append(campaignOpts, inventory.WithPSACampaignResolver(psaResolver))
 
 	campaignsService := inventory.NewService(
 		campaignStore,  // CampaignRepository
@@ -171,6 +176,25 @@ func initializeCampaignsService(
 		dhStore,        // DHRepository
 		campaignOpts...,
 	)
+
+	// CSV/portal intake. It writes through the same repositories and reaches back
+	// into the inventory service for the parts of intake inventory owns (purchase
+	// creation, market snapshots, DH events, card-ID backfill).
+	importService := csvimport.NewService(csvimport.Deps{
+		Campaigns:       campaignStore,
+		Purchases:       purchaseStore,
+		Sales:           saleStore,
+		Finance:         financeStore,
+		PendingItems:    pendingItemsRepo,
+		Inventory:       campaignsService,
+		PriceLookup:     priceLookupAdapter,
+		CardIDResolver:  cardIDResolver,
+		CertEnrichQueue: certEnrichQueue,
+		DHSoldNotifier:  dhSoldNotifier,
+		PSAResolver:     psaResolver,
+		IDGen:           uuid.NewString,
+		Logger:          logger,
+	})
 
 	arbOpts := []arbitrage.ServiceOption{
 		arbitrage.WithPriceLookup(priceLookupAdapter),
@@ -221,6 +245,7 @@ func initializeCampaignsService(
 
 	return campaignsInitResult{
 		service:          campaignsService,
+		importService:    importService,
 		campaignStore:    campaignStore,
 		purchaseStore:    purchaseStore,
 		saleStore:        saleStore,

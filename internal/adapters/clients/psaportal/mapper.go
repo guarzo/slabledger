@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 )
 
 // Lightdash "Itemized Purchases" field keys (confirmed via live spike — see
@@ -29,9 +29,9 @@ const (
 // The tile has no invoice-date dimension. PSA invoices on a fixed cadence (the 1st
 // and 15th of each month), so InvoiceDate is derived from the buyer payment date as
 // the next 1st-or-15th on or after it (see invoiceDateFor).
-func mapRow(r map[string]string) (inventory.PSAExportRow, error) {
-	row := inventory.PSAExportRow{
-		CertNumber:      inventory.NormalizePSACert(r[colCert]),
+func mapRow(r map[string]string) (csvimport.PSAExportRow, error) {
+	row := csvimport.PSAExportRow{
+		CertNumber:      csvimport.NormalizePSACert(r[colCert]),
 		ListingTitle:    r[colTitle],
 		PurchaseSource:  r[colSource],
 		Category:        r[colCategory],
@@ -51,7 +51,7 @@ func mapRow(r map[string]string) (inventory.PSAExportRow, error) {
 		row.Grade = v
 	}
 	if p := r[colPricePaid]; p != "" {
-		v, err := inventory.ParseCurrencyString(p)
+		v, err := csvimport.ParseCurrencyString(p)
 		if err != nil {
 			return row, err
 		}

@@ -1,17 +1,18 @@
-package inventory
+package csvimport
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // handleExistingPSAPurchase updates an existing purchase with PSA-specific fields
 // and repairs card metadata if the set name is generic or the card number is missing.
-func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purchase, row PSAExportRow) PSAImportItemResult {
-	fields := PSAUpdateFields{
+func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *inventory.Purchase, row PSAExportRow) PSAImportItemResult {
+	fields := inventory.PSAUpdateFields{
 		PSAShipDate:   row.ShipDate,
 		InvoiceDate:   row.InvoiceDate,
 		WasRefunded:   row.WasRefunded,
@@ -49,9 +50,9 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 	buyCostChanged := existing.BuyCostCents == 0 && row.PricePaid > 0
 
 	metadataChanged := false
-	if IsGenericSetName(existing.SetName) || existing.CardNumber == "" {
-		parsed := parseCardMetadataFromTitle(row.ListingTitle, row.Category)
-		metadataChanged = (IsGenericSetName(existing.SetName) && !IsGenericSetName(parsed.SetName)) ||
+	if inventory.IsGenericSetName(existing.SetName) || existing.CardNumber == "" {
+		parsed := inventory.ParseCardMetadataFromTitle(row.ListingTitle, row.Category)
+		metadataChanged = (inventory.IsGenericSetName(existing.SetName) && !inventory.IsGenericSetName(parsed.SetName)) ||
 			(existing.CardNumber == "" && parsed.CardNumber != "")
 	}
 
@@ -94,10 +95,10 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 	metadataWritten := false
 	metadataFailed := false
 	newName, newNum, newSet := existing.CardName, existing.CardNumber, existing.SetName
-	if IsGenericSetName(existing.SetName) || existing.CardNumber == "" {
-		parsed := parseCardMetadataFromTitle(row.ListingTitle, row.Category)
+	if inventory.IsGenericSetName(existing.SetName) || existing.CardNumber == "" {
+		parsed := inventory.ParseCardMetadataFromTitle(row.ListingTitle, row.Category)
 		needsUpdate := false
-		if IsGenericSetName(existing.SetName) && !IsGenericSetName(parsed.SetName) {
+		if inventory.IsGenericSetName(existing.SetName) && !inventory.IsGenericSetName(parsed.SetName) {
 			newSet = parsed.SetName
 			needsUpdate = true
 		}
@@ -120,7 +121,7 @@ func (s *service) handleExistingPSAPurchase(ctx context.Context, existing *Purch
 				metadataWritten = true
 				if s.priceProv != nil && existing.GradeValue > 0 {
 					// Defer snapshot recapture to background worker instead of blocking import
-					if err := s.purchases.UpdatePurchaseSnapshotStatus(ctx, existing.ID, SnapshotStatusPending, 0); err != nil {
+					if err := s.purchases.UpdatePurchaseSnapshotStatus(ctx, existing.ID, inventory.SnapshotStatusPending, 0); err != nil {
 						if s.logger != nil {
 							s.logger.Warn(ctx, "failed to set pending snapshot status",
 								observability.String("purchaseID", existing.ID),

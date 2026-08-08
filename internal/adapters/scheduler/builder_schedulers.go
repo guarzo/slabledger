@@ -206,7 +206,7 @@ func buildDHSuggestionsScheduler(cfg *config.Config, deps BuildDeps) *DHSuggesti
 
 // buildDHOrdersPollScheduler builds the DH v2 orders poll scheduler.
 func buildDHOrdersPollScheduler(cfg *config.Config, deps BuildDeps) *DHOrdersPollScheduler {
-	if deps.DHOrdersClient == nil || deps.SyncStateStore == nil || deps.CampaignService == nil {
+	if deps.DHOrdersClient == nil || deps.SyncStateStore == nil || deps.OrdersImporter == nil {
 		return nil
 	}
 	ordersPollCfg := DHOrdersPollConfig{
@@ -216,7 +216,7 @@ func buildDHOrdersPollScheduler(cfg *config.Config, deps BuildDeps) *DHOrdersPol
 	return NewDHOrdersPollScheduler(
 		deps.DHOrdersClient,
 		deps.SyncStateStore,
-		deps.CampaignService,
+		deps.OrdersImporter,
 		deps.EventRecorder,
 		deps.Logger,
 		ordersPollCfg,

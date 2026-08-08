@@ -1,11 +1,14 @@
-package inventory_test
+package csvimport_test
 
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -56,6 +59,37 @@ func (r *reconcileFixtureRepo) CountPendingItems(_ context.Context) (int, error)
 	return len(r.PendingItems), nil
 }
 
+// newReconcileServices pairs an inventory service (for campaign setup) with the
+// import service under test, both over the same repo. The PSA resolver is an
+// inventory option on one side and a Deps field on the other, so it is passed
+// explicitly rather than through newServices.
+func newReconcileServices(repo *reconcileFixtureRepo, resolver inventory.PSACampaignResolver, pending inventory.PendingItemRepository) (inventory.Service, csvimport.Service) {
+	var counter atomic.Int64
+	idGen := func() string { return fmt.Sprintf("reconcile-id-%d", counter.Add(1)) }
+
+	opts := []inventory.ServiceOption{
+		inventory.WithIDGenerator(idGen),
+		inventory.WithDisableBackgroundWorkers(),
+		inventory.WithPSACampaignResolver(resolver),
+	}
+	if pending != nil {
+		opts = append(opts, inventory.WithPendingItemRepository(pending))
+	}
+	inv := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, opts...)
+
+	imp := csvimport.NewService(csvimport.Deps{
+		Campaigns:    repo,
+		Purchases:    repo,
+		Sales:        repo,
+		Finance:      repo,
+		PendingItems: pending,
+		Inventory:    inv,
+		PSAResolver:  resolver,
+		IDGen:        idGen,
+	})
+	return inv, imp
+}
+
 // newReconcileFixture builds a service with two campaigns ("camp-a", "camp-b")
 // and a single PSA purchase ("purchase-1", cert "123") currently attributed to
 // currentCID. resolveTo/resolveOK configure the stub PSA resolver's response
@@ -64,14 +98,11 @@ func (r *reconcileFixtureRepo) CountPendingItems(_ context.Context) (int, error)
 // the purchase's starting AttributionSource, so tests that assert a specific
 // resulting source can start from something other than that value and prove
 // the write actually happened.
-func newReconcileFixture(t *testing.T, currentCID string, sold bool, resolveTo string, resolveOK bool, resolveErr error, initialSource string) (inventory.ImportService, *reconcileFixtureRepo) {
+func newReconcileFixture(t *testing.T, currentCID string, sold bool, resolveTo string, resolveOK bool, resolveErr error, initialSource string) (csvimport.Service, *reconcileFixtureRepo) {
 	t.Helper()
 	repo := &reconcileFixtureRepo{InMemoryCampaignStore: mocks.NewInMemoryCampaignStore()}
 	resolver := stubPSAResolver{campaignID: resolveTo, ok: resolveOK, err: resolveErr}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
-		withTestIDGen(), withDisabledBackgroundWorkers(),
-		inventory.WithPSACampaignResolver(resolver),
-		inventory.WithPendingItemRepository(repo))
+	inv, svc := newReconcileServices(repo, resolver, repo)
 	ctx := context.Background()
 
 	for _, id := range []string{"camp-a", "camp-b"} {
@@ -79,7 +110,7 @@ func newReconcileFixture(t *testing.T, currentCID string, sold bool, resolveTo s
 			ID: id, Name: id, Sport: "Pokemon",
 			Phase: inventory.PhaseActive, GradeRange: "8-10",
 		}
-		if err := svc.CreateCampaign(ctx, c); err != nil {
+		if err := inv.CreateCampaign(ctx, c); err != nil {
 			t.Fatalf("CreateCampaign(%s): %v", id, err)
 		}
 	}
@@ -99,27 +130,25 @@ func newReconcileFixture(t *testing.T, currentCID string, sold bool, resolveTo s
 // tests: one campaign ("camp-a", resolved to by the stub PSA resolver) with the
 // given UpdatedAt, and a purchase dated purchaseDate currently on "camp-b" so
 // reconciliation always takes the move path.
-func newReconcileFixtureWithDates(t *testing.T, purchaseDate string, campaignUpdatedAt time.Time) (inventory.ImportService, *reconcileFixtureRepo) {
+func newReconcileFixtureWithDates(t *testing.T, purchaseDate string, campaignUpdatedAt time.Time) (csvimport.Service, *reconcileFixtureRepo) {
 	t.Helper()
 	repo := &reconcileFixtureRepo{InMemoryCampaignStore: mocks.NewInMemoryCampaignStore()}
 	resolver := stubPSAResolver{campaignID: "camp-a", ok: true}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
-		withTestIDGen(), withDisabledBackgroundWorkers(),
-		inventory.WithPSACampaignResolver(resolver))
+	inv, svc := newReconcileServices(repo, resolver, nil)
 	ctx := context.Background()
 
 	campA := &inventory.Campaign{
 		ID: "camp-a", Name: "camp-a", Sport: "Pokemon",
 		Phase: inventory.PhaseActive, GradeRange: "8-10", CLConfidence: "2.5-4",
 	}
-	if err := svc.CreateCampaign(ctx, campA); err != nil {
+	if err := inv.CreateCampaign(ctx, campA); err != nil {
 		t.Fatalf("CreateCampaign(camp-a): %v", err)
 	}
 	campB := &inventory.Campaign{
 		ID: "camp-b", Name: "camp-b", Sport: "Pokemon",
 		Phase: inventory.PhaseActive, GradeRange: "8-10",
 	}
-	if err := svc.CreateCampaign(ctx, campB); err != nil {
+	if err := inv.CreateCampaign(ctx, campB); err != nil {
 		t.Fatalf("CreateCampaign(camp-b): %v", err)
 	}
 	// CreateCampaign stamps UpdatedAt; overwrite directly to the fixture's value.
@@ -150,29 +179,29 @@ func TestReconcilePSAAttribution(t *testing.T) {
 		currentCID    string
 		sold          bool
 		initialSource string
-		want          inventory.ReconcileResult
+		want          csvimport.ReconcileResult
 		wantSource    string
 	}{
 		{"agreement", "Modern", "camp-a", true, "camp-a", false, inventory.AttributionSourceInferred,
-			inventory.ReconcileResult{Agreed: 1}, inventory.AttributionSourcePSA},
+			csvimport.ReconcileResult{Agreed: 1}, inventory.AttributionSourcePSA},
 		{"disagreement moves", "Modern", "camp-a", true, "camp-b", false, inventory.AttributionSourceInferred,
-			inventory.ReconcileResult{Moved: 1}, inventory.AttributionSourcePSA},
+			csvimport.ReconcileResult{Moved: 1}, inventory.AttributionSourcePSA},
 		// initialSource starts at PSA (not the default Inferred) so the
 		// assertion below proves UpdatePurchaseAttributionName actually ran
 		// and left the source unchanged, rather than merely matching the
 		// fixture's baseline.
 		{"sold purchase skipped", "Modern", "camp-a", true, "camp-b", true, inventory.AttributionSourcePSA,
-			inventory.ReconcileResult{SoldSkipped: 1}, inventory.AttributionSourcePSA},
+			csvimport.ReconcileResult{SoldSkipped: 1}, inventory.AttributionSourcePSA},
 		// Same reasoning: starts at PSA so the resulting Inferred proves the
 		// downgrade wrote, rather than the fixture default coinciding with it.
 		{"dead name unresolved", "Brady modern", "", false, "camp-b", false, inventory.AttributionSourcePSA,
-			inventory.ReconcileResult{Unresolved: 1}, inventory.AttributionSourceInferred},
+			csvimport.ReconcileResult{Unresolved: 1}, inventory.AttributionSourceInferred},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newReconcileFixture(t, tt.currentCID, tt.sold, tt.resolveTo, tt.resolveOK, nil, tt.initialSource)
 			got, err := svc.ReconcilePSAAttribution(context.Background(),
-				[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: tt.psaName}})
+				[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: tt.psaName}})
 			if err != nil {
 				t.Fatalf("ReconcilePSAAttribution: %v", err)
 			}
@@ -197,7 +226,7 @@ func TestReconcilePSAAttribution_SoldPurchaseRecordsNameWithoutMoving(t *testing
 	// was already there, rather than coincidentally matching the default.
 	svc, repo := newReconcileFixture(t, "camp-b", true, "camp-a", true, nil, inventory.AttributionSourcePSA)
 	if _, err := svc.ReconcilePSAAttribution(context.Background(),
-		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
+		[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
 	got := repo.Purchases["purchase-1"]
@@ -236,13 +265,13 @@ func TestReconcilePSAAttribution_UnresolvedEnqueuesOnlyWithoutAttribution(t *tes
 			// rather than matching the fixture default.
 			svc, repo := newReconcileFixture(t, tt.currentCID, false, "", false, nil, inventory.AttributionSourcePSA)
 			got, err := svc.ReconcilePSAAttribution(context.Background(),
-				[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}})
+				[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}})
 			if err != nil {
 				t.Fatalf("ReconcilePSAAttribution: %v", err)
 			}
 			// The row is still Unresolved either way — the counter reports what
 			// PSA told us, not whether we queued work off the back of it.
-			if want := (inventory.ReconcileResult{Unresolved: 1}); got != want {
+			if want := (csvimport.ReconcileResult{Unresolved: 1}); got != want {
 				t.Errorf("result = %+v, want %+v", got, want)
 			}
 			if len(repo.PendingItems) != tt.wantPending {
@@ -271,7 +300,7 @@ func TestReconcilePSAAttribution_UnresolvedClearsStalePendingItem(t *testing.T) 
 	svc, repo := newReconcileFixture(t, "camp-b", false, "", false, nil, inventory.AttributionSourceInferred)
 	repo.PendingItems = []inventory.PendingItem{{ID: "pi-123", CertNumber: "123"}}
 	if _, err := svc.ReconcilePSAAttribution(context.Background(),
-		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}}); err != nil {
+		[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}}); err != nil {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
 	if len(repo.PendingItems) != 0 {
@@ -287,7 +316,7 @@ func TestReconcilePSAAttribution_UnresolvedClearsStalePendingItem(t *testing.T) 
 func TestReconcilePSAAttribution_UnresolvedPreservesManualAttribution(t *testing.T) {
 	svc, repo := newReconcileFixture(t, "camp-b", false, "", false, nil, inventory.AttributionSourceManual)
 	if _, err := svc.ReconcilePSAAttribution(context.Background(),
-		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}}); err != nil {
+		[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}}); err != nil {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
 	if got := repo.Purchases["purchase-1"].AttributionSource; got != inventory.AttributionSourceManual {
@@ -302,7 +331,7 @@ func TestReconcilePSAAttribution_ResolvingClearsStalePendingItem(t *testing.T) {
 	svc, repo := newReconcileFixture(t, "camp-b", false, "camp-a", true, nil, inventory.AttributionSourceInferred)
 	repo.PendingItems = []inventory.PendingItem{{CertNumber: "123"}}
 	if _, err := svc.ReconcilePSAAttribution(context.Background(),
-		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
+		[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
 	if len(repo.PendingItems) != 0 {
@@ -319,11 +348,11 @@ func TestReconcilePSAAttribution_ResolverErrorHardStops(t *testing.T) {
 	resolveErr := errors.New("stale snapshot")
 	svc, repo := newReconcileFixture(t, "camp-b", false, "camp-a", true, resolveErr, inventory.AttributionSourceInferred)
 	got, err := svc.ReconcilePSAAttribution(context.Background(),
-		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
+		[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
 	if !errors.Is(err, resolveErr) {
 		t.Fatalf("err = %v, want %v", err, resolveErr)
 	}
-	if got != (inventory.ReconcileResult{}) {
+	if got != (csvimport.ReconcileResult{}) {
 		t.Errorf("result = %+v, want zero value", got)
 	}
 	if repo.Purchases["purchase-1"].CampaignID != "camp-b" {
@@ -345,7 +374,7 @@ func TestReconcilePSAAttribution_CLConfidenceFreezing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newReconcileFixtureWithDates(t, tt.purchaseDate, tt.campaignUpdatedAt)
 			if _, err := svc.ReconcilePSAAttribution(context.Background(),
-				[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
+				[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
 				t.Fatalf("ReconcilePSAAttribution: %v", err)
 			}
 			got := repo.Purchases["purchase-1"].CLConfidenceAtPurchase
@@ -361,14 +390,14 @@ func TestReconcilePSAAttribution_CLConfidenceFreezing(t *testing.T) {
 
 // addReconcilePurchase adds another PSA purchase on camp-b (so it takes the move
 // path) plus a matching unresolved pending item, and returns its export row.
-func addReconcilePurchase(repo *reconcileFixtureRepo, cert string) inventory.PSAExportRow {
+func addReconcilePurchase(repo *reconcileFixtureRepo, cert string) csvimport.PSAExportRow {
 	repo.Purchases["purchase-"+cert] = &inventory.Purchase{
 		ID: "purchase-" + cert, CampaignID: "camp-b", Grader: "PSA", CertNumber: cert,
 		PurchaseDate: "2026-08-01", GradeValue: 9, BuyCostCents: 1000,
 		AttributionSource: inventory.AttributionSourceInferred,
 	}
 	repo.PendingItems = append(repo.PendingItems, inventory.PendingItem{ID: "pi-" + cert, CertNumber: cert})
-	return inventory.PSAExportRow{CertNumber: cert, PSACampaignName: "Modern"}
+	return csvimport.PSAExportRow{CertNumber: cert, PSACampaignName: "Modern"}
 }
 
 // The pending-item queue is scanned once per pass, not once per resolved row —
@@ -378,7 +407,7 @@ func TestReconcilePSAAttribution_PendingItemsScannedOncePerPass(t *testing.T) {
 	svc, repo := newReconcileFixture(t, "camp-a", false, "camp-a", true, nil, inventory.AttributionSourceInferred)
 	repo.PendingItems = []inventory.PendingItem{{ID: "pi-123", CertNumber: "123"}}
 
-	rows := []inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}
+	rows := []csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}
 	for _, cert := range []string{"456", "789"} {
 		rows = append(rows, addReconcilePurchase(repo, cert))
 	}
@@ -388,7 +417,7 @@ func TestReconcilePSAAttribution_PendingItemsScannedOncePerPass(t *testing.T) {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
 	// "123" is already on camp-a (Agreed); the two added rows move.
-	if want := (inventory.ReconcileResult{Agreed: 1, Moved: 2}); got != want {
+	if want := (csvimport.ReconcileResult{Agreed: 1, Moved: 2}); got != want {
 		t.Errorf("result = %+v, want %+v", got, want)
 	}
 	if repo.ListPendingCall != 1 {
@@ -403,7 +432,7 @@ func TestReconcilePSAAttribution_PendingItemsScannedOncePerPass(t *testing.T) {
 // still resolved even when other certs in the same pass have none.
 func TestReconcilePSAAttribution_PendingIndexCoversEveryCert(t *testing.T) {
 	svc, repo := newReconcileFixture(t, "camp-a", false, "camp-a", true, nil, inventory.AttributionSourceInferred)
-	rows := []inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}
+	rows := []csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}
 	for _, cert := range []string{"456", "789"} {
 		rows = append(rows, addReconcilePurchase(repo, cert))
 	}
@@ -430,14 +459,14 @@ func TestReconcilePSAAttribution_SoldSkipDefaultsEmptySource(t *testing.T) {
 	}
 
 	got, err := svc.ReconcilePSAAttribution(context.Background(),
-		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
+		[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
 	if err != nil {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
 	if wroteSource != inventory.AttributionSourceInferred {
 		t.Errorf("wrote attribution_source = %q, want %q", wroteSource, inventory.AttributionSourceInferred)
 	}
-	if want := (inventory.ReconcileResult{SoldSkipped: 1}); got != want {
+	if want := (csvimport.ReconcileResult{SoldSkipped: 1}); got != want {
 		t.Errorf("result = %+v, want %+v", got, want)
 	}
 }
@@ -451,11 +480,11 @@ func TestReconcilePSAAttribution_SoldSkipCountsRowOnce(t *testing.T) {
 	}
 
 	got, err := svc.ReconcilePSAAttribution(context.Background(),
-		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
+		[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}})
 	if err != nil {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
-	if want := (inventory.ReconcileResult{Failed: 1}); got != want {
+	if want := (csvimport.ReconcileResult{Failed: 1}); got != want {
 		t.Errorf("result = %+v, want %+v (one row, one count)", got, want)
 	}
 }

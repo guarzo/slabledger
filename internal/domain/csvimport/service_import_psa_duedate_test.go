@@ -1,9 +1,10 @@
-package inventory_test
+package csvimport_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -13,7 +14,7 @@ import (
 // how legacy empty rows self-heal on the next import.
 func TestService_ImportPSAExportGlobal_HealsEmptyDueDate(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc, imp := newServices(repo, nil)
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
@@ -26,10 +27,10 @@ func TestService_ImportPSAExportGlobal_HealsEmptyDueDate(t *testing.T) {
 	}
 
 	// First import creates the invoice (now with a +7 due date after Task 1).
-	rows := []inventory.PSAExportRow{
+	rows := []csvimport.PSAExportRow{
 		{CertNumber: "HEAL001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 200, Date: "2026-07-01", InvoiceDate: "2026-07-01", Category: "Pokemon"},
 	}
-	if _, err := svc.ImportPSAExportGlobal(ctx, rows); err != nil {
+	if _, err := imp.ImportPSAExportGlobal(ctx, rows); err != nil {
 		t.Fatalf("first import: %v", err)
 	}
 
@@ -50,7 +51,7 @@ func TestService_ImportPSAExportGlobal_HealsEmptyDueDate(t *testing.T) {
 	}
 
 	// Re-import the identical row: total is unchanged, but the empty due date must heal.
-	result, err := svc.ImportPSAExportGlobal(ctx, rows)
+	result, err := imp.ImportPSAExportGlobal(ctx, rows)
 	if err != nil {
 		t.Fatalf("re-import: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestService_ImportPSAExportGlobal_HealsEmptyDueDate(t *testing.T) {
 // +7 during re-import.
 func TestService_ImportPSAExportGlobal_SkipsHealForPreCutoffInvoice(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc, imp := newServices(repo, nil)
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
@@ -89,10 +90,10 @@ func TestService_ImportPSAExportGlobal_SkipsHealForPreCutoffInvoice(t *testing.T
 	}
 
 	// Re-import a row for that same pre-cutoff invoice date.
-	rows := []inventory.PSAExportRow{
+	rows := []csvimport.PSAExportRow{
 		{CertNumber: "PRE001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 200, Date: "2026-03-15", InvoiceDate: "2026-03-15", Category: "Pokemon"},
 	}
-	if _, err := svc.ImportPSAExportGlobal(ctx, rows); err != nil {
+	if _, err := imp.ImportPSAExportGlobal(ctx, rows); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 
@@ -108,7 +109,7 @@ func TestService_ImportPSAExportGlobal_SkipsHealForPreCutoffInvoice(t *testing.T
 // create path for cutoff-or-later dates gets the uniform +7 term.
 func TestService_ImportPSAExportGlobal_SkipsDueDateForPreCutoffCreate(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	svc, imp := newServices(repo, nil)
 	ctx := context.Background()
 
 	c := &inventory.Campaign{Name: "Test", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
@@ -121,10 +122,10 @@ func TestService_ImportPSAExportGlobal_SkipsDueDateForPreCutoffCreate(t *testing
 	}
 
 	// Import a pre-cutoff invoice date with NO pre-existing invoice → create path.
-	rows := []inventory.PSAExportRow{
+	rows := []csvimport.PSAExportRow{
 		{CertNumber: "PRECREATE001", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 200, Date: "2026-03-15", InvoiceDate: "2026-03-15", Category: "Pokemon"},
 	}
-	if _, err := svc.ImportPSAExportGlobal(ctx, rows); err != nil {
+	if _, err := imp.ImportPSAExportGlobal(ctx, rows); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 

@@ -1,4 +1,4 @@
-package inventory
+package csvimport
 
 // ParseError captures a per-row parse failure with field-level detail.
 type ParseError struct {

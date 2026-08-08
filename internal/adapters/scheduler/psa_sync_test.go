@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -15,33 +15,33 @@ import (
 func TestPSASyncScheduler_Tick(t *testing.T) {
 	tests := []struct {
 		name               string
-		providerFn         func(ctx context.Context) ([]inventory.PSAExportRow, error)
-		importerFn         func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
+		providerFn         func(ctx context.Context) ([]csvimport.PSAExportRow, error)
+		importerFn         func(ctx context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error)
 		wantImporterCalled bool
 	}{
 		{
 			name: "success",
-			providerFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
-				return []inventory.PSAExportRow{
+			providerFn: func(_ context.Context) ([]csvimport.PSAExportRow, error) {
+				return []csvimport.PSAExportRow{
 					{CertNumber: "12345678", Grade: 10, PricePaid: 125.00},
 				}, nil
 			},
-			importerFn: func(_ context.Context, _ []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
-				return &inventory.PSAImportResult{Allocated: 1}, nil
+			importerFn: func(_ context.Context, _ []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
+				return &csvimport.PSAImportResult{Allocated: 1}, nil
 			},
 			wantImporterCalled: true,
 		},
 		{
 			name: "fetch error",
-			providerFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
+			providerFn: func(_ context.Context) ([]csvimport.PSAExportRow, error) {
 				return nil, errors.New("network error")
 			},
 			wantImporterCalled: false,
 		},
 		{
 			name: "empty rows",
-			providerFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
-				return []inventory.PSAExportRow{}, nil
+			providerFn: func(_ context.Context) ([]csvimport.PSAExportRow, error) {
+				return []csvimport.PSAExportRow{}, nil
 			},
 			wantImporterCalled: false,
 		},
@@ -53,12 +53,12 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 
 			importerCalled := false
 			importer := &mocks.MockImportService{
-				ImportPSAExportGlobalFn: func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
+				ImportPSAExportGlobalFn: func(ctx context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
 					importerCalled = true
 					if tt.importerFn != nil {
 						return tt.importerFn(ctx, rows)
 					}
-					return &inventory.PSAImportResult{}, nil
+					return &csvimport.PSAImportResult{}, nil
 				},
 			}
 
@@ -79,7 +79,7 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 
 func TestPSASyncScheduler_Start_Disabled(t *testing.T) {
 	provider := &mocks.PSARowProviderMock{
-		FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) { return nil, nil },
+		FetchRowsFn: func(_ context.Context) ([]csvimport.PSAExportRow, error) { return nil, nil },
 	}
 	s := NewPSASyncScheduler(
 		provider, &mocks.MockImportService{},
@@ -102,8 +102,8 @@ func TestPSASyncScheduler_Start_Disabled(t *testing.T) {
 
 func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
 	provider := &mocks.PSARowProviderMock{
-		FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
-			return []inventory.PSAExportRow{
+		FetchRowsFn: func(_ context.Context) ([]csvimport.PSAExportRow, error) {
+			return []csvimport.PSAExportRow{
 				{CertNumber: "12345", Grade: 10, PricePaid: 15.00},
 			}, nil
 		},
@@ -111,8 +111,8 @@ func TestPSASyncScheduler_GetLastRunStats(t *testing.T) {
 	s := NewPSASyncScheduler(
 		provider,
 		&mocks.MockImportService{
-			ImportPSAExportGlobalFn: func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
-				return &inventory.PSAImportResult{
+			ImportPSAExportGlobalFn: func(ctx context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
+				return &csvimport.PSAImportResult{
 					Allocated: 1, Updated: 0, Refunded: 0,
 					Unmatched: 2, Ambiguous: 1, Skipped: 0, Failed: 0,
 				}, nil

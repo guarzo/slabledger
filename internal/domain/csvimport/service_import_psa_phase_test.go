@@ -1,9 +1,10 @@
-package inventory_test
+package csvimport_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -12,7 +13,7 @@ func TestService_ImportPSAExportGlobal_MatchesRealCampaignRegardlessOfPhase(t *t
 	tests := []struct {
 		name            string
 		phase           inventory.Phase
-		row             inventory.PSAExportRow
+		row             csvimport.PSAExportRow
 		inclusionList   string
 		includeExternal bool
 		wantCostCents   int
@@ -20,7 +21,7 @@ func TestService_ImportPSAExportGlobal_MatchesRealCampaignRegardlessOfPhase(t *t
 		{
 			name:  "active campaign matches reported Umbreon purchase",
 			phase: inventory.PhaseActive,
-			row: inventory.PSAExportRow{
+			row: csvimport.PSAExportRow{
 				CertNumber: "163772677", ListingTitle: "UMBREON PSA 9", Grade: 9,
 				PricePaid: 789.96, Date: "2026-07-15", Category: "Pokemon",
 			},
@@ -30,7 +31,7 @@ func TestService_ImportPSAExportGlobal_MatchesRealCampaignRegardlessOfPhase(t *t
 		{
 			name:  "pending campaign matches reported Mega Charizard purchase",
 			phase: inventory.PhasePending,
-			row: inventory.PSAExportRow{
+			row: csvimport.PSAExportRow{
 				CertNumber: "160987870", ListingTitle: "MEGA CHARIZARD X EX PSA 8", Grade: 8,
 				PricePaid: 485.64, Date: "2026-07-15", Category: "Pokemon",
 			},
@@ -40,7 +41,7 @@ func TestService_ImportPSAExportGlobal_MatchesRealCampaignRegardlessOfPhase(t *t
 		{
 			name:  "External wildcard cannot make pending real match ambiguous",
 			phase: inventory.PhasePending,
-			row: inventory.PSAExportRow{
+			row: csvimport.PSAExportRow{
 				CertNumber: "PSA-EXTERNAL-GUARD", ListingTitle: "PIKACHU PSA 9", Grade: 9,
 				PricePaid: 100, Date: "2026-07-15", Category: "Pokemon",
 			},
@@ -53,7 +54,7 @@ func TestService_ImportPSAExportGlobal_MatchesRealCampaignRegardlessOfPhase(t *t
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := mocks.NewInMemoryCampaignStore()
-			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+			svc, imp := newServices(repo, nil)
 			ctx := context.Background()
 
 			campaign := &inventory.Campaign{
@@ -64,12 +65,12 @@ func TestService_ImportPSAExportGlobal_MatchesRealCampaignRegardlessOfPhase(t *t
 				t.Fatalf("CreateCampaign: %v", err)
 			}
 			if tt.includeExternal {
-				if _, err := svc.EnsureExternalCampaign(ctx); err != nil {
+				if _, err := inventory.EnsureExternalCampaign(ctx, repo); err != nil {
 					t.Fatalf("EnsureExternalCampaign: %v", err)
 				}
 			}
 
-			result, err := svc.ImportPSAExportGlobal(ctx, []inventory.PSAExportRow{tt.row})
+			result, err := imp.ImportPSAExportGlobal(ctx, []csvimport.PSAExportRow{tt.row})
 			if err != nil {
 				t.Fatalf("ImportPSAExportGlobal: %v", err)
 			}
@@ -103,14 +104,10 @@ func TestService_ImportPSAExportGlobal_PersistsSchedulerPendingItemSource(t *tes
 		saved = append(saved, items...)
 		return nil
 	}
-	svc := inventory.NewService(
-		repo, repo, repo, repo, repo, repo, repo,
-		withTestIDGen(),
-		inventory.WithPendingItemRepository(pendingRepo),
-	)
+	_, imp := newServices(repo, pendingRepo)
 	ctx := inventory.WithImportSource(context.Background(), "scheduler")
 
-	result, err := svc.ImportPSAExportGlobal(ctx, []inventory.PSAExportRow{{
+	result, err := imp.ImportPSAExportGlobal(ctx, []csvimport.PSAExportRow{{
 		CertNumber: "PSA-SCHEDULER-PENDING", ListingTitle: "PIKACHU PSA 5",
 		Grade: 5, PricePaid: 100, Date: "2026-07-15", Category: "Pokemon",
 	}})

@@ -21,6 +21,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
@@ -166,7 +167,7 @@ func run(baseline bool, args []string) error {
 		// Only fetch the itemized rows snapshot when the campaign snapshot is
 		// actually fresh — decideReconcileGate would skip on campaignsFresh
 		// alone anyway, so there is nothing to diagnose from rowsErr in that case.
-		var rows []inventory.PSAExportRow
+		var rows []csvimport.PSAExportRow
 		var rowsErr error
 		if campaignsFresh {
 			rowProvider := psaportal.NewSnapshotRowProvider(snapshots, logger)
@@ -182,8 +183,8 @@ func run(baseline bool, args []string) error {
 			}
 		} else {
 			resolver := psaportal.NewCampaignResolver(snap, campaignStore, nil)
-			inv := buildInventoryService(db, logger, campaignStore, inventory.WithPSACampaignResolver(resolver))
-			res, recErr := inv.ReconcilePSAAttribution(ctx, rows)
+			imp := buildImportService(db, logger, campaignStore, resolver)
+			res, recErr := imp.ReconcilePSAAttribution(ctx, rows)
 			if recErr != nil {
 				logger.Error(ctx, "psa-harvest: attribution reconcile failed", observability.Err(recErr))
 			} else {
@@ -260,33 +261,19 @@ func decideReconcileGate(campaignsFresh bool, rowsErr error) reconcileGate {
 	}
 }
 
-// buildInventoryService assembles the inventory service for this binary's one
-// use of it: PSA attribution reconciliation. It wires the full set of
-// repositories NewService requires plus the pending-items repository, so an
-// unresolved PSA campaign name still lands in the operator work queue.
-func buildInventoryService(db *postgres.DB, logger observability.Logger, campaignStore *postgres.CampaignStore, opts ...inventory.ServiceOption) inventory.Service {
-	purchaseStore := postgres.NewPurchaseStore(db.DB, logger)
-	saleStore := postgres.NewSaleStore(db.DB, logger)
-	analyticsStore := postgres.NewAnalyticsStore(db.DB, logger)
-	financeStore := postgres.NewFinanceStore(db.DB, logger)
-	pricingStore := postgres.NewPricingStore(db.DB, logger)
-	dhStore := postgres.NewDHStore(db.DB, logger)
-	pendingItemsRepo := postgres.NewPendingItemsRepository(db.DB)
-
-	allOpts := append([]inventory.ServiceOption{
-		inventory.WithLogger(logger),
-		inventory.WithIDGenerator(uuid.NewString),
-		inventory.WithPendingItemRepository(pendingItemsRepo),
-	}, opts...)
-
-	return inventory.NewService(
-		campaignStore,
-		purchaseStore,
-		saleStore,
-		analyticsStore,
-		financeStore,
-		pricingStore,
-		dhStore,
-		allOpts...,
-	)
+// buildImportService assembles the CSV-intake service for this binary's one use
+// of it: PSA attribution reconciliation. It wires the repositories that path
+// touches plus the pending-items repository, so an unresolved PSA campaign name
+// still lands in the operator work queue.
+func buildImportService(db *postgres.DB, logger observability.Logger, campaignStore *postgres.CampaignStore, resolver inventory.PSACampaignResolver) csvimport.Service {
+	return csvimport.NewService(csvimport.Deps{
+		Campaigns:    campaignStore,
+		Purchases:    postgres.NewPurchaseStore(db.DB, logger),
+		Sales:        postgres.NewSaleStore(db.DB, logger),
+		Finance:      postgres.NewFinanceStore(db.DB, logger),
+		PendingItems: postgres.NewPendingItemsRepository(db.DB),
+		PSAResolver:  resolver,
+		IDGen:        uuid.NewString,
+		Logger:       logger,
+	})
 }

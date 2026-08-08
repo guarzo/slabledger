@@ -1,4 +1,4 @@
-package inventory
+package csvimport
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -31,7 +32,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 	// against every real campaign; External is reserved for Shopify imports.
 	matchingCampaigns := filterOutExternal(allCampaigns)
 
-	campaignMap := make(map[string]*Campaign, len(allCampaigns))
+	campaignMap := make(map[string]*inventory.Campaign, len(allCampaigns))
 	for i := range allCampaigns {
 		campaignMap[allCampaigns[i].ID] = &allCampaigns[i]
 	}
@@ -77,7 +78,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 
 		gradeValue := row.Grade
 		if gradeValue == 0 {
-			gradeValue = ExtractGrade(row.ListingTitle)
+			gradeValue = inventory.ExtractGrade(row.ListingTitle)
 		}
 		buyCostCents := mathutil.ToCentsInt(row.PricePaid)
 
@@ -92,7 +93,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 
 		// Parse card metadata from listing title (fast, no API calls).
 		// Cert lookups happen asynchronously after import completes.
-		meta := parseCardMetadataFromTitle(row.ListingTitle, row.Category)
+		meta := inventory.ParseCardMetadataFromTitle(row.ListingTitle, row.Category)
 		if meta.ParseWarning != "" && s.logger != nil {
 			s.logger.Info(ctx, "PSA title parse fallback",
 				observability.String("cert", row.CertNumber),
@@ -101,9 +102,9 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 		}
 
 		// PSA's own attribution wins when it resolves; inference is the fallback.
-		var match MatchResult
-		var campaign *Campaign
-		attributionSource := AttributionSourceInferred
+		var match inventory.MatchResult
+		var campaign *inventory.Campaign
+		attributionSource := inventory.AttributionSourceInferred
 
 		if s.psaResolver != nil && row.PSACampaignName != "" {
 			campaignID, ok, rErr := s.psaResolver.ResolveCampaignID(ctx, row.PSACampaignName)
@@ -125,8 +126,8 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 					// must therefore be expressed as a synthesized matched result —
 					// leaving match at its zero value turns every PSA-resolved row
 					// into a pending item, i.e. the exact inverse of this feature.
-					match = MatchResult{Status: "matched", CampaignID: campaignID}
-					attributionSource = AttributionSourcePSA
+					match = inventory.MatchResult{Status: "matched", CampaignID: campaignID}
+					attributionSource = inventory.AttributionSourcePSA
 				}
 			default:
 				if s.logger != nil {
@@ -139,7 +140,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 
 		if campaign == nil {
 			// Inference fallback (use float64 grade for half-grade support).
-			match = FindMatchingCampaign(MatchInput{
+			match = inventory.FindMatchingCampaign(inventory.MatchInput{
 				Grade:        gradeValue,
 				BuyCostCents: buyCostCents,
 				CardName:     meta.CardName,
@@ -198,12 +199,12 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 
 	// Persist ambiguous and unmatched items for later review.
 	if s.pendingItemRepo != nil {
-		var pending []PendingItem
+		var pending []inventory.PendingItem
 		for _, r := range result.Results {
 			if r.Status != "ambiguous" && r.Status != "unmatched" {
 				continue
 			}
-			pending = append(pending, PendingItem{
+			pending = append(pending, inventory.PendingItem{
 				ID:           s.idGen(),
 				CertNumber:   r.CertNumber,
 				CardName:     r.CardName,
@@ -214,7 +215,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 				PurchaseDate: r.PurchaseDate,
 				Status:       r.Status,
 				Candidates:   r.Candidates,
-				Source:       importSourceFromContext(ctx),
+				Source:       inventory.ImportSourceFromContext(ctx),
 			})
 		}
 		if len(pending) > 0 {
@@ -254,7 +255,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 				defer s.wg.Done()
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 				defer cancel()
-				s.batchResolveCardIDs(ctx, certs)
+				s.inv.BatchResolveCardIDs(ctx, certs)
 			}()
 		}
 	}
@@ -280,14 +281,14 @@ func collectAllocatedCerts(results []PSAImportItemResult) []string {
 // handleNewPSAPurchase processes a new PSA purchase row that has no existing purchase.
 // It uses the pre-computed match result and resolved campaign to create the purchase
 // (if matched) or report the row as ambiguous/unmatched.
-func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gradeValue float64, buyCostCents int, meta PSACardMetadata, match MatchResult, campaign *Campaign, attributionSource string) PSAImportItemResult {
+func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gradeValue float64, buyCostCents int, meta inventory.PSACardMetadata, match inventory.MatchResult, campaign *inventory.Campaign, attributionSource string) PSAImportItemResult {
 	switch match.Status {
 	case "matched":
 		purchaseDate := row.Date
 		if purchaseDate == "" {
 			purchaseDate = time.Now().Format("2006-01-02")
 		}
-		p := &Purchase{
+		p := &inventory.Purchase{
 			CampaignID:          campaign.ID,
 			CardName:            meta.CardName,
 			CertNumber:          row.CertNumber,
@@ -306,16 +307,16 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 			BackImageURL:        row.BackImageURL,
 			PurchaseSource:      row.PurchaseSource,
 			PSAListingTitle:     row.ListingTitle,
-			DHPushStatus:        DHPushStatusPending,
+			DHPushStatus:        inventory.DHPushStatusPending,
 			PSACampaignName:     row.PSACampaignName,
 			AttributionSource:   attributionSource,
 		}
 		// Only defer snapshot to background worker when a price provider is available
 		if s.priceProv != nil {
-			p.SnapshotStatus = SnapshotStatusPending
+			p.SnapshotStatus = inventory.SnapshotStatusPending
 		}
-		if err := s.CreatePurchase(ctx, p); err != nil {
-			if IsDuplicateCertNumber(err) {
+		if err := s.inv.CreatePurchase(ctx, p); err != nil {
+			if inventory.IsDuplicateCertNumber(err) {
 				return PSAImportItemResult{
 					CertNumber: row.CertNumber, CardName: meta.CardName, Grade: gradeValue,
 					Status: "skipped",
@@ -326,11 +327,11 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 				Status: "failed", Error: err.Error(),
 			}
 		}
-		s.recordEvent(ctx, dhevents.Event{
+		s.inv.RecordDHEvent(ctx, dhevents.Event{
 			PurchaseID:    p.ID,
 			CertNumber:    p.CertNumber,
 			Type:          dhevents.TypeEnrolled,
-			NewPushStatus: DHPushStatusPending,
+			NewPushStatus: inventory.DHPushStatusPending,
 			Source:        dhevents.SourcePSAImport,
 		})
 		return PSAImportItemResult{
@@ -397,7 +398,7 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 		return 0, 0
 	}
 	// Use a slice-based map so duplicate invoice dates don't silently overwrite.
-	existingByDate := make(map[string][]*Invoice, len(existingInvoices))
+	existingByDate := make(map[string][]*inventory.Invoice, len(existingInvoices))
 	for i := range existingInvoices {
 		d := existingInvoices[i].InvoiceDate
 		existingByDate[d] = append(existingByDate[d], &existingInvoices[i])
@@ -463,7 +464,7 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 			continue
 		}
 
-		inv := &Invoice{
+		inv := &inventory.Invoice{
 			ID:          s.idGen(),
 			InvoiceDate: invoiceDate,
 			TotalCents:  totalCents,
@@ -486,10 +487,10 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 }
 
 // filterOutExternal returns a copy of campaigns with the external campaign removed.
-func filterOutExternal(campaigns []Campaign) []Campaign {
-	filtered := make([]Campaign, 0, len(campaigns))
+func filterOutExternal(campaigns []inventory.Campaign) []inventory.Campaign {
+	filtered := make([]inventory.Campaign, 0, len(campaigns))
 	for _, c := range campaigns {
-		if c.ID != ExternalCampaignID {
+		if c.ID != inventory.ExternalCampaignID {
 			filtered = append(filtered, c)
 		}
 	}

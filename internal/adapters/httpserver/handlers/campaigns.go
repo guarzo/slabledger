@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
@@ -19,7 +20,7 @@ import (
 
 // RowProvider fetches PSA export rows from the portal for manual import.
 type RowProvider interface {
-	FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error)
+	FetchRows(ctx context.Context) ([]csvimport.PSAExportRow, error)
 }
 
 // DHPriceSyncer queues a DH price-sync for one purchase. Fire-and-forget
@@ -31,6 +32,7 @@ type DHPriceSyncer interface {
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
 	service        inventory.Service
+	importSvc      csvimport.Service // optional: CSV/portal intake
 	arbSvc         arbitrage.Service
 	portSvc        portfolio.Service
 	tuningSvc      tuning.Service
@@ -50,6 +52,12 @@ type CampaignsHandler struct {
 
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
 type CampaignsHandlerOption func(*CampaignsHandler)
+
+// WithImportService enables the CSV and PSA-portal intake endpoints. Without it
+// those routes answer 503; every other campaign route is unaffected.
+func WithImportService(svc csvimport.Service) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.importSvc = svc }
+}
 
 // WithDHListingService enables DH listing after cert import.
 func WithDHListingService(svc dhlisting.Service) CampaignsHandlerOption {
