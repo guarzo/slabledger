@@ -85,7 +85,7 @@ func ClassifyEra(purchaseDate string) string {
 
 // ClassifyPriceTier assigns a purchase to a fixed price tier based on cost basis.
 func ClassifyPriceTier(buyCostCents int) string {
-	for _, t := range fixedTiers {
+	for _, t := range FixedPriceTiers {
 		if buyCostCents >= t.MinCents && buyCostCents < t.MaxCents {
 			return t.Label
 		}

@@ -1,21 +1,6 @@
-package inventory
+package tuning
 
-// GradePerformance contains P&L metrics for a specific PSA grade within a campaign.
-type GradePerformance struct {
-	Grade             float64 `json:"grade"`
-	PurchaseCount     int     `json:"purchaseCount"`
-	SoldCount         int     `json:"soldCount"`
-	SellThroughPct    float64 `json:"sellThroughPct"`
-	AvgDaysToSell     float64 `json:"avgDaysToSell"`
-	TotalSpendCents   int     `json:"totalSpendCents"`
-	TotalRevenueCents int     `json:"totalRevenueCents"`
-	TotalFeesCents    int     `json:"totalFeesCents"`
-	NetProfitCents    int     `json:"netProfitCents"`
-	ROI               float64 `json:"roi"`
-	AvgBuyPctOfCL     float64 `json:"avgBuyPctOfCL"`
-	RoiStddev         float64 `json:"roiStddev"` // population stddev of per-sale ROIs; 0 if < 2 sales
-	CV                float64 `json:"cv"`        // coefficient of variation = RoiStddev / |ROI|; 0 if ROI==0
-}
+import "github.com/guarzo/slabledger/internal/domain/inventory"
 
 // PriceTierPerformance contains P&L metrics for a cost basis price tier.
 type PriceTierPerformance struct {
@@ -38,12 +23,12 @@ type PriceTierPerformance struct {
 
 // CardPerformance contains performance data for a single purchase with current market context.
 type CardPerformance struct {
-	Purchase      Purchase        `json:"purchase"`
-	BuyPctOfCL    float64         `json:"buyPctOfCL"`
-	Sale          *Sale           `json:"sale,omitempty"`
-	CurrentMarket *MarketSnapshot `json:"currentMarket,omitempty"`
-	RealizedPnL   int             `json:"realizedPnL"`
-	UnrealizedPnL int             `json:"unrealizedPnL"`
+	Purchase      inventory.Purchase        `json:"purchase"`
+	BuyPctOfCL    float64                   `json:"buyPctOfCL"`
+	Sale          *inventory.Sale           `json:"sale,omitempty"`
+	CurrentMarket *inventory.MarketSnapshot `json:"currentMarket,omitempty"`
+	RealizedPnL   int                       `json:"realizedPnL"`
+	UnrealizedPnL int                       `json:"unrealizedPnL"`
 }
 
 // BuyThresholdDataPoint is a single observation for the empirical optimal buy threshold chart.
@@ -103,22 +88,28 @@ type TuningRecommendation struct {
 	DataPoints   int    `json:"dataPoints"`
 }
 
-// TuningResponse is the top-level API response for the tuning endpoint.
-type TuningResponse struct {
-	CampaignID       string                 `json:"campaignId"`
-	CampaignName     string                 `json:"campaignName"`
-	ByGrade          []GradePerformance     `json:"byGrade"`
-	ByFixedTier      []PriceTierPerformance `json:"byFixedTier"`
-	ByRelativeTier   []PriceTierPerformance `json:"byRelativeTier"`
-	TopPerformers    []CardPerformance      `json:"topPerformers"`
-	BottomPerformers []CardPerformance      `json:"bottomPerformers"`
-	BuyThreshold     *BuyThresholdAnalysis  `json:"buyThreshold,omitempty"`
-	MarketAlignment  *MarketAlignment       `json:"marketAlignment,omitempty"`
-	Recommendations  []TuningRecommendation `json:"recommendations"`
+// TuningInput bundles all inputs needed by ComputeRecommendations.
+type TuningInput struct {
+	Campaign    *inventory.Campaign
+	PNL         *inventory.CampaignPNL
+	ByGrade     []inventory.GradePerformance
+	ByFixedTier []PriceTierPerformance
+	Threshold   *BuyThresholdAnalysis
+	Alignment   *MarketAlignment
+	DailySpend  []inventory.DailySpend
+	ChannelPNL  []inventory.ChannelPNL
 }
 
-// PurchaseWithSale joins a purchase with its optional sale for tuning analysis.
-type PurchaseWithSale struct {
-	Purchase Purchase
-	Sale     *Sale
+// TuningResponse is the top-level API response for the tuning endpoint.
+type TuningResponse struct {
+	CampaignID       string                       `json:"campaignId"`
+	CampaignName     string                       `json:"campaignName"`
+	ByGrade          []inventory.GradePerformance `json:"byGrade"`
+	ByFixedTier      []PriceTierPerformance       `json:"byFixedTier"`
+	ByRelativeTier   []PriceTierPerformance       `json:"byRelativeTier"`
+	TopPerformers    []CardPerformance            `json:"topPerformers"`
+	BottomPerformers []CardPerformance            `json:"bottomPerformers"`
+	BuyThreshold     *BuyThresholdAnalysis        `json:"buyThreshold,omitempty"`
+	MarketAlignment  *MarketAlignment             `json:"marketAlignment,omitempty"`
+	Recommendations  []TuningRecommendation       `json:"recommendations"`
 }

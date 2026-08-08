@@ -14,6 +14,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -226,16 +227,16 @@ func TestHandleCampaignPNL_ServiceError(t *testing.T) {
 // --- HandleTuning ---
 
 func TestHandleTuning_Success(t *testing.T) {
-	resp := &inventory.TuningResponse{
+	resp := &tuning.TuningResponse{
 		CampaignID:   "camp-1",
 		CampaignName: "Test Campaign",
 		ByGrade: []inventory.GradePerformance{
 			{Grade: 9, PurchaseCount: 10, SoldCount: 7, ROI: 0.15},
 		},
-		Recommendations: []inventory.TuningRecommendation{},
+		Recommendations: []tuning.TuningRecommendation{},
 	}
 	tuningSvc := &mocks.MockTuningService{
-		GetCampaignTuningFn: func(_ context.Context, _ string) (*inventory.TuningResponse, error) {
+		GetCampaignTuningFn: func(_ context.Context, _ string) (*tuning.TuningResponse, error) {
 			return resp, nil
 		},
 	}
@@ -252,7 +253,7 @@ func TestHandleTuning_Success(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
-	var got inventory.TuningResponse
+	var got tuning.TuningResponse
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -266,7 +267,7 @@ func TestHandleTuning_Success(t *testing.T) {
 
 func TestHandleTuning_ServiceError(t *testing.T) {
 	tuningSvc := &mocks.MockTuningService{
-		GetCampaignTuningFn: func(_ context.Context, _ string) (*inventory.TuningResponse, error) {
+		GetCampaignTuningFn: func(_ context.Context, _ string) (*tuning.TuningResponse, error) {
 			return nil, inventory.ErrCampaignNotFound
 		},
 	}

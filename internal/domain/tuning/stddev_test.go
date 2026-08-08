@@ -1,8 +1,10 @@
-package inventory
+package tuning
 
 import (
 	"math"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 func TestComputeROIStats(t *testing.T) {
@@ -85,28 +87,28 @@ func TestEnrichPriceTierStddev(t *testing.T) {
 	//  "mid" tier: 2 sales (bucketCost=1500, 2500) → >=2 sales → non-zero stddev
 	//  "high" tier: no sales → stddev=0
 	//  Zero-roiCost purchase: skipped.
-	//  Unsold (Sale == nil): skipped.
-	data := []PurchaseWithSale{
+	//  Unsold (inventory.Sale == nil): skipped.
+	data := []inventory.PurchaseWithSale{
 		{
-			Purchase: Purchase{BuyCostCents: 400, PSASourcingFeeCents: 100}, // bucketCost=400 (low), roiCost=500
-			Sale:     &Sale{NetProfitCents: 50},                             // roi = 50/500 = 0.1
+			Purchase: inventory.Purchase{BuyCostCents: 400, PSASourcingFeeCents: 100}, // bucketCost=400 (low), roiCost=500
+			Sale:     &inventory.Sale{NetProfitCents: 50},                             // roi = 50/500 = 0.1
 		},
 		{
-			Purchase: Purchase{BuyCostCents: 1500, PSASourcingFeeCents: 500}, // bucketCost=1500 (mid), roiCost=2000
-			Sale:     &Sale{NetProfitCents: 200},                             // roi = 200/2000 = 0.1
+			Purchase: inventory.Purchase{BuyCostCents: 1500, PSASourcingFeeCents: 500}, // bucketCost=1500 (mid), roiCost=2000
+			Sale:     &inventory.Sale{NetProfitCents: 200},                             // roi = 200/2000 = 0.1
 		},
 		{
-			Purchase: Purchase{BuyCostCents: 2500, PSASourcingFeeCents: 500}, // bucketCost=2500 (mid), roiCost=3000
-			Sale:     &Sale{NetProfitCents: 900},                             // roi = 900/3000 = 0.3
+			Purchase: inventory.Purchase{BuyCostCents: 2500, PSASourcingFeeCents: 500}, // bucketCost=2500 (mid), roiCost=3000
+			Sale:     &inventory.Sale{NetProfitCents: 900},                             // roi = 900/3000 = 0.3
 		},
 		{
 			// Zero cost — should be skipped entirely.
-			Purchase: Purchase{BuyCostCents: 0, PSASourcingFeeCents: 0},
-			Sale:     &Sale{NetProfitCents: 100},
+			Purchase: inventory.Purchase{BuyCostCents: 0, PSASourcingFeeCents: 0},
+			Sale:     &inventory.Sale{NetProfitCents: 100},
 		},
 		{
 			// Unsold — should be skipped.
-			Purchase: Purchase{BuyCostCents: 2000, PSASourcingFeeCents: 0},
+			Purchase: inventory.Purchase{BuyCostCents: 2000, PSASourcingFeeCents: 0},
 			Sale:     nil,
 		},
 	}
@@ -142,7 +144,7 @@ func TestEnrichPriceTierStddev(t *testing.T) {
 
 func TestEnrichPriceTierStddev_EmptyTiers(t *testing.T) {
 	// Should not panic.
-	EnrichPriceTierStddev(nil, []PurchaseWithSale{
-		{Purchase: Purchase{BuyCostCents: 1000}, Sale: &Sale{NetProfitCents: 100}},
+	EnrichPriceTierStddev(nil, []inventory.PurchaseWithSale{
+		{Purchase: inventory.Purchase{BuyCostCents: 1000}, Sale: &inventory.Sale{NetProfitCents: 100}},
 	})
 }

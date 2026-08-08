@@ -233,7 +233,7 @@ func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, cam
 				if m.PurchaseCount > 0 {
 					sellThrough = float64(m.SoldCount) / float64(m.PurchaseCount)
 				}
-				if sellThrough < suggLowSellThroughPct {
+				if sellThrough < LowSellThroughPct {
 					suggestions = append(suggestions, CampaignSuggestion{
 						Type:  "adjust",
 						Title: fmt.Sprintf("Consider closing %s", c.Name),

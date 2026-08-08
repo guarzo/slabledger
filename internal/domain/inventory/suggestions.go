@@ -73,9 +73,11 @@ const (
 	// may be suggested for closing (Rule 7).
 	suggArchiveROIThreshold = -0.10
 
-	// suggLowSellThroughPct is the sell-through percentage below which a campaign
-	// may be suggested for closing. Shared with tuning.go's recLowSellThrough.
-	suggLowSellThroughPct = 0.30
+	// LowSellThroughPct is the sell-through percentage below which a campaign
+	// may be suggested for closing. Exported because internal/domain/tuning's
+	// recLowSellThrough applies the same threshold; keep it a single definition
+	// rather than letting the two packages drift.
+	LowSellThroughPct = 0.30
 
 	// suggActivateMinROI is the minimum ROI for a character segment to trigger
 	// a suggestion to activate a pending campaign (Rule 7).

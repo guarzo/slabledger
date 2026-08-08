@@ -1,12 +1,14 @@
-package inventory
+package tuning
 
 import (
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-func makePWS(cardName string, grade float64, buyCost, clValue int, sale *Sale) PurchaseWithSale {
-	return PurchaseWithSale{
-		Purchase: Purchase{
+func makePWS(cardName string, grade float64, buyCost, clValue int, sale *inventory.Sale) inventory.PurchaseWithSale {
+	return inventory.PurchaseWithSale{
+		Purchase: inventory.Purchase{
 			ID:                  "p-" + cardName,
 			CampaignID:          "campaign-1",
 			CardName:            cardName,
@@ -16,14 +18,14 @@ func makePWS(cardName string, grade float64, buyCost, clValue int, sale *Sale) P
 			BuyCostCents:        buyCost,
 			PSASourcingFeeCents: 300,
 			PurchaseDate:        "2026-01-15",
-			MarketSnapshotData:  MarketSnapshotData{MedianCents: clValue}, // assume median = CL at purchase time
+			MarketSnapshotData:  inventory.MarketSnapshotData{MedianCents: clValue}, // assume median = CL at purchase time
 		},
 		Sale: sale,
 	}
 }
 
-func makeSale(price, fee, profit, days int, channel SaleChannel) *Sale {
-	return &Sale{
+func makeSale(price, fee, profit, days int, channel inventory.SaleChannel) *inventory.Sale {
+	return &inventory.Sale{
 		ID:             "s-1",
 		SaleChannel:    channel,
 		SalePriceCents: price,
@@ -35,16 +37,16 @@ func makeSale(price, fee, profit, days int, channel SaleChannel) *Sale {
 }
 
 func Test_computePriceTierPerformance_FixedBuckets(t *testing.T) {
-	data := []PurchaseWithSale{
-		makePWS("card1", 9, 3000, 4000, makeSale(5000, 600, 1100, 10, SaleChannelEbay)),    // $30 -> $0-50
-		makePWS("card2", 9, 8000, 10000, makeSale(12000, 1400, 2300, 15, SaleChannelEbay)), // $80 -> $50-100
-		makePWS("card3", 10, 15000, 18000, nil),                                            // $150 -> $100-200
+	data := []inventory.PurchaseWithSale{
+		makePWS("card1", 9, 3000, 4000, makeSale(5000, 600, 1100, 10, inventory.SaleChannelEbay)),    // $30 -> $0-50
+		makePWS("card2", 9, 8000, 10000, makeSale(12000, 1400, 2300, 15, inventory.SaleChannelEbay)), // $80 -> $50-100
+		makePWS("card3", 10, 15000, 18000, nil),                                                      // $150 -> $100-200
 	}
 
 	fixed, relative := ComputePriceTierPerformance(data)
 
-	if len(fixed) != len(fixedTiers) {
-		t.Fatalf("expected %d fixed tiers, got %d", len(fixedTiers), len(fixed))
+	if len(fixed) != len(inventory.FixedPriceTiers) {
+		t.Fatalf("expected %d fixed tiers, got %d", len(inventory.FixedPriceTiers), len(fixed))
 	}
 
 	// $0-50 bucket
@@ -76,8 +78,8 @@ func Test_computePriceTierPerformance_FixedBuckets(t *testing.T) {
 
 func Test_computePriceTierPerformance_Empty(t *testing.T) {
 	fixed, relative := ComputePriceTierPerformance(nil)
-	if len(fixed) != len(fixedTiers) {
-		t.Errorf("expected %d fixed tiers for empty data, got %d", len(fixedTiers), len(fixed))
+	if len(fixed) != len(inventory.FixedPriceTiers) {
+		t.Errorf("expected %d fixed tiers for empty data, got %d", len(inventory.FixedPriceTiers), len(fixed))
 	}
 	// Relative tiers are nil when quartileBuckets returns nil for empty input
 	for _, r := range relative {
@@ -88,10 +90,10 @@ func Test_computePriceTierPerformance_Empty(t *testing.T) {
 }
 
 func Test_ComputeCardPerformance(t *testing.T) {
-	data := []PurchaseWithSale{
-		makePWS("winner", 10, 5000, 8000, makeSale(10000, 1200, 3500, 5, SaleChannelEbay)),
-		makePWS("loser", 8, 20000, 22000, makeSale(15000, 1800, -7100, 30, SaleChannelEbay)),
-		makePWS("mid", 9, 10000, 12000, makeSale(13000, 1500, 1200, 12, SaleChannelInPerson)),
+	data := []inventory.PurchaseWithSale{
+		makePWS("winner", 10, 5000, 8000, makeSale(10000, 1200, 3500, 5, inventory.SaleChannelEbay)),
+		makePWS("loser", 8, 20000, 22000, makeSale(15000, 1800, -7100, 30, inventory.SaleChannelEbay)),
+		makePWS("mid", 9, 10000, 12000, makeSale(13000, 1500, 1200, 12, inventory.SaleChannelInPerson)),
 	}
 
 	top, bottom := ComputeCardPerformance(data, 2)
@@ -123,16 +125,16 @@ func Test_computeCardPerformance_Empty(t *testing.T) {
 
 func Test_ComputeBuyThresholdAnalysis(t *testing.T) {
 	// Create purchases at various CL% levels with different outcomes
-	var data []PurchaseWithSale
+	var data []inventory.PurchaseWithSale
 	// Good purchases at 70-75% CL (high ROI)
 	for i := 0; i < 5; i++ {
 		data = append(data, makePWS("good"+string(rune('0'+i)), 9, 7000, 10000,
-			makeSale(12000, 1400, 3300, 10, SaleChannelEbay)))
+			makeSale(12000, 1400, 3300, 10, inventory.SaleChannelEbay)))
 	}
 	// Bad purchases at 90-95% CL (low/negative ROI)
 	for i := 0; i < 5; i++ {
 		data = append(data, makePWS("bad"+string(rune('0'+i)), 9, 9200, 10000,
-			makeSale(10000, 1200, -700, 25, SaleChannelEbay)))
+			makeSale(10000, 1200, -700, 25, inventory.SaleChannelEbay)))
 	}
 
 	result := ComputeBuyThresholdAnalysis(data, 0.90)
@@ -156,7 +158,7 @@ func Test_ComputeBuyThresholdAnalysis(t *testing.T) {
 }
 
 func Test_computeBuyThresholdAnalysis_NoCLValues(t *testing.T) {
-	data := []PurchaseWithSale{
+	data := []inventory.PurchaseWithSale{
 		makePWS("card1", 9, 5000, 0, nil), // CLValueCents = 0
 	}
 	result := ComputeBuyThresholdAnalysis(data, 0.85)
@@ -166,29 +168,29 @@ func Test_computeBuyThresholdAnalysis_NoCLValues(t *testing.T) {
 }
 
 func Test_ComputeMarketAlignment(t *testing.T) {
-	data := []PurchaseWithSale{
+	data := []inventory.PurchaseWithSale{
 		{
-			Purchase: Purchase{
+			Purchase: inventory.Purchase{
 				CardName: "rising", GradeValue: 10,
-				MarketSnapshotData: MarketSnapshotData{MedianCents: 10000},
+				MarketSnapshotData: inventory.MarketSnapshotData{MedianCents: 10000},
 			},
 		},
 		{
-			Purchase: Purchase{
+			Purchase: inventory.Purchase{
 				CardName: "falling", GradeValue: 9,
-				MarketSnapshotData: MarketSnapshotData{MedianCents: 10000},
+				MarketSnapshotData: inventory.MarketSnapshotData{MedianCents: 10000},
 			},
 		},
 		{
-			Purchase: Purchase{
+			Purchase: inventory.Purchase{
 				CardName: "stable", GradeValue: 9,
-				MarketSnapshotData: MarketSnapshotData{MedianCents: 10000},
+				MarketSnapshotData: inventory.MarketSnapshotData{MedianCents: 10000},
 			},
-			Sale: &Sale{}, // sold — should be excluded
+			Sale: &inventory.Sale{}, // sold — should be excluded
 		},
 	}
 
-	snapshots := map[string]*MarketSnapshot{
+	snapshots := map[string]*inventory.MarketSnapshot{
 		"rising|||10": {MedianCents: 12000, Trend30d: 0.15, Trend90d: 0.10, SalesLast30d: 8, Volatility: 0.05},
 		"falling|||9": {MedianCents: 8000, Trend30d: -0.12, Trend90d: -0.08, SalesLast30d: 3, Volatility: 0.20},
 	}
@@ -212,8 +214,8 @@ func Test_ComputeMarketAlignment(t *testing.T) {
 }
 
 func Test_computeMarketAlignment_NoUnsold(t *testing.T) {
-	data := []PurchaseWithSale{
-		{Purchase: Purchase{CardName: "sold", GradeValue: 9}, Sale: &Sale{}},
+	data := []inventory.PurchaseWithSale{
+		{Purchase: inventory.Purchase{CardName: "sold", GradeValue: 9}, Sale: &inventory.Sale{}},
 	}
 	result := ComputeMarketAlignment(data, nil)
 	if result != nil {
@@ -222,7 +224,7 @@ func Test_computeMarketAlignment_NoUnsold(t *testing.T) {
 }
 
 func Test_computeRecommendations_BuyThreshold(t *testing.T) {
-	campaign := &Campaign{BuyTermsCLPct: 0.90, GradeRange: "8-10", Phase: PhaseActive}
+	campaign := &inventory.Campaign{BuyTermsCLPct: 0.90, GradeRange: "8-10", Phase: inventory.PhaseActive}
 
 	threshold := &BuyThresholdAnalysis{
 		OptimalPct: 0.75,
@@ -251,9 +253,9 @@ func Test_computeRecommendations_BuyThreshold(t *testing.T) {
 }
 
 func Test_computeRecommendations_UnderperformingGrade(t *testing.T) {
-	campaign := &Campaign{GradeRange: "8-10", BuyTermsCLPct: 0.85}
+	campaign := &inventory.Campaign{GradeRange: "8-10", BuyTermsCLPct: 0.85}
 
-	byGrade := []GradePerformance{
+	byGrade := []inventory.GradePerformance{
 		{Grade: 8, PurchaseCount: 10, ROI: -0.08},
 		{Grade: 9, PurchaseCount: 15, ROI: 0.12},
 		{Grade: 10, PurchaseCount: 12, ROI: 0.18},
@@ -275,8 +277,8 @@ func Test_computeRecommendations_UnderperformingGrade(t *testing.T) {
 }
 
 func Test_computeRecommendations_LowSellThrough(t *testing.T) {
-	campaign := &Campaign{BuyTermsCLPct: 0.85, Phase: PhaseActive}
-	pnl := &CampaignPNL{
+	campaign := &inventory.Campaign{BuyTermsCLPct: 0.85, Phase: inventory.PhaseActive}
+	pnl := &inventory.CampaignPNL{
 		TotalPurchases: 30,
 		TotalSold:      5,
 		SellThroughPct: 0.17,
@@ -286,7 +288,7 @@ func Test_computeRecommendations_LowSellThrough(t *testing.T) {
 	recs := ComputeRecommendations(&TuningInput{Campaign: campaign, PNL: pnl})
 	found := false
 	for _, r := range recs {
-		if r.Parameter == "phase" && r.SuggestedVal == string(PhasePending) {
+		if r.Parameter == "phase" && r.SuggestedVal == string(inventory.PhasePending) {
 			found = true
 		}
 	}
@@ -296,7 +298,7 @@ func Test_computeRecommendations_LowSellThrough(t *testing.T) {
 }
 
 func Test_computeRecommendations_MarketWarning(t *testing.T) {
-	campaign := &Campaign{BuyTermsCLPct: 0.85, Phase: PhaseActive}
+	campaign := &inventory.Campaign{BuyTermsCLPct: 0.85, Phase: inventory.PhaseActive}
 	alignment := &MarketAlignment{
 		Signal:       "warning",
 		SignalReason: "Market trending down -15%",
@@ -316,13 +318,13 @@ func Test_computeRecommendations_MarketWarning(t *testing.T) {
 }
 
 func Test_computeRecommendations_NoRecsWhenDataInsufficient(t *testing.T) {
-	campaign := &Campaign{BuyTermsCLPct: 0.85}
+	campaign := &inventory.Campaign{BuyTermsCLPct: 0.85}
 	// Only 2 grades, each with < 5 purchases — should not fire grade rule
-	byGrade := []GradePerformance{
+	byGrade := []inventory.GradePerformance{
 		{Grade: 9, PurchaseCount: 3, ROI: -0.10},
 		{Grade: 10, PurchaseCount: 4, ROI: 0.15},
 	}
-	pnl := &CampaignPNL{TotalPurchases: 7, SellThroughPct: 0.20} // < 20, won't fire sell-through rule
+	pnl := &inventory.CampaignPNL{TotalPurchases: 7, SellThroughPct: 0.20} // < 20, won't fire sell-through rule
 
 	recs := ComputeRecommendations(&TuningInput{Campaign: campaign, PNL: pnl, ByGrade: byGrade})
 	for _, r := range recs {
@@ -336,10 +338,10 @@ func Test_computeRecommendations_NoRecsWhenDataInsufficient(t *testing.T) {
 }
 
 func Test_computeRecommendations_ChannelOptimization(t *testing.T) {
-	campaign := &Campaign{BuyTermsCLPct: 0.85}
-	channelPNL := []ChannelPNL{
-		{Channel: SaleChannelEbay, SaleCount: 10, NetProfitCents: -5000},
-		{Channel: SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
+	campaign := &inventory.Campaign{BuyTermsCLPct: 0.85}
+	channelPNL := []inventory.ChannelPNL{
+		{Channel: inventory.SaleChannelEbay, SaleCount: 10, NetProfitCents: -5000},
+		{Channel: inventory.SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
 	}
 
 	recs := ComputeRecommendations(&TuningInput{Campaign: campaign, ChannelPNL: channelPNL})
@@ -358,10 +360,10 @@ func Test_computeRecommendations_ChannelOptimization(t *testing.T) {
 }
 
 func Test_computeRecommendations_ChannelOptimization_NoRecWhenProfitable(t *testing.T) {
-	campaign := &Campaign{BuyTermsCLPct: 0.85}
-	channelPNL := []ChannelPNL{
-		{Channel: SaleChannelEbay, SaleCount: 10, NetProfitCents: 5000},
-		{Channel: SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
+	campaign := &inventory.Campaign{BuyTermsCLPct: 0.85}
+	channelPNL := []inventory.ChannelPNL{
+		{Channel: inventory.SaleChannelEbay, SaleCount: 10, NetProfitCents: 5000},
+		{Channel: inventory.SaleChannelInPerson, SaleCount: 8, NetProfitCents: 16000},
 	}
 
 	recs := ComputeRecommendations(&TuningInput{Campaign: campaign, ChannelPNL: channelPNL})
@@ -375,10 +377,10 @@ func Test_computeRecommendations_ChannelOptimization_NoRecWhenProfitable(t *test
 func TestEnrichCardPerformance(t *testing.T) {
 	cards := []CardPerformance{
 		{
-			Purchase: Purchase{CardName: "Charizard", GradeValue: 10, BuyCostCents: 5000, PSASourcingFeeCents: 300},
+			Purchase: inventory.Purchase{CardName: "Charizard", GradeValue: 10, BuyCostCents: 5000, PSASourcingFeeCents: 300},
 		},
 	}
-	snapshots := map[string]*MarketSnapshot{
+	snapshots := map[string]*inventory.MarketSnapshot{
 		"Charizard|||10": {MedianCents: 8000, Trend30d: 0.10},
 	}
 
