@@ -34,7 +34,7 @@ jobs:
       # PR-only: this path uses the GitHub API and needs no git history. On pushes to
       # main the action would fall back to a git diff against github.event.before,
       # which is unreliable on a shallow checkout.
-      uses: dorny/paths-filter@v3
+      uses: dorny/paths-filter@v4
       if: github.event_name == 'pull_request'
       id: filter
       with:
