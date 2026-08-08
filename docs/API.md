@@ -793,18 +793,20 @@ Returns daily spend vs daily cap over a window.
 
 **Query params:** `days` (int, default 30, max 365)
 
-**Response:** `200 OK` — Array of `DailySpend`
+**Response:** `200 OK` — Array of daily spend rows. Monetary values are USD, not cents.
 ```json
 [
   {
     "date": "2025-01-15",
-    "spendCents": 84000,
-    "capCents": 1000000,
+    "spendUSD": 840.00,
+    "capUSD": 10000.00,
     "fillRatePct": 0.084,
     "purchaseCount": 1
   }
 ]
 ```
+
+`capUSD` reflects the campaign's current daily cap, applied to every day in the window; no per-day historical cap is stored.
 
 ---
 
