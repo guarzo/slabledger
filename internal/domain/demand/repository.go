@@ -13,7 +13,6 @@ type Repository interface {
 	// Card cache
 	UpsertCardCache(ctx context.Context, row CardCache) error
 	GetCardCache(ctx context.Context, cardID, window string) (*CardCache, error)
-	ListCardCacheByDemandScore(ctx context.Context, window string, limit int) ([]CardCache, error)
 	CardDataQualityStats(ctx context.Context, window string) (QualityStats, error)
 
 	// Character cache

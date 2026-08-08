@@ -82,41 +82,6 @@ func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window st
 	return result, nil
 }
 
-// ListCardCacheByDemandScore returns rows for the given window ordered by
-// demand_score DESC. Rows with a NULL demand_score are excluded — they
-// cannot be ranked meaningfully.
-func (r *DHDemandRepository) ListCardCacheByDemandScore(ctx context.Context, window string, limit int) (_ []demand.CardCache, err error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT card_id, "window",
-			demand_score, demand_data_quality,
-			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
-			analytics_computed_at, demand_computed_at, fetched_at
-		FROM dh_card_cache
-		WHERE "window" = $1 AND demand_score IS NOT NULL
-		ORDER BY demand_score DESC
-		LIMIT $2`,
-		window, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query dh_card_cache by demand_score: %w", err)
-	}
-	defer func() {
-		if cerr := rows.Close(); err == nil && cerr != nil {
-			err = cerr
-		}
-	}()
-
-	results := make([]demand.CardCache, 0, limit)
-	for rows.Next() {
-		r, scanErr := scanCardCacheRow(rows)
-		if scanErr != nil {
-			return nil, fmt.Errorf("scan dh_card_cache row: %w", scanErr)
-		}
-		results = append(results, *r)
-	}
-	return results, rows.Err()
-}
-
 // CardDataQualityStats returns the distribution of demand_data_quality values
 // across dh_card_cache rows for a given window.
 func (r *DHDemandRepository) CardDataQualityStats(ctx context.Context, window string) (demand.QualityStats, error) {
