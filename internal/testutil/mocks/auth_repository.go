@@ -27,11 +27,6 @@ type MockAuthRepository struct {
 	GetUserByIDFn               func(ctx context.Context, userID int64) (*auth.User, error)
 	UpdateUserFn                func(ctx context.Context, user *auth.User) error
 	StoreTokensFn               func(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
-	GetTokensFn                 func(ctx context.Context, userID int64, sessionID string) (*auth.UserTokens, error)
-	GetTokensByUserIDFn         func(ctx context.Context, userID int64) (*auth.UserTokens, error)
-	UpdateTokensFn              func(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
-	DeleteTokensFn              func(ctx context.Context, userID int64, sessionID string) error
-	DeleteAllUserTokensFn       func(ctx context.Context, userID int64) error
 	CreateSessionFn             func(ctx context.Context, session *auth.Session) error
 	GetSessionFn                func(ctx context.Context, sessionID string) (*auth.Session, error)
 	UpdateSessionAccessFn       func(ctx context.Context, sessionID string) error
@@ -111,52 +106,6 @@ func (m *MockAuthRepository) StoreTokens(ctx context.Context, userID int64, sess
 		return m.StoreTokensFn(ctx, userID, sessionID, tokens)
 	}
 	m.Tokens[userID] = tokens
-	return nil
-}
-
-func (m *MockAuthRepository) GetTokens(ctx context.Context, userID int64, sessionID string) (*auth.UserTokens, error) {
-	if m.GetTokensFn != nil {
-		return m.GetTokensFn(ctx, userID, sessionID)
-	}
-	tokens, ok := m.Tokens[userID]
-	if !ok {
-		return nil, errors.New("tokens not found")
-	}
-	return tokens, nil
-}
-
-func (m *MockAuthRepository) GetTokensByUserID(ctx context.Context, userID int64) (*auth.UserTokens, error) {
-	if m.GetTokensByUserIDFn != nil {
-		return m.GetTokensByUserIDFn(ctx, userID)
-	}
-	tokens, ok := m.Tokens[userID]
-	if !ok {
-		return nil, errors.New("tokens not found")
-	}
-	return tokens, nil
-}
-
-func (m *MockAuthRepository) UpdateTokens(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {
-	if m.UpdateTokensFn != nil {
-		return m.UpdateTokensFn(ctx, userID, sessionID, tokens)
-	}
-	m.Tokens[userID] = tokens
-	return nil
-}
-
-func (m *MockAuthRepository) DeleteTokens(ctx context.Context, userID int64, sessionID string) error {
-	if m.DeleteTokensFn != nil {
-		return m.DeleteTokensFn(ctx, userID, sessionID)
-	}
-	delete(m.Tokens, userID)
-	return nil
-}
-
-func (m *MockAuthRepository) DeleteAllUserTokens(ctx context.Context, userID int64) error {
-	if m.DeleteAllUserTokensFn != nil {
-		return m.DeleteAllUserTokensFn(ctx, userID)
-	}
-	delete(m.Tokens, userID)
 	return nil
 }
 
