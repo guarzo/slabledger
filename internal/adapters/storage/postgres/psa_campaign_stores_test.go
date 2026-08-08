@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 	"github.com/stretchr/testify/require"
@@ -16,12 +17,25 @@ func truncatePSACampaignTables(t *testing.T, db *DB) {
 	require.NoError(t, err, "truncate psa_campaign tables")
 }
 
+// approvalBy builds the signed-approval value Approve now takes. The signature
+// bytes are opaque to the store — it persists them verbatim — so a fixed stub is
+// enough here; psacampaign's own tests cover minting and verification.
+func approvalBy(name string) psacampaign.Approval {
+	return psacampaign.Approval{
+		ApprovedBy:        name,
+		ApprovedAt:        time.Now().UTC().Truncate(time.Second),
+		PayloadDigest:     "digest-" + name,
+		ApprovalSignature: "sig-" + name,
+		SignatureKeyID:    "test-key",
+	}
+}
+
 // advanceToPushing drives a queued row through approve -> claim so MarkResult's
 // status guard is satisfied, mirroring what DrainPushQueue does before it
 // records an outcome. Tolerates an already-approved row.
 func advanceToPushing(t *testing.T, ctx context.Context, s *PSACampaignPushQueueStore, id string) {
 	t.Helper()
-	if err := s.Approve(ctx, id, "test-approver"); err != nil && !errors.Is(err, psacampaign.ErrPushNotPending) {
+	if err := s.Approve(ctx, id, approvalBy("test-approver")); err != nil && !errors.Is(err, psacampaign.ErrPushNotPending) {
 		require.NoError(t, err, "approve %s", id)
 	}
 	claimed, err := s.Claim(ctx, id)
@@ -110,7 +124,7 @@ func TestPushQueueStore_Lifecycle(t *testing.T) {
 	require.Equal(t, "alice", pending[0].RequestedBy)
 	require.Equal(t, row.Diff, pending[0].Diff)
 
-	require.NoError(t, s.Approve(ctx, "push-1", "bob"))
+	require.NoError(t, s.Approve(ctx, "push-1", approvalBy("bob")))
 
 	approved, err := s.ListByStatus(ctx, psacampaign.PushApproved)
 	require.NoError(t, err)
@@ -118,12 +132,27 @@ func TestPushQueueStore_Lifecycle(t *testing.T) {
 	require.Equal(t, "bob", approved[0].ApprovedBy)
 	require.Equal(t, psacampaign.PushApproved, approved[0].Status)
 
+	// The signature columns must survive the round trip intact — the drain
+	// re-derives the signing input from exactly these values, so a dropped or
+	// mangled column here reads as tampering later.
+	require.Equal(t, "digest-bob", approved[0].PayloadDigest)
+	require.Equal(t, "sig-bob", approved[0].ApprovalSignature)
+	require.Equal(t, "test-key", approved[0].SignatureKeyID)
+	require.False(t, approved[0].ApprovedAt.IsZero(), "approved_at must be persisted")
+
+	// Get must return the same row as the list read: the publish handler reads
+	// through Get before signing, so a divergence there would sign one row and
+	// store the signature against another.
+	got, err := s.Get(ctx, "push-1")
+	require.NoError(t, err)
+	require.Equal(t, approved[0], got)
+
 	stillPending, err := s.ListByStatus(ctx, psacampaign.PushPending)
 	require.NoError(t, err)
 	require.Empty(t, stillPending)
 
 	// Approving an already-approved row should fail.
-	err = s.Approve(ctx, "push-1", "carol")
+	err = s.Approve(ctx, "push-1", approvalBy("carol"))
 	require.ErrorIs(t, err, psacampaign.ErrPushNotPending)
 
 	advanceToPushing(t, ctx, s, "push-1")
@@ -141,8 +170,11 @@ func TestPushQueueStore_Approve_NotPending(t *testing.T) {
 	s := NewPSACampaignPushQueueStore(db.DB)
 	ctx := context.Background()
 
-	err := s.Approve(ctx, "does-not-exist", "bob")
+	err := s.Approve(ctx, "does-not-exist", approvalBy("bob"))
 	require.ErrorIs(t, err, psacampaign.ErrPushNotPending)
+
+	_, err = s.Get(ctx, "does-not-exist")
+	require.ErrorIs(t, err, psacampaign.ErrPushNotFound)
 }
 
 // MarkResult must be conditional on the caller holding a claim. The last case
@@ -164,7 +196,7 @@ func TestPushQueueStore_MarkResult_RequiresClaim(t *testing.T) {
 	require.ErrorIs(t, s.MarkResult(ctx, "push-1", psacampaign.PushPushed, "", ""),
 		psacampaign.ErrPushNotClaimed, "pending row")
 
-	require.NoError(t, s.Approve(ctx, "push-1", "bob"))
+	require.NoError(t, s.Approve(ctx, "push-1", approvalBy("bob")))
 	require.ErrorIs(t, s.MarkResult(ctx, "push-1", psacampaign.PushPushed, "", ""),
 		psacampaign.ErrPushNotClaimed, "approved but unclaimed row")
 

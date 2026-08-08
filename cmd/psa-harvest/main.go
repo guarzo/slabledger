@@ -74,6 +74,11 @@ func run(baseline bool, args []string) error {
 		return errors.New("ENCRYPTION_KEY is required (token is encrypted at rest)")
 	case cfg.Database.URL == "":
 		return errors.New("DATABASE_URL is required")
+	case cfg.PSAPortal.PushSigningKey == "":
+		// Fail closed. Without the key the drain cannot authenticate any
+		// approval, so every queued row would be marked failed — better to
+		// refuse the run than to burn the queue.
+		return errors.New("PSA_PUSH_SIGNING_KEY is required (approvals are signed; it must match the web app's key)")
 	}
 
 	dbCtx, dbCancel := context.WithTimeout(ctx, 90*time.Second)
@@ -87,6 +92,10 @@ func run(baseline bool, args []string) error {
 	enc, err := crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
 	if err != nil {
 		return fmt.Errorf("encryptor: %w", err)
+	}
+	pushSigner, err := crypto.NewHMACSigner(cfg.PSAPortal.PushSigningKey, cfg.PSAPortal.PushSigningKeyID)
+	if err != nil {
+		return fmt.Errorf("push signer: %w", err)
 	}
 	store := postgres.NewPSAPortalTokenStore(db.DB, enc)
 	snapshots := postgres.NewPSAPortalSnapshotStore(db.DB)
@@ -220,7 +229,7 @@ func run(baseline bool, args []string) error {
 			return nil
 		}
 
-		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, linker, logger)
+		pushed, failed := psaportal.DrainPushQueue(ctx, portal, queue, linker, pushSigner, logger)
 		logger.Info(ctx, "psa-harvest: push queue drained",
 			observability.Int("pushed", pushed), observability.Int("failed", failed))
 	}

@@ -291,6 +291,16 @@ type PSAPortalConfig struct {
 	// datacenter IP). Optional; empty = direct egress. Format:
 	// http://user:pass@host:port or socks5://host:port.
 	ProxyURL string
+	// PushSigningKey authenticates push-queue approvals (PSA_PUSH_SIGNING_KEY).
+	// It must be the same value in the web app that approves and the harvester
+	// that pushes, and it must not be the database's to read: the whole point is
+	// that a database writer cannot mint an approval. At least 32 characters;
+	// generate with: openssl rand -hex 32.
+	PushSigningKey string
+	// PushSigningKeyID labels the key in the rows it signs so it can be rotated
+	// without stranding approvals already queued (PSA_PUSH_SIGNING_KEY_ID).
+	// Optional; defaults to "default".
+	PushSigningKeyID string
 }
 
 // PSASyncConfig controls the background PSA portal sync scheduler.

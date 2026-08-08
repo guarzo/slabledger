@@ -72,6 +72,14 @@ func (cfg *Config) Validate() error {
 		return apperrors.ConfigInvalid("psa-portal", "", "PSA_PORTAL_EMAIL and PSA_PORTAL_PASSWORD must both be set or both be empty")
 	}
 
+	// A too-short push signing key is worse than none: it would let the publish
+	// endpoint mint approvals under a guessable key, which is exactly the
+	// forgery this signature is meant to stop. An empty key is a valid
+	// "publishing disabled" state and is left alone.
+	if cfg.PSAPortal.PushSigningKey != "" && len(cfg.PSAPortal.PushSigningKey) < 32 {
+		return apperrors.ConfigInvalid("psa-portal", "", "PSA_PUSH_SIGNING_KEY must be at least 32 characters (generate with: openssl rand -hex 32)")
+	}
+
 	return nil
 }
 

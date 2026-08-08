@@ -3,11 +3,47 @@ package psaportal
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
 )
+
+// errAmbiguousPortalName is returned when more than one portal campaign carries
+// the name a create row wants. Name is the only handle we have before the
+// campaign exists, so an ambiguous one means we cannot tell "already created"
+// from "about to duplicate" — and duplicating a live buy-box campaign spends
+// real money. Refuse and let a human disambiguate.
+var errAmbiguousPortalName = errors.New("multiple portal campaigns share this name")
+
+// portalCampaignIDByName reports the portal campaign id whose name matches, "" if
+// none does. Matching is case-insensitive and trimmed because the portal echoes
+// back what a human typed. The error cases are deliberately fatal to the row:
+// this is a safety check, and a check that cannot run has not passed.
+func portalCampaignIDByName(ctx context.Context, c *Client, name string) (string, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", errors.New("create row has an empty campaign name")
+	}
+	campaigns, err := c.fetchCampaignNames(ctx)
+	if err != nil {
+		return "", err
+	}
+	var found string
+	for _, pc := range campaigns {
+		if !strings.EqualFold(strings.TrimSpace(pc.Name), trimmed) {
+			continue
+		}
+		if found != "" {
+			return "", fmt.Errorf("%w: %q", errAmbiguousPortalName, trimmed)
+		}
+		found = pc.CampaignRequestID
+	}
+	return found, nil
+}
 
 // transientPushError reports whether a portal push failed on an edge/transport
 // condition that a later run with a fresh browser session routinely clears.
@@ -27,6 +63,13 @@ import (
 //     connection/proxy signatures qualify — the generic net::ERR_FAILED is
 //     ambiguous and stays terminal.
 func transientPushError(err error) bool {
+	// Staleness and unrenderable-field refusals are terminal by construction:
+	// retrying re-reads the same live record and refuses again, and the error
+	// text quotes operator-controlled values (campaign and subject names) that
+	// could otherwise contain a transient signature by accident.
+	if errors.Is(err, psacampaign.ErrFieldStale) || errors.Is(err, psacampaign.ErrNoRenderer) {
+		return false
+	}
 	msg := err.Error()
 	for _, s := range transientPushSignatures {
 		if strings.Contains(msg, s) {
@@ -67,7 +110,11 @@ func pushOutcome(err error) psacampaign.PushStatus {
 // DrainPushQueue pushes all approved rows in q to the PSA portal via c,
 // marking each row pushed or failed based on the outcome. It returns the
 // count of successful and failed pushes.
-func DrainPushQueue(ctx context.Context, c *Client, q psacampaign.PushQueueStore, linker psacampaign.CampaignLinker, logger observability.Logger) (pushed, failed int) {
+//
+// signer authenticates each row's approval before any portal call. It is
+// required: a nil signer fails every row, because "approved" as a bare column
+// value is exactly the claim this check exists to stop trusting.
+func DrainPushQueue(ctx context.Context, c *Client, q psacampaign.PushQueueStore, linker psacampaign.CampaignLinker, signer psacampaign.ApprovalSigner, logger observability.Logger) (pushed, failed int) {
 	rows, err := q.ListByStatus(ctx, psacampaign.PushApproved)
 	if err != nil {
 		logger.Error(ctx, "psaportal: list approved push rows failed", observability.Err(err))
@@ -84,6 +131,26 @@ func DrainPushQueue(ctx context.Context, c *Client, q psacampaign.PushQueueStore
 		if !claimed {
 			logger.Info(ctx, "psaportal: push row already claimed, skipping",
 				observability.String("row_id", row.ID))
+			continue
+		}
+
+		// Authenticate the approval before anything reaches the portal. This
+		// deliberately does not go through pushOutcome: a row that fails here
+		// was forged, altered or has expired, and re-queuing it for the next
+		// hourly drain would just replay the same rejection forever.
+		if err := psacampaign.VerifyApproval(row, signer, time.Now()); err != nil {
+			if markErr := q.MarkResult(ctx, row.ID, psacampaign.PushFailed, "", err.Error()); markErr != nil {
+				logger.Error(ctx, "psaportal: mark unverified push row failed",
+					observability.String("row_id", row.ID), observability.Err(markErr))
+			}
+			logger.Error(ctx, "psaportal: approval verification failed, refusing to push",
+				observability.String("row_id", row.ID),
+				observability.String("internal_campaign_id", row.InternalCampaignID),
+				observability.String("psa_campaign_id", row.PSACampaignID),
+				observability.String("approved_by", row.ApprovedBy),
+				observability.String("signature_key_id", row.SignatureKeyID),
+				observability.Err(err))
+			failed++
 			continue
 		}
 
@@ -161,6 +228,40 @@ func drainCreate(ctx context.Context, c *Client, q psacampaign.PushQueueStore, l
 			}
 			return true
 		}
+	}
+
+	// Portal-rooted replay guard. The check above trusts the database, which is
+	// exactly the surface SLA-44 assumes is hostile: a writer that clears the
+	// link and replays an already-drained approved row would slip past it. The
+	// portal's own campaign list is the one source that writer cannot edit, so
+	// consult it before creating anything.
+	if existingID, err := portalCampaignIDByName(ctx, c, row.Diff.Create.CampaignName); err != nil {
+		logger.Error(ctx, "psaportal: portal existence check failed, refusing create",
+			observability.String("row_id", row.ID),
+			observability.String("campaign_name", row.Diff.Create.CampaignName),
+			observability.Err(err))
+		if markErr := q.MarkResult(ctx, row.ID, psacampaign.PushFailed, "", "portal existence check failed: "+err.Error()); markErr != nil {
+			logger.Error(ctx, "psaportal: mark create portal-check-failed result failed", observability.String("row_id", row.ID), observability.Err(markErr))
+		}
+		return false
+	} else if existingID != "" {
+		logger.Info(ctx, "psaportal: campaign already exists on the portal, recording it without re-creating",
+			observability.String("row_id", row.ID),
+			observability.String("campaign_name", row.Diff.Create.CampaignName),
+			observability.String("psa_campaign_id", existingID))
+		if linker != nil && row.InternalCampaignID != "" {
+			if err := linker.LinkPSACampaign(ctx, row.InternalCampaignID, existingID); err != nil {
+				logger.Error(ctx, "psaportal: link pre-existing campaign failed",
+					observability.String("row_id", row.ID),
+					observability.String("psa_campaign_id", existingID),
+					observability.Err(err))
+			}
+		}
+		resultJSON, _ := json.Marshal(map[string]string{"campaignRequestId": existingID})
+		if err := q.MarkResult(ctx, row.ID, psacampaign.PushPushed, string(resultJSON), ""); err != nil {
+			logger.Error(ctx, "psaportal: mark create pushed (portal-existing) result failed", observability.String("row_id", row.ID), observability.Err(err))
+		}
+		return true
 	}
 
 	newID, err := c.CreateCampaign(ctx, *row.Diff.Create)

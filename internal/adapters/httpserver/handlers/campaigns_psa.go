@@ -128,6 +128,9 @@ func (h *CampaignsHandler) HandlePSALink(w http.ResponseWriter, r *http.Request)
 type psaProposeResponse struct {
 	PushID string                   `json:"pushId,omitempty"`
 	Diff   psacampaign.ProposedDiff `json:"diff"`
+	// PayloadDigest identifies the exact payload being proposed. The client
+	// echoes it back on publish so approval is bound to what was reviewed.
+	PayloadDigest string `json:"payloadDigest,omitempty"`
 }
 
 // HandlePSAPropose handles POST /api/campaigns/{id}/psa-propose, computing the
@@ -236,12 +239,24 @@ func (h *CampaignsHandler) HandlePSAPropose(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeJSON(w, http.StatusOK, psaProposeResponse{PushID: row.ID, Diff: diff})
+	digest, err := psacampaign.PayloadDigest(diff)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to digest proposed diff", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, psaProposeResponse{PushID: row.ID, Diff: diff, PayloadDigest: digest})
 }
 
 // psaPublishRequest is the body for HandlePSAPublish.
 type psaPublishRequest struct {
 	PushID string `json:"pushId"`
+	// PayloadDigest is the digest the approver was shown, echoed back from the
+	// propose response. When present it must still match the queued diff, so a
+	// payload swapped between propose and publish cannot be approved by someone
+	// who never saw it.
+	PayloadDigest string `json:"payloadDigest,omitempty"`
 }
 
 // HandlePSAPublish handles POST /api/campaigns/{id}/psa-publish, approving a
@@ -250,6 +265,10 @@ type psaPublishRequest struct {
 func (h *CampaignsHandler) HandlePSAPublish(w http.ResponseWriter, r *http.Request) {
 	if h.psaQueue == nil {
 		writeError(w, http.StatusServiceUnavailable, "PSA campaign sync not enabled")
+		return
+	}
+	if h.psaSigner == nil {
+		writeError(w, http.StatusServiceUnavailable, "PSA push approval signing is not configured")
 		return
 	}
 	var req psaPublishRequest
@@ -264,7 +283,32 @@ func (h *CampaignsHandler) HandlePSAPublish(w http.ResponseWriter, r *http.Reque
 	}
 	approvedBy := user.Username
 
-	if err := h.psaQueue.Approve(r.Context(), req.PushID, approvedBy); err != nil {
+	row, err := h.psaQueue.Get(r.Context(), req.PushID)
+	if err != nil {
+		if errors.Is(err, psacampaign.ErrPushNotFound) {
+			writeError(w, http.StatusNotFound, "push row not found")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to read PSA push row", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	approval, err := psacampaign.SignApproval(row, approvedBy, time.Now(), h.psaSigner)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to sign PSA push approval", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Bind the approval to what the approver actually reviewed. A mismatch means
+	// the queued payload changed underneath them.
+	if req.PayloadDigest != "" && req.PayloadDigest != approval.PayloadDigest {
+		writeError(w, http.StatusConflict, "the queued changes have changed since they were reviewed; re-open the proposal")
+		return
+	}
+
+	if err := h.psaQueue.Approve(r.Context(), req.PushID, approval); err != nil {
 		if errors.Is(err, psacampaign.ErrPushNotPending) {
 			writeError(w, http.StatusConflict, "push row is not pending")
 			return
@@ -281,6 +325,9 @@ func (h *CampaignsHandler) HandlePSAPublish(w http.ResponseWriter, r *http.Reque
 type psaProposeCreateResponse struct {
 	PushID   string                       `json:"pushId"`
 	FormData psacampaign.CampaignFormData `json:"formData"`
+	// PayloadDigest identifies the exact payload being proposed. The client
+	// echoes it back on publish so approval is bound to what was reviewed.
+	PayloadDigest string `json:"payloadDigest,omitempty"`
 }
 
 // HandlePSAProposeCreate handles POST /api/campaigns/{id}/psa-propose-create,
@@ -380,7 +427,14 @@ func (h *CampaignsHandler) HandlePSAProposeCreate(w http.ResponseWriter, r *http
 		return
 	}
 
-	writeJSON(w, http.StatusOK, psaProposeCreateResponse{PushID: row.ID, FormData: fd})
+	digest, err := psacampaign.PayloadDigest(row.Diff)
+	if err != nil {
+		h.logger.Error(r.Context(), "failed to digest proposed create", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, psaProposeCreateResponse{PushID: row.ID, FormData: fd, PayloadDigest: digest})
 }
 
 // existingCreateStatus returns the status of an existing OpCreate push row for
@@ -416,6 +470,9 @@ type psaPushRowResponse struct {
 	RequestedBy string                        `json:"requestedBy,omitempty"`
 	ApprovedBy  string                        `json:"approvedBy,omitempty"`
 	UpdatedAt   time.Time                     `json:"updatedAt"`
+	// PayloadDigest lets the approve modal bind its publish call to the payload
+	// it rendered from this row.
+	PayloadDigest string `json:"payloadDigest,omitempty"`
 }
 
 // HandleListPSAPushes handles GET /api/psa-pushes, returning the most recent
@@ -448,6 +505,12 @@ func (h *CampaignsHandler) HandleListPSAPushes(w http.ResponseWriter, r *http.Re
 			resp.FormData = row.Diff.Create
 		} else if len(row.Diff.Changes) > 0 {
 			resp.Diff = &psacampaign.ProposedDiff{Changes: row.Diff.Changes}
+		}
+		// Digest the row as stored so the approve modal can echo it back on
+		// publish. A digest failure here is not worth failing the whole list
+		// over — publish simply falls back to its unbound path for that row.
+		if digest, err := psacampaign.PayloadDigest(row.Diff); err == nil {
+			resp.PayloadDigest = digest
 		}
 		pushes = append(pushes, resp)
 	}

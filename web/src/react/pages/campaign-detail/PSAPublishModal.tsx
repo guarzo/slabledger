@@ -5,7 +5,7 @@ import { api, isAPIError } from '../../../js/api';
 import { getErrorMessage } from '../../utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Select, StatusPill, CardShell, SectionEyebrow } from '../../ui';
-import type { Campaign, ProposedDiff, CampaignFormData, PSAPushRow } from '../../../types/campaigns';
+import type { Campaign, ProposedDiff, CampaignFormData, PSAPushRow, SubjectRef } from '../../../types/campaigns';
 import { queryKeys } from '../../queries/queryKeys';
 import { classifyPushStatus, syncState, SYNC_LABELS, SYNC_TONES } from '../../utils/psaPush';
 import SpecListChangeRow, { SPEC_LIST_FIELD } from './SpecListChangeRow';
@@ -49,6 +49,91 @@ function PreviewGrid({ rows }: { rows: Array<[string, ReactNode]> }) {
   );
 }
 
+/** Human labels for the portal formData fields, in display order. Fields absent
+    from this map still render (see formDataRows) — they just fall back to their
+    raw key. */
+const FIELD_LABELS: Partial<Record<keyof CampaignFormData, string>> = {
+  campaignName: 'Name',
+  campaignType: 'Type',
+  category: 'Category',
+  isActive: 'Status',
+  bidPercentage: 'Bid %',
+  dailyBudget: 'Daily budget',
+  flatFee: 'Flat fee',
+  dailySpecLimit: 'Daily spec limit',
+  gradeMinimum: 'Grade min',
+  gradeMaximum: 'Grade max',
+  yearMinimum: 'Year min',
+  yearMaximum: 'Year max',
+  priceMinimum: 'Price min',
+  priceMaximum: 'Price max',
+  cardLadderConfidenceMinimum: 'CL confidence ≥',
+  publisherFilterType: 'Publisher filter',
+  selectedPublishers: 'Publishers',
+  subjectFilterType: 'Subject filter',
+  selectedSubjects: 'Subjects',
+  deniedSpecs: 'Denied specs',
+  prepackagedSpecListIds: 'Spec lists',
+};
+
+/** Money fields on CampaignFormData are whole USD, not cents (Go side converts). */
+const USD_FIELDS = new Set(['dailyBudget', 'flatFee', 'priceMinimum', 'priceMaximum']);
+
+function formatFieldValue(key: string, value: unknown): ReactNode {
+  if (value === null || value === undefined) return '—';
+  if (key === 'isActive') return value ? 'ACTIVE' : 'PAUSED';
+  if (Array.isArray(value)) {
+    if (value.length === 0) return 'none';
+    return value
+      .map((v) => (v !== null && typeof v === 'object' && 'name' in v ? String((v as SubjectRef).name) : String(v)))
+      .join(', ');
+  }
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (USD_FIELDS.has(key)) return `$${value}`;
+  if (key === 'bidPercentage') return `${value}%`;
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+/**
+ * Renders every field of the payload the server proposed, rather than a
+ * hand-picked subset. Approval is bound to a digest of the whole payload
+ * (payloadDigest), so a field the modal declined to show would still be
+ * approved — the operator would be signing for something they never saw. Known
+ * fields get friendly labels in a curated order; anything the backend adds
+ * later falls through with its raw key rather than disappearing.
+ */
+function formDataRows(fd: CampaignFormData): Array<[string, ReactNode]> {
+  const rows: Array<[string, ReactNode]> = [];
+  const seen = new Set<string>();
+  for (const key of Object.keys(FIELD_LABELS) as Array<keyof CampaignFormData>) {
+    if (!(key in fd)) continue;
+    seen.add(key);
+    rows.push([FIELD_LABELS[key]!, formatFieldValue(key, fd[key])]);
+  }
+  for (const [key, value] of Object.entries(fd)) {
+    if (seen.has(key)) continue;
+    rows.push([key, formatFieldValue(key, value)]);
+  }
+  return rows;
+}
+
+/** The payload the modal is currently showing, from whichever source won. */
+interface PayloadSource {
+  operation: 'create' | 'update';
+  pushId: string;
+  /** Absent only if the server could not digest the row; publish then falls
+      back to its unbound path rather than blocking approval outright. */
+  payloadDigest?: string;
+  formData?: CampaignFormData;
+  diff?: ProposedDiff;
+  /** Target languages when this diff was computed; only a local propose knows them. */
+  languages?: string[];
+}
+
+/** PayloadSource as returned by a propose call in this session. */
+type LocalPayload = PayloadSource;
+
 export interface PSAPublishModalProps {
   open: boolean;
   onClose: () => void;
@@ -66,18 +151,11 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   const queryClient = useQueryClient();
 
   const [selectedPSAId, setSelectedPSAId] = useState('');
-  const [diff, setDiff] = useState<ProposedDiff | null>(null);
-  // The language axis as it stood when `diff` was computed. The spec-list diff
-  // row labels a set of curated-list ids with the languages that justify them,
-  // so reading the live campaign there would caption a stale diff with a newer
-  // axis if the operator edits the campaign in another tab between proposing
-  // and publishing — on the one screen whose whole job is showing exactly what
-  // is about to be pushed. Null means we have no snapshot (the diff came from
-  // an already-queued push row, not from a propose in this session).
-  const [diffLanguages, setDiffLanguages] = useState<string[] | null>(null);
-  const [pushId, setPushId] = useState<string | undefined>(undefined);
+  // Everything one propose call returned, kept as a single object so the
+  // preview and the digest that binds approval can never be taken from
+  // different payloads.
+  const [localPayload, setLocalPayload] = useState<LocalPayload | null>(null);
   const [publishStatus, setPublishStatus] = useState<string | null>(null);
-  const [createPreview, setCreatePreview] = useState<CampaignFormData | null>(null);
 
   const isLinked = !!campaign.psaCampaignRequestId;
 
@@ -98,17 +176,41 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   if (rowPushId !== lastRowPushId) {
     setLastRowPushId(rowPushId);
     if (publishStatus) setPublishStatus(null);
-    if (pushId && rowPushId && rowPushId !== pushId) {
-      setDiff(null);
-      setDiffLanguages(null);
-      setPushId(undefined);
-      setCreatePreview(null);
+    if (localPayload && rowPushId && rowPushId !== localPayload.pushId) {
+      setLocalPayload(null);
     }
   }
 
-  const effectiveCreatePreview = createPreview ?? ((pendingRow?.operation === 'create' || inFlightRow?.operation === 'create') ? (pendingRow?.formData ?? inFlightRow?.formData ?? null) : null);
-  const effectiveDiff = diff ?? ((pendingRow?.operation === 'update' || inFlightRow?.operation === 'update') ? (pendingRow?.diff ?? inFlightRow?.diff ?? null) : null);
-  const effectivePushId = pushId ?? pendingRow?.pushId;
+  // One source for the preview, the pushId and the digest. Splitting these
+  // would let the modal render one payload while binding approval to another —
+  // precisely the substitution payloadDigest exists to prevent.
+  //
+  // The queued row wins whenever it exists: it is what the harvester will
+  // actually push, and it reflects any change made after this propose call.
+  // Local state only covers the gap between the propose response and the
+  // push-list refetch.
+  const queuedRow = pendingRow ?? inFlightRow;
+  const source: PayloadSource | null = queuedRow
+    ? {
+        operation: queuedRow.operation,
+        pushId: queuedRow.pushId,
+        payloadDigest: queuedRow.payloadDigest,
+        formData: queuedRow.formData,
+        diff: queuedRow.diff,
+      }
+    : localPayload;
+
+  const effectiveCreatePreview = source?.operation === 'create' ? source.formData ?? null : null;
+  const effectiveDiff = source?.operation === 'update' ? source.diff ?? null : null;
+  const effectivePushId = source?.pushId;
+  // The language axis as it stood when the diff was computed. The spec-list
+  // diff row labels a set of curated-list ids with the languages that justify
+  // them, so reading the live campaign there would caption a stale diff with a
+  // newer axis if the operator edits the campaign in another tab between
+  // proposing and publishing — on the one screen whose whole job is showing
+  // exactly what is about to be pushed. A queued row carries no snapshot, so it
+  // falls back to the live axis.
+  const diffLanguages = source?.languages ?? campaign.targetLanguages;
 
   const { data: portalCampaignsData } = useQuery({
     queryKey: queryKeys.psaCampaigns.list,
@@ -128,9 +230,15 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   const proposeMutation = useMutation({
     mutationFn: () => api.psaPropose(campaign.id),
     onSuccess: (res) => {
-      setDiff(res.diff);
-      setDiffLanguages(campaign.targetLanguages);
-      setPushId(res.pushId);
+      if (res.pushId) {
+        setLocalPayload({
+          operation: 'update',
+          pushId: res.pushId,
+          payloadDigest: res.payloadDigest,
+          diff: res.diff,
+          languages: campaign.targetLanguages,
+        });
+      }
       setPublishStatus(null);
       if ((res.diff.changes?.length ?? 0) === 0) {
         toast.success('No changes to publish — campaign already matches PSA');
@@ -143,8 +251,12 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   const proposeCreateMutation = useMutation({
     mutationFn: () => api.psaProposeCreate(campaign.id),
     onSuccess: (res) => {
-      setCreatePreview(res.formData);
-      setPushId(res.pushId);
+      setLocalPayload({
+        operation: 'create',
+        pushId: res.pushId,
+        payloadDigest: res.payloadDigest,
+        formData: res.formData,
+      });
       setPublishStatus(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
     },
@@ -163,7 +275,9 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
   const publishMutation = useMutation({
     mutationFn: () => {
       if (!effectivePushId) throw new Error('No pending push to publish');
-      return api.psaPublish(campaign.id, effectivePushId);
+      // Send the digest of what this modal rendered. The server re-digests the
+      // queued row and refuses with 409 if the payload moved underneath us.
+      return api.psaPublish(campaign.id, effectivePushId, source?.payloadDigest);
     },
     onSuccess: (res) => {
       setPublishStatus(res.status);
@@ -172,7 +286,11 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
     },
     onError: (err) => {
       if (isAPIError(err) && err.status === 409) {
-        toast.error('This push is no longer pending — check for changes again');
+        // Two distinct 409s share this path: the row is no longer pending, and
+        // the digest no longer matches what was reviewed. Surface the server's
+        // own wording so the operator can tell them apart, then refetch so the
+        // modal re-renders from the current row.
+        toast.error(getErrorMessage(err, 'This push is no longer pending — check for changes again'));
         queryClient.invalidateQueries({ queryKey: queryKeys.psaPushes.list });
         return;
       }
@@ -282,22 +400,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
 
                 {effectiveCreatePreview && (
                   <CardShell variant="data" padding="sm">
-                    <PreviewGrid
-                      rows={[
-                        ['Name', effectiveCreatePreview.campaignName],
-                        ['Category', effectiveCreatePreview.category],
-                        ['Status', 'PAUSED'],
-                        ['Bid %', `${effectiveCreatePreview.bidPercentage}%`],
-                        ['Daily budget', `$${effectiveCreatePreview.dailyBudget}`],
-                        ['Flat fee', `$${effectiveCreatePreview.flatFee}`],
-                        ['Daily spec limit', `${effectiveCreatePreview.dailySpecLimit}`],
-                        ['Grades', `${effectiveCreatePreview.gradeMinimum}–${effectiveCreatePreview.gradeMaximum}`],
-                        ['Years', `${effectiveCreatePreview.yearMinimum}–${effectiveCreatePreview.yearMaximum}`],
-                        ['Prices', `$${effectiveCreatePreview.priceMinimum}–$${effectiveCreatePreview.priceMaximum}`],
-                        ['CL confidence ≥', `${effectiveCreatePreview.cardLadderConfidenceMinimum}`],
-                        ['Subjects', 'none (add in portal before activating)'],
-                      ]}
-                    />
+                    <PreviewGrid rows={formDataRows(effectiveCreatePreview)} />
                   </CardShell>
                 )}
 
@@ -336,7 +439,7 @@ export default function PSAPublishModal({ open, onClose, campaign, pushRow = nul
                         <SpecListChangeRow
                           key={change.field}
                           change={change}
-                          targetLanguages={diffLanguages ?? campaign.targetLanguages}
+                          targetLanguages={diffLanguages}
                         />
                       ) : (
                         <div key={change.field} className="flex items-baseline justify-between gap-3">

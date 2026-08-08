@@ -90,9 +90,10 @@ describe('PSAPublishModal', () => {
     expect(screen.getByText(/80/)).toBeInTheDocument();
   });
 
-  it('clicking Publish to PSA calls api.psaPublish with the pending pushId', async () => {
+  it('clicking Publish to PSA binds the approval to the digest it rendered', async () => {
     vi.mocked(api.psaPropose).mockResolvedValue({
       pushId: 'push-1',
+      payloadDigest: 'digest-abc',
       diff: { changes: [{ field: 'bidPercentage', old: '70', new: '80' }] },
     });
     vi.mocked(api.psaPublish).mockResolvedValue({ pushId: 'push-1', status: 'approved' });
@@ -108,7 +109,7 @@ describe('PSAPublishModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /publish to psa/i }));
 
     await waitFor(() => {
-      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-1');
+      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-1', 'digest-abc');
     });
   });
 
@@ -116,6 +117,7 @@ describe('PSAPublishModal', () => {
     vi.mocked(api.listPSACampaigns).mockResolvedValue({ campaigns: [], fetchedAt: '' });
     vi.mocked(api.psaProposeCreate).mockResolvedValue({
       pushId: 'push-create-1',
+      payloadDigest: 'digest-create',
       formData: {
         campaignName: 'Modern 10s',
         campaignType: 'CATEGORY',
@@ -159,7 +161,7 @@ describe('PSAPublishModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /approve & queue create/i }));
 
     await waitFor(() => {
-      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-create-1');
+      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-create-1', 'digest-create');
     });
   });
 
@@ -293,6 +295,7 @@ describe('PSAPublishModal with a queued push row', () => {
     status: 'pending',
     requestedBy: 'alice',
     updatedAt: '2026-07-14T12:00:00Z',
+    payloadDigest: 'digest-queued',
     formData: {
       campaignName: 'Modern 10s',
       campaignType: 'CATEGORY',
@@ -332,8 +335,35 @@ describe('PSAPublishModal with a queued push row', () => {
     fireEvent.click(screen.getByRole('button', { name: /approve & queue create/i }));
 
     await waitFor(() => {
-      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-queued-1');
+      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-queued-1', 'digest-queued');
     });
+  });
+
+  it('renders every field of the queued payload, not a curated subset', () => {
+    vi.mocked(api.listPSACampaigns).mockResolvedValue({ campaigns: [], fetchedAt: '' });
+
+    // Approval binds to a digest of the whole payload, so a field the preview
+    // declined to show would still be approved — the operator would be signing
+    // for something they never saw. Fields the backend adds later must fall
+    // through under their raw key rather than disappearing.
+    const rowWithExtraField = {
+      ...pendingCreateRow,
+      formData: {
+        ...pendingCreateRow.formData!,
+        selectedSubjects: [{ id: 4807, name: 'Charizard' }],
+        futureField: 'surprise',
+      },
+    } as PSAPushRow;
+
+    renderModal(makeCampaign({ psaCampaignRequestId: '' }), rowWithExtraField);
+
+    // Curated labels for known fields...
+    expect(screen.getByText('Subjects')).toBeInTheDocument();
+    expect(screen.getByText('Charizard')).toBeInTheDocument();
+    expect(screen.getByText('Grade min')).toBeInTheDocument();
+    // ...and a raw-key fallback for anything unknown.
+    expect(screen.getByText('futureField')).toBeInTheDocument();
+    expect(screen.getByText('surprise')).toBeInTheDocument();
   });
 
   it('renders a queued update diff with a publish button', () => {
@@ -405,6 +435,7 @@ describe('PSAPublishModal with a queued push row', () => {
   it('drops stale local state when the queued row is superseded by a different push', async () => {
     vi.mocked(api.psaPropose).mockResolvedValue({
       pushId: 'push-old',
+      payloadDigest: 'digest-old',
       diff: { changes: [{ field: 'bidPercentage', old: '70', new: '80' }] },
     });
     vi.mocked(api.psaPublish).mockResolvedValue({ pushId: 'push-new', status: 'approved' });
@@ -427,6 +458,7 @@ describe('PSAPublishModal with a queued push row', () => {
       operation: 'update',
       status: 'pending',
       updatedAt: '2026-07-15T12:00:00Z',
+      payloadDigest: 'digest-new',
       diff: { changes: [{ field: 'flatFee', old: '3', new: '4' }] },
     };
     view.rerender(modalTree(campaign, supersededRow, qc));
@@ -436,7 +468,10 @@ describe('PSAPublishModal with a queued push row', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /publish to psa/i }));
     await waitFor(() => {
-      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-new');
+      // The digest travels with the payload that is on screen: publishing must
+      // never bind approval to the digest of the diff it stopped rendering.
+      expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-new', 'digest-new');
     });
+    expect(vi.mocked(api.psaPublish)).not.toHaveBeenCalledWith('c1', 'push-old', 'digest-old');
   });
 });

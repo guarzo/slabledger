@@ -597,8 +597,19 @@ database cannot verify — which is what the claim guard above, and SLA-44, cove
 | `approved_by` | TEXT | | Username that approved the change |
 | `result_json` | JSONB | | Result payload from the push attempt |
 | `error` | TEXT | | Error message if `status = 'failed'` |
+| `approved_at` | TIMESTAMPTZ | | When the approval was signed; part of the signed envelope |
+| `payload_digest` | TEXT | | Hex SHA-256 of the canonical `proposed_diff` at approval time |
+| `approval_signature` | TEXT | | Hex HMAC-SHA256 over the approval envelope; key never stored here |
+| `signature_key_id` | TEXT | | Identifier of the signing key, so rotation does not strand in-flight approvals |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+The four signature columns (migration 000034, SLA-44) are nullable: rows approved
+before that migration carry no signature, and the drain refuses them rather than
+treating an unsigned row as authorized. The signature is what closes the gap the
+paragraph above describes — `status = 'approved'` is a claim the database cannot
+verify, but the HMAC is minted with `PSA_PUSH_SIGNING_KEY`, which lives only in the
+application environment. See [docs/psa-harvester.md](psa-harvester.md).
 
 **Indexes:**
 - `idx_psa_push_queue_status` on `(status)`
@@ -606,7 +617,7 @@ database cannot verify — which is what the claim guard above, and SLA-44, cove
 
 **Foreign Keys:** none
 
-**Added:** migration 000018 (RLS enabled in 000029)
+**Added:** migration 000018 (RLS enabled in 000029; approval signature columns in 000034)
 
 ---
 
