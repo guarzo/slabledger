@@ -167,9 +167,6 @@ func FromEnv(base Config) Config {
 	envDurationPositive("SNAPSHOT_ENRICH_RETRY_INTERVAL", &cfg.SnapshotEnrich.RetryInterval)
 	envIntPositive("SNAPSHOT_ENRICH_MAX_RETRIES", &cfg.SnapshotEnrich.MaxRetries)
 
-	// Advisor service
-	envIntPositive("ADVISOR_MAX_TOOL_ROUNDS", &cfg.AdvisorRefresh.MaxToolRounds)
-
 	// Card Ladder scheduler
 	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)
 	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, 0, 23)
@@ -179,15 +176,8 @@ func FromEnv(base Config) Config {
 	cfg.Adapters.PricingAPIKey = os.Getenv("PRICING_API_KEY")
 	cfg.Adapters.GoogleOAuthEnv = os.Getenv("GOOGLE_OAUTH_ENV")
 	cfg.Adapters.LocalAPIToken = os.Getenv("LOCAL_API_TOKEN")
-	cfg.Adapters.AzureAIEndpoint = os.Getenv("AZURE_AI_ENDPOINT")
-	cfg.Adapters.AzureAIKey = os.Getenv("AZURE_AI_API_KEY")
-	cfg.Adapters.AzureAIDeployment = os.Getenv("AZURE_AI_DEPLOYMENT")
-	if cfg.Adapters.AzureAIDeployment == "" {
-		cfg.Adapters.AzureAIDeployment = "gpt-5.4"
-	}
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
-	envDurationPositive("AZURE_AI_TIMEOUT", &cfg.Adapters.AzureAICompletionTimeout)
 	envIntPositive("DH_CACHE_TTL_HOURS", &cfg.DH.CacheTTLHours)
 	envIntPositive("DH_RATE_LIMIT_RPS", &cfg.DH.RateLimitRPS)
 	cfg.DH.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DH.Enabled)

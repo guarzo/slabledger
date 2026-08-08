@@ -76,9 +76,6 @@ func Default() Config {
 			BatchSize:     3,
 			MaxRetries:    5,
 		},
-		AdvisorRefresh: AdvisorRefreshConfig{
-			MaxToolRounds: 5, // hard cap; prompt guides LLM to 2 rounds, service default is 3, 5 is safety margin
-		},
 		CardLadder: CardLadderConfig{
 			Enabled:     true, // runs automatically when credentials are configured
 			Interval:    24 * time.Hour,
