@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
@@ -21,6 +22,7 @@ type MockInventoryService struct {
 	GetCampaignFn               func(ctx context.Context, id string) (*inventory.Campaign, error)
 	ListCampaignsFn             func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
 	UpdateCampaignFn            func(ctx context.Context, c *inventory.Campaign) error
+	UpdateCampaignIfUnchangedFn func(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error
 	DeleteCampaignFn            func(ctx context.Context, id string) error
 	CreatePurchaseFn            func(ctx context.Context, p *inventory.Purchase) error
 	GetPurchaseFn               func(ctx context.Context, id string) (*inventory.Purchase, error)
@@ -40,6 +42,7 @@ type MockInventoryService struct {
 	GetGlobalInventoryAgingFn   func(ctx context.Context) (*inventory.InventoryResult, error)
 	GetFlaggedInventoryFn       func(ctx context.Context) ([]inventory.AgingItem, error)
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
+	ReconcilePSAAttributionFn   func(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error)
 	ReassignPurchaseFn          func(ctx context.Context, purchaseID string, newCampaignID string) error
 
 	// Capital & Invoice
@@ -57,6 +60,7 @@ type MockInventoryService struct {
 	// Price overrides & AI suggestions
 	GetPriceOverrideStatsFn func(ctx context.Context) (*inventory.PriceOverrideStats, error)
 	UpdateBuyCostFn         func(ctx context.Context, purchaseID string, buyCostCents int) error
+	UpdateSaleReasonFn      func(ctx context.Context, campaignID, saleID, reason string) error
 	SetPriceOverrideFn      func(ctx context.Context, purchaseID string, priceCents int, source string) error
 	SetAISuggestedPriceFn   func(ctx context.Context, purchaseID string, priceCents int) error
 	AcceptAISuggestionFn    func(ctx context.Context, purchaseID string) error
@@ -123,6 +127,13 @@ func (m *MockInventoryService) ListCampaigns(ctx context.Context, activeOnly boo
 func (m *MockInventoryService) UpdateCampaign(ctx context.Context, c *inventory.Campaign) error {
 	if m.UpdateCampaignFn != nil {
 		return m.UpdateCampaignFn(ctx, c)
+	}
+	return nil
+}
+
+func (m *MockInventoryService) UpdateCampaignIfUnchanged(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error {
+	if m.UpdateCampaignIfUnchangedFn != nil {
+		return m.UpdateCampaignIfUnchangedFn(ctx, c, expectedUpdatedAt)
 	}
 	return nil
 }
@@ -260,6 +271,13 @@ func (m *MockInventoryService) ImportPSAExportGlobal(ctx context.Context, rows [
 	return &inventory.PSAImportResult{}, nil
 }
 
+func (m *MockInventoryService) ReconcilePSAAttribution(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error) {
+	if m.ReconcilePSAAttributionFn != nil {
+		return m.ReconcilePSAAttributionFn(ctx, rows)
+	}
+	return inventory.ReconcileResult{}, nil
+}
+
 func (m *MockInventoryService) ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error {
 	if m.ReassignPurchaseFn != nil {
 		return m.ReassignPurchaseFn(ctx, purchaseID, newCampaignID)
@@ -337,6 +355,13 @@ func (m *MockInventoryService) GetPriceOverrideStats(ctx context.Context) (*inve
 func (m *MockInventoryService) UpdateBuyCost(ctx context.Context, purchaseID string, buyCostCents int) error {
 	if m.UpdateBuyCostFn != nil {
 		return m.UpdateBuyCostFn(ctx, purchaseID, buyCostCents)
+	}
+	return nil
+}
+
+func (m *MockInventoryService) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error {
+	if m.UpdateSaleReasonFn != nil {
+		return m.UpdateSaleReasonFn(ctx, campaignID, saleID, reason)
 	}
 	return nil
 }

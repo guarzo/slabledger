@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/demand"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -74,21 +75,31 @@ func TestCampaignSignals(t *testing.T) {
 		{
 			name:      "empty cache",
 			rows:      nil,
-			campaigns: []demand.ActiveCampaign{{ID: "c1", Name: "Modern", InclusionList: ""}},
+			campaigns: []demand.ActiveCampaign{{ID: "c1", Name: "Modern"}},
 			wantSigs:  0,
 			wantQual:  demand.QualityEmpty,
 		},
 		{
-			name: "inclusion list campaign one accelerator",
+			name: "subject list campaign one accelerator",
 			rows: []demand.CharacterCache{
 				charRow("Pikachu", 11, 22.1, 34, computed),
 				charRow("Charizard", 8, 2.0, 52, computed), // below accel threshold
 				charRow("Umbreon", 21, -8.3, 18, computed), // decelerating
 			},
-			campaigns: []demand.ActiveCampaign{{ID: "c1", Name: "Vintage Core", InclusionList: "Charizard,Pikachu,Umbreon", GradeRange: "9-10"}},
-			wantSigs:  1,
-			wantTop:   "Pikachu",
-			wantQual:  demand.QualityFull,
+			campaigns: []demand.ActiveCampaign{{
+				ID:                "c1",
+				Name:              "Vintage Core",
+				GradeRange:        "9-10",
+				SubjectFilterMode: inventory.SubjectFilterTarget,
+				Subjects: []inventory.TargetSubject{
+					{ID: 1, Name: "Charizard"},
+					{ID: 2, Name: "Pikachu"},
+					{ID: 3, Name: "Umbreon"},
+				},
+			}},
+			wantSigs: 1,
+			wantTop:  "Pikachu",
+			wantQual: demand.QualityFull,
 		},
 		{
 			name: "open net campaign matches all cached characters",
@@ -96,19 +107,27 @@ func TestCampaignSignals(t *testing.T) {
 				charRow("Pikachu", 11, 22.1, 34, computed),
 				charRow("Gengar", 12, 10.0, 20, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: "c4", Name: "Modern", InclusionList: ""}},
+			campaigns: []demand.ActiveCampaign{{ID: "c4", Name: "Modern"}},
 			wantSigs:  1,
 			wantTop:   "Pikachu",
 			wantQual:  demand.QualityFull,
 		},
 		{
-			name: "inclusion list with no cache overlap produces no signal",
+			name: "subject list with no cache overlap produces no signal",
 			rows: []demand.CharacterCache{
 				charRow("Pikachu", 11, 22.1, 34, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: "c7", Name: "Crystal", InclusionList: "Kingdra,Kabutops"}},
-			wantSigs:  0,
-			wantQual:  demand.QualityEmpty,
+			campaigns: []demand.ActiveCampaign{{
+				ID:                "c7",
+				Name:              "Crystal",
+				SubjectFilterMode: inventory.SubjectFilterTarget,
+				Subjects: []inventory.TargetSubject{
+					{ID: 1, Name: "Kingdra"},
+					{ID: 2, Name: "Kabutops"},
+				},
+			}},
+			wantSigs: 0,
+			wantQual: demand.QualityEmpty,
 		},
 		{
 			name: "character with null velocity_change_pct is excluded from contributors",
@@ -116,10 +135,18 @@ func TestCampaignSignals(t *testing.T) {
 				charRowNoChange("Pikachu", computed),
 				charRow("Charizard", 8, 15.7, 52, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: "c1", Name: "Vintage Core", InclusionList: "Pikachu,Charizard"}},
-			wantSigs:  1,
-			wantTop:   "Charizard",
-			wantQual:  demand.QualityFull,
+			campaigns: []demand.ActiveCampaign{{
+				ID:                "c1",
+				Name:              "Vintage Core",
+				SubjectFilterMode: inventory.SubjectFilterTarget,
+				Subjects: []inventory.TargetSubject{
+					{ID: 1, Name: "Pikachu"},
+					{ID: 2, Name: "Charizard"},
+				},
+			}},
+			wantSigs: 1,
+			wantTop:  "Charizard",
+			wantQual: demand.QualityFull,
 		},
 		{
 			name: "top accelerating list capped at 5",
@@ -132,7 +159,7 @@ func TestCampaignSignals(t *testing.T) {
 				charRow("F", 5, 20.0, 20, computed),
 				charRow("G", 5, 18.0, 20, computed),
 			},
-			campaigns: []demand.ActiveCampaign{{ID: "c4", Name: "Modern", InclusionList: ""}},
+			campaigns: []demand.ActiveCampaign{{ID: "c4", Name: "Modern"}},
 			wantSigs:  1,
 			wantTop:   "A",
 			wantQual:  demand.QualityFull,
@@ -145,10 +172,10 @@ func TestCampaignSignals(t *testing.T) {
 				charRow("Gengar", 12, 10.0, 20, computed),
 			},
 			campaigns: []demand.ActiveCampaign{{
-				ID:            "c5",
-				Name:          "No Pikachu",
-				InclusionList: "Pikachu",
-				ExclusionMode: true,
+				ID:                "c5",
+				Name:              "No Pikachu",
+				SubjectFilterMode: inventory.SubjectFilterExclude,
+				Subjects:          []inventory.TargetSubject{{ID: 1, Name: "Pikachu"}},
 			}},
 			wantSigs: 1,
 			wantTop:  "Charizard",
@@ -234,7 +261,7 @@ func TestCampaignSignals_MedianVelocity(t *testing.T) {
 					return rows, nil
 				},
 			}
-			campaign := demand.ActiveCampaign{ID: "c1", Name: "Test", InclusionList: ""}
+			campaign := demand.ActiveCampaign{ID: "c1", Name: "Test"}
 			svc := demand.NewService(repo, campaignLookupWith([]demand.ActiveCampaign{campaign}))
 
 			resp, err := svc.CampaignSignals(context.Background())

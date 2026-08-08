@@ -1,0 +1,323 @@
+[
+  {
+    "id": "FE-001",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "APIClient.deleteCampaign, .getCampaignSuggestions, .globalImportExternal, .listRevocationFlags, .syncPSASheets"
+    },
+    "category": "dead-code",
+    "title": "Five API-client prototype methods have zero callers in web/src",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "frontend-reference-map.json reports external_refs==0 for these 5 api-client-method records",
+        "command": "jq -r '.records[] | select(.kind==\"api-client-method\" and .external_refs==0) | .identity' docs/audit/maps/frontend-reference-map.json",
+        "output": "api.deleteCampaign\napi.getCampaignSuggestions\napi.globalImportExternal\napi.listRevocationFlags\napi.syncPSASheets"
+      },
+      {
+        "claim": "Each method has no caller anywhere in web/src outside its own declaration/prototype-assignment/test-mock-table lines",
+        "command": "for m in deleteCampaign getCampaignSuggestions globalImportExternal listRevocationFlags syncPSASheets; do echo \"=== $m ===\"; git grep -nE \"\\b$m\\b\" web/src | grep -v 'web/src/js/api/'; done",
+        "output": "=== deleteCampaign ===\n=== getCampaignSuggestions ===\n=== globalImportExternal ===\n=== listRevocationFlags ===\n=== syncPSASheets ===",
+        "file_line": "web/src/js/api/campaigns.ts:53; web/src/js/api/campaignAnalytics.ts:80,88; web/src/js/api/campaignImports.ts:63,68"
+      }
+    ],
+    "searched_universe": "git grep over all 239 git-tracked files under web/src (*.ts, *.tsx), word-boundary, method name only (declaration-merged onto APIClient.prototype so no import statement to trace)",
+    "exclusions": [
+      "web/src/js/api/*.ts declaration/prototype-assignment lines (the definition itself)",
+      "web/src/js/api/campaigns.test.ts:39 parameterized mock-table row (exercises the method directly in a contract test, not a product caller)"
+    ],
+    "proposed_fix": "Remove the 5 unused methods (and their interface declarations) from campaigns.ts, campaignAnalytics.ts and campaignImports.ts, or confirm with the backend owner whether the underlying endpoints (DELETE /campaigns/:id, campaign suggestions, external bulk import, revocation-flag listing, PSA sheet sync) are still reachable from any UI path before deleting.",
+    "blast_radius": [
+      "web/src/js/api/campaigns.ts",
+      "web/src/js/api/campaignAnalytics.ts",
+      "web/src/js/api/campaignImports.ts",
+      "web/src/js/api/campaigns.test.ts (mock-table entry exercising deleteCampaign)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "npm run build and npm test pass in web/ with the 5 methods and their interface declarations removed",
+      "grep confirms no remaining reference to the removed method names in web/src"
+    ]
+  },
+  {
+    "id": "FE-002",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "component",
+      "identity": "CompSummaryPanel, QuickAddSection, ImportResultsDetail, SignalBadge, SignalChip (default exports); ScoreCardHeader, InventoryRow (named exports)"
+    },
+    "category": "dead-code",
+    "title": "Seven React components in campaign-detail/inventory and advisor trees have no import site anywhere in web/src",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Five of the seven are default exports, so the map's word-boundary matching cannot see a renamed import; hand-checked import sites by file path for all five and found none",
+        "command": "for f in CompSummaryPanel QuickAddSection ImportResultsDetail SignalBadge SignalChip; do echo \"=== $f ===\"; git grep -n \"from '.*$f'\" web/src; done",
+        "output": "=== CompSummaryPanel ===\n=== QuickAddSection ===\n=== ImportResultsDetail ===\n=== SignalBadge ===\n=== SignalChip ===\n(no output for any of the five — no file imports from a path ending in these names)"
+      },
+      {
+        "claim": "The other two (ScoreCardHeader, InventoryRow) are named exports; word-boundary search over all of web/src finds only their own definition line",
+        "command": "for f in ScoreCardHeader InventoryRow; do echo \"=== $f ===\"; git grep -nE \"\\b$f\\b\" web/src; done",
+        "output": "=== ScoreCardHeader ===\nweb/src/react/components/advisor/ScoreCardHeader.tsx:27:export function ScoreCardHeader({ scoreCard }: ScoreCardHeaderProps) {\n=== InventoryRow ===\nweb/src/react/components/inventory/InventoryRow.tsx:39:export function InventoryRow(p: InventoryRowProps) {\n(InventoryRow.tsx:5's own CSS-module import line is a filename coincidence, not a reference to the component)"
+      }
+    ],
+    "searched_universe": "git grep over all 239 git-tracked files under web/src (*.ts, *.tsx); import-site search by literal path fragment for the 5 default exports per the LENS-BRIEF default-export trap, plus a plain word-boundary search for the 2 named exports",
+    "exclusions": [
+      "campaign-detail/ files are composed inline (not routed) per the LENS-BRIEF note — that pattern does not apply here since these components have zero import sites of any kind, inline or routed"
+    ],
+    "proposed_fix": "Delete the 7 component files (and any co-located .module.css / test file that exists only for them) after confirming with git log / PR history that they are leftovers from a removed or superseded UI flow, not a component mid-integration.",
+    "blast_radius": [
+      "web/src/react/pages/campaign-detail/inventory/CompSummaryPanel.tsx",
+      "web/src/react/pages/campaign-detail/QuickAddSection.tsx",
+      "web/src/react/pages/campaigns/ImportResultsDetail.tsx",
+      "web/src/react/pages/campaign-detail/inventory/SignalBadge.tsx",
+      "web/src/react/pages/campaign-detail/inventory/SignalChip.tsx",
+      "web/src/react/components/advisor/ScoreCardHeader.tsx",
+      "web/src/react/components/inventory/InventoryRow.tsx"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "npm run build succeeds after deleting the 7 files",
+      "git grep for each component name returns no hits in web/src"
+    ]
+  },
+  {
+    "id": "FE-003",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "hook",
+      "identity": "useInventory, useCampaignPNL, usePortfolioChannelVelocity, usePortfolioInsights, useCreateBulkSales, useCreatePurchase, useCreateSale, useDeletePurchase, useImportPSA, useReassignPurchase (web/src/react/queries/useCampaignQueries.ts); useUnmatchDH (web/src/react/queries/useAdminQueries.ts)"
+    },
+    "category": "dead-code",
+    "title": "Eleven React Query hooks in useCampaignQueries.ts / useAdminQueries.ts have no caller",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Word-boundary search over web/src finds each hook name only at its own declaration (or, for useCampaignPNL, one incidental mention inside another hook's JSDoc comment)",
+        "command": "for f in useInventory useCampaignPNL usePortfolioChannelVelocity usePortfolioInsights useCreateBulkSales useCreatePurchase useCreateSale useDeletePurchase useImportPSA useReassignPurchase useUnmatchDH; do echo \"=== $f ===\"; git grep -nE \"\\b$f\\b\" web/src; done",
+        "output": "=== useInventory ===\nweb/src/react/queries/useCampaignQueries.ts:47:export function useInventory(campaignId: string, opts?: { enabled?: boolean }) {\n=== useCampaignPNL ===\nweb/src/react/queries/useCampaignQueries.ts:32:export const useCampaignPNL = createParamQuery(\nweb/src/react/queries/useCampaignQueries.ts:38: * Using this ensures cache key consistency with useCampaignPNL hook.\n=== usePortfolioChannelVelocity ===\nweb/src/react/queries/useCampaignQueries.ts:71:export const usePortfolioChannelVelocity = ...\n=== usePortfolioInsights ===\nweb/src/react/queries/useCampaignQueries.ts:75:export const usePortfolioInsights = ...\n(remaining 6 hooks: only their own export line, one hit each)"
+      }
+    ],
+    "searched_universe": "git grep over all 239 git-tracked files under web/src, word-boundary, hook names only (these are named exports, not default, so the default-export trap does not apply)",
+    "exclusions": [
+      "useCampaignPNL's second hit is a JSDoc comment in a sibling hook's docstring, not executable code — does not constitute a caller"
+    ],
+    "proposed_fix": "Remove the 11 unused hooks, or verify with the feature owner whether they are staged for an in-progress UI (campaign P&L view, portfolio velocity/insights widgets, bulk-sale/purchase-edit/DH-unmatch actions) that has not yet been wired to a page.",
+    "blast_radius": [
+      "web/src/react/queries/useCampaignQueries.ts",
+      "web/src/react/queries/useAdminQueries.ts"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "npm run build and npm test pass in web/ with the 11 hooks removed",
+      "grep confirms no remaining reference to the removed hook names in web/src"
+    ]
+  },
+  {
+    "id": "FE-004",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "normalizeChannel, toTitleCase, formatCardName, gradeDisplay, cardSubtitle, marginCode, marketTooltip, statusBorderColor, ProgressBar, saleChannelColors"
+    },
+    "category": "dead-code",
+    "title": "Ten unused utility exports across campaignConstants.ts, formatters.ts, sellSheetHelpers.tsx, and inventory/utils.ts",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Each of the 10 names has exactly one word-boundary hit repo-wide in web/src — its own export line — with no caller anywhere, including its own file",
+        "command": "for f in normalizeChannel toTitleCase formatCardName gradeDisplay cardSubtitle marginCode marketTooltip statusBorderColor ProgressBar saleChannelColors; do n=$(git grep -cE \"\\b$f\\b\" web/src | awk -F: '{s+=$2} END {print s+0}'); echo \"$f total_hits=$n\"; done",
+        "output": "normalizeChannel total_hits=1\ntoTitleCase total_hits=1\nformatCardName total_hits=1\ngradeDisplay total_hits=1\ncardSubtitle total_hits=1\nmarginCode total_hits=1\nmarketTooltip total_hits=1\nstatusBorderColor total_hits=1\nProgressBar total_hits=1\nsaleChannelColors total_hits=1"
+      },
+      {
+        "claim": "sellSheetHelpers.tsx is a mixed file: 4 of its exports (formatCardName, gradeDisplay, cardSubtitle, marginCode) are dead while checkHotSeller, clPriceDisplayCents, formatLastSaleDate, dollars are live imports elsewhere — confirming this is per-symbol dead code, not a whole orphaned file",
+        "command": "git grep -n \"from '.*sellSheetHelpers'\" web/src",
+        "output": "web/src/react/pages/campaign-detail/inventory/utils.ts:3:import { checkHotSeller } from '../../../utils/sellSheetHelpers';\nweb/src/react/utils/sellSheetHelpers.test.tsx:2:import { clPriceDisplayCents, formatLastSaleDate } from './sellSheetHelpers';"
+      }
+    ],
+    "searched_universe": "git grep over all 239 git-tracked files under web/src, word-boundary, named exports only (no default-export trap concern)",
+    "exclusions": [
+      "DEFAULT_TIMEOUT_MS and UPLOAD_TIMEOUT_MS (web/src/js/api/client.ts) were investigated as candidates but excluded: both are referenced within their own file (setting instance defaults), matching the map's documented caveat that external_refs==0 includes exported helpers used only inside their own package — they are not dead"
+    ],
+    "proposed_fix": "Remove the 10 dead exports. Downgrade any that are demonstrably reserved for a near-term feature (e.g. saleChannelColors for a planned channel-color legend) to a code comment rather than a live export.",
+    "blast_radius": [
+      "web/src/react/utils/campaignConstants.ts",
+      "web/src/react/utils/formatters.ts",
+      "web/src/react/utils/sellSheetHelpers.tsx",
+      "web/src/react/pages/campaign-detail/inventory/utils.ts"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "npm run build and npm test pass in web/ with the 10 symbols removed",
+      "grep confirms no remaining reference to the removed names in web/src"
+    ]
+  },
+  {
+    "id": "FE-005",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "hook",
+      "identity": "useUserPreferences (web/src/react/contexts/UserPreferencesContext.tsx:157) and its associated types UserPreferencesContextValue, UserPreferences, RecentCard, SavedFilterPreferences, ViewMode"
+    },
+    "category": "dead-code",
+    "title": "UserPreferencesProvider is mounted app-wide but its own useUserPreferences() hook is never called — the whole context has no consumer",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "UserPreferencesProvider is wired into both entry points (main.tsx and App.tsx), so this is not simply an orphaned file — the context genuinely renders in production",
+        "command": "git grep -n \"UserPreferencesProvider\" web/src",
+        "output": "web/src/main.tsx:14:import { UserPreferencesProvider } from './react/contexts/UserPreferencesContext';\nweb/src/main.tsx:52:      <UserPreferencesProvider>\nweb/src/react/App.tsx:11:import { UserPreferencesProvider } from './contexts/UserPreferencesContext';\nweb/src/react/App.tsx:121:          <UserPreferencesProvider>"
+      },
+      {
+        "claim": "But useUserPreferences (the only way to read the context's value) has zero callers anywhere, and neither does the default-exported raw context object",
+        "command": "git grep -nE \"\\buseUserPreferences\\b\" web/src; echo ---; git grep -n \"from '.*UserPreferencesContext'\" web/src",
+        "output": "web/src/react/contexts/UserPreferencesContext.tsx:152: *   const { preferences, addRecentPriceCheck } = useUserPreferences();\nweb/src/react/contexts/UserPreferencesContext.tsx:157:export function useUserPreferences(): UserPreferencesContextValue {\nweb/src/react/contexts/UserPreferencesContext.tsx:161:    throw new Error('useUserPreferences must be used within a UserPreferencesProvider');\n---\nweb/src/main.tsx:14:import { UserPreferencesProvider } from './react/contexts/UserPreferencesContext';\nweb/src/react/App.tsx:11:import { UserPreferencesProvider } from './contexts/UserPreferencesContext';\n(only the JSDoc example and the hook's own error message mention the name; no import of useUserPreferences or the default-exported context anywhere)"
+      }
+    ],
+    "searched_universe": "git grep over all 239 git-tracked files under web/src, word-boundary, for the hook name and for import statements against the context's file path (covers both named and default-export consumption)",
+    "exclusions": [
+      "UserPreferencesProviderProps is excluded from this finding — it is genuinely used within the same file to type the Provider component's props, so it is live, just not externally referenced"
+    ],
+    "proposed_fix": "Either wire a real consumer (the JSDoc at line 152 documents an intended addRecentPriceCheck/preferences usage that was apparently never finished) or remove the entire feature (Provider, hook, and its 4 backing types) if it was superseded by something else. Left as-is, the Provider still runs its state/localStorage-sync logic on every render for a value nothing reads.",
+    "blast_radius": [
+      "web/src/react/contexts/UserPreferencesContext.tsx",
+      "web/src/main.tsx",
+      "web/src/react/App.tsx"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "Either: a real call site for useUserPreferences exists and npm test covers it, or: the Provider, hook, and unused types are removed and npm run build / npm test still pass"
+    ]
+  },
+  {
+    "id": "FE-006",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "type",
+      "identity": "EbayGradeData, EstimateGradeData, GradeData, MarketOverview, SalesVelocity (web/src/types/pricing.ts)"
+    },
+    "category": "dead-code",
+    "title": "Five type interfaces in pricing.ts describe a per-grade eBay/estimate pricing API that no longer exists",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "frontend-reference-map.json reports external_refs==0 for 5 of the 7 types in pricing.ts; only GradeKey and PriceHint are live",
+        "command": "jq -r '.records[] | select(.defined_at | test(\"types/pricing.ts\")) | \"\\(.identity)\\t\\(.external_refs)\"' docs/audit/maps/frontend-reference-map.json",
+        "output": "EbayGradeData\t0\nEstimateGradeData\t0\nGradeData\t0\nGradeKey\t9\nMarketOverview\t0\nSalesVelocity\t0\nPriceHint\t6"
+      },
+      {
+        "claim": "Confirmed these 5 types are not merely internal-only (used elsewhere in the same file) — they appear nowhere outside their own declaration in pricing.ts",
+        "command": "git grep -n \"EbayGradeData\\|GradeData\\b\\|MarketOverview\\|SalesVelocity\" web/src | grep -v 'types/pricing.ts'",
+        "output": "(no output — zero hits outside pricing.ts)"
+      },
+      {
+        "claim": "No Go handler in internal/adapters/httpserver builds a response using the field names these types describe (price, salesCount, avg7day, volume7day) or references the closest-named Go types (pricing.GradeDetail / EbayGradeDetail / EstimateGradeDetail), and no route named price-estimate exists",
+        "command": "grep -rln \"GradeDetail\\|EbayGradeDetail\\|EstimateGradeDetail\" internal/adapters/httpserver/*.go 2>/dev/null; git grep -n \"price-estimate\\|priceEstimate\" internal/adapters/httpserver/routes.go web/src/js/api/*.ts",
+        "output": "(both commands produced no output — no handler or route matches)"
+      }
+    ],
+    "searched_universe": "git grep/jq over web/src/types/pricing.ts records in the frontend map, cross-referenced against internal/adapters/httpserver/*.go for a live producing endpoint",
+    "exclusions": [
+      "GradeKey and PriceHint in the same file are excluded — both have live external references"
+    ],
+    "proposed_fix": "Delete the 5 unused interfaces from pricing.ts. They likely describe a per-grade multi-source pricing view tied to one of the pricing sources CLAUDE.md records as removed on 2026-04-06 (PriceCharting, CardHedger, JustTCG, fusion engine) — confirm with git blame before deleting in case a UI for this is mid-build rather than post-removal debris.",
+    "blast_radius": [
+      "web/src/types/pricing.ts"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "npm run build passes with the 5 interfaces removed from pricing.ts",
+      "grep confirms no remaining reference to the removed type names in web/src"
+    ]
+  },
+  {
+    "id": "FE-007",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "type",
+      "identity": "web/src/types/campaigns/core.ts Sale interface — missing field forcedLiquidation"
+    },
+    "category": "frontend",
+    "title": "Sale.forcedLiquidation is sent unconditionally by the Go API but has no field in the TS Sale type",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Go's Sale struct (internal/domain/inventory/types_core.go) declares ForcedLiquidation as a plain bool with no `omitempty` — it is always present on the wire — while the TS Sale interface in web/src/types/campaigns/core.ts (lines 114-145) has no forcedLiquidation field at all",
+        "command": "sed -n '488,492p' internal/domain/inventory/types_core.go",
+        "output": "\t// ForcedLiquidation indicates this sale was driven by invoice timing pressure.\n\t// App-maintained (not a generated/computed column): kept in sync with SaleReason\n\t// by freezeSaleProvenance whenever a sale is created.\n\tForcedLiquidation bool `json:\"forcedLiquidation\"`",
+        "file_line": "internal/domain/inventory/types_core.go:491"
+      },
+      {
+        "claim": "Zero references to forcedLiquidation anywhere in web/src — the frontend has no type for this field and cannot read or display it",
+        "command": "git grep -nE 'forcedLiquidation|ForcedLiquidation' web/src",
+        "output": "(no output — zero hits)"
+      }
+    ],
+    "searched_universe": "internal/domain/inventory/types_core.go Sale struct's json tags, cross-referenced against web/src/types/campaigns/core.ts Sale interface and a repo-wide grep for the field name in web/src",
+    "exclusions": [],
+    "proposed_fix": "Add `forcedLiquidation: boolean;` to the Sale interface in web/src/types/campaigns/core.ts to match the Go contract. If the UI is meant to surface this (e.g. a badge distinguishing forced-liquidation sales in sale history/analytics), a follow-up UI task is separate from this type-sync fix.",
+    "blast_radius": [
+      "web/src/types/campaigns/core.ts"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "web/src/types/campaigns/core.ts Sale interface includes forcedLiquidation: boolean matching the Go json tag",
+      "npm run build passes"
+    ]
+  },
+  {
+    "id": "FE-008",
+    "lens": "frontend-health",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "type",
+      "identity": "SellSheetItem.targetSellPrice, SellSheetItem.minimumAcceptPrice (internal/domain/inventory/analytics_types.go, mirrored in web/src/types/campaigns/market.ts)"
+    },
+    "category": "naming",
+    "title": "Pointer: two SellSheetItem price fields carry cent values but their name (and JSON tag) omit the Cents suffix used everywhere else in the codebase",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "TargetSellPrice/MinimumAcceptPrice are populated from ConservativeCents/CLValueCents/ComputedPriceCents — genuinely cent-denominated — but neither the Go field name nor its json tag carries the Cents suffix the rest of the struct uses (BuyCostCents, CostBasisCents, CLValueCents, OverridePriceCents, ComputedPriceCents, AISuggestedPriceCents all live in the same struct)",
+        "command": "sed -n '108,122p' internal/domain/inventory/analytics_types.go; echo ---; grep -n 'TargetSellPrice\\|MinimumAcceptPrice' internal/domain/export/service_sell_sheet.go",
+        "output": "\tBuyCostCents          int               `json:\"buyCostCents\"`\n\tCostBasisCents        int               `json:\"costBasisCents\"`\n\tCLValueCents          int               `json:\"clValueCents\"`\n\tCurrentMarket         *MarketSnapshot   `json:\"currentMarket,omitempty\"`\n\tRecommendation        string            `json:\"recommendation\"`\n\tTargetSellPrice       int               `json:\"targetSellPrice\"`\n\tMinimumAcceptPrice    int               `json:\"minimumAcceptPrice\"`\n---\nitem.TargetSellPrice = computeTargetPrice(snapshot, item.Recommendation)\nitem.MinimumAcceptPrice = snapshot.ConservativeCents (cents-denominated source)"
+      },
+      {
+        "claim": "The frontend correctly treats both fields as cents (compared directly against costBasisCents with no /100 conversion in sellSheetHelpers.tsx), so this is not a live unit bug today — just an unlabeled boundary that the next person to touch either field could easily get wrong",
+        "command": "git grep -n 'targetSellPrice' web/src/react/utils/sellSheetHelpers.tsx",
+        "output": "web/src/react/utils/sellSheetHelpers.tsx:40:export function marginCode(targetSellPrice: number, costBasisCents: number): string {\nweb/src/react/utils/sellSheetHelpers.tsx:42:  const pct = Math.floor(((targetSellPrice - costBasisCents) / costBasisCents) * 100);"
+      }
+    ],
+    "searched_universe": "internal/domain/inventory/analytics_types.go and internal/domain/export/service_sell_sheet.go for the Go-side naming/semantics; web/src/react/utils/sellSheetHelpers.tsx and web/src/types/campaigns/market.ts for how the frontend consumes and types the same fields",
+    "exclusions": [
+      "This is a Go-side naming inconsistency that happens to surface through the TS mirror; primary ownership belongs to the naming/boundaries lens, recorded here as a pointer per LENS-BRIEF section 6"
+    ],
+    "proposed_fix": "Rename to TargetSellPriceCents / MinimumAcceptPriceCents (and the matching JSON tags and TS field names) for consistency with the rest of the struct, in a lens-naming-boundaries-owned pass.",
+    "blast_radius": [
+      "internal/domain/inventory/analytics_types.go",
+      "internal/domain/export/service_sell_sheet.go",
+      "web/src/types/campaigns/market.ts",
+      "web/src/react/utils/sellSheetHelpers.tsx"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Owning lens confirms whether to action; if renamed, go build/test and npm run build/test all pass with the new names"
+    ]
+  }
+]

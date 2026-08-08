@@ -126,6 +126,13 @@ type MarketSnapshotData struct {
 	Trend30d          float64 `json:"trend30d,omitempty"`
 	SnapshotDate      string  `json:"snapshotDate,omitempty"`
 	SnapshotJSON      string  `json:"-"` // Full MarketSnapshot serialized as JSON (DB column, not in API)
+
+	// Decision-time provenance: read in-process by the freeze paths and written to
+	// the *_at_purchase columns. Not part of the API wire format (json:"-") — the
+	// frozen snapshots live in dedicated Purchase/Sale fields, not on this embed.
+	Confidence         float64 `json:"-"` // DH pricing confidence
+	SourceCountRaw     int     `json:"-"` // external platform count, pre-CL-correction
+	MarketDataObserved bool    `json:"-"` // true when CardLookup market data was present
 }
 
 func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string) {
@@ -139,6 +146,9 @@ func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string
 	d.SalesLast30d = snapshot.SalesLast30d
 	d.Trend30d = snapshot.Trend30d
 	d.SnapshotDate = date
+	d.Confidence = snapshot.Confidence
+	d.SourceCountRaw = snapshot.SourceCountRaw
+	d.MarketDataObserved = snapshot.MarketDataObserved
 
 	// Persist the full snapshot as JSON for frontend consumption
 	if b, err := json.Marshal(snapshot); err == nil {
@@ -148,19 +158,87 @@ func (d *MarketSnapshotData) applySnapshot(snapshot *MarketSnapshot, date string
 	}
 }
 
+// TargetSubject is one portal-sourced targeting entity: a character subject or
+// a card-level spec. ID is copied verbatim from the portal and is never
+// re-resolved from Name — live IDs span multiple generations (4xxx, 8xxx,
+// 22xxx) while getSubjects returns only 22xxx.
+type TargetSubject struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// SubjectFilterMode values. Target buys only the listed subjects; Exclude
+// buys everything except them.
+const (
+	SubjectFilterTarget  = "Target"
+	SubjectFilterExclude = "Exclude"
+)
+
+// LegacyUnreconciledSubjectID marks a subject that migration 000024 backfilled
+// from the legacy inclusion_list string: a name with no portal id behind it
+// and no reconciliation against live portal state yet.
+//
+// It exists because id 0 is already taken. An operator who types a new
+// subject name in the UI creates it with id 0 (SubjectListEditor.tsx), and
+// TranslateToCreate/TranslateToDiff deliberately resolve those by name. If
+// backfilled legacy subjects also carried 0, a push issued between deploy and
+// the baseline pull would re-resolve them by name and swap the live 4xxx/8xxx
+// portal ids on six money-spending campaigns for current-generation 22xxx
+// ids. -1 cannot collide with either case: portal-issued ids are positive.
+const LegacyUnreconciledSubjectID = -1
+
 // Campaign represents a PSA Direct Buy campaign with buy parameters and fee configuration.
 type Campaign struct {
-	ID                   string    `json:"id"`
-	Name                 string    `json:"name"`
-	Sport                string    `json:"sport"`
-	YearRange            string    `json:"yearRange"`          // e.g. "1999-2003"
-	GradeRange           string    `json:"gradeRange"`         // e.g. "9-10"
-	PriceRange           string    `json:"priceRange"`         // e.g. "50-500"
-	CLConfidence         string    `json:"clConfidence"`       // CL confidence range, e.g. "2.5-4"
-	BuyTermsCLPct        float64   `json:"buyTermsCLPct"`      // Buy at X% of CL value (0-1)
-	DailySpendCapCents   int       `json:"dailySpendCapCents"` // Max daily spend in cents
-	InclusionList        string    `json:"inclusionList"`      // Comma-separated card names/sets
-	ExclusionMode        bool      `json:"exclusionMode"`      // If true, inclusionList acts as exclusion list
+	ID                 string  `json:"id"`
+	Name               string  `json:"name"`
+	Sport              string  `json:"sport"`
+	YearRange          string  `json:"yearRange"`          // e.g. "1999-2003"
+	GradeRange         string  `json:"gradeRange"`         // e.g. "9-10"
+	PriceRange         string  `json:"priceRange"`         // e.g. "50-500"
+	CLConfidence       string  `json:"clConfidence"`       // CL confidence range, e.g. "2.5-4"
+	BuyTermsCLPct      float64 `json:"buyTermsCLPct"`      // Buy at X% of CL value (0-1)
+	DailySpendCapCents int     `json:"dailySpendCapCents"` // Max daily spend in cents
+
+	// InclusionList and ExclusionMode are a legacy mirror kept for one release
+	// so a rollback to the previous binary sees a database that still matches
+	// its own model. campaign_store.go derives both from
+	// Subjects/SubjectFilterMode on every write, discarding whatever a caller
+	// sets on these two fields directly. Nothing in the codebase reads them
+	// anymore — matching.go, portfolio.go, suggestion_rules.go,
+	// portfolio/analysis.go, demand/campaign_signals.go, and
+	// campaign_coverage.go were all switched to the new axes in Task 4. They
+	// are write-only at this point, kept solely for the rollback guarantee
+	// above.
+	InclusionList string `json:"inclusionList"`
+	ExclusionMode bool   `json:"exclusionMode"`
+
+	// TargetLanguages is the set of PSA curated spec lists the campaign buys
+	// from, held as stable internal tokens rather than portal UUIDs (which PSA
+	// can re-issue). It is an unordered set; ValidateAndNormalizeCampaign
+	// (validation.go) sorts it so persistence and diffs stay deterministic.
+	//
+	// Empty means an open net: the campaign buys any language. Every live
+	// campaign carries BOTH "english" and "japanese" — the single-token model
+	// this replaced could not represent them.
+	//
+	// The closed set is "english" | "japanese" only. cardutil.SetLanguage
+	// classifies chinese and korean sets too, but the portal offers no curated
+	// spec list for either, so those tokens are rejected rather than stored
+	// unmatchable.
+	TargetLanguages []string `json:"targetLanguages"`
+
+	// SubjectFilterMode is the polarity of Subjects: Target buys only the
+	// listed characters, Exclude buys everything except them. Empty is
+	// normalized to SubjectFilterTarget on read.
+	SubjectFilterMode string `json:"subjectFilterMode"`
+
+	// Subjects are the characters this campaign targets or excludes. ID is the
+	// PSA subject id and is authoritative — it is never re-derived from Name.
+	Subjects []TargetSubject `json:"subjects"`
+
+	// DeniedSpecs are individual cards excluded regardless of Subjects.
+	DeniedSpecs []TargetSubject `json:"deniedSpecs"`
+
 	Phase                Phase     `json:"phase"`
 	PSASourcingFeeCents  int       `json:"psaSourcingFeeCents"`            // Default 300 ($3)
 	EbayFeePct           float64   `json:"ebayFeePct"`                     // Default 0.1235 (12.35%)
@@ -208,6 +286,18 @@ type Purchase struct {
 	CLValueCents           int    `json:"clValueCents"`                     // Current CL market value (scheduler-refreshed; frozen snapshot lives in CLValueAtPurchaseCents)
 	CLValueUpdatedAt       string `json:"clValueUpdatedAt,omitempty"`       // When CL value was last refreshed (RFC3339)
 	CLValueAtPurchaseCents int    `json:"clValueAtPurchaseCents,omitempty"` // CL value at purchase/first-enrichment; set once, never overwritten (0 = no snapshot)
+
+	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
+	CLConfidenceAtPurchase   *int     `json:"clConfidenceAtPurchase,omitempty"`
+	PopulationAtPurchase     *int     `json:"populationAtPurchase,omitempty"`
+	DHConfidenceAtPurchase   *float64 `json:"dhConfidenceAtPurchase,omitempty"`
+	SourceCountAtPurchase    *int     `json:"sourceCountAtPurchase,omitempty"`
+	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
+	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
+
+	// --- Campaign attribution provenance ---
+	PSACampaignName   string `json:"psaCampaignName,omitempty"`   // raw campaign name PSA reported, verbatim
+	AttributionSource string `json:"attributionSource,omitempty"` // psa | inferred | manual
 
 	// --- Purchase cost & logistics ---
 	BuyCostCents        int     `json:"buyCostCents"`         // Actual cost paid
@@ -395,9 +485,26 @@ type Sale struct {
 	// Crack slab tracking — indicates the card was cracked from its slab and sold raw
 	WasCracked bool `json:"wasCracked,omitempty"`
 
-	// ForcedLiquidation indicates this sale was driven by invoice timing pressure
-	// (heuristic: forced channel within 6 days before an invoice due date; operator-overridable).
+	// ForcedLiquidation indicates this sale was driven by invoice timing pressure.
+	// App-maintained (not a generated/computed column): kept in sync with SaleReason
+	// by freezeSaleProvenance whenever a sale is created.
 	ForcedLiquidation bool `json:"forcedLiquidation"`
+
+	// SaleReason records why this sale happened (discretionary, invoice_pressure,
+	// aging_policy, bulk_lot, show_clearout). Client-supplied when valid; defaulted
+	// via heuristic when empty. Frozen at sale-creation time.
+	SaleReason string `json:"saleReason,omitempty"`
+
+	// CLValueAtSaleCents and ChannelFeePctAtSale freeze the purchase's CL value and
+	// the channel fee rate in effect at sale time.
+	//
+	// The two use different "unknown" encodings, mirroring the DB: cl_value_at_sale_cents
+	// is NOT NULL DEFAULT 0, so 0 is ambiguous for sales predating migration 000022
+	// (genuinely-zero vs never-recorded are indistinguishable); channel_fee_pct_at_sale
+	// is nullable, so nil is unambiguous. This is why the sale side does not use a
+	// pointer the way the purchase-side *AtPurchase fields do.
+	CLValueAtSaleCents  int      `json:"clValueAtSaleCents,omitempty"`
+	ChannelFeePctAtSale *float64 `json:"channelFeePctAtSale,omitempty"`
 
 	// Market snapshot at time of sale (best-effort, may be zero)
 	MarketSnapshotData
@@ -405,8 +512,12 @@ type Sale struct {
 
 // BulkSaleInput represents a single item in a bulk sale request.
 type BulkSaleInput struct {
-	PurchaseID     string `json:"purchaseId"`
-	SalePriceCents int    `json:"salePriceCents"`
+	PurchaseID             string `json:"purchaseId"`
+	SalePriceCents         int    `json:"salePriceCents"`
+	OriginalListPriceCents int    `json:"originalListPriceCents,omitempty"`
+	PriceReductions        int    `json:"priceReductions,omitempty"`
+	DaysListed             int    `json:"daysListed,omitempty"`
+	SaleReason             string `json:"saleReason,omitempty"`
 }
 
 // BulkSaleResult summarizes the outcome of a bulk sale operation.

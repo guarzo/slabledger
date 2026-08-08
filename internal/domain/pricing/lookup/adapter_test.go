@@ -895,6 +895,60 @@ func TestCachedAdapter_GetMarketSnapshot_Cached(t *testing.T) {
 	}
 }
 
+func TestBuildMarketSnapshot_Provenance(t *testing.T) {
+	adapter := NewAdapter(&mockPriceProvider{})
+
+	tests := []struct {
+		name                   string
+		price                  *pricing.Price
+		wantMarketDataObserved bool
+		wantActiveListings     int
+		wantSourceCountRaw     int
+	}{
+		{
+			name: "MarketPresentAllZeroListings_ObservedTrue",
+			price: &pricing.Price{
+				Grades: pricing.GradedPrices{PSA9Cents: 9000},
+				Market: &pricing.MarketData{},
+			},
+			wantMarketDataObserved: true,
+			wantActiveListings:     0,
+		},
+		{
+			name: "MarketNil_ObservedFalse",
+			price: &pricing.Price{
+				Grades: pricing.GradedPrices{PSA9Cents: 9000},
+			},
+			wantMarketDataObserved: false,
+		},
+		{
+			name: "SourcesTwo_SourceCountRawTwo",
+			price: &pricing.Price{
+				Grades:  pricing.GradedPrices{PSA9Cents: 9000},
+				Sources: []string{"ebay", "dh"},
+			},
+			wantSourceCountRaw: 2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snap, err := adapter.buildMarketSnapshot(tt.price, 9)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if snap.MarketDataObserved != tt.wantMarketDataObserved {
+				t.Errorf("MarketDataObserved = %v, want %v", snap.MarketDataObserved, tt.wantMarketDataObserved)
+			}
+			if snap.ActiveListings != tt.wantActiveListings {
+				t.Errorf("ActiveListings = %d, want %d", snap.ActiveListings, tt.wantActiveListings)
+			}
+			if snap.SourceCountRaw != tt.wantSourceCountRaw {
+				t.Errorf("SourceCountRaw = %d, want %d", snap.SourceCountRaw, tt.wantSourceCountRaw)
+			}
+		})
+	}
+}
+
 // TestCacheKey_NoCollision verifies that cacheKey produces distinct keys for
 // cards whose field values, if naively concatenated with "|", would collide.
 func TestCacheKey_NoCollision(t *testing.T) {

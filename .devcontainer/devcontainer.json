@@ -113,11 +113,10 @@
     }
   },
 
-  // Commands to run after container is created (one-time setup)
+  // Commands to run after container is created (one-time project setup).
+  // AI tooling (claude CLI, codex, marketplace, ~/.claude config) is NOT here —
+  // it belongs to .devcontainer/local-seed.sh, which runs on every start.
   "postCreateCommand": "sudo chown -R vscode:vscode /go && bash .devcontainer/post-create.sh",
-
-  // Commands to run after container starts (every time)
-  "postStartCommand": "bash .devcontainer/post-start.sh",
 
   // Environment variables
   "remoteEnv": {

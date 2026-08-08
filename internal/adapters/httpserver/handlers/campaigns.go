@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
@@ -44,6 +45,7 @@ type CampaignsHandler struct {
 
 	psaSnapshots psacampaign.SnapshotStore  // optional: PSA portal campaign snapshot reader
 	psaQueue     psacampaign.PushQueueStore // optional: PSA propose/publish push queue
+	psaCatalog   psacampaign.CatalogStore   // optional: PSA spec-list/subject catalog reader
 }
 
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
@@ -82,6 +84,12 @@ func WithPSASnapshotStore(s psacampaign.SnapshotStore) CampaignsHandlerOption {
 // WithPSAPushQueue enables the PSA propose/publish push queue.
 func WithPSAPushQueue(q psacampaign.PushQueueStore) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.psaQueue = q }
+}
+
+// WithPSACatalogStore enables the PSA spec-list/subject catalog reader, which
+// the translators need (via a Resolver) to push list-valued targeting.
+func WithPSACatalogStore(s psacampaign.CatalogStore) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.psaCatalog = s }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.
@@ -176,10 +184,26 @@ func (h *CampaignsHandler) HandleGetCampaign(w http.ResponseWriter, r *http.Requ
 }
 
 // HandleUpdateCampaign handles PUT /api/campaigns/{id}.
+//
+// An optional ifUnmodifiedSince query parameter (RFC3339, as served in the
+// campaign's own updatedAt) turns the write into a conditional one: the row is
+// written only if it has not changed since the caller read it, and a mismatch
+// answers 409 rather than silently overwriting. Callers that do a
+// read-modify-write — the edit form and the bulk-paste importer — send it.
+// Omitting it keeps the historic unconditional behaviour.
 func (h *CampaignsHandler) HandleUpdateCampaign(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "id", "Campaign ID")
 	if !ok {
 		return
+	}
+	var expectedUpdatedAt *time.Time
+	if raw := r.URL.Query().Get("ifUnmodifiedSince"); raw != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid ifUnmodifiedSince timestamp")
+			return
+		}
+		expectedUpdatedAt = &parsed
 	}
 	var c inventory.Campaign
 	if !decodeBody(w, r, &c) {
@@ -187,9 +211,19 @@ func (h *CampaignsHandler) HandleUpdateCampaign(w http.ResponseWriter, r *http.R
 	}
 	c.ID = id
 
-	if err := h.service.UpdateCampaign(r.Context(), &c); err != nil {
+	var err error
+	if expectedUpdatedAt != nil {
+		err = h.service.UpdateCampaignIfUnchanged(r.Context(), &c, *expectedUpdatedAt)
+	} else {
+		err = h.service.UpdateCampaign(r.Context(), &c)
+	}
+	if err != nil {
 		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
+			return
+		}
+		if inventory.IsCampaignConflict(err) {
+			writeError(w, http.StatusConflict, "Campaign changed since it was loaded")
 			return
 		}
 		if inventory.IsValidationError(err) {

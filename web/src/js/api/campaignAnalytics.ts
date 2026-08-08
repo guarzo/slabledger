@@ -40,11 +40,11 @@ const proto = APIClient.prototype;
 
 // Campaign analytics endpoints
 proto.getCampaignPNL = async function (this: APIClient, campaignId: string): Promise<CampaignPNL> {
-  return this.get<CampaignPNL>(`/campaigns/${campaignId}/pnl`);
+  return this.get<CampaignPNL>(`/campaigns/${encodeURIComponent(campaignId)}/pnl`);
 };
 
 proto.getInventory = async function (this: APIClient, campaignId: string): Promise<InventoryResult> {
-  return this.get<InventoryResult>(`/campaigns/${campaignId}/inventory`);
+  return this.get<InventoryResult>(`/campaigns/${encodeURIComponent(campaignId)}/inventory`);
 };
 
 proto.getGlobalInventory = async function (this: APIClient): Promise<InventoryResult> {
@@ -91,5 +91,5 @@ proto.listRevocationFlags = async function (this: APIClient): Promise<Revocation
 
 // Expected value
 proto.getExpectedValues = async function (this: APIClient, campaignId: string): Promise<EVPortfolio> {
-  return this.get<EVPortfolio>(`/campaigns/${campaignId}/expected-values`);
+  return this.get<EVPortfolio>(`/campaigns/${encodeURIComponent(campaignId)}/expected-values`);
 };

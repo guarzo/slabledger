@@ -1,4 +1,4 @@
-import { forwardRef, SelectHTMLAttributes } from 'react';
+import { forwardRef, useId, SelectHTMLAttributes } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { clsx } from 'clsx';
 
@@ -80,7 +80,9 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
     ...props
   }, ref) => {
     const selectState = error ? 'error' : state;
-    const selectId = props.id || props.name;
+    // See Input.tsx: mounts without id/name left htmlFor bound to nothing.
+    const fallbackId = useId();
+    const selectId = props.id || props.name || fallbackId;
 
     return (
       <div className="space-y-2">

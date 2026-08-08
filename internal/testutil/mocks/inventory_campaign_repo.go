@@ -2,17 +2,19 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // CampaignRepositoryMock implements inventory.CampaignRepository with Fn-field pattern.
 type CampaignRepositoryMock struct {
-	CreateCampaignFn func(ctx context.Context, c *inventory.Campaign) error
-	GetCampaignFn    func(ctx context.Context, id string) (*inventory.Campaign, error)
-	ListCampaignsFn  func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
-	UpdateCampaignFn func(ctx context.Context, c *inventory.Campaign) error
-	DeleteCampaignFn func(ctx context.Context, id string) error
+	CreateCampaignFn            func(ctx context.Context, c *inventory.Campaign) error
+	GetCampaignFn               func(ctx context.Context, id string) (*inventory.Campaign, error)
+	ListCampaignsFn             func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
+	UpdateCampaignFn            func(ctx context.Context, c *inventory.Campaign) error
+	UpdateCampaignIfUnchangedFn func(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error
+	DeleteCampaignFn            func(ctx context.Context, id string) error
 }
 
 var _ inventory.CampaignRepository = (*CampaignRepositoryMock)(nil)
@@ -41,6 +43,13 @@ func (m *CampaignRepositoryMock) ListCampaigns(ctx context.Context, activeOnly b
 func (m *CampaignRepositoryMock) UpdateCampaign(ctx context.Context, c *inventory.Campaign) error {
 	if m.UpdateCampaignFn != nil {
 		return m.UpdateCampaignFn(ctx, c)
+	}
+	return nil
+}
+
+func (m *CampaignRepositoryMock) UpdateCampaignIfUnchanged(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error {
+	if m.UpdateCampaignIfUnchangedFn != nil {
+		return m.UpdateCampaignIfUnchangedFn(ctx, c, expectedUpdatedAt)
 	}
 	return nil
 }

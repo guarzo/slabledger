@@ -64,6 +64,7 @@ type ServerDependencies struct {
 	PSARowProvider            handlers.RowProvider             // optional: PSA portal fetcher for manual sync
 	PSASnapshotStore          psacampaign.SnapshotStore        // optional: PSA campaign snapshot reader
 	PSAPushQueue              psacampaign.PushQueueStore       // optional: PSA campaign push-queue reader/writer
+	PSACatalogStore           psacampaign.CatalogStore         // optional: PSA portal catalog reader (spec lists + subjects)
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -163,28 +164,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	// Create campaigns handler if service is available
 	var campaignsHandler *handlers.CampaignsHandler
 	if deps.CampaignsService != nil {
-		var opts []handlers.CampaignsHandlerOption
-		if deps.DHListingService != nil {
-			opts = append(opts, handlers.WithDHListingService(deps.DHListingService))
-		}
-		if deps.DHPriceSyncService != nil {
-			opts = append(opts, handlers.WithDHPriceSyncer(dhPriceSyncerAdapter{inner: deps.DHPriceSyncService}))
-		}
-		if deps.FinanceService != nil {
-			opts = append(opts, handlers.WithFinanceService(deps.FinanceService))
-		}
-		if deps.ExportService != nil {
-			opts = append(opts, handlers.WithExportService(deps.ExportService))
-		}
-		if deps.PSARowProvider != nil {
-			opts = append(opts, handlers.WithPSARowProvider(deps.PSARowProvider))
-		}
-		if deps.PSASnapshotStore != nil {
-			opts = append(opts, handlers.WithPSASnapshotStore(deps.PSASnapshotStore))
-		}
-		if deps.PSAPushQueue != nil {
-			opts = append(opts, handlers.WithPSAPushQueue(deps.PSAPushQueue))
-		}
 		campaignsHandler = handlers.NewCampaignsHandler(
 			deps.CampaignsService,
 			deps.ArbitrageService,
@@ -192,7 +171,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 			deps.TuningService,
 			logger,
 			ctx,
-			opts...,
+			campaignsHandlerOptions(deps)...,
 		)
 		logger.Info(ctx, "Campaigns handler initialized")
 	}
@@ -305,6 +284,39 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 	serverErrMu.Lock()
 	defer serverErrMu.Unlock()
 	return serverErr
+}
+
+// campaignsHandlerOptions builds the CampaignsHandlerOption slice from
+// ServerDependencies. Extracted from startWebServer so the wiring itself is
+// unit-testable — a deleted append here is otherwise invisible to every test
+// that builds the handler directly with the option already in hand.
+func campaignsHandlerOptions(deps ServerDependencies) []handlers.CampaignsHandlerOption {
+	var opts []handlers.CampaignsHandlerOption
+	if deps.DHListingService != nil {
+		opts = append(opts, handlers.WithDHListingService(deps.DHListingService))
+	}
+	if deps.DHPriceSyncService != nil {
+		opts = append(opts, handlers.WithDHPriceSyncer(dhPriceSyncerAdapter{inner: deps.DHPriceSyncService}))
+	}
+	if deps.FinanceService != nil {
+		opts = append(opts, handlers.WithFinanceService(deps.FinanceService))
+	}
+	if deps.ExportService != nil {
+		opts = append(opts, handlers.WithExportService(deps.ExportService))
+	}
+	if deps.PSARowProvider != nil {
+		opts = append(opts, handlers.WithPSARowProvider(deps.PSARowProvider))
+	}
+	if deps.PSASnapshotStore != nil {
+		opts = append(opts, handlers.WithPSASnapshotStore(deps.PSASnapshotStore))
+	}
+	if deps.PSAPushQueue != nil {
+		opts = append(opts, handlers.WithPSAPushQueue(deps.PSAPushQueue))
+	}
+	if deps.PSACatalogStore != nil {
+		opts = append(opts, handlers.WithPSACatalogStore(deps.PSACatalogStore))
+	}
+	return opts
 }
 
 // dhPriceSyncerAdapter bridges the handler-layer DHPriceSyncer interface

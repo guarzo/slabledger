@@ -34,6 +34,23 @@ func (h *CampaignsHandler) HandleCreatePurchase(w http.ResponseWriter, r *http.R
 		return
 	}
 	p.CampaignID = id
+	// Server-authoritative: campaign attribution is never client-settable. Same
+	// reasoning as the frozen provenance pointers cleared in
+	// service_crud.go CreatePurchase ("these pointers are attacker-controllable"):
+	// the body decodes straight into inventory.Purchase, and both of these fields
+	// carry JSON tags. Letting a caller post attributionSource:"psa" would forge
+	// the column this feature exists to make trustworthy. Cleared here rather
+	// than in the service because the PSA import path legitimately sets 'psa'
+	// through the same service method.
+	//
+	// The unconditional overwrite below is the clear: whatever the body carried is
+	// discarded. 'manual' is the correct server-derived value here — the campaign
+	// came from the URL path, so an operator picked it and no heuristic ran.
+	// Leaving it empty would let the store default to 'inferred', and
+	// ReconcilePSAAttribution's recordUnresolvedAttribution only protects 'manual'
+	// from being overwritten when PSA later names a campaign we cannot resolve.
+	p.AttributionSource = inventory.AttributionSourceManual
+	p.PSACampaignName = ""
 
 	if err := h.service.CreatePurchase(r.Context(), &p); err != nil {
 		if inventory.IsDuplicateCertNumber(err) {
@@ -234,6 +251,40 @@ func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		h.logger.Error(r.Context(), "failed to delete sale", observability.Err(err), observability.String("purchase_id", purchaseID))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleUpdateSaleReason handles PATCH /api/campaigns/{id}/sales/{saleID}.
+func (h *CampaignsHandler) HandleUpdateSaleReason(w http.ResponseWriter, r *http.Request) {
+	campaignID, ok := pathID(w, r, "id", "Campaign ID")
+	if !ok {
+		return
+	}
+	saleID, ok := pathID(w, r, "saleID", "Sale ID")
+	if !ok {
+		return
+	}
+
+	var req struct {
+		SaleReason string `json:"saleReason"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+
+	if err := h.service.UpdateSaleReason(r.Context(), campaignID, saleID, req.SaleReason); err != nil {
+		if inventory.IsValidationError(err) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if inventory.IsSaleNotFound(err) {
+			writeError(w, http.StatusNotFound, "Sale not found")
+			return
+		}
+		h.logger.Error(r.Context(), "failed to update sale reason", observability.Err(err), observability.String("sale_id", saleID))
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}

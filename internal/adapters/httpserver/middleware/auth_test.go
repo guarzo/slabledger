@@ -44,6 +44,10 @@ func (m *mockAuthService) ConsumeOAuthState(ctx context.Context, state string) (
 	return true, nil
 }
 
+func (m *mockAuthService) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
+	return 0, nil
+}
+
 func (m *mockAuthService) CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error) {
 	return nil, errors.New("not implemented")
 }

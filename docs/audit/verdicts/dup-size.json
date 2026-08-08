@@ -1,0 +1,65 @@
+[
+  {
+    "id": "DUP-001",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently. internal/domain/mathutil/mathutil.go:15-27 defines ToCents/ToCentsInt/ToDollars. internal/adapters/clients/dhprice/batch_adapter.go:89-91 defines `func dollarsToCents(dollars float64) int { return int(math.Round(dollars * 100)) }` -- textually identical body to ToCentsInt. internal/adapters/httpserver/handlers/pricing_api.go:58-60 defines `func centsToDollars(cents int) float64 { return float64(cents) / 100 }` -- identical to ToDollars modulo the int/int64 parameter type. Both locals are unexported, uncalled outside their own file, and untested (grep for the two names returns only their own definition/call sites). Counted 37 non-test call sites of mathutil.ToCents/ToCentsInt/ToDollars across the tree (finding claimed 23+, actual is higher, so the claim is not overstated). mathutil is a domain package; both offending files are adapters, which may freely import domain per the hexagonal rule, so there is no architectural reason for the duplication -- this passes the team lead's same-responsibility test: both functions solve the identical dollars<->cents rounding problem with no adapter-specific twist.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DUP-002",
+    "verdict": "confirmed_lower_severity",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently. internal/domain/inventory/import_parsing.go:43 (gradeRegex, used by ExtractGrade at :49) accepts `\\d{1,2}(?:\\.\\d+)?` (multi-digit fraction); internal/domain/inventory/import_types.go:164 (graderGradeRegex, used by ExtractGraderAndGrade at :168) accepts `\\d{1,2}(?:\\.\\d)?` (single-digit fraction); internal/platform/cardutil/normalize.go:30 (PSAGradeSuffixRegex) independently repeats the single-digit form a third time. Confirmed both extraction functions have live, distinct production callers on different import paths: ExtractGrade from internal/domain/inventory/service_import_psa.go:80 and internal/adapters/scheduler/cert_enrich.go:164 (PSA CSV path), ExtractGraderAndGrade from internal/domain/inventory/parse_shopify.go:102 (Shopify path). Reproduced the claimed divergence on 'PSA 9.55' by hand-transcribing both regex literals -- ExtractGrade returns 9.55, ExtractGraderAndGrade returns 9. The code duplication (three independently authored copies of the same grader+grade pattern, one already drifted) is real.",
+    "what_the_finding_got_wrong": "The title's claimed consequence ('causing silent disambiguation misses') is not supported: PSA, BGS, CGC, and SGC grading scales never produce a grade with two or more fractional digits (grades are whole or single-decimal, e.g. 9, 9.5) -- so no real-world grader title can ever trigger the divergence the finding demonstrates with the synthetic input 'PSA 9.55'. The finding's own exclusions section already concedes this ('production PSA-sourced CSV data are effectively always single-decimal... flagged as a latent inconsistency rather than an active production bug'), so the self-reported severity is close to right, but the title overstates it as an active data-quality defect rather than a purely theoretical one. The real, defensible finding is narrower: three independently-maintained copies of the same regex fragment are a maintenance liability (the next person who needs a grade format change must remember to touch three files), not a currently-triggering bug.",
+    "corrected_severity": "low",
+    "ticketable": true
+  },
+  {
+    "id": "DUP-003",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently. internal/adapters/clients/dh/disambiguate.go:34-40 (normalizeCardNumber) only does TrimLeft(s, \"0\"); internal/platform/cardutil/normalize_cards.go:186-213 (NormalizeCardNumber) strips a '/denominator' suffix before stripping leading zeros. Traced the actual data flow: internal/domain/inventory/import_parsing.go:99-116 (parsePSAListingTitleWithIndex, called by ParsePSAListingTitle) genuinely returns denominator-form tokens like '199/165' as the card number (comment at :100-101 confirms this is an intentional, expected shape); internal/domain/inventory/import_parsing_metadata.go:87-91 assigns this verbatim into PSACardMetadata.CardNumber with no further normalization, which becomes Purchase.CardNumber; internal/adapters/httpserver/handlers/dh_match_handler.go:251 passes p.CardNumber directly into dh.ResolveAmbiguous -> dh.Disambiguate -> dh.normalizeCardNumber. cardutil is a platform package already imported by both domain and adapter packages elsewhere (internal/domain/inventory/matching.go, internal/adapters/storage/postgres/purchase_store.go, etc.), so delegating dh.normalizeCardNumber to it introduces no architectural violation. The one gap the finding itself honestly flags -- that DH's own candidate.CardNumber shape is inferred from disambiguate_test.go fixtures ('199', '234', '228', never a denominator) rather than a captured live payload -- is a real but appropriately disclosed limit, and every fixture and every other CardNumber field in types_v2.go/types_psa_import.go is consistent with a bare-integer DH-side shape.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "SIZE-001",
+    "verdict": "confirmed_lower_severity",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently by reading internal/domain/inventory/repository_purchase.go:31-157 in full and hand-counting method signatures: exactly 55, matching the finding and the team lead's pre-verified sibling counts (Campaign 5, Sale 7, Pricing 8, Analytics 10, Finance 14, DH 2 = 46). Verified the postgres-side split independently: purchase_store.go(21)/purchase_cert_store.go(7)/purchase_dh_push_store.go(15)/purchase_dh_query_store.go(12)/purchase_price_store.go(10)/purchase_psa_store.go(5) methods on *PurchaseStore, confirming the implementation is already organized by exactly the concerns the interface comment-groups name. Verified the scheduler counter-evidence: internal/adapters/scheduler/dh_inventory_poll.go:25 and :32 declare DHFieldsUpdater and PurchaseByCertLookup as narrow structural interfaces satisfied by *PurchaseStore, confirming at least one real consumer already avoids the full 55-method surface. This finding rests entirely on source facts (interface declarations, grep counts, file splits) -- it does not cite CLAUDE.md or any other documentation claim, so the caution about the SnapshotRepository-naming CLAUDE.md error does not apply here.",
+    "what_the_finding_got_wrong": "The 'DH v2 fields' comment group is claimed as '~25 methods'; hand-counting the methods from the '// DH v2 fields' comment (repository_purchase.go:89) to the end of the interface (:156) gives 19, not ~25. This doesn't change the conclusion (19 is still the largest single group and still supports extracting a DH sub-interface) but the finding overstated the group size by roughly 30%. More materially: severity 'high' is inconsistent with the audit's own adjudicated sibling finding ARCH-004 (internal/domain/inventory/service.go:175, the 54-method consumer-facing Service interface, same theme, same file family, ruled by the controller to be a distinct-but-parallel defect) which was rated 'low'. Nothing in this finding's evidence shows the 55-method interface has caused a bug, an outage, a security issue, or even measurable developer friction beyond the scheduler already routing around it -- it is a structural/maintainability concern with a clear fix path, which argues for a severity in the same band as its sibling, not three tiers higher.",
+    "corrected_severity": "medium",
+    "ticketable": true
+  },
+  {
+    "id": "SIZE-002",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently. `awk` brace-span on internal/domain/dhlisting/dh_listing_service.go confirms ListPurchases spans exactly 286 lines starting at line 157, in a 451-line file (under the 500-line warn threshold, as claimed). Read the loop body (lines 210-429): a single `for _, cn := range sortedCerts` loop performs, per purchase: a received/shipped gate, conditional inline match+push with its own failure branch, a DH-enrollment gate, a committed-price gate, a no-op/already-synced short-circuit, then an UpdateInventoryStatus call with three distinct error-handling branches (stale-ID reset, PSA-key-exhaustion short-circuit, generic failure) -- 9 `continue` statements confirm the multi-gate state-machine shape the finding describes. This is a real, nameable seam (everything inside the per-cert loop body is already a self-contained unit bounded by `continue`), not just an assertion that the number is large.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "SIZE-003",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently. internal/adapters/scheduler/builder.go is 436 lines; BuildGroup starts at line 125 and spans exactly 312 lines. Counted exactly 20 `schedulers = append(schedulers` occurrences and confirmed `type BuildDeps struct` at line 24 with 52 field lines, matching the finding. Read the body from line 125: each block is gated on its own `if deps.X != nil` with its own preceding doc comment (e.g. 'Price refresh scheduler', confirmed at :132), which is a genuine, already-labeled split point -- this is a real seam, not just a line-count complaint. The cmd/-package exclusion (runServer/createHandlers, same DI-wiring shape) is a defensible, consistently-applied carve-out rather than special pleading for this one finding.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "SIZE-004",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently. wc -l and `grep -c '^func '` confirm internal/testutil/mocks/inmemory_campaign_store.go is exactly 1,328 lines / 106 functions. Independently ran the check-file-size.sh find expression myself (excluding testutil, as the script does) and confirmed the next-largest git-tracked non-test, non-testutil file is internal/domain/inventory/types_core.go at 562 lines -- the finding's '562' comparison figure is exact, not approximate. Confirmed scripts/check-file-size.sh:20 hardcodes `! -path '*/testutil/*'`, so this file is structurally invisible to `make check` regardless of size. Confirmed the file already carries 8 section-comment markers (`// --- CampaignRepository ---` etc.) that exactly mirror the same 7 repository interfaces named in SIZE-001/repository_purchase.go, so a real split seam already exists and is self-documented by the author, satisfying the 'real seam, not just a big number' bar.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  }
+]

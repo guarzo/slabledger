@@ -410,17 +410,28 @@ pkill slabledger
 
 ### post-create.sh (runs once)
 - Downloads Go dependencies
-- Installs Go tools
-- Installs Claude Code CLI globally
+- Installs web dependencies + Playwright
 - Creates data directories
+- Sets up git hooks and `.env`
 - Builds the application
-- Runs initial tests
 
-### post-start.sh (runs every time)
-- Updates Go tools
-- Checks .env configuration (including ANTHROPIC_API_KEY)
-- Displays environment info (including Claude Code version)
-- Shows helpful commands
+### local-seed.sh (local, gitignored — runs every start)
+Owns all AI tooling and personal config. Enabled by copying
+`docker-compose.override.yml.example` and adapting it (see the seed-copy design
+doc under `docs/superpowers/specs/`).
+
+- Repairs container-local volume ownership
+- Adds the Vekil proxy hook and `~/.local/bin` to `~/.zshrc`
+- Installs the Claude Code CLI and links Codex config (always-run: their targets
+  live in the ephemeral writable layer and are wiped by a rebuild)
+- Copies an allowlisted subset of host `~/.claude` and `~/.dotfiles` into
+  container-local named volumes, and installs the marketplace plugins
+  (version-gated: those targets persist across rebuilds)
+- Runs a self-check whose output appears in the container start log
+
+There is no `post-start.sh`. It previously patched up host-path breakage caused
+by bind-mounting host `~/.claude` read-write; the seed-copy model removes that
+bind, so the workaround is obsolete.
 
 ## Differences from Production
 

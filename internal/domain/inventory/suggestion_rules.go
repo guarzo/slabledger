@@ -24,27 +24,8 @@ func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights
 			if c.Phase != PhaseActive {
 				continue
 			}
-			if c.InclusionList == "" {
-				if c.ExclusionMode {
-					continue
-				}
-				continue
-			}
-			inList := false
-			for _, name := range SplitInclusionList(c.InclusionList) {
-				if strings.EqualFold(strings.TrimSpace(name), seg.Label) {
-					inList = true
-					break
-				}
-			}
-			if c.ExclusionMode {
-				if inList {
-					missingCampaigns = append(missingCampaigns, c.Name)
-				}
-			} else {
-				if !inList {
-					missingCampaigns = append(missingCampaigns, c.Name)
-				}
+			if !SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode) {
+				missingCampaigns = append(missingCampaigns, c.Name)
 			}
 		}
 
@@ -60,9 +41,9 @@ func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights
 			Confidence: mathutil.ConfidenceLabel(seg.SoldCount),
 			DataPoints: seg.PurchaseCount,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:          fmt.Sprintf("%s Focus", seg.Label),
-				InclusionList: seg.Label,
-				PrimaryExit:   string(seg.BestChannel),
+				Name:        fmt.Sprintf("%s Focus", seg.Label),
+				Subjects:    []string{seg.Label},
+				PrimaryExit: string(seg.BestChannel),
 			},
 			ExpectedMetrics: ExpectedMetrics{
 				ExpectedROI:       seg.ROI,
@@ -143,9 +124,9 @@ func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights)
 			Confidence: mathutil.ConfidenceLabel(seg.SoldCount),
 			DataPoints: seg.PurchaseCount,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:          fmt.Sprintf("%s Campaign", seg.Label),
-				InclusionList: seg.Label,
-				PrimaryExit:   string(seg.BestChannel),
+				Name:        fmt.Sprintf("%s Campaign", seg.Label),
+				Subjects:    []string{seg.Label},
+				PrimaryExit: string(seg.BestChannel),
 			},
 			ExpectedMetrics: ExpectedMetrics{
 				ExpectedROI:       seg.ROI,

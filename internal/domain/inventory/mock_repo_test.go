@@ -88,6 +88,18 @@ func (m *mockRepo) UpdateCampaign(_ context.Context, c *Campaign) error {
 	return nil
 }
 
+func (m *mockRepo) UpdateCampaignIfUnchanged(_ context.Context, c *Campaign, expectedUpdatedAt time.Time) error {
+	current, ok := m.campaigns[c.ID]
+	if !ok {
+		return ErrCampaignNotFound
+	}
+	if !current.UpdatedAt.Equal(expectedUpdatedAt) {
+		return ErrCampaignConflict
+	}
+	m.campaigns[c.ID] = c
+	return nil
+}
+
 func (m *mockRepo) CreatePurchase(_ context.Context, p *Purchase) error {
 	if p.Grader == "" {
 		p.Grader = "PSA"
@@ -221,6 +233,20 @@ func (m *mockRepo) DeleteSaleByPurchaseID(_ context.Context, purchaseID string) 
 		}
 	}
 	return ErrSaleNotFound
+}
+
+func (m *mockRepo) UpdateSaleReason(_ context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error {
+	s, ok := m.sales[saleID]
+	if !ok {
+		return ErrSaleNotFound
+	}
+	p, ok := m.purchases[s.PurchaseID]
+	if !ok || p.CampaignID != campaignID {
+		return ErrSaleNotFound
+	}
+	s.SaleReason = reason
+	s.ForcedLiquidation = forcedLiquidation
+	return nil
 }
 
 func (m *mockRepo) ListSalesByCampaign(_ context.Context, campaignID string, limit, offset int) ([]Sale, error) {
@@ -429,6 +455,33 @@ func (m *mockRepo) UpdatePurchaseCampaign(_ context.Context, purchaseID string, 
 	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
+	p.AttributionSource = AttributionSourceManual
+	return nil
+}
+
+func (m *mockRepo) ReattributePurchase(_ context.Context, purchaseID string, r Reattribution) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	if m.purchaseSales[purchaseID] {
+		return ErrPurchaseHasSale
+	}
+	p.CampaignID = r.CampaignID
+	p.PSASourcingFeeCents = r.PSASourcingFeeCents
+	p.CLConfidenceAtPurchase = r.CLConfidenceAtPurchase
+	p.PSACampaignName = r.PSACampaignName
+	p.AttributionSource = AttributionSourcePSA
+	return nil
+}
+
+func (m *mockRepo) UpdatePurchaseAttributionName(_ context.Context, purchaseID, psaName, source string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.PSACampaignName = psaName
+	p.AttributionSource = source
 	return nil
 }
 

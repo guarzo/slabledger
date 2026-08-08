@@ -11,7 +11,8 @@ import (
 
 var _ Scheduler = (*SessionCleanupScheduler)(nil)
 
-// SessionCleanupScheduler handles periodic cleanup of expired sessions
+// SessionCleanupScheduler handles periodic cleanup of expired sessions and
+// expired OAuth state tokens
 type SessionCleanupScheduler struct {
 	StopHandle
 	authService auth.Service
@@ -70,20 +71,33 @@ func (s *SessionCleanupScheduler) Start(ctx context.Context) {
 	}, s.cleanup)
 }
 
-// cleanup performs the actual session cleanup
+// cleanup sweeps expired sessions and expired OAuth state tokens
 func (s *SessionCleanupScheduler) cleanup(ctx context.Context) {
 	s.logger.Debug(ctx, "running session cleanup")
 
 	count, err := s.authService.CleanupExpiredSessions(ctx)
 	if err != nil {
 		s.logger.Error(ctx, "session cleanup failed", observability.Err(err))
-		return
-	}
-
-	if count > 0 {
+	} else if count > 0 {
 		s.logger.Info(ctx, "expired sessions cleaned up",
 			observability.Int("count", count))
 	} else {
 		s.logger.Debug(ctx, "no expired sessions to clean up")
+	}
+
+	// OAuth state rows are only deleted when a login completes, so abandoned
+	// logins leave them behind permanently unless swept here. Run this even if
+	// session cleanup failed — the two tables are independent.
+	stateCount, err := s.authService.CleanupExpiredOAuthStates(ctx)
+	if err != nil {
+		s.logger.Error(ctx, "oauth state cleanup failed", observability.Err(err))
+		return
+	}
+
+	if stateCount > 0 {
+		s.logger.Info(ctx, "expired oauth states cleaned up",
+			observability.Int("count", stateCount))
+	} else {
+		s.logger.Debug(ctx, "no expired oauth states to clean up")
 	}
 }

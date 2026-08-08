@@ -31,6 +31,7 @@ type InMemoryCampaignStore struct {
 	GetCampaignFn                       func(ctx context.Context, id string) (*inventory.Campaign, error)
 	ListCampaignsFn                     func(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
 	UpdateCampaignFn                    func(ctx context.Context, c *inventory.Campaign) error
+	UpdateCampaignIfUnchangedFn         func(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error
 	DeleteCampaignFn                    func(ctx context.Context, id string) error
 	CreatePurchaseFn                    func(ctx context.Context, p *inventory.Purchase) error
 	GetPurchaseFn                       func(ctx context.Context, id string) (*inventory.Purchase, error)
@@ -44,6 +45,7 @@ type InMemoryCampaignStore struct {
 	ListSalesByCampaignFn               func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error)
 	DeleteSaleFn                        func(ctx context.Context, saleID string) error
 	DeleteSaleByPurchaseIDFn            func(ctx context.Context, purchaseID string) error
+	UpdateSaleReasonFn                  func(ctx context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error
 	GetCampaignPNLFn                    func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error)
 	GetPNLByChannelFn                   func(ctx context.Context, campaignID string) ([]inventory.ChannelPNL, error)
 	GetDailySpendFn                     func(ctx context.Context, campaignID string, days int) ([]inventory.DailySpend, error)
@@ -60,6 +62,8 @@ type InMemoryCampaignStore struct {
 	UpdatePurchaseMarketSnapshotFn      func(ctx context.Context, id string, snap inventory.MarketSnapshotData) error
 	UpdatePurchaseCampaignFn            func(ctx context.Context, purchaseID, campaignID string, sourcingFeeCents int) error
 	UpdatePurchasePSAFieldsFn           func(ctx context.Context, id string, fields inventory.PSAUpdateFields) error
+	ReattributePurchaseFn               func(ctx context.Context, purchaseID string, r inventory.Reattribution) error
+	UpdatePurchaseAttributionNameFn     func(ctx context.Context, purchaseID, psaName, source string) error
 	GetAllPurchasesWithSalesFn          func(ctx context.Context, opts ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error)
 	GetGlobalPNLByChannelFn             func(ctx context.Context) ([]inventory.ChannelPNL, error)
 	GetPurchasesByCertNumbersFn         func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
@@ -180,6 +184,24 @@ func (m *InMemoryCampaignStore) UpdateCampaign(ctx context.Context, c *inventory
 	}
 	if _, ok := m.Campaigns[c.ID]; !ok {
 		return inventory.ErrCampaignNotFound
+	}
+	m.Campaigns[c.ID] = c
+	return nil
+}
+
+// UpdateCampaignIfUnchanged mirrors the store's conditional write: it compares
+// against the currently held row rather than the one being written, so a test
+// can reproduce a lost update by mutating m.Campaigns behind the caller's back.
+func (m *InMemoryCampaignStore) UpdateCampaignIfUnchanged(ctx context.Context, c *inventory.Campaign, expectedUpdatedAt time.Time) error {
+	if m.UpdateCampaignIfUnchangedFn != nil {
+		return m.UpdateCampaignIfUnchangedFn(ctx, c, expectedUpdatedAt)
+	}
+	current, ok := m.Campaigns[c.ID]
+	if !ok {
+		return inventory.ErrCampaignNotFound
+	}
+	if !current.UpdatedAt.Equal(expectedUpdatedAt) {
+		return inventory.ErrCampaignConflict
 	}
 	m.Campaigns[c.ID] = c
 	return nil
@@ -479,6 +501,44 @@ func (m *InMemoryCampaignStore) UpdatePurchaseCampaign(ctx context.Context, purc
 	}
 	p.CampaignID = campaignID
 	p.PSASourcingFeeCents = sourcingFeeCents
+	p.AttributionSource = inventory.AttributionSourceManual
+	return nil
+}
+
+// ReattributePurchase moves a purchase to a PSA-authoritative campaign and marks
+// attribution_source='psa', refusing when a linked sale exists (mirrors the
+// Postgres store's conditional-update guard).
+func (m *InMemoryCampaignStore) ReattributePurchase(ctx context.Context, purchaseID string, r inventory.Reattribution) error {
+	if m.ReattributePurchaseFn != nil {
+		return m.ReattributePurchaseFn(ctx, purchaseID, r)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	if m.PurchaseSales[purchaseID] {
+		return inventory.ErrPurchaseHasSale
+	}
+	p.CampaignID = r.CampaignID
+	p.PSASourcingFeeCents = r.PSASourcingFeeCents
+	p.CLConfidenceAtPurchase = r.CLConfidenceAtPurchase
+	p.PSACampaignName = r.PSACampaignName
+	p.AttributionSource = inventory.AttributionSourcePSA
+	return nil
+}
+
+// UpdatePurchaseAttributionName records PSA's campaign name and attribution
+// source without moving the campaign. Safe on sold purchases.
+func (m *InMemoryCampaignStore) UpdatePurchaseAttributionName(ctx context.Context, purchaseID, psaName, source string) error {
+	if m.UpdatePurchaseAttributionNameFn != nil {
+		return m.UpdatePurchaseAttributionNameFn(ctx, purchaseID, psaName, source)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	p.PSACampaignName = psaName
+	p.AttributionSource = source
 	return nil
 }
 
@@ -705,6 +765,23 @@ func (m *InMemoryCampaignStore) DeleteSaleByPurchaseID(ctx context.Context, purc
 		}
 	}
 	return inventory.ErrSaleNotFound
+}
+
+func (m *InMemoryCampaignStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error {
+	if m.UpdateSaleReasonFn != nil {
+		return m.UpdateSaleReasonFn(ctx, campaignID, saleID, reason, forcedLiquidation)
+	}
+	s, ok := m.Sales[saleID]
+	if !ok {
+		return inventory.ErrSaleNotFound
+	}
+	p, ok := m.Purchases[s.PurchaseID]
+	if !ok || p.CampaignID != campaignID {
+		return inventory.ErrSaleNotFound
+	}
+	s.SaleReason = reason
+	s.ForcedLiquidation = forcedLiquidation
+	return nil
 }
 
 func (m *InMemoryCampaignStore) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error) {

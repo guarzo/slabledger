@@ -183,7 +183,11 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 		}
 
 		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
-		sa.ForcedLiquidation = IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)
+		if err := freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
+			continue
+		}
 
 		now := time.Now()
 		sa.CreatedAt = now

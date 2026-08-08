@@ -23,7 +23,10 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	gem_rate_id, psa_spec_id,
 	card_player, card_variation, card_category, cl_synced_at, cl_last_error, dh_last_synced_at,
 	mid_price_cents, last_sold_date, dh_unlisted_detected_at,
-	cl_value_at_purchase_cents`
+	cl_value_at_purchase_cents,
+	cl_confidence_at_purchase, population_at_purchase, dh_confidence_at_purchase,
+	source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
+	psa_campaign_name, attribution_source`
 
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
 const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number, p.card_number, p.set_name,
@@ -42,14 +45,17 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 		p.gem_rate_id, p.psa_spec_id,
 		p.card_player, p.card_variation, p.card_category, p.cl_synced_at, p.cl_last_error, p.dh_last_synced_at,
 		p.mid_price_cents, p.last_sold_date, p.dh_unlisted_detected_at,
-		p.cl_value_at_purchase_cents`
+		p.cl_value_at_purchase_cents,
+		p.cl_confidence_at_purchase, p.population_at_purchase, p.dh_confidence_at_purchase,
+		p.source_count_at_purchase, p.active_listings_at_purchase, p.sales_last_30d_at_purchase,
+		p.psa_campaign_name, p.attribution_source`
 
 // saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
 const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_cents, s.sale_fee_cents,
 	s.sale_date, s.days_to_sell, s.net_profit_cents, s.created_at, s.updated_at,
 	s.last_sold_cents, s.lowest_list_cents, s.conservative_cents,
 	s.median_cents, s.active_listings, s.sales_last_30d, s.trend_30d, s.snapshot_date, s.snapshot_json,
-	s.forced_liquidation`
+	s.forced_liquidation, s.sale_reason, s.cl_value_at_sale_cents, s.channel_fee_pct_at_sale`
 
 // saleColumns is the canonical column list for campaign_sales queries (no table alias).
 const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_cents,
@@ -57,7 +63,7 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
-	was_cracked, order_id, forced_liquidation`
+	was_cracked, order_id, forced_liquidation, sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale`
 
 // scanner abstracts *sql.Row and *sql.Rows so scanPurchase works with both.
 type scanner interface {
@@ -67,6 +73,11 @@ type scanner interface {
 // scanSale scans a single Sale row matching saleColumns order.
 func scanSale(s scanner) (inventory.Sale, error) {
 	var sale inventory.Sale
+	var (
+		saleReason          sql.NullString
+		clValueAtSaleCents  sql.NullInt64
+		channelFeePctAtSale sql.NullFloat64
+	)
 	err := s.Scan(
 		&sale.ID, &sale.PurchaseID, &sale.SaleChannel, &sale.SalePriceCents, &sale.SaleFeeCents,
 		&sale.SaleDate, &sale.DaysToSell, &sale.NetProfitCents, &sale.CreatedAt, &sale.UpdatedAt,
@@ -74,13 +85,26 @@ func scanSale(s scanner) (inventory.Sale, error) {
 		&sale.ActiveListings, &sale.SalesLast30d, &sale.Trend30d, &sale.SnapshotDate, &sale.SnapshotJSON,
 		&sale.OriginalListPriceCents, &sale.PriceReductions, &sale.DaysListed, &sale.SoldAtAskingPrice,
 		&sale.WasCracked, &sale.OrderID, &sale.ForcedLiquidation,
+		&saleReason, &clValueAtSaleCents, &channelFeePctAtSale,
 	)
-	return sale, err
+	if err != nil {
+		return sale, err
+	}
+	sale.SaleReason = saleReason.String
+	sale.CLValueAtSaleCents = int(clValueAtSaleCents.Int64)
+	if channelFeePctAtSale.Valid {
+		v := channelFeePctAtSale.Float64
+		sale.ChannelFeePctAtSale = &v
+	}
+	return sale, nil
 }
 
 // purchaseScanDests returns the ordered slice of scan destinations for a Purchase.
-// The order matches purchaseColumns exactly.
-func purchaseScanDests(p *inventory.Purchase) []any {
+// The order matches purchaseColumns exactly. psaCampaignName and attributionSource
+// are nullable columns (migration 000023 did not backfill psa_campaign_name and
+// does not enforce NOT NULL on either), so they scan into sql.NullString; see
+// scanPurchase for the assignment back onto the struct.
+func purchaseScanDests(p *inventory.Purchase, psaCampaignName, attributionSource *sql.NullString) []any {
 	return []any{
 		&p.ID, &p.CampaignID, &p.CardName, &p.CertNumber, &p.CardNumber, &p.SetName,
 		&p.Grader, &p.GradeValue,
@@ -99,13 +123,22 @@ func purchaseScanDests(p *inventory.Purchase) []any {
 		&p.CardPlayer, &p.CardVariation, &p.CardCategory, &p.CLSyncedAt, &p.CLLastError, &p.DHLastSyncedAt,
 		&p.MidPriceCents, &p.LastSoldDate, &p.DHUnlistedDetectedAt,
 		&p.CLValueAtPurchaseCents,
+		&p.CLConfidenceAtPurchase, &p.PopulationAtPurchase, &p.DHConfidenceAtPurchase,
+		&p.SourceCountAtPurchase, &p.ActiveListingsAtPurchase, &p.SalesLast30dAtPurchase,
+		psaCampaignName, attributionSource,
 	}
 }
 
 // scanPurchase scans a single row into a Purchase struct.
 // The row must contain exactly the columns listed in purchaseColumns, in order.
 func scanPurchase(s scanner, p *inventory.Purchase) error {
-	return s.Scan(purchaseScanDests(p)...)
+	var psaCampaignName, attributionSource sql.NullString
+	if err := s.Scan(purchaseScanDests(p, &psaCampaignName, &attributionSource)...); err != nil {
+		return err
+	}
+	p.PSACampaignName = psaCampaignName.String
+	p.AttributionSource = attributionSource.String
+	return nil
 }
 
 // scanPurchaseWithSale scans a row containing purchase columns followed by sale columns
@@ -133,21 +166,29 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 		sSnapshotDate      sql.NullString
 		sSnapshotJSON      sql.NullString
 		sForcedLiquidation sql.NullBool
+		sSaleReason        sql.NullString
+		sCLValueAtSale     sql.NullInt64
+		sChannelFeePct     sql.NullFloat64
+
+		psaCampaignName   sql.NullString
+		attributionSource sql.NullString
 	)
 
 	// Build combined dest slice: purchase fields + sale fields.
 	dests := append(
-		purchaseScanDests(&pws.Purchase),
+		purchaseScanDests(&pws.Purchase, &psaCampaignName, &attributionSource),
 		&sID, &sPurchaseID, &sSaleChannel, &sSalePriceCents, &sSaleFeeCents,
 		&sSaleDate, &sDaysToSell, &sNetProfitCents, &sCreatedAt, &sUpdatedAt,
 		&sLastSold, &sLowestList, &sConservative, &sMedian,
 		&sActiveListings, &sSalesLast30d, &sTrend30d, &sSnapshotDate, &sSnapshotJSON,
-		&sForcedLiquidation,
+		&sForcedLiquidation, &sSaleReason, &sCLValueAtSale, &sChannelFeePct,
 	)
 
 	if err := s.Scan(dests...); err != nil {
 		return pws, err
 	}
+	pws.Purchase.PSACampaignName = psaCampaignName.String
+	pws.Purchase.AttributionSource = attributionSource.String
 
 	if sID.Valid {
 		sale := &inventory.Sale{
@@ -181,6 +222,14 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 		}
 		if sSnapshotJSON.Valid {
 			sale.SnapshotJSON = sSnapshotJSON.String
+		}
+		if sSaleReason.Valid {
+			sale.SaleReason = sSaleReason.String
+		}
+		sale.CLValueAtSaleCents = int(sCLValueAtSale.Int64)
+		if sChannelFeePct.Valid {
+			v := sChannelFeePct.Float64
+			sale.ChannelFeePctAtSale = &v
 		}
 		pws.Sale = sale
 	}

@@ -2,6 +2,8 @@
  * Core campaign domain types
  */
 
+import type { SubjectRef } from './psaCampaign';
+
 export type Phase = 'pending' | 'active' | 'closed';
 export type SaleChannel = 'ebay' | 'website' | 'inperson' | 'tcgplayer' | 'local' | 'other' | 'gamestop' | 'cardshow' | 'doubleholo';
 
@@ -15,8 +17,12 @@ export interface Campaign {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  inclusionList: string;
-  exclusionMode: boolean;
+  /** Curated-spec-list language tokens; empty = open net (buys any language).
+      Mirrors Go's inventory.Campaign.TargetLanguages (json: targetLanguages). */
+  targetLanguages: string[];
+  subjectFilterMode: string;
+  subjects: SubjectRef[];
+  deniedSpecs: SubjectRef[];
   phase: Phase;
   psaSourcingFeeCents: number;
   ebayFeePct: number;
@@ -92,6 +98,17 @@ export interface Purchase {
   salesLast30d?: number;
   trend30d?: number;
   snapshotDate?: string;
+  // Decision provenance at time of purchase
+  clConfidenceAtPurchase?: number;
+  populationAtPurchase?: number;
+  dhConfidenceAtPurchase?: number;
+  sourceCountAtPurchase?: number;
+  activeListingsAtPurchase?: number;
+  salesLast30dAtPurchase?: number;
+  // Campaign attribution provenance
+  /** Raw campaign name PSA reported, verbatim. */
+  psaCampaignName?: string;
+  attributionSource?: 'psa' | 'inferred' | 'manual';
 }
 
 export interface Sale {
@@ -121,6 +138,10 @@ export interface Sale {
   soldAtAskingPrice?: boolean;
   wasCracked?: boolean;
   orderId?: string;
+  // Decision provenance at time of sale
+  saleReason?: string;
+  clValueAtSaleCents?: number;
+  channelFeePctAtSale?: number;
 }
 
 export interface CreateCampaignInput {
@@ -132,8 +153,12 @@ export interface CreateCampaignInput {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  inclusionList: string;
-  exclusionMode: boolean;
+  /** Curated-spec-list language tokens; empty = open net (buys any language).
+      Mirrors Go's inventory.Campaign.TargetLanguages (json: targetLanguages). */
+  targetLanguages: string[];
+  subjectFilterMode: string;
+  subjects: SubjectRef[];
+  deniedSpecs: SubjectRef[];
   psaSourcingFeeCents: number;
   ebayFeePct: number;
   phase?: Phase;
@@ -152,6 +177,15 @@ export interface CreatePurchaseInput {
   population?: number;
 }
 
+export interface BulkSaleItemInput {
+  purchaseId: string;
+  salePriceCents: number;
+  originalListPriceCents?: number;
+  priceReductions?: number;
+  daysListed?: number;
+  saleReason?: string;
+}
+
 export interface CreateSaleInput {
   purchaseId: string;
   saleChannel: SaleChannel;
@@ -162,4 +196,5 @@ export interface CreateSaleInput {
   daysListed?: number;
   soldAtAskingPrice?: boolean;
   wasCracked?: boolean;
+  saleReason?: string;
 }

@@ -1,0 +1,488 @@
+[
+  {
+    "id": "NB-001",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "config",
+      "identity": "scripts/check-imports.sh:39 SUB_PACKAGES"
+    },
+    "category": "architecture",
+    "title": "The flat-sibling rule enforces a hardcoded six-package list that has not kept pace with the twelve domain siblings that now exist; dhpricing already imports dhlisting uncaught",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The flat-sibling rule is enforced against a hardcoded list of exactly six packages.",
+        "command": "grep -n 'SUB_PACKAGES=' scripts/check-imports.sh",
+        "output": "39:SUB_PACKAGES=\"arbitrage portfolio tuning finance export dhlisting\"",
+        "file_line": "scripts/check-imports.sh:39"
+      },
+      {
+        "claim": "internal/domain/ actually contains 25 top-level packages, of which demand, dhevents, dhpricing, liquidation, psacampaign and intelligence are inventory-siblings absent from the enforced list.",
+        "command": "git ls-files 'internal/domain' | awk -F/ 'NF>3{print $3}' | sort -u | tr '\\n' ' '",
+        "output": "advisor ai arbitrage auth constants demand dhevents dhlisting dhpricing errors export finance intelligence inventory liquidation llmutil mathutil observability portfolio pricing psacampaign scoring storage timeutil tuning"
+      },
+      {
+        "claim": "internal/domain/dhpricing imports sibling internal/domain/dhlisting in two production files. The check passes only because dhpricing is not in SUB_PACKAGES.",
+        "command": "git grep -n 'domain/dhlisting' -- 'internal/domain/dhpricing/*.go'",
+        "output": "internal/domain/dhpricing/service.go:7:\t\"github.com/guarzo/slabledger/internal/domain/dhlisting\"\ninternal/domain/dhpricing/service_test.go:9:\t\"github.com/guarzo/slabledger/internal/domain/dhlisting\"\ninternal/domain/dhpricing/types.go:11:\t\"github.com/guarzo/slabledger/internal/domain/dhlisting\"",
+        "file_line": "internal/domain/dhpricing/service.go:7"
+      },
+      {
+        "claim": "demand, dhpricing and psacampaign import internal/domain/inventory in production files, i.e. they occupy the same structural position as the six enforced siblings.",
+        "command": "for p in demand dhpricing psacampaign; do printf '%s %s\\n' \"$p\" \"$(git grep -l 'domain/inventory' -- \"internal/domain/$p/*.go\" | grep -cv _test)\"; done",
+        "output": "demand 2\ndhpricing 2\npsacampaign 1"
+      }
+    ],
+    "searched_universe": "git ls-files 'internal/domain' and git ls-files 'internal/domain/<pkg>/*.go' at the baseline revision; scripts/check-imports.sh read in full.",
+    "exclusions": [
+      "Did not evaluate whether dhpricing -> dhlisting is architecturally wrong on its merits, only that the declared rule does not cover it."
+    ],
+    "proposed_fix": "Derive SUB_PACKAGES from the filesystem (every directory under internal/domain/ that imports internal/domain/inventory) rather than hardcoding six names, so the rule cannot silently stop covering new packages. Then decide explicitly whether dhpricing -> dhlisting is an intended exception (and record it as one) or a violation to be broken by moving the shared types into inventory or a leaf package.",
+    "blast_radius": [
+      "scripts/check-imports.sh",
+      "internal/domain/dhpricing/service.go",
+      "internal/domain/dhpricing/types.go",
+      "make check / CI"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "scripts/check-imports.sh derives its sibling list from the repository layout, and adding a new directory under internal/domain/ that imports inventory brings it under the rule with no edit to the script.",
+      "bash scripts/check-imports.sh exits 0, and the dhpricing -> dhlisting edge is either removed or listed in an explicit, commented allowlist in the script."
+    ]
+  },
+  {
+    "id": "NB-002",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/domain/tuning"
+    },
+    "category": "naming",
+    "title": "The package named `tuning` contains no tuning logic: all 902 LOC of tuning computation and every tuning type live in `inventory`, consumed by nothing but the 162-LOC `tuning` package",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "internal/domain/tuning is a single 162-line file whose only exported surface is a Service interface with one method that returns an inventory type.",
+        "command": "git ls-files 'internal/domain/tuning/*.go' | grep -v _test | xargs wc -l && grep -nE '^(func|type)' internal/domain/tuning/service.go",
+        "output": "162 internal/domain/tuning/service.go\n14:type Service interface {\n18:type service struct {\n25:func NewService(\n37:func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*inventory.TuningResponse, error) {",
+        "file_line": "internal/domain/tuning/service.go:14"
+      },
+      {
+        "claim": "The four tuning-named files inside internal/domain/inventory total 902 lines and hold every Compute* entry point plus all ten tuning types.",
+        "command": "wc -l internal/domain/inventory/tuning.go internal/domain/inventory/tuning_analytics.go internal/domain/inventory/tuning_stddev.go internal/domain/inventory/tuning_types.go | tail -1",
+        "output": "  902 total",
+        "file_line": "internal/domain/inventory/tuning.go:62"
+      },
+      {
+        "claim": "Every one of those seven tuning entry points is referenced from exactly one file outside internal/domain/inventory, and it is internal/domain/tuning/service.go.",
+        "command": "git grep -lE '\\b(ComputeRecommendations|ComputePriceTierPerformance|ComputeBuyThresholdAnalysis|ComputeROIStats|EnrichPriceTierStddev|ComputeCardPerformance|EnrichCardPerformance)\\b' -- '*.go' ':!internal/domain/inventory'",
+        "output": "internal/domain/tuning/service.go"
+      },
+      {
+        "claim": "The Phase 1 reference map independently records external_refs == 1 and name_ambiguous false for the tuning entry points.",
+        "command": "jq -r '.records[] | select(.identity==\"github.com/guarzo/slabledger/internal/domain/inventory.ComputeRecommendations\" or .identity==\"github.com/guarzo/slabledger/internal/domain/inventory.ComputeBuyThresholdAnalysis\" or .identity==\"github.com/guarzo/slabledger/internal/domain/inventory.ComputeROIStats\") | \"\\(.identity) refs=\\(.external_refs) amb=\\(.name_ambiguous // false)\"' docs/audit/maps/go-reference-map.json",
+        "output": "github.com/guarzo/slabledger/internal/domain/inventory.ComputeRecommendations refs=1 amb=false\ngithub.com/guarzo/slabledger/internal/domain/inventory.ComputeBuyThresholdAnalysis refs=1 amb=false\ngithub.com/guarzo/slabledger/internal/domain/inventory.ComputeROIStats refs=1 amb=false"
+      },
+      {
+        "claim": "The cluster's only dependencies on the rest of inventory are five shared types, all of which stay behind: Campaign, Phase, Purchase, Sale (types_core.go), CampaignPNL/ChannelPNL/DailySpend (analytics_types.go) and MarketSnapshot (service.go).",
+        "command": "git grep -nE '\\b(CampaignPNL|ChannelPNL|DailySpend|MarketSnapshot|Campaign|Phase|Purchase|Sale)\\b' -- 'internal/domain/inventory/tuning*.go' | grep -v _test | wc -l",
+        "output": "66"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go at the baseline revision, both default and integration build tags; intra-package coupling computed over the 67 non-test .go files of internal/domain/inventory.",
+    "exclusions": [
+      "inventory.PurchaseWithSale and inventory.TuningResponse are excluded from the move set: PurchaseWithSale is the shared analytics row type used by arbitrage, portfolio and the postgres store, and TuningResponse is a JSON API contract consumed by the handler layer.",
+      "ComputeMarketAlignment is name_ambiguous in the repo (a same-named, unrelated function exists at internal/domain/scoring/factors.go:69); it is included here on the strength of its qualified call site inventory.ComputeMarketAlignment at internal/domain/tuning/service.go:135, not on a raw count."
+    ],
+    "proposed_fix": "Move tuning.go, tuning_analytics.go, tuning_stddev.go, tuning_types.go (and their tests) into internal/domain/tuning/, leaving only genuinely shared types in inventory. This follows the established flat-sibling pattern exactly: tuning already imports inventory, and no new sibling-to-sibling edge is created. Keep TuningResponse in inventory (or move it and update the handler import) \u2014 that is the one decision the mover must make consciously.",
+    "blast_radius": [
+      "internal/domain/inventory/tuning*.go",
+      "internal/domain/tuning/service.go",
+      "internal/testutil/mocks/tuning_service.go",
+      "internal/adapters/httpserver/handlers (TuningResponse only)"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "go build ./... and go test -race ./... pass after the move.",
+      "bash scripts/check-imports.sh passes: internal/domain/tuning imports only inventory and observability, and no other sibling imports tuning.",
+      "git grep -lE '\\bCompute(Recommendations|PriceTierPerformance|BuyThresholdAnalysis|CardPerformance)\\b' -- 'internal/domain/inventory/*.go' returns empty."
+    ]
+  },
+  {
+    "id": "NB-003",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/domain/inventory (suggestion*.go cluster)"
+    },
+    "category": "architecture",
+    "title": "The 919-LOC campaign-suggestions cluster has zero inbound references from the rest of `inventory` and exactly one consumer package \u2014 a clean, isolated seam",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The cluster is four files totalling 919 production lines.",
+        "command": "wc -l internal/domain/inventory/suggestions.go internal/domain/inventory/suggestion_rules.go internal/domain/inventory/suggestion_rules_optimization.go internal/domain/inventory/suggestion_types.go | tail -1",
+        "output": "  919 total",
+        "file_line": "internal/domain/inventory/suggestions.go:105"
+      },
+      {
+        "claim": "No other file in internal/domain/inventory references the cluster's entry points. Empty output is the evidence of absence.",
+        "command": "git grep -nE '\\b(GenerateSuggestions|CampaignSuggestionParams|ExpectedMetrics)\\b' -- 'internal/domain/inventory/*.go' ':!internal/domain/inventory/suggestion*'",
+        "output": ""
+      },
+      {
+        "claim": "The Phase 1 reference map records GenerateSuggestions with exactly two external reference sites, both inside internal/domain/portfolio.",
+        "command": "jq -r '.records[] | select(.identity|endswith(\"inventory.GenerateSuggestions\")) | \"refs=\\(.external_refs) sites=\\(.ref_sites)\"' docs/audit/maps/go-reference-map.json",
+        "output": "refs=2 sites=[\"internal/domain/portfolio/snapshot.go:228\",\"internal/domain/portfolio/service.go:306\"]"
+      },
+      {
+        "claim": "The cluster's outbound dependencies are five inventory types plus two functions \u2014 SubjectAxisMatches (exported, matching.go) and confidenceLabelWithAge (unexported, portfolio.go:415). The latter is the only mechanical blocker to a move.",
+        "command": "git grep -nE '\\bconfidenceLabelWithAge\\b' -- 'internal/domain/inventory/*.go' | grep -v _test",
+        "output": "internal/domain/inventory/portfolio.go:413:// confidenceLabelWithAge returns a confidence string that decays based on data age.\ninternal/domain/inventory/portfolio.go:415:func confidenceLabelWithAge(n int, latestSaleDate string, now string) string {\ninternal/domain/inventory/suggestion_rules.go:200:\t\tconfidence := confidenceLabelWithAge(totalSales, \"\", now)",
+        "file_line": "internal/domain/inventory/portfolio.go:415"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go at the baseline revision; intra-package edges computed by tokenising each of the 67 non-test inventory files against the set of top-level declarations owned by every other file in the package.",
+    "exclusions": [
+      "inventory.SuggestionsResponse is a JSON API contract reachable from internal/adapters/httpserver/handlers/campaigns_finance.go:173 and embedded in portfolio's snapshot struct; moving the type changes an import path in the handler and in internal/testutil/mocks/portfolio_service.go.",
+      "A same-named but unrelated dh.SuggestionsResponse exists at internal/adapters/clients/dh/types.go:90. Reference counts on the bare name are contaminated by it; the citations above are all qualified call sites."
+    ],
+    "proposed_fix": "Move the four suggestion*.go files into internal/domain/portfolio/, their sole computational consumer. Do NOT create a new internal/domain/suggestions/ sibling: portfolio would then have to import it, which is precisely the sibling-to-sibling edge the flat-sibling rule forbids. The move requires exporting confidenceLabelWithAge (or relocating it alongside), and deciding whether SuggestionsResponse moves with the logic or stays in inventory as a shared API type.",
+    "blast_radius": [
+      "internal/domain/inventory/suggestion*.go",
+      "internal/domain/inventory/suggestions_test.go",
+      "internal/domain/portfolio/service.go",
+      "internal/domain/portfolio/snapshot.go",
+      "internal/adapters/httpserver/handlers/campaigns_finance.go"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "go build ./... and go test -race ./... pass after the move.",
+      "bash scripts/check-imports.sh passes with no new sibling-to-sibling import.",
+      "git ls-files 'internal/domain/inventory/suggestion*' returns empty."
+    ]
+  },
+  {
+    "id": "NB-004",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/domain/inventory (decomposition assessment)"
+    },
+    "category": "architecture",
+    "title": "`inventory` is 10,428 LOC because the flat-sibling rule makes it the only legal home for anything two siblings share; the CSV-import subsystem (2,901 LOC) is the largest seam that can leave under the existing pattern",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "internal/domain/inventory is 10,428 production lines across 67 files.",
+        "command": "git ls-files 'internal/domain/inventory/*.go' | grep -v _test | xargs wc -l | tail -1",
+        "output": " 10428 total"
+      },
+      {
+        "claim": "The import/parse subsystem is 2,901 of those lines \u2014 28% of the package \u2014 across 19 files with a coherent single purpose.",
+        "command": "git ls-files 'internal/domain/inventory/*.go' | grep -v _test | grep -E '/(parse_|import_|service_import_|cert_import)' | xargs wc -l | tail -1",
+        "output": " 2901 total",
+        "file_line": "internal/domain/inventory/import_parsing.go:1"
+      },
+      {
+        "claim": "Unlike tuning and suggestions, the import subsystem has a genuine external public surface: its parser entry points and result types are referenced from 19 files outside internal/domain/inventory, spanning handlers, schedulers, the psaportal and dh clients, cmd/psa-harvest and the shared mocks. It is a subsystem with real consumers, not an isolated leaf.",
+        "command": "git grep -lE '\\b(ParsePSAExportRows|ParseEbayOrderRows|ParseOrdersExportRows|ParseShopifyExportRows|PSAExportRow|PSAImportResult|OrdersImportResult)\\b' -- '*.go' ':!internal/domain/inventory' | head -20",
+        "output": "cmd/psa-harvest/main.go\ninternal/adapters/clients/dh/psa_import_test.go\ninternal/adapters/clients/dh/types_psa_import.go\ninternal/adapters/clients/psaportal/client.go\ninternal/adapters/clients/psaportal/mapper.go\ninternal/adapters/clients/psaportal/mapper_test.go\ninternal/adapters/clients/psaportal/snapshotprovider.go\ninternal/adapters/httpserver/handlers/campaigns.go\ninternal/adapters/httpserver/handlers/campaigns_imports.go\ninternal/adapters/httpserver/handlers/campaigns_imports_test.go\ninternal/adapters/httpserver/handlers/dh_retry_match_handler_test.go\ninternal/adapters/scheduler/dh_orders_poll_test.go\ninternal/adapters/scheduler/dh_psa_import.go\ninternal/adapters/scheduler/dh_push_test.go\ninternal/adapters/scheduler/psa_sync.go\ninternal/adapters/scheduler/psa_sync_test.go\ninternal/testutil/mocks/inventory_service.go\ninternal/testutil/mocks/inventory_service_imports.go\ninternal/testutil/mocks/psa_row_provider.go",
+        "file_line": "internal/adapters/httpserver/handlers/campaigns_imports.go:1"
+      },
+      {
+        "claim": "The structural cause is visible in the sibling packages themselves: each is a thin orchestrator over computation that had to be parked in inventory. tuning is 162 LOC over 902 LOC of inventory-resident tuning code; finance is 207 LOC and calls inventory.ComputeInvoiceProjection and inventory.ComputeCapitalSummary; portfolio calls inventory.ComputePortfolioInsights and inventory.GenerateSuggestions.",
+        "command": "for p in tuning finance export portfolio arbitrage; do printf '%-10s %s\\n' \"$p\" \"$(git ls-files \"internal/domain/$p/*.go\" | grep -v _test | xargs cat | wc -l)\"; done",
+        "output": "tuning     162\nfinance    207\nexport     260\nportfolio  1518\narbitrage  1244"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go at the baseline revision. Intra-inventory coupling measured by tokenising each of the 67 non-test files against the top-level declarations owned by every other file in the package (429 symbols, 255 file-to-file edges).",
+    "exclusions": [
+      "File-size debt as such is owned by the `size` lens and is not claimed here; this finding is about where the boundary should fall, not about line counts per file.",
+      "internal/domain/inventory/matching.go is deliberately excluded from the import seam: its predicates are consumed by portfolio, demand, the postgres store and cmd/psa-harvest, so it is a shared concern, not part of the importer. See NB-007.",
+      "Whether any individual symbol in the import subsystem is dead is owned by the `dead-code-go` lens."
+    ],
+    "proposed_fix": "Decompose in three ordered steps, largest structural win last. (1) Take the two clean leaves first \u2014 NB-002 (tuning, 902 LOC) and NB-003 (suggestions, 919 LOC); together they remove 17% of the package with no new sibling edges. (2) Move the CSV-import subsystem to a new internal/domain/csvimport/ sibling: it depends on inventory types (Campaign, Purchase, Sale) but nothing in inventory calls into it except service_interfaces.go, and adapters importing a domain package directly is already the norm. (3) Only then revisit the flat-sibling rule itself. The rule is what forces every shared concept into inventory; a two-tier variant \u2014 a leaf tier of shared types that all siblings may import, with the no-cross-imports rule applying only between the orchestrating siblings \u2014 would let the remaining shared computation leave inventory too. Step 3 is a deliberate architectural decision and should not be taken as a side effect of steps 1-2.",
+    "blast_radius": [
+      "internal/domain/inventory/parse_*.go",
+      "internal/domain/inventory/import_*.go",
+      "internal/domain/inventory/service_import_*.go",
+      "internal/adapters/httpserver/handlers/campaigns_imports.go",
+      "internal/adapters/scheduler/psa_sync.go",
+      "internal/adapters/scheduler/dh_orders_poll.go",
+      "internal/adapters/clients/psaportal/",
+      "cmd/psa-harvest/",
+      "internal/testutil/mocks/inventory_service_imports.go",
+      "scripts/check-imports.sh"
+    ],
+    "effort": "L",
+    "acceptance_criteria": [
+      "After each step independently: go build ./... and go test -race ./... pass, and bash scripts/check-imports.sh passes.",
+      "After step 2, internal/domain/csvimport imports internal/domain/inventory and no other internal/domain sibling, and git grep -lE '\\bcsvimport\\.' -- 'internal/domain/inventory/*.go' returns empty (the dependency runs one way only).",
+      "git ls-files 'internal/domain/inventory/*.go' | grep -v _test | xargs wc -l reports a total below 7,000 after steps 1 and 2."
+    ]
+  },
+  {
+    "id": "NB-005",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory/types_analytics.go"
+    },
+    "category": "naming",
+    "title": "`analytics_types.go` and `types_analytics.go` coexist in one package under two opposite naming conventions, and `types_analytics.go` mostly holds capital/finance and portfolio-health types rather than analytics types",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Both files exist side by side in the same package, and the package uses both the `<subject>_types.go` and the `types_<subject>.go` convention at once.",
+        "command": "git ls-files 'internal/domain/inventory/*types*.go' | tr '\\n' ' '",
+        "output": "internal/domain/inventory/analytics_types.go internal/domain/inventory/cert_import_types.go internal/domain/inventory/import_types.go internal/domain/inventory/portfolio_types.go internal/domain/inventory/suggestion_types.go internal/domain/inventory/tuning_types.go internal/domain/inventory/types_analytics.go internal/domain/inventory/types_core.go internal/domain/inventory/types_core_test.go internal/domain/inventory/types_dh.go"
+      },
+      {
+        "claim": "types_analytics.go declares capital/finance types (CapitalRawData, CapitalSummary, InvoiceSellThrough, ComputeCapitalSummary), portfolio-health types (PortfolioHealth, CampaignHealth, ChannelVelocity, AlertLevel, RecoveryTrend) and a query-filter option type \u2014 not analytics types. It also contains a function, despite the name.",
+        "command": "grep -nE '^(func|type)' internal/domain/inventory/types_analytics.go",
+        "output": "4:type AlertLevel string\n13:type RecoveryTrend string\n34:type InvoiceSellThrough struct {\n43:type CapitalRawData struct {\n53:type CapitalSummary struct {\n75:func ComputeCapitalSummary(raw *CapitalRawData) *CapitalSummary {\n133:type PurchaseFilter struct {\n140:type PurchaseFilterOpt func(*PurchaseFilter)\n143:func WithSinceDate(d string) PurchaseFilterOpt {\n148:func WithExcludeArchived() PurchaseFilterOpt {\n155:func WithExcludeExternal() PurchaseFilterOpt {\n160:type ChannelVelocity struct {\n168:type PortfolioHealth struct {\n178:type CampaignHealth struct {",
+        "file_line": "internal/domain/inventory/types_analytics.go:53"
+      },
+      {
+        "claim": "The consumers confirm the mismatch: the capital types are used by finance, the health types by portfolio and the advisor tooling. Neither consumer is an analytics path.",
+        "command": "git grep -lE '\\b(CapitalSummary|ComputeCapitalSummary|PortfolioHealth|CampaignHealth)\\b' -- '*.go' ':!internal/domain/inventory' ':!*_test.go' ':!internal/testutil/*'",
+        "output": "internal/adapters/advisortool/tools_portfolio.go\ninternal/adapters/httpserver/handlers/campaigns_finance.go\ninternal/domain/arbitrage/service.go\ninternal/domain/finance/service.go\ninternal/domain/portfolio/service.go\ninternal/domain/portfolio/snapshot.go"
+      }
+    ],
+    "searched_universe": "git ls-files 'internal/domain/inventory/*.go' at the baseline revision, plus repo-wide git grep for the declared symbol names.",
+    "exclusions": [
+      "No claim is made that any of these types is unused; that is the `dead-code-go` lens.",
+      "Whether these types should physically move to finance/ or portfolio/ is constrained by the flat-sibling rule (ComputeCapitalSummary is called from three different siblings \u2014 arbitrage, finance and portfolio \u2014 so it cannot move into any one of them). This finding proposes renaming only."
+    ],
+    "proposed_fix": "Pick one convention (the package majority is `<subject>_types.go`) and rename consistently. Then split types_analytics.go by its actual contents: capital_types.go (CapitalRawData, CapitalSummary, InvoiceSellThrough, ComputeCapitalSummary), health_types.go (PortfolioHealth, CampaignHealth, ChannelVelocity, AlertLevel, RecoveryTrend) and purchase_filter.go (PurchaseFilter, PurchaseFilterOpt, With*). These are file renames within one package \u2014 no import path changes and no behavior change.",
+    "blast_radius": [
+      "internal/domain/inventory/types_analytics.go",
+      "internal/domain/inventory/analytics_types.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "go build ./... and go test -race ./... pass with no import-path edits anywhere outside internal/domain/inventory (the change is intra-package file renames).",
+      "git ls-files 'internal/domain/inventory/*.go' shows exactly one of the two conventions in use.",
+      "No file in internal/domain/inventory is named for a subject whose declarations it does not contain."
+    ]
+  },
+  {
+    "id": "NB-006",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory/service_advanced.go"
+    },
+    "category": "naming",
+    "title": "`service_advanced.go` names an adjective, not a concept: it holds two unrelated methods (certificate lookup and quick-add purchase)",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The file's entire contents are two unrelated service methods. Nothing about either is 'advanced'.",
+        "command": "grep -nE '^func ' internal/domain/inventory/service_advanced.go",
+        "output": "11:func (s *service) LookupCert(ctx context.Context, certNumber string) (*CertInfo, *MarketSnapshot, error) {\n38:func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req QuickAddRequest) (*Purchase, error) {",
+        "file_line": "internal/domain/inventory/service_advanced.go:11"
+      },
+      {
+        "claim": "A cert-lookup home already exists in the package \u2014 service_cert_entry.go plus psa_resolver.go and cert_import_types.go \u2014 so LookupCert is separated from its concept by the filename alone.",
+        "command": "git ls-files 'internal/domain/inventory/*cert*.go' | grep -v _test | tr '\\n' ' '",
+        "output": "internal/domain/inventory/cert_import_types.go internal/domain/inventory/service_cert_entry.go"
+      }
+    ],
+    "searched_universe": "git ls-files 'internal/domain/inventory/*.go' at the baseline revision.",
+    "exclusions": [
+      "service_cert_entry.go is 491 lines, close to the 500-line warn threshold; moving LookupCert into it interacts with the `size` lens's budget. That interaction is noted, not resolved here."
+    ],
+    "proposed_fix": "Delete the file by relocating its two methods: LookupCert alongside the other cert-entry code, QuickAddPurchase alongside the purchase CRUD in service_crud.go. If service_cert_entry.go is already at its size budget, create service_cert_lookup.go rather than reintroducing an adjective-named file.",
+    "blast_radius": [
+      "internal/domain/inventory/service_advanced.go",
+      "internal/domain/inventory/service_cert_entry.go",
+      "internal/domain/inventory/service_crud.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "go build ./... and go test -race ./... pass.",
+      "git ls-files 'internal/domain/inventory/service_advanced.go' returns empty.",
+      "bash scripts/check-file-size.sh passes for every file that received code."
+    ]
+  },
+  {
+    "id": "NB-007",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory/matching.go"
+    },
+    "category": "naming",
+    "title": "Campaign-targeting predicates are filed under the generic name `matching.go` inside `inventory`, while being the shared vocabulary of four packages plus a command",
+    "severity": "medium",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "matching.go declares the campaign-targeting axis vocabulary introduced by migration 000024, not inventory bookkeeping.",
+        "command": "grep -nE '^(func [A-Z]|type [A-Z])' internal/domain/inventory/matching.go",
+        "output": "13:func ParseRange(s string) (lo, hi int, ok bool) {\n42:type MatchInput struct {\n56:func PurchaseMatchesCampaign(in MatchInput, c *Campaign) bool {\n129:func LanguageAxisMatches(setName string, targetLanguages []string) bool {\n149:func SubjectAxisMatches(cardName string, subjects []TargetSubject, mode string) bool {\n202:func SpecDenied(in MatchInput, denied []TargetSubject) bool {\n236:type MatchResult struct {\n246:func FindMatchingCampaign(in MatchInput, allCampaigns []Campaign) MatchResult {",
+        "file_line": "internal/domain/inventory/matching.go:149"
+      },
+      {
+        "claim": "Its predicates are consumed by four separate packages and a command, which is why it cannot follow NB-002/NB-003 into any single sibling.",
+        "command": "git grep -lE '\\b(PurchaseMatchesCampaign|SubjectAxisMatches|LanguageAxisMatches|FindMatchingCampaign)\\b' -- '*.go' ':!internal/domain/inventory' ':!*_test.go'",
+        "output": "cmd/psa-harvest/baseline.go\ninternal/adapters/httpserver/handlers/psa_sync_handler.go\ninternal/adapters/storage/postgres/campaign_coverage.go\ninternal/domain/demand/campaign_signals.go\ninternal/domain/portfolio/analysis.go"
+      },
+      {
+        "claim": "inventory/portfolio.go carries an explicit comment warning that its own subject check deliberately does NOT delegate to SubjectAxisMatches \u2014 evidence that the shared concept has already begun to fork under the generic name.",
+        "command": "git grep -n 'SubjectAxisMatches' internal/domain/inventory/portfolio.go",
+        "output": "internal/domain/inventory/portfolio.go:33:\t// decision, so it does not go through SubjectAxisMatches.\ninternal/domain/inventory/portfolio.go:319:\t// This deliberately does NOT delegate to SubjectAxisMatches, and the\ninternal/domain/inventory/portfolio.go:321:\t// \"simplifying\" it. SubjectAxisMatches answers \"would this campaign accept\ninternal/domain/inventory/portfolio.go:326:\t// surfacing. Routing this through SubjectAxisMatches would make a single",
+        "file_line": "internal/domain/inventory/portfolio.go:319"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go at the baseline revision, default and integration build tags.",
+    "exclusions": [
+      "Marked `suspected` rather than `strong`: unlike NB-002 and NB-003 this is a rename/relocate judgment with no mechanical seam behind it. Because five consumers across three layers depend on it, extracting it to its own package would create sibling-to-sibling edges (portfolio -> targeting, demand -> targeting) that the flat-sibling rule forbids as currently written. It therefore cannot be actioned before the NB-004 step 3 decision.",
+      "ParseRange is a generic string helper that arguably belongs in internal/platform/ rather than with the targeting predicates; not separately assessed."
+    ],
+    "proposed_fix": "At minimum rename matching.go to campaign_targeting.go so the filename names the concept (campaign targeting axes) rather than a verb. Do not extract it to its own package until NB-004 step 3 establishes a shared leaf tier \u2014 until then, the flat-sibling rule makes inventory the only legal home for it.",
+    "blast_radius": [
+      "internal/domain/inventory/matching.go",
+      "internal/domain/inventory/matching_test.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "go build ./... and go test -race ./... pass (a pure file rename within one package changes no import paths).",
+      "git ls-files 'internal/domain/inventory/matching*.go' returns empty."
+    ]
+  },
+  {
+    "id": "NB-008",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory/invoice_projection.go"
+    },
+    "category": "naming",
+    "title": "Invoice projection \u2014 an unambiguously financial concept \u2014 sits in `inventory` with `internal/domain/finance` as its only consumer",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The file's whole surface is one type and one function, and the only non-inventory reference is internal/domain/finance.",
+        "command": "git grep -n '\\bComputeInvoiceProjection\\b' -- '*.go'",
+        "output": "internal/domain/finance/service.go:49:\tprojection := inventory.ComputeInvoiceProjection(invoices, time.Now())\ninternal/domain/inventory/invoice_projection.go:17:// ComputeInvoiceProjection picks the earliest unpaid invoice with a parseable\ninternal/domain/inventory/invoice_projection.go:30:func ComputeInvoiceProjection(\ninternal/domain/inventory/types_analytics.go:63:\t// Invoice-cycle actuals (see ComputeInvoiceProjection in invoice_projection.go).",
+        "file_line": "internal/domain/inventory/invoice_projection.go:30"
+      },
+      {
+        "claim": "InvoiceProjection itself has no consumer outside the file that declares it.",
+        "command": "git grep -n '\\bInvoiceProjection\\b' -- '*.go' ':!internal/domain/inventory/invoice_projection.go'",
+        "output": ""
+      },
+      {
+        "claim": "This is the same single-sibling-consumer shape as NB-002, at smaller scale: a 93-line computation parked in inventory for a 207-line finance package.",
+        "command": "wc -l internal/domain/inventory/invoice_projection.go && git ls-files 'internal/domain/finance/*.go' | grep -v _test | xargs wc -l | tail -1",
+        "output": "93 internal/domain/inventory/invoice_projection.go\n 207 total"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go at the baseline revision, default and integration build tags.",
+    "exclusions": [
+      "The Invoice type itself and the rest of the finance vocabulary (CapitalSummary, CashflowConfig, RevocationFlag) remain in inventory and are referenced by portfolio and arbitrage as well; only the projection computation is claimed here."
+    ],
+    "proposed_fix": "Move invoice_projection.go into internal/domain/finance/. finance already imports inventory, so no new sibling edge is created and the flat-sibling rule is unaffected. Bundle this with NB-002 as a single 'reunite each sibling with its own computation' change rather than shipping it alone.",
+    "blast_radius": [
+      "internal/domain/inventory/invoice_projection.go",
+      "internal/domain/finance/service.go",
+      "internal/domain/inventory/types_analytics.go (comment reference at line 63)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "go build ./... and go test -race ./... pass after the move.",
+      "bash scripts/check-imports.sh passes.",
+      "git grep -n '\\bComputeInvoiceProjection\\b' -- 'internal/domain/inventory/*.go' returns only the stale comment at types_analytics.go:63, updated or removed."
+    ]
+  },
+  {
+    "id": "NB-009",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "claim",
+      "identity": "CLAUDE.md: inventory has '8 focused repository interfaces' including SnapshotRepository"
+    },
+    "category": "docs",
+    "title": "POINTER (docs-config-tests lens): the documented repository-interface roster names `SnapshotRepository`, which does not exist anywhere in the repo",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "SnapshotRepository is declared nowhere in the repository. Empty output is the evidence of absence.",
+        "command": "git grep -nE '\\bSnapshotRepository\\b' -- '*.go'",
+        "output": ""
+      },
+      {
+        "claim": "There are indeed eight *Repository interfaces in inventory, but the eighth is PendingItemRepository, not SnapshotRepository.",
+        "command": "git ls-files 'internal/domain/inventory/*.go' | grep -v _test | xargs grep -hnE '^type [A-Za-z]+Repository interface' | sort -u",
+        "output": "31:type PurchaseRepository interface {\n44:type PendingItemRepository interface {\n6:type AnalyticsRepository interface {\n6:type CampaignRepository interface {\n6:type DHRepository interface {\n6:type PricingRepository interface {\n6:type SaleRepository interface {\n9:type FinanceRepository interface {",
+        "file_line": "internal/domain/inventory/pending_items.go:44"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go at the baseline revision; CLAUDE.md 'Inventory Domain' section.",
+    "exclusions": [
+      "Emitted as a pointer under LENS-BRIEF section 6, not as a competing finding. The docs-config-tests lens owns doc drift; recorded here only because the boundary reality (which interfaces the package actually publishes) is this lens's subject."
+    ],
+    "proposed_fix": "Owned by the docs-config-tests lens. Correct the CLAUDE.md roster to the eight interfaces that exist.",
+    "blast_radius": [
+      "CLAUDE.md"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every interface named in the CLAUDE.md roster is found by git grep -nE '^type <Name> interface' -- 'internal/domain/inventory/*.go', and the roster count matches the grep count."
+    ]
+  },
+  {
+    "id": "NB-010",
+    "lens": "naming-and-boundaries",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory/portfolio.go coverage-gap and classification helpers"
+    },
+    "category": "dead-code",
+    "title": "POINTER (dead-code-go lens): DetectCoverageGaps, CoverageGap, ExtractCharacter, ClassifyEra and ClassifyPriceTier all show zero external references and are unambiguous in the map",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "The Phase 1 reference map records all five as external_refs 0, name_ambiguous false, test_only false.",
+        "command": "for s in DetectCoverageGaps CoverageGap ExtractCharacter ClassifyEra ClassifyPriceTier; do jq -r --arg s \"$s\" '.records[] | select(.identity==\"github.com/guarzo/slabledger/internal/domain/inventory.\"+$s) | \"\\(.identity) refs=\\(.external_refs) amb=\\(.name_ambiguous // false) test_only=\\(.test_only // false)\"' docs/audit/maps/go-reference-map.json; done",
+        "output": "github.com/guarzo/slabledger/internal/domain/inventory.DetectCoverageGaps refs=0 amb=false test_only=false\ngithub.com/guarzo/slabledger/internal/domain/inventory.CoverageGap refs=0 amb=false test_only=false\ngithub.com/guarzo/slabledger/internal/domain/inventory.ExtractCharacter refs=0 amb=false test_only=false\ngithub.com/guarzo/slabledger/internal/domain/inventory.ClassifyEra refs=0 amb=false test_only=false\ngithub.com/guarzo/slabledger/internal/domain/inventory.ClassifyPriceTier refs=0 amb=false test_only=false",
+        "file_line": "internal/domain/inventory/portfolio.go:306"
+      }
+    ],
+    "searched_universe": "docs/audit/maps/go-reference-map.json at the baseline revision.",
+    "exclusions": [
+      "Emitted as a pointer under LENS-BRIEF section 6. This lens did NOT run the nine runtime-reachability checks on these symbols; CoverageGap in particular carries JSON tags and could be an unreferenced-in-Go API contract (mechanism 4). Surfaced only because it was encountered while mapping the portfolio cluster's seams for NB-003."
+    ],
+    "proposed_fix": "Owned by the dead-code-go lens. Run the nine runtime checks before any removal is considered.",
+    "blast_radius": [
+      "internal/domain/inventory/portfolio.go",
+      "internal/domain/inventory/portfolio_types.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "go build ./... and go test -race ./... pass with the symbols removed, and no JSON response shape consumed by web/src/ loses a field."
+    ]
+  }
+]

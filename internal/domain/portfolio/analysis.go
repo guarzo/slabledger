@@ -46,14 +46,15 @@ func ComputeAnalysis(
 		}
 		cRows := byCampaign[c.ID]
 		analyses = append(analyses, CampaignAnalysis{
-			CampaignID:     c.ID,
-			CampaignName:   c.Name,
-			Phase:          c.Phase,
-			BuyTermsCLPct:  c.BuyTermsCLPct,
-			BPCLAtBuy:      computeBPCLAtBuy(cRows),
-			PNL:            computeSplitPNL(cRows),
-			WeeklyFill:     computeWeeklyFill(c, cRows, now),
-			InScopeByGrade: computeInScopeByGrade(c, cRows),
+			CampaignID:         c.ID,
+			CampaignName:       c.Name,
+			Phase:              c.Phase,
+			BuyTermsCLPct:      c.BuyTermsCLPct,
+			BPCLAtBuy:          computeBPCLAtBuy(cRows),
+			PNL:                computeSplitPNL(cRows),
+			WeeklyFill:         computeWeeklyFill(c, cRows, now),
+			InScopeByGrade:     computeInScopeByGrade(c, cRows),
+			PNLByConfidenceBuy: computeConfidenceBuyCohorts(cRows),
 		})
 	}
 
@@ -106,6 +107,13 @@ func computeBPCLAtBuy(rows []inventory.PurchaseWithSale) BPCLStats {
 // computeSplitPNL separates realised P&L into discretionary vs forced-liquidation.
 func computeSplitPNL(rows []inventory.PurchaseWithSale) SplitPNL {
 	var disc, forced PNLBlock
+	byReason := map[string]PNLBlock{
+		inventory.SaleReasonDiscretionary:   {},
+		inventory.SaleReasonInvoicePressure: {},
+		inventory.SaleReasonAgingPolicy:     {},
+		inventory.SaleReasonBulkLot:         {},
+		inventory.SaleReasonShowClearout:    {},
+	}
 	for _, r := range rows {
 		if r.Sale == nil {
 			continue
@@ -117,10 +125,27 @@ func computeSplitPNL(rows []inventory.PurchaseWithSale) SplitPNL {
 		b.SoldCount++
 		b.RevenueCents += r.Sale.SalePriceCents
 		b.NetProfitCents += r.Sale.NetProfitCents
+
+		// Legacy/unknown sales (SaleReason == "") still count above but are
+		// skipped from the 5-key reason buckets. An unrecognized reason outside
+		// the 5 valid keys is treated the same way — never inserted as a new key,
+		// so the ByReason contract (exactly the 5 keys) always holds.
+		rb, ok := byReason[r.Sale.SaleReason]
+		if !ok {
+			continue
+		}
+		rb.SoldCount++
+		rb.RevenueCents += r.Sale.SalePriceCents
+		rb.NetProfitCents += r.Sale.NetProfitCents
+		byReason[r.Sale.SaleReason] = rb
 	}
 	disc.ROIPct = roiPct(disc.RevenueCents, disc.NetProfitCents)
 	forced.ROIPct = roiPct(forced.RevenueCents, forced.NetProfitCents)
-	return SplitPNL{Discretionary: disc, Forced: forced}
+	for reason, rb := range byReason {
+		rb.ROIPct = roiPct(rb.RevenueCents, rb.NetProfitCents)
+		byReason[reason] = rb
+	}
+	return SplitPNL{Discretionary: disc, Forced: forced, ByReason: byReason}
 }
 
 // roiPct computes netProfit/(revenue-netProfit)*100, returning 0 when cost basis ≤ 0.
@@ -311,8 +336,9 @@ func mondayOf(t time.Time) time.Time {
 //   - GradeRange: GradeValue ∈ [min, max]
 //   - PriceRange: BuyCostCents ∈ [min*100, max*100]  (range stored in dollars)
 //   - YearRange:  CardYear (int) ∈ [min, max]; skipped if CardYear is empty or non-numeric
-//   - InclusionList non-empty, ExclusionMode=false: CardPlayer (case-insensitive) must be in list
-//   - InclusionList non-empty, ExclusionMode=true:  CardPlayer must NOT be in list
+//   - Subjects: CardPlayer must satisfy inventory.SubjectAxisMatches against the
+//     campaign's Subjects/SubjectFilterMode — the same subject-axis predicate
+//     PurchaseMatchesCampaign uses, so an empty Subjects list is an open net.
 func inScope(c inventory.Campaign, p inventory.Purchase) bool {
 	if minG, maxG, ok := parseRange(c.GradeRange); ok {
 		if p.GradeValue < minG || p.GradeValue > maxG {
@@ -336,21 +362,8 @@ func inScope(c inventory.Campaign, p inventory.Purchase) bool {
 		}
 	}
 
-	if c.InclusionList != "" {
-		playerLower := strings.ToLower(p.CardPlayer)
-		inList := false
-		for _, part := range strings.Split(c.InclusionList, ",") {
-			if strings.TrimSpace(strings.ToLower(part)) == playerLower {
-				inList = true
-				break
-			}
-		}
-		if !c.ExclusionMode && !inList {
-			return false
-		}
-		if c.ExclusionMode && inList {
-			return false
-		}
+	if !inventory.SubjectAxisMatches(p.CardPlayer, c.Subjects, c.SubjectFilterMode) {
+		return false
 	}
 
 	return true

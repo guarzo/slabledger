@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -31,14 +32,14 @@ func TestGenerateSuggestions_TopCharacterExpansion(t *testing.T) {
 		DataSummary: InsightsDataSummary{TotalPurchases: 50},
 	}
 	campaigns := []Campaign{
-		{Name: "Campaign A", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
+		{Name: "Campaign A", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
-		if s.SuggestedParams.InclusionList == "Charizard" {
+		if len(s.SuggestedParams.Subjects) == 1 && s.SuggestedParams.Subjects[0] == "Charizard" {
 			found = true
 			if s.Confidence != "medium" {
 				t.Errorf("expected medium confidence for 10 sales, got %s", s.Confidence)
@@ -63,7 +64,7 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 		DataSummary: InsightsDataSummary{TotalPurchases: 35},
 	}
 	campaigns := []Campaign{
-		{Name: "Test Campaign", Phase: PhaseActive, InclusionList: "Pikachu, Blastoise"},
+		{Name: "Test Campaign", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
@@ -75,9 +76,29 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 		if s.Type == "adjust" {
 			if s.Title == "Remove underperformers from Test Campaign" {
 				foundRemove = true
+				// SubjectsAction must disambiguate polarity: a client applying
+				// suggestedParams programmatically has only Subjects + this
+				// field to know whether to add or remove from the campaign's
+				// existing targeting list.
+				if s.SuggestedParams.SubjectsAction != SubjectsActionRemove {
+					t.Errorf("expected SubjectsAction %q on remove suggestion, got %q", SubjectsActionRemove, s.SuggestedParams.SubjectsAction)
+				}
+				// Pin the payload too, not just the action label: swapping
+				// Subjects between the add/remove branches (while leaving
+				// SubjectsAction untouched) would previously slip past this
+				// test undetected.
+				if !slices.Equal(s.SuggestedParams.Subjects, []string{"Pikachu"}) {
+					t.Errorf("expected Subjects [Pikachu] on remove suggestion, got %v", s.SuggestedParams.Subjects)
+				}
 			}
 			if s.Title == "Add top performers to Test Campaign" {
 				foundAdd = true
+				if s.SuggestedParams.SubjectsAction != SubjectsActionAdd {
+					t.Errorf("expected SubjectsAction %q on add suggestion, got %q", SubjectsActionAdd, s.SuggestedParams.SubjectsAction)
+				}
+				if !slices.Equal(s.SuggestedParams.Subjects, []string{"Charizard"}) {
+					t.Errorf("expected Subjects [Charizard] on add suggestion, got %v", s.SuggestedParams.Subjects)
+				}
 				// ExpectedMetrics should be propagated from Charizard (top-ROI add).
 				if math.Abs(s.ExpectedMetrics.ExpectedROI-0.30) > 1e-6 {
 					t.Errorf("expected ExpectedROI ~0.30 from Charizard, got %f", s.ExpectedMetrics.ExpectedROI)
@@ -117,7 +138,7 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 
 	found := false
 	for _, s := range resp.NewCampaigns {
-		if s.Type == "gap" && s.SuggestedParams.InclusionList == "Gengar" {
+		if s.Type == "gap" && len(s.SuggestedParams.Subjects) == 1 && s.SuggestedParams.Subjects[0] == "Gengar" {
 			found = true
 		}
 	}
@@ -414,8 +435,8 @@ func TestDeduplicateSuggestions(t *testing.T) {
 			Confidence: "medium",
 			DataPoints: 20,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:          "Campaign A",
-				InclusionList: "add: Charizard",
+				Name:     "Campaign A",
+				Subjects: []string{"Charizard"},
 			},
 		},
 	}
@@ -506,7 +527,7 @@ func TestPhaseTransition_ActivatePending(t *testing.T) {
 		},
 	}
 	campaigns := []Campaign{
-		{ID: "c1", Name: "Pending Charizard", Phase: PhasePending, InclusionList: "Charizard"},
+		{ID: "c1", Name: "Pending Charizard", Phase: PhasePending, Subjects: []TargetSubject{{Name: "Charizard"}}, SubjectFilterMode: SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)

@@ -14,16 +14,13 @@ services:
       # Mount command history
       - command-history:/commandhistory
 
-      # Mount host Claude Code directory (config, commands, plugins, settings).
-      # This gives the container access to host-defined slash commands
-      # (~/.claude/commands/), installed plugins, and user settings.
-      # NOTE: Claude Code writes absolute host paths in its config files (e.g.
-      # /home/<host-user>/.claude/...) which won't resolve if the container user
-      # differs. post-start.sh auto-creates a symlink to fix this.
-      - ~/.claude:/home/vscode/.claude:cached
-
-      # Mount host dotfiles (used by Claude Code commands symlink, etc.)
-      - ~/.dotfiles:/home/vscode/.dotfiles:cached,ro
+      # NOTE: host ~/.claude and ~/.dotfiles are deliberately NOT bind-mounted.
+      # Writable host binds let the container corrupt host config with
+      # container-absolute paths, and a read-only bind of all of ~/.claude would
+      # still expose .credentials.json and session transcripts. The local,
+      # gitignored docker-compose.override.yml mounts an allowlisted subset
+      # read-only at /host-seed and local-seed.sh copies it into container-local
+      # named volumes. See docker-compose.override.yml.example.
 
       # NOTE: Host config mounts (~/.gitconfig, ~/.ssh) moved to
       # docker-compose.override.yml. Copy docker-compose.override.yml.example

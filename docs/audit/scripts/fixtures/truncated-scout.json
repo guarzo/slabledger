@@ -1,0 +1,8 @@
+{
+  "scout": "go-reference-map",
+  "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+  "status": "complete",
+  "declared_totals": {"go_files": 400, "packages": 53},
+  "gaps": [],
+  "records": []
+}

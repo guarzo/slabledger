@@ -93,3 +93,27 @@ func TestMapRow(t *testing.T) {
 		})
 	}
 }
+
+func TestMapRow_PSACampaignName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   map[string]string
+		want string
+	}{
+		{"present", map[string]string{"adjusted_description": "Modern"}, "Modern"},
+		{"absent", map[string]string{}, ""},
+		{"empty", map[string]string{"adjusted_description": ""}, ""},
+		{"whitespace preserved verbatim", map[string]string{"adjusted_description": " Modern "}, " Modern "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := mapRow(tt.in)
+			if err != nil {
+				t.Fatalf("mapRow: %v", err)
+			}
+			if got.PSACampaignName != tt.want {
+				t.Errorf("PSACampaignName = %q, want %q", got.PSACampaignName, tt.want)
+			}
+		})
+	}
+}

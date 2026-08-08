@@ -68,6 +68,7 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 			mux.Handle("POST /api/admin/cardladder/refresh", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleRefresh)))
 			mux.Handle("POST /api/admin/cardladder/add-card", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleAddCard)))
 			mux.Handle("POST /api/admin/cardladder/sync-to-cl", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleSyncToCardLadder)))
+			mux.Handle("GET /api/admin/cardladder/coverage", rt.authMW.RequireAdmin(http.HandlerFunc(rt.cardLadderHandler.HandleCoverage)))
 		}
 		if rt.psaSyncHandler != nil {
 			mux.Handle("GET /api/admin/psa-sync/status", rt.authMW.RequireAdmin(http.HandlerFunc(rt.psaSyncHandler.HandleStatus)))
@@ -114,6 +115,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 
 	// PSA portal campaign sync
 	mux.Handle("GET /api/psa-campaigns", authRoute(rt.campaignsHandler.HandleListPSACampaigns))
+	mux.Handle("GET /api/psa/subjects", authRoute(rt.campaignsHandler.HandleGetPSASubjects))
 	mux.Handle("POST /api/campaigns/{id}/psa-link", authRoute(rt.campaignsHandler.HandlePSALink))
 	mux.Handle("POST /api/campaigns/{id}/psa-propose", authRoute(rt.campaignsHandler.HandlePSAPropose))
 	mux.Handle("POST /api/campaigns/{id}/psa-publish", authRoute(rt.campaignsHandler.HandlePSAPublish))
@@ -130,6 +132,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/campaigns/{id}/sales", authRoute(rt.campaignsHandler.HandleListSales))
 	mux.Handle("POST /api/campaigns/{id}/sales", authRoute(rt.campaignsHandler.HandleCreateSale))
 	mux.Handle("POST /api/campaigns/{id}/sales/bulk", authRoute(rt.campaignsHandler.HandleBulkSales))
+	mux.Handle("PATCH /api/campaigns/{id}/sales/{saleID}", authRoute(rt.campaignsHandler.HandleUpdateSaleReason))
 	mux.Handle("DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale", authRoute(rt.campaignsHandler.HandleDeleteSale))
 
 	// Campaign analytics

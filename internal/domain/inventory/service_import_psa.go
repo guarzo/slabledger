@@ -100,21 +100,63 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 				observability.String("title", row.ListingTitle))
 		}
 
-		// New purchase — find matching campaign (use float64 grade for half-grade support)
-		match := FindMatchingCampaign(
-			gradeValue,
-			buyCostCents,
-			meta.CardName,
-			meta.SetName,
-			meta.CardYear,
-			matchingCampaigns,
-		)
+		// PSA's own attribution wins when it resolves; inference is the fallback.
+		var match MatchResult
 		var campaign *Campaign
-		if match.Status == "matched" {
-			campaign = campaignMap[match.CampaignID]
+		attributionSource := AttributionSourceInferred
+
+		if s.psaResolver != nil && row.PSACampaignName != "" {
+			campaignID, ok, rErr := s.psaResolver.ResolveCampaignID(ctx, row.PSACampaignName)
+			switch {
+			case rErr != nil:
+				// Lookup failed outright (e.g. stale snapshot). Fall back to
+				// inference rather than dropping the row, and say so.
+				if s.logger != nil {
+					s.logger.Warn(ctx, "PSA campaign resolve failed, falling back to inference",
+						observability.String("certNumber", row.CertNumber),
+						observability.String("psaCampaign", row.PSACampaignName),
+						observability.Err(rErr))
+				}
+			case ok:
+				if c := campaignMap[campaignID]; c != nil {
+					campaign = c
+					// handleNewPSAPurchase switches exclusively on match.Status and
+					// falls through to "unmatched" by default. A resolved campaign
+					// must therefore be expressed as a synthesized matched result —
+					// leaving match at its zero value turns every PSA-resolved row
+					// into a pending item, i.e. the exact inverse of this feature.
+					match = MatchResult{Status: "matched", CampaignID: campaignID}
+					attributionSource = AttributionSourcePSA
+				}
+			default:
+				if s.logger != nil {
+					s.logger.Info(ctx, "PSA campaign name did not resolve",
+						observability.String("certNumber", row.CertNumber),
+						observability.String("psaCampaign", row.PSACampaignName))
+				}
+			}
 		}
 
-		itemResult := s.handleNewPSAPurchase(ctx, row, gradeValue, buyCostCents, meta, match, campaign)
+		if campaign == nil {
+			// Inference fallback (use float64 grade for half-grade support).
+			match = FindMatchingCampaign(MatchInput{
+				Grade:        gradeValue,
+				BuyCostCents: buyCostCents,
+				CardName:     meta.CardName,
+				SetName:      meta.SetName,
+				CardNumber:   meta.CardNumber,
+				CardYear:     meta.CardYear,
+				// PSASpecID is left at its zero value here: the CSV-title parse
+				// path has no CL spec id yet — cert lookups that resolve it run
+				// asynchronously after import completes (see the metadata-parse
+				// comment above).
+			}, matchingCampaigns)
+			if match.Status == "matched" {
+				campaign = campaignMap[match.CampaignID]
+			}
+		}
+
+		itemResult := s.handleNewPSAPurchase(ctx, row, gradeValue, buyCostCents, meta, match, campaign, attributionSource)
 		result.Results = append(result.Results, itemResult)
 		switch itemResult.Status {
 		case "allocated":
@@ -238,7 +280,7 @@ func collectAllocatedCerts(results []PSAImportItemResult) []string {
 // handleNewPSAPurchase processes a new PSA purchase row that has no existing purchase.
 // It uses the pre-computed match result and resolved campaign to create the purchase
 // (if matched) or report the row as ambiguous/unmatched.
-func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gradeValue float64, buyCostCents int, meta PSACardMetadata, match MatchResult, campaign *Campaign) PSAImportItemResult {
+func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gradeValue float64, buyCostCents int, meta PSACardMetadata, match MatchResult, campaign *Campaign, attributionSource string) PSAImportItemResult {
 	switch match.Status {
 	case "matched":
 		purchaseDate := row.Date
@@ -265,6 +307,8 @@ func (s *service) handleNewPSAPurchase(ctx context.Context, row PSAExportRow, gr
 			PurchaseSource:      row.PurchaseSource,
 			PSAListingTitle:     row.ListingTitle,
 			DHPushStatus:        DHPushStatusPending,
+			PSACampaignName:     row.PSACampaignName,
+			AttributionSource:   attributionSource,
 		}
 		// Only defer snapshot to background worker when a price provider is available
 		if s.priceProv != nil {

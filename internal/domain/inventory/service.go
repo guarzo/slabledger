@@ -78,6 +78,12 @@ type MarketSnapshot struct {
 	SourceCount int      `json:"sourceCount,omitempty"`
 	Sources     []string `json:"sources,omitempty"`
 	Confidence  float64  `json:"confidence,omitempty"`
+	// SourceCountRaw is len(Sources) at build time, BEFORE applyCLCorrection
+	// appends the "cardladder" anchor. This is the external-platform count.
+	SourceCountRaw int `json:"sourceCountRaw,omitempty"`
+	// MarketDataObserved is true when the DH CardLookup returned a market block
+	// (price.Market != nil) — distinguishing an observed zero from a missing one.
+	MarketDataObserved bool `json:"marketDataObserved,omitempty"`
 
 	// Per-source pricing data
 	SourcePrices []SourcePrice `json:"sourcePrices,omitempty"`
@@ -191,7 +197,8 @@ type service struct {
 	priceProv          PriceLookup
 	certLookup         CertLookup
 	cardIDResolver     CardIDResolver
-	eventRec           dhevents.Recorder // optional — DH state-transition event recorder
+	psaResolver        PSACampaignResolver // optional — resolves PSA campaign names to internal campaign IDs
+	eventRec           dhevents.Recorder   // optional — DH state-transition event recorder
 	logger             observability.Logger
 	idGen              func() string // generates unique IDs; must be injected via WithIDGenerator
 	maxSnapshotRetries int           // max retry attempts for failed snapshots (0 = unlimited)
@@ -227,6 +234,11 @@ type ServiceOption func(*service)
 // WithPriceLookup enables market signal computation on inventory aging.
 func WithPriceLookup(pl PriceLookup) ServiceOption {
 	return func(s *service) { s.priceProv = pl }
+}
+
+// WithPSACampaignResolver enables PSA-authoritative campaign attribution.
+func WithPSACampaignResolver(r PSACampaignResolver) ServiceOption {
+	return func(s *service) { s.psaResolver = r }
 }
 
 // WithCertLookup enables PSA cert number resolution.

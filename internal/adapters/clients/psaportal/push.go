@@ -56,13 +56,30 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 		if _, exists := formData[ch.Field]; !exists {
 			return fmt.Errorf("psaportal: unknown campaign field %q", ch.Field)
 		}
-		if numericFormDataFields[ch.Field] {
+		switch {
+		case numericFormDataFields[ch.Field]:
 			n, err := strconv.ParseFloat(ch.New, 64)
 			if err != nil {
 				return fmt.Errorf("psaportal: field %q value %q is not numeric: %w", ch.Field, ch.New, err)
 			}
 			formData[ch.Field] = n
-		} else {
+		case ch.Value != nil:
+			// List-valued changes (selectedSubjects, deniedSpecs,
+			// prepackagedSpecListIds) carry a typed Go value, not the display
+			// string in ch.New. Round-trip it through JSON so EncodeRefPacked
+			// sees the same plain map[string]any/[]any/scalar types the rest of
+			// formData already holds (it came from DecodeRefPacked), exactly as
+			// CreateCampaign round-trips its formData struct (create.go:24-34).
+			valueJSON, err := json.Marshal(ch.Value)
+			if err != nil {
+				return fmt.Errorf("psaportal: marshal field %q value: %w", ch.Field, err)
+			}
+			var plain any
+			if err := json.Unmarshal(valueJSON, &plain); err != nil {
+				return fmt.Errorf("psaportal: remarshal field %q value: %w", ch.Field, err)
+			}
+			formData[ch.Field] = plain
+		default:
 			formData[ch.Field] = ch.New
 		}
 	}

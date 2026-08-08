@@ -32,8 +32,10 @@ function makeCampaign(overrides: Partial<Campaign> = {}): Campaign {
     clConfidence: '',
     buyTermsCLPct: 0.7,
     dailySpendCapCents: 100000,
-    inclusionList: '',
-    exclusionMode: false,
+    targetLanguages: [],
+    subjectFilterMode: 'Target',
+    subjects: [],
+    deniedSpecs: [],
     phase: 'active',
     psaSourcingFeeCents: 0,
     ebayFeePct: 0,
@@ -159,6 +161,119 @@ describe('PSAPublishModal', () => {
     await waitFor(() => {
       expect(vi.mocked(api.psaPublish)).toHaveBeenCalledWith('c1', 'push-create-1');
     });
+  });
+
+  // Two real-shaped portal UUIDs. mapper.go renders list changes sorted and
+  // comma-joined with no spaces (renderStringList), which is what the modal parses.
+  const ENGLISH_LIST = '1c0f4e6a-1111-4111-8111-111111111111';
+  const JAPANESE_LIST = '2d1a5f7b-2222-4222-8222-222222222222';
+
+  it('renders a dropped curated spec list as an explicit removal, not a wall of UUIDs', async () => {
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-2',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: `${ENGLISH_LIST},${JAPANESE_LIST}`,
+          new: ENGLISH_LIST,
+          value: [ENGLISH_LIST],
+        }],
+      },
+    });
+
+    renderModal(makeCampaign({ targetLanguages: ['english'] }));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Curated spec lists')).toBeInTheDocument();
+    });
+    expect(screen.getByText('1 curated list will be REMOVED from this campaign.')).toBeInTheDocument();
+    expect(screen.getByText('Target languages: English')).toBeInTheDocument();
+    expect(screen.getByText(`Removed ${JAPANESE_LIST}`)).toBeInTheDocument();
+    expect(screen.getByText('1 unchanged')).toBeInTheDocument();
+    // The raw field name and blob rendering are gone for this field.
+    expect(screen.queryByText('prepackagedSpecListIds')).not.toBeInTheDocument();
+    expect(screen.queryByText(`${ENGLISH_LIST},${JAPANESE_LIST}`)).not.toBeInTheDocument();
+  });
+
+  it('renders an added curated spec list without a removal warning', async () => {
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-3',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: ENGLISH_LIST,
+          new: `${ENGLISH_LIST},${JAPANESE_LIST}`,
+          value: [ENGLISH_LIST, JAPANESE_LIST],
+        }],
+      },
+    });
+
+    renderModal(makeCampaign({ targetLanguages: ['english', 'japanese'] }));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(`Added ${JAPANESE_LIST}`)).toBeInTheDocument();
+    });
+    expect(screen.getByText('Target languages: English, Japanese')).toBeInTheDocument();
+    expect(screen.queryByText(/will be REMOVED/)).not.toBeInTheDocument();
+  });
+
+  it('describes an open-net campaign as such in the spec-list caption', async () => {
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-4',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: '',
+          new: ENGLISH_LIST,
+          value: [ENGLISH_LIST],
+        }],
+      },
+    });
+
+    renderModal(makeCampaign({ targetLanguages: [] }));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Target languages: any language (open net)')).toBeInTheDocument();
+    });
+    expect(screen.getByText(`Added ${ENGLISH_LIST}`)).toBeInTheDocument();
+    expect(screen.queryByText(/unchanged/)).not.toBeInTheDocument();
+  });
+  it('captions the diff with the language axis as it stood when the diff was computed', async () => {
+    // The spec-list row labels a set of curated-list ids with the languages
+    // that justify them. If the campaign is edited in another tab between
+    // proposing and publishing, reading the live axis here would caption a
+    // stale diff with a newer axis — on the one screen whose entire job is
+    // showing exactly what is about to be pushed.
+    vi.mocked(api.psaPropose).mockResolvedValue({
+      pushId: 'push-5',
+      diff: {
+        changes: [{
+          field: 'prepackagedSpecListIds',
+          old: '',
+          new: ENGLISH_LIST,
+          value: [ENGLISH_LIST],
+        }],
+      },
+    });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onClose = vi.fn();
+    const { rerender } = render(modalTree(makeCampaign({ targetLanguages: ['english'] }), null, qc, onClose));
+    fireEvent.click(screen.getByRole('button', { name: /check for changes/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Target languages: English')).toBeInTheDocument();
+    });
+
+    // The campaign gains Japanese after the diff was computed; the queued push
+    // still carries only the English list, so the caption must not claim
+    // otherwise.
+    rerender(modalTree(makeCampaign({ targetLanguages: ['english', 'japanese'] }), null, qc, onClose));
+    expect(screen.getByText('Target languages: English')).toBeInTheDocument();
+    expect(screen.queryByText('Target languages: English, Japanese')).not.toBeInTheDocument();
   });
 });
 

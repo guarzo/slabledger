@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -73,5 +74,333 @@ func TestCLValueAtPurchaseSetOnce(t *testing.T) {
 				t.Errorf("CLValueAtPurchaseCents = %d, want %d", got.CLValueAtPurchaseCents, tt.wantAtBuy)
 			}
 		})
+	}
+}
+
+func TestCreatePurchaseProvenanceRoundTrip(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	// Seed the campaign required by the foreign-key constraint.
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		set  func(p *inventory.Purchase)
+	}{
+		{
+			name: "all provenance fields set",
+			set: func(p *inventory.Purchase) {
+				p.CLConfidenceAtPurchase = intPtr(85)
+				p.PopulationAtPurchase = intPtr(120)
+				p.DHConfidenceAtPurchase = floatPtr(0.92)
+				p.SourceCountAtPurchase = intPtr(4)
+				p.ActiveListingsAtPurchase = intPtr(7)
+				p.SalesLast30dAtPurchase = intPtr(3)
+			},
+		},
+		{
+			name: "all provenance fields nil",
+			set:  func(p *inventory.Purchase) {},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := makeTestPurchase()
+			tt.set(p)
+			if err := ps.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			got, err := ps.GetPurchase(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+
+			assertIntPtrEqual(t, "CLConfidenceAtPurchase", p.CLConfidenceAtPurchase, got.CLConfidenceAtPurchase)
+			assertIntPtrEqual(t, "PopulationAtPurchase", p.PopulationAtPurchase, got.PopulationAtPurchase)
+			assertFloatPtrEqual(t, "DHConfidenceAtPurchase", p.DHConfidenceAtPurchase, got.DHConfidenceAtPurchase)
+			assertIntPtrEqual(t, "SourceCountAtPurchase", p.SourceCountAtPurchase, got.SourceCountAtPurchase)
+			assertIntPtrEqual(t, "ActiveListingsAtPurchase", p.ActiveListingsAtPurchase, got.ActiveListingsAtPurchase)
+			assertIntPtrEqual(t, "SalesLast30dAtPurchase", p.SalesLast30dAtPurchase, got.SalesLast30dAtPurchase)
+		})
+	}
+}
+
+func assertIntPtrEqual(t *testing.T, field string, want, got *int) {
+	t.Helper()
+	if (want == nil) != (got == nil) {
+		t.Errorf("%s: want nil=%v, got nil=%v", field, want == nil, got == nil)
+		return
+	}
+	if want != nil && *want != *got {
+		t.Errorf("%s = %d, want %d", field, *got, *want)
+	}
+}
+
+func assertFloatPtrEqual(t *testing.T, field string, want, got *float64) {
+	t.Helper()
+	if (want == nil) != (got == nil) {
+		t.Errorf("%s: want nil=%v, got nil=%v", field, want == nil, got == nil)
+		return
+	}
+	if want != nil && *want != *got {
+		t.Errorf("%s = %v, want %v", field, *got, *want)
+	}
+}
+
+func TestUpdatePurchaseMarketSnapshotProvenanceSetOnce(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	t.Run("set-once freeze on first enrichment, unchanged on second", func(t *testing.T) {
+		p := makeTestPurchase()
+		if err := ps.CreatePurchase(ctx, p); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+
+		first := inventory.MarketSnapshotData{
+			Confidence:         0.9,
+			SourceCountRaw:     2,
+			MarketDataObserved: true,
+			ActiveListings:     3,
+			SalesLast30d:       5,
+		}
+		if err := ps.UpdatePurchaseMarketSnapshot(ctx, p.ID, first); err != nil {
+			t.Fatalf("first update: %v", err)
+		}
+
+		got, err := ps.GetPurchase(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		assertFloatPtrEqual(t, "DHConfidenceAtPurchase", floatPtr(0.9), got.DHConfidenceAtPurchase)
+		assertIntPtrEqual(t, "SourceCountAtPurchase", intPtr(2), got.SourceCountAtPurchase)
+		assertIntPtrEqual(t, "ActiveListingsAtPurchase", intPtr(3), got.ActiveListingsAtPurchase)
+		assertIntPtrEqual(t, "SalesLast30dAtPurchase", intPtr(5), got.SalesLast30dAtPurchase)
+
+		// Second enrichment with different values must not overwrite (set-once).
+		second := inventory.MarketSnapshotData{
+			Confidence:         0.1,
+			SourceCountRaw:     99,
+			MarketDataObserved: true,
+			ActiveListings:     100,
+			SalesLast30d:       200,
+		}
+		if err := ps.UpdatePurchaseMarketSnapshot(ctx, p.ID, second); err != nil {
+			t.Fatalf("second update: %v", err)
+		}
+
+		got2, err := ps.GetPurchase(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("get2: %v", err)
+		}
+		assertFloatPtrEqual(t, "DHConfidenceAtPurchase", floatPtr(0.9), got2.DHConfidenceAtPurchase)
+		assertIntPtrEqual(t, "SourceCountAtPurchase", intPtr(2), got2.SourceCountAtPurchase)
+		assertIntPtrEqual(t, "ActiveListingsAtPurchase", intPtr(3), got2.ActiveListingsAtPurchase)
+		assertIntPtrEqual(t, "SalesLast30dAtPurchase", intPtr(5), got2.SalesLast30dAtPurchase)
+	})
+
+	t.Run("market data not observed leaves market provenance nil but still freezes confidence/source count", func(t *testing.T) {
+		p := makeTestPurchase()
+		if err := ps.CreatePurchase(ctx, p); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+
+		snap := inventory.MarketSnapshotData{
+			Confidence:         0.75,
+			SourceCountRaw:     6,
+			MarketDataObserved: false,
+			ActiveListings:     42, // must be ignored since not observed
+			SalesLast30d:       43,
+		}
+		if err := ps.UpdatePurchaseMarketSnapshot(ctx, p.ID, snap); err != nil {
+			t.Fatalf("update: %v", err)
+		}
+
+		got, err := ps.GetPurchase(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		assertFloatPtrEqual(t, "DHConfidenceAtPurchase", floatPtr(0.75), got.DHConfidenceAtPurchase)
+		assertIntPtrEqual(t, "SourceCountAtPurchase", intPtr(6), got.SourceCountAtPurchase)
+		if got.ActiveListingsAtPurchase != nil {
+			t.Errorf("ActiveListingsAtPurchase = %v, want nil (market data not observed)", *got.ActiveListingsAtPurchase)
+		}
+		if got.SalesLast30dAtPurchase != nil {
+			t.Errorf("SalesLast30dAtPurchase = %v, want nil (market data not observed)", *got.SalesLast30dAtPurchase)
+		}
+	})
+}
+
+func intPtr(v int) *int           { return &v }
+func floatPtr(v float64) *float64 { return &v }
+
+// newStoreWithUnsoldPurchase seeds a campaign and a single unsold purchase,
+// returning the store and the purchase's ID.
+func newStoreWithUnsoldPurchase(t *testing.T) (*PurchaseStore, string) {
+	t.Helper()
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('campaign-b', 'Campaign B', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign-b: %v", err)
+	}
+
+	p := makeTestPurchase()
+	p.CLConfidenceAtPurchase = intPtr(50)
+	if err := ps.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	return ps, p.ID
+}
+
+// newStoreWithSoldPurchase seeds a campaign, a purchase, and a linked sale,
+// returning the store and the purchase's ID.
+func newStoreWithSoldPurchase(t *testing.T) (*PurchaseStore, string) {
+	t.Helper()
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	ctx := context.Background()
+
+	_, err := ps.db.ExecContext(ctx,
+		`INSERT INTO campaign_sales (id, purchase_id, sale_channel, sale_price_cents, sale_date, forced_liquidation)
+		 VALUES ($1, $2, 'ebay', 9000, '2026-01-15', FALSE)`,
+		"sale-"+purchaseID, purchaseID,
+	)
+	if err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+	return ps, purchaseID
+}
+
+// mustGetPurchase fetches a purchase by ID, failing the test on error.
+func mustGetPurchase(t *testing.T, ps *PurchaseStore, purchaseID string) *inventory.Purchase {
+	t.Helper()
+	got, err := ps.GetPurchase(context.Background(), purchaseID)
+	if err != nil {
+		t.Fatalf("GetPurchase: %v", err)
+	}
+	return got
+}
+
+func TestReattributePurchase_RefusesWhenSaleExists(t *testing.T) {
+	ps, purchaseID := newStoreWithSoldPurchase(t)
+	err := ps.ReattributePurchase(context.Background(), purchaseID, inventory.Reattribution{
+		CampaignID:          "campaign-b",
+		PSACampaignName:     "Modern High Band",
+		PSASourcingFeeCents: 300,
+	})
+	if !errors.Is(err, inventory.ErrPurchaseHasSale) {
+		t.Fatalf("err = %v, want ErrPurchaseHasSale", err)
+	}
+}
+
+func TestReattributePurchase_NullsCLConfidenceWhenNil(t *testing.T) {
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	err := ps.ReattributePurchase(context.Background(), purchaseID, inventory.Reattribution{
+		CampaignID:             "campaign-b",
+		PSACampaignName:        "Modern",
+		PSASourcingFeeCents:    300,
+		CLConfidenceAtPurchase: nil,
+	})
+	if err != nil {
+		t.Fatalf("ReattributePurchase: %v", err)
+	}
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.CLConfidenceAtPurchase != nil {
+		t.Errorf("CLConfidenceAtPurchase = %v, want nil", *got.CLConfidenceAtPurchase)
+	}
+	if got.AttributionSource != inventory.AttributionSourcePSA {
+		t.Errorf("AttributionSource = %q, want %q", got.AttributionSource, inventory.AttributionSourcePSA)
+	}
+}
+
+func TestUpdatePurchaseCampaign_SetsManualAttribution(t *testing.T) {
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	ctx := context.Background()
+
+	before := mustGetPurchase(t, ps, purchaseID)
+	if before.AttributionSource != inventory.AttributionSourceInferred {
+		t.Fatalf("precondition: AttributionSource = %q, want %q", before.AttributionSource, inventory.AttributionSourceInferred)
+	}
+
+	if err := ps.UpdatePurchaseCampaign(ctx, purchaseID, "campaign-b", 300); err != nil {
+		t.Fatalf("UpdatePurchaseCampaign: %v", err)
+	}
+
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.CampaignID != "campaign-b" {
+		t.Errorf("CampaignID = %q, want %q", got.CampaignID, "campaign-b")
+	}
+	if got.PSASourcingFeeCents != 300 {
+		t.Errorf("PSASourcingFeeCents = %d, want 300", got.PSASourcingFeeCents)
+	}
+	if got.AttributionSource != inventory.AttributionSourceManual {
+		t.Errorf("AttributionSource = %q, want %q", got.AttributionSource, inventory.AttributionSourceManual)
+	}
+}
+
+func TestUpdatePurchaseCampaign_RefusesWhenSaleExists(t *testing.T) {
+	ps, purchaseID := newStoreWithSoldPurchase(t)
+	ctx := context.Background()
+
+	err := ps.UpdatePurchaseCampaign(ctx, purchaseID, "campaign-b", 300)
+	if !errors.Is(err, inventory.ErrPurchaseHasSale) {
+		t.Fatalf("err = %v, want ErrPurchaseHasSale", err)
+	}
+
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.CampaignID != "camp-1" {
+		t.Errorf("CampaignID = %q, want unchanged %q", got.CampaignID, "camp-1")
+	}
+	if got.AttributionSource == inventory.AttributionSourceManual {
+		t.Errorf("AttributionSource = %q, want unchanged (not manual) since the guard should have blocked the update", got.AttributionSource)
+	}
+}
+
+func TestUpdatePurchaseAttributionName(t *testing.T) {
+	ps, purchaseID := newStoreWithUnsoldPurchase(t)
+	err := ps.UpdatePurchaseAttributionName(context.Background(), purchaseID, "Modern High Band", inventory.AttributionSourcePSA)
+	if err != nil {
+		t.Fatalf("UpdatePurchaseAttributionName: %v", err)
+	}
+	got := mustGetPurchase(t, ps, purchaseID)
+	if got.PSACampaignName != "Modern High Band" {
+		t.Errorf("PSACampaignName = %q, want %q", got.PSACampaignName, "Modern High Band")
+	}
+	if got.AttributionSource != inventory.AttributionSourcePSA {
+		t.Errorf("AttributionSource = %q, want %q", got.AttributionSource, inventory.AttributionSourcePSA)
 	}
 }

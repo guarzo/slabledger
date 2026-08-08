@@ -6,6 +6,24 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/constants"
 )
 
+func TestEffectiveChannelFeePct(t *testing.T) {
+	c := &Campaign{EbayFeePct: 0.10}
+	tests := []struct {
+		channel SaleChannel
+		want    float64
+	}{
+		{SaleChannelEbay, 0.10},
+		{SaleChannelTCGPlayer, 0.10},
+		{SaleChannelWebsite, DefaultWebsiteFeePct},
+		{SaleChannelInPerson, 0},
+	}
+	for _, tt := range tests {
+		if got := EffectiveChannelFeePct(tt.channel, c); got != tt.want {
+			t.Errorf("EffectiveChannelFeePct(%s)=%v want %v", tt.channel, got, tt.want)
+		}
+	}
+}
+
 func TestEffectiveFeePct(t *testing.T) {
 	tests := []struct {
 		name     string

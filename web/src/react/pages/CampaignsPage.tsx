@@ -3,9 +3,9 @@
  *
  * Lists all campaigns with P&L summary info and portfolio summary strip.
  */
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../js/api';
+import { api, isAPIError } from '../../js/api';
 import { reportError } from '../../js/errors';
 import type { Campaign, CampaignPNL, CreateCampaignInput, Phase, PSAPushRow } from '../../types/campaigns';
 import { queryKeys } from '../queries/queryKeys';
@@ -15,12 +15,20 @@ import { useToast } from '../contexts/ToastContext';
 import { useForm } from '../hooks/useForm';
 import { defaultCampaignInput } from '../utils/campaignConstants';
 import { Button, SectionErrorBoundary } from '../ui';
-import { useCampaigns, useCreateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
+import { useCampaigns, useCreateCampaign, useUpdateCampaign, usePortfolioHealth, campaignPNLQueryOptions } from '../queries/useCampaignQueries';
 import CampaignsPortfolioHero from './campaigns/CampaignsPortfolioHero';
 import CampaignsTab from './campaigns/CampaignsTab';
 import InvoicesSection from '../components/insights/InvoicesSection';
+import { toFormValues, type EditCampaignFormValues } from '../utils/campaignFormValues';
 
 const phaseOrder: Record<Phase, number> = { active: 0, pending: 1, closed: 2 };
+
+// The server answers 409 when a conditional update's ifUnmodifiedSince no longer
+// matches the stored row. Both write paths here treat that as "someone else got
+// there first", not as a generic failure.
+function isConflict(err: unknown): boolean {
+  return isAPIError(err) && err.status === 409;
+}
 
 function sortCampaigns(campaigns: Campaign[]): Campaign[] {
   return [...campaigns].sort((a, b) => {
@@ -41,8 +49,18 @@ function validateCampaignForm(values: CreateCampaignInput) {
 
 
 // Parsed campaign: only fields explicitly present in the text are set.
-// inclusionList + exclusionMode are always included — absent line = cleared.
-type ParsedCampaign = Partial<CreateCampaignInput> & { name: string; inclusionList: string; exclusionMode: boolean };
+//
+// Targeting (targetLanguages, subjectFilterMode, subjects, deniedSpecs) is
+// deliberately NOT part of this bulk paste format. Subjects and denied specs
+// carry portal-issued ids that must never be re-derived from a name (see the
+// design doc's "ids are copied verbatim, never re-resolved" rule) — a text
+// round-trip through paste would reset those ids to 0 and corrupt targeting on
+// the next push for every campaign already linked to the portal. Targeting is
+// set at campaign creation, edited through the per-row Edit form (which carries
+// SubjectRef ids through untouched), or replaced by the harvester's baseline
+// pull. This paste format stays scoped to scalar economics/range fields, which
+// round-trip safely.
+type ParsedCampaign = Partial<CreateCampaignInput> & { name: string };
 
 function parseExportText(text: string): ParsedCampaign[] {
   // Split at campaign boundaries (before "Campaign N — ..." lines) instead of
@@ -62,17 +80,15 @@ function parseExportText(text: string): ParsedCampaign[] {
     // Only set fields that actually appear in the text. When updating an
     // existing campaign, omitted fields (e.g. PSA Sourcing Fee, eBay Fee)
     // keep their current values instead of being reset to defaults.
-    // Conditionally-emitted string filters (year, grade, price, clConfidence,
-    // inclusionList) default to '' so an absent line clears the filter —
-    // buildExportText only emits these when non-empty.
+    // Conditionally-emitted string filters (year, grade, price, clConfidence)
+    // default to '' so an absent line clears the filter — buildExportText
+    // only emits these when non-empty.
     const input: ParsedCampaign = {
       name: headerMatch[1].trim(),
       yearRange: '',
       gradeRange: '',
       priceRange: '',
       clConfidence: '',
-      inclusionList: '',
-      exclusionMode: false,
     };
 
     for (let i = 1; i < lines.length; i++) {
@@ -115,14 +131,6 @@ function parseExportText(text: string): ParsedCampaign[] {
           if (!isNaN(dollars)) input.dailySpendCapCents = Math.round(dollars * 100);
           break;
         }
-        case 'INCLUSION':
-          input.inclusionList = val;
-          input.exclusionMode = false;
-          break;
-        case 'EXCLUSION':
-          input.inclusionList = val;
-          input.exclusionMode = true;
-          break;
         case 'PSA SOURCING FEE': {
           const dollars = parseFloat(val.replace(/[$,]/g, ''));
           if (!isNaN(dollars)) input.psaSourcingFeeCents = Math.round(dollars * 100);
@@ -133,6 +141,8 @@ function parseExportText(text: string): ParsedCampaign[] {
           if (!isNaN(pct)) input.ebayFeePct = pct / 100;
           break;
         }
+        // 'INCLUSION'/'EXCLUSION' lines from the pre-spec-list format are no
+        // longer recognized — see the comment on ParsedCampaign above.
       }
     }
 
@@ -158,21 +168,23 @@ function buildExportText(campaigns: Campaign[]): string {
     lines.push(`Daily Spend: ${formatCents(c.dailySpendCapCents)}`);
     lines.push(`PSA Sourcing Fee: ${formatCents(c.psaSourcingFeeCents)}`);
     lines.push(`eBay Fee: ${formatPct(c.ebayFeePct)}`);
-    if (c.inclusionList) {
-      const label = c.exclusionMode ? 'Exclusion' : 'Inclusion';
-      lines.push(`${label}: ${c.inclusionList}`);
-    }
     return lines.join('\n');
   }).join('\n\n');
 }
 
 export default function CampaignsPage() {
   const [showCreate, setShowCreate] = useState(false);
+  // The campaign under edit, plus the updatedAt captured when the form opened.
+  // That timestamp is the optimistic-concurrency token: the psa-harvest
+  // baseline pull writes the same targeting fields from a separate process,
+  // and a stale form would put -1 placeholders back over reconciled portal ids.
+  const [editing, setEditing] = useState<{ id: string; updatedAt: string } | null>(null);
   const toast = useToast();
 
   const queryClient = useQueryClient();
-  const { data: allCampaigns = [], isLoading } = useCampaigns(false);
+  const { data: allCampaigns = [], isLoading, isSuccess } = useCampaigns(false);
   const createMutation = useCreateCampaign();
+  const updateMutation = useUpdateCampaign();
 
   const form = useForm<CreateCampaignInput>({
     initialValues: { ...defaultCampaignInput },
@@ -188,6 +200,116 @@ export default function CampaignsPage() {
       }
     },
   });
+
+  const editForm = useForm<EditCampaignFormValues>({
+    // expectedFillRate is only meaningful once handleEdit seeds real data via
+    // toFormValues; this placeholder is never shown (the edit form only
+    // mounts once `editing` is set, immediately after reset()).
+    initialValues: { ...defaultCampaignInput, expectedFillRate: 0 },
+    validate: validateCampaignForm,
+    onSubmit: async (values) => {
+      if (!editing) return;
+
+      // Re-read over the network to build the payload. This is a full-row PUT,
+      // so the request has to echo back the targeting, psaCampaignRequestId and
+      // expectedFillRate the form does not edit — and the React Query cache
+      // cannot supply them reliably, since it holds data fresh for
+      // CAMPAIGN_STALE_TIME (30s) and never observes a psa-harvest write.
+      //
+      // Note this read is NOT the staleness check. There is no client-side
+      // comparison here at all: ifUnmodifiedSince below carries the timestamp
+      // captured when the form opened, so the server's compare-and-write covers
+      // the whole form-open→UPDATE span in one statement. Comparing `fresh`
+      // against `editing` here as well would only re-check the front half of a
+      // window the server already covers.
+      let fresh: Campaign;
+      try {
+        fresh = await api.getCampaign(editing.id);
+      } catch (err) {
+        // Fail closed. Saving from the cached row instead would put its stale
+        // targeting ids back over a newer baseline — the exact write this path
+        // exists to prevent. The message is fixed rather than routed through
+        // getErrorMessage: that helper surfaces the raw Error.message when
+        // present (e.g. "network down"), which would bury the actionable
+        // "nothing was saved" guidance the operator needs here.
+        reportError('Campaign edit staleness check', err);
+        toast.error('Could not confirm the campaign is unchanged — nothing was saved');
+        return;
+      }
+
+      try {
+        // Full-row PUT: HandleUpdateCampaign decodes a whole inventory.Campaign
+        // and the UPDATE sets every column, so an omitted field is written as
+        // its zero value. Spreading `fresh` first is what keeps
+        // psaCampaignRequestId and expectedFillRate intact.
+        //
+        // ifUnmodifiedSince is editing.updatedAt — the row as of form open —
+        // not fresh.updatedAt. That is the whole point: fresh was read
+        // milliseconds ago, so asserting it would almost always pass and would
+        // miss a harvester write that landed while the form sat open. Passing
+        // the form-open value makes the server reject any change since then.
+        await updateMutation.mutateAsync({
+          id: editing.id,
+          data: { ...fresh, ...values },
+          ifUnmodifiedSince: editing.updatedAt,
+        });
+        setEditing(null);
+        toast.success(
+          fresh.psaCampaignRequestId
+            ? 'Campaign updated — open PSA on the row to publish the change'
+            : 'Campaign updated',
+        );
+      } catch (err) {
+        if (isConflict(err)) {
+          // The row moved at some point between the form opening and the write.
+          // The "start from current data" advice is only true if the cache is
+          // actually refreshed — otherwise re-opening Edit re-reads the same
+          // stale row and fails again the same way.
+          await queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
+          toast.error(
+            'This campaign changed while you were editing it — most likely the harvester baseline pull. ' +
+            'Nothing was saved. Close and re-open Edit to start from current data.',
+          );
+          return;
+        }
+        toast.error(getErrorMessage(err, 'Failed to update campaign'));
+      }
+    },
+  });
+
+  function handleEdit(c: Campaign) {
+    setShowCreate(false);
+    setEditing({ id: c.id, updatedAt: c.updatedAt });
+    editForm.reset(toFormValues(c));
+  }
+
+  function handleCancelEdit() {
+    setEditing(null);
+  }
+
+  // Create and edit are mutually exclusive in both directions. handleEdit
+  // already closes Create; without the matching clear here, opening Create
+  // while editing stacks two full-height form cards, and it stops being clear
+  // which one a Save applies to.
+  function handleToggleCreate(next: boolean) {
+    setShowCreate(next);
+    if (next) setEditing(null);
+  }
+
+  const editingCampaign = editing ? allCampaigns.find(c => c.id === editing.id) ?? null : null;
+
+  // A campaign deleted out from under an open edit form — from another tab, or
+  // the detail page — drops out of the list on the next refetch. Without this,
+  // `editingCampaign` goes null and the card vanishes mid-typing while
+  // `editing` stays set, leaving a save target that can only ever 404. Gate on
+  // isSuccess so a failed refetch (data falls back to []) doesn't read as
+  // "everything was deleted" and discard a valid in-progress edit.
+  useEffect(() => {
+    if (!editing || !isSuccess) return;
+    if (allCampaigns.some(c => c.id === editing.id)) return;
+    setEditing(null);
+    toast.error('That campaign no longer exists — it was deleted while you were editing. Nothing was saved.');
+  }, [editing, allCampaigns, isSuccess, toast]);
 
   const pnlQueries = useQueries({
     queries: allCampaigns.map(c => campaignPNLQueryOptions(c.id)),
@@ -305,13 +427,48 @@ export default function CampaignsPage() {
                 // same mutation overwrite internal state, losing all but one.
                 for (const input of parsed) {
                   try {
-                    const existing = allCampaigns.find(c => c.name.toLowerCase() === input.name.toLowerCase());
-                    if (existing) {
+                    const cached = allCampaigns.find(c => c.name.toLowerCase() === input.name.toLowerCase());
+                    if (cached) {
+                      // Re-read over the network to build the payload, the same
+                      // reason the edit form does: this is a full-row PUT, so it
+                      // has to echo back the targeting the paste format
+                      // deliberately does not carry, and allCampaigns is React
+                      // Query data held fresh for CAMPAIGN_STALE_TIME that never
+                      // observes a psa-harvest write. Spreading the cached row
+                      // instead would write its stale targeting ids back over a
+                      // newer baseline.
+                      //
+                      // The staleness check itself is the ifUnmodifiedSince on
+                      // the PUT below, keyed on cached.updatedAt — not a
+                      // comparison here.
+                      let fresh: Campaign;
+                      try {
+                        fresh = await api.getCampaign(cached.id);
+                      } catch (err) {
+                        // Fail closed, but per campaign: skip this one and keep
+                        // importing the rest of the block.
+                        reportError('Campaign paste staleness check', err);
+                        errors.push(`${input.name}: could not confirm the campaign is unchanged — not updated`);
+                        continue;
+                      }
                       // Only overlay fields that were explicitly in the import text;
-                      // omitted fields (e.g. PSA Sourcing Fee) keep their current values.
-                      // Strip server-owned fields so only mutable data is sent.
-                      const { id: _id, createdAt: _ca, updatedAt: _ua, expectedFillRate: _efr, ...base } = existing;
-                      await api.updateCampaign(existing.id, { ...base, ...input });
+                      // omitted fields (e.g. PSA Sourcing Fee) keep their current
+                      // values. Everything else rides along verbatim because this is
+                      // a full-row PUT: HandleUpdateCampaign decodes a whole
+                      // inventory.Campaign and the UPDATE sets every column, so an
+                      // omitted field is written as its zero value. That is why
+                      // expectedFillRate is no longer stripped — it is operator-owned
+                      // (campaign_store.go binds c.ExpectedFillRate verbatim and
+                      // nothing derives it), so stripping it zeroed the column on
+                      // every paste update. id/createdAt/updatedAt are the genuinely
+                      // server-owned ones: id comes from the URL, created_at is not in
+                      // the UPDATE, and the service stamps UpdatedAt itself.
+                      const { id: _id, createdAt: _ca, updatedAt: _ua, ...base } = fresh;
+                      // cached.updatedAt, not fresh.updatedAt: fresh was read
+                      // milliseconds ago, so asserting it would almost always
+                      // pass. The list-load value is the baseline the operator's
+                      // paste was actually written against.
+                      await api.updateCampaign(cached.id, { ...base, ...input }, cached.updatedAt);
                       updated++;
                     } else {
                       // New campaigns get defaults for any fields not in the text.
@@ -319,6 +476,15 @@ export default function CampaignsPage() {
                       created++;
                     }
                   } catch (err) {
+                    if (isConflict(err)) {
+                      // The row moved at some point since the list loaded.
+                      // Recorded per campaign so the rest of the block still
+                      // imports. No invalidate here — the unconditional one
+                      // after this loop already refreshes the list, so a
+                      // re-paste sees current data.
+                      errors.push(`${input.name}: changed since the campaign list loaded (most likely the harvester baseline pull) — not updated`);
+                      continue;
+                    }
                     errors.push(`${input.name}: ${getErrorMessage(err, 'failed')}`);
                   }
                 }
@@ -347,7 +513,7 @@ export default function CampaignsPage() {
             title={showCreate ? 'Cancel' : 'New campaign'}
             variant={showCreate ? 'danger' : 'primary'}
             onClick={() => {
-              setShowCreate(!showCreate);
+              handleToggleCreate(!showCreate);
             }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -372,7 +538,12 @@ export default function CampaignsPage() {
           showCreate={showCreate}
           form={form}
           createMutation={createMutation}
-          onToggleCreate={() => setShowCreate(true)}
+          onToggleCreate={() => handleToggleCreate(true)}
+          editingCampaign={editingCampaign}
+          editForm={editForm}
+          updateMutation={updateMutation}
+          onEdit={handleEdit}
+          onCancelEdit={handleCancelEdit}
         />
       </SectionErrorBoundary>
 

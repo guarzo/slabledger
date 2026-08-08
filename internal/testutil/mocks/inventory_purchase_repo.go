@@ -62,6 +62,8 @@ type PurchaseRepositoryMock struct {
 	UpdatePurchaseDHPriceSyncFn          func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
 	UnmatchPurchaseDHFn                  func(ctx context.Context, purchaseID string, pushStatus string) error
 	ListDHPriceDriftFn                   func(ctx context.Context) ([]inventory.Purchase, error)
+	ReattributePurchaseFn                func(ctx context.Context, purchaseID string, r inventory.Reattribution) error
+	UpdatePurchaseAttributionNameFn      func(ctx context.Context, purchaseID, psaName, source string) error
 }
 
 var _ inventory.PurchaseRepository = (*PurchaseRepositoryMock)(nil)
@@ -435,4 +437,18 @@ func (m *PurchaseRepositoryMock) ListDHPriceDrift(ctx context.Context) ([]invent
 		return m.ListDHPriceDriftFn(ctx)
 	}
 	return []inventory.Purchase{}, nil
+}
+
+func (m *PurchaseRepositoryMock) ReattributePurchase(ctx context.Context, purchaseID string, r inventory.Reattribution) error {
+	if m.ReattributePurchaseFn != nil {
+		return m.ReattributePurchaseFn(ctx, purchaseID, r)
+	}
+	return nil
+}
+
+func (m *PurchaseRepositoryMock) UpdatePurchaseAttributionName(ctx context.Context, purchaseID, psaName, source string) error {
+	if m.UpdatePurchaseAttributionNameFn != nil {
+		return m.UpdatePurchaseAttributionNameFn(ctx, purchaseID, psaName, source)
+	}
+	return nil
 }

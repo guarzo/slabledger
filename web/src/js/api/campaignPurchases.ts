@@ -35,7 +35,7 @@ declare module './client' {
     listPurchaseOnDH(purchaseId: string): Promise<{ listed: number; synced: number; skipped: number; total: number }>;
 
     // Bulk sales
-    createBulkSales(campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number }[]): Promise<import('../../types/campaigns').BulkSaleResult>;
+    createBulkSales(campaignId: string, saleChannel: string, saleDate: string, items: import('../../types/campaigns').BulkSaleItemInput[]): Promise<import('../../types/campaigns').BulkSaleResult>;
 
     // Price hints
     savePriceHint(hint: PriceHint): Promise<{ status: string }>;
@@ -45,28 +45,28 @@ declare module './client' {
 const proto = APIClient.prototype;
 
 proto.createPurchase = async function (this: APIClient, campaignId: string, input: CreatePurchaseInput): Promise<Purchase> {
-  return this.post<Purchase>(`/campaigns/${campaignId}/purchases`, input);
+  return this.post<Purchase>(`/campaigns/${encodeURIComponent(campaignId)}/purchases`, input);
 };
 
 proto.deletePurchase = async function (this: APIClient, campaignId: string, purchaseId: string): Promise<void> {
-  await this.deleteResource(`/campaigns/${campaignId}/purchases/${purchaseId}`);
+  await this.deleteResource(`/campaigns/${encodeURIComponent(campaignId)}/purchases/${encodeURIComponent(purchaseId)}`);
 };
 
 proto.createSale = async function (this: APIClient, campaignId: string, input: CreateSaleInput): Promise<Sale> {
-  return this.post<Sale>(`/campaigns/${campaignId}/sales`, input);
+  return this.post<Sale>(`/campaigns/${encodeURIComponent(campaignId)}/sales`, input);
 };
 
 proto.deleteSale = async function (this: APIClient, campaignId: string, purchaseId: string): Promise<void> {
-  await this.deleteResource(`/campaigns/${campaignId}/purchases/${purchaseId}/sale`);
+  await this.deleteResource(`/campaigns/${encodeURIComponent(campaignId)}/purchases/${encodeURIComponent(purchaseId)}/sale`);
 };
 
 proto.quickAddPurchase = async function (this: APIClient, campaignId: string, req: QuickAddRequest): Promise<Purchase> {
-  return this.post<Purchase>(`/campaigns/${campaignId}/purchases/quick-add`, req);
+  return this.post<Purchase>(`/campaigns/${encodeURIComponent(campaignId)}/purchases/quick-add`, req);
 };
 
 proto.setPriceOverride = async function (this: APIClient, purchaseId: string, priceCents: number, source: string): Promise<void> {
   const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/${purchaseId}/price-override`,
+    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/price-override`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -78,7 +78,7 @@ proto.setPriceOverride = async function (this: APIClient, purchaseId: string, pr
 
 proto.clearPriceOverride = async function (this: APIClient, purchaseId: string): Promise<void> {
   const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/${purchaseId}/price-override`,
+    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/price-override`,
     { method: 'DELETE' }
   );
   await this.expectNoContent(response);
@@ -86,7 +86,7 @@ proto.clearPriceOverride = async function (this: APIClient, purchaseId: string):
 
 proto.acceptAISuggestion = async function (this: APIClient, purchaseId: string): Promise<void> {
   const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/${purchaseId}/accept-ai-suggestion`,
+    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/accept-ai-suggestion`,
     { method: 'POST' },
   );
   await this.expectNoContent(response);
@@ -94,7 +94,7 @@ proto.acceptAISuggestion = async function (this: APIClient, purchaseId: string):
 
 proto.dismissAISuggestion = async function (this: APIClient, purchaseId: string): Promise<void> {
   const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/${purchaseId}/ai-suggestion`,
+    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/ai-suggestion`,
     { method: 'DELETE' }
   );
   await this.expectNoContent(response);
@@ -102,7 +102,7 @@ proto.dismissAISuggestion = async function (this: APIClient, purchaseId: string)
 
 proto.reassignPurchase = async function (this: APIClient, purchaseId: string, campaignId: string): Promise<void> {
   const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/${purchaseId}/campaign`,
+    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/campaign`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -116,8 +116,8 @@ proto.listPurchaseOnDH = async function (this: APIClient, purchaseId: string): P
   return this.post<{ listed: number; synced: number; skipped: number; total: number }>(`/purchases/${encodeURIComponent(purchaseId)}/list-on-dh`);
 };
 
-proto.createBulkSales = async function (this: APIClient, campaignId: string, saleChannel: string, saleDate: string, items: { purchaseId: string; salePriceCents: number }[]): Promise<import('../../types/campaigns').BulkSaleResult> {
-  return this.post<import('../../types/campaigns').BulkSaleResult>(`/campaigns/${campaignId}/sales/bulk`, { saleChannel, saleDate, items });
+proto.createBulkSales = async function (this: APIClient, campaignId: string, saleChannel: string, saleDate: string, items: import('../../types/campaigns').BulkSaleItemInput[]): Promise<import('../../types/campaigns').BulkSaleResult> {
+  return this.post<import('../../types/campaigns').BulkSaleResult>(`/campaigns/${encodeURIComponent(campaignId)}/sales/bulk`, { saleChannel, saleDate, items });
 };
 
 proto.savePriceHint = async function (this: APIClient, hint: PriceHint): Promise<{ status: string }> {

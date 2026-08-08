@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -336,6 +338,92 @@ func TestHandleUpdateCampaign_PUT_InvalidBody(t *testing.T) {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
 	decodeErrorResponse(t, rec)
+}
+
+// --- HandleUpdateCampaign conditional writes (ifUnmodifiedSince) ---
+
+func TestHandleUpdateCampaign_ConditionalRouting(t *testing.T) {
+	// The query parameter is what selects between the two service methods, so
+	// each case asserts which one ran rather than only the status code: routing
+	// a conditional request to the unconditional method would still answer 200
+	// while silently dropping the precondition.
+	expected := time.Date(2026, 2, 2, 3, 4, 5, 0, time.UTC)
+
+	tests := []struct {
+		name             string
+		query            string
+		wantStatus       int
+		wantConditional  bool
+		conditionalErr   error
+		wantExpectedTime time.Time
+	}{
+		{
+			name:       "no parameter uses the unconditional update",
+			query:      "",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:             "parameter routes to the conditional update",
+			query:            "?ifUnmodifiedSince=" + url.QueryEscape(expected.Format(time.RFC3339Nano)),
+			wantStatus:       http.StatusOK,
+			wantConditional:  true,
+			wantExpectedTime: expected,
+		},
+		{
+			name:             "a precondition failure answers 409",
+			query:            "?ifUnmodifiedSince=" + url.QueryEscape(expected.Format(time.RFC3339Nano)),
+			wantStatus:       http.StatusConflict,
+			wantConditional:  true,
+			conditionalErr:   inventory.ErrCampaignConflict,
+			wantExpectedTime: expected,
+		},
+		{
+			name:       "an unparseable timestamp is rejected rather than ignored",
+			query:      "?ifUnmodifiedSince=not-a-time",
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calledUnconditional, calledConditional bool
+			var gotExpected time.Time
+			svc := &mocks.MockInventoryService{
+				UpdateCampaignFn: func(_ context.Context, _ *inventory.Campaign) error {
+					calledUnconditional = true
+					return nil
+				},
+				UpdateCampaignIfUnchangedFn: func(_ context.Context, _ *inventory.Campaign, e time.Time) error {
+					calledConditional = true
+					gotExpected = e
+					return tt.conditionalErr
+				},
+			}
+			h := newTestHandler(svc)
+
+			body := `{"name":"Updated","sport":"pokemon"}`
+			req := httptest.NewRequest(http.MethodPut, "/api/campaigns/abc-123"+tt.query, bytes.NewBufferString(body))
+			req.SetPathValue("id", "abc-123")
+			rec := httptest.NewRecorder()
+			h.HandleUpdateCampaign(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
+			}
+			if calledConditional != tt.wantConditional {
+				t.Errorf("conditional update called = %v, want %v", calledConditional, tt.wantConditional)
+			}
+			if tt.wantConditional && calledUnconditional {
+				t.Error("unconditional update also ran; the precondition would be lost")
+			}
+			if tt.wantConditional && !gotExpected.Equal(tt.wantExpectedTime) {
+				t.Errorf("expected timestamp %v, got %v", tt.wantExpectedTime, gotExpected)
+			}
+			if tt.wantStatus != http.StatusOK {
+				decodeErrorResponse(t, rec)
+			}
+		})
+	}
 }
 
 // --- HandleDelete ---

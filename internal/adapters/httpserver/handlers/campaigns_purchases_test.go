@@ -90,6 +90,12 @@ func TestHandleCreatePurchase_POST_Success(t *testing.T) {
 			if p.GradeValue != 9.5 {
 				t.Errorf("expected gradeValue=9.5, got %g", p.GradeValue)
 			}
+			// The body carries no attributionSource; the handler must supply
+			// 'manual' because the campaign came from the URL path.
+			if p.AttributionSource != inventory.AttributionSourceManual {
+				t.Errorf("expected attributionSource=%q, got %q",
+					inventory.AttributionSourceManual, p.AttributionSource)
+			}
 			p.ID = "new-purchase"
 			return nil
 		},
@@ -125,6 +131,81 @@ func TestHandleCreatePurchase_POST_DuplicateCert(t *testing.T) {
 		t.Fatalf("expected 409, got %d; body: %s", rec.Code, rec.Body.String())
 	}
 	decodeErrorResponse(t, rec)
+}
+
+// TestHandleCreatePurchase_POST_DiscardsClientAttribution is the security
+// regression test from d7f11436, updated for the create-path 'manual' rule. It
+// covers both halves: whatever the body claims is discarded, and the
+// server-derived value is 'manual' (the campaign came from the URL path, so an
+// operator chose it). The security property is unchanged — the client's value
+// never survives — only the expected post-clear value moved from "" to 'manual'.
+//
+// The first three cases supply an attributionSource other than 'manual', so the
+// source assertion proves the overwrite rather than observing a pass-through.
+// The fourth supplies 'manual' itself, where only the psaCampaignName assertion
+// can discriminate; it is retained because a client-supplied PSA name must still
+// be cleared unconditionally, and that is exactly the case where someone might
+// wrongly assume "source already matches, so nothing needs clearing".
+func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "forged psa attribution",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"psa","psaCampaignName":"Forged Campaign"}`,
+		},
+		{
+			name: "forged inferred attribution",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"inferred","psaCampaignName":"x"}`,
+		},
+		{
+			name: "value outside the CHECK constraint",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"not-a-source","psaCampaignName":"x"}`,
+		},
+		{
+			name: "forged manual attribution",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"attributionSource":"manual","psaCampaignName":"Forged Campaign"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got inventory.Purchase
+			svc := &mocks.MockInventoryService{
+				CreatePurchaseFn: func(_ context.Context, p *inventory.Purchase) error {
+					got = *p
+					return nil
+				},
+			}
+			h := newTestHandler(svc)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/purchases", bytes.NewBufferString(tt.body))
+			req.SetPathValue("id", "c1")
+			rec := httptest.NewRecorder()
+			h.HandleCreatePurchase(rec, req)
+
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
+			}
+			if got.AttributionSource != inventory.AttributionSourceManual {
+				t.Errorf("AttributionSource reaching the service = %q, want %q",
+					got.AttributionSource, inventory.AttributionSourceManual)
+			}
+			if got.PSACampaignName != "" {
+				t.Errorf("client-supplied psaCampaignName reached the service: %q", got.PSACampaignName)
+			}
+			// The response must not echo the forged values back either.
+			var resp inventory.Purchase
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if resp.AttributionSource != inventory.AttributionSourceManual || resp.PSACampaignName != "" {
+				t.Errorf("response echoed forged attribution: source=%q name=%q",
+					resp.AttributionSource, resp.PSACampaignName)
+			}
+		})
+	}
 }
 
 func TestHandleCreatePurchase_POST_InvalidBody(t *testing.T) {
@@ -673,6 +754,74 @@ func TestHandleDeleteSale(t *testing.T) {
 			}
 			if tt.checkBody != nil {
 				tt.checkBody(t, rec)
+			}
+		})
+	}
+}
+
+// --- HandleUpdateSaleReason ---
+
+func TestHandleUpdateSaleReason(t *testing.T) {
+	tests := []struct {
+		name       string
+		svc        *mocks.MockInventoryService
+		body       string
+		wantStatus int
+	}{
+		{
+			name: "empty reason returns 400",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, _, _, _ string) error {
+					return inventory.ErrInvalidSaleReason
+				},
+			},
+			body:       `{"saleReason":""}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid reason returns 400",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, _, _, _ string) error {
+					return inventory.ErrInvalidSaleReason
+				},
+			},
+			body:       `{"saleReason":"bogus"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "valid reason returns 200",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, campaignID, saleID, reason string) error {
+					if campaignID != "c-1" || saleID != "s-1" || reason != "bulk_lot" {
+						t.Fatalf("unexpected args: %s %s %s", campaignID, saleID, reason)
+					}
+					return nil
+				},
+			},
+			body:       `{"saleReason":"bulk_lot"}`,
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "sale not found returns 404",
+			svc: &mocks.MockInventoryService{
+				UpdateSaleReasonFn: func(_ context.Context, _, _, _ string) error {
+					return inventory.ErrSaleNotFound
+				},
+			},
+			body:       `{"saleReason":"bulk_lot"}`,
+			wantStatus: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newTestHandler(tt.svc)
+			req := httptest.NewRequest(http.MethodPatch, "/api/campaigns/c-1/sales/s-1", strings.NewReader(tt.body))
+			req.SetPathValue("id", "c-1")
+			req.SetPathValue("saleID", "s-1")
+			rec := httptest.NewRecorder()
+			h.HandleUpdateSaleReason(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d; body: %s", tt.wantStatus, rec.Code, rec.Body.String())
 			}
 		})
 	}

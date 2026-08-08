@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Button, Input, Select } from '../../ui';
 import { costBasis } from './inventory/utils';
 import { invalidateAfterSale } from './saleModal/invalidateAfterSale';
+import { saleReasonOptions } from './saleReasonOptions';
 
 interface RecordSaleFormProps {
   item: AgingItem;
@@ -36,6 +37,7 @@ export default function RecordSaleForm({ item, onSuccess, onCancel, hideItemHead
   const [daysListed, setDaysListed] = useState('');
   const [soldAtAskingPrice, setSoldAtAskingPrice] = useState(false);
   const [showOutcomeFields, setShowOutcomeFields] = useState(false);
+  const [saleReason, setSaleReason] = useState('');
 
   const initialPrices = useMemo(() => ({ [item.purchase.id]: prefillPrice(item) }), [item]);
   const effectivePrices = { ...initialPrices, ...prices };
@@ -60,6 +62,7 @@ export default function RecordSaleForm({ item, onSuccess, onCancel, hideItemHead
         ...(priceReductions ? { priceReductions: parseInt(priceReductions, 10) || 0 } : {}),
         ...(daysListed ? { daysListed: parseInt(daysListed, 10) || 0 } : {}),
         ...(soldAtAskingPrice ? { soldAtAskingPrice: true } : {}),
+        ...(saleReason ? { saleReason } : {}),
       });
       toast.success('Sale recorded');
       invalidateAfterSale(queryClient, [item.purchase.campaignId]);
@@ -103,6 +106,15 @@ export default function RecordSaleForm({ item, onSuccess, onCancel, hideItemHead
           onChange={e => setSaleDate(e.target.value)}
         />
       </div>
+
+      <Select
+        label="Sale Reason"
+        name="sale_reason"
+        selectSize="sm"
+        value={saleReason}
+        onChange={e => setSaleReason(e.target.value)}
+        options={saleReasonOptions}
+      />
 
       <Input
         label="Sale Price ($)"

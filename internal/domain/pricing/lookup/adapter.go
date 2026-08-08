@@ -236,6 +236,7 @@ func (a *Adapter) buildMarketSnapshot(price *pricing.Price, grade float64) (*inv
 
 	// Market data
 	if price.Market != nil {
+		snap.MarketDataObserved = true
 		snap.LowestListCents = int(price.Market.LowestListing)
 		snap.ActiveListings = price.Market.ActiveListings
 		snap.SalesLast30d = price.Market.SalesLast30d
@@ -269,6 +270,7 @@ func (a *Adapter) buildMarketSnapshot(price *pricing.Price, grade float64) (*inv
 		snap.Sources = price.Sources
 		snap.SourceCount = len(price.Sources)
 	}
+	snap.SourceCountRaw = len(price.Sources)
 
 	// Conservative/distribution data.
 	// PSA 8 has no direct data in the provider API; the fallback logic at lines below

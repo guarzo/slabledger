@@ -18,6 +18,7 @@ import (
 //	}
 type MockImportService struct {
 	ImportPSAExportGlobalFn     func(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
+	ReconcilePSAAttributionFn   func(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error)
 	EnsureExternalCampaignFn    func(ctx context.Context) (*inventory.Campaign, error)
 	ImportExternalCSVFn         func(ctx context.Context, rows []inventory.ShopifyExportRow) (*inventory.ExternalImportResult, error)
 	ImportOrdersSalesFn         func(ctx context.Context, rows []inventory.OrdersExportRow) (*inventory.OrdersImportResult, error)
@@ -37,6 +38,13 @@ func (m *MockImportService) ImportPSAExportGlobal(ctx context.Context, rows []in
 		return m.ImportPSAExportGlobalFn(ctx, rows)
 	}
 	return &inventory.PSAImportResult{}, nil
+}
+
+func (m *MockImportService) ReconcilePSAAttribution(ctx context.Context, rows []inventory.PSAExportRow) (inventory.ReconcileResult, error) {
+	if m.ReconcilePSAAttributionFn != nil {
+		return m.ReconcilePSAAttributionFn(ctx, rows)
+	}
+	return inventory.ReconcileResult{}, nil
 }
 
 func (m *MockImportService) EnsureExternalCampaign(ctx context.Context) (*inventory.Campaign, error) {

@@ -1,6 +1,6 @@
 # SlabLedger - Makefile
 
-.PHONY: all help build test test-verbose coverage lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull db-push ci hooks screenshots screenshots-quick kill
+.PHONY: all help build test test-verbose coverage test-postgres lint check fmt clean install web web-build web-dev web-clean web-rebuild db-pull db-push ci hooks screenshots screenshots-quick kill
 
 # Default target
 all: help
@@ -71,19 +71,48 @@ web-clean:
 	@rm -rf web/dist web/node_modules/.vite
 
 # Testing
+#
+# -count=1 on every target below disables Go's test cache. This is a
+# correctness requirement, not a style choice: the cache keys on source files,
+# the build, and consulted env vars -- NOT on database contents. A DB-backed
+# suite can therefore report a cached "ok" without ever connecting, which is
+# exactly what happened during #537 (make test-postgres served a stale pass
+# after the database had changed underneath it).
 test:
 	@echo "Running tests..."
-	go test -race ./...
+	go test -race -count=1 ./...
 
 test-verbose:
 	@echo "Running tests (verbose)..."
-	go test -race -v ./...
+	go test -race -count=1 -v ./...
 
 coverage:
 	@echo "Running tests with coverage..."
-	go test -race -coverprofile=coverage.out -covermode=atomic ./...
+	go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
+
+# Runs the Postgres adapter package against a DEDICATED throwaway database.
+# That package drops schemas and truncates tables, so it must never point at
+# the development database. Creates $(POSTGRES_TEST_DB) on first run.
+#
+# The guard below is the safety interlock: provisioning creates
+# $(POSTGRES_TEST_DB), but the tests connect via POSTGRES_TEST_DSN. If someone
+# overrides the DSN to point elsewhere, we would create one database and drop
+# schemas in another — so refuse to run unless the DSN's database name matches.
+test-postgres:
+	@dsn_db=$$(printf '%s' "$(POSTGRES_TEST_DSN)" | sed -e 's/?.*$$//' -e 's#.*/##'); \
+	if [ "$$dsn_db" != "$(POSTGRES_TEST_DB)" ]; then \
+		echo "ERROR: POSTGRES_TEST_DSN targets database '$$dsn_db' but POSTGRES_TEST_DB is '$(POSTGRES_TEST_DB)'."; \
+		echo "       These must match; override both together, e.g.:"; \
+		echo "       make test-postgres POSTGRES_TEST_DB=mydb POSTGRES_TEST_DSN=postgresql://.../mydb?sslmode=disable"; \
+		exit 1; \
+	fi
+	@echo "Ensuring $(POSTGRES_TEST_DB) database exists..."
+	@psql "$(POSTGRES_ADMIN_URL)" -tc "SELECT 1 FROM pg_database WHERE datname = '$(POSTGRES_TEST_DB)'" \
+		| grep -q 1 || psql "$(POSTGRES_ADMIN_URL)" -c "CREATE DATABASE \"$(POSTGRES_TEST_DB)\""
+	@echo "Running Postgres package tests..."
+	POSTGRES_TEST_URL="$(POSTGRES_TEST_DSN)" go test -race -count=1 ./internal/adapters/storage/postgres/...
 
 # Screenshots of all pages via Playwright (uses real backend + local Postgres).
 # Pulls prod data first via db-pull so pages render with real content.
@@ -142,6 +171,9 @@ install:
 # Both can be overridden from the environment.
 PROD_DB_URL  ?= $(SUPABASE_URL)
 LOCAL_DB_URL ?= postgresql://slabledger:slabledger@postgres:5432/slabledger?sslmode=disable
+POSTGRES_ADMIN_URL ?= postgresql://slabledger:slabledger@postgres:5432/postgres?sslmode=disable
+POSTGRES_TEST_DB   ?= slabledger_test
+POSTGRES_TEST_DSN  ?= postgresql://slabledger:slabledger@postgres:5432/$(POSTGRES_TEST_DB)?sslmode=disable
 
 db-pull:
 	@if [ -f .env ]; then set -a && . ./.env && set +a; fi && \

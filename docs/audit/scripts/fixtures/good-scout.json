@@ -1,0 +1,13 @@
+{
+  "scout": "go-reference-map",
+  "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+  "status": "complete",
+  "declared_totals": {"go_files": 676, "packages": 53},
+  "records_count": 1,
+  "gaps": [],
+  "records": [
+    {"identity": "inventory.Campaign", "kind": "symbol",
+     "defined_at": "internal/domain/inventory/types_core.go:31",
+     "external_refs": 42, "command": "git grep -nE '\\bCampaign\\b'"}
+  ]
+}

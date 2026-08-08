@@ -54,12 +54,46 @@ func asSubjectRefs(v any) []psacampaign.SubjectRef {
 	return out
 }
 
+// asStrings converts a decoded []any of string values into []string,
+// skipping any element that is not a string.
+func asStrings(v any) []string {
+	arr, _ := v.([]any)
+	out := make([]string, 0, len(arr))
+	for _, e := range arr {
+		if s, ok := e.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// decodeSpecLists converts the edit root's prepackagedSpecLists sibling of
+// formData into the curated spec-list catalog. This is the field
+// fetchCampaignFormData used to discard entirely.
+func decodeSpecLists(v any) []psacampaign.SpecListRef {
+	arr, _ := v.([]any)
+	out := make([]psacampaign.SpecListRef, 0, len(arr))
+	for _, e := range arr {
+		m, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, psacampaign.SpecListRef{
+			ID:     asString(m["id"]),
+			Name:   asString(m["name"]),
+			Status: asString(m["status"]),
+		})
+	}
+	return out
+}
+
 // decodeFormData maps a decoded formData object into CampaignFormData.
 func decodeFormData(fd map[string]any) (psacampaign.CampaignFormData, error) {
 	return psacampaign.CampaignFormData{
 		CampaignName:                asString(fd["campaignName"]),
 		CampaignType:                asString(fd["campaignType"]),
 		Category:                    asString(fd["category"]),
+		PrepackagedSpecListIDs:      asStrings(fd["prepackagedSpecListIds"]),
 		IsActive:                    boolVal(fd["isActive"]),
 		BidPercentage:               asInt(fd["bidPercentage"]),
 		FlatFee:                     asInt(fd["flatFee"]),

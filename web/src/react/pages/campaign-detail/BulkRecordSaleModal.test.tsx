@@ -183,4 +183,97 @@ describe('BulkRecordSaleModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /reset to computed/i }));
     expect(row1Input.value).toBe('35');
   });
+
+  it('includes per-row listing details and sale reason keyed by purchaseId in the payload', async () => {
+    vi.mocked(api.createBulkSales).mockResolvedValue({ created: 2, failed: 0 });
+    const items = [makeItem('1', 'c1', 5000), makeItem('2', 'c1', 6000)];
+    renderModal(items);
+
+    const pctInput = screen.getByLabelText(/% of CL/i) as HTMLInputElement;
+    fireEvent.change(pctInput, { target: { value: '70' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices/i }));
+
+    fireEvent.change(screen.getByLabelText(/Original list price for Card 1/i), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText(/Price reductions for Card 1/i), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText(/Days listed for Card 1/i), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText(/Sale reason for Card 1/i), { target: { value: 'bulk_lot' } });
+
+    fireEvent.change(screen.getByLabelText(/Days listed for Card 2/i), { target: { value: '5' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Record 2 Sales/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(api.createBulkSales)).toHaveBeenCalledWith(
+        'c1',
+        expect.any(String),
+        expect.any(String),
+        expect.arrayContaining([
+          expect.objectContaining({
+            purchaseId: '1',
+            originalListPriceCents: 2000,
+            priceReductions: 3,
+            daysListed: 12,
+            saleReason: 'bulk_lot',
+          }),
+          expect.objectContaining({
+            purchaseId: '2',
+            daysListed: 5,
+          }),
+        ]),
+      );
+    });
+  });
+
+  it('clears per-row listing details when the modal closes and reopens', () => {
+    const items = [makeItem('1', 'c1', 5000)];
+    renderModal(items);
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices/i }));
+    fireEvent.change(screen.getByLabelText(/Days listed for Card 1/i), { target: { value: '7' } });
+    expect((screen.getByLabelText(/Days listed for Card 1/i) as HTMLInputElement).value).toBe('7');
+
+    // Simulate the user closing the modal (Cancel triggers handleClose -> reset()).
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices/i }));
+    expect((screen.getByLabelText(/Days listed for Card 1/i) as HTMLInputElement).value).toBe('');
+  });
+
+  it('keeps entered per-row values on the row that failed after a partial-failure retry', async () => {
+    vi.mocked(api.createBulkSales).mockResolvedValue({
+      created: 1,
+      failed: 1,
+      errors: [{ purchaseId: '2', error: 'bad reason' }],
+    });
+    const items = [makeItem('1', 'c1', 5000), makeItem('2', 'c1', 6000)];
+    renderModal(items);
+
+    const pctInput = screen.getByLabelText(/% of CL/i) as HTMLInputElement;
+    fireEvent.change(pctInput, { target: { value: '70' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices/i }));
+    fireEvent.change(screen.getByLabelText(/Days listed for Card 2/i), { target: { value: '9' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Record 2 Sales/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Record Sale \(1 cards\)/i)).toBeInTheDocument();
+    });
+
+    // Review panel stays open across the narrowing retry.
+    expect((screen.getByLabelText(/Days listed for Card 2/i) as HTMLInputElement).value).toBe('9');
+  });
+
+  it('exposes each row\'s listing-detail inputs via row-specific accessible labels', () => {
+    const items = [makeItem('1', 'c1', 5000), makeItem('2', 'c1', 6000)];
+    renderModal(items);
+
+    fireEvent.click(screen.getByRole('button', { name: /Review prices/i }));
+
+    expect(screen.getByLabelText(/Days listed for Card 1/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Days listed for Card 2/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Sale reason for Card 1/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Sale reason for Card 2/i)).toBeInTheDocument();
+  });
 });

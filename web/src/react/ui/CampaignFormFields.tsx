@@ -1,10 +1,11 @@
-import type { Phase } from '../../types/campaigns';
-import { useEffect, useState, useId, type ReactNode } from 'react';
-import { Checkbox } from 'radix-ui';
-import { phaseOptions } from '../utils/campaignConstants';
+import type { Phase, SubjectRef } from '../../types/campaigns';
+import { useId, useEffect, useState, type ReactNode } from 'react';
+import { phaseOptions, targetLanguageOptions, subjectFilterModeOptions, SUBJECT_FILTER_EXCLUDE } from '../utils/campaignConstants';
 import { Input, Select } from '../ui';
+import { Segmented } from './Segmented';
 import ConfidenceRating from './ConfidenceRating';
 import GradeRangeSlider from './GradeRangeSlider';
+import SubjectListEditor from './SubjectListEditor';
 
 export interface CampaignFormValues {
   name: string;
@@ -15,8 +16,10 @@ export interface CampaignFormValues {
   clConfidence: string;
   buyTermsCLPct: number;
   dailySpendCapCents: number;
-  inclusionList: string;
-  exclusionMode: boolean;
+  targetLanguages: string[];
+  subjectFilterMode: string;
+  subjects: SubjectRef[];
+  deniedSpecs: SubjectRef[];
   psaSourcingFeeCents: number;
   ebayFeePct: number;
   expectedFillRate?: number;
@@ -25,7 +28,7 @@ export interface CampaignFormValues {
 
 interface CampaignFormFieldsProps {
   values: CampaignFormValues;
-  onChange: (field: string, value: string | number | boolean) => void;
+  onChange: (field: string, value: string | number | string[] | SubjectRef[]) => void;
   inputSize?: 'sm';
   showPhase?: boolean;
   showFees?: boolean;
@@ -63,7 +66,7 @@ function EconomicsSection({
   values, onChange, inputSize, showFees,
 }: {
   values: CampaignFormValues;
-  onChange: (field: string, value: string | number | boolean) => void;
+  onChange: (field: string, value: string | number | string[] | SubjectRef[]) => void;
   inputSize?: 'sm';
   showFees?: boolean;
 }) {
@@ -79,6 +82,9 @@ function EconomicsSection({
   const [psaSourcingFeeInput, setPsaSourcingFeeInput] = useState(() =>
     values.psaSourcingFeeCents == null ? '' : String(values.psaSourcingFeeCents / 100),
   );
+  const [expectedFillRateInput, setExpectedFillRateInput] = useState(() =>
+    values.expectedFillRate == null ? '' : String(values.expectedFillRate),
+  );
 
   // Sync local inputs when parent form values change (e.g. after setForm(campaign))
   useEffect(() => {
@@ -86,7 +92,8 @@ function EconomicsSection({
     setDailySpendCapInput(values.dailySpendCapCents == null ? '' : String(values.dailySpendCapCents / 100));
     setEbayFeeInput(values.ebayFeePct == null ? '' : String(Math.round(values.ebayFeePct * 10000) / 100));
     setPsaSourcingFeeInput(values.psaSourcingFeeCents == null ? '' : String(values.psaSourcingFeeCents / 100));
-  }, [values.buyTermsCLPct, values.dailySpendCapCents, values.ebayFeePct, values.psaSourcingFeeCents]);
+    setExpectedFillRateInput(values.expectedFillRate == null ? '' : String(values.expectedFillRate));
+  }, [values.buyTermsCLPct, values.dailySpendCapCents, values.ebayFeePct, values.psaSourcingFeeCents, values.expectedFillRate]);
 
   return (
     <FormSection
@@ -110,8 +117,10 @@ function EconomicsSection({
           onBlur={() => { const v = parseFloat(dailySpendCapInput); onChange('dailySpendCapCents', Number.isNaN(v) ? 0 : Math.round(v * 100)); }} />
         {showFees && (
           <>
-            <Input label="Expected Fill Rate (%)" type="text" inputMode="decimal" inputSize={inputSize} placeholder="e.g. 80" value={values.expectedFillRate != null ? String(values.expectedFillRate) : ''}
-              onChange={e => { const v = parseFloat(e.target.value); onChange('expectedFillRate', Number.isNaN(v) ? 0 : v); }} />
+            <Input label="Expected Fill Rate (%)" type="text" inputMode="decimal" inputSize={inputSize} placeholder="e.g. 80"
+              value={expectedFillRateInput}
+              onChange={e => setExpectedFillRateInput(e.target.value)}
+              onBlur={() => { const v = parseFloat(expectedFillRateInput); onChange('expectedFillRate', Number.isNaN(v) ? 0 : v); }} />
             <Input label="eBay Fee %" type="text" inputMode="decimal" inputSize={inputSize} placeholder="e.g. 12.35"
               value={ebayFeeInput}
               onChange={e => setEbayFeeInput(e.target.value)}
@@ -131,10 +140,95 @@ function EconomicsSection({
   );
 }
 
+function LanguageMultiSelect({
+  value, onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const groupId = useId();
+  const selected = new Set(value);
+  const known = new Set<string>(targetLanguageOptions.map(o => o.value));
+  // Tokens the backend sent that this copy of the closed set doesn't know.
+  // They are preserved through every toggle rather than silently dropped —
+  // dropping one would narrow what a live, money-spending campaign buys.
+  const unknown = value.filter(t => !known.has(t));
+
+  function toggleLanguage(token: string) {
+    onChange(selected.has(token) ? value.filter(t => t !== token) : [...value, token]);
+  }
+
+  const labels = value
+    .filter(t => known.has(t))
+    .map(t => targetLanguageOptions.find(o => o.value === t)?.label ?? t);
+  // Derived from value.length, not labels.length: an unrecognized token means
+  // the set is non-empty, so it is NOT an open net even though no known
+  // checkbox is checked. Conflating the two would contradict the warning
+  // below for the same state.
+  let summary: string;
+  if (value.length === 0) {
+    summary = 'None selected — open net: this campaign buys any language.';
+  } else if (labels.length === 0) {
+    // Every token in the set is unrecognized — there's nothing to enumerate,
+    // and the set is not open (see above). Point at the warning below rather
+    // than assert an empty buy scope.
+    summary = 'No recognized language selected — see warning below.';
+  } else {
+    summary = `Buys ${labels.join(' and ')} cards only.`;
+  }
+
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="block text-xs text-[var(--text-muted)] mb-1">Languages</legend>
+      <div className="flex flex-wrap items-center gap-4">
+        {targetLanguageOptions.map(o => (
+          <label
+            key={o.value}
+            htmlFor={`${groupId}-${o.value}`}
+            className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer"
+          >
+            <input
+              id={`${groupId}-${o.value}`}
+              type="checkbox"
+              checked={selected.has(o.value)}
+              onChange={() => toggleLanguage(o.value)}
+              className="rounded border-[var(--surface-2)]"
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-[var(--text-subtle)]">{summary}</p>
+      {unknown.map(t => (
+        <p key={t} className="text-xs text-[var(--warning)] flex flex-wrap items-center gap-1.5">
+          {/* normalizeTargetLanguages (validation.go) rejects the whole save on
+              the first unknown token — nothing with this token is pushed. */}
+          <span>
+            Unrecognized language token: {t} — not recognized by this UI; the
+            campaign will be rejected on save until it is reconciled.
+          </span>
+          {/* Toggling a known checkbox preserves unknown tokens, so without an
+              explicit action here the campaign cannot be saved at all and the
+              operator has no way out of the form. Removing is deliberate and
+              operator-initiated, which is the distinction that matters: the
+              silent drop this component avoids is the one that happens as a
+              side effect of an unrelated toggle. */}
+          <button
+            type="button"
+            onClick={() => onChange(value.filter(v => v !== t))}
+            className="underline underline-offset-2 hover:text-[var(--danger)]"
+          >
+            Remove {t}
+          </button>
+        </p>
+      ))}
+    </fieldset>
+  );
+}
+
 export default function CampaignFormFields({
   values, onChange, inputSize, showPhase, showFees, nameError, onNameBlur,
 }: CampaignFormFieldsProps) {
-  const exclusionModeId = useId();
   return (
     <div className="space-y-4">
       {/* Identity */}
@@ -182,29 +276,42 @@ export default function CampaignFormFields({
           </div>
           <Input label="Price Range" type="text" inputSize={inputSize} placeholder="e.g. 250-1500" value={values.priceRange}
             onChange={e => onChange('priceRange', e.target.value)} />
-          <div className="md:col-span-2 space-y-2">
-            <Input label={values.exclusionMode ? 'Exclusion List' : 'Inclusion List'} type="text" inputSize={inputSize} placeholder="e.g. charizard pikachu blastoise" value={values.inclusionList}
-              onChange={e => onChange('inclusionList', e.target.value)} />
-            <label htmlFor={exclusionModeId} className="inline-flex items-center gap-2.5 text-sm text-[var(--text-muted)] cursor-pointer group select-none">
-              <Checkbox.Root id={exclusionModeId} checked={values.exclusionMode}
-                onCheckedChange={(checked) => onChange('exclusionMode', checked === true)}
-                className="flex items-center justify-center w-4 h-4 rounded
-                           border border-[var(--surface-3)] bg-[var(--surface-2)] transition-colors
-                           data-[state=checked]:bg-[var(--brand-500)] data-[state=checked]:border-[var(--brand-500)]
-                           focus-visible:ring-2 focus-visible:ring-[var(--brand-500)]/40
-                           focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface-1)]
-                           group-hover:border-[var(--brand-500)]/50">
-                <Checkbox.Indicator className="text-white">
-                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3"
-                       viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"
-                       aria-hidden="true" focusable="false">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </Checkbox.Indicator>
-              </Checkbox.Root>
-              Use as exclusion list
-            </label>
+          <LanguageMultiSelect
+            value={values.targetLanguages}
+            onChange={(next) => onChange('targetLanguages', next)}
+          />
+          <div className="space-y-1.5">
+            <span className="block text-xs text-[var(--text-muted)] mb-1">Subject Mode</span>
+            <Segmented
+              ariaLabel="Subject filter mode"
+              options={subjectFilterModeOptions}
+              value={(values.subjectFilterMode || 'Target') as 'Target' | 'Exclude'}
+              onChange={(v) => onChange('subjectFilterMode', v)}
+            />
           </div>
+          <div className="md:col-span-2">
+            <SubjectListEditor
+              label={values.subjectFilterMode === SUBJECT_FILTER_EXCLUDE ? 'Excluded Subjects' : 'Targeted Subjects'}
+              value={values.subjects}
+              onChange={(next) => onChange('subjects', next)}
+              inputSize={inputSize}
+            />
+          </div>
+          {values.deniedSpecs.length > 0 && (
+            <div className="md:col-span-2 space-y-1.5">
+              <span className="block text-xs text-[var(--text-muted)] mb-1">
+                Denied Specs (portal-managed — add or remove in the PSA portal)
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {values.deniedSpecs.map((spec, i) => (
+                  <span key={`${spec.id}-${spec.name}-${i}`} title={`id: ${spec.id}`}
+                    className="inline-flex items-center rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] text-xs px-2.5 py-1">
+                    {spec.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </FormSection>
 

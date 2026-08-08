@@ -1,6 +1,9 @@
 package inventory
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // CRUDService handles campaign, purchase, and sale CRUD operations.
 type CRUDService interface {
@@ -8,6 +11,9 @@ type CRUDService interface {
 	GetCampaign(ctx context.Context, id string) (*Campaign, error)
 	ListCampaigns(ctx context.Context, activeOnly bool) ([]Campaign, error)
 	UpdateCampaign(ctx context.Context, c *Campaign) error
+	// UpdateCampaignIfUnchanged is UpdateCampaign for read-modify-write callers;
+	// see CampaignRepository for why both exist.
+	UpdateCampaignIfUnchanged(ctx context.Context, c *Campaign, expectedUpdatedAt time.Time) error
 	DeleteCampaign(ctx context.Context, id string) error
 
 	CreatePurchase(ctx context.Context, p *Purchase) error
@@ -19,6 +25,7 @@ type CRUDService interface {
 	CreateBulkSales(ctx context.Context, campaignID string, channel SaleChannel, saleDate string, items []BulkSaleInput) (*BulkSaleResult, error)
 	ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error)
 	DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error
+	UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error
 
 	ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error
 }
@@ -37,6 +44,7 @@ type AnalyticsService interface {
 // ImportService handles CSV imports, cert entry, and external data ingestion.
 type ImportService interface {
 	ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error)
+	ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)
 
 	EnsureExternalCampaign(ctx context.Context) (*Campaign, error)
 	ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow) (*ExternalImportResult, error)

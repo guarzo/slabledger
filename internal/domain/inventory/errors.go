@@ -12,6 +12,7 @@ const (
 	ErrCodeDuplicateCertNumber    errors.ErrorCode = "ERR_DUPLICATE_CERT_NUMBER"
 	ErrCodeDuplicateSale          errors.ErrorCode = "ERR_DUPLICATE_SALE"
 	ErrCodeCampaignValidation     errors.ErrorCode = "ERR_CAMPAIGN_VALIDATION"
+	ErrCodeCampaignConflict       errors.ErrorCode = "ERR_CAMPAIGN_CONFLICT"
 	ErrCodeInvoiceNotFound        errors.ErrorCode = "ERR_INVOICE_NOT_FOUND"
 	ErrCodeRevocationTooSoon      errors.ErrorCode = "ERR_REVOCATION_TOO_SOON"
 	ErrCodeRevocationFlagNotFound errors.ErrorCode = "ERR_REVOCATION_FLAG_NOT_FOUND"
@@ -26,6 +27,7 @@ const (
 // Sentinel errors for campaign operations
 var (
 	ErrCampaignNotFound       = errors.NewAppError(ErrCodeCampaignNotFound, "campaign not found")
+	ErrCampaignConflict       = errors.NewAppError(ErrCodeCampaignConflict, "campaign changed since it was read")
 	ErrPurchaseNotFound       = errors.NewAppError(ErrCodePurchaseNotFound, "purchase not found")
 	ErrSaleNotFound           = errors.NewAppError(ErrCodeSaleNotFound, "sale not found")
 	ErrDuplicateCertNumber    = errors.NewAppError(ErrCodeDuplicateCertNumber, "certificate number already exists")
@@ -43,6 +45,10 @@ var (
 
 // IsCampaignNotFound checks if the error is a "campaign not found" error.
 func IsCampaignNotFound(err error) bool { return errors.HasErrorCode(err, ErrCodeCampaignNotFound) }
+
+// IsCampaignConflict reports whether a conditional campaign update was rejected
+// because the row changed after the caller read it.
+func IsCampaignConflict(err error) bool { return errors.HasErrorCode(err, ErrCodeCampaignConflict) }
 
 // IsDuplicateCertNumber checks if the error is a "duplicate cert number" error.
 func IsDuplicateCertNumber(err error) bool {

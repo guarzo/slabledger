@@ -253,16 +253,27 @@ func (ps *PurchaseStore) UpdateExternalPurchaseFields(ctx context.Context, id st
 
 // UpdatePurchaseMarketSnapshot persists refreshed market snapshot fields on a purchase.
 func (ps *PurchaseStore) UpdatePurchaseMarketSnapshot(ctx context.Context, id string, snap inventory.MarketSnapshotData) error {
+	// The 4 DH provenance columns (dh_confidence_at_purchase, source_count_at_purchase,
+	// active_listings_at_purchase, sales_last_30d_at_purchase) freeze set-once on first
+	// successful snapshot via IS NULL guard. For purchases predating migration 000022,
+	// this first freeze happens at refresh time, so values are record-time proxies rather
+	// than strict decision-time; this is intentional per spec (only creation-time
+	// confidence/population are strictly decision-time).
 	result, err := ps.db.ExecContext(ctx,
 		`UPDATE campaign_purchases SET last_sold_cents = $1, lowest_list_cents = $2, conservative_cents = $3,
 			median_cents = $4, mid_price_cents = $5, last_sold_date = $6,
 			active_listings = $7, sales_last_30d = $8, trend_30d = $9, snapshot_date = $10,
-			snapshot_json = $11, updated_at = $12
+			snapshot_json = $11, updated_at = $12,
+			dh_confidence_at_purchase = CASE WHEN dh_confidence_at_purchase IS NULL THEN $15 ELSE dh_confidence_at_purchase END,
+			source_count_at_purchase  = CASE WHEN source_count_at_purchase IS NULL THEN $16 ELSE source_count_at_purchase END,
+			active_listings_at_purchase = CASE WHEN active_listings_at_purchase IS NULL AND $14 THEN $7 ELSE active_listings_at_purchase END,
+			sales_last_30d_at_purchase  = CASE WHEN sales_last_30d_at_purchase  IS NULL AND $14 THEN $8 ELSE sales_last_30d_at_purchase END
 		WHERE id = $13`,
 		snap.LastSoldCents, snap.LowestListCents, snap.ConservativeCents,
 		snap.MedianCents, snap.MidPriceCents, snap.LastSoldDate,
 		snap.ActiveListings, snap.SalesLast30d, snap.Trend30d, snap.SnapshotDate,
 		snap.SnapshotJSON, time.Now(), id,
+		snap.MarketDataObserved, snap.Confidence, snap.SourceCountRaw,
 	)
 	if err != nil {
 		return fmt.Errorf("update market snapshot for purchase %s: %w", id, err)

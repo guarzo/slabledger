@@ -183,6 +183,22 @@ func (s *OAuthService) ConsumeOAuthState(ctx context.Context, state string) (boo
 	return s.repo.ConsumeOAuthState(ctx, state)
 }
 
+// CleanupExpiredOAuthStates removes expired one-time OAuth state tokens. States
+// from abandoned logins are never consumed, so without this they accumulate.
+func (s *OAuthService) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
+	count, err := s.repo.CleanupExpiredOAuthStates(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	if count > 0 {
+		s.logger.Info(ctx, "cleaned up expired oauth states",
+			observability.Int("count", count))
+	}
+
+	return count, nil
+}
+
 // CreateSession creates a new user session
 func (s *OAuthService) CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error) {
 	session := &auth.Session{

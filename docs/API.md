@@ -428,6 +428,10 @@ Lists campaigns.
     "dailySpendCapCents": 1000000,
     "inclusionList": "",
     "exclusionMode": false,
+    "targetLanguages": ["english"],
+    "subjectFilterMode": "Target",
+    "subjects": [{ "id": 22210, "name": "Machamp" }],
+    "deniedSpecs": [],
     "phase": "active",
     "psaSourcingFeeCents": 300,
     "ebayFeePct": 0.1235,
@@ -476,11 +480,19 @@ Updates a campaign. Full replacement.
 
 **Path params:** `id` (string UUID)
 
+**Query params:** `ifUnmodifiedSince` (optional, RFC3339) — the `updatedAt` of the
+row this payload was built from. Supplying it makes the write conditional: the
+row is written only if its stored `updated_at` still matches, so a
+read-modify-write caller cannot overwrite a change it never saw. Omitting it
+keeps the unconditional overwrite.
+
 **Body:** `Campaign` object
 
 **Response:** `200 OK` — updated `Campaign`
 
-**Errors:** `400` invalid data; `404` not found
+**Errors:** `400` invalid data or unparseable `ifUnmodifiedSince`; `404` not
+found; `409` the row changed since `ifUnmodifiedSince` (nothing was written —
+re-read and retry)
 
 ---
 
@@ -641,9 +653,33 @@ Records a sale for a purchase within this campaign. Computes `netProfitCents`, `
 
 Valid `saleChannel` values: `ebay`, `website`, `inperson`, `tcgplayer`, `local`, `other`, `gamestop`, `cardshow`, `doubleholo`
 
+Optional `saleReason` (one of `discretionary`, `invoice_pressure`, `aging_policy`, `bulk_lot`, `show_clearout`); omit to let the server derive a default (from `forced_liquidation`/channel heuristics). Sending `saleReason: ""` is equivalent to omitting it.
+
 **Response:** `201 Created` — `Sale` object (may include `warnings` array)
 
 **Errors:** `400` invalid data or purchase belongs to different campaign; `404` purchase or campaign not found; `409` sale already exists for this purchase
+
+---
+
+### `PATCH /api/campaigns/{id}/sales/{saleID}`
+
+Auth: RequireAuth
+
+Updates the `saleReason` on an existing sale record (e.g. correcting a
+misclassified reason after the fact).
+
+**Path params:** `id` (campaign UUID), `saleID` (sale UUID)
+
+**Body:**
+```json
+{ "saleReason": "aging_policy" }
+```
+
+`saleReason` must be one of `discretionary`, `invoice_pressure`, `aging_policy`, `bulk_lot`, `show_clearout` (or `""`).
+
+**Response:** `204 No Content`
+
+**Errors:** `400` invalid `saleReason` value; `404` sale not found
 
 ---
 
@@ -661,10 +697,12 @@ Creates multiple sales in one request.
   "saleChannel": "ebay",
   "saleDate": "2025-02-01",
   "items": [
-    { "purchaseId": "uuid", "salePriceCents": 130000 }
+    { "purchaseId": "uuid", "salePriceCents": 130000, "saleReason": "bulk_lot" }
   ]
 }
 ```
+
+Per-item optional fields (all in `items[]`, mirroring the single-sale endpoint): `originalListPriceCents`, `priceReductions`, `daysListed`, `saleReason`. `saleReason` follows the same omit-when-default rule as the single-sale endpoint.
 
 **Response:** `201 Created` — `BulkSaleResult`
 ```json
@@ -676,6 +714,35 @@ Creates multiple sales in one request.
 ```
 
 ---
+
+### `GET /api/portfolio/analysis`
+
+Auth: RequireAuth
+
+Returns cross-campaign portfolio analysis. **Query params:** `since` (optional, `YYYY-MM-DD`).
+
+**Response:** `200 OK` — `portfolio.AnalysisResponse`. Each `campaigns[]` entry (`CampaignAnalysis`) includes, in addition to the existing `bpclAtBuy`/`weeklyFill`/`inScopeByGrade`:
+
+- `pnlByConfidenceBuy` — array of cohort rows aggregating P&L and provenance
+  averages by `(CL confidence at purchase) × (buy cost as % of CL at
+  purchase)`, using the frozen `*_at_purchase` snapshot columns (migration
+  000022). Sorted by confidence bucket then buy-terms bucket, `"unknown"`
+  last.
+- `pnl.byReason` — map keyed by `saleReason` (`discretionary`,
+  `invoice_pressure`, `aging_policy`, `bulk_lot`, `show_clearout`) to a
+  `PNLBlock` (`soldCount`, `revenueCents`, `netProfitCents`, `roiPct`). All
+  five keys are always present, even with zero sales. Sales with an empty/
+  legacy `saleReason` are excluded from this map but still counted in the
+  existing `pnl.discretionary`/`pnl.forced` split.
+
+Imported historical purchases/sales that predate migration 000022 (or were
+imported without a market-data source) will have `null`/absent
+`*_at_purchase` and `*_at_sale` fields; these values are **record-time
+proxies** captured at import/purchase/sale time, not live market data — treat
+them as directional signal, not authoritative pricing.
+
+---
+
 
 ## Campaign Analytics
 
@@ -2473,6 +2540,50 @@ Returns a breakdown of per-purchase Card Ladder mapping/sync failures for the ad
 
 **Errors:** `500` internal error
 
+### `GET /api/admin/cardladder/coverage`
+
+Auth: RequireAdmin
+
+Reports CardLadder value coverage by purchase month and intake cohort.
+
+Unlike `/status`, which summarizes freshness over live unsold inventory, this covers **all** purchases including sold ones and rows in closed campaigns.
+
+Coverage is measured on `cl_value_updated_at`, not `cl_value_cents` — the latter is also written by the Shopify external import without ever calling CardLadder.
+
+Buckets, evaluated in order:
+
+| Bucket | Meaning |
+|---|---|
+| `resolved` | CardLadder returned a positive value at least once |
+| `unresolved` | CardLadder was asked and failed (today: always `no_value`) |
+| `pending` | Skipped at the quota wall, or not yet swept and still sweep-eligible |
+| `stranded` | Created after CardLadder went live, never priced, and no longer reachable by the sweep (sold, or campaign closed). Non-zero is a data-quality alarm |
+| `preCL` | Created before CardLadder existed (before `eraStart`); will never be swept |
+
+`pct` is `resolved / (resolved + unresolved)`. `pending`, `stranded` and `preCL` are excluded from the denominator, so `rows` is a full total and does not equal it. `pct` is `null`, not `0`, when the denominator is empty.
+
+`reassigned` counts rows whose `purchase_source` is set but whose `campaign_id` is `external` — the two possible cohort definitions disagreeing. It is reported so drift is visible.
+
+**Response:** `200 OK` — `CLCoverageReport`
+```json
+{
+  "eraStart": "2026-04-13T04:00:13Z",
+  "months": [
+    {
+      "month": "2026-07",
+      "reassigned": 0,
+      "campaign": {"rows": 20, "resolved": 20, "unresolved": 0, "pending": 0, "stranded": 0, "preCL": 0, "pct": 100.0},
+      "external": {"rows": 71, "resolved": 56, "unresolved": 15, "pending": 0, "stranded": 0, "preCL": 0, "pct": 78.9},
+      "unresolvedByReason": {"no_value": 15}
+    }
+  ]
+}
+```
+
+**Errors:** `500` internal error
+
+The same query is available offline as `scripts/cl-coverage.sql`.
+
 ---
 
 ## Admin — Market Movers
@@ -2745,6 +2856,26 @@ Returns the most recent PSA portal campaign snapshot (written by the harvester).
     }
   ],
   "fetchedAt": "2025-01-15T10:00:00Z"
+}
+```
+
+**Errors:** `503` PSA campaign sync not enabled; `500` internal error
+
+---
+
+### `GET /api/psa/subjects`
+
+Auth: required (session)
+
+Returns the persisted PSA subject catalog (Pokemon category) harvested by
+`cmd/psa-harvest`, for the campaign form's subject-name typeahead. Served
+entirely from the database — the main server never contacts psacard.com.
+
+**Response:** `200 OK`
+```json
+{
+  "subjects": [{ "id": 22210, "name": "Machamp" }],
+  "fetchedAt": "2026-08-06T10:00:00Z"
 }
 ```
 

@@ -1,0 +1,142 @@
+{
+ "FU-01": {
+  "id": "SLA-9",
+  "url": "https://linear.app/slabledger/issue/SLA-9/enable-rls-on-psa-campaign-push-queue-and-stop-trusting-its-status"
+ },
+ "FU-02": {
+  "id": "SLA-10",
+  "url": "https://linear.app/slabledger/issue/SLA-10/enable-rls-on-the-six-remaining-tables-created-after-the-000003"
+ },
+ "FU-03": {
+  "id": "SLA-11",
+  "url": "https://linear.app/slabledger/issue/SLA-11/wire-cleanupexpiredoauthstates-into-the-session-cleanup-scheduler-and"
+ },
+ "FU-04": {
+  "id": "SLA-12",
+  "url": "https://linear.app/slabledger/issue/SLA-12/fix-the-flat-sibling-import-checker-it-skips-19-of-25-domain-packages"
+ },
+ "FU-05": {
+  "id": "SLA-13",
+  "url": "https://linear.app/slabledger/issue/SLA-13/strip-denominators-in-the-dh-cert-disambiguation-card-number"
+ },
+ "FU-06": {
+  "id": "SLA-14",
+  "url": "https://linear.app/slabledger/issue/SLA-14/move-the-fill-rate-business-rule-out-of-the-http-handler-into-the"
+ },
+ "FU-07": {
+  "id": "SLA-15",
+  "url": "https://linear.app/slabledger/issue/SLA-15/add-the-missing-forcedliquidation-field-to-the-typescript-sale-type"
+ },
+ "FU-08": {
+  "id": "SLA-16",
+  "url": "https://linear.app/slabledger/issue/SLA-16/remove-the-five-dead-auth-token-lifecycle-methods"
+ },
+ "FU-09": {
+  "id": "SLA-17",
+  "url": "https://linear.app/slabledger/issue/SLA-17/remove-the-unwired-ai-image-generation-cluster"
+ },
+ "FU-10": {
+  "id": "SLA-18",
+  "url": "https://linear.app/slabledger/issue/SLA-18/remove-the-advisor-functional-options-that-are-never-invoked"
+ },
+ "FU-11": {
+  "id": "SLA-19",
+  "url": "https://linear.app/slabledger/issue/SLA-19/resolve-the-cache-path-plumbing-that-exists-only-to-relocate-a-startup"
+ },
+ "FU-12": {
+  "id": "SLA-20",
+  "url": "https://linear.app/slabledger/issue/SLA-20/drop-the-dead-marketmovers-config-table"
+ },
+ "FU-13": {
+  "id": "SLA-21",
+  "url": "https://linear.app/slabledger/issue/SLA-21/remove-seven-unreferenced-react-components-and-eleven-unreferenced"
+ },
+ "FU-14": {
+  "id": "SLA-22",
+  "url": "https://linear.app/slabledger/issue/SLA-22/remove-unused-frontend-api-client-methods-pricing-types-and-utility"
+ },
+ "FU-15": {
+  "id": "SLA-23",
+  "url": "https://linear.app/slabledger/issue/SLA-23/remove-userpreferencesprovider-or-wire-its-hook-to-a-consumer"
+ },
+ "FU-16": {
+  "id": "SLA-24",
+  "url": "https://linear.app/slabledger/issue/SLA-24/reconcile-claudemd-with-the-real-architecture"
+ },
+ "FU-17": {
+  "id": "SLA-25",
+  "url": "https://linear.app/slabledger/issue/SLA-25/reconcile-docsschemamd-with-the-25-migration-postgres-history"
+ },
+ "FU-18": {
+  "id": "SLA-26",
+  "url": "https://linear.app/slabledger/issue/SLA-26/reconcile-docsapimd-with-the-live-route-table"
+ },
+ "FU-19": {
+  "id": "SLA-27",
+  "url": "https://linear.app/slabledger/issue/SLA-27/purge-removed-subsystems-from-the-remaining-documentation"
+ },
+ "FU-20": {
+  "id": "SLA-28",
+  "url": "https://linear.app/slabledger/issue/SLA-28/reconcile-envexample-with-what-loadergo-actually-reads"
+ },
+ "FU-21": {
+  "id": "SLA-29",
+  "url": "https://linear.app/slabledger/issue/SLA-29/re-enable-the-scheduler-tests-blocked-by-a-stale-todo"
+ },
+ "FU-22": {
+  "id": "SLA-30",
+  "url": "https://linear.app/slabledger/issue/SLA-30/add-test-coverage-for-the-dhlisting-adapter-package"
+ },
+ "FU-23": {
+  "id": "SLA-31",
+  "url": "https://linear.app/slabledger/issue/SLA-31/move-the-tuning-computation-into-the-package-named-tuning"
+ },
+ "FU-24": {
+  "id": "SLA-32",
+  "url": "https://linear.app/slabledger/issue/SLA-32/rename-the-two-mis-named-inventory-files"
+ },
+ "FU-25": {
+  "id": "SLA-33",
+  "url": "https://linear.app/slabledger/issue/SLA-33/move-invoice-projection-from-inventory-to-the-finance-package"
+ },
+ "FU-26": {
+  "id": "SLA-34",
+  "url": "https://linear.app/slabledger/issue/SLA-34/extract-the-campaign-suggestions-cluster-out-of-inventory"
+ },
+ "FU-27": {
+  "id": "SLA-35",
+  "url": "https://linear.app/slabledger/issue/SLA-35/extract-the-csv-import-subsystem-out-of-inventory"
+ },
+ "FU-28": {
+  "id": "SLA-36",
+  "url": "https://linear.app/slabledger/issue/SLA-36/make-the-inventory-service-interface-segmentation-buy-an-actual-seam"
+ },
+ "FU-29": {
+  "id": "SLA-37",
+  "url": "https://linear.app/slabledger/issue/SLA-37/split-the-55-method-purchaserepository-persistence-port"
+ },
+ "FU-30": {
+  "id": "SLA-38",
+  "url": "https://linear.app/slabledger/issue/SLA-38/decompose-the-286-line-listpurchases-function"
+ },
+ "FU-31": {
+  "id": "SLA-39",
+  "url": "https://linear.app/slabledger/issue/SLA-39/decompose-the-312-line-buildgroup-scheduler-constructor"
+ },
+ "FU-32": {
+  "id": "SLA-40",
+  "url": "https://linear.app/slabledger/issue/SLA-40/bring-inmemory-campaign-storego-under-the-file-size-budget"
+ },
+ "FU-33": {
+  "id": "SLA-41",
+  "url": "https://linear.app/slabledger/issue/SLA-41/give-the-demand-repository-contract-a-shared-go-type-across-the-seam"
+ },
+ "FU-34": {
+  "id": "SLA-42",
+  "url": "https://linear.app/slabledger/issue/SLA-42/give-the-dh-tombstone-threshold-a-home-in-the-domain"
+ },
+ "FU-35": {
+  "id": "SLA-43",
+  "url": "https://linear.app/slabledger/issue/SLA-43/route-the-local-centsdollars-and-grader-regex-reimplementations"
+ }
+}

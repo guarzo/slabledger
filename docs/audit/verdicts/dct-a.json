@@ -1,0 +1,101 @@
+[
+  {
+    "id": "DCT-001",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran every evidence command independently. `grep -n 'Pricing Pipeline' -A3 CLAUDE.md` reproduces the exact quoted text at CLAUDE.md:137 ('DH ... is the sole price source'). `grep -n CardLadder cmd/slabledger/init_services.go` shows initializeCardLadder at line 99; `wc -l internal/adapters/scheduler/cardladder_refresh.go` = 525; routes.go:65-71 register 7 /api/admin/cardladder/* routes; loader.go:176 reads CARDLADDER_REFRESH_ENABLED. `sed -n '1,15p' internal/domain/liquidation/comp_price.go` confirms ComputeCompPrice(comps, clValueCents) at line 9, independent of DHPriceProvider. `git ls-files internal/domain/dhpricing/` returns service.go/service_test.go/types.go, unmentioned in CLAUDE.md. Every cited file:line resolves to the claimed content.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-002",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "`go list ./internal/domain/... | grep -iE 'cards|favorites'` returns nothing (no such packages), matching the finding. `go list ./internal/domain/... | sed 's#.*/domain/##' | sort` returns 25 entries including demand, dhevents, dhpricing, liquidation, psacampaign, pricing/lookup \u2014 none of which appear in CLAUDE.md's domain tree (lines 36-58), which instead lists the nonexistent cards/ (line 47) and favorites/ (line 50). Cross-checked against the audit's own verified-context note (7 repo interfaces, 25 domain packages) which agrees.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-003",
+    "verdict": "confirmed",
+    "evidence_reproduces": false,
+    "basis": "`find internal/adapters/clients -maxdepth 1 -type d` and `ls internal/adapters/clients/` both confirm the real set: azureai, cardladder, dh, dhlisting, dhprice, google, httpx, psa, psaportal \u2014 no pricelookup, no tcgdex. CLAUDE.md:63-64 lists pricelookup/ and tcgdex/ under adapters/clients/, both absent. The real PriceLookup wrapper lives at internal/domain/pricing/lookup/adapter.go (git ls-files confirms), not under adapters/clients/. CLAUDE.md's tree also omits cardladder/, dh/, dhlisting/, psa/, psaportal/, all of which exist.",
+    "what_the_finding_got_wrong": "The finding's second evidence command reports 'd555333b removed internal/adapters/clients/tcgdex' as the output of `git log --diff-filter=D --oneline -- internal/adapters/clients/tcgdex | head -3`. Running that exact command returns a different commit: `474072bd remove: reduce surface area \u2014 card search, watchlists, picks, orphaned tables (#152)`. Commit d555333b is real but is an unrelated dead-code-removal commit (#154) that does not touch tcgdex. This detail is fabricated/mismatched, but it is supporting color, not the actionable claim \u2014 the directory-tree drift itself (pricelookup/tcgdex listed but absent; 5 real dirs omitted) is independently and fully verified, and the acceptance criteria (`ls` output matching CLAUDE.md's tree) do not depend on the commit hash at all.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-004",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "CLAUDE.md:125-133 lists exactly Required/DH/AI/Auth/Schedulers (PRICE_REFRESH_ENABLED only) with no CardLadder group. .env.example:212-213 has CARDLADDER_REFRESH_ENABLED=\"true\" and CARDLADDER_REFRESH_HOUR=\"4\" live (uncommented); line 218 has CL_SEARCH_URL as a commented example. loader.go:176 reads CARDLADDER_REFRESH_ENABLED live via envBool. All claims reproduce exactly.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-005",
+    "verdict": "refuted",
+    "evidence_reproduces": false,
+    "basis": "The finding's subject.identity and claim both cite 'CLAUDE.md:145' as where the '`make check` \u2014 runs lint + architecture import check + file size check' text lives. Reading CLAUDE.md:145 directly shows a completely unrelated line: '- Service mocks for each sub-package: `MockArbitrageService`, `MockPortfolioService`, etc.' The actual `make check` description sentence is at CLAUDE.md:167 (confirmed via `grep -n \"make check\" CLAUDE.md`). The Makefile side of the evidence (`grep -n -A5 '^check:' Makefile`) does reproduce correctly \u2014 check: lint / check-imports.sh / check-file-size.sh / check-playwright-version.sh, at Makefile:146 as cited \u2014 confirming the Makefile does run a 4th, undocumented script. But per VERIFIER-BRIEF, a finding citing a line that does not contain the quoted text is refuted even when the underlying complaint is valid, because a fixer following the citation lands on the wrong sentence in CLAUDE.md.",
+    "what_the_finding_got_wrong": "Cites CLAUDE.md:145 for the 'make check' description; the real location is CLAUDE.md:167. Line 145 is an unrelated bullet about mock patterns. The underlying complaint (Makefile's check target runs check-playwright-version.sh, which CLAUDE.md's description omits) is independently true, but the finding as written would send a fixer to the wrong line.",
+    "corrected_severity": "",
+    "ticketable": false
+  },
+  {
+    "id": "DCT-006",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "`grep -n sqlite internal/README.md` reproduces exactly lines 31, 164, 271 referencing storage/sqlite/, and `find internal/adapters/storage -maxdepth 1 -type d` shows only postgres/ exists. `wc -l` on the three named files gives 217 (arbitrage/service.go, not 530 as the stale table claims), 540 (portfolio/service.go, over the 500-line budget, absent from the table), and 525 (cardladder_refresh.go, also over budget and absent). The Large File Awareness table (internal/README.md:578-582 region) does list arbitrage/service.go at 530 lines and omits both over-budget files, matching the finding exactly.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-007",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "`grep -n 'SQLite' docs/ARCHITECTURE.md` returns exactly lines 7 (Stack line), 18 (diagram box), and 84 (storage/sqlite/ tree entry) as cited; go.mod confirms jackc/pgx/v5 present with no sqlite driver. `picks/` domain package is documented at docs/ARCHITECTURE.md:70 exactly (confirmed via targeted grep) but `go list ./internal/domain/...` shows no picks package, and git log confirms its removal (commit 474072bd, 'remove: reduce surface area \u2014 card search, watchlists, picks, orphaned tables'). Favorites/cards are referenced at multiple lines (28, 63-64, 74, 185, 189, 200, 204, 266-268) as live domain packages, but neither exists per `go list`.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-008",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "docs/LLM_USAGE.md:17 and :19 reference 'picks' in the AZURE_AI_DEPLOYMENT description and degrade-gracefully note, exactly as cited. Lines 114-173 contain a full '### 2. Picks' section naming internal/domain/picks/, internal/adapters/scheduler/picks_refresh.go, a 3-stage pipeline, and picks.NewService(...) at line 173 \u2014 all precisely within the cited range. `go list ./internal/domain/...` shows no picks package and `git grep -n 'picks.NewService' internal cmd` returns nothing outside the doc itself.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-009",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "docs/DH_INVENTORY.md:199-200 cite exactly 'internal/adapters/storage/sqlite/purchases_repository_dh.go' and '.../card_id_mapping_repository.go'. `find internal/adapters/storage -maxdepth 1 -type d` shows only postgres/ exists; `ls internal/adapters/storage/postgres | grep -i card_id_mapping` and `... purchases_repository_dh` both confirm the real files live under postgres/, not sqlite/.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-010",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "docs/USER_GUIDE.md:30 has '8. [Favorites](#favorites)' in the TOC; :45 has 'The system also provides card pricing lookup and favorites tracking'; :244-250 is a full '## Favorites' section instructing users to 'View all favorites on the dedicated Favorites page.' `git grep -n favorites internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go` and `go list ./internal/domain/... | grep -i favorites` both return nothing \u2014 no route, no domain package.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-011",
+    "verdict": "confirmed",
+    "evidence_reproduces": false,
+    "basis": "docs/SCHEMA.md:210,212 cite 'DROPPED (migration 000038)' for price_history verbatim (and the same fictitious migration number recurs at 216, 244, 932 for other tables); `ls .../migrations/*.up.sql | wc -l` = 25, and `ls .../migrations/000038*` errors with 'No such file or directory'. docs/SCHEMA.md:250,265,267,985 fully documents advisor_cache including its unique index and trigger, but migrations/000013_drop_advisor_cache.up.sql drops the trigger, function, policy, and table. docs/SCHEMA.md:438,852,868,995-996 document mm_value_cents, marketmovers_config, and mm_card_mappings; migrations/000021_drop_market_movers.up.sql drops mm_sales_comps, mm_card_mappings, and 7 mm_* columns including mm_value_cents from campaign_purchases.",
+    "what_the_finding_got_wrong": "The 'zero Go references remain outside one stale comment' sub-claim cites `git grep -ci marketmovers internal cmd | grep -v ':0'` as producing 'cmd/slabledger/init_services.go:4: 1 (a stale comment only)'. Running that exact command instead returns five migration files (000001, 000003, 000005 \u2014 all legitimate table-creation/rollback SQL, not stale references) and does NOT include cmd/slabledger/init_services.go, because that file's comment reads 'Market Movers' (two words, space-separated), which the single-word substring 'marketmovers' never matches. The underlying claim is still true \u2014 a broader search (`git grep -in 'Market Movers|MarketMovers' -- '*.go'` excluding tests) confirms init_services.go:4 is indeed the only non-migration Go reference, and `git grep -n 'mm_value_cents|mm_trend_pct|mm_sales_30d' -- '*.go'` returns nothing \u2014 but the specific command/output pair in the finding's evidence does not reproduce as written. This does not affect either acceptance criterion, both of which concern only docs/SCHEMA.md's migration-number citation and its documentation of dropped tables, which are independently solid.",
+    "corrected_severity": "",
+    "ticketable": true
+  }
+]

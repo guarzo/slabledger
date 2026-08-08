@@ -15,6 +15,12 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
+// englishSpecList is the ENABLED "Pokemon - English Language Only" curated
+// list, matched by
+// diffCampaign()/noDiffPortal()'s TargetLanguages/SpecListIDs so their scalar
+// fixtures still produce zero diff by default.
+var englishSpecList = []psacampaign.SpecListRef{{ID: "sl-1", Name: "Pokemon - English Language Only", Status: "ENABLED"}}
+
 // noDiffPortal matches the internal campaign fields exactly so
 // psacampaign.TranslateToDiff produces zero changes.
 func noDiffPortal() psacampaign.PortalCampaign {
@@ -26,6 +32,7 @@ func noDiffPortal() psacampaign.PortalCampaign {
 			GradeMin: "9", GradeMax: "10", YearMin: 2020, YearMax: 2024,
 			PriceMinCents: 10000, PriceMaxCents: 300000, ClvConfidenceMin: 3,
 		},
+		SpecListIDs: []string{"sl-1"},
 	}
 }
 
@@ -39,6 +46,7 @@ func diffCampaign() inventory.Campaign {
 		YearRange:            "2020-2024",
 		PriceRange:           "100-3000",
 		CLConfidence:         "3-4",
+		TargetLanguages:      []string{"english"},
 	}
 }
 
@@ -89,6 +97,45 @@ func TestHandlePSAPropose(t *testing.T) {
 			wantEnqueue: false,
 			wantPushID:  false,
 		},
+		{
+			// Guards the 4xx-vs-500 classification: an operator-entered subject
+			// name that hasn't been reconciled with the portal catalog yet is an
+			// expected, actionable state (naming the subject), not a server fault.
+			name: "unresolved subject name maps to 400 not 500",
+			campaign: func() *inventory.Campaign {
+				c := diffCampaign()
+				c.Subjects = []inventory.TargetSubject{{Name: "Mystery Card"}} // ID 0, unresolved
+				return &c
+			}(),
+			portalRows: []psacampaign.PortalCampaign{noDiffPortal()},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			// Same classification guard, via the spec-list axis: a campaign
+			// targeting a language the portal offers no curated list for.
+			name: "unresolved target language maps to 400 not 500",
+			campaign: func() *inventory.Campaign {
+				c := diffCampaign()
+				c.TargetLanguages = []string{"korean"}
+				return &c
+			}(),
+			portalRows: []psacampaign.PortalCampaign{noDiffPortal()},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			// Migration 000023's legacy backfill is unreconciled until the
+			// baseline pull runs. Proposing in that window must refuse with an
+			// actionable 400 rather than silently re-resolving legacy subjects
+			// to current-generation portal ids.
+			name: "legacy unreconciled subject maps to 400 not 500",
+			campaign: func() *inventory.Campaign {
+				c := diffCampaign()
+				c.Subjects = []inventory.TargetSubject{{ID: inventory.LegacyUnreconciledSubjectID, Name: "Charizard"}}
+				return &c
+			}(),
+			portalRows: []psacampaign.PortalCampaign{noDiffPortal()},
+			wantStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {
@@ -124,6 +171,7 @@ func TestHandlePSAPropose(t *testing.T) {
 			if !tt.noQueue {
 				opts = append(opts, WithPSAPushQueue(queue))
 			}
+			opts = append(opts, WithPSACatalogStore(freshCatalog(englishSpecList, nil)))
 			h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose", strings.NewReader(`{}`))
@@ -192,6 +240,40 @@ func TestHandlePSAPropose_NoSnapshotsOrQueue(t *testing.T) {
 				t.Fatalf("expected 503, got %d: %s", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestHandlePSAPropose_CatalogStale guards the ErrCatalogStale branch in
+// HandlePSAPropose: a catalog whose fetchedAt exceeds psacampaign.CatalogMaxAge
+// must surface as 503 (the operator's signal to run the harvester), not the
+// generic 500 that any other buildResolver error gets.
+func TestHandlePSAPropose_CatalogStale(t *testing.T) {
+	c := diffCampaign()
+	portal := noDiffPortal()
+	svc := &mocks.MockInventoryService{
+		GetCampaignFn: func(ctx context.Context, id string) (*inventory.Campaign, error) { return &c, nil },
+	}
+	snap := &mocks.SnapshotStoreMock{
+		GetSnapshotFn: func(ctx context.Context) ([]psacampaign.PortalCampaign, time.Time, error) {
+			return []psacampaign.PortalCampaign{portal}, time.Now(), nil
+		},
+	}
+	h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(),
+		WithPSASnapshotStore(snap),
+		WithPSAPushQueue(&mocks.PushQueueStoreMock{}),
+		WithPSACatalogStore(staleCatalog(englishSpecList, nil)),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose", strings.NewReader(`{}`))
+	req.SetPathValue("id", "c1")
+	rec := httptest.NewRecorder()
+	h.HandlePSAPropose(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 (stale catalog), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "stale") {
+		t.Fatalf("expected a staleness message, got: %s", rec.Body.String())
 	}
 }
 
@@ -265,8 +347,11 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 	valid := inventory.Campaign{
 		ID: "c1", Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
 		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
-		CLConfidence: "3-4", PSASourcingFeeCents: 300,
+		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguages: []string{"english"},
 	}
+	englishCatalog := freshCatalog([]psacampaign.SpecListRef{
+		{ID: "sl-1", Name: "Pokemon - English Language Only", Status: "ENABLED"},
+	}, nil)
 	tests := []struct {
 		name        string
 		noQueue     bool
@@ -342,6 +427,7 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 			if !tt.noQueue {
 				opts = append(opts, WithPSAPushQueue(queue))
 			}
+			opts = append(opts, WithPSACatalogStore(englishCatalog))
 			h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose-create", strings.NewReader(`{}`))
@@ -378,5 +464,40 @@ func TestHandlePSAProposeCreate(t *testing.T) {
 				t.Fatalf("response = %+v", resp)
 			}
 		})
+	}
+}
+
+// TestHandlePSAProposeCreate_CatalogStale guards the ErrCatalogStale branch in
+// HandlePSAProposeCreate: a catalog whose fetchedAt exceeds
+// psacampaign.CatalogMaxAge must surface as 503 (the operator's signal to run
+// the harvester), not the wholesale 400 that any other buildResolver error
+// gets on this path.
+func TestHandlePSAProposeCreate_CatalogStale(t *testing.T) {
+	c := inventory.Campaign{
+		ID: "c1", Name: "Modern 10s", BuyTermsCLPct: 0.72, DailySpendCapCents: 300000,
+		GradeRange: "10", YearRange: "2024-2026", PriceRange: "500-3000",
+		CLConfidence: "3-4", PSASourcingFeeCents: 300, TargetLanguages: []string{"english"},
+	}
+	svc := &mocks.MockInventoryService{
+		GetCampaignFn: func(ctx context.Context, id string) (*inventory.Campaign, error) {
+			cc := c
+			return &cc, nil
+		},
+	}
+	h := NewCampaignsHandler(svc, nil, nil, nil, observability.NewNoopLogger(), context.Background(),
+		WithPSAPushQueue(&mocks.PushQueueStoreMock{}),
+		WithPSACatalogStore(staleCatalog(nil, nil)),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-propose-create", strings.NewReader(`{}`))
+	req.SetPathValue("id", "c1")
+	rec := httptest.NewRecorder()
+	h.HandlePSAProposeCreate(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 (stale catalog), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "stale") {
+		t.Fatalf("expected a staleness message, got: %s", rec.Body.String())
 	}
 }
