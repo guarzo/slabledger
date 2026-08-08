@@ -18,6 +18,15 @@ jq empty "$FILE" 2>/dev/null || fail "$FILE is not valid JSON"
 declare -A BASELINE=( [go_files]=676 [packages]=53 [migrations]=25
                       [frontend_files]=218 [env_vars]=71 )
 
+# Closed per-scout contract: the exact declared_totals keys each scout must
+# report. Value is a space-separated list of baseline keys (empty = none).
+# An unrecognized .scout value gets no entry here and must fail.
+declare -A SCOUT_KEYS=( [go-reference-map]="go_files packages"
+                        [frontend-reference-map]="frontend_files"
+                        [db-map]="migrations"
+                        [config-map]="env_vars"
+                        [docs-map]="" )
+
 if [ "$MODE" = "scout" ]; then
   rev=$(jq -r '.revision // ""' "$FILE")
   [ "$rev" = "$BASELINE_REV" ] || fail "revision is '$rev', expected $BASELINE_REV"
@@ -29,19 +38,47 @@ if [ "$MODE" = "scout" ]; then
     *) fail "scout status missing or invalid: '$status'" ;;
   esac
 
-  # Count reconciliation: any declared total that names a baseline key must match.
+  scout_name=$(jq -r '.scout // ""' "$FILE")
+  [ -n "${SCOUT_KEYS[$scout_name]+isset}" ] || \
+    fail "unrecognized scout: '$scout_name'"
+
+  # Every key this scout's contract requires must be present in declared_totals.
+  # Absence is exactly the gap that let a silently-truncated report through.
+  for key in ${SCOUT_KEYS[$scout_name]}; do
+    present=$(jq --arg k "$key" '(.declared_totals // {}) | has($k)' "$FILE")
+    [ "$present" = "true" ] || \
+      fail "declared_totals missing required key '$key' for scout '$scout_name'"
+  done
+
+  # Count reconciliation: every key present in declared_totals must be a
+  # recognized baseline key (an unrecognized key is a loud failure, not a
+  # silent skip), and its value must match the baseline exactly.
   while IFS=$'\t' read -r key val; do
-    [ -n "${BASELINE[$key]:-}" ] || continue
+    [ -n "${BASELINE[$key]:-}" ] || \
+      fail "declared_totals has unrecognized key: '$key'"
     [ "$val" = "${BASELINE[$key]}" ] || \
       fail "declared_totals.$key = $val, baseline says ${BASELINE[$key]}"
-  done < <(jq -r '.declared_totals | to_entries[] | "\(.key)\t\(.value)"' "$FILE")
+  done < <(jq -r '(.declared_totals // {}) | to_entries[] | "\(.key)\t\(.value)"' "$FILE")
+
+  # Payload cross-check: declared_totals is self-reported and proves nothing
+  # on its own. records_count must be present, numeric, and match the actual
+  # records payload — and a "complete" scout can never carry zero records.
+  rc_present=$(jq 'has("records_count")' "$FILE")
+  [ "$rc_present" = "true" ] || fail "records_count is missing"
+  rc_type=$(jq -r '.records_count | type' "$FILE")
+  [ "$rc_type" = "number" ] || fail "records_count is not a number"
+  rc=$(jq '.records_count' "$FILE")
+  n=$(jq '.records | length' "$FILE")
+  [ "$rc" = "$n" ] || fail "records_count=$rc but records has $n entries"
+  if [ "$status" = "complete" ] && [ "$n" = "0" ]; then
+    fail "status is complete but records is empty"
+  fi
 
   # Provenance: every record must carry the command that produced it.
   missing=$(jq '[.records[] | select((.command // "") == "")] | length' "$FILE")
   [ "$missing" = "0" ] || fail "$missing record(s) missing provenance 'command'"
 
-  n=$(jq '.records | length' "$FILE")
-  echo "GATE PASS: scout $(jq -r .scout "$FILE") — $n records, totals reconciled"
+  echo "GATE PASS: scout $scout_name — $n records, totals reconciled"
 
 elif [ "$MODE" = "findings" ]; then
   bad_rev=$(jq --arg r "$BASELINE_REV" \

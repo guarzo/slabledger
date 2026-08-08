@@ -3,6 +3,7 @@
   "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
   "status": "complete",
   "declared_totals": {"go_files": 676, "packages": 53},
+  "records_count": 1,
   "gaps": [],
   "records": [
     {"identity": "inventory.Campaign", "kind": "symbol",

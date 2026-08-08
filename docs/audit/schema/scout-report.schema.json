@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Scout report",
   "type": "object",
-  "required": ["scout", "revision", "status", "declared_totals", "records"],
+  "required": ["scout", "revision", "status", "declared_totals", "records_count", "records"],
   "properties": {
     "scout":    {"type": "string"},
     "revision": {"type": "string", "const": "740976ecf80a4f2ccdaa611d7790ccaa95b48773"},
@@ -11,6 +11,11 @@
       "type": "object",
       "description": "Counts this scout claims to have covered; reconciled against baseline.",
       "additionalProperties": {"type": "integer"}
+    },
+    "records_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Must equal records.length; cross-checks the declared_totals payload against actual output."
     },
     "gaps":    {"type": "array", "items": {"type": "string"}},
     "records": {
