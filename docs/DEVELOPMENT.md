@@ -76,6 +76,59 @@ Run them against a dedicated throwaway database:
 This creates `slabledger_test` on first use and points the tests at it. CI sets
 `POSTGRES_TEST_URL` explicitly (`.github/workflows/test.yml`).
 
+### Integration tests (`-tags integration`)
+
+Tests behind the `integration` build tag call live third-party APIs, so they are
+excluded from `go test ./...`. Each one `t.Skip`s with a message naming what it
+needs, which means a missing variable looks like a pass — check for `SKIP` in the
+output rather than trusting a green run.
+
+CI does not run them on push. The `integration` job in `.github/workflows/test.yml`
+covers `./internal/integration/...` only on a weekly schedule (Mondays 06:00 UTC)
+or via `workflow_dispatch`, and it supplies only `DH_ENTERPRISE_API_KEY` — so the
+Card Ladder tests below skip there as well, and the PSA portal test is outside the
+path it runs entirely. In practice a developer machine is the only place the
+`CL_*` tests execute.
+
+These variables are **not** in `.env.example` and deliberately so: they are test
+credentials, not application config, and `.env.example` is the template
+developers copy. This table is their only home — do not duplicate it there.
+`POSTGRES_TEST_URL` above follows the same convention.
+
+**Export these into your environment** — do not put them in the repo-root `.env`.
+The tests use `godotenv/autoload`, which reads `.env` from the *package* directory,
+and `go test` runs each binary with its cwd set there. So the root `.env` is never
+consulted, and the skip message in `cardladder_test.go` that says "add to .env" is
+misleading. Verified 2026-08-08: unsetting `CL_EMAIL` with the root `.env` in place
+still skips; dropping a `.env` into `internal/integration/` makes it take effect.
+`psaportal/live_test.go:25` reads the environment directly and has no `.env`
+support at all.
+
+Either export them in your shell (what the devcontainer does), or place a `.env`
+in `internal/integration/`.
+
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `CL_EMAIL` | `internal/integration/cardladder_test.go` | Card Ladder login |
+| `CL_PASSWORD` | same | Card Ladder login |
+| `CL_FIREBASE_API_KEY` | same | Card Ladder login |
+| `CL_TEST_CERT` | same | Cert number used as the lookup fixture |
+| `CL_TEST_WRITE` | same | **Set to `true` to enable a test that writes to Firestore.** Off by default; the only destructive knob here |
+| `CL_COLLECTION_ID` | same | Target collection for that write test |
+| `PSA_PORTAL_TEST_TOKEN` | `internal/adapters/clients/psaportal/live_test.go` | Portal `accessToken` cookie value |
+
+`internal/integration/dh_enterprise_test.go` also runs under this tag, but reads
+`DH_API_BASE_URL` and `DH_ENTERPRISE_API_KEY` — production config already
+documented in `.env.example`, so nothing extra is needed for it.
+
+Run them explicitly:
+
+    go test ./internal/integration/ -tags integration -v -run TestCardLadder -timeout 2m
+    go test -tags integration ./internal/adapters/clients/psaportal/ -run TestLiveSnapshotChain -v
+
+`TestLiveSnapshotChain` must run from an IP Cloudflare trusts — the devcontainer
+qualifies, datacenter IPs do not.
+
 ---
 
 ## Cache System

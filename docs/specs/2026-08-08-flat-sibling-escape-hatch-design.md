@@ -119,8 +119,8 @@ hub; enforcement applies to any importer of a governed sibling.
 
 This does not close the single-package escape hatch. It halves it.
 
-Today both endpoints must be governed for an edge to be checked (`check-imports.sh:83`
-and `:97` iterate the same derived set), so *either* package can escape by dropping its
+Today both endpoints must be governed for an edge to be checked (`check-imports.sh:94`
+and `:108` iterate the same derived set), so *either* package can escape by dropping its
 hub import. Target-based enforcement removes the source-side escape: a governed target is
 protected from every importer under `internal/domain/`, whether or not that importer is
 itself governed.
@@ -136,6 +136,26 @@ is legal under the rule as written. Deciding when that is true requires the leaf
 taxonomy for `internal/domain/`, which is SLA-48. Enforcing against a
 target set we cannot yet define would mean hardcoding one — the failure mode SLA-12 was
 opened to remove.
+
+### Re-assessed 2026-08-08 (SLA-48): still open, and now known to be irreducible
+
+SLA-48 supplied the missing definition — a leaf is a package whose transitive closure under
+`internal/domain/` excludes the hub — and the residual **survives it unchanged**.
+
+Two findings from that work bear on this section:
+
+1. **The definition ratifies the escape.** A package that severs all hub dependency
+   genuinely *is* a leaf, so importing it is legal by the rule as written. This is no longer
+   "we lack a definition to enforce against"; it is "the definition says this is allowed."
+   Whether such a package still *belongs* to the inventory family is a question about
+   intent, and no derivation over the import graph can answer it.
+2. **Strengthening membership would not have helped.** The obvious fix — deriving membership
+   transitively rather than directly — is a no-op on any conforming tree, because closure can
+   only add a package that imports an already-governed package, which is itself a violation.
+   The hatch is not narrowable from the membership side.
+
+So this section is no longer a deferred task pointing at SLA-48. It is a documented boundary
+of the target-side approach. See `docs/specs/2026-08-08-domain-leaf-taxonomy-design.md`.
 
 ## Verification
 

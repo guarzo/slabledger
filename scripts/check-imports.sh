@@ -12,6 +12,17 @@
 #      importer imports the hub itself. Sub-packages may depend on
 #      internal/domain/inventory (the hub) and on leaf packages, but never on
 #      each other.
+#
+#      A LEAF is a package under internal/domain/ whose transitive import
+#      closure excludes internal/domain/inventory; non-leaf is the hub plus
+#      everything depending on it (SLA-48; see internal/README.md).
+#      No separate leaf check exists because none is needed: the derived
+#      governed set (direct hub importers) and the non-leaf set (transitive)
+#      differ only for a package reaching the hub via another non-leaf, and
+#      that package imports a governed sub-package, which pass 2 already
+#      flags. On any passing tree the two sets coincide, so the scan below IS
+#      the leaf rule. Corollary: making membership transitive would be a
+#      no-op — closure can only add a package that is already in violation.
 set -euo pipefail
 
 MODULE="github.com/guarzo/slabledger"

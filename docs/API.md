@@ -1923,16 +1923,16 @@ Preconditions: the purchase must be received, not already listed, and carry a hu
 **Response:** `200 OK` — `DHListingResult`
 ```json
 {
-  "Listed": 1,
-  "Synced": 1,
-  "Skipped": 0,
-  "Total": 1,
-  "Paused": false,
-  "Error": null,
-  "FailedCerts": null
+  "listed": 1,
+  "synced": 1,
+  "skipped": 0,
+  "total": 1,
+  "paused": false
 }
 ```
-This struct carries no JSON tags, so the field names are the Go names.
+`paused` is always `false` on a `200` — the pause case is reported as a `409`. The
+struct's two `error`-typed fields are `json:"-"`: the handler turns them into the
+status codes below before writing a success body.
 
 **Errors:** `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused; `502` PSA authentication temporarily unavailable — retry shortly; `503` DH listing service not configured; `500` internal error
 

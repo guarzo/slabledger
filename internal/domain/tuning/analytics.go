@@ -289,11 +289,12 @@ func ComputeMarketAlignment(data []inventory.PurchaseWithSale, currentSnapshots 
 			drift := float64(snap.MedianCents-d.Purchase.MedianCents) / float64(d.Purchase.MedianCents)
 			ma.AvgSnapshotDrift += drift
 			driftSamples++
-			if drift > inventory.MarketDriftThreshold {
+			switch inventory.ClassifyMarketDrift(drift) {
+			case inventory.MarketDriftUp:
 				ma.AppreciatingCount++
-			} else if drift < -inventory.MarketDriftThreshold {
+			case inventory.MarketDriftDown:
 				ma.DepreciatingCount++
-			} else {
+			default:
 				ma.StableCount++
 			}
 		} else {
