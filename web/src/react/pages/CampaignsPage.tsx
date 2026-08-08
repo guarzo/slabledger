@@ -210,32 +210,30 @@ export default function CampaignsPage() {
     onSubmit: async (values) => {
       if (!editing) return;
 
-      // Re-read over the network, not from the React Query cache: useCampaigns
-      // holds data fresh for CAMPAIGN_STALE_TIME (30s), and the racing writer
-      // is the psa-harvest process, whose write the cache cannot observe.
+      // Re-read over the network to build the payload. This is a full-row PUT,
+      // so the request has to echo back the targeting, psaCampaignRequestId and
+      // expectedFillRate the form does not edit — and the React Query cache
+      // cannot supply them reliably, since it holds data fresh for
+      // CAMPAIGN_STALE_TIME (30s) and never observes a psa-harvest write.
+      //
+      // Note this read is NOT the staleness check. There is no client-side
+      // comparison here at all: ifUnmodifiedSince below carries the timestamp
+      // captured when the form opened, so the server's compare-and-write covers
+      // the whole form-open→UPDATE span in one statement. Comparing `fresh`
+      // against `editing` here as well would only re-check the front half of a
+      // window the server already covers.
       let fresh: Campaign;
       try {
         fresh = await api.getCampaign(editing.id);
       } catch (err) {
-        // Fail closed. Saving anyway would reintroduce exactly the race this
-        // check exists to close. The message is fixed rather than routed
-        // through getErrorMessage: that helper surfaces the raw Error.message
-        // when present (e.g. "network down"), which would bury the actionable
+        // Fail closed. Saving from the cached row instead would put its stale
+        // targeting ids back over a newer baseline — the exact write this path
+        // exists to prevent. The message is fixed rather than routed through
+        // getErrorMessage: that helper surfaces the raw Error.message when
+        // present (e.g. "network down"), which would bury the actionable
         // "nothing was saved" guidance the operator needs here.
         reportError('Campaign edit staleness check', err);
         toast.error('Could not confirm the campaign is unchanged — nothing was saved');
-        return;
-      }
-
-      if (fresh.updatedAt !== editing.updatedAt) {
-        // The toast's "start from current data" advice is only true if the
-        // cache is actually refreshed — otherwise re-opening Edit re-reads
-        // the same stale row from the query cache and fails this check again.
-        await queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
-        toast.error(
-          'This campaign changed since you opened the form — most likely the harvester baseline pull. ' +
-          'Nothing was saved. Close and re-open Edit to start from current data.',
-        );
         return;
       }
 
@@ -243,18 +241,17 @@ export default function CampaignsPage() {
         // Full-row PUT: HandleUpdateCampaign decodes a whole inventory.Campaign
         // and the UPDATE sets every column, so an omitted field is written as
         // its zero value. Spreading `fresh` first is what keeps
-        // psaCampaignRequestId and expectedFillRate intact. The bulk-paste path
-        // below now spreads a freshly-read row the same way, behind the same
-        // updatedAt guard.
+        // psaCampaignRequestId and expectedFillRate intact.
         //
-        // ifUnmodifiedSince re-states the check above as a precondition inside
-        // the UPDATE itself, which is what actually closes the race: the
-        // comparison above can still be overtaken between the GET and the PUT,
-        // and only the server can compare-and-write in one statement.
+        // ifUnmodifiedSince is editing.updatedAt — the row as of form open —
+        // not fresh.updatedAt. That is the whole point: fresh was read
+        // milliseconds ago, so asserting it would almost always pass and would
+        // miss a harvester write that landed while the form sat open. Passing
+        // the form-open value makes the server reject any change since then.
         await updateMutation.mutateAsync({
           id: editing.id,
           data: { ...fresh, ...values },
-          ifUnmodifiedSince: fresh.updatedAt,
+          ifUnmodifiedSince: editing.updatedAt,
         });
         setEditing(null);
         toast.success(
@@ -264,10 +261,13 @@ export default function CampaignsPage() {
         );
       } catch (err) {
         if (isConflict(err)) {
-          // Lost the race inside the GET→PUT window. Same remedy as above.
+          // The row moved at some point between the form opening and the write.
+          // The "start from current data" advice is only true if the cache is
+          // actually refreshed — otherwise re-opening Edit re-reads the same
+          // stale row and fails again the same way.
           await queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
           toast.error(
-            'This campaign changed while the save was in flight — most likely the harvester baseline pull. ' +
+            'This campaign changed while you were editing it — most likely the harvester baseline pull. ' +
             'Nothing was saved. Close and re-open Edit to start from current data.',
           );
           return;
@@ -429,16 +429,18 @@ export default function CampaignsPage() {
                   try {
                     const cached = allCampaigns.find(c => c.name.toLowerCase() === input.name.toLowerCase());
                     if (cached) {
-                      // Re-read over the network before the full-row PUT, the same
-                      // guard the edit form uses: allCampaigns is React Query data
-                      // held fresh for CAMPAIGN_STALE_TIME, and the racing writer is
-                      // the psa-harvest baseline pull, whose write the cache cannot
-                      // observe. Without this, a paste spreads the cached row and
-                      // writes its stale targeting ids back over a newer baseline.
-                      // The read is still needed for the payload — a full-row PUT has
-                      // to echo the current targeting back — but the comparison below
-                      // is only a fast path for a nicer message; ifUnmodifiedSince on
-                      // the PUT is what actually closes the GET→PUT window.
+                      // Re-read over the network to build the payload, the same
+                      // reason the edit form does: this is a full-row PUT, so it
+                      // has to echo back the targeting the paste format
+                      // deliberately does not carry, and allCampaigns is React
+                      // Query data held fresh for CAMPAIGN_STALE_TIME that never
+                      // observes a psa-harvest write. Spreading the cached row
+                      // instead would write its stale targeting ids back over a
+                      // newer baseline.
+                      //
+                      // The staleness check itself is the ifUnmodifiedSince on
+                      // the PUT below, keyed on cached.updatedAt — not a
+                      // comparison here.
                       let fresh: Campaign;
                       try {
                         fresh = await api.getCampaign(cached.id);
@@ -447,12 +449,6 @@ export default function CampaignsPage() {
                         // importing the rest of the block.
                         reportError('Campaign paste staleness check', err);
                         errors.push(`${input.name}: could not confirm the campaign is unchanged — not updated`);
-                        continue;
-                      }
-                      if (fresh.updatedAt !== cached.updatedAt) {
-                        // No invalidate here — the unconditional one after this loop
-                        // already refreshes the list, so a re-paste sees current data.
-                        errors.push(`${input.name}: changed since the campaign list loaded (most likely the harvester baseline pull) — not updated`);
                         continue;
                       }
                       // Only overlay fields that were explicitly in the import text;
@@ -468,7 +464,11 @@ export default function CampaignsPage() {
                       // server-owned ones: id comes from the URL, created_at is not in
                       // the UPDATE, and the service stamps UpdatedAt itself.
                       const { id: _id, createdAt: _ca, updatedAt: _ua, ...base } = fresh;
-                      await api.updateCampaign(cached.id, { ...base, ...input }, fresh.updatedAt);
+                      // cached.updatedAt, not fresh.updatedAt: fresh was read
+                      // milliseconds ago, so asserting it would almost always
+                      // pass. The list-load value is the baseline the operator's
+                      // paste was actually written against.
+                      await api.updateCampaign(cached.id, { ...base, ...input }, cached.updatedAt);
                       updated++;
                     } else {
                       // New campaigns get defaults for any fields not in the text.
@@ -477,9 +477,12 @@ export default function CampaignsPage() {
                     }
                   } catch (err) {
                     if (isConflict(err)) {
-                      // Lost the race inside the GET→PUT window. Recorded per
-                      // campaign so the rest of the block still imports.
-                      errors.push(`${input.name}: changed while the update was in flight (most likely the harvester baseline pull) — not updated`);
+                      // The row moved at some point since the list loaded.
+                      // Recorded per campaign so the rest of the block still
+                      // imports. No invalidate here — the unconditional one
+                      // after this loop already refreshes the list, so a
+                      // re-paste sees current data.
+                      errors.push(`${input.name}: changed since the campaign list loaded (most likely the harvester baseline pull) — not updated`);
                       continue;
                     }
                     errors.push(`${input.name}: ${getErrorMessage(err, 'failed')}`);

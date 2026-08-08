@@ -1,23 +1,29 @@
 # Prompt: optimistic concurrency control for campaign update
 
-> **Status:** implemented in #549. Kept as the record of the reasoning that led
-> there. Two deliberate deviations from the acceptance criteria below, both
-> argued in that PR:
+> **Status:** implemented in #549, with the client-side duplication removed in
+> the follow-up. Kept as the record of the reasoning that led there.
 >
-> 1. **Transport is a query parameter** (`?ifUnmodifiedSince=<RFC3339>`), not a
->    body field or `If-Match`. `If-Match`/`If-Unmodified-Since` carry an
->    HTTP-date, which is second-precision — far too coarse to guard a window
->    measured in milliseconds. A body field would give `updatedAt` two different
->    meanings on request and response.
-> 2. **The client-side comparison was kept, not deleted.** The criterion below
->    treats it as duplication of the server check. It is not: the two compare
->    against different baselines. The client compares the freshly-read row
->    against the row as of *form open* or *list load* — a window of minutes. The
->    server compares against the pre-flight `GET` — a window of milliseconds.
->    Deleting the client check would make every stale-form save succeed, because
->    the precondition is taken from the read that just happened. The pre-flight
->    `GET` is unavoidable regardless, since a full-row `PUT` has to echo the
->    current targeting back, so the comparison is free.
+> One deviation from the acceptance criteria below: **transport is a query
+> parameter** (`?ifUnmodifiedSince=<RFC3339>`), not a body field or `If-Match`.
+> A body field would give `Campaign.updatedAt` two different meanings — "expected
+> previous value" on request, "current value" on response — and the field is
+> already spoken for on the way in, since `service_crud.go` stamps
+> `c.UpdatedAt = time.Now()` over whatever the body carried. `If-Match` is the
+> HTTP-correct answer and was rejected only on cost: it is a two-sided contract
+> requiring the server to emit `ETag` on `GET` and the client's generic
+> `get`/`put` to grow header plumbing they do not have, in exchange for an opaque
+> token replacing a version already on the wire.
+>
+> The "delete the duplication" criterion is met. The client no longer compares
+> anything; the precondition sent is the timestamp captured when the form opened
+> (or when the campaign list loaded, for the paste path), so the server's
+> compare-and-write covers that entire span in one statement. Note that the
+> pre-flight `GET` **remains** — it is not the staleness check, it builds the
+> full-row payload, which has to echo back the targeting neither the form nor the
+> paste format edits. Sending `fresh.updatedAt` as the precondition instead would
+> be the subtle wrong turn: `fresh` was read milliseconds earlier, so the
+> assertion almost always passes and the guard silently degrades to covering only
+> the `GET`→`UPDATE` window.
 
 ---
 
