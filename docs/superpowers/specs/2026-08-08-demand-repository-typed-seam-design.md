@@ -101,14 +101,28 @@ ticket exists to remove. `ByGrade` and `ByPriceTier` are carried despite having
 no reader today because they are the natural next thing the leaderboard wants
 and they cost two map fields.
 
-See "Accepted losses" below — this decision has a write-side consequence worth
-confirming before implementation.
+See "Accepted losses" below — this decision has a write-side consequence, now
+resolved in favour of dropping the two unread fields.
 
 **3. `DataQuality` and `ComputedAt` are preserved exactly as they behave
-today.** `CharacterDemand` keeps both fields with their current JSON tags even
-though no DH writer populates `data_quality`. Changing that behaviour is SLA-61.
-The field carries a doc comment citing SLA-61 so the next reader does not
-rediscover it.
+today, at the character level only.** `CharacterDemand` keeps both fields with
+their current JSON tags even though no DH writer populates `data_quality`.
+Changing that behaviour is SLA-61. The field carries a doc comment citing
+SLA-61 so the next reader does not rediscover it.
+
+`ByEraDemand` does **not** get a `DataQuality` field. `dh.ByEraEntry`
+(`internal/adapters/clients/dh/types_analytics.go:186-193`) has no
+`data_quality` key, so the per-era value can never be populated from DH's wire
+format — unlike the character-level field, which at least has a plausible
+future source. Today's reader already handles this: `eraDemandFor`
+(`internal/domain/demand/service.go:386-393`) reads `entry.DataQuality` and
+falls back to `demand.DataQuality` when it is empty, and since it is *always*
+empty the fallback always fires. Assigning `demand.DataQuality` directly is
+therefore behaviour-preserving in every reachable state — both today (both
+values `""`) and after SLA-61 gives the character-level field a real value,
+which the fallback would have inherited anyway. This keeps "can character
+demand carry a data quality at all?" a single question owned by SLA-61 rather
+than splitting it across two fields, one of which is structurally dead.
 
 **4. Defect 1 is fixed as part of this change.** The scheduler will map DH types
 into the new domain structs field by field, which makes the nesting bug
@@ -139,14 +153,15 @@ type CharacterDemand struct {
 	ByEra       map[string]ByEraDemand `json:"by_era,omitempty"`
 }
 
-// ByEraDemand is the per-era breakdown inside CharacterDemand.
+// ByEraDemand is the per-era breakdown inside CharacterDemand. It carries no
+// DataQuality: DH's by_era entries have no data_quality key, so era buckets
+// inherit the character-level value. See decision 3.
 type ByEraDemand struct {
 	CardCount         int     `json:"card_count"`
 	AvgDemandScore    float64 `json:"avg_demand_score"`
 	TotalViews        int     `json:"total_views"`
 	TotalSearchClicks int     `json:"total_search_clicks"`
 	TotalWishlistAdds int     `json:"total_wishlist_adds"`
-	DataQuality       string  `json:"data_quality"`
 }
 
 // CharacterVelocity is the velocity payload persisted on CharacterCache.
@@ -259,23 +274,50 @@ Delete `characterDemandJSON`, `byEraJSON`, `velocityBlobJSON`, and
 lines 307, 321, 339 plus the one at `campaign_signals.go:150`. Readers use the
 typed fields directly. `encoding/json` should drop out of both files' imports.
 
-## Accepted losses — confirm before implementation
+`eraDemandFor` (`service.go:386-393`) loses its empty-string fallback along with
+`ByEraDemand.DataQuality`: the three lines computing `quality` collapse to
+`DataQuality: demand.DataQuality`. Per decision 3 this is behaviour-preserving,
+not a behaviour change.
 
-Decision 2 has a consequence that only bites on the **write** side, and it is
-worth an explicit look before code is written.
+## Accepted losses
+
+Decision 2 has a consequence that only bites on the **write** side, recorded
+here because it is invisible from the read side.
 
 Today the scheduler marshals the entire `dh.CharacterVelocityFields`, so the
 persisted column contains all twelve fields — including `avg_days_to_sell` and
 `sell_through`, which no domain code reads. Under this design the adapter
 marshals the *domain* struct, so those two fields stop being written at all.
-That is not merely a read-side omission; it permanently removes them from the
-column.
+That is not merely a read-side omission; it removes them from the column.
 
-Nothing reads them today, and DH remains the source of truth if they are ever
-wanted. But if the intent was for the persisted blob to stay a faithful DH
-snapshot, `CharacterVelocity` should gain `AvgDaysToSell *float64` and
-`SellThrough map[string]float64` — two fields, no other change to this design.
-Flagging rather than deciding silently.
+**Decision: accept the loss. Do not add the two fields.** Three things make it
+low-risk:
+
+- **Nothing reads them.** The only mention of
+  `CharacterVelocityFields.AvgDaysToSell` / `.SellThrough` in the repository is
+  their declaration at `internal/adapters/clients/dh/types_analytics.go:235-236`.
+  The apparent consumers at `internal/adapters/clients/dh/convert.go:111-113`
+  are a *different* struct — `CardAnalytics.Velocity.SellThrough`, a
+  `map[string]string` at `types_analytics.go:34`. Card velocity, not character
+  velocity, and untouched by this change.
+- **The blob is a cache, not a system of record.**
+  `DH_ANALYTICS_REFRESH_ENABLED` defaults to `true`
+  (`internal/platform/config/loader.go:196`) with a configurable hour, so the
+  payload is rewritten daily from DH. Restoring a field means adding it and
+  waiting one refresh cycle — there is no backfill and no data migration,
+  because DH is authoritative and always re-queryable.
+- **Repository convention.** CLAUDE.md's "avoid speculative abstractions" and
+  "only make changes directly requested" point directly at persisting fields on
+  the theory that someone might later want them.
+
+The counter-argument — that the blob should stay a faithful DH snapshot for
+debugging — does not hold up: the snapshot is already lossy (`dh_character_cache`
+stores three payloads, not the response), and the honest tool for inspecting raw
+DH output is a client call, not a partially-faithful cache column.
+
+Reversibility decides it. If this is wrong, the fix is two struct fields and a
+24-hour wait. If the opposite is wrong, two unread fields sit in the database
+indefinitely and every future reader must work out whether they are trustworthy.
 
 ## Error handling
 
@@ -340,7 +382,10 @@ That is Defect 1 being fixed, and it is the only intended output difference.
 ## Open follow-ups
 
 - **SLA-61** — character-level `data_quality` has no DH source, so
-  `min_data_quality=full` returns no character niches.
+  `min_data_quality=full` returns no character niches. Scoped to the single
+  `CharacterDemand.DataQuality` field; per decision 3, the per-era variant is
+  deleted rather than deferred, since DH's `by_era` entries could not populate
+  it even in principle.
 - `ByGrade` / `ByPriceTier` are persisted but unread. If they are still unread
   in a few months, delete them rather than let them become the next
   write-only blob.
