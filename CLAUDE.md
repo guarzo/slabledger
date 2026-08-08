@@ -24,7 +24,7 @@ make screenshots
 # Output: web/screenshots/*.png (desktop) + web/screenshots/mobile/*.png (mobile)
 
 # Quality
-make check                                 # Full quality check (lint + architecture + file size)
+make check                                 # Full quality check (see "Quality Checks" below)
 ```
 
 ## Architecture
@@ -33,49 +33,41 @@ make check                                 # Full quality check (lint + architec
 
 ```
 internal/
-  domain/           # Pure business logic (NO external deps)
-    inventory/      # Core inventory: campaigns, purchases, sales (8 focused repo interfaces)
-    arbitrage/      # Acquisition targets, EV, Monte Carlo projection
-    portfolio/      # Inventory aging, price signals, portfolio health analysis
-    tuning/         # Campaign parameter optimization, tuning suggestions and analytics
-    finance/        # Invoices, cashflow, capital tracking, revocation flags
-    export/         # Sell sheet generation
-    dhlisting/      # DH listing push pipeline coordination
-    advisor/        # AI advisor interfaces, tool loop, tracking
-    ai/             # LLM provider, image generation, tool executor interfaces
-    auth/           # Authentication interfaces
-    cards/          # CardRepository interface
-    constants/      # Shared constants
-    errors/         # Error types
-    favorites/      # Favorites management
-    intelligence/   # Market intelligence repository and types (DH Tier 3 data)
-    llmutil/        # LLM response utilities (strip fences, etc.)
-    mathutil/       # Math utility functions
-    observability/  # Logger, MetricsRecorder interfaces
-    pricing/        # PriceProvider interface, graded prices, market data
-    scoring/        # Price scoring factors and profiles
-    storage/        # Cache and storage interfaces
-    timeutil/       # Time utility functions
-  adapters/         # Interface implementations
-    httpserver/     # HTTP handlers, middleware, router
-    clients/        # External API clients
-      dhprice/      # DH (DoubleHolo) price provider — sole price source
-      pricelookup/  # PriceLookup adapter (wraps PriceProvider for campaigns)
-      tcgdex/       # TCGdex.dev card/set metadata (EN + JA, no API key)
-      google/       # Google OAuth
-      httpx/        # Unified HTTP client (retry + circuit breaker)
-      azureai/      # Azure AI completions
-    storage/postgres/ # Postgres persistence + migrations (Supabase in prod, local Postgres in dev)
-    scheduler/      # Background jobs (price refresh, session cleanup, advisor, snapshots)
-  platform/         # Cross-cutting concerns
-    cache/          # Type-safe cache
-    cardutil/       # Card name/set normalization (pure utility, no external deps)
-    config/         # Configuration
-    crypto/         # AES encryption for auth tokens
-    errors/         # Error types
-    resilience/     # Retry + circuit breaker
-    telemetry/      # slog logging
+  domain/     # Pure business logic (NO external deps) — defines the interfaces
+  adapters/   # Interface implementations (HTTP, clients, storage, schedulers)
+  platform/   # Cross-cutting concerns (cache, config, crypto, resilience, telemetry)
 ```
+
+**Package rosters are derived, not listed here.** Any snapshot of the package tree
+goes stale silently and then misleads every session that loads this file. Get the
+current set from the tree:
+
+```bash
+go list ./internal/domain/...            # domain packages
+ls internal/adapters internal/adapters/clients internal/platform
+```
+
+Orientation for the packages whose purpose is not obvious from the name:
+
+- `domain/inventory` — the hub: campaigns, purchases, sales. See "Inventory Domain" below.
+- `domain/pricing` — `PriceProvider` interface, graded prices, market data.
+  `domain/pricing/lookup` is the `PriceLookup` adapter over it.
+- `domain/intelligence` — market intelligence repository and types (DH Tier 3 data).
+- `domain/scoring` — price scoring factors and profiles.
+- `domain/liquidation` — liquidation candidates and comp pricing.
+- `domain/dhevents` — DH event stream types.
+- `domain/advisor`, `domain/ai` — AI advisor interfaces, tool loop, LLM provider.
+- `domain/storage` — cache and storage interfaces.
+- `domain/{constants,errors,llmutil,mathutil,observability,timeutil}` — leaf utilities.
+- `adapters/clients/dh` — the DH API client; `adapters/clients/dhprice` wraps it as a
+  `PriceProvider`; `adapters/clients/dhlisting` handles listing pushes.
+- `adapters/clients/cardladder` — CardLadder valuations (separate from `PriceProvider`).
+- `adapters/clients/psa`, `adapters/clients/psaportal` — PSA APIs and the portal session.
+- `adapters/clients/httpx` — unified HTTP client (retry + circuit breaker), used by the rest.
+- `adapters/advisortool`, `adapters/scoring` — executor and provider implementations.
+- `adapters/storage/postgres` — persistence + embedded migrations.
+- `adapters/scheduler` — background jobs (price refresh, DH polling/push, CardLadder
+  refresh, PSA sync, session cleanup, snapshots).
 
 **Key Principle**: Domain code depends ONLY on interfaces, never concrete implementations.
 
@@ -84,11 +76,16 @@ internal/
 The inventory domain (`internal/domain/inventory/`) is the core campaigns and inventory tracking feature.
 
 ### Core inventory package
-- **Types**: Campaign, Purchase, Sale, Phase, SaleChannel
-- **8 focused repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository, AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository, SnapshotRepository
+- **Types**: Campaign, Purchase, Sale, Phase, SaleChannel (`types_core.go`)
+- **8 repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository,
+  AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository,
+  PendingItemRepository. They are split by concern, not by size — PurchaseRepository
+  alone carries more methods than the other seven combined, so do not assume a new
+  purchase-shaped method belongs elsewhere just to keep it small.
 - **Service**: CRUD + imports + analytics; delegates computation to sibling sub-packages
 - **PriceLookup**: Optional interface for market signal computation (injected via `WithPriceLookup` functional option)
-- **Import**: CSV parsing lives directly in the `inventory` package (parse_psa.go, parse_mm.go, parse_shopify.go, parse_orders.go)
+- **Import**: CSV parsing lives directly in the `inventory` package
+  (`ls internal/domain/inventory/parse_*.go` for the current set — eBay, Shopify, orders)
 - **Channel fees**: eBay/TCGPlayer use campaign's `ebayFeePct`; local/other = 0%
 
 ### Sibling sub-packages (flat siblings under `internal/domain/`, no cross-imports between them)
@@ -100,18 +97,16 @@ so adding a new inventory-importing package puts it under the rule automatically
 no list to update here or in the script.
 
 Siblings may depend on `inventory` (the hub) and on leaf packages such as `errors`
-and `observability`, but never on each other. The derived set as of 2026-08-08:
+and `observability`, but never on each other. To see the current set:
 
-- **arbitrage**: Acquisition targets, expected value, Monte Carlo projection
-- **demand**: Demand signals
-- **dhlisting**: DH listing push pipeline coordination
-- **dhpricing**: DH listing price reconciliation
-- **export**: Sell sheet generation
-- **finance**: Invoices, cashflow forecasting, capital tracking, revocation flags
-- **portfolio**: Inventory aging, price signals, portfolio health analysis
-- **pricing/lookup**: PriceLookup adapter over PriceProvider
-- **psacampaign**: PSA campaign targeting
-- **tuning**: Campaign parameter optimization, tuning suggestions and analytics
+```bash
+grep -rl --include='*.go' 'internal/domain/inventory' internal/domain \
+  | grep -v _test.go | xargs -n1 dirname | sort -u
+```
+
+As of 2026-08-08 that set is arbitrage, demand, dhlisting, dhpricing, export, finance,
+portfolio, pricing/lookup, psacampaign, and tuning — but derive it rather than trusting
+this sentence.
 
 ## Database
 
@@ -120,30 +115,23 @@ All monetary values in **cents**. Migrations managed by `golang-migrate/migrate/
 embedded in the binary via `embed.FS`. Migrations run automatically on startup.
 
 Migration files: `internal/adapters/storage/postgres/migrations/`. `000001_initial_schema`
-represents the final-state schema after cutover from SQLite; subsequent migrations are
-incremental (Supabase index/RLS fixes, hot-query indexes, `resolved_at` indexes, DH push
-plumbing, MM grade-mismatch repair, and the dead-code cleanups dropping
-`advisor_cache` (000013) and `psa_exchange_policy` (000014)); most recently
-`campaign_targeting_axes` (000024 — four new `campaigns` columns replacing the
-inclusion/exclusion model with a multi-valued language axis (`target_languages` JSONB,
-empty = open net), subject-mode, subject-list, and denied-spec axes; its legacy subject
-backfill marks unreconciled rows with a negative sentinel id)
-and `psa_portal_catalog` (000025 — persisted PSA spec-list/subject reference data so the
-main server can resolve portal identifiers without a portal session),
-`restore_oauth_states_expires_index` (000026 — re-creates the `oauth_states(expires_at)`
-index that 000003 dropped as unused, now that the session-cleanup scheduler sweeps
-expired OAuth states), and the RLS retrofit
-(000027 — enables row-level security on the six tables created after the 000003 blanket
-pass, with policies scoped `TO service_role` and grants revoked from `anon`/`authenticated`;
-those role-dependent statements are guarded on `pg_roles` so the migration also applies to
-a local Postgres, where Supabase's roles do not exist), its follow-up (000028 — applies
-the same tightening to the 36 tables and 7 views 000003 covered, whose `USING (true)`
-policies carried no `TO` clause and therefore defaulted to `TO PUBLIC`, passing
-`anon`/`authenticated`; after it, no policy in `public` is `TO PUBLIC`), and
-`psa_push_queue_rls` (000029 — the last table 000027 deliberately left out, brought under
-the same `TO service_role` + REVOKE pattern; it denies an `anon`/`authenticated` PostgREST
-writer, but not a holder of `service_role` or direct database access, which is what the
-claim/`MarkResult` guard in code and SLA-44 address).
+represents the final-state schema after cutover from SQLite; every later migration is
+incremental. **Do not trust a prose list of migrations here** — run
+`ls internal/adapters/storage/postgres/migrations/` for the current set and read the file
+itself for what it does. The narratives below are only the ones carrying semantics you
+would not infer from the SQL:
+
+- `campaign_targeting_axes` (000024) — replaced the inclusion/exclusion model with four
+  `campaigns` columns: a multi-valued language axis (`target_languages` JSONB, **empty =
+  open net**), subject-mode, subject-list, and denied-spec. Its legacy subject backfill
+  marks unreconciled rows with a **negative sentinel id**.
+- The RLS retrofits (000027, 000028, 000029) — 000003's blanket pass wrote `USING (true)`
+  policies with no `TO` clause, which defaults to `TO PUBLIC` and therefore admits
+  `anon`/`authenticated`. These three migrations bring every table under
+  `TO service_role` + REVOKE. Role-dependent statements are guarded on `pg_roles` so they
+  also apply to a local Postgres, where Supabase's roles do not exist. This denies a
+  PostgREST writer, **not** a holder of `service_role` or direct database access — the
+  claim/`MarkResult` guard in code and SLA-44 cover that.
 
 Connection is configured via `DATABASE_URL`. The transaction pooler is used for the app
 runtime; DDL works the same because `db.go` uses `pgx.QueryExecModeExec` (simple protocol).
@@ -158,11 +146,24 @@ See `.env.example` for the complete list with descriptions. Key groups:
 - **DH**: `DH_API_BASE_URL`, `DH_ENTERPRISE_API_KEY`
 - **AI**: `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_DEPLOYMENT`
 - **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`
+- **CardLadder**: `CARDLADDER_REFRESH_ENABLED`, `CARDLADDER_REFRESH_HOUR`
 - **Schedulers**: `PRICE_REFRESH_ENABLED`
 
 ## Pricing Pipeline
 
-DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapters/clients/dhprice/`). Prices are computed in-memory from DH API calls — there is no `price_history` table (dropped before the Postgres cutover). The price refresh scheduler warms the DH card ID cache by iterating unsold inventory from `campaign_purchases`. The `DBTracker` struct (`internal/adapters/storage/postgres/prices.go`) provides API tracking, access tracking, and health checks. Previous pricing sources (PriceCharting, CardHedger, JustTCG, fusion engine) were removed on 2026-04-06.
+DH (DoubleHolo) is the sole implementation of the `pricing.PriceProvider` interface, via
+`DHPriceProvider` (`internal/adapters/clients/dhprice/`). It is not the only valuation
+source in the system: **CardLadder** is wired separately in
+`cmd/slabledger/init_services.go` (`initializeCardLadder`) and feeds
+`internal/domain/liquidation` comp pricing plus its own scheduler jobs. When a change
+touches "prices," check which of the two it means.
+
+Prices are computed in-memory from DH API calls — there is no `price_history` table
+(dropped before the Postgres cutover). The price refresh scheduler warms the DH card ID
+cache by iterating unsold inventory from `campaign_purchases`. The `DBTracker` struct
+(`internal/adapters/storage/postgres/prices.go`) provides API tracking, access tracking,
+and health checks. Previous pricing sources (PriceCharting, CardHedger, JustTCG, fusion
+engine) were removed on 2026-04-06.
 
 ## Testing
 
@@ -192,9 +193,10 @@ DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapte
 
 ## Quality Checks
 
-- `make check` — runs lint + architecture import check + file size check
+- `make check` — runs lint + architecture import check + file size check + Playwright version check
 - `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces the flat sibling rule against a package set derived from the tree, and fails closed if that derivation yields fewer than two packages
 - `scripts/check-file-size.sh` — warns at 500 lines, fails at 600 lines (excludes test files and mocks)
+- `scripts/check-playwright-version.sh` — keeps the Playwright package and browser image in step
 
 ## Adding New Components
 
@@ -210,9 +212,11 @@ Simplest API client reference: `internal/adapters/clients/dhprice/`
 
 ## Frontend-Backend Integration
 
-- **Dev proxy**: Vite proxies `/api/*` → `http://localhost:8081` (see `web/vite.config.ts`)
+- **Dev proxy**: Vite proxies `/api/*` and `/auth/*` → `http://localhost:8081`
+  (see `web/vite.config.js`). The proxy is disabled when `PLAYWRIGHT_TEST` is set, so
+  Playwright specs can mock routes.
 - **Type sync**: Frontend types in `web/src/types/` are manually maintained to match Go struct JSON tags. When modifying Go response structs, update corresponding TS interfaces.
-- **API client**: `web/src/js/api.ts` — singleton with retry, 30s timeout (5min for uploads), credential inclusion
+- **API client**: `web/src/js/api/client.ts` — singleton with retry, 30s timeout (5min for uploads), credential inclusion
 
 ## Configuration
 
@@ -235,7 +239,13 @@ See [docs/API.md](docs/API.md) for all endpoints with request/response shapes.
 - [Development](docs/DEVELOPMENT.md) - Caching, rate limiting, resilience, troubleshooting
 - [Database Schema](docs/SCHEMA.md) - Table definitions, indexes, relationships
 - [API Reference](docs/API.md) - All endpoints with request/response shapes
-- [Campaign Strategy](docs/private/CAMPAIGN_STRATEGY.md) - Business strategy (private, not tracked in git)
+- [Schedulers](docs/SCHEDULERS.md) - Every background job, its cadence and its env gate
+- [Operations](docs/OPERATIONS.md) - Deploy, monitoring, incident handling; see also `docs/runbooks/`
+- [Loop](docs/LOOP.md) - The acquisition/liquidation loop this system exists to run
+- [DH Inventory](docs/DH_INVENTORY.md) - DH listing and inventory sync behavior
+- [LLM Usage](docs/LLM_USAGE.md) - Where models are called and what they cost
+
+`ls docs/` for the rest — the list above is the durable set, not an inventory.
 
 ## Key Reference Files
 
