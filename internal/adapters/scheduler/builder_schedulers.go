@@ -73,15 +73,6 @@ func buildDHEventCleanupScheduler(cfg *config.Config, deps BuildDeps) *DHEventCl
 	return NewDHEventCleanupScheduler(deps.EventPruner, deps.Logger, dhEventConfig)
 }
 
-// buildGapCleanupScheduler builds the scoring data gap cleanup scheduler
-// (if a gap store is provided).
-func buildGapCleanupScheduler(deps BuildDeps) *GapCleanupScheduler {
-	if deps.GapStore == nil {
-		return nil
-	}
-	return NewGapCleanupScheduler(deps.GapStore, deps.Logger)
-}
-
 // buildInventoryRefreshScheduler builds the inventory snapshot refresh scheduler
 // (if its dependencies are provided).
 func buildInventoryRefreshScheduler(cfg *config.Config, deps BuildDeps) *InventoryRefreshScheduler {

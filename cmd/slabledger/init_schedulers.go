@@ -8,7 +8,6 @@ import (
 	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
@@ -37,8 +36,6 @@ type schedulerDeps struct {
 	CertLookup                 inventory.CertLookup
 	CertEnrichJob              *scheduler.CertEnrichJob    // pre-built; nil if PSA not configured
 	PricingEnrichJob           *scheduler.PricingEnrichJob // pre-built; wired into inventory service as the pricing enqueuer
-	AdvisorService             advisor.Service
-	AICallRepo                 *postgres.AICallRepository
 	CardLadderClient           *cardladder.Client
 	CardLadderStore            *postgres.CardLadderStore
 	CardLadderSalesStore       *postgres.CLSalesStore
@@ -53,7 +50,6 @@ type schedulerDeps struct {
 	DHCompCacheStore           *postgres.DHCompCacheStore
 	DHPriceSyncService         dhpricing.Service
 	DHTombstoneStore           *postgres.DHCardTombstoneStore
-	GapStore                   *postgres.GapStore
 	PSARowProvider             scheduler.RowProvider
 	PSATokenRefresher          scheduler.TokenRefresher
 }
@@ -74,7 +70,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		InventoryLister:            &inventoryListAdapter{repo: deps.PurchaseStore},
 		SnapshotRefresher:          &snapshotRefreshAdapter{svc: deps.CampaignsService},
 		SnapshotEnrichService:      deps.CampaignsService,
-		AICallTracker:              deps.AICallRepo,
 		CardLadderClient:           deps.CardLadderClient,
 		CardLadderStore:            deps.CardLadderStore,
 		CardLadderPurchaseLister:   deps.PurchaseStore,
@@ -199,9 +194,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 				buildDeps.DHPushRelister = listingSvc
 			}
 		}
-	}
-	if deps.GapStore != nil {
-		buildDeps.GapStore = deps.GapStore
 	}
 	// Wire PSA portal sync (nil-safe)
 	if deps.PSARowProvider != nil {

@@ -4,7 +4,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
@@ -14,7 +13,6 @@ import (
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
-	"github.com/guarzo/slabledger/internal/domain/scoring"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -37,9 +35,6 @@ type BuildDeps struct {
 
 	// Snapshot enrichment dependencies (optional)
 	SnapshotEnrichService SnapshotEnrichService
-
-	// AI call tracking (used by various AI-related schedulers if present).
-	AICallTracker ai.AICallTracker
 
 	// DH dependencies (optional)
 	DHClient                 *dh.Client
@@ -85,9 +80,6 @@ type BuildDeps struct {
 	DHPushConfigLoader DHPushConfigLoader
 	DHPushHoldSetter   DHPushHoldSetter
 	DHPushRelister     DHPushRelister
-
-	// Scoring gap cleanup dependencies (optional)
-	GapStore scoring.GapStore
 
 	// Card Ladder dependencies (optional)
 	CardLadderClient           *cardladder.Client
@@ -146,9 +138,6 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, s)
 	}
 	if s := buildDHEventCleanupScheduler(cfg, deps); s != nil {
-		schedulers = append(schedulers, s)
-	}
-	if s := buildGapCleanupScheduler(deps); s != nil {
 		schedulers = append(schedulers, s)
 	}
 	if s := buildInventoryRefreshScheduler(cfg, deps); s != nil {
