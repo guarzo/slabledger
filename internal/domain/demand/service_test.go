@@ -356,6 +356,42 @@ func TestService_Leaderboard_Acceleration(t *testing.T) {
 	}
 }
 
+// TestService_Leaderboard_ActiveListingCount asserts that a row's Saturation
+// payload reaches NicheOpportunity.Market.ActiveListingCount unchanged. This
+// guards the read side of the Defect-1 fix: the write side
+// (mapCharacterSaturation) and the JSON decode are both tested elsewhere, but
+// nothing previously checked that the decoded value survives all the way to
+// what the API returns. A regression here — e.g. mapCharacterSaturation
+// reverting to marshal the whole nested entry — would otherwise pass every
+// existing test and silently zero the count again.
+func TestService_Leaderboard_ActiveListingCount(t *testing.T) {
+	rows := []demand.CharacterCache{{
+		Character:  "Pikachu",
+		Window:     "30d",
+		Demand:     demandPayload("Pikachu", 0.9, "full"),
+		Saturation: &demand.CharacterSaturation{ActiveListingCount: 42},
+	}}
+
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
+	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
+		Window: "30d",
+		Era:    "sword_shield",
+		Grade:  10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("want 1 bucket; got %d", len(out))
+	}
+	if out[0].Market == nil {
+		t.Fatalf("want Market populated; got nil")
+	}
+	if out[0].Market.ActiveListingCount != 42 {
+		t.Errorf("Market.ActiveListingCount = %d, want 42", out[0].Market.ActiveListingCount)
+	}
+}
+
 // --- Standalone scoring tests ---
 
 func TestOpportunityScore_CoverageAndSaturation(t *testing.T) {
@@ -387,7 +423,7 @@ func TestService_Leaderboard_MalformedVelocity_LogsWarn(t *testing.T) {
 				AvgDemandScore: 0.8,
 			},
 			MalformedPayloads: []demand.MalformedPayload{
-				{Column: "velocity", Err: errors.New("unexpected end of JSON input")},
+				{Column: demand.MalformedColumnVelocity, Err: errors.New("unexpected end of JSON input")},
 			},
 		},
 		{
@@ -399,7 +435,7 @@ func TestService_Leaderboard_MalformedVelocity_LogsWarn(t *testing.T) {
 				AvgDemandScore: 0.6,
 			},
 			MalformedPayloads: []demand.MalformedPayload{
-				{Column: "demand", Err: errors.New("some demand decode error")},
+				{Column: demand.MalformedColumnDemand, Err: errors.New("some demand decode error")},
 			},
 		},
 	}

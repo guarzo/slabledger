@@ -177,11 +177,11 @@ func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window stri
 
 	results := make([]demand.CharacterCache, 0, 32)
 	for rows.Next() {
-		r, scanErr := scanCharacterCacheRow(rows)
+		row, scanErr := scanCharacterCacheRow(rows)
 		if scanErr != nil {
 			return nil, fmt.Errorf("scan dh_character_cache row: %w", scanErr)
 		}
-		results = append(results, *r)
+		results = append(results, *row)
 	}
 	return results, rows.Err()
 }
@@ -231,17 +231,17 @@ func scanCharacterCacheRow(s scanner) (*demand.CharacterCache, error) {
 	}
 
 	if v, decErr := unmarshalPayload[demand.CharacterDemand](demandJSON); decErr != nil {
-		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: "demand", Err: decErr})
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: demand.MalformedColumnDemand, Err: decErr})
 	} else {
 		row.Demand = v
 	}
 	if v, decErr := unmarshalPayload[demand.CharacterVelocity](velocityJSON); decErr != nil {
-		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: "velocity", Err: decErr})
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: demand.MalformedColumnVelocity, Err: decErr})
 	} else {
 		row.Velocity = v
 	}
 	if v, decErr := unmarshalPayload[demand.CharacterSaturation](saturationJSON); decErr != nil {
-		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: "saturation", Err: decErr})
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: demand.MalformedColumnSaturation, Err: decErr})
 	} else {
 		row.Saturation = v
 	}

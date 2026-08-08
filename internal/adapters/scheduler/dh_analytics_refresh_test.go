@@ -249,7 +249,7 @@ func TestDHAnalyticsRefresh_HappyPath(t *testing.T) {
 		t.Fatalf("expected Pikachu row with a Saturation payload; got %+v", pikachu)
 	}
 	if pikachu.Saturation.ActiveListingCount != 42 {
-		t.Fatalf("want Pikachu ActiveListingCount=42 (Defect 1 regression); got %d", pikachu.Saturation.ActiveListingCount)
+		t.Fatalf("want Pikachu ActiveListingCount=42 (active_listing_count written and read flat); got %d", pikachu.Saturation.ActiveListingCount)
 	}
 	if charizard == nil || charizard.Velocity == nil {
 		t.Fatalf("expected Charizard row with a Velocity payload; got %+v", charizard)

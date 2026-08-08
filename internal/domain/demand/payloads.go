@@ -12,9 +12,11 @@ type CharacterDemand struct {
 	// DataQuality is read by qualityAllowed but has no writer: DH's
 	// character demand endpoint does not report it. Character niches
 	// therefore always carry "". Tracked as SLA-61.
-	DataQuality string                 `json:"data_quality"`
-	ComputedAt  string                 `json:"computed_at"`
-	ByEra       map[string]ByEraDemand `json:"by_era,omitempty"`
+	DataQuality string `json:"data_quality"`
+	// ComputedAt is likewise unwritten by DH's character demand endpoint and
+	// is always empty in practice.
+	ComputedAt string                 `json:"computed_at"`
+	ByEra      map[string]ByEraDemand `json:"by_era,omitempty"`
 }
 
 type ByEraDemand struct {

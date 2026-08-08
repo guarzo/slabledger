@@ -124,6 +124,18 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 	out := make([]NicheOpportunity, 0, len(rows)*len(grades))
 	for _, row := range rows {
 		if row.Demand == nil {
+			// A nil Demand is normal for a row whose payload column is
+			// legitimately NULL. Only warn when a MalformedPayloads entry
+			// says the nil is actually a decode failure — otherwise this
+			// would fire on every ordinary row with no demand data yet.
+			for _, mp := range row.MalformedPayloads {
+				if mp.Column != MalformedColumnDemand {
+					continue
+				}
+				s.logger.Warn(ctx, "demand_json unmarshal failed",
+					observability.String("character", row.Character),
+					observability.Err(mp.Err))
+			}
 			continue
 		}
 		demand := row.Demand
@@ -319,7 +331,7 @@ func (s *Service) parseCharacterMarket(ctx context.Context, row CharacterCache) 
 		has = true
 	}
 	for _, mp := range row.MalformedPayloads {
-		if mp.Column != "velocity" {
+		if mp.Column != MalformedColumnVelocity {
 			continue
 		}
 		s.logger.Warn(ctx, "velocity_json unmarshal failed",

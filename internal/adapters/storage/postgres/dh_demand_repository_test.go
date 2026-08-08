@@ -109,6 +109,13 @@ func TestScanCharacterCacheRow(t *testing.T) {
 		wantVelocityNil   bool
 		wantSaturationNil bool
 		wantMalformed     []demand.MalformedPayload
+		// wantSampleSize and wantActiveListingCount, when non-nil, assert the
+		// decoded values on the valid-payload case — otherwise this test only
+		// checks nil-ness and a regression like reverting
+		// mapCharacterSaturation to marshal the whole nested entry would pass
+		// silently (SLA-41 item 6).
+		wantSampleSize         *int
+		wantActiveListingCount *int
 	}{
 		{
 			name: "all three payload columns valid",
@@ -121,6 +128,8 @@ func TestScanCharacterCacheRow(t *testing.T) {
 				sql.NullTime{Time: analyticsComputedAt, Valid: true},
 				fetchedAt,
 			},
+			wantSampleSize:         intPtr(12),
+			wantActiveListingCount: intPtr(42),
 		},
 		{
 			name: "all three NULL",
@@ -150,7 +159,7 @@ func TestScanCharacterCacheRow(t *testing.T) {
 			},
 			wantVelocityNil: true,
 			wantMalformed: []demand.MalformedPayload{
-				{Column: "velocity"},
+				{Column: demand.MalformedColumnVelocity},
 			},
 		},
 		{
@@ -167,8 +176,8 @@ func TestScanCharacterCacheRow(t *testing.T) {
 			wantDemandNil:     true,
 			wantSaturationNil: true,
 			wantMalformed: []demand.MalformedPayload{
-				{Column: "demand"},
-				{Column: "saturation"},
+				{Column: demand.MalformedColumnDemand},
+				{Column: demand.MalformedColumnSaturation},
 			},
 		},
 	}
@@ -188,6 +197,16 @@ func TestScanCharacterCacheRow(t *testing.T) {
 			}
 			if (row.Saturation == nil) != tc.wantSaturationNil {
 				t.Errorf("Saturation nil = %v, want %v", row.Saturation == nil, tc.wantSaturationNil)
+			}
+			if tc.wantSampleSize != nil {
+				if row.Velocity == nil || row.Velocity.SampleSize != *tc.wantSampleSize {
+					t.Errorf("Velocity.SampleSize = %v, want %d", row.Velocity, *tc.wantSampleSize)
+				}
+			}
+			if tc.wantActiveListingCount != nil {
+				if row.Saturation == nil || row.Saturation.ActiveListingCount != *tc.wantActiveListingCount {
+					t.Errorf("Saturation.ActiveListingCount = %v, want %d", row.Saturation, *tc.wantActiveListingCount)
+				}
 			}
 
 			if len(row.MalformedPayloads) != len(tc.wantMalformed) {

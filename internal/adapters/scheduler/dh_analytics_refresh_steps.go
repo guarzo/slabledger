@@ -335,9 +335,10 @@ func mapCharacterVelocity(v dh.CharacterVelocityFields) *demand.CharacterVelocit
 }
 
 // mapCharacterSaturation converts DH's nested saturation entry into the flat
-// domain payload. This is where Defect 1 dies: reading
-// entry.Saturation.ActiveListingCount directly is an explicit assignment the
-// compiler checks, and there is no marshal depth left to get wrong.
+// domain payload. active_listing_count is written flat here and parsed flat
+// by the reader; reading entry.Saturation.ActiveListingCount directly is an
+// explicit assignment the compiler checks, so the nested wire shape never
+// reaches storage.
 func mapCharacterSaturation(entry dh.CharacterSaturationEntry) *demand.CharacterSaturation {
 	return &demand.CharacterSaturation{
 		ActiveListingCount: entry.Saturation.ActiveListingCount,

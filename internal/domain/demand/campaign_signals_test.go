@@ -291,7 +291,7 @@ func TestCampaignSignals_MalformedVelocityCountsAsSkipped(t *testing.T) {
 			Window:              "30d",
 			AnalyticsComputedAt: &computed,
 			MalformedPayloads: []demand.MalformedPayload{
-				{Column: "velocity", Err: errors.New("unexpected end of JSON input")},
+				{Column: demand.MalformedColumnVelocity, Err: errors.New("unexpected end of JSON input")},
 			},
 		},
 		{
@@ -299,7 +299,7 @@ func TestCampaignSignals_MalformedVelocityCountsAsSkipped(t *testing.T) {
 			Window:              "30d",
 			AnalyticsComputedAt: &computed,
 			MalformedPayloads: []demand.MalformedPayload{
-				{Column: "demand", Err: errors.New("unexpected end of JSON input")},
+				{Column: demand.MalformedColumnDemand, Err: errors.New("unexpected end of JSON input")},
 			},
 		},
 	}

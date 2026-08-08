@@ -78,9 +78,10 @@ func TestCharacterVelocity_DecodesLegacyFlatBlob(t *testing.T) {
 	}
 }
 
-// TestCharacterSaturation_FlatVsNestedLegacyShapes documents Defect 1's
-// footprint: a flat blob (today's correct shape, post-fix) decodes fully, but
-// the pre-existing nested shape the scheduler used to write for saturation
+// TestCharacterSaturation_FlatVsNestedLegacyShapes pins the invariant that
+// active_listing_count is decoded from the flat shape, not the nested one: a
+// flat blob (today's correct shape, post-fix) decodes fully, but the
+// pre-existing nested shape the scheduler used to write for saturation
 // decodes ActiveListingCount to zero. This is not new lossy behavior — it
 // pins what already-persisted rows contain until the next scheduler refresh
 // overwrites them with the flat shape.
@@ -96,7 +97,7 @@ func TestCharacterSaturation_FlatVsNestedLegacyShapes(t *testing.T) {
 			want: 42,
 		},
 		{
-			name: "legacy nested shape loses the count (Defect 1, pre-existing rows)",
+			name: "legacy nested shape loses the count (pre-existing rows)",
 			blob: `{"character_name":"Pikachu","saturation":{"active_listing_count":42}}`,
 			want: 0,
 		},

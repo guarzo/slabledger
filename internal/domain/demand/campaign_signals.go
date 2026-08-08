@@ -140,7 +140,7 @@ func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 	skipped := 0
 	for _, row := range rows {
 		for _, mp := range row.MalformedPayloads {
-			if mp.Column == "velocity" {
+			if mp.Column == MalformedColumnVelocity {
 				skipped++
 			}
 		}

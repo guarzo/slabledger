@@ -41,10 +41,20 @@ type CharacterCache struct {
 // MalformedPayload names a payload column that failed to decode and carries
 // the error, so the domain can log the same diagnostic the adapter cannot.
 type MalformedPayload struct {
-	// Column is "demand", "velocity", or "saturation".
+	// Column is one of the MalformedColumn* constants below.
 	Column string
 	Err    error
 }
+
+// MalformedPayload.Column values. These are the coupling between the
+// postgres adapter (which produces MalformedPayload entries) and the domain
+// (which reads them) — keep the string values stable, they are not
+// serialized but do appear in test fixtures.
+const (
+	MalformedColumnDemand     = "demand"
+	MalformedColumnVelocity   = "velocity"
+	MalformedColumnSaturation = "saturation"
+)
 
 // QualityStats summarises demand_data_quality distribution for a given
 // window, used by the refresh scheduler for observability.
