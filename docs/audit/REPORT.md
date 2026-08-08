@@ -1714,7 +1714,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
   - `internal/domain/dhlisting/dh_listing_service.go:210-429`
   - Reproduce: `sed -n '210,429p' internal/domain/dhlisting/dh_listing_service.go | grep -c 'continue'`
 
-**Proposed fix:** Split inmemory_campaign_store.go along its own existing section markers into per-interface files sharing the same InMemoryCampaignStore struct (e.g. inmemory_campaign_store.go for the struct + CampaignRepository methods, inmemory_purchase_store.go, inmemory_sale_store.go, inmemory_analytics_store.go, inmemory_finance_store.go, inmemory_pricing_store.go, inmemory_dh_store.go), matching the split already used for the production Postgres implementation (purchase_store.go / purchase_cert_store.go / purchase_dh_push_store.go / etc., see SIZE-001). The section markers alone are not sufficient: the PurchaseRepository block is 191-685 (494 lines) on its own, so it needs a further sub-split (mirroring the production purchase_store / purchase_cert_store / purchase_dh_push_store division), and the trailing 'PurchaseRepository: Snapshot Status Methods' block at 1295 belongs with it rather than with DHRepository.
+**Proposed fix:** Extract the per-purchase body (everything inside the `for _, cn := range sortedCerts` loop) into a helper method, e.g. `(s *dhListingService) listOnePurchase(ctx, p Purchase) (outcome listOutcome, err error)`, returning a small result enum (listed/synced/skipped/aborted) plus the failure reason. ListPurchases would then own only: the pause gate, batch lookup, iteration, and aggregation of the per-item outcomes — matching the shape of the existing pause-gate/aggregation code that already precedes and follows the loop.
 
 **Blast radius:**
 
@@ -1722,8 +1722,8 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
 
 **Acceptance criteria:**
 
-- [ ] go build ./... and go test ./... pass unchanged (pure file split, same package, no exported surface change).
-- [ ] No resulting file in internal/testutil/mocks/ from this split exceeds ~250 lines — which requires sub-splitting the 494-line PurchaseRepository section, not just cutting on the seven top-level section markers.
+- [ ] go test ./internal/domain/dhlisting/... passes unchanged after the extraction (existing table-driven tests should require no behavior changes, only possibly new unit tests for the extracted helper).
+- [ ] ListPurchases itself drops to roughly the length of its pre-loop batch-lookup section plus a short iteration/aggregation loop.
 
 ### FU-31 — Decompose the 312-line BuildGroup scheduler constructor
 
@@ -1785,7 +1785,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
   - `internal/testutil/mocks/inmemory_campaign_store.go:122-1295`
   - Reproduce: `grep -n '^// ---' internal/testutil/mocks/inmemory_campaign_store.go`
 
-**Proposed fix:** Split inmemory_campaign_store.go along its own existing section markers into per-interface files sharing the same InMemoryCampaignStore struct (e.g. inmemory_campaign_store.go for the struct + CampaignRepository methods, inmemory_purchase_store.go, inmemory_sale_store.go, inmemory_analytics_store.go, inmemory_finance_store.go, inmemory_pricing_store.go, inmemory_dh_store.go), matching the split already used for the production Postgres implementation (purchase_store.go / purchase_cert_store.go / purchase_dh_push_store.go / etc., see SIZE-001).
+**Proposed fix:** Split inmemory_campaign_store.go along its own existing section markers into per-interface files sharing the same InMemoryCampaignStore struct (e.g. inmemory_campaign_store.go for the struct + CampaignRepository methods, inmemory_purchase_store.go, inmemory_sale_store.go, inmemory_analytics_store.go, inmemory_finance_store.go, inmemory_pricing_store.go, inmemory_dh_store.go), matching the split already used for the production Postgres implementation (purchase_store.go / purchase_cert_store.go / purchase_dh_push_store.go / etc., see SIZE-001). The section markers alone are not sufficient: the PurchaseRepository block is 191-685 (494 lines) on its own, so it needs a further sub-split (mirroring the production purchase_store / purchase_cert_store / purchase_dh_push_store division), and the trailing 'PurchaseRepository: Snapshot Status Methods' block at 1295 belongs with it rather than with DHRepository.
 
 **Blast radius:**
 
@@ -1794,7 +1794,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
 **Acceptance criteria:**
 
 - [ ] go build ./... and go test ./... pass unchanged (pure file split, same package, no exported surface change).
-- [ ] No resulting file in internal/testutil/mocks/ from this split exceeds ~250 lines.
+- [ ] No resulting file in internal/testutil/mocks/ from this split exceeds ~250 lines — which requires sub-splitting the 494-line PurchaseRepository section, not just cutting on the seven top-level section markers.
 
 
 ---
