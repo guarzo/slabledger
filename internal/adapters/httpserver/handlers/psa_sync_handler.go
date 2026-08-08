@@ -199,15 +199,16 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 	}
 
 	if err := h.pendingRepo.ResolvePendingItem(ctx, id, body.CampaignID); err != nil {
-		h.logger.Error(ctx, "failed to resolve pending item after purchase created",
+		h.logger.Error(ctx, "failed to resolve pending item after assignment",
 			observability.Err(err),
 			observability.String("pendingItemID", id),
 			observability.String("campaignID", body.CampaignID))
-		// The purchase was committed but the pending item was not resolved.
-		// Return 500 with the purchase ID so the caller knows the purchase exists
-		// and can dismiss the pending item manually via DELETE /api/admin/psa-sync/pending/{id}.
+		// The assignment was committed — the purchase was created or reassigned —
+		// but the pending item was not resolved. Return 500 with the purchase ID so
+		// the caller knows the assignment stuck and can dismiss the pending item
+		// manually via DELETE /api/admin/psa-sync/pending/{id}.
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":      "purchase created but pending item could not be resolved — dismiss it manually",
+			"error":      "campaign assigned but pending item could not be resolved — dismiss it manually",
 			"purchaseId": purchase.ID,
 		})
 		return

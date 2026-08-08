@@ -174,7 +174,15 @@ func TestPSASyncHandler_HandleAssignPendingItem(t *testing.T) {
 					return nil
 				},
 			}
+			var lookedUp []string
 			svc := &mocks.MockInventoryService{
+				// Explicit: assignment now looks the cert up first, and the create
+				// path is only reached when that lookup finds nothing. Leaving the
+				// Fn unset would exercise it by accident on the nil-map default.
+				GetPurchasesByCertNumbersFn: func(ctx context.Context, certs []string) (map[string]*inventory.Purchase, error) {
+					lookedUp = certs
+					return map[string]*inventory.Purchase{}, nil
+				},
 				CreatePurchaseFn: func(ctx context.Context, p *inventory.Purchase) error {
 					created = p
 					p.ID = "new-purchase"
@@ -196,6 +204,9 @@ func TestPSASyncHandler_HandleAssignPendingItem(t *testing.T) {
 			}
 			if !resolved {
 				t.Error("expected pending item to be resolved")
+			}
+			if len(lookedUp) != 1 || lookedUp[0] != "CERT001" {
+				t.Errorf("cert lookup = %v, want [CERT001]", lookedUp)
 			}
 			if created == nil {
 				t.Fatal("expected a purchase to be created")

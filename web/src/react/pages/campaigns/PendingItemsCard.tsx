@@ -53,8 +53,16 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
     ? campaigns.filter((c) => (item.candidates ?? []).includes(c.id))
     : campaigns;
 
+  // The row is keyed by item.id, so a refetch that changes this item's status
+  // or candidates updates props without remounting — and a useState initializer
+  // only runs on mount, leaving a selection the dropdown no longer offers. The
+  // <select> renders blank in that state while `selectedCampaign` still holds
+  // the stale ID, so gate on membership rather than on non-emptiness: what the
+  // operator can see is what they can submit.
+  const selectionIsOffered = dropdownCampaigns.some((c) => c.id === selectedCampaign);
+
   const handleAssign = () => {
-    if (!selectedCampaign) return;
+    if (!selectionIsOffered) return;
     assign.mutate({ id: item.id, campaignId: selectedCampaign });
   };
 
@@ -91,7 +99,7 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
         </select>
         <button
           onClick={handleAssign}
-          disabled={!selectedCampaign || assign.isPending}
+          disabled={!selectionIsOffered || assign.isPending}
           className="text-xs px-2 py-1 rounded bg-[var(--brand-500)] text-white hover:opacity-90 disabled:opacity-50"
         >
           Assign
