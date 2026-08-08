@@ -24,8 +24,30 @@ import (
 // in price API set names. Upper bound of 6 covers modern multi-char prefixes.
 var psaSetCodeRegex = regexp.MustCompile(`^[A-Z0-9]{2,6}\s[A-Z]{2}\s`)
 
+// GraderPattern is the shared regex fragment matching a grading company name.
+// It is a bare alternation with no group of its own, so callers wrap it in the
+// capturing or non-capturing group they need.
+const GraderPattern = `CGC|BGS|PSA|SGC`
+
+// GradePattern is the shared regex fragment matching a numeric card grade:
+// one or two whole digits with an optional fractional part ("9", "10", "9.5").
+//
+// The PSA, BGS, CGC, and SGC scales only ever emit whole or single-decimal
+// grades, so the permissive fractional form is inert on valid titles. It is
+// deliberately permissive anyway: on a malformed title the alternative is to
+// match a truncated prefix ("PSA 9" out of "PSA 9.55"), which silently yields a
+// wrong grade on the extraction paths and leaves a stray ".55" behind on the
+// stripping paths. Matching the whole number and letting the caller's 1-10
+// range check reject it fails louder.
+//
+// Every grader+grade regex in the codebase derives from these two fragments so
+// that a future grade-format change happens in one place — see
+// inventory.ExtractGrade, inventory.ExtractGraderAndGrade, and
+// PSAGradeSuffixRegex below.
+const GradePattern = `\d{1,2}(?:\.\d+)?`
+
 // PSAGradeSuffixRegex matches trailing PSA/BGS/CGC/SGC grade suffixes like "PSA 9", "BGS 10", "PSA 9.5".
-var PSAGradeSuffixRegex = regexp.MustCompile(`\s+(?:PSA|BGS|CGC|SGC)\s+\d{1,2}(?:\.\d)?\s*$`)
+var PSAGradeSuffixRegex = regexp.MustCompile(`\s+(?:` + GraderPattern + `)\s+` + GradePattern + `\s*$`)
 
 // BaseAbbreviation is a canonical PSA abbreviation -> expansion pair shared
 // across pipelines. NoDashPrefix marks entries that appear without a leading

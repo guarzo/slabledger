@@ -3,7 +3,7 @@
  */
 
 import type {
-  Purchase, Sale, CreatePurchaseInput, CreateSaleInput,
+  Purchase, Sale, CreateSaleInput,
   QuickAddRequest,
 } from '../../types/campaigns';
 import type { PriceHint } from '../../types/pricing';
@@ -12,7 +12,6 @@ import { APIClient } from './client';
 declare module './client' {
   interface APIClient {
     // Purchases
-    createPurchase(campaignId: string, input: CreatePurchaseInput): Promise<Purchase>;
     deletePurchase(campaignId: string, purchaseId: string): Promise<void>;
 
     // Sales
@@ -28,9 +27,6 @@ declare module './client' {
     acceptAISuggestion(purchaseId: string): Promise<void>;
     dismissAISuggestion(purchaseId: string): Promise<void>;
 
-    // Reassign
-    reassignPurchase(purchaseId: string, campaignId: string): Promise<void>;
-
     // DH listing (manual transition from in_stock to listed)
     listPurchaseOnDH(purchaseId: string): Promise<{ listed: number; synced: number; skipped: number; total: number }>;
 
@@ -43,10 +39,6 @@ declare module './client' {
 }
 
 const proto = APIClient.prototype;
-
-proto.createPurchase = async function (this: APIClient, campaignId: string, input: CreatePurchaseInput): Promise<Purchase> {
-  return this.post<Purchase>(`/campaigns/${encodeURIComponent(campaignId)}/purchases`, input);
-};
 
 proto.deletePurchase = async function (this: APIClient, campaignId: string, purchaseId: string): Promise<void> {
   await this.deleteResource(`/campaigns/${encodeURIComponent(campaignId)}/purchases/${encodeURIComponent(purchaseId)}`);
@@ -96,18 +88,6 @@ proto.dismissAISuggestion = async function (this: APIClient, purchaseId: string)
   const response = await this.fetchWithRetry(
     `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/ai-suggestion`,
     { method: 'DELETE' }
-  );
-  await this.expectNoContent(response);
-};
-
-proto.reassignPurchase = async function (this: APIClient, purchaseId: string, campaignId: string): Promise<void> {
-  const response = await this.fetchWithRetry(
-    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/campaign`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaignId }),
-    }
   );
   await this.expectNoContent(response);
 };
