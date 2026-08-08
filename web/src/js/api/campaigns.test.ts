@@ -36,7 +36,6 @@ describe('APIClient campaign CRUD URLs', () => {
   // that down so a future hand-rolled id shape cannot silently break routing.
   it.each([
     ['getCampaign', (c: APIClient, id: string) => c.getCampaign(id)],
-    ['deleteCampaign', (c: APIClient, id: string) => c.deleteCampaign(id)],
     ['updateCampaign', (c: APIClient, id: string) => c.updateCampaign(id, {})],
   ])('%s percent-encodes the id path segment', async (_name, call) => {
     const fetchMock = vi.fn().mockResolvedValue({

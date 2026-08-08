@@ -3,7 +3,7 @@
  */
 
 import type {
-  PSAImportResult, ExternalImportResult,
+  PSAImportResult,
   CertLookupResult,
   CertImportResult,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
@@ -20,8 +20,6 @@ declare module './client' {
 
     // PSA / External imports
     globalImportPSA(file: File): Promise<PSAImportResult>;
-    syncPSASheets(): Promise<PSAImportResult>;
-    globalImportExternal(file: File): Promise<ExternalImportResult>;
 
     // Orders sales import
     importOrdersSales(file: File): Promise<OrdersImportResult>;
@@ -57,16 +55,6 @@ proto.lookupCert = async function (this: APIClient, certNumber: string): Promise
 // PSA CSV import (global)
 proto.globalImportPSA = async function (this: APIClient, file: File): Promise<PSAImportResult> {
   return this.uploadFile<PSAImportResult>('/purchases/import-psa', file);
-};
-
-// PSA portal sync (manual trigger)
-proto.syncPSASheets = async function (this: APIClient): Promise<PSAImportResult> {
-  return this.post<PSAImportResult>('/purchases/sync-psa-sheets', {});
-};
-
-// External CSV import
-proto.globalImportExternal = async function (this: APIClient, file: File): Promise<ExternalImportResult> {
-  return this.uploadFile<ExternalImportResult>('/purchases/import-external', file);
 };
 
 // Orders sales import

@@ -6,8 +6,8 @@ import type {
   CampaignPNL, InventoryResult,
   EVPortfolio,
   CapitalSummary, Invoice, PortfolioHealth,
-  ChannelVelocity, PortfolioInsights, SuggestionsResponse,
-  RevocationFlag, WeeklyReviewSummary,
+  ChannelVelocity, PortfolioInsights,
+  WeeklyReviewSummary,
 } from '../../types/campaigns';
 import { APIClient } from './client';
 
@@ -27,9 +27,7 @@ declare module './client' {
     getPortfolioHealth(): Promise<PortfolioHealth>;
     getPortfolioChannelVelocity(): Promise<ChannelVelocity[]>;
     getPortfolioInsights(): Promise<PortfolioInsights>;
-    getCampaignSuggestions(): Promise<SuggestionsResponse>;
     getWeeklyReview(): Promise<WeeklyReviewSummary>;
-    listRevocationFlags(): Promise<RevocationFlag[]>;
 
     // Expected value
     getExpectedValues(campaignId: string): Promise<EVPortfolio>;
@@ -77,16 +75,8 @@ proto.getPortfolioInsights = async function (this: APIClient): Promise<Portfolio
   return this.get<PortfolioInsights>('/portfolio/insights');
 };
 
-proto.getCampaignSuggestions = async function (this: APIClient): Promise<SuggestionsResponse> {
-  return this.get<SuggestionsResponse>('/portfolio/suggestions');
-};
-
 proto.getWeeklyReview = async function (this: APIClient): Promise<WeeklyReviewSummary> {
   return this.get<WeeklyReviewSummary>('/portfolio/weekly-review');
-};
-
-proto.listRevocationFlags = async function (this: APIClient): Promise<RevocationFlag[]> {
-  return this.get<RevocationFlag[]>('/portfolio/revocations');
 };
 
 // Expected value

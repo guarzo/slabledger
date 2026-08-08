@@ -24,7 +24,6 @@ declare module './client' {
     // Campaign CRUD
     listCampaigns(activeOnly?: boolean): Promise<Campaign[]>;
     getCampaign(id: string): Promise<Campaign>;
-    deleteCampaign(id: string): Promise<void>;
     createCampaign(input: CreateCampaignInput): Promise<Campaign>;
     updateCampaign(id: string, data: Partial<Campaign>, ifUnmodifiedSince?: string): Promise<Campaign>;
   }
@@ -48,10 +47,6 @@ proto.listCampaigns = async function (this: APIClient, activeOnly = false): Prom
 // observe a write made by the psa-harvest process.
 proto.getCampaign = async function (this: APIClient, id: string): Promise<Campaign> {
   return this.get<Campaign>(`/campaigns/${encodeURIComponent(id)}`);
-};
-
-proto.deleteCampaign = async function (this: APIClient, id: string): Promise<void> {
-  await this.deleteResource(`/campaigns/${encodeURIComponent(id)}`);
 };
 
 proto.createCampaign = async function (this: APIClient, input: CreateCampaignInput): Promise<Campaign> {

@@ -137,19 +137,6 @@ export function formatLatency(ms: number): string {
 }
 
 /**
- * Convert ALL CAPS card names to Title Case for readability.
- * Preserves known card game acronyms (EX, GX, V, VMAX, etc.) in uppercase.
- */
-const PRESERVE_UPPER = new Set(['EX', 'GX', 'V', 'VMAX', 'VSTAR', 'DX', 'PM', 'HP', 'TG', 'FA', 'AA', 'SIR', 'SR', 'AR', 'SAR', 'IR']);
-
-export function toTitleCase(text: string): string {
-  return text.replace(/\p{L}+/gu, (word) => {
-    if (PRESERVE_UPPER.has(word.toUpperCase())) return word.toUpperCase();
-    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-  });
-}
-
-/**
  * Format a raw price range string (e.g. "10-50") into a display format ("$10 to $50").
  */
 export function formatPriceRange(raw: string): string {
