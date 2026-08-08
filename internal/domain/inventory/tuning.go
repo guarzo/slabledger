@@ -231,9 +231,7 @@ func recSpendCapUtilization(campaign *Campaign, pnl *CampaignPNL, dailySpend []D
 
 	var totalFill float64
 	for _, ds := range recent {
-		if campaign.DailySpendCapCents > 0 {
-			totalFill += float64(ds.SpendCents) / float64(campaign.DailySpendCapCents)
-		}
+		totalFill += ds.FillRatePct
 	}
 	avgFill := totalFill / float64(len(recent))
 
