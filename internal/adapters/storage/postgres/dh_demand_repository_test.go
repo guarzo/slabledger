@@ -90,3 +90,118 @@ func TestScanCardCacheRow(t *testing.T) {
 		})
 	}
 }
+
+func TestScanCharacterCacheRow(t *testing.T) {
+	fetchedAt := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	demandComputedAt := time.Date(2026, 8, 1, 6, 0, 0, 0, time.UTC)
+	analyticsComputedAt := time.Date(2026, 8, 1, 7, 0, 0, 0, time.UTC)
+
+	validDemand := `{"character_name":"Pikachu","card_count":5,"avg_demand_score":0.8,` +
+		`"total_views":100,"total_search_clicks":10,"total_wishlist_adds":3,` +
+		`"data_quality":"full","computed_at":"2026-08-01T06:00:00Z"}`
+	validVelocity := `{"sample_size":12}`
+	validSaturation := `{"active_listing_count":42,"computed_at":"2026-08-01T07:00:00Z"}`
+
+	tests := []struct {
+		name              string
+		values            []any
+		wantDemandNil     bool
+		wantVelocityNil   bool
+		wantSaturationNil bool
+		wantMalformed     []demand.MalformedPayload
+	}{
+		{
+			name: "all three payload columns valid",
+			values: []any{
+				"Pikachu", "7d",
+				sql.NullString{String: validDemand, Valid: true},
+				sql.NullString{String: validVelocity, Valid: true},
+				sql.NullString{String: validSaturation, Valid: true},
+				sql.NullTime{Time: demandComputedAt, Valid: true},
+				sql.NullTime{Time: analyticsComputedAt, Valid: true},
+				fetchedAt,
+			},
+		},
+		{
+			name: "all three NULL",
+			values: []any{
+				"Pikachu", "7d",
+				sql.NullString{},
+				sql.NullString{},
+				sql.NullString{},
+				sql.NullTime{},
+				sql.NullTime{},
+				fetchedAt,
+			},
+			wantDemandNil:     true,
+			wantVelocityNil:   true,
+			wantSaturationNil: true,
+		},
+		{
+			name: "velocity column present but garbage",
+			values: []any{
+				"Pikachu", "7d",
+				sql.NullString{String: validDemand, Valid: true},
+				sql.NullString{String: "{", Valid: true},
+				sql.NullString{String: validSaturation, Valid: true},
+				sql.NullTime{Time: demandComputedAt, Valid: true},
+				sql.NullTime{Time: analyticsComputedAt, Valid: true},
+				fetchedAt,
+			},
+			wantVelocityNil: true,
+			wantMalformed: []demand.MalformedPayload{
+				{Column: "velocity"},
+			},
+		},
+		{
+			name: "demand and saturation both garbage",
+			values: []any{
+				"Pikachu", "7d",
+				sql.NullString{String: "{", Valid: true},
+				sql.NullString{String: validVelocity, Valid: true},
+				sql.NullString{String: "{", Valid: true},
+				sql.NullTime{Time: demandComputedAt, Valid: true},
+				sql.NullTime{Time: analyticsComputedAt, Valid: true},
+				fetchedAt,
+			},
+			wantDemandNil:     true,
+			wantSaturationNil: true,
+			wantMalformed: []demand.MalformedPayload{
+				{Column: "demand"},
+				{Column: "saturation"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			row, err := scanCharacterCacheRow(&mocks.RowScanner{Values: tc.values})
+			if err != nil {
+				t.Fatalf("scanCharacterCacheRow: unexpected error: %v", err)
+			}
+
+			if (row.Demand == nil) != tc.wantDemandNil {
+				t.Errorf("Demand nil = %v, want %v", row.Demand == nil, tc.wantDemandNil)
+			}
+			if (row.Velocity == nil) != tc.wantVelocityNil {
+				t.Errorf("Velocity nil = %v, want %v", row.Velocity == nil, tc.wantVelocityNil)
+			}
+			if (row.Saturation == nil) != tc.wantSaturationNil {
+				t.Errorf("Saturation nil = %v, want %v", row.Saturation == nil, tc.wantSaturationNil)
+			}
+
+			if len(row.MalformedPayloads) != len(tc.wantMalformed) {
+				t.Fatalf("MalformedPayloads = %d entries, want %d: %+v", len(row.MalformedPayloads), len(tc.wantMalformed), row.MalformedPayloads)
+			}
+			for i, want := range tc.wantMalformed {
+				got := row.MalformedPayloads[i]
+				if got.Column != want.Column {
+					t.Errorf("MalformedPayloads[%d].Column = %q, want %q", i, got.Column, want.Column)
+				}
+				if got.Err == nil {
+					t.Errorf("MalformedPayloads[%d].Err = nil, want non-nil", i)
+				}
+			}
+		})
+	}
+}
