@@ -83,6 +83,10 @@ func (s *authService) ConsumeOAuthState(ctx context.Context, state string) (bool
 	return s.repo.ConsumeOAuthState(ctx, state)
 }
 
+func (s *authService) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
+	return s.repo.CleanupExpiredOAuthStates(ctx)
+}
+
 // ─── Session management ───────────────────────────────────────────────────────
 
 func (s *authService) CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*Session, error) {
