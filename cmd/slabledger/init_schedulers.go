@@ -83,9 +83,10 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		CardLadderCompRefreshStore: deps.CardLadderCompRefreshStore,
 		SchedulerStatsStore:        deps.SchedulerStatsStore,
 	}
-	// Wire DH event recorder (nil-safe)
+	// Wire DH event recorder and pruner (nil-safe)
 	if deps.DHEventStore != nil {
 		buildDeps.EventRecorder = deps.DHEventStore
+		buildDeps.EventPruner = deps.DHEventStore
 	}
 	// Nil-safe interface conversion for DH dependencies.
 	if deps.DHClient != nil {

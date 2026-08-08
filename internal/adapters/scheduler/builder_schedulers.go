@@ -56,6 +56,23 @@ func buildAccessLogCleanupScheduler(cfg *config.Config, deps BuildDeps) *AccessL
 	return NewAccessLogCleanupScheduler(deps.AccessTracker, deps.Logger, accessLogConfig)
 }
 
+// buildDHEventCleanupScheduler builds the dh_state_events cleanup scheduler
+// (if enabled and a pruner is provided).
+func buildDHEventCleanupScheduler(cfg *config.Config, deps BuildDeps) *DHEventCleanupScheduler {
+	if deps.EventPruner == nil {
+		return nil
+	}
+	if !cfg.Maintenance.DHEventCleanupEnabled || cfg.Maintenance.DHEventRetentionDays <= 0 {
+		return nil
+	}
+	dhEventConfig := DHEventCleanupConfig{
+		Enabled:       cfg.Maintenance.DHEventCleanupEnabled,
+		Interval:      cfg.Maintenance.DHEventCleanupInterval,
+		RetentionDays: cfg.Maintenance.DHEventRetentionDays,
+	}
+	return NewDHEventCleanupScheduler(deps.EventPruner, deps.Logger, dhEventConfig)
+}
+
 // buildGapCleanupScheduler builds the scoring data gap cleanup scheduler
 // (if a gap store is provided).
 func buildGapCleanupScheduler(deps BuildDeps) *GapCleanupScheduler {

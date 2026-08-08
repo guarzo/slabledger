@@ -172,6 +172,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			EventRecorder:     in.DHEventStore,
 			SyncStateReader:   in.SyncStateRepo,
 			EventCountsStore:  in.DHEventStore,
+			EventHistoryStore: in.DHEventStore,
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}

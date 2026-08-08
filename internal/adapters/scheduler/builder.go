@@ -60,6 +60,9 @@ type BuildDeps struct {
 	// DH event recorder (shared across DH schedulers)
 	EventRecorder dhevents.Recorder
 
+	// DH event pruner (optional; enables the dh_state_events retention scheduler).
+	EventPruner dhevents.Pruner
+
 	// DH v2 dependencies (optional)
 	DHOrdersClient        DHOrdersClient
 	DHInventoryListClient DHInventoryListClient
@@ -136,6 +139,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, s)
 	}
 	if s := buildAccessLogCleanupScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildDHEventCleanupScheduler(cfg, deps); s != nil {
 		schedulers = append(schedulers, s)
 	}
 	if s := buildGapCleanupScheduler(deps); s != nil {

@@ -49,6 +49,22 @@ type MaintenanceConfig struct {
 	// Default: true
 	AccessLogCleanupEnabled bool
 
+	// DHEventRetentionDays controls how long dh_state_events rows are retained.
+	// The table is append-only and nothing else deletes from it, so this is the
+	// only bound on its growth.
+	// Default: 90 days — longer than the access log because this is a diagnostic
+	// trail for failures noticed on the scale of weeks. 0 or negative disables
+	// the prune entirely (the builder skips the scheduler).
+	DHEventRetentionDays int
+
+	// DHEventCleanupInterval controls how often the dh_state_events prune runs.
+	// Default: 24 hours (daily).
+	DHEventCleanupInterval time.Duration
+
+	// DHEventCleanupEnabled controls whether the dh_state_events prune is active.
+	// Default: true
+	DHEventCleanupEnabled bool
+
 	// BackfillImages enqueues unsold PSA purchases with empty image URLs onto
 	// the cert-enrichment queue at startup so they pick up front/back slab
 	// images from PSA. Opt-in because it consumes PSA daily budget.

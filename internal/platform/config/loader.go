@@ -125,6 +125,9 @@ func FromEnv(base Config) Config {
 	envInt("ACCESS_LOG_RETENTION_DAYS", &cfg.Maintenance.AccessLogRetentionDays)
 	envDuration("ACCESS_LOG_CLEANUP_INTERVAL", &cfg.Maintenance.AccessLogCleanupInterval)
 	envBool("ACCESS_LOG_CLEANUP_ENABLED", &cfg.Maintenance.AccessLogCleanupEnabled, true)
+	envInt("DH_EVENT_RETENTION_DAYS", &cfg.Maintenance.DHEventRetentionDays)
+	envDuration("DH_EVENT_CLEANUP_INTERVAL", &cfg.Maintenance.DHEventCleanupInterval)
+	envBool("DH_EVENT_CLEANUP_ENABLED", &cfg.Maintenance.DHEventCleanupEnabled, true)
 	envBool("BACKFILL_IMAGES", &cfg.Maintenance.BackfillImages, false)
 
 	// Auth

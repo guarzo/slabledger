@@ -2257,6 +2257,61 @@ Returns aggregate stats for the DH integration including match counts, API healt
 
 ---
 
+### `GET /api/dh/events`
+
+Auth: RequireAuth
+
+Returns the recorded DH pipeline state-transition trail for a single purchase or cert,
+newest first. `/api/dh/status` answers "is the pipeline healthy"; this answers "why is
+this one item stuck".
+
+**Query parameters:**
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `purchaseId` | one of | Purchase UUID. Mutually exclusive with `cert`. |
+| `cert` | one of | PSA cert number. Reaches orphan events that carry no purchase id. |
+| `limit` | no | Max rows (default 100, capped at 500). |
+
+Exactly one of `purchaseId` or `cert` must be supplied — an unfiltered listing is
+deliberately not offered.
+
+**Response:** `200 OK`
+```json
+{
+  "events": [
+    {
+      "id": 4821,
+      "event_at": "2025-01-15T10:00:00Z",
+      "purchase_id": "uuid",
+      "cert_number": "12345678",
+      "type": "pushed",
+      "source": "dh_push",
+      "prev_push_status": "pending",
+      "new_push_status": "pushed",
+      "dh_inventory_id": 67890,
+      "dh_card_id": 12345,
+      "sale_price_cents": 4500,
+      "notes": ""
+    }
+  ],
+  "count": 1,
+  "limit": 100
+}
+```
+
+Monetary values keep the explicit `_cents` suffix rather than converting to USD: this is
+a diagnostic view of what was written to `dh_state_events`, and a reader comparing it
+against the row wants the stored value. Empty fields are omitted.
+
+**Errors:** `400` neither or both subjects supplied, or a non-positive/non-numeric
+`limit`; `500` lookup failed; `503` DH event history not configured
+
+Rows are pruned by the DH event cleanup scheduler (`DH_EVENT_RETENTION_DAYS`, default 90
+days) — see [SCHEDULERS.md](SCHEDULERS.md).
+
+---
+
 ### `POST /api/dh/fix-match`
 
 Auth: RequireAuth

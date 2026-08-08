@@ -982,8 +982,16 @@ Append-only audit log of DH push/inventory state transitions. Maps to `dhevents.
 
 **Indexes:**
 - `idx_dh_state_events_type_time` on `(event_type, event_at DESC)`
+- `idx_dh_state_events_purchase` on `(purchase_id, event_at)`
+- `idx_dh_state_events_cert` on `(cert_number, event_at)`
 
-`idx_dh_state_events_purchase` and `idx_dh_state_events_cert` were created by 000001 and dropped by 000003; lookups by `purchase_id` or `cert_number` are unindexed.
+The last two were created by 000001, dropped by 000003 as unscanned — correct at the
+time, since nothing read the table per row — and restored by 000032 when SLA-58 added
+the read path (`GET /api/dh/events`).
+
+**Retention:** the table is append-only and no write path ever deletes from it. The
+`dh-event-cleanup` scheduler prunes rows older than `DH_EVENT_RETENTION_DAYS`
+(default 90) — see [SCHEDULERS.md](SCHEDULERS.md).
 
 **Foreign Keys:** none
 
@@ -1074,9 +1082,10 @@ Per-operation breakdown of AI call counts, error rates, latency, token usage, an
 ## Dropped indexes
 
 Migration 000003 dropped 28 indexes that Supabase's advisor reported as never scanned, and
-migration 000021 dropped one more along with the Market Movers columns. 27 of 000003's 28
-are gone for good and are listed below; the 28th, `idx_oauth_states_expires`, was restored
-by migration 000026 and is live again (documented under `oauth_states` above). They are
+migration 000021 dropped one more along with the Market Movers columns. 25 of 000003's 28
+are gone for good and are listed below. Three have since been restored and are live again,
+documented under their tables above: `idx_oauth_states_expires` (by 000026), and
+`idx_dh_state_events_purchase` / `idx_dh_state_events_cert` (by 000032). They are
 catalogued here because older docs, query plans, and commit messages still name them —
 none of the rows below exist in the current schema.
 
@@ -1096,8 +1105,6 @@ none of the rows below exist in the current schema.
 | `idx_card_cache_demand_score` | `dh_card_cache` | 000003 |
 | `idx_card_price_trajectory_card` | `card_price_trajectory` | 000003 |
 | `idx_cl_sales_comps_gem_rate` | `cl_sales_comps` | 000003 |
-| `idx_dh_state_events_cert` | `dh_state_events` | 000003 |
-| `idx_dh_state_events_purchase` | `dh_state_events` | 000003 |
 | `idx_dh_suggestions_card` | `dh_suggestions` | 000003 |
 | `idx_invoices_status` | `invoices` | 000003 |
 | `idx_revocation_flags_segment` | `revocation_flags` | 000003 |
