@@ -42,7 +42,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │    ├── mathutil/       (math utilities)         │
  │    ├── observability/  (logger interfaces)      │
  │    ├── pricing/        (price interfaces/models)│
- │    ├── scoring/        (price scoring factors)  │
  │    └── storage/        (storage interfaces)     │
 └───────────────────┬─────────────────────────────┘
                     │ (uses)
@@ -93,7 +92,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | `mathutil/` | Math utility functions |
 | `observability/` | Logger, MetricsRecorder interfaces |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
-| `scoring/` | Price scoring factors and profiles |
 | `storage/` | Storage interfaces |
 
 **Rules**:

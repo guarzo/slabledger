@@ -147,45 +147,6 @@ Returns API call statistics for all pricing providers.
 
 ---
 
-### `GET /api/admin/ai-usage`
-
-Auth: RequireAdmin
-
-Returns AI call usage statistics broken down by operation.
-
-**Response:** `200 OK`
-```json
-{
-  "configured": true,
-  "summary": {
-    "totalCalls": 42,
-    "successRate": 97.6,
-    "totalInputTokens": 100000,
-    "totalOutputTokens": 20000,
-    "totalTokens": 120000,
-    "avgLatencyMs": 4500.0,
-    "rateLimitHits": 1,
-    "callsLast24h": 10,
-    "lastCallAt": "2025-01-01T00:00:00Z",
-    "totalCostCents": 240
-  },
-  "operations": [
-    {
-      "operation": "digest",
-      "calls": 5,
-      "errors": 0,
-      "successRate": 100.0,
-      "avgLatencyMs": 5200.0,
-      "totalTokens": 30000,
-      "totalCostCents": 90
-    }
-  ],
-  "timestamp": "2025-01-01T00:00:00Z"
-}
-```
-
----
-
 ## Card Catalog
 
 ### `GET /api/cards/catalog`
@@ -1652,43 +1613,6 @@ Looks up a PSA cert number and returns card info plus current market snapshot.
 ```
 
 **Errors:** `404` cert lookup failed
-
----
-
-## AI Advisor
-
-All advisor endpoints stream responses via **Server-Sent Events (SSE)**. Set `Accept: text/event-stream` or handle the `text/event-stream` content type. Each event is `data: <JSON>\n\n`. The stream ends with `data: [DONE]\n\n`.
-
-Event shape:
-```json
-{ "type": "content", "content": "Markdown text chunk..." }
-```
-Error event:
-```json
-{ "type": "error", "content": "Error message" }
-```
-
-### `POST /api/advisor/digest`
-
-Auth: RequireAuth
-
-Streams a weekly portfolio intelligence digest.
-
-**Body:** (empty)
-
-**Response:** `200 OK` — SSE stream
-
----
-
-### `POST /api/advisor/liquidation-analysis`
-
-Auth: RequireAuth
-
-Streams liquidation candidate recommendations across all campaigns.
-
-**Body:** (empty)
-
-**Response:** `200 OK` — SSE stream
 
 ---
 

@@ -53,10 +53,8 @@ Orientation for the packages whose purpose is not obvious from the name:
 - `domain/pricing` — `PriceProvider` interface, graded prices, market data.
   `domain/pricing/lookup` is the `PriceLookup` adapter over it.
 - `domain/intelligence` — market intelligence repository and types (DH Tier 3 data).
-- `domain/scoring` — price scoring factors and profiles.
 - `domain/liquidation` — liquidation candidates and comp pricing.
 - `domain/dhevents` — DH event stream types.
-- `domain/advisor`, `domain/ai` — AI advisor interfaces, tool loop, LLM provider.
 - `domain/storage` — cache and storage interfaces.
 - `domain/{constants,errors,llmutil,mathutil,observability,timeutil}` — leaf utilities.
 - `adapters/clients/dh` — the DH API client; `adapters/clients/dhprice` wraps it as a
@@ -64,7 +62,6 @@ Orientation for the packages whose purpose is not obvious from the name:
 - `adapters/clients/cardladder` — CardLadder valuations (separate from `PriceProvider`).
 - `adapters/clients/psa`, `adapters/clients/psaportal` — PSA APIs and the portal session.
 - `adapters/clients/httpx` — unified HTTP client (retry + circuit breaker), used by the rest.
-- `adapters/advisortool`, `adapters/scoring` — executor and provider implementations.
 - `adapters/storage/postgres` — persistence + embedded migrations.
 - `adapters/scheduler` — background jobs (price refresh, DH polling/push, CardLadder
   refresh, PSA sync, session cleanup, snapshots).
@@ -156,7 +153,6 @@ See `.env.example` for the complete list with descriptions. Key groups:
 
 - **Required**: none (all features optional or DH-keyed)
 - **DH**: `DH_API_BASE_URL`, `DH_ENTERPRISE_API_KEY`
-- **AI**: `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY`, `AZURE_AI_DEPLOYMENT`
 - **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`
 - **CardLadder**: `CARDLADDER_REFRESH_ENABLED`, `CARDLADDER_REFRESH_HOUR`
 - **Schedulers**: `PRICE_REFRESH_ENABLED`
@@ -256,7 +252,6 @@ See [docs/API.md](docs/API.md) for all endpoints with request/response shapes.
 - [Operations](docs/OPERATIONS.md) - Deploy, monitoring, incident handling; see also `docs/runbooks/`
 - [Loop](docs/LOOP.md) - The acquisition/liquidation loop this system exists to run
 - [DH Inventory](docs/DH_INVENTORY.md) - DH listing and inventory sync behavior
-- [LLM Usage](docs/LLM_USAGE.md) - Where models are called and what they cost
 
 `ls docs/` for the rest — the list above is the durable set, not an inventory.
 

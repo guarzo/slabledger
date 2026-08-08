@@ -28,7 +28,7 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 │  • Portfolio Health        • CSV Import                     │
 │  • Authentication          • Channel Fee Calculation        │
 │                                                             │
-│  Interfaces: PriceProvider, PriceLookup, LLMProvider        │
+│  Interfaces: PriceProvider, PriceLookup                     │
 └─────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────┐
@@ -63,8 +63,6 @@ internal/
     observability/          # Logger, MetricsRecorder interfaces
     pricing/                # PriceProvider, Price, GradedPrices, LastSoldByGrade
     mathutil/               # CalculateTrend, CalculatePercentChange, etc.
-    ai/                     # LLMProvider, ToolExecutor interfaces
-    advisor/                # AI advisor service and tool loop
 
   adapters/                 # Interface implementations
     httpserver/             # Inbound HTTP
@@ -80,9 +78,8 @@ internal/
       psaportal/            # PSA portal session
       google/               # Google OAuth service
       httpx/                # Unified HTTP client with retry + circuit breaker
-      azureai/              # Azure AI completions and image generation
     storage/postgres/       # Postgres repository implementations + migrations
-    scheduler/              # Background jobs (price refresh, session cleanup, advisor)
+    scheduler/              # Background jobs (price refresh, session cleanup)
 
   platform/                 # Cross-cutting concerns
     cache/                  # Type-safe cache (memory + file)
@@ -252,8 +249,4 @@ To support multi-tenant usage, the following changes would be required:
 | `pricing` | `HealthChecker` | `repository.go` | 1 | Provider health |
 | `auth` | `Service` | `service.go` | 14 | OAuth flow, session management, allowlist |
 | `auth` | `Repository` | `repository.go` | ~14 | Auth persistence |
-| `advisor` | `Service` | `service.go` | 6 | AI advisor analysis (streaming) |
-| `advisor` | `CacheStore` | `cache.go` | 5 | Advisor result persistence |
-| `ai` | `LLMProvider` | `llm.go` | 1 | LLM completion (Azure AI) |
-| `ai` | `ToolExecutor` | `tools.go` | 1 | Tool call execution |
 | `observability` | `Logger` | `logger.go` | 5 | Structured logging |
