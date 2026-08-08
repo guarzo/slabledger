@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
+    - cron: '0 6 * * *'  # Daily at 06:00 UTC
   workflow_dispatch:
 
 concurrency:
@@ -89,7 +89,11 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-    # Run weekly on Mondays at 06:00 UTC, or on-demand via workflow_dispatch
+      issues: write  # opens/updates the failure-report issue below
+    # Run daily at 06:00 UTC, or on-demand via workflow_dispatch. Deliberately not
+    # on push/PR: this suite calls rate-limited third-party APIs, and the drift it
+    # detects is time-based rather than commit-based. Compile-level rot in the
+    # integration-tagged code is caught on every PR by the ci job's vet step.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     environment: integration-tests
 
@@ -106,7 +110,76 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    # Every live test calls t.Skip() when its credentials are absent, and `go test`
+    # without -v prints no SKIP lines. A suite that skipped everything is therefore
+    # indistinguishable from one that passed everything — a silent green that hides
+    # expired or unset secrets. Fail before the run instead.
+    - name: Verify integration credentials are present
+      env:
+        DH_API_BASE_URL: ${{ secrets.DH_API_BASE_URL }}
+        DH_ENTERPRISE_API_KEY: ${{ secrets.DH_ENTERPRISE_API_KEY }}
+        CL_EMAIL: ${{ secrets.CL_EMAIL }}
+        CL_PASSWORD: ${{ secrets.CL_PASSWORD }}
+        CL_FIREBASE_API_KEY: ${{ secrets.CL_FIREBASE_API_KEY }}
+      run: |
+        missing=""
+        for v in DH_API_BASE_URL DH_ENTERPRISE_API_KEY CL_EMAIL CL_PASSWORD CL_FIREBASE_API_KEY; do
+          if [ -z "${!v}" ]; then
+            missing="$missing $v"
+          fi
+        done
+        if [ -n "$missing" ]; then
+          echo "::error::Missing integration credentials:$missing — set them in the integration-tests environment"
+          exit 1
+        fi
+        echo "All 5 integration credentials are present."
+
+    # CL_TEST_WRITE / CL_COLLECTION_ID are intentionally not set: they gate a test
+    # that writes a real document into the live Card Ladder collection.
     - name: Run integration tests
       env:
+        DH_API_BASE_URL: ${{ secrets.DH_API_BASE_URL }}
         DH_ENTERPRISE_API_KEY: ${{ secrets.DH_ENTERPRISE_API_KEY }}
-      run: go test -race -timeout 20m -tags integration ./internal/integration/...
+        CL_EMAIL: ${{ secrets.CL_EMAIL }}
+        CL_PASSWORD: ${{ secrets.CL_PASSWORD }}
+        CL_FIREBASE_API_KEY: ${{ secrets.CL_FIREBASE_API_KEY }}
+      run: |
+        set -o pipefail
+        go test -race -v -timeout 20m -tags integration ./internal/integration/... 2>&1 | tee test-output.txt
+
+    # Credentials can be present but wrong, or an upstream change can turn a live
+    # assertion into a skip. Assert that one canary per provider actually passed, so
+    # "nothing ran" can never be reported as success.
+    - name: Verify live-API tests actually ran
+      run: |
+        failed=0
+        for t in TestDHEnterprise_ResolveCert TestCardLadder_CardEstimate TestCardLadder_ProfileIDContract; do
+          if ! grep -qE "^--- PASS: $t " test-output.txt; then
+            echo "::error::Canary $t did not pass — its live API path was not exercised"
+            failed=1
+          fi
+        done
+        if [ "$failed" -eq 0 ]; then
+          echo "All canary tests exercised their live API paths."
+        fi
+        exit $failed
+
+    # A red scheduled run is easy to miss — this suite was broken for three months
+    # before anyone noticed. File (or update) an issue so failures are visible.
+    - name: Report scheduled failure
+      if: failure() && github.event_name == 'schedule'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        gh label create integration-failure --color B60205 \
+          --description "Scheduled integration suite is failing" 2>/dev/null || true
+        body="Scheduled integration run failed: $RUN_URL (commit \`${{ github.sha }}\`)"
+        existing=$(gh issue list --label integration-failure --state open \
+          --limit 1 --json number --jq '.[0].number' 2>/dev/null || echo "")
+        if [ -n "$existing" ]; then
+          gh issue comment "$existing" --body "$body"
+        else
+          gh issue create --title "Scheduled integration tests are failing" \
+            --label integration-failure --body "$body"
+        fi
