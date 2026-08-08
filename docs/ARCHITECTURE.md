@@ -65,7 +65,7 @@ internal/
     observability/          # Logger, MetricsRecorder interfaces
     pricing/                # PriceProvider, Price, GradedPrices, LastSoldByGrade
     mathutil/               # CalculateTrend, CalculatePercentChange, etc.
-    ai/                     # LLMProvider, ImageGenerator, ToolExecutor interfaces
+    ai/                     # LLMProvider, ToolExecutor interfaces
     advisor/                # AI advisor service and tool loop
     picks/                  # Acquisition watchlist (AI-driven picks)
 
@@ -261,7 +261,6 @@ To support multi-tenant usage, the following changes would be required:
 | `advisor` | `Service` | `service.go` | 6 | AI advisor analysis (streaming) |
 | `advisor` | `CacheStore` | `cache.go` | 5 | Advisor result persistence |
 | `ai` | `LLMProvider` | `llm.go` | 1 | LLM completion (Azure AI) |
-| `ai` | `ImageGenerator` | `llm.go` | 1 | Image generation |
 | `ai` | `ToolExecutor` | `tools.go` | 1 | Tool call execution |
 | `cards` | `CardProvider` | `provider.go` | 5 | Card/set search (TCGdex) |
 | `favorites` | `Service` | `service.go` | 6 | Favorites CRUD |
