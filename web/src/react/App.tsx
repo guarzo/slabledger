@@ -8,7 +8,6 @@
 import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { UserPreferencesProvider } from './contexts/UserPreferencesContext';
 import { ToastProvider } from './contexts/ToastContext';
 import Header from './components/Header';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
@@ -118,9 +117,7 @@ function AppWithErrorBoundary() {
     <ErrorBoundary key={location.pathname}>
       <QueryProvider>
         <AuthProvider>
-          <UserPreferencesProvider>
-            <AppContent />
-          </UserPreferencesProvider>
+          <AppContent />
         </AuthProvider>
       </QueryProvider>
     </ErrorBoundary>
