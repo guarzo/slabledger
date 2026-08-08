@@ -371,6 +371,38 @@ Returns timing metrics for tracked endpoints (sell-sheet, insights, capital-time
 
 ---
 
+### `GET /api/admin/dh-tombstones/count`
+
+Auth: RequireAdmin
+
+Returns how many DH card tombstones are recorded. A tombstone marks a cert DH could not resolve to a card, suppressing repeat lookups.
+
+**Response:** `200 OK`
+```json
+{ "count": 128 }
+```
+
+**Errors:** `503` DH tombstones not configured; `500` count failed
+
+---
+
+### `POST /api/admin/dh-tombstones/clear`
+
+Auth: RequireAdmin
+
+Clears every DH card tombstone so suppressed certs are retried on the next lookup.
+
+**Body:** (empty)
+
+**Response:** `200 OK`
+```json
+{ "cleared": 128 }
+```
+
+**Errors:** `503` DH tombstones not configured; `500` clear failed
+
+---
+
 ### `GET /api/admin/pricing-diagnostics`
 
 Auth: RequireAdmin
@@ -683,6 +715,20 @@ misclassified reason after the fact).
 
 ---
 
+### `DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale`
+
+Auth: RequireAuth
+
+Deletes the sale recorded against a purchase, returning the purchase to unsold. The purchase must belong to the named campaign.
+
+**Path params:** `id` (campaign UUID), `purchaseId` (purchase UUID)
+
+**Response:** `204 No Content`
+
+**Errors:** `404` purchase not in campaign, or no sale recorded for this purchase; `500` internal error
+
+---
+
 ### `POST /api/campaigns/{id}/sales/bulk`
 
 Auth: RequireAuth
@@ -859,51 +905,6 @@ Returns unsold inventory with aging data and market signals.
     }
   }
 ]
-```
-
----
-
-### `POST /api/campaigns/{id}/sell-sheet`
-
-Auth: RequireAuth
-
-Generates a sell sheet for selected purchases.
-
-**Path params:** `id` (campaign UUID)
-
-**Body:**
-```json
-{ "purchaseIds": ["uuid1", "uuid2"] }
-```
-At least one purchaseId required.
-
-**Response:** `200 OK` — `SellSheet`
-```json
-{
-  "generatedAt": "2025-01-01T00:00:00Z",
-  "campaignName": "Pokemon Base 2025 Q1",
-  "items": [
-    {
-      "certNumber": "12345678",
-      "cardName": "Charizard",
-      "grade": 10,
-      "buyCostCents": 84000,
-      "costBasisCents": 84300,
-      "clValueCents": 120000,
-      "recommendation": "List on eBay",
-      "targetSellPrice": 130000,
-      "minimumAcceptPrice": 90000,
-      "recommendedChannel": "ebay"
-    }
-  ],
-  "totals": {
-    "totalCostBasis": 84300,
-    "totalExpectedRevenue": 130000,
-    "totalProjectedProfit": 29645,
-    "itemCount": 1,
-    "skippedItems": 0
-  }
-}
 ```
 
 ---
@@ -1252,6 +1253,26 @@ Returns the current cashflow configuration.
 
 ---
 
+### `PUT /api/credit/config`
+
+Auth: RequireAuth
+
+Replaces the cashflow configuration. Both fields are required — this is a full replace, not a patch.
+
+**Body:**
+```json
+{
+  "capitalBudgetCents": 2000000,
+  "cashBufferCents": 200000
+}
+```
+
+**Response:** `200 OK` — the saved `CashflowConfig`
+
+**Errors:** `400` invalid configuration; `503` finance service not available; `500` internal error
+
+---
+
 ### `GET /api/credit/invoices`
 
 Auth: RequireAuth
@@ -1500,6 +1521,20 @@ Returns the Monday weekly review summary (WoW spend, revenue, sales comparisons)
 
 ---
 
+### `GET /api/portfolio/weekly-history`
+
+Auth: RequireAuth
+
+Returns the N most recent weekly review summaries in reverse chronological order.
+
+**Query params:** `weeks` (optional, default 8, minimum 1, maximum 52)
+
+**Response:** `200 OK` — Array of `WeeklyReviewSummary` (same shape as `GET /api/portfolio/weekly-review`)
+
+**Errors:** `400` `weeks` is not a positive integer or exceeds 52; `500` internal error
+
+---
+
 ## Utilities
 
 ### `GET /api/certs/{certNumber}`
@@ -1556,73 +1591,6 @@ Streams liquidation candidate recommendations across all campaigns.
 **Body:** (empty)
 
 **Response:** `200 OK` — SSE stream
-
----
-
-### `POST /api/advisor/purchase-assessment`
-
-Auth: RequireAuth
-
-Streams an AI assessment of a potential card purchase.
-
-**Body:**
-```json
-{
-  "campaignId": "uuid",
-  "cardName": "Charizard",
-  "setName": "Base Set",
-  "grade": "10",
-  "buyCostCents": 84000,
-  "clValueCents": 120000,
-  "certNumber": "12345678"
-}
-```
-`grade`, `buyCostCents`, `campaignId`, and `cardName` are required.
-
-**Response:** `200 OK` — SSE stream
-
-**Errors:** `400` missing required fields
-
----
-
-### `GET /api/advisor/cache/{type}`
-
-Auth: RequireAuth
-
-Returns cached analysis result. `type` must be `digest` or `liquidation`.
-
-**Path params:** `type` (`digest` | `liquidation`)
-
-**Response:** `200 OK`
-```json
-{
-  "status": "ready",
-  "content": "## Weekly Digest...",
-  "errorMessage": "",
-  "updatedAt": "2025-01-01T00:00:00Z"
-}
-```
-When no cache: `{ "status": "empty" }`
-
-**Errors:** `400` invalid type; `503` caching not configured
-
----
-
-### `POST /api/advisor/refresh/{type}`
-
-Auth: RequireAuth
-
-Triggers a background analysis refresh. Returns immediately.
-
-**Path params:** `type` (`digest` | `liquidation`)
-
-**Response:** `202 Accepted`
-```json
-{ "status": "running" }
-```
-If already running: `200 OK` — `{ "status": "running" }`
-
-**Errors:** `400` invalid type; `503` caching not configured
 
 ---
 
@@ -1714,128 +1682,55 @@ Returns unsold inventory aging data across all campaigns.
 
 ### `GET /api/sell-sheet`
 
-Auth: RequireAuth (POST not required — uses GET)
+Auth: RequireAuth
 
 Generates a global sell sheet across all active campaigns.
 
-**Response:** `200 OK` — `SellSheet` object (same shape as campaign sell sheet, `campaignName` set per item)
-
----
-
-### `GET /api/sell-sheet/items`
-
-Get the authenticated user's sell sheet item IDs.
-
-**Auth:** RequireAuth
-
-**Response:** `200 OK`
+**Response:** `200 OK` — `SellSheet`
 ```json
 {
-  "purchaseIds": ["uuid1", "uuid2"]
+  "generatedAt": "2025-01-01T00:00:00Z",
+  "campaignName": "Pokemon Base 2025 Q1",
+  "items": [
+    {
+      "certNumber": "12345678",
+      "cardName": "Charizard",
+      "grade": 10,
+      "buyCostCents": 84000,
+      "costBasisCents": 84300,
+      "clValueCents": 120000,
+      "recommendation": "List on eBay",
+      "targetSellPrice": 130000,
+      "minimumAcceptPrice": 90000,
+      "recommendedChannel": "ebay"
+    }
+  ],
+  "totals": {
+    "totalCostBasis": 84300,
+    "totalExpectedRevenue": 130000,
+    "totalProjectedProfit": 29645,
+    "itemCount": 1,
+    "skippedItems": 0
+  }
 }
 ```
-
-### `PUT /api/sell-sheet/items`
-
-Add purchase IDs to the sell sheet (idempotent).
-
-**Auth:** RequireAuth
-
-**Request body:**
-```json
-{
-  "purchaseIds": ["uuid1", "uuid2"]
-}
-```
-
-**Response:** `204 No Content`
-
-### `DELETE /api/sell-sheet/items`
-
-Remove specific purchase IDs from the sell sheet.
-
-**Auth:** RequireAuth
-
-**Request body:**
-```json
-{
-  "purchaseIds": ["uuid1", "uuid2"]
-}
-```
-
-**Response:** `204 No Content`
-
-### `DELETE /api/sell-sheet/items/all`
-
-Clear all items from the sell sheet.
-
-**Auth:** RequireAuth
-
-**Response:** `204 No Content`
-
----
-
-### `POST /api/portfolio/sell-sheet`
-
-Auth: RequireAuth
-
-Generates a sell sheet for selected purchases across all campaigns.
-
-**Body:**
-```json
-{ "purchaseIds": ["uuid1", "uuid2"] }
-```
-At least one, max 5,000 purchase IDs.
-
-**Response:** `200 OK` — `SellSheet` object (same shape as campaign sell sheet)
-
-**Errors:** `400` no purchase IDs or too many (>5,000)
+`campaignName` is set per item rather than at the top level when the sheet spans campaigns.
 
 ---
 
 ## Global Purchase Operations
 
-### `GET /api/purchases/export-mm`
+### `POST /api/purchases/sync-psa-sheets`
 
 Auth: RequireAuth
 
-Exports all unsold inventory as a Market Movers collection import-format CSV (13 columns).
+Pulls the PSA portal's order rows directly (no file upload) and imports them the same way the CSV path does. The portal fetch is bounded by a 2-minute timeout.
 
-**Query params:** `missing_mm_only=true` (optional, export only items lacking MM value data)
+**Body:** (empty)
 
-**Response:** `200 OK` with `Content-Type: text/csv`, `Content-Disposition: attachment; filename="market-movers-export.csv"`
+**Response:** `200 OK` — `PSAImportResult` (same shape as `POST /api/purchases/import-psa`)
 
-CSV columns: `Sport`, `Grade`, `Player Name`, `Year`, `Set`, `Variation`, `Card Number`, `Specific Qualifier`, `Quantity`, `Date Purchased`, `Purchase Price per Card`, `Notes`, `Category`
-
----
-
-### `POST /api/purchases/refresh-mm`
-
-Auth: RequireAuth
-
-Refreshes Market Movers values across all campaigns from a Market Movers collection export CSV upload.
-
-**Body:** `multipart/form-data` — `file` field (CSV, max 10MB)
-
-**Response:** `200 OK` — `MMRefreshResult`
-```json
-{
-  "updated": 10,
-  "notFound": 2,
-  "skipped": 1,
-  "failed": 0,
-  "errors": [],
-  "results": [
-    {
-      "certNumber": "12345678",
-      "cardName": "Charizard",
-      "oldValueCents": 110000,
-      "newValueCents": 120000,
-      "status": "updated"
-    }
-  ]
-}
-```
+**Errors:** `400` portal returned no rows; `502` failed to fetch PSA portal data; `503` PSA portal sync not configured; `500` internal error
 
 ---
 
@@ -2013,7 +1908,214 @@ Updates the buy cost of a purchase.
 
 ---
 
+### `POST /api/purchases/{purchaseId}/list-on-dh`
+
+Auth: RequireAuth
+
+Lists a single received purchase on DH. When the item has no DH inventory ID yet but is push-eligible, the listing service performs an inline match + push first, then lists.
+
+Preconditions: the purchase must be received, not already listed, and carry a human-committed price (a "Set Price" override or a price-review value — CardLadder values alone do not qualify). Items with a DH inventory ID must be `in_stock`.
+
+**Path params:** `purchaseId` (purchase UUID)
+
+**Body:** (empty)
+
+**Response:** `200 OK` — `DHListingResult`
+```json
+{
+  "Listed": 1,
+  "Synced": 1,
+  "Skipped": 0,
+  "Total": 1,
+  "Paused": false,
+  "Error": null,
+  "FailedCerts": null
+}
+```
+This struct carries no JSON tags, so the field names are the Go names.
+
+**Errors:** `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused; `502` PSA authentication temporarily unavailable — retry shortly; `503` DH listing service not configured; `500` internal error
+
+---
+
+## Liquidation
+
+### `POST /api/liquidation/preview`
+
+Auth: RequireAuth
+
+Computes suggested liquidation prices for unsold inventory, discounting against recent sale comps where available and falling back to a no-comps discount otherwise. Read-only — nothing is written.
+
+**Body:** optional; an empty body uses the configured defaults.
+```json
+{
+  "discountWithCompsPct": 0.10,
+  "discountNoCompsPct": 0.25
+}
+```
+
+**Response:** `200 OK` — `PreviewResponse`
+```json
+{
+  "items": [
+    {
+      "purchaseId": "uuid",
+      "certNumber": "12345678",
+      "cardName": "Charizard",
+      "setName": "Base Set",
+      "cardNumber": "4",
+      "grade": 10,
+      "buyCostCents": 84000,
+      "clValueCents": 120000,
+      "compPriceCents": 118000,
+      "compCount": 6,
+      "mostRecentCompDate": "2025-01-01",
+      "confidenceLevel": "high",
+      "gapPct": -0.02,
+      "currentReviewedPriceCents": 130000,
+      "suggestedPriceCents": 106200,
+      "belowCost": false
+    }
+  ],
+  "summary": {
+    "totalCards": 42,
+    "withComps": 30,
+    "withoutComps": 8,
+    "noData": 4,
+    "totalCurrentValueCents": 5400000,
+    "totalSuggestedValueCents": 4860000,
+    "belowCostCount": 3
+  }
+}
+```
+
+**Errors:** `400` invalid request body; `500` preview failed
+
+---
+
+### `POST /api/liquidation/apply`
+
+Auth: RequireAuth
+
+Applies the chosen prices from a preview. Partial success is reported rather than rolled back — check `failed` and `errors`.
+
+**Body:**
+```json
+{
+  "items": [
+    { "purchaseId": "uuid", "newPriceCents": 106200 }
+  ]
+}
+```
+At least one item is required.
+
+**Response:** `200 OK` — `ApplyResult`
+```json
+{
+  "applied": 40,
+  "failed": 2,
+  "errors": ["purchase uuid: not found"]
+}
+```
+
+**Errors:** `400` invalid request body or empty `items`; `500` apply failed
+
+---
+
 ## DH Integration
+
+### `GET /api/dh/pending`
+
+Auth: RequireAuth
+
+Lists received, unsold purchases with `dhPushStatus = "pending"` — the queue the DH push pipeline drains. Each item carries a recommended price and a data-freshness confidence signal.
+
+**Response:** `200 OK`
+```json
+{
+  "items": [
+    {
+      "purchaseId": "uuid",
+      "cardName": "Charizard",
+      "setName": "Base Set",
+      "grade": 10,
+      "recommendedPriceCents": 130000,
+      "daysQueued": 3,
+      "dhConfidence": "high"
+    }
+  ],
+  "count": 1
+}
+```
+`dhConfidence` is `"high"` (synced <24h ago), `"medium"` (<7d), or `"low"` (>7d or never synced).
+
+**Errors:** `503` DH pending lister not available; `500` internal error
+
+---
+
+### `POST /api/dh/dismiss`
+
+Auth: RequireAuth
+
+Marks a purchase as `dismissed` so the DH listing pipeline skips it. Valid from any non-terminal push state (`pending`, `unmatched`, `matched`, `manual`, `held`).
+
+**Body:**
+```json
+{ "purchaseId": "uuid" }
+```
+
+**Response:** `200 OK`
+```json
+{ "status": "dismissed" }
+```
+
+**Errors:** `400` missing `purchaseId` or invalid body; `404` purchase not found; `409` purchase cannot be dismissed from its current state (includes already-dismissed); `500` internal error
+
+---
+
+### `POST /api/dh/undismiss`
+
+Auth: RequireAuth
+
+Restores a dismissed purchase so it can be re-attempted. Received items go back to `pending` for the scheduler to pick up; unreceived items have their push status cleared entirely and wait for intake to re-enroll them.
+
+**Body:**
+```json
+{ "purchaseId": "uuid" }
+```
+
+**Response:** `200 OK` — the new push status, empty string for unreceived items
+```json
+{ "status": "pending" }
+```
+
+**Errors:** `400` missing `purchaseId` or invalid body; `404` purchase not found; `409` purchase is not in dismissed state; `500` internal error
+
+---
+
+### `POST /api/dh/reconcile`
+
+Auth: RequireAdmin
+
+Runs DH reconciliation synchronously: scans our listed inventory against DH and resets rows that no longer exist upstream. Guarded by a mutex so concurrent clicks cannot double-reset the same rows.
+
+**Body:** (empty)
+
+**Response:** `200 OK`
+```json
+{
+  "scanned": 240,
+  "missingOnDH": 3,
+  "reset": 3,
+  "errors": [],
+  "resetIds": ["uuid1", "uuid2", "uuid3"]
+}
+```
+`errors` and `resetIds` are omitted when empty.
+
+**Errors:** `409` a reconcile is already running — `{ "status": "already_running" }`; `503` DH reconciliation not configured; `502`/`500` upstream or internal failure
+
+---
 
 ### `POST /api/dh/match`
 
@@ -2588,120 +2690,6 @@ The same query is available offline as `scripts/cl-coverage.sql`.
 
 ---
 
-## Admin — Market Movers
-
-### `POST /api/admin/marketmovers/config`
-
-Auth: RequireAdmin
-
-Authenticates with Market Movers and stores the refresh token.
-
-**Body:**
-```json
-{
-  "username": "user@example.com",
-  "password": "secret"
-}
-```
-
-**Response:** `200 OK`
-```json
-{ "status": "connected" }
-```
-
-**Errors:** `400` missing username or password; `401` Market Movers authentication failed
-
----
-
-### `GET /api/admin/marketmovers/status`
-
-Auth: RequireAdmin
-
-Returns the current Market Movers connection status including mapped card count, price stats, and last refresh run stats.
-
-**Response:** `200 OK`
-```json
-{
-  "configured": true,
-  "username": "user@example.com",
-  "cardsMapped": 80,
-  "priceStats": { ... },
-  "lastRun": {
-    "startedAt": "2025-01-15T10:00:00Z",
-    "duration": "1m15s",
-    "updated": 12,
-    "failed": 0
-  }
-}
-```
-
----
-
-### `POST /api/admin/marketmovers/refresh`
-
-Auth: RequireAdmin
-
-Triggers a manual Market Movers value sync.
-
-**Response:** `200 OK`
-```json
-{ "status": "refresh complete" }
-```
-
-**Errors:** `503` Market Movers refresh scheduler not available
-
----
-
-### `POST /api/admin/marketmovers/sync-collection`
-
-Auth: RequireAdmin
-
-Pushes unmapped unsold inventory items to the Market Movers collection. Items must have a resolved MM collectible_id and must not already have a collection_item_id.
-
-**Response:** `200 OK` — `MMSyncResult`
-```json
-{
-  "synced": 8,
-  "skipped": 3,
-  "failed": 0,
-  "total": 11,
-  "errors": []
-}
-```
-
-**Errors:** `503` Market Movers client or purchase lister not available
-
----
-
-### `GET /api/admin/marketmovers/failures`
-
-Auth: RequireAdmin
-
-Returns a breakdown of per-purchase Market Movers mapping/sync failures for the admin UI. Query param `limit` (default 50, max 200) controls the sample list size.
-
-**Response:** `200 OK` — `IntegrationFailuresReport`
-```json
-{
-  "byReason": {
-    "collectible_not_found": 2,
-    "token_expired": 1
-  },
-  "samples": [
-    {
-      "purchaseId": "uuid",
-      "certNumber": "12345678",
-      "cardName": "Pikachu",
-      "reason": "collectible_not_found",
-      "errorAt": "2026-04-13T10:00:00Z"
-    }
-  ]
-}
-```
-
-**Errors:** `500` internal error
-
----
-
 ## Admin — PSA Sync
 
 ### `GET /api/admin/psa-sync/status`
@@ -2821,6 +2809,31 @@ Dismisses a pending item without creating a purchase.
 See [docs/psa-harvester.md](psa-harvester.md#campaign-sync) for the harvester-side flow
 (snapshot fetch, push-queue drain, `updateCampaign`). The endpoints below are the app's
 read + human-approval surface; the app never contacts psacard.com directly.
+
+### `POST /api/campaigns/{id}/psa-propose-create`
+
+Auth: RequireAuth
+
+Builds the full PSA portal `formData` for an internal campaign that is not yet linked to a portal campaign, and enqueues it as a pending `create` for human approval. The app does not contact psacard.com — the harvester drains the queue.
+
+Rejected if the campaign is already linked, or if a create for it is already queued. A previously pushed-but-unlinked create is also rejected: the portal campaign already exists, so it should be linked manually (`psa-link`) rather than created twice.
+
+**Path params:** `id` (campaign UUID)
+
+**Body:** (empty)
+
+**Response:** `200 OK`
+```json
+{
+  "pushId": "uuid",
+  "formData": { }
+}
+```
+`formData` is the translated portal payload (`CampaignFormData`).
+
+**Errors:** `400` campaign already linked to a PSA portal campaign, or the campaign could not be translated; `404` campaign not found; `409` a create is already queued, or one was already pushed but not linked; `503` PSA campaign sync not enabled, PSA catalog not enabled, or the catalog is stale — run `cmd/psa-harvest`; `500` internal error
+
+---
 
 ### `GET /api/psa-campaigns`
 
@@ -3091,3 +3104,43 @@ Returns ranked acquisition-niche opportunities: `(character, era, grade)` bucket
 
 **Errors:** `400` invalid `window`, `sort`, or out-of-range `grade`; `500` internal
 
+
+---
+
+### `GET /api/intelligence/campaign-signals`
+
+Auth: RequireAuth
+
+Returns per-campaign demand-velocity signals derived from the cached DH analytics rows: for each campaign, how many of its tracked characters are accelerating vs decelerating, and the strongest movers in each direction.
+
+**Response:** `200 OK`
+```json
+{
+  "computed_at": "2025-01-01T00:00:00Z",
+  "data_quality": "ok",
+  "signals": [
+    {
+      "campaign_id": "uuid",
+      "campaign_name": "Pokemon Base 2025 Q1",
+      "tracked_characters": 12,
+      "accelerating_count": 5,
+      "decelerating_count": 3,
+      "median_velocity_change_pct": 0.08,
+      "data_quality": "ok",
+      "computed_at": "2025-01-01T00:00:00Z",
+      "top_accelerating": [
+        {
+          "character": "Charizard",
+          "velocity_change_pct": 0.34,
+          "median_days_to_sell": 11.5,
+          "sample_size": 42
+        }
+      ],
+      "top_decelerating": []
+    }
+  ]
+}
+```
+`computed_at` (top level and per signal) is `null` when no cached analytics rows carried a timestamp. `median_days_to_sell` is `null` when the cached row lacked the field. Unparseable cache rows are skipped and logged rather than failing the request.
+
+**Errors:** `500` internal error
