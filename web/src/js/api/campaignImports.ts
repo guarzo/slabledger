@@ -3,7 +3,6 @@
  */
 
 import type {
-  PSAImportResult,
   CertLookupResult,
   CertImportResult,
   OrdersImportResult, OrdersConfirmItem, BulkSaleResult,
@@ -17,9 +16,6 @@ declare module './client' {
   interface APIClient {
     // Cert lookup
     lookupCert(certNumber: string): Promise<CertLookupResult>;
-
-    // PSA / External imports
-    globalImportPSA(file: File): Promise<PSAImportResult>;
 
     // Orders sales import
     importOrdersSales(file: File): Promise<OrdersImportResult>;
@@ -49,12 +45,6 @@ const proto = APIClient.prototype;
 // Cert lookup
 proto.lookupCert = async function (this: APIClient, certNumber: string): Promise<CertLookupResult> {
   return this.get<CertLookupResult>(`/certs/${encodeURIComponent(certNumber)}`);
-};
-
-// Global purchase endpoints (cross-campaign)
-// PSA CSV import (global)
-proto.globalImportPSA = async function (this: APIClient, file: File): Promise<PSAImportResult> {
-  return this.uploadFile<PSAImportResult>('/purchases/import-psa', file);
 };
 
 // Orders sales import
