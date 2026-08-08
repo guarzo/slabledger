@@ -44,11 +44,11 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	if err != nil && !errors.Is(err, dh.ErrAnalyticsNotComputed) {
 		s.logger.Warn(ctx, "top_characters overall failed", observability.Err(err))
 	}
-	var overallEntries []dh.CharacterDemandEntry
+	var overallEntries []stampedDemandEntry
 	if overallTop != nil {
-		overallEntries = overallTop.CharacterDemand
-		for _, e := range overallEntries {
+		for _, e := range overallTop.CharacterDemand {
 			addCharacter(e.CharacterName)
+			overallEntries = append(overallEntries, stampedDemandEntry{Entry: e, ComputedAt: overallTop.ComputedAt})
 		}
 	}
 
@@ -60,7 +60,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	// CharacterDemandEntry. When T2 exposes that field the loop below will
 	// start producing card IDs. Until then, step 2 is seeded by unsold
 	// inventory only, which is the intended Phase-1 behavior anyway.
-	eraEntries := make([]dh.CharacterDemandEntry, 0, len(defaultAnalyticsEras)*topCharactersPerEraLimit)
+	eraEntries := make([]stampedDemandEntry, 0, len(defaultAnalyticsEras)*topCharactersPerEraLimit)
 	for _, era := range defaultAnalyticsEras {
 		apiCalls++
 		resp, eraErr := s.dhClient.TopCharacters(ctx, topCharactersPerEraLimit, era)
@@ -77,7 +77,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		}
 		for _, e := range resp.CharacterDemand {
 			addCharacter(e.CharacterName)
-			eraEntries = append(eraEntries, e)
+			eraEntries = append(eraEntries, stampedDemandEntry{Entry: e, ComputedAt: resp.ComputedAt})
 		}
 	}
 
@@ -130,11 +130,14 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			FetchedAt: now,
 		}
 		if entry, ok := demandByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry); encErr == nil {
+			if blob, encErr := json.Marshal(entry.blob()); encErr == nil {
 				str := string(blob)
 				row.DemandJSON = &str
 			} else {
 				s.logger.Warn(ctx, "marshal character demand JSON", observability.String("character", name), observability.Err(encErr))
+			}
+			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
+				row.DemandComputedAt = &t
 			}
 		}
 		if entry, ok := velocityByChar[name]; ok {
@@ -330,15 +333,45 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 
 // --- helpers ---
 
-func indexDemand(entries []dh.CharacterDemandEntry) map[string]dh.CharacterDemandEntry {
-	m := make(map[string]dh.CharacterDemandEntry, len(entries))
+// stampedDemandEntry pairs a character demand entry with the computed_at of
+// the TopCharacters response it arrived in. DH reports computed_at once per
+// response rather than per entry, so the timestamp has to be carried alongside
+// the entry to survive the overall/per-era merge in indexDemand.
+type stampedDemandEntry struct {
+	Entry      dh.CharacterDemandEntry
+	ComputedAt string
+}
+
+// characterDemandBlob is the persisted shape of a character's demand payload:
+// the DH entry's own fields plus the response-level computed_at. The embedded
+// struct is anonymous so encoding/json inlines its fields, keeping the blob
+// byte-identical to the previous shape apart from the added computed_at.
+//
+// DataQuality is deliberately absent: DH exposes data_quality only per card
+// (dh.DemandSignal), and nothing in this flow maps a card to a character — the
+// card seed is our unsold inventory, not a character's cards. Populating it
+// needs a character-level aggregation rule and a card→character mapping that
+// does not exist yet. See SLA-63.
+type characterDemandBlob struct {
+	dh.CharacterDemandEntry
+	ComputedAt string `json:"computed_at,omitempty"`
+}
+
+func (s stampedDemandEntry) blob() characterDemandBlob {
+	return characterDemandBlob{CharacterDemandEntry: s.Entry, ComputedAt: s.ComputedAt}
+}
+
+func indexDemand(entries []stampedDemandEntry) map[string]stampedDemandEntry {
+	m := make(map[string]stampedDemandEntry, len(entries))
 	for _, e := range entries {
-		if e.CharacterName == "" {
+		if e.Entry.CharacterName == "" {
 			continue
 		}
 		// Later entries (per-era) overwrite earlier (overall) so the cached
-		// blob carries by_era when available.
-		m[e.CharacterName] = e
+		// blob carries by_era when available. The entry's own computed_at
+		// travels with it, so the stored timestamp always describes the
+		// stored payload.
+		m[e.Entry.CharacterName] = e
 	}
 	return m
 }

@@ -73,6 +73,77 @@ func demandJSONWithEras(character string, baseScore float64, quality string) str
 
 // --- Tests ---
 
+// demandJSONWithComputedAt builds a blob carrying a response-level computed_at.
+// withEras controls whether the character has a by_era map, which is what
+// decides between era buckets and the single "" character-overall bucket.
+func demandJSONWithComputedAt(character, computedAt string, withEras bool) string {
+	eras := ""
+	if withEras {
+		eras = `,
+			"by_era": {
+				"sword_shield": {"card_count": 6, "avg_demand_score": 0.85, "total_views": 240, "total_wishlist_adds": 12}
+			}`
+	}
+	return `{
+		"character_name": "` + character + `",
+		"card_count": 10,
+		"avg_demand_score": 0.8,
+		"total_views": 400,
+		"total_search_clicks": 80,
+		"total_wishlist_adds": 20,
+		"computed_at": "` + computedAt + `"` + eras + `
+	}`
+}
+
+// TestService_Leaderboard_ComputedAt covers the timestamp the scheduler now
+// writes into the demand blob. Era rows deliberately inherit the
+// character-level value — DH reports computed_at once per response, not per
+// by_era bucket (see eraDemandFor).
+func TestService_Leaderboard_ComputedAt(t *testing.T) {
+	const stamp = "2026-04-15T00:00:00Z"
+	want, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		t.Fatalf("bad fixture timestamp: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		withEras bool
+		wantEra  string
+	}{
+		{name: "character overall row", withEras: false, wantEra: ""},
+		{name: "era row inherits character timestamp", withEras: true, wantEra: "sword_shield"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := []demand.CharacterCache{{
+				Character:  "Umbreon",
+				Window:     "30d",
+				DemandJSON: strPtr(demandJSONWithComputedAt("Umbreon", stamp, tc.withEras)),
+			}}
+			svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
+
+			out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "30d", Limit: 10})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out) == 0 {
+				t.Fatalf("expected at least one opportunity")
+			}
+			got := out[0]
+			if got.Era != tc.wantEra {
+				t.Errorf("Era = %q; want %q", got.Era, tc.wantEra)
+			}
+			if got.Demand == nil {
+				t.Fatalf("Demand is nil")
+			}
+			if !got.Demand.ComputedAt.Equal(want) {
+				t.Errorf("ComputedAt = %s; want %s", got.Demand.ComputedAt, want)
+			}
+		})
+	}
+}
+
 func TestService_Leaderboard_EmptyCache(t *testing.T) {
 	repo := newRepoWithRows(nil)
 	svc := demand.NewService(repo, uncoveredLookup())

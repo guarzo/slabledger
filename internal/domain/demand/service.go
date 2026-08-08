@@ -373,6 +373,12 @@ func erasForRow(demand *characterDemandJSON, filter string) []string {
 
 // eraDemandFor returns the NicheDemand for a given era within a character's
 // demand JSON. An empty era means "character overall".
+//
+// ComputedAt is the character-level value for both branches: DH reports
+// computed_at once per TopCharacters response, not per by_era bucket, so an
+// era row inherits the timestamp of the response its character arrived in.
+// DataQuality still falls back per-era-then-character, since by_era entries
+// have their own data_quality slot even though nothing writes it today.
 func eraDemandFor(demand *characterDemandJSON, era string) (*NicheDemand, bool) {
 	if era == "" {
 		return &NicheDemand{
