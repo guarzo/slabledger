@@ -27,7 +27,7 @@ jobs:
     - name: Fetch update metadata
       # Reads the semver bump type off the PR without checking out its code.
       id: meta
-      uses: dependabot/fetch-metadata@v2
+      uses: dependabot/fetch-metadata@v3
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
