@@ -21,16 +21,26 @@ type MockDBTracker struct {
 	APIUsage      *pricing.APIUsageStats
 	RecordedCalls []pricing.APICallRecord
 	PingError     error
+
+	// Override hooks; when nil the default field-driven behavior applies.
+	IsProviderBlockedFn func(ctx context.Context, provider string) (bool, time.Time, error)
+	GetAPIUsageFn       func(ctx context.Context, provider string) (*pricing.APIUsageStats, error)
 }
 
-func (m *MockDBTracker) IsProviderBlocked(_ context.Context, _ string) (bool, time.Time, error) {
+func (m *MockDBTracker) IsProviderBlocked(ctx context.Context, provider string) (bool, time.Time, error) {
+	if m.IsProviderBlockedFn != nil {
+		return m.IsProviderBlockedFn(ctx, provider)
+	}
 	if m.BlockedUntil.After(time.Now()) {
 		return true, m.BlockedUntil, nil
 	}
 	return false, time.Time{}, nil
 }
 
-func (m *MockDBTracker) GetAPIUsage(_ context.Context, provider string) (*pricing.APIUsageStats, error) {
+func (m *MockDBTracker) GetAPIUsage(ctx context.Context, provider string) (*pricing.APIUsageStats, error) {
+	if m.GetAPIUsageFn != nil {
+		return m.GetAPIUsageFn(ctx, provider)
+	}
 	if m.APIUsage != nil {
 		return m.APIUsage, nil
 	}
@@ -65,11 +75,17 @@ func (m *MockDBTracker) Ping(_ context.Context) error {
 
 // MockRefreshCandidateProvider implements pricing.RefreshCandidateProvider for testing.
 type MockRefreshCandidateProvider struct {
+	mu         sync.Mutex
+	callCount  int
 	Candidates []pricing.RefreshCandidate
 	Err        error
 }
 
 func (m *MockRefreshCandidateProvider) GetRefreshCandidates(_ context.Context, limit int) ([]pricing.RefreshCandidate, error) {
+	m.mu.Lock()
+	m.callCount++
+	m.mu.Unlock()
+
 	if m.Err != nil {
 		return nil, m.Err
 	}
@@ -79,11 +95,21 @@ func (m *MockRefreshCandidateProvider) GetRefreshCandidates(_ context.Context, l
 	return m.Candidates[:limit], nil
 }
 
+// CallCount returns the number of GetRefreshCandidates calls made.
+func (m *MockRefreshCandidateProvider) CallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount
+}
+
 // MockSimplePriceProvider implements pricing.PriceProvider with call tracking for testing
 type MockSimplePriceProvider struct {
 	mu        sync.Mutex
 	callCount int
 	available bool
+
+	// GetPriceFn overrides the default success response when non-nil.
+	GetPriceFn func(ctx context.Context, card pricing.Card) (*pricing.Price, error)
 }
 
 // NewMockSimplePriceProvider creates a new mock provider with the given availability
@@ -91,10 +117,15 @@ func NewMockSimplePriceProvider(available bool) *MockSimplePriceProvider {
 	return &MockSimplePriceProvider{available: available}
 }
 
-func (m *MockSimplePriceProvider) GetPrice(_ context.Context, _ pricing.Card) (*pricing.Price, error) {
+func (m *MockSimplePriceProvider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Price, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.callCount++
+	fn := m.GetPriceFn
+	m.mu.Unlock()
+
+	if fn != nil {
+		return fn(ctx, card)
+	}
 	return &pricing.Price{}, nil
 }
 
