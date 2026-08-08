@@ -351,8 +351,8 @@ func indexDemand(entries []dh.CharacterDemandEntry) map[string]dh.CharacterDeman
 		if e.CharacterName == "" {
 			continue
 		}
-		// Later entries (per-era) overwrite earlier (overall) so the cached
-		// blob carries by_era when available.
+		// Later entries (per-era) overwrite earlier (overall) so the persisted
+		// CharacterDemand carries ByEra when available.
 		m[e.CharacterName] = e
 	}
 	return m
