@@ -43,6 +43,35 @@ PRIORITY = {  # Linear: 1=Urgent 2=High 3=Normal 4=Low
 }
 
 
+# --- Linear markdown survival -------------------------------------------
+# Verified against the live endpoint by round-tripping a probe issue:
+#   * a backslash inside an inline code span survives as-is;
+#   * a backslash in raw prose is eaten as a markdown escape, so `\|`
+#     becomes `|` and silently breaks a BRE alternation in a grep command;
+#   * a multi-line string inside single backticks is dropped entirely;
+#   * fenced blocks survive verbatim, backslashes included.
+# So: escape backslashes only outside code spans, and fence anything that
+# is multi-line or already contains a backtick.
+
+def prose(s):
+    """Escape backslashes in the non-code segments of a markdown string."""
+    parts = s.split("`")
+    return "`".join(p.replace("\\", "\\\\") if n % 2 == 0 else p
+                    for n, p in enumerate(parts))
+
+
+def code(s, indent=""):
+    """Render a command/snippet so Linear stores it byte-for-byte.
+
+    Multi-line fences are deliberately NOT indented to match the list item
+    they sit under: Linear preserves leading whitespace inside a fence, and
+    an indented `python3 -c "..."` snippet pastes back as an IndentationError.
+    """
+    if "\n" in s or "`" in s:
+        return f"\n```\n{s}\n```"
+    return f"`{s}`"
+
+
 def load():
     F, V = {}, {}
     for p in sorted(glob.glob(f"{AUDIT}/findings/*.json")):
@@ -80,47 +109,47 @@ def ticket_body(u, F, V):
 
     if u.get("note"):
         w("> [!IMPORTANT]")
-        for ln in u["note"].split("\n"):
+        for ln in prose(u["note"]).split("\n"):
             w(f"> {ln}")
         w("")
 
     for i in u["ids"]:
         f, v = F[i], V[i]
         if len(u["ids"]) > 1:
-            w(f"## {i} — {f['title']}")
+            w(f"## {i} — {prose(f['title'])}")
         else:
             w(f"## Claim")
             w("")
-            w(f["title"])
+            w(prose(f["title"]))
         w("")
-        w(f"**Subject:** `{f['subject']}`")
+        w(f"**Subject:** {code(str(f['subject']))}")
         if v.get("what_the_finding_got_wrong"):
             w("")
             w(f"**Verifier correction (already applied to this ticket):** "
-              f"{v['what_the_finding_got_wrong']}")
+              f"{prose(v['what_the_finding_got_wrong'])}")
         w("")
         w("### Evidence")
         w("")
         for e in f["evidence"]:
-            w(f"- {e['claim']}")
+            w(f"- {prose(e['claim'])}")
             if e.get("file_line"):
-                w(f"  - `{e['file_line']}`")
+                w(f"  - {code(e['file_line'], '  ')}")
             if e.get("command"):
-                w(f"  - Reproduce: `{e['command']}`")
+                w(f"  - Reproduce: {code(e['command'], '  ')}")
         w("")
         w("### Proposed fix")
         w("")
-        w(f["proposed_fix"])
+        w(prose(f["proposed_fix"]))
         w("")
         w("### Blast radius")
         w("")
         for b in f["blast_radius"]:
-            w(f"- `{b}`")
+            w(f"- {code(b)}")
         w("")
         w("### Acceptance criteria")
         w("")
         for a in f["acceptance_criteria"]:
-            w(f"- [ ] {a}")
+            w(f"- [ ] {prose(a)}")
         w("")
 
     w("### Definition of done")
@@ -133,6 +162,9 @@ def ticket_body(u, F, V):
 
 def main():
     F, V = load()
+    ids = {}
+    if os.path.exists(f"{AUDIT}/linear-ids.json"):
+        ids = json.load(open(f"{AUDIT}/linear-ids.json"))
     out = []
     w = out.append
     w("# Audit Tickets — draft bodies\n")
@@ -145,17 +177,23 @@ def main():
 
     manifest = []
     for n, u in enumerate(UNITS, 1):
+        fu = f"FU-{n:02d}"
         title = u["n"]
-        w(f"## FU-{n:02d} — {title}\n")
-        w(f"**Linear ID:** _(not yet filed)_  ")
+        rec = ids.get(fu)
+        w(f"## {fu} — {title}\n")
+        if rec:
+            w(f"**Linear:** [{rec['id']}]({rec['url']})  ")
+        else:
+            w(f"**Linear ID:** _(not yet filed)_  ")
         w(f"**Label:** {LABEL[u['tier']]} · **Priority:** {PRIORITY[u['tier']]}\n")
         w("<details><summary>Ticket body as posted</summary>\n")
         w(ticket_body(u, F, V))
         w("\n</details>\n")
         w("---\n")
-        manifest.append(dict(fu=f"FU-{n:02d}", title=title,
+        manifest.append(dict(fu=fu, title=title,
                              label=LABEL[u["tier"]], priority=PRIORITY[u["tier"]],
                              tier=u["tier"], ids=u["ids"],
+                             linear=(rec or {}).get("id", ""),
                              body=ticket_body(u, F, V)))
 
     open(f"{AUDIT}/TICKETS.md", "w").write("\n".join(out) + "\n")

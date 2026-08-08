@@ -10,7 +10,7 @@ Nothing here is filed until the user signs off. The `Linear ID` line on each tic
 
 ## FU-01 — Enable RLS on psa_campaign_push_queue and stop trusting its status column
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-9](https://linear.app/slabledger/issue/SLA-9/enable-rls-on-psa-campaign-push-queue-and-stop-trusting-its-status)  
 **Label:** Bug · **Priority:** 2
 
 <details><summary>Ticket body as posted</summary>
@@ -51,7 +51,7 @@ Add RLS (ENABLE ROW LEVEL SECURITY + service-role-bypass policy, matching 000003
 ### Acceptance criteria
 
 - [ ] A new migration's .up.sql enables RLS and adds a policy for psa_campaign_push_queue; .down.sql reverses it.
-- [ ] grep -n 'ENABLE ROW LEVEL SECURITY\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w psa_campaign_push_queue now returns two lines.
+- [ ] grep -n 'ENABLE ROW LEVEL SECURITY\\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w psa_campaign_push_queue now returns two lines.
 
 ### Definition of done
 
@@ -65,7 +65,7 @@ Add RLS (ENABLE ROW LEVEL SECURITY + service-role-bypass policy, matching 000003
 
 ## FU-02 — Enable RLS on the six remaining tables created after the 000003 blanket grant
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-10](https://linear.app/slabledger/issue/SLA-10/enable-rls-on-the-six-remaining-tables-created-after-the-000003)  
 **Label:** Bug · **Priority:** 2
 
 <details><summary>Ticket body as posted</summary>
@@ -109,7 +109,7 @@ Add a new migration enabling RLS and a service-role-bypass policy for psa_portal
 ### Acceptance criteria
 
 - [ ] A new migration's .up.sql contains 'ALTER TABLE public.psa_portal_token ENABLE ROW LEVEL SECURITY;' and a CREATE POLICY statement for it; its .down.sql reverses both.
-- [ ] grep -n 'ENABLE ROW LEVEL SECURITY\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w psa_portal_token now returns two lines.
+- [ ] grep -n 'ENABLE ROW LEVEL SECURITY\\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w psa_portal_token now returns two lines.
 - [ ] go test ./... passes (migrations apply cleanly against a local Postgres).
 
 ## DBSCHEMA-003 — Five more live tables (dh_comp_cache, dh_card_tombstones, psa_portal_snapshot, psa_campaign_snapshot, psa_portal_catalog) were created after the 000003 blanket RLS grant and never received RLS — grouped because the fix is identical for each
@@ -154,7 +154,7 @@ Add a single new migration enabling RLS + service-role-bypass policy (000003's p
 
 ## FU-03 — Wire CleanupExpiredOAuthStates into the session-cleanup scheduler and restore its index
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-11](https://linear.app/slabledger/issue/SLA-11/wire-cleanupexpiredoauthstates-into-the-session-cleanup-scheduler-and)  
 **Label:** Bug · **Priority:** 2
 
 <details><summary>Ticket body as posted</summary>
@@ -220,7 +220,7 @@ Two logically distinct removals, since the six methods split into a coherent tok
 
 ## FU-04 — Fix the flat-sibling import checker: it skips 19 of 25 domain packages
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-12](https://linear.app/slabledger/issue/SLA-12/fix-the-flat-sibling-import-checker-it-skips-19-of-25-domain-packages)  
 **Label:** Bug · **Priority:** 2
 
 <details><summary>Ticket body as posted</summary>
@@ -282,7 +282,7 @@ Derive SUB_PACKAGES from the filesystem (every directory under internal/domain/ 
 
 ## FU-05 — Strip denominators in the DH cert-disambiguation card-number normalizer
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-13](https://linear.app/slabledger/issue/SLA-13/strip-denominators-in-the-dh-cert-disambiguation-card-number)  
 **Label:** Bug · **Priority:** 2
 
 <details><summary>Ticket body as posted</summary>
@@ -317,7 +317,9 @@ DH cert-disambiguation's local card-number normalizer doesn't strip denominators
   - Reproduce: `grep -n 'dh.ResolveAmbiguous(resp.Candidates, p.CardNumber' internal/adapters/httpserver/handlers/dh_match_handler.go; grep -n 'CardNumber:' internal/adapters/clients/dh/disambiguate_test.go`
 - Concretely demonstrated divergence: for a purchase card number '199/165' against a DH candidate with bare card number '199' (the shapes both sides actually produce per the evidence above), dh.normalizeCardNumber leaves the two unequal ('199/165' != '199', match fails) while cardutil.NormalizeCardNumber reduces both to '199' (match succeeds). Reproduced by transcribing each function's exact logic (both are simple, fully deterministic string operations with no external dependencies).
   - `internal/adapters/clients/dh/disambiguate.go:36`
-  - Reproduce: `python3 -c "
+  - Reproduce: 
+```
+python3 -c "
 def normalize_dh(s):
     n = s.lstrip('0')
     return '0' if n=='' and len(s)>0 else n
@@ -331,7 +333,8 @@ def normalize_cardutil(number):
 purchase, candidate = '199/165', '199'
 print('dh match:', normalize_dh(purchase) == normalize_dh(candidate))
 print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(candidate))
-"`
+"
+```
 
 ### Proposed fix
 
@@ -360,7 +363,7 @@ Replace the body of internal/adapters/clients/dh/disambiguate.go's normalizeCard
 
 ## FU-06 — Move the fill-rate business rule out of the HTTP handler into the domain
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-14](https://linear.app/slabledger/issue/SLA-14/move-the-fill-rate-business-rule-out-of-the-http-handler-into-the)  
 **Label:** Bug · **Priority:** 2
 
 <details><summary>Ticket body as posted</summary>
@@ -430,7 +433,7 @@ Move the fill-rate computation into internal/domain/inventory as a single export
 
 ## FU-07 — Add the missing forcedLiquidation field to the TypeScript Sale type
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-15](https://linear.app/slabledger/issue/SLA-15/add-the-missing-forcedliquidation-field-to-the-typescript-sale-type)  
 **Label:** Bug · **Priority:** 2
 
 <details><summary>Ticket body as posted</summary>
@@ -481,7 +484,7 @@ Add `forcedLiquidation: boolean;` to the Sale interface in web/src/types/campaig
 
 ## FU-08 — Remove the five dead auth token-lifecycle methods
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-16](https://linear.app/slabledger/issue/SLA-16/remove-the-five-dead-auth-token-lifecycle-methods)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -547,7 +550,7 @@ Two logically distinct removals, since the six methods split into a coherent tok
 
 ## FU-09 — Remove the unwired AI image-generation cluster
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-17](https://linear.app/slabledger/issue/SLA-17/remove-the-unwired-ai-image-generation-cluster)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -607,7 +610,7 @@ Delete internal/adapters/clients/azureai/image_client.go and internal/domain/ai/
 
 ## FU-10 — Remove the advisor functional options that are never invoked
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-18](https://linear.app/slabledger/issue/SLA-18/remove-the-advisor-functional-options-that-are-never-invoked)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -665,7 +668,7 @@ Either remove WithMaxTokens and WithTemperature (and hardcode/derive the default
 
 ## FU-11 — Resolve the cache-path plumbing that exists only to relocate a startup mkdir
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-19](https://linear.app/slabledger/issue/SLA-19/resolve-the-cache-path-plumbing-that-exists-only-to-relocate-a-startup)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -720,7 +723,7 @@ Either wire cfg.Cache.Path into the actual cache backend construction path in cm
 
 ## FU-12 — Drop the dead marketmovers_config table
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-20](https://linear.app/slabledger/issue/SLA-20/drop-the-dead-marketmovers-config-table)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -761,7 +764,10 @@ Add a new migration dropping marketmovers_config (DROP TABLE IF EXISTS marketmov
 ### Blast radius
 
 - `internal/adapters/storage/postgres/migrations/ (new migration file)`
-- `docs/SCHEMA.md (### `marketmovers_config` section)`
+- 
+```
+docs/SCHEMA.md (### `marketmovers_config` section)
+```
 
 ### Acceptance criteria
 
@@ -781,7 +787,7 @@ Add a new migration dropping marketmovers_config (DROP TABLE IF EXISTS marketmov
 
 ## FU-13 — Remove seven unreferenced React components and eleven unreferenced React Query hooks
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-21](https://linear.app/slabledger/issue/SLA-21/remove-seven-unreferenced-react-components-and-eleven-unreferenced)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -859,7 +865,7 @@ Remove the 11 unused hooks, or verify with the feature owner whether they are st
 
 ## FU-14 — Remove unused frontend API-client methods, pricing types, and utility exports
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-22](https://linear.app/slabledger/issue/SLA-22/remove-unused-frontend-api-client-methods-pricing-types-and-utility)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -965,7 +971,7 @@ Delete the 5 unused interfaces from pricing.ts. They likely describe a per-grade
 
 ## FU-15 — Remove UserPreferencesProvider, or wire its hook to a consumer
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-23](https://linear.app/slabledger/issue/SLA-23/remove-userpreferencesprovider-or-wire-its-hook-to-a-consumer)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1017,7 +1023,7 @@ Either wire a real consumer (the JSDoc at line 152 documents an intended addRece
 
 ## FU-16 — Reconcile CLAUDE.md with the real architecture
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-24](https://linear.app/slabledger/issue/SLA-24/reconcile-claudemd-with-the-real-architecture)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1195,7 +1201,7 @@ Owned by the docs-config-tests lens. Correct the CLAUDE.md roster to the eight i
 
 ## FU-17 — Reconcile docs/SCHEMA.md with the 25-migration Postgres history
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-25](https://linear.app/slabledger/issue/SLA-25/reconcile-docsschemamd-with-the-25-migration-postgres-history)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1215,7 +1221,10 @@ Produced by the read-only tech-debt audit. Every claim below survived an adversa
 ### Evidence
 
 - Diffing db-map.json's 44 declared tables (minus the 5 that later migrations drop, see DBSCHEMA-004/007 context) against every '### `table_name`' heading in docs/SCHEMA.md shows 7 live tables with no heading at all.
-  - Reproduce: `jq -r '.records[] | select(.kind=="table") | .identity' docs/audit/maps/db-map.json | sed 's/^table://' | sort > /tmp/actual_tables.txt; grep -n '^### `' docs/SCHEMA.md | sed -E 's/.*`([a-z_0-9]+)`.*/\1/' | sort > /tmp/documented.txt; comm -23 /tmp/actual_tables.txt /tmp/documented.txt`
+  - Reproduce: 
+```
+jq -r '.records[] | select(.kind=="table") | .identity' docs/audit/maps/db-map.json | sed 's/^table://' | sort > /tmp/actual_tables.txt; grep -n '^### `' docs/SCHEMA.md | sed -E 's/.*`([a-z_0-9]+)`.*/\1/' | sort > /tmp/documented.txt; comm -23 /tmp/actual_tables.txt /tmp/documented.txt
+```
 - Of those 9 raw hits, 2 (mm_sales_comps, psa_exchange_policy) are correctly absent because both tables are dropped (000021, 000014 respectively) — their absence from the docs is correct, not drift. The remaining 7 are live tables with real Go callers and are genuinely undocumented.
   - Reproduce: `for t in card_price_trajectory dh_card_tombstones dh_comp_cache dh_state_events psa_portal_snapshot psa_portal_token scheduler_run_stats; do git grep -cE "\\b$t\\b" -- '*.go' | awk -v t=$t '{print t": "$0}'; done`
 
@@ -1264,7 +1273,7 @@ Delete the `### advisor_cache`, `### sell_sheet_items`, and `### mm_card_mapping
 
 **Subject:** `{'kind': 'table', 'identity': 'docs/SCHEMA.md (wrong migration provenance)'}`
 
-**Verifier correction (already applied to this ticket):** Nothing material. One cosmetic note for the fixer's acceptance criteria: the second criterion, "grep -n 'Added: migration 000017' docs/SCHEMA.md no longer matches either section", is vacuously satisfiable — that literal pattern already matches nothing today, because the file's text is '**Added:** migration 000017' with bold markers. The criterion should be written against the real text (e.g. grep -n '\*\*Added:\*\* migration 000017' docs/SCHEMA.md) so it can actually fail before the fix and pass after. This does not affect the verdict; the defect and the fix are both correct as stated.
+**Verifier correction (already applied to this ticket):** Nothing material. One cosmetic note for the fixer's acceptance criteria: the second criterion, "grep -n 'Added: migration 000017' docs/SCHEMA.md no longer matches either section", is vacuously satisfiable — that literal pattern already matches nothing today, because the file's text is '**Added:** migration 000017' with bold markers. The criterion should be written against the real text (e.g. grep -n '\\*\\*Added:\\*\\* migration 000017' docs/SCHEMA.md) so it can actually fail before the fix and pass after. This does not affect the verdict; the defect and the fix are both correct as stated.
 
 ### Evidence
 
@@ -1356,7 +1365,7 @@ Fix the migration number cited for price_history's removal (or remove the citati
 
 ## FU-18 — Reconcile docs/API.md with the live route table
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-26](https://linear.app/slabledger/issue/SLA-26/reconcile-docsapimd-with-the-live-route-table)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1384,7 +1393,10 @@ docs/API.md documents removed marketmovers/advisor/sell-sheet endpoints and is m
 - docs/API.md documents POST /api/campaigns/{id}/sell-sheet, POST /api/portfolio/sell-sheet, and a full /api/sell-sheet/items CRUD set; only GET /api/sell-sheet is registered.
   - Reproduce: `grep -n sell-sheet internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go`
 - At least 13 live routes have no corresponding ### heading in docs/API.md.
-  - Reproduce: `comm -23 <(grep -ohE '"(GET|POST|PUT|PATCH|DELETE) [^"]+"' internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go | tr -d '"' | sed -E 's#\{[a-zA-Z_]+\}#{}#g' | sort -u) <(grep -oE '### `(GET|POST|PUT|PATCH|DELETE) [^`]+`' docs/API.md | sed -E 's/### `//; s/`//' | sed -E 's#\{[a-zA-Z_]+\}#{}#g' | sort -u)`
+  - Reproduce: 
+```
+comm -23 <(grep -ohE '"(GET|POST|PUT|PATCH|DELETE) [^"]+"' internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go | tr -d '"' | sed -E 's#\{[a-zA-Z_]+\}#{}#g' | sort -u) <(grep -oE '### `(GET|POST|PUT|PATCH|DELETE) [^`]+`' docs/API.md | sed -E 's/### `//; s/`//' | sed -E 's#\{[a-zA-Z_]+\}#{}#g' | sort -u)
+```
 
 ### Proposed fix
 
@@ -1412,7 +1424,7 @@ Remove the marketmovers, extra advisor, and extra sell-sheet endpoint sections f
 
 ## FU-19 — Purge removed subsystems from the remaining documentation
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-27](https://linear.app/slabledger/issue/SLA-27/purge-removed-subsystems-from-the-remaining-documentation)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1572,7 +1584,7 @@ Either rename the doc comment's last pipeline step to the function that actually
 
 ## FU-20 — Reconcile .env.example with what loader.go actually reads
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-28](https://linear.app/slabledger/issue/SLA-28/reconcile-envexample-with-what-loadergo-actually-reads)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1643,7 +1655,7 @@ Add ADVISOR_MAX_TOOL_ROUNDS as a live (uncommented) entry in .env.example, and u
 
 ## FU-21 — Re-enable the scheduler tests blocked by a stale TODO
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-29](https://linear.app/slabledger/issue/SLA-29/re-enable-the-scheduler-tests-blocked-by-a-stale-todo)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1699,7 +1711,7 @@ Write direct tests for refreshBatch covering: candidate-fetch error handling and
 
 ## FU-22 — Add test coverage for the dhlisting adapter package
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-30](https://linear.app/slabledger/issue/SLA-30/add-test-coverage-for-the-dhlisting-adapter-package)  
 **Label:** Improvement · **Priority:** 3
 
 <details><summary>Ticket body as posted</summary>
@@ -1750,7 +1762,7 @@ Add table-driven tests for PSAImporterAdapter.PSAImport (success, batch-rejected
 
 ## FU-23 — Move the tuning computation into the package named tuning
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-31](https://linear.app/slabledger/issue/SLA-31/move-the-tuning-computation-into-the-package-named-tuning)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -1801,7 +1813,7 @@ Move tuning.go, tuning_analytics.go, tuning_stddev.go, tuning_types.go (and thei
 
 - [ ] go build ./... and go test -race ./... pass after the move.
 - [ ] bash scripts/check-imports.sh passes: internal/domain/tuning imports only inventory and observability, and no other sibling imports tuning.
-- [ ] git grep -lE '\bCompute(Recommendations|PriceTierPerformance|BuyThresholdAnalysis|CardPerformance)\b' -- 'internal/domain/inventory/*.go' returns empty.
+- [ ] git grep -lE '\\bCompute(Recommendations|PriceTierPerformance|BuyThresholdAnalysis|CardPerformance)\\b' -- 'internal/domain/inventory/*.go' returns empty.
 
 ### Definition of done
 
@@ -1815,7 +1827,7 @@ Move tuning.go, tuning_analytics.go, tuning_stddev.go, tuning_types.go (and thei
 
 ## FU-24 — Rename the two mis-named inventory files
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-32](https://linear.app/slabledger/issue/SLA-32/rename-the-two-mis-named-inventory-files)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -1897,7 +1909,7 @@ Delete the file by relocating its two methods: LookupCert alongside the other ce
 
 ## FU-25 — Move invoice projection from inventory to the finance package
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-33](https://linear.app/slabledger/issue/SLA-33/move-invoice-projection-from-inventory-to-the-finance-package)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -1939,7 +1951,7 @@ Move invoice_projection.go into internal/domain/finance/. finance already import
 
 - [ ] go build ./... and go test -race ./... pass after the move.
 - [ ] bash scripts/check-imports.sh passes.
-- [ ] git grep -n '\bComputeInvoiceProjection\b' -- 'internal/domain/inventory/*.go' returns only the stale comment at types_analytics.go:63, updated or removed.
+- [ ] git grep -n '\\bComputeInvoiceProjection\\b' -- 'internal/domain/inventory/*.go' returns only the stale comment at types_analytics.go:63, updated or removed.
 
 ### Definition of done
 
@@ -1953,7 +1965,7 @@ Move invoice_projection.go into internal/domain/finance/. finance already import
 
 ## FU-26 — Extract the campaign-suggestions cluster out of inventory
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-34](https://linear.app/slabledger/issue/SLA-34/extract-the-campaign-suggestions-cluster-out-of-inventory)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2015,7 +2027,7 @@ Move the four suggestion*.go files into internal/domain/portfolio/, their sole c
 
 ## FU-27 — Extract the CSV-import subsystem out of inventory
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-35](https://linear.app/slabledger/issue/SLA-35/extract-the-csv-import-subsystem-out-of-inventory)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2069,7 +2081,7 @@ Decompose in three ordered steps, largest structural win last. (1) Take the two 
 ### Acceptance criteria
 
 - [ ] After each step independently: go build ./... and go test -race ./... pass, and bash scripts/check-imports.sh passes.
-- [ ] After step 2, internal/domain/csvimport imports internal/domain/inventory and no other internal/domain sibling, and git grep -lE '\bcsvimport\.' -- 'internal/domain/inventory/*.go' returns empty (the dependency runs one way only).
+- [ ] After step 2, internal/domain/csvimport imports internal/domain/inventory and no other internal/domain sibling, and git grep -lE '\\bcsvimport\\.' -- 'internal/domain/inventory/*.go' returns empty (the dependency runs one way only).
 - [ ] git ls-files 'internal/domain/inventory/*.go' | grep -v _test | xargs wc -l reports a total below 7,000 after steps 1 and 2.
 
 ### Definition of done
@@ -2084,7 +2096,7 @@ Decompose in three ordered steps, largest structural win last. (1) Take the two 
 
 ## FU-28 — Make the inventory Service interface segmentation buy an actual seam
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-36](https://linear.app/slabledger/issue/SLA-36/make-the-inventory-service-interface-segmentation-buy-an-actual-seam)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2151,7 +2163,7 @@ Either (a) split CampaignsHandler and CampaignToolExecutor to depend on the narr
 
 ## FU-29 — Split the 55-method PurchaseRepository persistence port
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-37](https://linear.app/slabledger/issue/SLA-37/split-the-55-method-purchaserepository-persistence-port)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2217,7 +2229,7 @@ Split PurchaseRepository along the same lines the Postgres implementation alread
 
 ## FU-30 — Decompose the 286-line ListPurchases function
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-38](https://linear.app/slabledger/issue/SLA-38/decompose-the-286-line-listpurchases-function)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2267,7 +2279,7 @@ Extract the per-purchase body (everything inside the `for _, cn := range sortedC
 
 ## FU-31 — Decompose the 312-line BuildGroup scheduler constructor
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-39](https://linear.app/slabledger/issue/SLA-39/decompose-the-312-line-buildgroup-scheduler-constructor)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2324,7 +2336,7 @@ Extract each `if deps.X != nil { ... }` block into its own `buildXScheduler(cfg 
 
 ## FU-32 — Bring inmemory_campaign_store.go under the file-size budget
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-40](https://linear.app/slabledger/issue/SLA-40/bring-inmemory-campaign-storego-under-the-file-size-budget)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2380,7 +2392,7 @@ Split inmemory_campaign_store.go along its own existing section markers into per
 
 ## FU-33 — Give the demand repository contract a shared Go type across the seam
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-41](https://linear.app/slabledger/issue/SLA-41/give-the-demand-repository-contract-a-shared-go-type-across-the-seam)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2453,7 +2465,7 @@ Define the velocity / demand / saturation payloads as exported domain structs in
 
 ## FU-34 — Give the DH tombstone threshold a home in the domain
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-42](https://linear.app/slabledger/issue/SLA-42/give-the-dh-tombstone-threshold-a-home-in-the-domain)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2516,7 +2528,7 @@ Add an exported constant (or an IsTombstoned(attempts int) bool predicate) to in
 
 ## FU-35 — Route the local cents/dollars and grader-regex reimplementations through the shared helpers
 
-**Linear ID:** _(not yet filed)_  
+**Linear:** [SLA-43](https://linear.app/slabledger/issue/SLA-43/route-the-local-centsdollars-and-grader-regex-reimplementations)  
 **Label:** Improvement · **Priority:** 4
 
 <details><summary>Ticket body as posted</summary>
@@ -2564,7 +2576,7 @@ Delete dollarsToCents in internal/adapters/clients/dhprice/batch_adapter.go and 
 
 - [ ] go build ./... succeeds with dollarsToCents and centsToDollars removed and their call sites replaced with mathutil.ToCentsInt / mathutil.ToDollars
 - [ ] go test ./internal/adapters/clients/dhprice/... ./internal/adapters/httpserver/handlers/... passes unchanged
-- [ ] grep -rn 'func dollarsToCents\|func centsToDollars' --include='*.go' . returns no results
+- [ ] grep -rn 'func dollarsToCents\\|func centsToDollars' --include='*.go' . returns no results
 
 ## DUP-002 — Two independently-maintained grader/grade regexes accept different fractional-grade formats for the same concept
 
@@ -2577,7 +2589,7 @@ Delete dollarsToCents in internal/adapters/clients/dhprice/batch_adapter.go and 
 - ExtractGrade (PSA-only, used by the PSA CSV import path and cert enrichment) accepts a multi-digit fractional grade component.
   - `internal/domain/inventory/import_parsing.go:43,49`
   - Reproduce: `sed -n '43,49p' internal/domain/inventory/import_parsing.go`
-- ExtractGraderAndGrade (4-grader, used by the Shopify import path) is documented as the multi-grader counterpart to ExtractGrade but only accepts a single-digit fractional grade component -- the two regexes were clearly copy-derived (same '\bGRADER\s*(\d{1,2}...)\b' shape, same 1-10 range check) but have diverged in decimal precision.
+- ExtractGraderAndGrade (4-grader, used by the Shopify import path) is documented as the multi-grader counterpart to ExtractGrade but only accepts a single-digit fractional grade component -- the two regexes were clearly copy-derived (same '\\bGRADER\\s*(\\d{1,2}...)\\b' shape, same 1-10 range check) but have diverged in decimal precision.
   - `internal/domain/inventory/import_types.go:164,168`
   - Reproduce: `sed -n '164,168p' internal/domain/inventory/import_types.go; grep -n 'For multi-grader support' internal/domain/inventory/import_parsing.go`
 - Concretely demonstrated divergence: a title containing 'PSA 9.55' matches ExtractGrade's regex in full but ExtractGraderAndGrade's regex only matches the truncated 'PSA 9', producing grade 9 instead of 9.55 for the same input string.
