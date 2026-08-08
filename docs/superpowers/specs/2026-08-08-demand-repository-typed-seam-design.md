@@ -73,10 +73,12 @@ In scope:
 - Replace the eight opaque blob fields with exported domain structs.
 - Delete the four hand-mirrored unexported structs in `service.go`.
 - Fix Defect 1.
-- Delete `ListCardCacheByDemandScore` and the five `CardCache` blob columns.
+- Delete `ListCardCacheByDemandScore` and stop reading and writing the five
+  `CardCache` blob columns.
 
 Out of scope: Defect 2 (SLA-61), any change to DH client types, any change to
-the niches leaderboard's scoring or ranking.
+the niches leaderboard's scoring or ranking, **and the migration that physically
+drops the five columns** — see "Column removal is a separate release".
 
 ## Decisions
 
@@ -88,7 +90,8 @@ zero production callers — the symbol appears only in the interface
 (`repository.go:16`), the Postgres implementation
 (`dh_demand_repository.go:88`), and the mock (`demand_repository.go:14`). Typing
 five structs nobody reads would be work in the wrong direction. They go, along
-with the method and the columns.
+with the method. The columns themselves are dropped one release later — see
+"Column removal is a separate release".
 
 `CardCache` keeps `CardID`, `Window`, `DemandScore`, `DemandDataQuality`,
 `AnalyticsComputedAt`, `DemandComputedAt`, and `FetchedAt` — the fields
@@ -206,10 +209,17 @@ type CharacterCache struct {
 	DemandComputedAt    *time.Time
 	AnalyticsComputedAt *time.Time
 	FetchedAt           time.Time
-	// MalformedPayloads names the payload columns that were present but
-	// failed to decode ("demand", "velocity", "saturation"). See
-	// "Error handling".
-	MalformedPayloads []string
+	// MalformedPayloads records payload columns that were present but failed
+	// to decode, with the decode error preserved. See "Error handling".
+	MalformedPayloads []MalformedPayload
+}
+
+// MalformedPayload names a payload column that failed to decode and carries the
+// error, so the domain can log the same diagnostic the adapter cannot.
+type MalformedPayload struct {
+	// Column is "demand", "velocity", or "saturation".
+	Column string
+	Err    error
 }
 ```
 
@@ -221,36 +231,76 @@ true.
 
 Delete `ListCardCacheByDemandScore` from the interface.
 
-### 4. Migration `000032_drop_card_cache_blobs`
+### 4. No migration in this change
 
-Up — drop five columns from `dh_card_cache` (defined at
-`000001_initial_schema.up.sql:639`):
+SLA-41 stops reading and writing the five `dh_card_cache` blob columns. It does
+**not** drop them. See "Column removal is a separate release" below for why, and
+for what the follow-up ticket has to do.
 
-```sql
-ALTER TABLE dh_card_cache
-    DROP COLUMN demand_json,
-    DROP COLUMN velocity_json,
-    DROP COLUMN trend_json,
-    DROP COLUMN saturation_json,
-    DROP COLUMN price_distribution_json;
+The columns are `NULL`-able as defined at `000001_initial_schema.up.sql:639`, so
+an `INSERT` that omits them succeeds. Existing rows keep whatever they hold until
+the follow-up migration lands; nothing reads it.
 
-DROP INDEX IF EXISTS idx_card_cache_demand_score;
-```
-
-The index goes too. It exists only to serve `ORDER BY demand_score DESC`, which
-appears in exactly one query — `ListCardCacheByDemandScore`
-(`dh_demand_repository.go:96`) — and that method is being deleted. The
-`demand_score` column itself stays; `GetCardCache` and `CardDataQualityStats`
-still read it, neither with an ordering.
-
-Down: re-add the five columns as nullable `TEXT` and recreate the index. Column
-data is unrecoverable on rollback, which is acceptable — nothing reads it, and
-the scheduler repopulates the rest of the row on its next run.
-
-**`dh_character_cache` needs no migration.** Its `demand_json`,
+**`dh_character_cache` needs no migration either.** Its `demand_json`,
 `velocity_json`, and `saturation_json` columns keep their names, types, and
 contents. Only the Go-side representation changes, and the JSON tags are chosen
 so persisted rows decode as-is.
+
+#### Column removal is a separate release
+
+Dropping the columns in the same release as the code change breaks this repo's
+normal rollback path. The chain:
+
+- Migrations run automatically and unconditionally at startup
+  (`cmd/slabledger/main.go:210-212`).
+- Rolling the app image back does **not** run the Down migration — stated
+  explicitly at `docs/OPERATIONS.md:87`: "Rolling back the app image does NOT
+  undo a migration... the rolled-back app may crash because its code doesn't
+  match the schema."
+- The previous binary names all five columns explicitly, in both directions:
+  `UpsertCardCache` (`dh_demand_repository.go:36`) and `GetCardCache`
+  (`dh_demand_repository.go:69`).
+
+So `deploy → migrate → roll back` leaves the old binary issuing
+`SELECT ... demand_json ...` against a table that no longer has the column, and
+the card cache read path fails outright. This repository auto-deploys on push to
+`main`, so that sequence is the ordinary recovery path, not a corner case.
+
+The fix is the standard expand/contract ordering, split across two tickets:
+
+1. **This ticket (SLA-41)** — the code stops touching the columns. Fully
+   rollback-safe in both directions: the old binary still finds every column it
+   names, and the new binary does not care that they are there.
+2. **Follow-up ticket** — once the SLA-41 release is confirmed live and the team
+   is no longer willing to roll back past it, a `000032_drop_card_cache_blobs`
+   migration drops the five columns:
+
+   ```sql
+   ALTER TABLE dh_card_cache
+       DROP COLUMN demand_json,
+       DROP COLUMN velocity_json,
+       DROP COLUMN trend_json,
+       DROP COLUMN saturation_json,
+       DROP COLUMN price_distribution_json;
+   ```
+
+   Down: re-add the five columns as nullable `TEXT`. Column data is unrecoverable
+   on rollback, which is acceptable — nothing reads it, and the scheduler
+   repopulates the rest of the row on its next run.
+
+   **No index statement belongs in that migration.**
+   `idx_card_cache_demand_score` does not exist: migration 000003 already dropped
+   it (`000003_supabase_security_and_perf_fixes.up.sql:269`), and
+   `docs/SCHEMA.md:871` records the resulting state — "Indexes: none —
+   `idx_card_cache_demand_score` was dropped in migration 000003". Adding a
+   `CREATE INDEX` to the Down migration would invent an index that was never
+   present at version 31.
+
+The `demand_score` column itself stays in both steps; `GetCardCache` and
+`CardDataQualityStats` still read it, neither with an ordering. Deleting
+`ListCardCacheByDemandScore` removes the only `ORDER BY demand_score DESC` in the
+codebase (`dh_demand_repository.go:96`), but since the supporting index is
+already gone, that has no schema consequence.
 
 ### 5. `internal/adapters/storage/postgres/dh_demand_repository.go`
 
@@ -331,10 +381,36 @@ as a nil pointer.
 
 Rather than thread a logger into the repository, the adapter records the failure
 on the row: a column that is present but fails to decode yields a nil field
-**and** an entry in `MalformedPayloads`. The domain keeps the absent-vs-corrupt
-distinction, `buildSignalIndex` keeps counting, `SkippedRows` keeps its meaning,
-and the existing warn log keeps firing. One malformed column does not fail the
-scan or drop the row — the other payloads on that row still decode.
+**and** an entry in `MalformedPayloads` carrying both the column name and the
+`json.Unmarshal` error. The domain keeps the absent-vs-corrupt distinction,
+`buildSignalIndex` keeps counting, and `SkippedRows` keeps its meaning. One
+malformed column does not fail the scan or drop the row — the other payloads on
+that row still decode.
+
+**Where the log happens.** Carrying the column name alone would be a real loss:
+today `parseCharacterMarket` logs the character *and* the concrete decode error
+(`service.go:322`), and `SkippedRows` is only an aggregate surfaced when the
+campaign-signals endpoint is called (`campaign_signals_handler.go:36`) — it is
+not a substitute. Since `Err` travels with the entry and
+`parseCharacterMarket` already holds both `ctx` and `s.logger`, the warn moves
+there and keeps its full context:
+
+```go
+for _, mp := range row.MalformedPayloads {
+	if mp.Column != "velocity" {
+		continue
+	}
+	s.logger.Warn(ctx, "velocity_json unmarshal failed",
+		observability.String("character", row.Character),
+		observability.Err(mp.Err))
+}
+```
+
+Same message, same fields, same trigger condition — only the decode site moves.
+`demand` and `saturation` decode failures stay silent, matching today: neither
+`parseCharacterDemand` (`service.go:302-311`) nor the saturation branch
+(`service.go:337-343`) logs. Widening that is a separate change, deliberately not
+made here.
 
 Old rows written under the nested saturation shape decode to
 `ActiveListingCount: 0` — exactly today's behaviour, not a regression — and
@@ -349,8 +425,9 @@ self-heal on the next scheduler run.
   through the scheduler mapping into `CharacterCache`, and assert the domain
   reads 42. This test must fail against the current `json.Marshal(entry)` line.
 - **Malformed-payload test**: a row with corrupt velocity JSON yields a nil
-  `Velocity`, a `MalformedPayloads` slice containing `"velocity"`, and a
-  non-zero `SkippedRows` from `CampaignSignals`.
+  `Velocity`, a `MalformedPayloads` entry with `Column: "velocity"` and a
+  non-nil `Err`, a warn log carrying the character name, and a non-zero
+  `SkippedRows` from `CampaignSignals`.
 - **Backward-compatibility test**: a persisted blob in today's on-disk shape
   decodes into the new struct with the same values the old unexported struct
   produced.
@@ -373,6 +450,9 @@ self-heal on the next scheduler run.
    `grep -rn 'ListCardCacheByDemandScore' internal/ cmd/` returns nothing.
    (Scope it to code — this spec mentions the symbol by name, so a repo-root
    grep will always match.)
+6. Confirm no migration was added:
+   `ls internal/adapters/storage/postgres/migrations/` shows nothing numbered
+   `000032`. A migration here would make the release non-rollback-safe.
 
 **One documented exception to "no behaviour change":**
 `NicheMarket.ActiveListingCount` changes from a constant 0 to real DH values.
@@ -386,6 +466,10 @@ That is Defect 1 being fixed, and it is the only intended output difference.
   `CharacterDemand.DataQuality` field; per decision 3, the per-era variant is
   deleted rather than deferred, since DH's `by_era` entries could not populate
   it even in principle.
+- **Drop the five `dh_card_cache` blob columns.** Deferred out of this ticket so
+  the SLA-41 release stays rollback-safe; see "Column removal is a separate
+  release" for the migration and the precondition. Needs a Linear ticket filed
+  before SLA-41 merges, or the columns become permanent dead weight.
 - `ByGrade` / `ByPriceTier` are persisted but unread. If they are still unread
   in a few months, delete them rather than let them become the next
   write-only blob.
