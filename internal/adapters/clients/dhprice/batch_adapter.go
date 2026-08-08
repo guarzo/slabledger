@@ -3,11 +3,11 @@ package dhprice
 import (
 	"context"
 	"fmt"
-	"math"
 	"strconv"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 // BatchAnalyticsClient is the subset of dh.Client needed for batch pricing.
@@ -74,20 +74,16 @@ func (a *BatchAdapter) BatchPriceDistribution(ctx context.Context, cardIDs []int
 		}
 		for gradeKey, bucket := range *r.PriceDistribution {
 			dist.ByGrade[gradeKey] = arbitrage.PriceBucket{
-				MinCents:    dollarsToCents(bucket.Min),
-				MedianCents: dollarsToCents(bucket.Median),
-				MaxCents:    dollarsToCents(bucket.Max),
-				AvgCents:    dollarsToCents(bucket.Avg),
+				MinCents:    mathutil.ToCentsInt(bucket.Min),
+				MedianCents: mathutil.ToCentsInt(bucket.Median),
+				MaxCents:    mathutil.ToCentsInt(bucket.Max),
+				AvgCents:    mathutil.ToCentsInt(bucket.Avg),
 				SampleSize:  bucket.SampleSize,
 			}
 		}
 		out[r.CardID] = dist
 	}
 	return out, nil
-}
-
-func dollarsToCents(dollars float64) int {
-	return int(math.Round(dollars * 100))
 }
 
 var _ arbitrage.BatchPricer = (*BatchAdapter)(nil)
