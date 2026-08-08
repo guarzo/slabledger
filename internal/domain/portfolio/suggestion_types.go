@@ -1,4 +1,6 @@
-package inventory
+package portfolio
+
+import "github.com/guarzo/slabledger/internal/domain/inventory"
 
 // CampaignSuggestion is a data-driven recommendation for a new or modified campaign.
 type CampaignSuggestion struct {
@@ -47,7 +49,7 @@ type ExpectedMetrics struct {
 
 // SuggestionsResponse is the API response for campaign suggestions.
 type SuggestionsResponse struct {
-	NewCampaigns []CampaignSuggestion `json:"newCampaigns"`
-	Adjustments  []CampaignSuggestion `json:"adjustments"`
-	DataSummary  InsightsDataSummary  `json:"dataSummary"`
+	NewCampaigns []CampaignSuggestion          `json:"newCampaigns"`
+	Adjustments  []CampaignSuggestion          `json:"adjustments"`
+	DataSummary  inventory.InsightsDataSummary `json:"dataSummary"`
 }

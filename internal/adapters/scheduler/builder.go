@@ -1,8 +1,6 @@
 package scheduler
 
 import (
-	"time"
-
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -122,306 +120,83 @@ type BuildResult struct {
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
+//
+// Each scheduler is built by its own buildXScheduler helper in builder_schedulers.go,
+// which returns nil when that scheduler's prerequisites are not met. The helpers return
+// concrete pointer types rather than the Scheduler interface so the nil checks below
+// test the pointer itself: a nil *T assigned to a Scheduler interface would compare
+// non-nil and add a broken entry to the group.
 func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	var schedulers []Scheduler
-	var clRefresh *CardLadderRefreshScheduler
-	var psaSync *PSASyncScheduler
-	var certEnrichJob *CertEnrichJob
-	var dhReconcile *DHReconcileScheduler
 
-	// Price refresh scheduler
-	schedulerConfig := Config{
-		RefreshInterval:    cfg.PriceRefresh.RefreshInterval,
-		BatchSize:          cfg.PriceRefresh.BatchSize,
-		BatchDelay:         cfg.PriceRefresh.BatchDelay,
-		MaxBurstCalls:      cfg.PriceRefresh.MaxBurstCalls,
-		MaxCallsPerHour:    cfg.PriceRefresh.MaxCallsPerHour,
-		BurstPauseDuration: cfg.PriceRefresh.BurstPauseDuration,
-		Enabled:            cfg.PriceRefresh.Enabled,
+	// Price refresh is the one unconditional scheduler; every other is gated.
+	schedulers = append(schedulers, buildPriceRefreshScheduler(cfg, deps))
+
+	if s := buildSessionCleanupScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
 	}
-	priceScheduler := NewPriceRefreshScheduler(
-		deps.RefreshCandidates, deps.APITracker, deps.HealthChecker, deps.PriceProvider,
-		deps.Logger, schedulerConfig,
-	)
-	schedulers = append(schedulers, priceScheduler)
-
-	// Session cleanup scheduler (if auth is enabled)
-	if deps.AuthService != nil {
-		cleanupConfig := SessionCleanupConfig{
-			Enabled:  cfg.SessionCleanup.Enabled,
-			Interval: cfg.SessionCleanup.Interval,
-		}
-		sessionCleanupScheduler := NewSessionCleanupScheduler(
-			deps.AuthService, deps.Logger, cleanupConfig,
-		)
-		schedulers = append(schedulers, sessionCleanupScheduler)
+	if s := buildAccessLogCleanupScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildGapCleanupScheduler(deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildInventoryRefreshScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildSnapshotEnrichScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
 	}
 
-	// Access log cleanup scheduler (if enabled)
-	if cfg.Maintenance.AccessLogCleanupEnabled && cfg.Maintenance.AccessLogRetentionDays > 0 {
-		accessLogConfig := AccessLogCleanupConfig{
-			Enabled:       cfg.Maintenance.AccessLogCleanupEnabled,
-			Interval:      cfg.Maintenance.AccessLogCleanupInterval,
-			RetentionDays: cfg.Maintenance.AccessLogRetentionDays,
-		}
-		accessLogCleanupScheduler := NewAccessLogCleanupScheduler(
-			deps.AccessTracker, deps.Logger, accessLogConfig,
-		)
-		schedulers = append(schedulers, accessLogCleanupScheduler)
-	}
-
-	// Scoring data gap cleanup scheduler (if gap store is provided)
-	if deps.GapStore != nil {
-		schedulers = append(schedulers, NewGapCleanupScheduler(deps.GapStore, deps.Logger))
-	}
-
-	// Inventory snapshot refresh scheduler (if dependencies are provided)
-	if deps.InventoryLister != nil && deps.SnapshotRefresher != nil {
-		invConfig := config.InventoryRefreshConfig{
-			Enabled:        cfg.InventoryRefresh.Enabled,
-			Interval:       cfg.InventoryRefresh.Interval,
-			StaleThreshold: cfg.InventoryRefresh.StaleThreshold,
-			BatchSize:      cfg.InventoryRefresh.BatchSize,
-			BatchDelay:     cfg.InventoryRefresh.BatchDelay,
-		}
-		inventoryScheduler := NewInventoryRefreshScheduler(
-			deps.InventoryLister, deps.SnapshotRefresher,
-			deps.Logger, invConfig,
-		)
-		schedulers = append(schedulers, inventoryScheduler)
-	}
-
-	// Snapshot enrichment scheduler (processes pending snapshots from async imports)
-	if deps.SnapshotEnrichService != nil {
-		enrichScheduler := NewSnapshotEnrichScheduler(
-			deps.SnapshotEnrichService, deps.Logger, cfg.SnapshotEnrich,
-		)
-		schedulers = append(schedulers, enrichScheduler)
-	}
-
-	// Card Ladder value refresh scheduler.
-	// Created whenever the store and purchase interfaces are available, even if
-	// no client exists yet at startup. SetClient is called by the handler when
-	// credentials are saved for the first time, activating the scheduler without
-	// requiring a server restart.
-	if deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil {
-		var clOpts []CardLadderRefreshOption
-		if deps.DHPushStatusUpdater != nil {
-			clOpts = append(clOpts, WithCLDHPushUpdater(deps.DHPushStatusUpdater))
-		}
-		if deps.CardLadderSyncUpdater != nil {
-			clOpts = append(clOpts, WithCLSyncUpdater(deps.CardLadderSyncUpdater))
-		}
-		if deps.EventRecorder != nil {
-			clOpts = append(clOpts, WithCLEventRecorder(deps.EventRecorder))
-		}
-		if deps.SchedulerStatsStore != nil {
-			clOpts = append(clOpts, WithCLStatsStore(deps.SchedulerStatsStore))
-		}
-		if deps.CardLadderCompRefreshStore != nil {
-			clOpts = append(clOpts, WithCLCompRefreshStore(deps.CardLadderCompRefreshStore))
-		}
-		clRefresh = NewCardLadderRefreshScheduler(
-			deps.CardLadderClient, deps.CardLadderStore,
-			deps.CardLadderPurchaseLister, deps.CardLadderValueUpdater,
-			deps.CardLadderGemRateUpdater,
-			deps.CardLadderSalesStore,
-			deps.Logger, cfg.CardLadder,
-			clOpts...,
-		)
+	clRefresh := buildCardLadderRefreshScheduler(cfg, deps)
+	if clRefresh != nil {
 		schedulers = append(schedulers, clRefresh)
 	}
 
-	// DH intelligence refresh scheduler (if client + repo are provided)
-	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHIntelligenceRepo != nil {
-		dhIntelConfig := DHIntelligenceRefreshConfig{
-			Enabled:   cfg.DH.Enabled,
-			Interval:  1 * time.Hour,
-			CacheTTL:  time.Duration(cfg.DH.CacheTTLHours) * time.Hour,
-			MaxPerRun: 50,
-		}
-		var intelOpts []IntelligenceRefreshOption
-		if deps.DHIntelligenceSeedLister != nil {
-			intelOpts = append(intelOpts, WithIntelligenceSeedLister(deps.DHIntelligenceSeedLister))
-		}
-		if deps.DHTombstoneRepo != nil {
-			intelOpts = append(intelOpts, WithIntelligenceTombstoneRepo(deps.DHTombstoneRepo))
-		}
-		schedulers = append(schedulers, NewDHIntelligenceRefreshScheduler(
-			deps.DHClient, deps.DHIntelligenceRepo, deps.Logger, dhIntelConfig, intelOpts...,
-		))
+	if s := buildDHIntelligenceRefreshScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildDHAnalyticsRefreshScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildCardTrajectoryRefreshScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildDHSuggestionsScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
 	}
 
-	// DH demand analytics refresh scheduler (daily; niche-opportunity cache).
-	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHDemandRepo != nil {
-		schedulers = append(schedulers, NewDHAnalyticsRefreshScheduler(
-			deps.DHClient,
-			deps.DHDemandRepo,
-			deps.DHUnsoldCardLister,
-			deps.Logger,
-			cfg.DHAnalyticsRefresh,
-		))
-	}
-
-	// Card trajectory refresh scheduler (weekly). Uses DH's graded-sales-analytics
-	// recent_sales array to build weekly price trajectory buckets.
-	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHTrajectoryRepo != nil && deps.DHIntelligenceSeedLister != nil {
-		schedulers = append(schedulers, NewCardTrajectoryRefreshScheduler(
-			deps.DHClient,
-			deps.DHTrajectoryRepo,
-			deps.DHIntelligenceSeedLister,
-			deps.Logger,
-			CardTrajectoryRefreshConfig{
-				Enabled:  cfg.DH.Enabled,
-				Interval: 7 * 24 * time.Hour,
-			},
-			deps.DHCompCacheStore,
-		))
-	}
-
-	// DH suggestions scheduler (if client + repo are provided)
-	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.DHSuggestionsRepo != nil {
-		dhSuggestConfig := DHSuggestionsConfig{
-			Enabled:  cfg.DH.Enabled,
-			Interval: 6 * time.Hour,
-		}
-		schedulers = append(schedulers, NewDHSuggestionsScheduler(
-			deps.DHClient, deps.DHSuggestionsRepo, deps.Logger, dhSuggestConfig,
-		))
-	}
-
-	// DH v2: Orders poll scheduler
-	var dhOrdersPoll *DHOrdersPollScheduler
-	if deps.DHOrdersClient != nil && deps.SyncStateStore != nil && deps.CampaignService != nil {
-		ordersPollCfg := DHOrdersPollConfig{
-			Enabled:  cfg.DH.Enabled,
-			Interval: cfg.DH.OrdersPollInterval,
-		}
-		dhOrdersPoll = NewDHOrdersPollScheduler(
-			deps.DHOrdersClient,
-			deps.SyncStateStore,
-			deps.CampaignService,
-			deps.EventRecorder,
-			deps.Logger,
-			ordersPollCfg,
-		)
+	dhOrdersPoll := buildDHOrdersPollScheduler(cfg, deps)
+	if dhOrdersPoll != nil {
 		schedulers = append(schedulers, dhOrdersPoll)
 	}
 
-	// DH v2: Inventory status poll scheduler
-	if deps.DHInventoryListClient != nil && deps.SyncStateStore != nil && deps.DHFieldsUpdater != nil && deps.PurchaseByCertLookup != nil {
-		inventoryPollCfg := DHInventoryPollConfig{
-			Enabled:  cfg.DH.Enabled,
-			Interval: cfg.DH.InventoryPollInterval,
-		}
-		schedulers = append(schedulers, NewDHInventoryPollScheduler(
-			deps.DHInventoryListClient,
-			deps.SyncStateStore,
-			deps.DHFieldsUpdater,
-			deps.PurchaseByCertLookup,
-			deps.EventRecorder,
-			deps.Logger,
-			inventoryPollCfg,
-		))
+	if s := buildDHInventoryPollScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildDHSoldReconcilerScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
 	}
 
-	// DH sold-status reconciler (safety net for best-effort dh_status update in CreateSale)
-	if deps.PurchaseRepo != nil {
-		soldReconcilerCfg := DHSoldReconcilerConfig{
-			Enabled:  cfg.DHSoldReconciler.Enabled,
-			Interval: cfg.DHSoldReconciler.Interval,
-		}
-		schedulers = append(schedulers, NewDHSoldReconcilerScheduler(
-			deps.PurchaseRepo,
-			deps.PurchaseRepo,
-			deps.Logger,
-			soldReconcilerCfg,
-		))
-	}
-
-	// DH inventory reconciliation scheduler (hourly drift scan).
-	if deps.DHReconciler != nil {
-		reconcileCfg := config.DHReconcileConfig{
-			Enabled:  cfg.DHReconcile.Enabled,
-			Interval: cfg.DHReconcile.Interval,
-		}
-		dhReconcile = NewDHReconcileScheduler(
-			deps.DHReconciler,
-			deps.Logger,
-			reconcileCfg,
-		)
+	dhReconcile := buildDHReconcileScheduler(cfg, deps)
+	if dhReconcile != nil {
 		schedulers = append(schedulers, dhReconcile)
 	}
 
-	// DH price-sync scheduler: reconciles reviewed price vs DH listing price.
-	if deps.DHPriceSyncService != nil {
-		schedulers = append(schedulers, NewDHPriceSyncScheduler(
-			deps.DHPriceSyncService,
-			deps.Logger,
-			DHPriceSyncConfig{
-				Enabled:  cfg.DHPriceSync.Enabled,
-				Interval: cfg.DHPriceSync.Interval,
-			},
-		))
+	if s := buildDHPriceSyncScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
+	}
+	if s := buildDHPushScheduler(cfg, deps); s != nil {
+		schedulers = append(schedulers, s)
 	}
 
-	// DH v2: Push scheduler — matches pending purchases and pushes to DH inventory
-	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() &&
-		deps.DHPushPendingLister != nil && deps.DHPushStatusUpdater != nil &&
-		deps.DHPushCardIDSaver != nil && deps.DHFieldsUpdater != nil {
-		pushCfg := DHPushConfig{
-			Enabled:  cfg.DH.Enabled,
-			Interval: cfg.DH.PushInterval,
-		}
-		var pushOpts []DHPushOption
-		if deps.DHPushConfigLoader != nil {
-			pushOpts = append(pushOpts, WithDHPushConfigLoader(deps.DHPushConfigLoader))
-		}
-		if deps.DHPushHoldSetter != nil {
-			pushOpts = append(pushOpts, WithDHPushHoldSetter(deps.DHPushHoldSetter))
-		}
-		if deps.EventRecorder != nil {
-			pushOpts = append(pushOpts, WithDHPushEventRecorder(deps.EventRecorder))
-		}
-		if deps.DHPushRelister != nil {
-			pushOpts = append(pushOpts, WithDHPushRelister(deps.DHPushRelister))
-		}
-		if deps.DHPushAttemptInc != nil {
-			pushOpts = append(pushOpts, WithDHPushAttemptIncrementer(deps.DHPushAttemptInc))
-		}
-		schedulers = append(schedulers, NewDHPushScheduler(
-			deps.DHPushPendingLister,
-			deps.DHPushStatusUpdater,
-			deps.DHClient, // implements DHPushPSAImporter via PSAImport()
-			deps.DHFieldsUpdater,
-			deps.DHPushCardIDSaver,
-			deps.Logger,
-			pushCfg,
-			pushOpts...,
-		))
-	}
-
-	// PSA portal sync scheduler (if provider and importer are provided)
-	if deps.PSARowProvider != nil && deps.PSAImporter != nil {
-		psaSync = NewPSASyncScheduler(
-			deps.PSARowProvider, deps.PSAImporter,
-			deps.Logger, cfg.PSASync,
-			WithPSATokenRefresher(deps.PSATokenRefresher),
-		)
+	psaSync := buildPSASyncScheduler(cfg, deps)
+	if psaSync != nil {
 		schedulers = append(schedulers, psaSync)
 	}
 
-	// Cert enrichment scheduler (if cert lookup is provided).
-	// Prefer the pre-built job (created before service construction) so the same instance
-	// is injected into inventory.service via WithCertEnrichEnqueuer.
-	if deps.CertEnrichJobPrebuilt != nil {
-		certEnrichJob = deps.CertEnrichJobPrebuilt
-		schedulers = append(schedulers, certEnrichJob)
-	} else if deps.CertLookup != nil && deps.PurchaseRepo != nil {
-		certEnrichJob = NewCertEnrichJob(
-			deps.CertLookup, deps.PurchaseRepo,
-			deps.Logger,
-		)
+	certEnrichJob := buildCertEnrichJob(deps)
+	if certEnrichJob != nil {
 		schedulers = append(schedulers, certEnrichJob)
 	}
 

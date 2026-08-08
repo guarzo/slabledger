@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-)
 
-const tombstoneThreshold = 3
+	"github.com/guarzo/slabledger/internal/domain/pricing"
+)
 
 type DHCardTombstoneStore struct {
 	db *sql.DB
@@ -29,7 +29,7 @@ func (s *DHCardTombstoneStore) IsTombstoned(ctx context.Context, cardID int) (bo
 	if err != nil {
 		return false, fmt.Errorf("is tombstoned: %w", err)
 	}
-	return attempts >= tombstoneThreshold, nil
+	return pricing.IsDHTombstoned(attempts), nil
 }
 
 func (s *DHCardTombstoneStore) RecordFailure(ctx context.Context, cardID int, errMsg string) (int, error) {
@@ -74,7 +74,7 @@ func (s *DHCardTombstoneStore) Count(ctx context.Context) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM dh_card_tombstones WHERE attempts >= $1`,
-		tombstoneThreshold,
+		pricing.DHTombstoneThreshold,
 	).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("count tombstones: %w", err)

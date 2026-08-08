@@ -11,20 +11,32 @@ import (
 var _ inventory.CertEnrichEnqueuer = (*CertEnrichJob)(nil)
 var _ Scheduler = (*CertEnrichJob)(nil)
 
+// CertEnrichRepository is the narrow slice of purchase persistence this job
+// needs: find the purchase behind a cert, then write back the metadata PSA
+// returned. Declared here rather than taking inventory.PurchaseRepository so
+// the job's actual surface is visible at the seam.
+type CertEnrichRepository interface {
+	GetPurchaseByCertNumber(ctx context.Context, grader string, certNumber string) (*inventory.Purchase, error)
+	UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error
+	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error
+	UpdatePurchaseGrade(ctx context.Context, id string, gradeValue float64) error
+	UpdatePurchaseImages(ctx context.Context, id string, frontURL, backURL string) error
+}
+
 // CertEnrichJob handles background PSA certificate enrichment.
 // It processes cert numbers sequentially, respecting PSA API rate limits (100/day).
 type CertEnrichJob struct {
 	StopHandle
 	ch         chan string
 	certLookup inventory.CertLookup
-	repo       inventory.PurchaseRepository
+	repo       CertEnrichRepository
 	logger     observability.Logger
 }
 
 // NewCertEnrichJob creates a new cert enrichment job.
 func NewCertEnrichJob(
 	certLookup inventory.CertLookup,
-	repo inventory.PurchaseRepository,
+	repo CertEnrichRepository,
 	logger observability.Logger,
 ) *CertEnrichJob {
 	return &CertEnrichJob{

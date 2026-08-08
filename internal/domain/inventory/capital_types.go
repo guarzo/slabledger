@@ -60,7 +60,8 @@ type CapitalSummary struct {
 	RefundedCents             int           `json:"refundedCents"` // Total refunds
 	PaidCents                 int           `json:"paidCents"`     // Total paid
 	UnpaidInvoiceCount        int           `json:"unpaidInvoiceCount"`
-	// Invoice-cycle actuals (see ComputeInvoiceProjection in invoice_projection.go).
+	// Invoice-cycle actuals (populated by the finance service; see
+	// ComputeInvoiceProjection in internal/domain/finance/invoice_projection.go).
 	NextInvoiceDate                string             `json:"nextInvoiceDate,omitempty"`      // YYYY-MM-DD, empty if no unpaid
 	NextInvoiceDueDate             string             `json:"nextInvoiceDueDate,omitempty"`   // YYYY-MM-DD
 	NextInvoiceAmountCents         int                `json:"nextInvoiceAmountCents"`         // TotalCents - PaidCents of earliest unpaid invoice (amount still owed)
@@ -127,76 +128,4 @@ func ComputeCapitalSummary(raw *CapitalRawData) *CapitalSummary {
 		PaidCents:                 raw.PaidCents,
 		UnpaidInvoiceCount:        raw.UnpaidInvoiceCount,
 	}
-}
-
-// PurchaseFilter holds optional filtering criteria for GetAllPurchasesWithSales.
-type PurchaseFilter struct {
-	SinceDate       string // "2025-01-01" or empty for all
-	ExcludeArchived bool
-	ExcludeExternal bool
-}
-
-// PurchaseFilterOpt is a functional option for configuring PurchaseFilter.
-type PurchaseFilterOpt func(*PurchaseFilter)
-
-// WithSinceDate returns an option that filters purchases to those on or after the given date (YYYY-MM-DD).
-func WithSinceDate(d string) PurchaseFilterOpt {
-	return func(f *PurchaseFilter) { f.SinceDate = d }
-}
-
-// WithExcludeArchived returns an option that excludes purchases from archived inventory.
-func WithExcludeArchived() PurchaseFilterOpt {
-	return func(f *PurchaseFilter) { f.ExcludeArchived = true }
-}
-
-// WithExcludeExternal returns an option that excludes purchases from the
-// external (Shopify-imported) campaign. External purchases have no real cost
-// basis, so including them skews any profit/margin calculation.
-func WithExcludeExternal() PurchaseFilterOpt {
-	return func(f *PurchaseFilter) { f.ExcludeExternal = true }
-}
-
-// ChannelVelocity holds cross-campaign recovery velocity stats for a sale channel.
-type ChannelVelocity struct {
-	Channel       SaleChannel `json:"channel"`
-	SaleCount     int         `json:"saleCount"`
-	AvgDaysToSell float64     `json:"avgDaysToSell"`
-	RevenueCents  int         `json:"revenueCents"`
-}
-
-// PortfolioHealth represents cross-campaign health assessment.
-type PortfolioHealth struct {
-	Campaigns      []CampaignHealth `json:"campaigns"`
-	TotalDeployed  int              `json:"totalDeployedCents"`
-	TotalRecovered int              `json:"totalRecoveredCents"`
-	TotalAtRisk    int              `json:"totalAtRiskCents"`
-	OverallROI     float64          `json:"overallROI"`
-	RealizedROI    float64          `json:"realizedROI"`
-}
-
-// CampaignHealth represents health status for a single campaign.
-type CampaignHealth struct {
-	CampaignID     string  `json:"campaignId"`
-	CampaignName   string  `json:"campaignName"`
-	Phase          Phase   `json:"phase"`
-	ROI            float64 `json:"roi"`
-	SellThroughPct float64 `json:"sellThroughPct"`
-	AvgDaysToSell  float64 `json:"avgDaysToSell"`
-	TotalPurchases int     `json:"totalPurchases"`
-	TotalUnsold    int     `json:"totalUnsold"`
-	CapitalAtRisk  int     `json:"capitalAtRiskCents"`
-	HealthStatus   string  `json:"healthStatus"` // "healthy", "warning", "critical"
-	HealthReason   string  `json:"healthReason"`
-
-	// Liquidation awareness — distinguishes "marketplace margin broken" from
-	// "we forced cards into low-margin inperson/cardshow sales to cover an invoice".
-	LiquidationLossCents int     `json:"liquidationLossCents"` // sum of negative net profit on inperson+cardshow sales; always ≤ 0
-	LiquidationSaleCount int     `json:"liquidationSaleCount"` // count of sales contributing to the loss
-	EbayChannelMarginPct float64 `json:"ebayChannelMarginPct"` // net profit / revenue on eBay + TCGPlayer sales combined; 0 if no marketplace sales. JSON field name retained for frontend compatibility.
-
-	// In-hand vs in-transit breakdown (received_at IS NOT NULL = in hand)
-	InHandUnsoldCount     int `json:"inHandUnsoldCount"`     // unsold cards physically received
-	InHandCapitalCents    int `json:"inHandCapitalCents"`    // cost of in-hand unsold cards
-	InTransitUnsoldCount  int `json:"inTransitUnsoldCount"`  // unsold cards still at PSA
-	InTransitCapitalCents int `json:"inTransitCapitalCents"` // cost of in-transit unsold cards
 }

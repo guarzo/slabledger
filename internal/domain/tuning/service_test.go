@@ -76,7 +76,7 @@ func TestService_GetCampaignTuning_SpendCapUtilization(t *testing.T) {
 		t.Fatalf("GetCampaignTuning: %v", err)
 	}
 
-	var found *inventory.TuningRecommendation
+	var found *tuning.TuningRecommendation
 	for i := range result.Recommendations {
 		if result.Recommendations[i].Parameter == "dailySpendCap" {
 			found = &result.Recommendations[i]

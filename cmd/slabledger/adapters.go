@@ -36,9 +36,9 @@ func (a *inventoryListAdapter) ListUnsoldInventory(ctx context.Context) ([]sched
 	return result, nil
 }
 
-// snapshotRefreshAdapter adapts inventory.Service to the scheduler.SnapshotRefresher interface.
+// snapshotRefreshAdapter adapts inventory.SnapshotService to the scheduler.SnapshotRefresher interface.
 type snapshotRefreshAdapter struct {
-	svc inventory.Service
+	svc inventory.SnapshotService
 }
 
 func (a *snapshotRefreshAdapter) RefreshSnapshot(ctx context.Context, p scheduler.InventoryPurchase) bool {

@@ -14,9 +14,9 @@ This document describes how SlabLedger integrates large language models — what
 |---|---|---|
 | `AZURE_AI_ENDPOINT` | `""` | Azure AI Foundry or Azure OpenAI endpoint |
 | `AZURE_AI_API_KEY` | `""` | API key |
-| `AZURE_AI_DEPLOYMENT` | `"gpt-5.4"` | Default model deployment (advisor, picks) |
+| `AZURE_AI_DEPLOYMENT` | `"gpt-5.4"` | Default model deployment (advisor) |
 
-If `AZURE_AI_ENDPOINT` or `AZURE_AI_API_KEY` is empty, the advisor and picks LLM features degrade gracefully to no-ops or rule-based fallbacks.
+If `AZURE_AI_ENDPOINT` or `AZURE_AI_API_KEY` is empty, the advisor LLM features degrade gracefully to no-ops or rule-based fallbacks.
 
 ### API versions
 
@@ -67,7 +67,7 @@ type LLMProvider interface {
 
 ## Features
 
-### 1. Advisor
+### Advisor
 
 **Package:** `internal/domain/advisor/`  
 **Invocation:** on-demand via the streaming HTTP endpoints (`/api/advisor/digest`, `/api/advisor/liquidation-analysis`).
@@ -106,46 +106,11 @@ For `AssessPurchase`, a pre-computed `ScoreCard` is injected into the system pro
 
 ---
 
-### 2. Picks
-
-**Package:** `internal/domain/picks/`  
-**Scheduler:** `internal/adapters/scheduler/picks_refresh.go` — daily at `PICKS_REFRESH_HOUR` (default 03:00 UTC)
-
-The picks service runs a **3-stage pipeline**:
-
-1. **Context gathering** — profitability profile, held cards, watchlist
-2. **Candidate generation** — LLM produces 20–30 card candidates as a JSON array
-3. **Scoring and ranking** — LLM scores candidates and returns top 10 picks as a JSON array
-
-Both LLM calls use `MaxTokens: 4096`. No tools, no temperature, no server-side storage.
-
-The pipeline is idempotent: if picks already exist for today, it skips the run. High-confidence `buy` picks are automatically added to the watchlist.
-
-**Output schema — scored picks:**
-
-```json
-[{
-  "card_name": "...",
-  "set_name": "...",
-  "grade": "...",
-  "direction": "buy|watch|avoid",
-  "confidence": 0.0,
-  "buy_thesis": "...",
-  "target_buy_price_cents": 0,
-  "expected_sell_price_cents": 0,
-  "rank": 1,
-  "signals": [{"factor": "...", "direction": "...", "title": "...", "detail": "..."}]
-}]
-```
-
----
-
 ## Scheduler summary
 
 | Scheduler | Default trigger | Timeout | Retries |
 |---|---|---|---|
 | Advisor refresh | Daily at 04:00 UTC | 20 min per analysis | 2× with 5-min backoff |
-| Picks refresh | Daily at 03:00 UTC | — | — (idempotent) |
 
 ---
 
@@ -159,11 +124,10 @@ Usage stats are exposed via the `/api/ai/usage` endpoint.
 
 ## Wiring
 
-`cmd/slabledger/init.go` assembles the dependency graph:
+`cmd/slabledger/init_services.go` assembles the dependency graph:
 
 ```
 AZURE_AI_ENDPOINT + AZURE_AI_KEY
     └─ azureai.NewClient (deployment = AZURE_AI_DEPLOYMENT)
-         ├─ advisor.NewService(llmProvider, CampaignToolExecutor)
-         └─ picks.NewService(picksRepo, llmProvider, ...)
+         └─ advisor.NewService(llmProvider, CampaignToolExecutor)
 ```

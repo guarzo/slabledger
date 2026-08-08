@@ -2,33 +2,13 @@ package inventory
 
 import (
 	"context"
-	"time"
 )
 
-// CRUDService handles campaign, purchase, and sale CRUD operations.
-type CRUDService interface {
-	CreateCampaign(ctx context.Context, c *Campaign) error
-	GetCampaign(ctx context.Context, id string) (*Campaign, error)
-	ListCampaigns(ctx context.Context, activeOnly bool) ([]Campaign, error)
-	UpdateCampaign(ctx context.Context, c *Campaign) error
-	// UpdateCampaignIfUnchanged is UpdateCampaign for read-modify-write callers;
-	// see CampaignRepository for why both exist.
-	UpdateCampaignIfUnchanged(ctx context.Context, c *Campaign, expectedUpdatedAt time.Time) error
-	DeleteCampaign(ctx context.Context, id string) error
-
-	CreatePurchase(ctx context.Context, p *Purchase) error
-	GetPurchase(ctx context.Context, id string) (*Purchase, error)
-	DeletePurchase(ctx context.Context, id string) error
-	ListPurchasesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Purchase, error)
-
-	CreateSale(ctx context.Context, s *Sale, campaign *Campaign, purchase *Purchase) error
-	CreateBulkSales(ctx context.Context, campaignID string, channel SaleChannel, saleDate string, items []BulkSaleInput) (*BulkSaleResult, error)
-	ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error)
-	DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error
-	UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error
-
-	ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error
-}
+// Every interface in this file has at least one non-test consumer that depends
+// on it instead of the full Service union. An interface here that loses its last
+// such consumer should be inlined into Service rather than left standing as a
+// split that buys no seam (SLA-36). Campaign/purchase/sale CRUD is declared
+// directly on Service for exactly that reason: no consumer wants it alone.
 
 // AnalyticsService provides read-only analytics, portfolio, and reporting operations.
 type AnalyticsService interface {
