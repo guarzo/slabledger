@@ -139,6 +139,8 @@ export interface Sale {
   wasCracked?: boolean;
   orderId?: string;
   // Decision provenance at time of sale
+  /** Sale was driven by invoice timing pressure. Always present on the wire (no omitempty). */
+  forcedLiquidation: boolean;
   saleReason?: string;
   clValueAtSaleCents?: number;
   channelFeePctAtSale?: number;
