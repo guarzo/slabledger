@@ -93,7 +93,7 @@ UNITS = [
            "yet its value never reaches any cache constructor. But its proposed_fix offers "
            "'remove the field, its CLI flag, and its validation/directory-creation code', "
            "and THAT OPTION BREAKS PRODUCTION: Dockerfile.harvest:39 passes --cache to the "
-           "deployed entrypoint, and flag.ContinueOnError at loader.go:239 turns an unknown "
+           "deployed entrypoint, and flag.ContinueOnError at loader.go:240 turns an unknown "
            "flag into log.Fatalf. Acceptance criteria MUST require that any removal edits "
            "Dockerfile.harvest:39 in the same commit, and MUST state that removing the flag "
            "registration alone fails the deployed container at startup with "

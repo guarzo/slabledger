@@ -417,3 +417,30 @@ recommendation is "no ticket required." `ticketable: false`. No action.
 own paraphrase in the NB-010 section above, and the correction was accepted and
 applied. Recorded here so Task 14 knows the record has been amended and can
 trust the amended text.
+
+---
+
+## Post-filing adjudication — two `suspected` findings were ticketed
+
+Recorded after the fact, during the final whole-branch review. The audit states
+in five places that `suspected` findings are recorded but **not** ticketed
+(`README.md`, `PREAMBLE.md`, `LENS-BRIEF.md`, the plan, and `REPORT.md`), and
+`FE-008` was correctly held back on exactly that rule. Two were nonetheless
+rolled into tickets:
+
+| Finding | Ticket | Why the exception stands |
+|---|---|---|
+| `NB-009` | FU-16 / SLA-24 | Its own verifier directed the merge: *"Task 14 should merge this into whatever docs-drift ticket that lens produces"* (`verdicts/naming.json`). Confirmed, evidence reproduces. |
+| `DCT-015` | FU-20 / SLA-28 | Confirmed with reproducing evidence; absorbed into a docs-drift ticket it shares a file with. Ticketing it separately would have been noise. |
+
+**The rule as applied is narrower than the rule as written.** `suspected` bars
+a finding from being *the basis of its own ticket*; it does not bar a confirmed
+`suspected`-tier finding from riding along in a ticket that exists on other
+evidence. Both tickets disclose it — their headers read
+`**Confidence:** strong, suspected`.
+
+Neither generator nor gate caught this, because the ticketability rule in
+`METHODOLOGY.md` has no confidence clause. That is the real defect: **an
+exception that no artifact records is indistinguishable from a mistake.** A
+rerun should either encode the narrow reading in the ticketability rule or
+adjudicate each exception here, before filing rather than after.

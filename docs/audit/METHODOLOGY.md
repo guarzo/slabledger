@@ -193,6 +193,13 @@ silently drops every downgraded-but-real finding. On the real run that was 11
 of 54. For `confirmed_lower_severity` always use the verdict's
 `corrected_severity`, never the finding's own claimed severity.
 
+**Confidence bars a finding from being the basis of its own ticket, not from
+riding along in one.** `suspected` findings do not become tickets. They may be
+folded into a ticket that exists on other evidence — the real run did this
+twice, and disclosed it in both ticket headers. Neither the generator nor the
+gate enforces this, so it must be adjudicated in `ADJUDICATIONS.md` **before**
+filing. An exception no artifact records is indistinguishable from a mistake.
+
 ## Filing to Linear
 
 The MCP endpoint at `mcp.linear.app/mcp` speaks `text/event-stream`; parse

@@ -165,6 +165,16 @@ def main():
     ids = {}
     if os.path.exists(f"{AUDIT}/linear-ids.json"):
         ids = json.load(open(f"{AUDIT}/linear-ids.json"))
+    fus = {f"FU-{n:02d}" for n in range(1, len(UNITS) + 1)}
+    # METHODOLOGY.md lists "every fix unit filed" as a final check. Enforce it
+    # here rather than asserting it in a table: an unfiled unit used to degrade
+    # to a "_(not yet filed)_" placeholder that no gate would ever notice.
+    if ids:
+        missing, extra = sorted(fus - set(ids)), sorted(set(ids) - fus)
+        if missing or extra:
+            print(f"linear-ids.json does not cover the emitted fix units: "
+                  f"missing={missing} extra={extra}", file=sys.stderr)
+            sys.exit(1)
     out = []
     w = out.append
     w("# Audit Tickets — draft bodies\n")
