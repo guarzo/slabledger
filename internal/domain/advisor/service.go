@@ -37,16 +37,6 @@ func WithMaxToolRounds(n int) ServiceOption {
 	return func(s *service) { s.maxToolRounds = n }
 }
 
-// WithMaxTokens sets the max tokens for LLM completion requests.
-func WithMaxTokens(n int) ServiceOption {
-	return func(s *service) { s.maxTokens = n }
-}
-
-// WithTemperature sets the temperature for LLM completion requests.
-func WithTemperature(t float64) ServiceOption {
-	return func(s *service) { s.temperature = t }
-}
-
 // WithAITracker enables recording of AI call metrics.
 func WithAITracker(t AICallTracker) ServiceOption {
 	return func(s *service) { s.tracker = t }
