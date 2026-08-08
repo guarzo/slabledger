@@ -13,7 +13,7 @@ type MockPortfolioService struct {
 	GetPortfolioHealthFn          func(ctx context.Context) (*inventory.PortfolioHealth, error)
 	GetPortfolioChannelVelocityFn func(ctx context.Context) ([]inventory.ChannelVelocity, error)
 	GetPortfolioInsightsFn        func(ctx context.Context) (*inventory.PortfolioInsights, error)
-	GetCampaignSuggestionsFn      func(ctx context.Context) (*inventory.SuggestionsResponse, error)
+	GetCampaignSuggestionsFn      func(ctx context.Context) (*portfolio.SuggestionsResponse, error)
 	GetCapitalTimelineFn          func(ctx context.Context) (*inventory.CapitalTimeline, error)
 	GetWeeklyReviewSummaryFn      func(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
 	GetWeeklyHistoryFn            func(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error)
@@ -44,7 +44,7 @@ func (m *MockPortfolioService) GetPortfolioInsights(ctx context.Context) (*inven
 	return nil, nil
 }
 
-func (m *MockPortfolioService) GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error) {
+func (m *MockPortfolioService) GetCampaignSuggestions(ctx context.Context) (*portfolio.SuggestionsResponse, error) {
 	if m.GetCampaignSuggestionsFn != nil {
 		return m.GetCampaignSuggestionsFn(ctx)
 	}

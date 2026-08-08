@@ -1,4 +1,4 @@
-package inventory
+package portfolio
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
-func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestSpendCapRebalancing(_ context.Context, insights *inventory.PortfolioInsights, campaigns []inventory.Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	if insights.DataSummary.TotalPurchases < suggMinPurchasesSpendCap || insights.DataSummary.OverallROI < 0 {
@@ -22,14 +23,14 @@ func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, 
 	}
 
 	type capEntry struct {
-		campaign Campaign
+		campaign inventory.Campaign
 		cap      int
 		roi      float64
 	}
 	hasROIData := len(campaignROI) > 0
 	var active []capEntry
 	for _, c := range campaigns {
-		if c.Phase != PhaseActive || c.DailySpendCapCents <= 0 {
+		if c.Phase != inventory.PhaseActive || c.DailySpendCapCents <= 0 {
 			continue
 		}
 		roi, ok := campaignROI[c.ID]
@@ -117,21 +118,21 @@ func suggestSpendCapRebalancing(_ context.Context, insights *PortfolioInsights, 
 	return suggestions
 }
 
-func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestCharacterAdjustments(_ context.Context, insights *inventory.PortfolioInsights, campaigns []inventory.Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	if len(insights.ByCharacter) < suggMinCharacterSegments {
 		return nil
 	}
 
-	sorted := make([]SegmentPerformance, len(insights.ByCharacter))
+	sorted := make([]inventory.SegmentPerformance, len(insights.ByCharacter))
 	copy(sorted, insights.ByCharacter)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].ROI > sorted[j].ROI
 	})
 
 	for _, c := range campaigns {
-		if c.Phase != PhaseActive || len(c.Subjects) == 0 {
+		if c.Phase != inventory.PhaseActive || len(c.Subjects) == 0 {
 			continue
 		}
 
@@ -142,7 +143,7 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 			if seg.Label == "Other" || seg.PurchaseCount < suggMinSoldForConfidence {
 				continue
 			}
-			targeted := SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode)
+			targeted := inventory.SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode)
 
 			if targeted && seg.ROI < suggUnderperformingROI && seg.SoldCount >= suggMinSoldForRemoval {
 				removes = append(removes, seg.Label)
@@ -213,17 +214,17 @@ func suggestCharacterAdjustments(_ context.Context, insights *PortfolioInsights,
 	return suggestions
 }
 
-func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestPhaseTransitions(_ context.Context, insights *inventory.PortfolioInsights, campaigns []inventory.Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
-	// metricsMap is only needed for PhaseActive close suggestions
-	metricsMap := make(map[string]CampaignPNLBrief)
+	// metricsMap is only needed for inventory.PhaseActive close suggestions
+	metricsMap := make(map[string]inventory.CampaignPNLBrief)
 	for _, m := range insights.CampaignMetrics {
 		metricsMap[m.CampaignID] = m
 	}
 
 	for _, c := range campaigns {
-		if c.Phase == PhaseActive {
+		if c.Phase == inventory.PhaseActive {
 			m, ok := metricsMap[c.ID]
 			if !ok {
 				continue
@@ -233,7 +234,7 @@ func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, cam
 				if m.PurchaseCount > 0 {
 					sellThrough = float64(m.SoldCount) / float64(m.PurchaseCount)
 				}
-				if sellThrough < LowSellThroughPct {
+				if sellThrough < inventory.LowSellThroughPct {
 					suggestions = append(suggestions, CampaignSuggestion{
 						Type:  "adjust",
 						Title: fmt.Sprintf("Consider closing %s", c.Name),
@@ -253,13 +254,13 @@ func suggestPhaseTransitions(_ context.Context, insights *PortfolioInsights, cam
 			}
 		}
 
-		// PhasePending activation uses insights.ByCharacter directly — no metrics needed
-		if c.Phase == PhasePending && len(c.Subjects) > 0 {
+		// inventory.PhasePending activation uses insights.ByCharacter directly — no metrics needed
+		if c.Phase == inventory.PhasePending && len(c.Subjects) > 0 {
 			var profitableChars []string
 			var bestROI float64
 			for _, seg := range insights.ByCharacter {
 				if seg.ROI > suggActivateMinROI && seg.SoldCount >= suggMinSoldForConfidence {
-					if SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode) {
+					if inventory.SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode) {
 						profitableChars = append(profitableChars, fmt.Sprintf("%s (%.0f%% ROI)", seg.Label, seg.ROI*100))
 						if seg.ROI > bestROI {
 							bestROI = seg.ROI

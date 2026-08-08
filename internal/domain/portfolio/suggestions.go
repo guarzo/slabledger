@@ -1,4 +1,4 @@
-package inventory
+package portfolio
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 const (
@@ -73,12 +75,6 @@ const (
 	// may be suggested for closing (Rule 7).
 	suggArchiveROIThreshold = -0.10
 
-	// LowSellThroughPct is the sell-through percentage below which a campaign
-	// may be suggested for closing. Exported because internal/domain/tuning's
-	// recLowSellThrough applies the same threshold; keep it a single definition
-	// rather than letting the two packages drift.
-	LowSellThroughPct = 0.30
-
 	// suggActivateMinROI is the minimum ROI for a character segment to trigger
 	// a suggestion to activate a pending campaign (Rule 7).
 	suggActivateMinROI = 0.10
@@ -101,10 +97,10 @@ const (
 )
 
 // GenerateSuggestions produces data-driven campaign recommendations from portfolio insights.
-// healthByCampaign is keyed by Campaign.ID and drives the liquidation-aware buy-terms
+// healthByCampaign is keyed by inventory.Campaign.ID and drives the liquidation-aware buy-terms
 // rule. Callers that don't have portfolio health (e.g. unit tests of unrelated rules)
 // can pass nil — liquidation-dependent rules will simply skip.
-func GenerateSuggestions(ctx context.Context, insights *PortfolioInsights, campaigns []Campaign, healthByCampaign map[string]CampaignHealth) *SuggestionsResponse {
+func GenerateSuggestions(ctx context.Context, insights *inventory.PortfolioInsights, campaigns []inventory.Campaign, healthByCampaign map[string]inventory.CampaignHealth) *SuggestionsResponse {
 	resp := &SuggestionsResponse{
 		DataSummary: insights.DataSummary,
 	}
