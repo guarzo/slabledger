@@ -105,7 +105,11 @@ The checker computes both from the tree on every `make check`, and
 `scripts/check-imports-test.sh` tests the checker.
 
 Siblings may depend on `inventory` (the hub) and on leaf packages such as `errors`
-and `observability`, but never on each other. To see the current set:
+and `observability`, but never on each other. "Leaf" is defined precisely — a package
+whose transitive closure under `internal/domain/` excludes the hub — in
+[internal/README.md](internal/README.md#leaf-and-non-leaf-packages) (SLA-48). That section
+also explains why the existing target-side check already enforces the leaf rule, and why
+making membership transitive would be a no-op. To see the current set:
 
 ```bash
 grep -rl --include='*.go' 'internal/domain/inventory' internal/domain \

@@ -111,7 +111,7 @@ fixture_one_sibling() {
 # Case 5 — nested governed sibling importing a flat sibling.
 # Pins owner resolution for multi-segment package paths: the offender must be
 # named "nest/deep", not "deep" and not "nest". Membership derivation
-# (check-imports.sh:67-70) uses the same ${dir#internal/domain/} formula, so
+# (check-imports.sh:83-86) uses the same ${dir#internal/domain/} formula, so
 # this case is what keeps the two in step.
 fixture_nested_violation() {
   local root=$1
