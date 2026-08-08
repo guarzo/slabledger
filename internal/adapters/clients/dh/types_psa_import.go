@@ -11,7 +11,7 @@ const (
 	// PSAImportStatusOverrideCorrected means our overrides conflicted with DH's
 	// resolver match; DH created a partner_submitted card from the overrides
 	// instead. Response includes dh_card_id and dh_inventory_id. Rescue with
-	// POST /enterprise/certs/confirm_match once the operator decides which
+	// POST /enterprise/dev/certs/confirm_match once the operator decides which
 	// side is right.
 	PSAImportStatusOverrideCorrected = "override_corrected"
 	// PSAImportStatusAlreadyListed means the cert already had an active

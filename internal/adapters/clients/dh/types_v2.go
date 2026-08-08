@@ -112,25 +112,30 @@ type CertResolveBody struct {
 	Cert CertResolveRequest `json:"cert"`
 }
 
-// CertResolveBatchRequest is the request body for POST /enterprise/certs/resolve_batch.
+// CertResolveBatchRequest is the request body for POST /enterprise/dev/certs/resolve_batch.
 type CertResolveBatchRequest struct {
 	Certs []CertResolveRequest `json:"certs"`
 }
 
-// CertResolveBatchResponse is the response from POST /enterprise/certs/resolve_batch.
+// CertResolveBatchResponse is the response from POST /enterprise/dev/certs/resolve_batch.
+// DH returns 202 Accepted, not 200.
+//
+// PollURL is deliberately not modeled: DH emits it without the /dev/ segment, so it
+// 404s. GetCertResolutionJob builds the poll path from BatchID instead.
 type CertResolveBatchResponse struct {
-	JobID      string `json:"job_id"`
-	Status     string `json:"status"` // "queued"
-	TotalCerts int    `json:"total_certs"`
+	BatchID string `json:"batch_id"`
+	Status  string `json:"status"` // "processing"
+	Total   int    `json:"total"`
 }
 
-// CertResolutionJobStatus is the response from GET /enterprise/certs/resolve_batch/:job_id.
+// CertResolutionJobStatus is the response from GET /enterprise/dev/certs/batch_status/:batch_id.
+// It is served straight from Redis and carries no batch_id echo.
 type CertResolutionJobStatus struct {
-	JobID         string           `json:"job_id"`
-	Status        string           `json:"status"` // "queued", "processing", "completed", "failed"
-	TotalCerts    int              `json:"total_certs"`
-	ResolvedCount int              `json:"resolved_count"`
-	Results       []CertResolution `json:"results,omitempty"`
+	Status    string           `json:"status"` // "processing", "complete", "failed"
+	Completed int              `json:"completed"`
+	Total     int              `json:"total"`
+	Results   []CertResolution `json:"results,omitempty"`
+	UpdatedAt string           `json:"updated_at"`
 }
 
 // --- Inventory Types ---

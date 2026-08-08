@@ -85,14 +85,25 @@ func TestDHEnterprise_ResolveCertsBatch(t *testing.T) {
 				t.Fatalf("ResolveCertsBatch: %v", err)
 			}
 
-			t.Logf("Batch submitted: job_id=%s status=%s total_certs=%d",
-				resp.JobID, resp.Status, resp.TotalCerts)
+			t.Logf("Batch submitted: batch_id=%s status=%s total=%d",
+				resp.BatchID, resp.Status, resp.Total)
 
-			if resp.JobID == "" {
-				t.Error("expected non-empty JobID")
+			if resp.BatchID == "" {
+				t.Error("expected non-empty BatchID")
 			}
-			if resp.TotalCerts != tc.wantTotal {
-				t.Errorf("expected TotalCerts=%d, got %d", tc.wantTotal, resp.TotalCerts)
+			if resp.Total != tc.wantTotal {
+				t.Errorf("expected Total=%d, got %d", tc.wantTotal, resp.Total)
+			}
+
+			// Poll once to confirm the batch_status path resolves. The batch is
+			// asynchronous, so this asserts reachability, not completion.
+			status, err := c.GetCertResolutionJob(ctx, resp.BatchID)
+			if err != nil {
+				t.Fatalf("GetCertResolutionJob(%s): %v", resp.BatchID, err)
+			}
+			t.Logf("Batch status: status=%s completed=%d/%d", status.Status, status.Completed, status.Total)
+			if status.Status == "" {
+				t.Error("expected non-empty status from batch_status")
 			}
 		})
 	}
