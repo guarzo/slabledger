@@ -1,4 +1,4 @@
--- Reverses 000026. Drops the service-role policies, disables RLS, and re-grants
+-- Reverses 000027. Drops the service-role policies, disables RLS, and re-grants
 -- the DML privileges that Supabase's default privileges give anon and
 -- authenticated on new public tables. Restoring those grants re-exposes these
 -- tables to PostgREST, which is what reversing this migration means.
@@ -7,7 +7,7 @@
 -- ALL, so it cannot record which privileges each role actually held. The grant
 -- below is deliberately the four DML privileges rather than ALL — ALL would also
 -- hand back TRUNCATE, REFERENCES and TRIGGER, which Supabase's defaults never
--- granted, leaving these roles wider than before 000026 ran.
+-- granted, leaving these roles wider than before 000027 ran.
 --
 -- Role-dependent statements are guarded on pg_roles for the same reason as the
 -- up migration: anon, authenticated and service_role do not exist outside
