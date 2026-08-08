@@ -35,11 +35,6 @@ async function setupAuth(page: import('@playwright/test').Page, opts?: { skipAut
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USER) });
   });
-
-  // Mock advisor SSE endpoints — these fail without a configured AI provider
-  await page.route('**/api/advisor/**', async (route) => {
-    return route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
-  });
 }
 
 const SCREENSHOT_DIR = 'screenshots';

@@ -27,7 +27,6 @@ export const queryKeys = {
     apiUsage: ['admin', 'apiUsage'] as const,
     pricingDiagnostics: ['admin', 'pricingDiagnostics'] as const,
     priceOverrideStats: ['admin', 'priceOverrideStats'] as const,
-    aiUsage: ['admin', 'aiUsage'] as const,
     priceFlags: (status: string) => ['admin', 'priceFlags', status] as const,
     cardLadderStatus: ['admin', 'cardLadderStatus'] as const,
     cardLadderFailures: ['admin', 'cardLadderFailures'] as const,

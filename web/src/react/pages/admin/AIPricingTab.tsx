@@ -104,7 +104,7 @@ export function AIPricingTab({ enabled = true }: { enabled?: boolean }) {
       {stats.overrideCount === 0 && stats.pendingSuggestions === 0 && (
         <div className="text-center py-8 text-[var(--text-muted)]">
           <p className="text-sm">No price overrides or AI suggestions yet.</p>
-          <p className="text-xs mt-1">Use the $ button on inventory cards to set overrides, or run the AI advisor for pricing suggestions.</p>
+          <p className="text-xs mt-1">Use the $ button on inventory cards to set overrides.</p>
         </div>
       )}
     </div>

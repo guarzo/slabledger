@@ -54,38 +54,6 @@ export interface PriceOverrideStats {
   suggestionTotalUsd: number;
 }
 
-/** AI usage status types for the /api/admin/ai-usage endpoint */
-
-export interface AISummary {
-  totalCalls: number;
-  successRate: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  totalTokens: number;
-  avgLatencyMs: number;
-  rateLimitHits: number;
-  callsLast24h: number;
-  lastCallAt?: string;
-  totalCostCents: number;
-}
-
-export interface AIOperationSummary {
-  operation: string;
-  calls: number;
-  errors: number;
-  successRate: number;
-  avgLatencyMs: number;
-  totalTokens: number;
-  totalCostCents: number;
-}
-
-export interface AIUsageResponse {
-  configured: boolean;
-  summary: AISummary;
-  operations: AIOperationSummary[];
-  timestamp: string;
-}
-
 /** DH integration status types */
 
 export interface DHHealthStats {
