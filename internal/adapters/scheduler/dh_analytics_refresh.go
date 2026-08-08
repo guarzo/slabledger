@@ -58,6 +58,12 @@ const (
 	characterListMaxPages = 10
 	maxCharactersPerRun   = 200
 	maxSeedCardIDs        = 1000
+	// maxCharacterLookupsPerRun bounds the per-card /character_demand calls the
+	// attribution step makes. Attribution costs one call per unattributed card
+	// (see resolveCardCharacters) against a 1 rps client, so this is roughly a
+	// minute of the daily run. Attributions are cached permanently, so a
+	// backlog drains over consecutive days rather than in one burst.
+	maxCharacterLookupsPerRun = 50
 )
 
 // DHAnalyticsRefreshScheduler pulls DH demand + analytics signals once per day
@@ -113,8 +119,14 @@ func (s *DHAnalyticsRefreshScheduler) Start(ctx context.Context) {
 	}, s.refresh)
 }
 
-// refresh runs the 3-step pipeline. Errors in any single step are logged and
-// allowed to fall through so later steps still attempt to produce data.
+// refresh runs the pipeline. Errors in any single step are logged and allowed
+// to fall through so later steps still attempt to produce data.
+//
+// Cards run before characters: character-level data quality is aggregated from
+// per-card data quality (DH reports it only per card), so the card step has to
+// have written this run's rows before the character step can stamp a quality
+// onto them. Running characters first would publish a quality lagging one full
+// refresh behind the cards it summarises.
 func (s *DHAnalyticsRefreshScheduler) refresh(ctx context.Context) {
 	if !s.dhClient.EnterpriseAvailable() {
 		s.logger.Info(ctx, "DH enterprise key not configured; skipping analytics refresh")
@@ -124,14 +136,17 @@ func (s *DHAnalyticsRefreshScheduler) refresh(ctx context.Context) {
 	s.logger.Info(ctx, "DH analytics refresh starting",
 		observability.String("window", s.config.Window))
 
-	// Step 1: characters.
-	characters, topCardIDs, charCalls := s.refreshCharacters(ctx)
-
-	// Step 2: cards (inventory ∪ hot-list top cards).
-	cardIDs := s.buildCardSeed(ctx, topCardIDs)
+	// Step 1: cards (seeded from our unsold inventory).
+	cardIDs := s.buildCardSeed(ctx)
 	notComputed, cardCalls := s.refreshCards(ctx, cardIDs)
 
-	// Step 3: metrics.
+	// Step 2: card→character attribution, and the quality roll-up it enables.
+	qualityByChar, attributed, attrCalls := s.resolveCardCharacters(ctx)
+
+	// Step 3: characters.
+	characters, charCalls := s.refreshCharacters(ctx, qualityByChar)
+
+	// Step 4: metrics.
 	stats, statsErr := s.repo.CardDataQualityStats(ctx, s.config.Window)
 	if statsErr != nil {
 		s.logger.Warn(ctx, "failed to read card data-quality stats",
@@ -139,7 +154,9 @@ func (s *DHAnalyticsRefreshScheduler) refresh(ctx context.Context) {
 	}
 	s.logger.Info(ctx, "DH analytics refresh complete",
 		observability.Int("characters_upserted", len(characters)),
+		observability.Int("characters_with_quality", len(qualityByChar)),
 		observability.Int("cards_seeded", len(cardIDs)),
+		observability.Int("cards_attributed", attributed),
 		observability.Int("analytics_not_computed", notComputed),
 		observability.Int("data_quality_proxy", stats.ProxyCount),
 		observability.Int("data_quality_full", stats.FullCount),
@@ -147,5 +164,6 @@ func (s *DHAnalyticsRefreshScheduler) refresh(ctx context.Context) {
 		observability.Int("data_quality_total_rows", stats.TotalRows),
 		observability.Int("character_api_calls", charCalls),
 		observability.Int("card_api_calls", cardCalls),
+		observability.Int("attribution_api_calls", attrCalls),
 		observability.Duration("duration", time.Since(start)))
 }
