@@ -10,8 +10,6 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/csvimport"
@@ -55,9 +53,6 @@ type handlerInputs struct {
 	TrajectoryRepo       *postgres.CardPriceTrajectoryRepository
 	SuggestionsRepo      *postgres.DHSuggestionsRepository
 	DemandRepo           *postgres.DHDemandRepository
-	AdvisorService       advisor.Service
-	AzureAIClient        advisor.LLMProvider
-	AICallRepo           *postgres.AICallRepository
 	CLClient             *cardladder.Client
 	CLStore              *postgres.CardLadderStore
 	DHClient             *dh.Client
@@ -74,8 +69,7 @@ type handlerInputs struct {
 // handlerOutputs holds the constructed handlers that are also needed post-
 // server for graceful shutdown (Wait calls).
 type handlerOutputs struct {
-	DHHandler      *handlers.DHHandler
-	AdvisorHandler *handlers.AdvisorHandler
+	DHHandler *handlers.DHHandler
 }
 
 // createHandlers constructs all HTTP handlers, wires scheduler refresh
@@ -222,19 +216,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	pricingDiagRepo := postgres.NewPricingDiagnosticsRepository(in.DB.DB)
 	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
 
-	// Advisor handler (if advisor was initialized)
-	var advisorHandler *handlers.AdvisorHandler
-	if in.AdvisorService != nil {
-		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, logger)
-	}
-
-	// AI status handler — only wire tracker when an LLM provider is configured
-	var aiTracker ai.AICallTracker
-	if in.AzureAIClient != nil {
-		aiTracker = in.AICallRepo
-	}
-	aiStatusHandler := handlers.NewAIStatusHandler(aiTracker, logger)
-
 	// Price flags handler
 	priceFlagsHandler := handlers.NewPriceFlagsHandler(in.CampaignsService, logger)
 
@@ -273,8 +254,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		PricingDiagnosticsHandler: pricingDiagHandler,
 		CampaignsRepo:             in.PurchaseStore,
 		PricingAPIKey:             in.Cfg.Adapters.PricingAPIKey,
-		AdvisorHandler:            advisorHandler,
-		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
 		PSASyncHandler:            psaSyncHandler,
@@ -357,8 +336,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	}
 
 	out := handlerOutputs{
-		DHHandler:      dhHandler,
-		AdvisorHandler: advisorHandler,
+		DHHandler: dhHandler,
 	}
 	return deps, out
 }

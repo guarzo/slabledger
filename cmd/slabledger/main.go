@@ -322,7 +322,7 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		advisortool.WithExportService(exportService),
 	}
 
-	azureAIClient, advisorService, err := initializeAdvisorService(
+	_, advisorService, err := initializeAdvisorService(
 		ctx, cfg, logger, db, aiCallRepo, campaignsService,
 		[]scoringadapter.ProviderOption{
 			scoringadapter.WithTuningService(tuningSvc),
@@ -429,9 +429,6 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		TrajectoryRepo:       trajectoryRepo,
 		SuggestionsRepo:      suggestionsRepo,
 		DemandRepo:           demandRepo,
-		AdvisorService:       advisorService,
-		AzureAIClient:        azureAIClient,
-		AICallRepo:           aiCallRepo,
 		CLClient:             clClient,
 		CLStore:              clStore,
 		DHClient:             dhClient,
