@@ -90,11 +90,19 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 
 ### Sibling sub-packages (flat siblings under `internal/domain/`, no cross-imports between them)
 
-Membership is **derived, not listed**: a sibling is any directory under
-`internal/domain/` with a non-test `.go` file importing `internal/domain/inventory`.
-`scripts/check-imports.sh` computes this set from the tree on every `make check`,
-so adding a new inventory-importing package puts it under the rule automatically —
-no list to update here or in the script.
+Membership and enforcement are separate, and the split matters:
+
+- **Membership is derived, not listed**: a sibling is any directory under
+  `internal/domain/` with a non-test `.go` file importing `internal/domain/inventory`.
+  Adding a new inventory-importing package puts it under the rule automatically —
+  no list to update here or in the script.
+- **Enforcement is target-based**: `scripts/check-imports.sh` flags *any* importer of
+  a governed sibling, anywhere under `internal/domain/`, whether or not that importer
+  imports the hub itself. A package cannot leave enforcement by dropping its own hub
+  import (SLA-45).
+
+The checker computes both from the tree on every `make check`, and
+`scripts/check-imports-test.sh` tests the checker.
 
 Siblings may depend on `inventory` (the hub) and on leaf packages such as `errors`
 and `observability`, but never on each other. To see the current set:
@@ -194,7 +202,8 @@ engine) were removed on 2026-04-06.
 ## Quality Checks
 
 - `make check` — runs lint + architecture import check + file size check + Playwright version check
-- `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces the flat sibling rule against a package set derived from the tree, and fails closed if that derivation yields fewer than two packages
+- `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces the flat sibling rule, deriving membership from the tree and enforcing on the target side, and fails closed if fewer than two siblings are derived or if the scan performs an unexpected number of checks
+- `scripts/check-imports-test.sh` — self-test for the above; five fixture cases, run first by `make check`
 - `scripts/check-file-size.sh` — warns at 500 lines, fails at 600 lines (excludes test files and mocks)
 - `scripts/check-playwright-version.sh` — keeps the Playwright package and browser image in step
 
