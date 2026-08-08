@@ -9,8 +9,6 @@ import (
 )
 
 var (
-	// ErrTokenNotFound is returned when tokens are not found
-	ErrTokenNotFound = errors.New("tokens not found")
 	// ErrSessionNotFound is returned when a session is not found
 	ErrSessionNotFound = errors.New("session not found")
 )

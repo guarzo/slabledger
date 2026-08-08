@@ -13,13 +13,10 @@ type Repository interface {
 	GetUserByID(ctx context.Context, userID int64) (*User, error)
 	UpdateUser(ctx context.Context, user *User) error
 
-	// Tokens (session-based for multi-device support)
+	// Tokens (session-based for multi-device support).
+	// Only the write path is exposed: token rows are removed by the
+	// ON DELETE CASCADE from user_sessions/users, not by explicit deletes.
 	StoreTokens(ctx context.Context, userID int64, sessionID string, tokens *UserTokens) error
-	GetTokens(ctx context.Context, userID int64, sessionID string) (*UserTokens, error)
-	GetTokensByUserID(ctx context.Context, userID int64) (*UserTokens, error) // Gets most recent token for user
-	UpdateTokens(ctx context.Context, userID int64, sessionID string, tokens *UserTokens) error
-	DeleteTokens(ctx context.Context, userID int64, sessionID string) error
-	DeleteAllUserTokens(ctx context.Context, userID int64) error
 
 	// Sessions
 	CreateSession(ctx context.Context, session *Session) error

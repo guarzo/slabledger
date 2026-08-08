@@ -129,64 +129,6 @@ func (r *InMemoryAuthRepository) StoreTokens(_ context.Context, userID int64, se
 	return nil
 }
 
-func (r *InMemoryAuthRepository) GetTokens(_ context.Context, userID int64, sessionID string) (*auth.UserTokens, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	t, ok := r.tokens[tokenKey{userID, sessionID}]
-	if !ok {
-		return nil, apperrors.NewAppError("ERR_TOKENS_NOT_FOUND", "tokens not found")
-	}
-	cp := *t
-	return &cp, nil
-}
-
-func (r *InMemoryAuthRepository) GetTokensByUserID(_ context.Context, userID int64) (*auth.UserTokens, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	var latest *auth.UserTokens
-	for k, t := range r.tokens {
-		if k.userID != userID {
-			continue
-		}
-		if latest == nil || t.ExpiresAt.After(latest.ExpiresAt) {
-			latest = t
-		}
-	}
-	if latest == nil {
-		return nil, apperrors.NewAppError("ERR_TOKENS_NOT_FOUND", "tokens not found")
-	}
-	cp := *latest
-	return &cp, nil
-}
-
-func (r *InMemoryAuthRepository) UpdateTokens(_ context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	cp := *tokens
-	r.tokens[tokenKey{userID, sessionID}] = &cp
-	return nil
-}
-
-func (r *InMemoryAuthRepository) DeleteTokens(_ context.Context, userID int64, sessionID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.tokens, tokenKey{userID, sessionID})
-	return nil
-}
-
-func (r *InMemoryAuthRepository) DeleteAllUserTokens(_ context.Context, userID int64) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for k := range r.tokens {
-		if k.userID == userID {
-			delete(r.tokens, k)
-		}
-	}
-	return nil
-}
-
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
 func (r *InMemoryAuthRepository) CreateSession(_ context.Context, session *auth.Session) error {
