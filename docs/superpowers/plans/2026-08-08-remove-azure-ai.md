@@ -1155,8 +1155,12 @@ cd /workspace/.worktrees/remove-azure-ai
 gofmt -w cmd/slabledger/main.go cmd/slabledger/init_services.go \
          cmd/slabledger/init_schedulers.go internal/adapters/scheduler/builder.go
 go build ./...
-go test -race ./cmd/... ./internal/adapters/scheduler/... ./internal/adapters/storage/postgres/...
+go test -race -timeout 10m ./...
 ```
+
+Run the whole tree, not just the three packages this task edited. The Global
+Constraints require it, and this task removes a constructor and a scheduler job —
+the callers that break are exactly the ones a narrow package selection would miss.
 
 `go build ./...` must be clean. If it reports `declared and not used` for one of
 the seven `main.go` locals, Step 1's assumption broke — go back and delete that
@@ -1819,6 +1823,17 @@ func TestMigration000032_DownRestoresStructure(t *testing.T) {
 	// anon and authenticated hold no privilege on any of the four objects,
 	// including the two views — 000028 revoked on views by name for exactly
 	// this reason, and the down migration has to repeat it.
+	//
+	// Uses has_table_privilege rather than information_schema.role_table_grants,
+	// matching migration_000027_test.go:108-141 and for the reason documented
+	// there: role_table_grants lists only *direct* grants, so a privilege
+	// reaching anon through a grant to PUBLIC or through role inheritance
+	// slips past it and the assertion passes while the access is still live.
+	// has_table_privilege answers the effective-access question this test
+	// claims to be checking.
+	tablePrivileges := []string{
+		"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER",
+	}
 	for _, role := range []string{"anon", "authenticated"} {
 		if !roleExists(ctx, t, db, role) {
 			continue
@@ -1826,17 +1841,17 @@ func TestMigration000032_DownRestoresStructure(t *testing.T) {
 		for _, object := range []string{
 			aiCallsTable, scoringDataGapsTable, aiUsageSummaryView, aiUsageByOpView,
 		} {
-			var granted bool
-			require.NoError(t, db.QueryRowContext(ctx, `
-				SELECT EXISTS (
-					SELECT 1 FROM information_schema.role_table_grants
-					WHERE table_schema = 'public'
-					  AND table_name = $1
-					  AND grantee = $2
-				)`, object, role).Scan(&granted),
-				"read grants on %s for %s", object, role)
-			assert.False(t, granted,
-				"restored %s must not be reachable by %s", object, role)
+			for _, privilege := range tablePrivileges {
+				var allowed bool
+				require.NoError(t, db.QueryRowContext(ctx,
+					`SELECT has_table_privilege($1::text, format('public.%I', $2::text), $3::text)`,
+					role, object, privilege).Scan(&allowed),
+					"probe %s on %s for %s", privilege, object, role)
+				assert.False(t, allowed,
+					"restored %s must not be reachable by %s (effective %s remains; "+
+						"check for grants to PUBLIC or an inherited role, not just direct grants)",
+					object, role, privilege)
+			}
 		}
 	}
 
@@ -2160,10 +2175,11 @@ This destroys production ai_calls history on deploy and is not reversible."
 - Modify: `internal/README.md` (domain tree diagram, package table)
 - Modify: `internal/testutil/mocks/README.md` (service-mock table row)
 - Modify: `CLAUDE.md` (orientation bullets, env-var group, Documentation link)
+- Modify: `.claude/skills/polish-all/SKILL.md` (segment rows 2 and 8, sample summary row)
 
 **Out of scope — never edit:** `docs/audit/**`, `docs/plans/**`, `docs/specs/**`,
 `docs/superpowers/**`. These are historical records of past work; they are supposed to
-name things that no longer exist. The final grep in Step 16 excludes them by path.
+name things that no longer exist. The final grep in Step 24 excludes them by path.
 
 **Verified clean, no changes needed:** `docs/LOOP.md`, `docs/USER_GUIDE.md`,
 `docs/OPERATIONS.md`, `docs/SCHEDULERS.md`, `docs/DEVELOPMENT.md`, `docs/DH_INVENTORY.md`
@@ -2234,7 +2250,7 @@ name things that no longer exist. The final grep in Step 16 excludes them by pat
 
   The surrounding bullets (`**Required**`, `**DH**`, `**Auth**`, `**CardLadder**`,
   `**Schedulers**`) stay. `.env.example` itself is owned by the configuration task —
-  do not edit it here, but Step 16's grep will catch it if that task missed it.
+  do not edit it here, but Step 24's grep will catch it if that task missed it.
 
 - [ ] **Step 5: Remove the three dead orientation bullets from `CLAUDE.md`'s Architecture section.**
 
@@ -2588,7 +2604,59 @@ name things that no longer exist. The final grep in Step 16 excludes them by pat
   the advisor UI and its API-client methods; this step confirms no page, route, or type
   still references them.
 
-- [ ] **Step 23: Run the final repo-wide grep and confirm only permitted hits remain.**
+- [ ] **Step 23: Repoint the `polish-all` segment table away from the deleted packages.**
+
+  `.claude/skills/polish-all/SKILL.md` hardcodes a twelve-row segment table that drives how
+  the polish skill walks the codebase. Two rows name directories this change deletes:
+
+  ```
+  | 2 | `domain/advisor+social+scoring` | `internal/domain/advisor/`, `internal/domain/social/`, `internal/domain/scoring/` |
+  | 8 | `adapters/scheduler+scoring+advisor` | `internal/adapters/scheduler/`, `internal/adapters/scoring/`, `internal/adapters/advisortool/` |
+  ```
+
+  Segment 8 keeps a real path (`internal/adapters/scheduler/`) once the other two are
+  dropped. **Segment 2 does not** — its third path, `internal/domain/social/`, already
+  does not exist on `main` (verify: `ls internal/domain/social` fails). So deleting
+  `advisor/` and `scoring/` leaves segment 2 with zero existing directories, and the
+  polish run would iterate an empty segment. It needs replacement paths, not just deletions.
+
+  **Do not renumber the rows.** The literal `12` is hardcoded in at least eight other
+  places in this file (`--segment N (1-12)`, `all 12 segments`, `Segment <N>/12`,
+  `N/12 done`). Keep twelve rows; change only what this removal broke.
+
+  Replace row 2 with real, currently-unlisted domain packages, and trim row 8:
+
+  ```
+  | 2 | `domain/demand+dhpricing+psacampaign+liquidation` | `internal/domain/demand/`, `internal/domain/dhpricing/`, `internal/domain/psacampaign/`, `internal/domain/liquidation/`, `internal/domain/dhevents/`, `internal/domain/llmutil/` |
+  | 8 | `adapters/scheduler` | `internal/adapters/scheduler/` |
+  ```
+
+  Then update the sample summary row at `.claude/skills/polish-all/SKILL.md:286`:
+
+  ```
+  | domain/demand+dhpricing+psacampaign+liquidation | 5 | 2 | 8 | ✓ |
+  ```
+
+  (It is illustrative sample output, not data — only the segment name changes.)
+
+  **Scope boundary — report, do not fix.** This file carries a lot of staleness that
+  predates this change and is not ours to clean up here: segment 3 lists
+  `internal/domain/favorites/`, `internal/domain/picks/`, and `internal/domain/cards/`;
+  segment 4 lists `internal/domain/csvimport/` and `internal/domain/mmutil/`; segment 6 is
+  `adapters/storage/sqlite`, which the Postgres cutover removed. None of those exist.
+  Leave every one of them alone and note them to the team lead as a follow-up. This step
+  fixes the segment *this change* emptied, and nothing else.
+
+  Verify the edit:
+
+  ```bash
+  cd /workspace/.worktrees/remove-azure-ai
+  grep -nE 'advisor|scoring|social' .claude/skills/polish-all/SKILL.md
+  ```
+
+  Expected: no output.
+
+- [ ] **Step 24: Run the final repo-wide grep and confirm only permitted hits remain.**
 
   ```bash
   cd /workspace/.worktrees/remove-azure-ai
@@ -2604,19 +2672,25 @@ name things that no longer exist. The final grep in Step 16 excludes them by pat
     `idx_advisor_cache_type` rows in the Dropped-indexes catalogue.
   - `internal/adapters/storage/postgres/migrations/` — the historical `000013` advisor_cache
     drop and the new `000032` drop pair. Migrations are append-only history; never rewrite them.
-  - `.claude/skills/polish-all/SKILL.md` — three lines naming
-    `internal/domain/advisor/`, `internal/domain/scoring/`, and `internal/adapters/advisortool/`
-    as review segments. This is local tooling config, not repository documentation. Report it
-    to the team lead as a follow-up rather than editing it inside this change — it is outside
-    the stated file list and changing it would alter how the polish skill segments the codebase.
+  - `internal/adapters/storage/postgres/migration_000032_test.go` — the rollback test
+    **Task 7 creates**. It necessarily names `ai_calls`, `scoring_data_gaps`,
+    `ai_usage_summary`, and `ai_usage_by_operation` throughout: a test that proves the
+    drop happened has to refer to what was dropped. Dozens of hits here are correct.
+  - `.claude/skills/ui-screenshot-improve/workspace/trigger-eval.seed.json:20` — a tracked
+    eval fixture whose sample query reads "why is the **advisor** response slow on the
+    campaigns page…". It is synthetic prompt text used to test whether the screenshot skill
+    triggers, not a reference to the advisor feature — nothing about it breaks when the
+    code is gone. Leave it; editing eval fixtures to satisfy a grep changes what the eval
+    measures. It survives the filter because it says "advisor", not "advisory".
 
-  Anything else is a miss: fix it and re-run Steps 19–23.
+  Anything else is a miss: fix it and re-run Steps 19–24.
 
-- [ ] **Step 24: Stage and commit.**
+- [ ] **Step 25: Stage and commit.**
 
   ```bash
   cd /workspace/.worktrees/remove-azure-ai
-  git add docs/ internal/README.md internal/testutil/mocks/README.md CLAUDE.md
+  git add docs/ internal/README.md internal/testutil/mocks/README.md CLAUDE.md \
+          .claude/skills/polish-all/SKILL.md
   git status --short
   ```
 
@@ -2636,7 +2710,11 @@ SCHEMA.md keeps the removed objects as tombstones in the existing
 advisor_cache style (ai_calls, scoring_data_gaps, ai_usage_summary,
 ai_usage_by_operation) and leaves the Dropped-indexes catalogue intact, since
 both are deliberate historical records. docs/audit, docs/plans, docs/specs and
-docs/superpowers are untouched for the same reason."
+docs/superpowers are untouched for the same reason.
+
+Also repoints the polish-all skill's hardcoded segment table, whose rows 2 and 8
+named the deleted packages. Row 2 would otherwise have been left with no existing
+directory at all, since internal/domain/social was already gone."
   ```
 
   No ticket reference: none of the seven other commits in this change set carry one,
