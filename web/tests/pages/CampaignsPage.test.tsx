@@ -59,7 +59,6 @@ vi.mock('../../src/js/api', () => ({
       overallROI: 0,
     })),
     listInvoices: vi.fn(() => Promise.resolve([])),
-    getPortfolioChannelVelocity: vi.fn(() => Promise.resolve([])),
     getWeeklyReview: vi.fn(() => Promise.resolve({
       weekStart: '',
       weekEnd: '',
