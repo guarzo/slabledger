@@ -4,7 +4,7 @@
 
 slabledger is a graded card portfolio tracker and pricing tool using Hexagonal Architecture. The system manages PSA grading campaigns, tracks multi-channel sales (eBay, TCGPlayer, local), computes P&L analytics, and provides market direction signals via DH (DoubleHolo) pricing.
 
-**Stack**: Go 1.26 | SQLite (WAL) | stdlib net/http mux | slog logging | React + TypeScript + Vite + Tailwind
+**Stack**: Go 1.26 | Postgres (pgx) | stdlib net/http mux | slog logging | React + TypeScript + Vite + Tailwind
 
 ## Hexagonal Architecture
 
@@ -13,9 +13,9 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 │                        ADAPTERS LAYER                       │
 │  Inbound:                    Outbound:                      │
 │  • HTTP Handlers             • DH (DoubleHolo) Pricing      │
-│  • Web Server                • TCGdex.dev (card metadata)   │
+│  • Web Server                • CardLadder Valuations        │
 │                              • Google OAuth                 │
-│                              • SQLite Storage               │
+│                              • Postgres Storage             │
 │                              • PriceLookup (market signals) │
 └─────────────────────────────────────────────────────────────┘
                               ↓ Interfaces (defined by domain)
@@ -25,10 +25,10 @@ slabledger is a graded card portfolio tracker and pricing tool using Hexagonal A
 │                                                             │
 │  • Inventory Service       • P&L Analytics                  │
 │  • DH Pricing              • Market Direction Signals       │
-│  • Favorites               • CSV Import                     │
+│  • Portfolio Health        • CSV Import                     │
 │  • Authentication          • Channel Fee Calculation        │
 │                                                             │
-│  Interfaces: PriceProvider, CardRepository, PriceLookup     │
+│  Interfaces: PriceProvider, PriceLookup, LLMProvider        │
 └─────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────┐
@@ -60,28 +60,28 @@ internal/
     finance/                # Invoices, cashflow, capital tracking, revocation flags
     export/                 # Sell sheet generation
     dhlisting/              # DH listing push pipeline coordination
-    cards/                  # CardRepository interface
-    favorites/              # Favorites service
     observability/          # Logger, MetricsRecorder interfaces
     pricing/                # PriceProvider, Price, GradedPrices, LastSoldByGrade
     mathutil/               # CalculateTrend, CalculatePercentChange, etc.
     ai/                     # LLMProvider, ToolExecutor interfaces
     advisor/                # AI advisor service and tool loop
-    picks/                  # Acquisition watchlist (AI-driven picks)
 
   adapters/                 # Interface implementations
     httpserver/             # Inbound HTTP
-      handlers/             # CampaignsHandler, AuthHandlers, FavoritesHandlers, etc.
+      handlers/             # CampaignsHandler, AuthHandlers, etc.
       middleware/           # Auth, CORS, rate limiting, recovery
       router.go             # Route registration with auth gating
     clients/
-      dhprice/              # DH (DoubleHolo) pricing
-      pricelookup/          # PriceLookup adapter (wraps PriceProvider for inventory)
-      tcgdex/               # TCGdex.dev card/set metadata (EN + JA)
+      dh/                   # DH (DoubleHolo) API client
+      dhprice/              # DH pricing (PriceProvider implementation)
+      dhlisting/            # DH listing pushes
+      cardladder/           # CardLadder valuations
+      psa/                  # PSA APIs
+      psaportal/            # PSA portal session
       google/               # Google OAuth service
       httpx/                # Unified HTTP client with retry + circuit breaker
       azureai/              # Azure AI completions and image generation
-    storage/sqlite/         # SQLite repository implementations + migrations
+    storage/postgres/       # Postgres repository implementations + migrations
     scheduler/              # Background jobs (price refresh, session cleanup, advisor)
 
   platform/                 # Cross-cutting concerns
@@ -103,12 +103,6 @@ type PriceProvider interface {
     Available() bool
     Name() string
     LookupCard(ctx context.Context, setName string, card Card) (*Price, error)
-}
-
-// Card metadata
-type CardRepository interface {
-    GetCards(ctx context.Context, setName string) ([]Card, error)
-    SearchCard(ctx context.Context, name string) (*Card, error)
 }
 
 // Market signals for campaigns (dependency inversion)
@@ -153,7 +147,7 @@ type Repository interface {
 ### Pricing
 ```
 1. DH (DoubleHolo) → graded price estimates, market data, sales history
-2. Results cached in SQLite + memory with configurable TTL
+2. Results cached in Postgres + memory with configurable TTL
 ```
 
 ## Dependency Injection
@@ -182,11 +176,11 @@ deps := ServerDependencies{InventoryService: inventoryService, ...}
 
 ### Access Control Model
 
-SlabLedger is a **single-tenant** application. An email allowlist (`ADMIN_EMAILS` environment variable) gates authentication via Google OAuth. All authenticated users share the same campaign data, pricing caches, and favorites. There is no per-user data isolation, row-level security, or role hierarchy beyond the admin flag.
+SlabLedger is a **single-tenant** application. An email allowlist (`ADMIN_EMAILS` environment variable) gates authentication via Google OAuth. All authenticated users share the same campaign data and pricing caches. There is no per-user data isolation, row-level security, or role hierarchy beyond the admin flag.
 
 To support multi-tenant usage, the following changes would be required:
 
-1. Add a `user_id` foreign key to campaigns, purchases, sales, and favorites tables.
+1. Add a `user_id` foreign key to the campaigns, purchases, and sales tables.
 2. Enforce tenant scoping in every repository query.
 3. Introduce a `tenant_id` or `org_id` concept if multiple users should share data within an organization.
 4. Add authorization middleware that validates resource ownership on each request.
@@ -201,7 +195,7 @@ To support multi-tenant usage, the following changes would be required:
 
 **Decision**: New `inventory/` domain package with purchase/sale tracking, multi-channel P&L, market direction signals. Removed unused scoring, opportunity detection, eBay deal detection, PSA population analysis.
 
-**Result**: Clean separation between campaign tracking (new core feature) and card pricing (retained for market signals and favorites).
+**Result**: Clean separation between campaign tracking (new core feature) and card pricing (retained for market signals).
 
 ### PriceLookup Interface (Dependency Inversion)
 
@@ -262,7 +256,4 @@ To support multi-tenant usage, the following changes would be required:
 | `advisor` | `CacheStore` | `cache.go` | 5 | Advisor result persistence |
 | `ai` | `LLMProvider` | `llm.go` | 1 | LLM completion (Azure AI) |
 | `ai` | `ToolExecutor` | `tools.go` | 1 | Tool call execution |
-| `cards` | `CardProvider` | `provider.go` | 5 | Card/set search (TCGdex) |
-| `favorites` | `Service` | `service.go` | 6 | Favorites CRUD |
-| `favorites` | `Repository` | `repository.go` | ~6 | Favorites persistence |
 | `observability` | `Logger` | `logger.go` | 5 | Structured logging |

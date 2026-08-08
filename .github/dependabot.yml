@@ -3,6 +3,15 @@
 # See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
 
 version: 2
+
+# Each ecosystem groups its minor and patch bumps into a single weekly PR. Majors are
+# deliberately left out of the groups, so they still arrive as individual PRs — which
+# also keeps them separable for the auto-merge workflow, since a group's update-type is
+# the highest bump it contains and one major would otherwise hold up the whole batch.
+#
+# Grouping matters here beyond PR count: branch protection runs with `strict: true`, so
+# every merge invalidates the other open PRs and they land one at a time with full CI
+# reruns. It also means ~3 unattended deploys to production a week instead of ~15.
 updates:
   # GitHub Actions - updates pinned SHA refs automatically
   - package-ecosystem: "github-actions"
@@ -16,6 +25,13 @@ updates:
       - "dependencies"
       - "github-actions"
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Go modules
   - package-ecosystem: "gomod"
@@ -29,6 +45,13 @@ updates:
       - "dependencies"
       - "go"
     open-pull-requests-limit: 5
+    groups:
+      gomod:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # npm (web frontend)
   - package-ecosystem: "npm"
@@ -42,3 +65,10 @@ updates:
       - "dependencies"
       - "javascript"
     open-pull-requests-limit: 5
+    groups:
+      npm:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

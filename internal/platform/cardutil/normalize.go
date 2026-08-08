@@ -6,13 +6,11 @@
 // Pipeline 1 -- DoubleHolo / secondary source query building:
 //
 //	BuildCardMatchQuery -> NormalizeSetNameForSearch(set) + SimplifyForSearch(NormalizePurchaseName(name)) + number
-//	Fallback: truncateAtVariant(name) + eraPrefix + number
-//	Fallback: raw PSA listing title (stripped of grade suffix)
 //
-// Pipeline 2 -- Import Title Parsing (campaigns package):
+// Pipeline 2 -- Import Title Parsing (inventory package):
 //
 //	parseCardMetadataFromTitle -> ParsePSAListingTitle + extractCardNameFromPSATitle
-//	-> stripCollectionSuffix -> extractVariantFromTitle -> resolvePSACategory
+//	-> stripCollectionSuffix -> extractVariantFromTitle -> resolveSetName -> ResolvePSACategory
 package cardutil
 
 import (

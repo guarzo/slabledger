@@ -76,7 +76,7 @@ Orientation for the packages whose purpose is not obvious from the name:
 The inventory domain (`internal/domain/inventory/`) is the core campaigns and inventory tracking feature.
 
 ### Core inventory package
-- **Types**: Campaign, Purchase, Sale, Phase, SaleChannel (`types_core.go`)
+- **Types**: Campaign, Purchase, Sale, Phase, SaleChannel (`core_types.go`)
 - **8 repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository,
   AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository,
   PendingItemRepository. They are split by concern, not by size — PurchaseRepository

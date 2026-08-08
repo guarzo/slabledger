@@ -27,9 +27,8 @@ A guide to managing PSA Direct Buy campaigns, tracking purchases and sales acros
    - [Market Direction](#market-direction)
    - [Sell Channel Recommendations](#sell-channel-recommendations)
 7. [Card Pricing](#card-pricing)
-8. [Favorites](#favorites)
-9. [API Status](#api-status)
-10. [FAQ](#faq)
+8. [API Status](#api-status)
+9. [FAQ](#faq)
 
 ---
 
@@ -42,7 +41,7 @@ This application tracks PSA Direct Buy campaigns where PSA sources already-grade
 3. **Record sales** through eBay, TCGPlayer, local (GameStop/card shows), or other channels
 4. **Analyze profitability** with P&L dashboards, channel comparisons, and market signals
 
-The system also provides card pricing lookup and favorites tracking.
+The system also provides card pricing lookup.
 
 ---
 
@@ -238,16 +237,6 @@ The **Pricing** page lets you look up current card prices across all grades and 
 - Checking current market value before buying or selling
 - Comparing prices across grades and sources
 - Viewing price trends and sales history
-
----
-
-## Favorites
-
-Save cards you want to track. Requires authentication (Google OAuth).
-
-- Add/remove favorites from the pricing page
-- View all favorites on the dedicated Favorites page
-- Favorites persist across sessions
 
 ---
 
