@@ -24,7 +24,10 @@ The investigation that prompted this removal established:
   through to `<Route path="*">` and redirects to `/login`. The only thing that
   touches those endpoints is a Playwright *mock*
   (`web/tests/screenshot-all-pages.spec.ts:40`).
-- The sole path that reaches Azure is
+- Those endpoints are nonetheless live, authenticated, and **documented as
+  supported API operations** (`docs/API.md:1560-1593`). "No frontend caller" is
+  not "no caller" — see the API compatibility decision below.
+- The only path anyone is known to invoke is
   `slabledger admin analyze <digest|liquidation>`
   (`cmd/slabledger/admin_analyze.go`).
 - The scoring engine is not independently reachable. `adapters/scoring` is
@@ -44,6 +47,8 @@ that no longer exist anywhere in the code.
 | Scope | Full removal, all four tiers | Tiers 1-3 are one unit; nothing survives independently |
 | Postgres tables | Drop both via migration | Avoids permanent schema drift and orphaned RLS policies |
 | `admin analyze` CLI | Remove | Owner confirmed it is unused |
+| Documented HTTP API | **Accept the break** | `POST /api/advisor/digest` and `/api/advisor/liquidation-analysis` are documented but auth-gated and single-operator; no external consumer exists. Removing them is a deliberate, accepted incompatibility, not an oversight. |
+| Existing AI price suggestions | Keep the data, drop the producer | `campaign_purchases.ai_suggested_price_cents` and its accept/clear paths are untouched. Suggestions already recorded stay reviewable and dismissable; nothing new is ever written. |
 
 ## End state
 
@@ -90,27 +95,43 @@ through the advisor.
 | `cmd/slabledger/handlers.go` | `AzureAIClient`/`AICallRepo` fields, advisor + AI status handler construction and wiring |
 | `cmd/slabledger/server.go` | `AdvisorHandler` and `AIStatusHandler` fields and assignments |
 | `cmd/slabledger/admin.go` | `analyze` case (`:24`), help text (`:45`), usage example (`:54`) |
-| `cmd/slabledger/init_schedulers.go` | `GapStore` dep field (`:54`) and its propagation (`:197-198`) |
+| `cmd/slabledger/init_schedulers.go` | `advisor` import (`:11`), `AdvisorService` and `AICallRepo` dep fields (`:38-39`), `AICallTracker` propagation (`:75`), `GapStore` dep field (`:54`) and its propagation (`:197-198`) |
 | `internal/adapters/httpserver/routes.go` | `registerAdvisorRoutes`, the `/api/admin/ai-usage` route |
 | `internal/adapters/httpserver/router.go` | handler fields (`:35-36`), config fields (`:73-74`), assignments (`:149-153`) |
-| `internal/adapters/scheduler/builder.go` | `NewGapCleanupScheduler` call and `GapStore` dep |
-| `internal/adapters/scheduler/dh_orders_poll_test.go` | advisor references |
-| `internal/platform/config/types.go` | 4 Azure fields + advisor refresh config |
+| `internal/adapters/scheduler/builder.go` | `domain/ai` import (`:9`), `AICallTracker` dep field (`:43-44`), `NewGapCleanupScheduler` call and `GapStore` dep |
+| `internal/platform/config/types.go` | 4 Azure fields + `AdvisorRefreshConfig` |
+| `internal/platform/config/defaults.go` | `AdvisorRefresh` default block (`:76-78`) |
 | `internal/platform/config/loader.go` | `AZURE_AI_*` and `ADVISOR_MAX_TOOL_ROUNDS` parsing |
 
 ## Migration `000032_drop_ai_advisor_tables`
 
 Patterned on `000030_drop_marketmovers_config`. `000031` is the current head.
 
-**Up:** drop `ai_calls` and `scoring_data_gaps`. Their indexes and their RLS
-policies from `000003`/`000028` are dropped automatically with the tables.
+`ai_calls` carries **two dependent views**, both created in `000003` with
+`security_invoker = true`: `ai_usage_summary`
+(`000003_supabase_security_and_perf_fixes.up.sql:33-51`) and
+`ai_usage_by_operation` (`:53-61`). `DROP TABLE` errors out on a dependent view
+rather than cascading, so the views must be handled explicitly. `scoring_data_gaps`
+has no dependent views.
+
+**Up:** `DROP VIEW IF EXISTS public.ai_usage_summary` and
+`public.ai_usage_by_operation` **first**, then drop `ai_calls` and
+`scoring_data_gaps`. Prefer explicit view drops over `DROP TABLE ... CASCADE`:
+cascade would silently take anything else that later attaches to these tables.
+Table indexes and RLS policies do drop automatically with their tables — views
+are the exception, not the rule.
 
 **Down:** recreate both tables, their indexes, **and** the `TO service_role` RLS
-policies with the matching REVOKEs. A down migration that restores only the
-schema would silently reopen two tables to `anon`/`authenticated`, because
-`000003`'s original policy style defaulted to `TO PUBLIC`. Role-dependent
-statements must be guarded on `pg_roles` so the migration still applies on a
-local Postgres where Supabase roles do not exist.
+policies with the matching REVOKEs — then recreate both views with
+`WITH (security_invoker = true)` and re-apply their REVOKEs from `anon` and
+`authenticated`. `000028` revokes on the views by name, not just the tables
+(`000028_tighten_000003_rls_policies.up.sql:56-58`, `:82-87`), so a down
+migration that restores only tables leaves the two views readable by
+`anon`/`authenticated` even when the tables underneath are locked down. A down
+migration that restores only the schema would likewise reopen the tables,
+because `000003`'s original policy style defaulted to `TO PUBLIC`.
+Role-dependent statements must be guarded on `pg_roles` so the migration still
+applies on a local Postgres where Supabase roles do not exist.
 
 ## Frontend
 
@@ -120,17 +141,39 @@ local Postgres where Supabase roles do not exist.
 - Remove `AIOperationSummary` and `AIUsageResponse` from `web/src/types/apiStatus.ts`.
 - Remove the advisor route mock from `web/tests/screenshot-all-pages.spec.ts`.
 
-`AIPricingTab` **stays**. Despite the name it renders price-override stats via
-`usePriceOverrideStats` and involves no LLM.
+**`AIPricingTab` stays, with one edit.** It survives because it renders price
+*overrides* — a manual, non-LLM feature — via `usePriceOverrideStats`. But it
+also surfaces AI price suggestions ("Pending Suggestion Value",
+`AIPricingTab.tsx:92-98`), and its empty state instructs the user to *"run the
+AI advisor for pricing suggestions"* (`:107`) — an action that will no longer
+exist.
+
+Per the decision above, suggestion **data** survives and the **producer** does
+not. The only production writers of `ai_suggested_price_cents` are
+`advisortool` (`tools_portfolio_analysis.go:151`, `tools_portfolio_batch.go:29`,
+both registered at `executor.go:326,335`), all of which are deleted; the store
+methods that accept and clear suggestions
+(`internal/adapters/storage/postgres/purchase_price_store.go`) are untouched.
+So any suggestion already in the database stays visible and dismissable, and the
+count only ever decreases.
+
+Required edit: rewrite the empty-state line at `AIPricingTab.tsx:107` to drop
+the advisor instruction, keeping the override guidance. Leave the suggestion
+display itself intact.
 
 ## Documentation
 
 - Delete `docs/LLM_USAGE.md`.
-- `docs/SCHEMA.md`: replace both table sections with tombstones in the existing
-  `~~advisor_cache~~ — DROPPED (migration 000013)` style.
-- `docs/API.md`: remove the AI Advisor section.
-- `docs/ARCHITECTURE.md`: remove `LLMProvider` from the interface list and the
-  `ai/`, `advisor/`, `azureai/` tree entries; correct the scheduler line.
+- `docs/SCHEMA.md`: replace both table sections **and both view sections**
+  (`ai_usage_summary`, `ai_usage_by_operation` at `:1066-1070`) with tombstones
+  in the existing `~~advisor_cache~~ — DROPPED (migration 000013)` style.
+- `docs/API.md`: remove the AI Advisor section (`:1560-1593`).
+- `docs/ARCHITECTURE.md`: remove **four** interface rows, not one — `advisor`
+  `Service`, `advisor` `CacheStore`, `ai` `LLMProvider`, and `ai` `ToolExecutor`
+  (`:255-258`) — plus the `ai/`, `advisor/`, `azureai/` tree entries; correct the
+  scheduler line.
+- `internal/README.md`: remove `scoring/` from the domain tree diagram (`:45`)
+  and from the package table (`:96`).
 - `CLAUDE.md`: remove the AI env var group and the LLM Usage doc link.
 - `.env.example`: remove the four `AZURE_AI_*` entries.
 
@@ -167,3 +210,7 @@ export it before the PR merges.
 - The tuning, arbitrage, portfolio, finance, and export services — `advisortool`
   consumed them through the executor but does not own them.
 - `AIPricingTab` and price-override statistics.
+- `internal/adapters/scheduler/dh_orders_poll_test.go`. A naive grep flags it,
+  but its only match is the ordinary English word "advisory" describing a grade
+  (`:187`) — no advisor dependency. Do not touch it. The same false positive
+  exists in `internal/domain/inventory/core_types.go:543`.
