@@ -27,6 +27,12 @@ func ToDollars(cents int64) float64 {
 	return float64(cents) / 100
 }
 
+// ToDollarsInt converts int cents to a dollar float.
+// Convenience wrapper around ToDollars for callers that work with int.
+func ToDollarsInt(cents int) float64 {
+	return ToDollars(int64(cents))
+}
+
 // FormatGrade formats a numeric grade for display: whole numbers are printed without
 // a decimal point (9 → "9"), fractional grades use the minimal representation (9.5 → "9.5").
 func FormatGrade(v float64) string {
