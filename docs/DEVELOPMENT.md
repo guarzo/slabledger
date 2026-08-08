@@ -95,8 +95,17 @@ credentials, not application config, and `.env.example` is the template
 developers copy. This table is their only home — do not duplicate it there.
 `POSTGRES_TEST_URL` above follows the same convention.
 
-Set them in `.env`, which is what the CardLadder tests read
-(`internal/integration/cardladder_test.go:19`).
+**Export these into your environment** — do not put them in the repo-root `.env`.
+The tests use `godotenv/autoload`, which reads `.env` from the *package* directory,
+and `go test` runs each binary with its cwd set there. So the root `.env` is never
+consulted, and the skip message in `cardladder_test.go` that says "add to .env" is
+misleading. Verified 2026-08-08: unsetting `CL_EMAIL` with the root `.env` in place
+still skips; dropping a `.env` into `internal/integration/` makes it take effect.
+`psaportal/live_test.go:25` reads the environment directly and has no `.env`
+support at all.
+
+Either export them in your shell (what the devcontainer does), or place a `.env`
+in `internal/integration/`.
 
 | Variable | Used by | Purpose |
 |----------|---------|---------|
