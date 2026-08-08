@@ -589,7 +589,16 @@ the main app only reads it (`GET /api/psa-campaigns`), never fetches from PSA it
 Human-approval queue for proposed PSA campaign edits. The app enqueues `pending` rows
 (`POST /api/campaigns/{id}/psa-propose`) and flips them to `approved`
 (`POST /api/campaigns/{id}/psa-publish`); only the harvester (`DrainPushQueue`) moves a
-row to `pushed`/`failed` after actually calling PSA's `updateCampaign`.
+row further, first atomically claiming it (`approved` → `pushing`) and then recording
+`pushed`/`failed` after actually calling PSA's `updateCampaign`.
+
+Both transitions the harvester makes are conditional on the row's current status, so a
+drain run holding a stale snapshot cannot overwrite a row another run already claimed and
+pushed. RLS is enabled with a `TO service_role` policy and the `anon`/`authenticated`
+grants revoked (migration 000029, the same pattern as 000027), so a PostgREST caller
+holding either of those roles cannot flip a row to `approved`. That is not a control
+against a `service_role` or direct-database writer — the status column is a claim the
+database cannot verify — which is what the claim guard above, and SLA-44, cover.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
@@ -597,7 +606,7 @@ row to `pushed`/`failed` after actually calling PSA's `updateCampaign`.
 | `psa_campaign_id` | TEXT | NOT NULL | PSA portal `campaignRequestId` |
 | `internal_campaign_id` | TEXT | | Linked internal campaign ID |
 | `proposed_diff` | JSONB | NOT NULL | Serialized `ProposedDiff` (field changes) |
-| `status` | TEXT | NOT NULL DEFAULT 'pending' | `pending`, `approved`, `pushed`, `failed` |
+| `status` | TEXT | NOT NULL DEFAULT 'pending' | `pending`, `approved`, `pushing`, `pushed`, `failed` |
 | `requested_by` | TEXT | | Username that proposed the change |
 | `approved_by` | TEXT | | Username that approved the change |
 | `result_json` | JSONB | | Result payload from the push attempt |
@@ -610,7 +619,7 @@ row to `pushed`/`failed` after actually calling PSA's `updateCampaign`.
 
 **Foreign Keys:** none
 
-**Added:** migration 000017
+**Added:** migration 000017 (RLS enabled in 000029)
 
 ---
 

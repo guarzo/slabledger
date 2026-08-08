@@ -10,6 +10,13 @@ import (
 // that is not currently in the pending state.
 var ErrPushNotPending = errors.New("psacampaign: push row is not pending")
 
+// ErrPushNotClaimed is returned when MarkResult is called for a row the caller
+// does not hold a claim on — it is missing, or its status is not pushing.
+// Recording an outcome is only valid for the drain run that claimed the row;
+// without this, a slow or stale drain could overwrite a row another run had
+// already claimed and pushed.
+var ErrPushNotClaimed = errors.New("psacampaign: push row is not claimed for pushing")
+
 // ErrDuplicateCreate is returned by Enqueue when an unresolved create proposal
 // (pending/approved/pushing) already exists for the same internal campaign,
 // enforced atomically by a partial unique index.
@@ -40,6 +47,9 @@ type PushQueueStore interface {
 	Enqueue(ctx context.Context, p PushRow) error
 	Approve(ctx context.Context, id, approvedBy string) error
 	ListByStatus(ctx context.Context, status PushStatus) ([]PushRow, error)
+	// MarkResult records the outcome of a push attempt. Only valid for a row
+	// the caller has claimed: it returns ErrPushNotClaimed unless the row is
+	// still in the pushing state.
 	MarkResult(ctx context.Context, id string, status PushStatus, resultJSON, errMsg string) error
 	// Claim atomically transitions row id from approved to pushing, returning
 	// true if the claim succeeded (i.e. the row was still approved). Used to

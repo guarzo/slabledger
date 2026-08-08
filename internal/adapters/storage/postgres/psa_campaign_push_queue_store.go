@@ -160,12 +160,17 @@ func (s *PSACampaignPushQueueStore) LatestPerCampaign(ctx context.Context) ([]ps
 	return scanPushRows(rows, "latest")
 }
 
-// MarkResult records the outcome of a push attempt.
+// MarkResult records the outcome of a push attempt. The status guard makes the
+// write conditional on the caller still holding the claim it took in Claim:
+// only a row in the pushing state can have an outcome recorded. Without it, a
+// drain run holding a stale snapshot could overwrite a row that another run had
+// already claimed and pushed — turning a pushed row back into approved (and so
+// re-pushable) purely by losing a race.
 func (s *PSACampaignPushQueueStore) MarkResult(ctx context.Context, id string, status psacampaign.PushStatus, resultJSON, errMsg string) error {
 	const q = `
 		UPDATE psa_campaign_push_queue
 		   SET status = $2, result_json = NULLIF($3, '')::jsonb, error = NULLIF($4, ''), updated_at = now()
-		 WHERE id = $1`
+		 WHERE id = $1 AND status = 'pushing'`
 	res, err := s.db.ExecContext(ctx, q, id, status, resultJSON, errMsg)
 	if err != nil {
 		return fmt.Errorf("psa_campaign_push_queue: mark result: %w", err)
@@ -175,7 +180,7 @@ func (s *PSACampaignPushQueueStore) MarkResult(ctx context.Context, id string, s
 		return fmt.Errorf("psa_campaign_push_queue: mark result: rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("psa_campaign_push_queue: MarkResult: no row with id %q", id)
+		return fmt.Errorf("psa_campaign_push_queue: mark result %q: %w", id, psacampaign.ErrPushNotClaimed)
 	}
 	return nil
 }

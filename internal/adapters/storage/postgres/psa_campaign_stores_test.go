@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
@@ -13,6 +14,19 @@ func truncatePSACampaignTables(t *testing.T, db *DB) {
 	_, err := db.ExecContext(context.Background(),
 		`TRUNCATE TABLE psa_campaign_snapshot, psa_campaign_push_queue RESTART IDENTITY CASCADE`)
 	require.NoError(t, err, "truncate psa_campaign tables")
+}
+
+// advanceToPushing drives a queued row through approve -> claim so MarkResult's
+// status guard is satisfied, mirroring what DrainPushQueue does before it
+// records an outcome. Tolerates an already-approved row.
+func advanceToPushing(t *testing.T, ctx context.Context, s *PSACampaignPushQueueStore, id string) {
+	t.Helper()
+	if err := s.Approve(ctx, id, "test-approver"); err != nil && !errors.Is(err, psacampaign.ErrPushNotPending) {
+		require.NoError(t, err, "approve %s", id)
+	}
+	claimed, err := s.Claim(ctx, id)
+	require.NoError(t, err, "claim %s", id)
+	require.True(t, claimed, "claim %s", id)
 }
 
 func TestSnapshotStore_SaveGet(t *testing.T) {
@@ -112,6 +126,7 @@ func TestPushQueueStore_Lifecycle(t *testing.T) {
 	err = s.Approve(ctx, "push-1", "carol")
 	require.ErrorIs(t, err, psacampaign.ErrPushNotPending)
 
+	advanceToPushing(t, ctx, s, "push-1")
 	require.NoError(t, s.MarkResult(ctx, "push-1", psacampaign.PushPushed, `{"ok":true}`, ""))
 
 	pushed, err := s.ListByStatus(ctx, psacampaign.PushPushed)
@@ -128,6 +143,45 @@ func TestPushQueueStore_Approve_NotPending(t *testing.T) {
 
 	err := s.Approve(ctx, "does-not-exist", "bob")
 	require.ErrorIs(t, err, psacampaign.ErrPushNotPending)
+}
+
+// MarkResult must be conditional on the caller holding a claim. The last case
+// is the one that matters: once a row is pushed, a straggling drain run must not
+// be able to rewrite its outcome — that is how a pushed row would become
+// approved again, and therefore pushed to the portal twice.
+func TestPushQueueStore_MarkResult_RequiresClaim(t *testing.T) {
+	db := setupTestDB(t)
+	truncatePSACampaignTables(t, db)
+	s := NewPSACampaignPushQueueStore(db.DB)
+	ctx := context.Background()
+
+	require.NoError(t, s.Enqueue(ctx, psacampaign.PushRow{
+		ID: "push-1", PSACampaignID: "psa-1", InternalCampaignID: "internal-1",
+		Diff:   psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{{Field: "flatFee", Old: "3", New: "4"}}},
+		Status: psacampaign.PushPending,
+	}))
+
+	require.ErrorIs(t, s.MarkResult(ctx, "push-1", psacampaign.PushPushed, "", ""),
+		psacampaign.ErrPushNotClaimed, "pending row")
+
+	require.NoError(t, s.Approve(ctx, "push-1", "bob"))
+	require.ErrorIs(t, s.MarkResult(ctx, "push-1", psacampaign.PushPushed, "", ""),
+		psacampaign.ErrPushNotClaimed, "approved but unclaimed row")
+
+	claimed, err := s.Claim(ctx, "push-1")
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.NoError(t, s.MarkResult(ctx, "push-1", psacampaign.PushPushed, "", ""))
+
+	require.ErrorIs(t, s.MarkResult(ctx, "push-1", psacampaign.PushApproved, "", "stale drain"),
+		psacampaign.ErrPushNotClaimed, "already-pushed row")
+
+	require.ErrorIs(t, s.MarkResult(ctx, "does-not-exist", psacampaign.PushFailed, "", ""),
+		psacampaign.ErrPushNotClaimed, "missing row")
+
+	rows, err := s.ListByStatus(ctx, psacampaign.PushPushed)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the stale MarkResult must not have moved the row")
 }
 
 func TestPushQueueStore_CreateOperation_RoundTrip(t *testing.T) {
@@ -222,6 +276,7 @@ func TestPushQueueStore_CreateUnique(t *testing.T) {
 			name: "retry allowed after first create fails",
 			setup: func(t *testing.T) {
 				require.NoError(t, s.Enqueue(ctx, mk("row-1", "camp-x", psacampaign.PushPending)))
+				advanceToPushing(t, ctx, s, "row-1")
 				require.NoError(t, s.MarkResult(ctx, "row-1", psacampaign.PushFailed, "", "portal down"))
 			},
 			enqueue: mk("row-3", "camp-x", psacampaign.PushPending),
@@ -264,6 +319,7 @@ func TestPushQueueStore_LatestPerCampaign(t *testing.T) {
 		RequestedBy: "alice",
 		Diff:        psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{{Field: "bidPercentage", Old: "70", New: "72"}}},
 	}))
+	advanceToPushing(t, ctx, s, "a-old")
 	require.NoError(t, s.MarkResult(ctx, "a-old", psacampaign.PushFailed, "", "portal 500"))
 	require.NoError(t, s.Enqueue(ctx, psacampaign.PushRow{
 		ID: "a-newer", PSACampaignID: "psa-a", InternalCampaignID: "camp-a",
@@ -284,6 +340,7 @@ func TestPushQueueStore_LatestPerCampaign(t *testing.T) {
 		RequestedBy: "bob",
 		Diff:        psacampaign.ProposedDiff{Changes: []psacampaign.FieldChange{{Field: "flatFee", Old: "3", New: "4"}}},
 	}))
+	advanceToPushing(t, ctx, s, "c-1")
 	require.NoError(t, s.MarkResult(ctx, "c-1", psacampaign.PushFailed, "", "boom"))
 
 	got, err := s.LatestPerCampaign(ctx)

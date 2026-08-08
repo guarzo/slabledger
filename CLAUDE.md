@@ -115,17 +115,21 @@ inclusion/exclusion model with a multi-valued language axis (`target_languages` 
 empty = open net), subject-mode, subject-list, and denied-spec axes; its legacy subject
 backfill marks unreconciled rows with a negative sentinel id)
 and `psa_portal_catalog` (000025 — persisted PSA spec-list/subject reference data so the
-main server can resolve portal identifiers without a portal session), and
+main server can resolve portal identifiers without a portal session),
 `restore_oauth_states_expires_index` (000026 — re-creates the `oauth_states(expires_at)`
 index that 000003 dropped as unused, now that the session-cleanup scheduler sweeps
 expired OAuth states), and the RLS retrofit
 (000027 — enables row-level security on the six tables created after the 000003 blanket
 pass, with policies scoped `TO service_role` and grants revoked from `anon`/`authenticated`;
 those role-dependent statements are guarded on `pg_roles` so the migration also applies to
-a local Postgres, where Supabase's roles do not exist) and its follow-up (000028 — applies
+a local Postgres, where Supabase's roles do not exist), its follow-up (000028 — applies
 the same tightening to the 36 tables and 7 views 000003 covered, whose `USING (true)`
 policies carried no `TO` clause and therefore defaulted to `TO PUBLIC`, passing
-`anon`/`authenticated`; after it, no policy in `public` is `TO PUBLIC`).
+`anon`/`authenticated`; after it, no policy in `public` is `TO PUBLIC`), and
+`psa_push_queue_rls` (000029 — the last table 000027 deliberately left out, brought under
+the same `TO service_role` + REVOKE pattern; it denies an `anon`/`authenticated` PostgREST
+writer, but not a holder of `service_role` or direct database access, which is what the
+claim/`MarkResult` guard in code and SLA-44 address).
 
 Connection is configured via `DATABASE_URL`. The transaction pooler is used for the app
 runtime; DDL works the same because `db.go` uses `pgx.QueryExecModeExec` (simple protocol).
