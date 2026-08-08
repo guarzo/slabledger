@@ -78,8 +78,6 @@ func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*in
 		if err != nil {
 			return fmt.Errorf("daily spend: %w", err)
 		}
-		// This path bypasses inventory.Service, so the rows arrive unenriched.
-		inventory.EnrichDailySpendFillRate(dailySpend, campaign.DailySpendCapCents)
 		return nil
 	})
 	g.Go(func() error {

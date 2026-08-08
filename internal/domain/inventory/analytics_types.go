@@ -28,14 +28,20 @@ type ChannelPNL struct {
 // DailySpend holds actual spend vs cap for a given date.
 //
 // CapCents and FillRatePct are NOT populated by the repository — the cap lives
-// on campaigns, not campaign_purchases. They are filled in by the service layer
-// via EnrichDailySpendFillRate, using the campaign's current cap.
+// on campaigns, not campaign_purchases. inventory.Service.GetDailySpend fills
+// them in via EnrichDailySpendFillRate, using the campaign's current cap.
+// Callers that reach the repository directly get them zeroed, so any rule that
+// needs the fill rate must compute it with FillRatePct rather than read the
+// field.
+//
+// This type is not a wire format — the fill-rate handler builds its own USD
+// row — so it carries no json tags.
 type DailySpend struct {
-	Date          string  `json:"date"`
-	SpendCents    int     `json:"spendCents"`
-	CapCents      int     `json:"capCents"`
-	FillRatePct   float64 `json:"fillRatePct"`
-	PurchaseCount int     `json:"purchaseCount"`
+	Date          string
+	SpendCents    int
+	CapCents      int
+	FillRatePct   float64
+	PurchaseCount int
 }
 
 // DaysToSellBucket is a histogram bucket for days-to-sell distribution.

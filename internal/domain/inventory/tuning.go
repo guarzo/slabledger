@@ -229,9 +229,13 @@ func recSpendCapUtilization(campaign *Campaign, pnl *CampaignPNL, dailySpend []D
 		recent = recent[len(recent)-14:]
 	}
 
+	// Compute from the cap we already hold rather than trusting FillRatePct to
+	// have been enriched. An unenriched row reads as 0% utilized, which passes
+	// the low-use branch below and emits confident "widen your criteria" advice
+	// for a campaign that may be pegged at its cap.
 	var totalFill float64
 	for _, ds := range recent {
-		totalFill += ds.FillRatePct
+		totalFill += FillRatePct(ds.SpendCents, campaign.DailySpendCapCents)
 	}
 	avgFill := totalFill / float64(len(recent))
 
