@@ -27,7 +27,12 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
   const { data: campaignsData } = useCampaigns(false);
   const assign = useAssignPendingItem();
   const dismiss = useDismissPendingItem();
-  const [selectedCampaign, setSelectedCampaign] = useState(item.candidates?.[0] ?? '');
+  // Only ambiguous items hold campaign IDs in `candidates` (see dropdown note
+  // below); an unmatched item's first candidate is a PSA campaign name, which
+  // would seed the select with a value matching no option.
+  const [selectedCampaign, setSelectedCampaign] = useState(
+    item.status === 'ambiguous' ? (item.candidates?.[0] ?? '') : '',
+  );
 
   const needsLookup = isPlaceholderName(item);
   const certLookup = useCertLookup(item.certNumber, needsLookup);
@@ -35,12 +40,29 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
   const displayName = resolvedName || item.cardName;
 
   const campaigns = campaignsData ?? [];
+  // Ambiguous items carry real campaign IDs in `candidates`, so the dropdown
+  // narrows to the tie the matcher could not break. Unmatched items do not:
+  // reconcile-sourced ones put the unresolvable PSA campaign name there, and
+  // import-sourced ones leave it empty — so every campaign is a valid target.
+  //
+  // Do not narrow the unmatched list by phase. It used to filter to
+  // phase === 'active', which since the phase-allocation work (#509) leaves
+  // only the External sentinel: the operator's sole option was to dump
+  // correctly-attributed cards into the unattributed bucket.
   const dropdownCampaigns = item.status === 'ambiguous'
     ? campaigns.filter((c) => (item.candidates ?? []).includes(c.id))
-    : campaigns.filter((c) => c.phase === 'active');
+    : campaigns;
+
+  // The row is keyed by item.id, so a refetch that changes this item's status
+  // or candidates updates props without remounting — and a useState initializer
+  // only runs on mount, leaving a selection the dropdown no longer offers. The
+  // <select> renders blank in that state while `selectedCampaign` still holds
+  // the stale ID, so gate on membership rather than on non-emptiness: what the
+  // operator can see is what they can submit.
+  const selectionIsOffered = dropdownCampaigns.some((c) => c.id === selectedCampaign);
 
   const handleAssign = () => {
-    if (!selectedCampaign) return;
+    if (!selectionIsOffered) return;
     assign.mutate({ id: item.id, campaignId: selectedCampaign });
   };
 
@@ -77,7 +99,7 @@ function PendingRow({ item }: { item: PSAPendingItem }) {
         </select>
         <button
           onClick={handleAssign}
-          disabled={!selectedCampaign || assign.isPending}
+          disabled={!selectionIsOffered || assign.isPending}
           className="text-xs px-2 py-1 rounded bg-[var(--brand-500)] text-white hover:opacity-90 disabled:opacity-50"
         >
           Assign

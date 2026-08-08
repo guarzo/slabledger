@@ -66,7 +66,7 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 
 		if !ok {
 			res.Unresolved++
-			if err := s.recordUnresolvedAttribution(ctx, p, row.PSACampaignName); err != nil {
+			if err := s.recordUnresolvedAttribution(ctx, pendingByCert, p, row.PSACampaignName); err != nil {
 				res.Failed++
 				s.logReconcileFailure(ctx, row.CertNumber, err)
 			}
@@ -162,7 +162,7 @@ func clConfidenceForReattribution(purchaseDate string, campaign *Campaign) *int 
 	return &c
 }
 
-func (s *service) recordUnresolvedAttribution(ctx context.Context, p *Purchase, psaName string) error {
+func (s *service) recordUnresolvedAttribution(ctx context.Context, pendingByCert map[string]string, p *Purchase, psaName string) error {
 	// Keep the existing campaign; record PSA's name so a portal-side deletion
 	// never loses it again.
 	//
@@ -178,6 +178,24 @@ func (s *service) recordUnresolvedAttribution(ctx context.Context, p *Purchase, 
 	}
 	if err := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, psaName, source); err != nil {
 		return err
+	}
+
+	// A purchase that already sits on a real campaign needs no human review.
+	// The unresolvable name means a portal campaign was deleted (the
+	// 2026-07-27/28 band restructure), not that our attribution is in doubt —
+	// inference already placed the card, and the name we just wrote preserves
+	// PSA's claim for the audit trail. Queueing it anyway produced items the
+	// work queue's only consumer could not act on: HandleAssignPendingItem
+	// creates a purchase, and the purchase already exists.
+	//
+	// The External sentinel does not count: it is where unattributed cards
+	// land, so it is the absence of an answer, not one.
+	if p.CampaignID != "" && p.CampaignID != ExternalCampaignID {
+		// Retire any item enqueued before this guard existed. Those rows are
+		// otherwise stuck forever: resolveStalePendingItem only fires when the
+		// PSA name resolves, and a deleted portal campaign's name never will.
+		s.resolveStalePendingItem(ctx, pendingByCert, p.CertNumber, p.CampaignID)
+		return nil
 	}
 	return s.enqueueUnresolvedPendingItem(ctx, p, psaName)
 }

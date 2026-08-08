@@ -212,19 +212,70 @@ func TestReconcilePSAAttribution_SoldPurchaseRecordsNameWithoutMoving(t *testing
 	}
 }
 
-func TestReconcilePSAAttribution_UnresolvedEnqueuesPendingItem(t *testing.T) {
-	// Starts at PSA so the resulting Inferred proves recordUnresolvedAttribution
-	// actually wrote the downgrade, rather than matching the fixture default.
-	svc, repo := newReconcileFixture(t, "camp-b", false, "", false, nil, inventory.AttributionSourcePSA)
+// An unresolvable PSA name only warrants a human review item when we do not
+// already have a usable attribution of our own. A portal-side campaign deletion
+// (the 2026-07-27/28 band restructure) is expected churn: recording
+// psa_campaign_name keeps the audit trail, but queueing a purchase that already
+// sits on a real campaign asks an operator to re-decide something already
+// decided — and the queue's only consumer (HandleAssignPendingItem) cannot even
+// act on it without reassigning an existing purchase.
+func TestReconcilePSAAttribution_UnresolvedEnqueuesOnlyWithoutAttribution(t *testing.T) {
+	tests := []struct {
+		name        string
+		currentCID  string
+		wantPending int
+	}{
+		{"real campaign is already an answer", "camp-b", 0},
+		{"external sentinel is not an answer", inventory.ExternalCampaignID, 1},
+		{"no campaign at all", "", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Starts at PSA so the resulting Inferred proves
+			// recordUnresolvedAttribution wrote the downgrade in every case,
+			// rather than matching the fixture default.
+			svc, repo := newReconcileFixture(t, tt.currentCID, false, "", false, nil, inventory.AttributionSourcePSA)
+			got, err := svc.ReconcilePSAAttribution(context.Background(),
+				[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}})
+			if err != nil {
+				t.Fatalf("ReconcilePSAAttribution: %v", err)
+			}
+			// The row is still Unresolved either way — the counter reports what
+			// PSA told us, not whether we queued work off the back of it.
+			if want := (inventory.ReconcileResult{Unresolved: 1}); got != want {
+				t.Errorf("result = %+v, want %+v", got, want)
+			}
+			if len(repo.PendingItems) != tt.wantPending {
+				t.Errorf("pending items = %d, want %d", len(repo.PendingItems), tt.wantPending)
+			}
+			p := repo.Purchases["purchase-1"]
+			if p.PSACampaignName != "Brady modern" {
+				t.Errorf("PSACampaignName = %q, want the audit trail recorded", p.PSACampaignName)
+			}
+			if p.AttributionSource != inventory.AttributionSourceInferred {
+				t.Errorf("AttributionSource = %q, want inferred", p.AttributionSource)
+			}
+			if p.CampaignID != tt.currentCID {
+				t.Errorf("CampaignID = %q, want unchanged %q", p.CampaignID, tt.currentCID)
+			}
+		})
+	}
+}
+
+// Self-healing for items enqueued before the guard above existed: those rows
+// are stuck, because resolveStalePendingItem only fires when the PSA name
+// resolves and these names never will (the portal campaign is gone). Clearing
+// them here — against the purchase's own campaign — retires them on the next
+// reconcile pass without a data migration.
+func TestReconcilePSAAttribution_UnresolvedClearsStalePendingItem(t *testing.T) {
+	svc, repo := newReconcileFixture(t, "camp-b", false, "", false, nil, inventory.AttributionSourceInferred)
+	repo.PendingItems = []inventory.PendingItem{{ID: "pi-123", CertNumber: "123"}}
 	if _, err := svc.ReconcilePSAAttribution(context.Background(),
 		[]inventory.PSAExportRow{{CertNumber: "123", PSACampaignName: "Brady modern"}}); err != nil {
 		t.Fatalf("ReconcilePSAAttribution: %v", err)
 	}
-	if len(repo.PendingItems) != 1 {
-		t.Fatalf("pending items = %d, want 1", len(repo.PendingItems))
-	}
-	if got := repo.Purchases["purchase-1"].AttributionSource; got != inventory.AttributionSourceInferred {
-		t.Errorf("AttributionSource = %q, want inferred", got)
+	if len(repo.PendingItems) != 0 {
+		t.Errorf("pending items = %+v, want the stale item cleared", repo.PendingItems)
 	}
 }
 
