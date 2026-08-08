@@ -10,8 +10,6 @@ import { createRoot } from 'react-dom/client';
 // CSS imports - Tailwind + minimal base styles
 import './css/base.css';
 
-// Context providers
-import { UserPreferencesProvider } from './react/contexts/UserPreferencesContext';
 // App component
 import App from './react/App';
 
@@ -49,9 +47,7 @@ if (!rootElement) {
 
   root.render(
     <StrictMode>
-      <UserPreferencesProvider>
-        <App />
-      </UserPreferencesProvider>
+      <App />
     </StrictMode>
   );
 }
