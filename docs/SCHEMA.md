@@ -4,6 +4,28 @@ SlabLedger uses Postgres (Supabase in prod, local Postgres in the devcontainer).
 
 All monetary values are stored in **cents** (integer).
 
+## Migration numbering
+
+Every `migration NNNNN` citation in this document refers to a file in
+`internal/adapters/storage/postgres/migrations/`. There is no other numbering in play.
+
+`000001_initial_schema` is the **final-state schema after the cutover from SQLite** — it
+creates every table and column that survived the cutover in one step. Anything it creates
+is cited here as `000001`, regardless of which pre-cutover SQLite migration originally
+introduced it; those SQLite migration numbers (which ran as high as 000067) no longer
+correspond to any file in this repo and are not cited. Every later migration is
+incremental.
+
+To confirm a citation:
+
+```bash
+ls internal/adapters/storage/postgres/migrations/ | grep '^NNNNN'
+```
+
+Objects that were removed before the cutover never appear in the Postgres history at all.
+They are kept below as struck-through stubs, marked "dropped pre-cutover", because code
+and older docs still reference the names.
+
 ---
 
 ## Tables
@@ -27,7 +49,7 @@ Registered users authenticated via Google OAuth.
 | `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 | `last_login_at` | TIMESTAMP | | |
 
-**Indexes:** `idx_users_google_id` UNIQUE on `(google_id)`
+**Indexes:** none — `idx_users_google_id` was dropped in migration 000003 (see "Dropped indexes" below). The `google_id` UNIQUE constraint still enforces uniqueness.
 
 **Foreign Keys:** none
 
@@ -42,7 +64,7 @@ Short-lived CSRF tokens used during the OAuth authorization flow.
 | `expires_at` | DATETIME | NOT NULL | |
 | `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP | |
 
-**Indexes:** `idx_oauth_states_expires` on `(expires_at)`
+**Indexes:** `idx_oauth_states_expires` on `(expires_at)` — created by 000001, dropped by 000003 as unused, restored by migration 000026
 
 **Foreign Keys:** none
 
@@ -82,8 +104,6 @@ Log of every outbound pricing API call for observability and rate analysis.
 
 **Indexes:**
 - `idx_api_calls_provider` on `(provider, timestamp DESC)`
-- `idx_api_calls_timestamp` on `(timestamp DESC)`
-- `idx_api_calls_errors` on `(provider, status_code)` WHERE `status_code >= 400` (partial)
 
 **Foreign Keys:** none
 
@@ -103,12 +123,10 @@ Log of every AI (Azure OpenAI) call including token usage and estimated cost.
 | `input_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
 | `output_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
 | `total_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
-| `cost_estimate_cents` | INTEGER | NOT NULL DEFAULT 0 | Added in migration 000017 |
+| `cost_estimate_cents` | INTEGER | NOT NULL DEFAULT 0 | Added in migration 000001 |
 | `timestamp` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 
-**Indexes:**
-- `idx_ai_calls_timestamp` on `(timestamp DESC)`
-- `idx_ai_calls_operation` on `(operation, timestamp DESC)`
+**Indexes:** none — both were dropped in migration 000003 (see "Dropped indexes" below).
 
 **Foreign Keys:** none
 
@@ -155,7 +173,8 @@ Allowlist of emails permitted to log in (access control gate).
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `notes` | TEXT | | Optional reason/label |
 
-**Indexes:** none (PK lookup only)
+**Indexes:**
+- `idx_allowed_emails_added_by` on `(added_by)`; added migration 000003
 
 **Foreign Keys:** `added_by → users(id)` ON DELETE SET NULL
 
@@ -175,9 +194,7 @@ Records of access revocation notices to be emailed to affected users.
 | `created_at` | DATETIME | NOT NULL | |
 | `sent_at` | DATETIME | | |
 
-**Indexes:**
-- `idx_revocation_flags_status` on `(status)`
-- `idx_revocation_flags_segment` on `(segment_label, segment_dimension)`
+**Indexes:** none — both were dropped in migration 000003 (see "Dropped indexes" below).
 
 **Foreign Keys:** none
 
@@ -201,21 +218,22 @@ Cached provider-specific external IDs for card name/set/number triples.
 
 **Indexes:**
 - `idx_card_id_mappings_provider_external_id` on `(provider, external_id)`
+- `idx_card_id_mappings_card_name` on `(card_name)`; added migration 000003
 - `idx_card_id_mappings_collector_number` on `(collector_number)`; added migration 000002
 
 **Foreign Keys:** none
 
 ---
 
-### ~~`price_history`~~ — DROPPED (migration 000038)
+### ~~`price_history`~~ — DROPPED (pre-cutover)
 
-Dropped in migration 000038. DH computes prices in-memory; no production code wrote to this table.
+Dropped before the Postgres cutover; never created by any migration in this repo. DH computes prices in-memory; no production code wrote to this table.
 
 ---
 
-### ~~`price_refresh_queue`~~ — DROPPED (migration 000038)
+### ~~`price_refresh_queue`~~ — DROPPED (pre-cutover)
 
-Dropped in migration 000038. Was always empty; replaced by purchase-driven refresh via `campaign_purchases`.
+Dropped before the Postgres cutover; never created by any migration in this repo. Was always empty; replaced by purchase-driven refresh via `campaign_purchases`.
 
 ---
 
@@ -235,38 +253,20 @@ Access log used to prioritize price staleness detection (recently viewed cards g
 - `idx_access_log_card` on `(card_name, set_name, card_number, accessed_at DESC)`
 - `idx_access_log_covering` on `(card_name, set_name, card_number, accessed_at)`
 - `idx_card_access_log_recent` on `(accessed_at DESC, card_name, set_name, card_number)`
-- `idx_card_access_log_card_number` on `(card_number)`; added migration 000002
 
 **Foreign Keys:** none
 
 ---
 
-### ~~`discovery_failures`~~ — DROPPED (migration 000038)
+### ~~`discovery_failures`~~ — DROPPED (pre-cutover)
 
-Dropped in migration 000038. Was used for external pricing source discovery; source removed.
+Dropped before the Postgres cutover; never created by any migration in this repo. Was used for external pricing source discovery; source removed.
 
 ---
 
-### `advisor_cache`
-Cached results from the AI advisor scheduler (one row per analysis type).
+### ~~`advisor_cache`~~ — DROPPED (migration 000013)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `analysis_type` | TEXT | NOT NULL | Unique key for the analysis (e.g. 'digest') |
-| `status` | TEXT | NOT NULL DEFAULT 'pending' | e.g. 'pending','running','done','error' |
-| `content` | TEXT | NOT NULL DEFAULT '' | Rendered analysis output |
-| `error_message` | TEXT | NOT NULL DEFAULT '' | |
-| `started_at` | TEXT | DEFAULT NULL | ISO datetime or NULL |
-| `completed_at` | TEXT | DEFAULT NULL | ISO datetime or NULL |
-| `created_at` | TEXT | NOT NULL DEFAULT (datetime('now')) | |
-| `updated_at` | TEXT | NOT NULL DEFAULT (datetime('now')) | Auto-updated via trigger |
-
-**Unique:** `idx_advisor_cache_type` on `(analysis_type)`
-
-**Triggers:** `trg_advisor_cache_updated_at` — sets `updated_at = datetime('now')` on every UPDATE.
-
-**Foreign Keys:** none
+Dropped in migration 000013, along with its `idx_advisor_cache_type` unique index and `trg_advisor_cache_updated_at` trigger. Cached results from the AI advisor scheduler, one row per analysis type.
 
 ---
 
@@ -287,7 +287,6 @@ Purchase invoices from PSA Partner Offers for cashflow tracking.
 
 **Indexes:**
 - `idx_invoices_date` on `(invoice_date)`
-- `idx_invoices_status` on `(status)`
 
 **Foreign Keys:** none
 
@@ -315,7 +314,7 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `expected_fill_rate` | REAL | NOT NULL DEFAULT 0.0 | Expected % of offers accepted |
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-| `psa_campaign_request_id` | TEXT | | Linked PSA portal campaign request ID; added migration 000017 |
+| `psa_campaign_request_id` | TEXT | | Linked PSA portal campaign request ID; added migration 000018 |
 | `target_languages` | JSONB | NOT NULL DEFAULT '[]' | `[]string` — curated PSA spec-list language tokens this campaign buys: any of `'english'`, `'japanese'`. An **empty array is an open net** (buys any language); a non-empty array requires the card's classified language to be a member. Unordered set — order is not meaningful and must not be compared. Added migration 000024 |
 | `subject_filter_mode` | TEXT | NOT NULL DEFAULT 'Target', CHECK IN ('Target','Exclude','') | `'Target'` (buy only `subjects`) or `'Exclude'` (buy everything except `subjects`); added migration 000024. `''` is permitted because the domain treats it as valid and both read and write paths normalize it to `'Target'` |
 | `subjects` | JSONB | NOT NULL DEFAULT '[]' | `[]TargetSubject` (`{id, name}`) — character subjects this campaign targets or excludes, ids copied verbatim from the portal. Migration 000024's legacy backfill writes id `-1` as a sentinel meaning "legacy name, never reconciled against the portal"; push translation refuses a campaign containing sentinel entries until a baseline pull replaces them. Id `0` is distinct and means "operator-typed name awaiting name-based resolution". Added migration 000024 |
@@ -341,7 +340,6 @@ Active browser sessions for authenticated users.
 | `ip_address` | TEXT | | |
 
 **Indexes:**
-- `idx_user_sessions_user_id` on `(user_id)`
 - `idx_user_sessions_expires_at` on `(expires_at)`
 
 **Foreign Keys:** `user_id → users(id)` ON DELETE CASCADE
@@ -364,11 +362,7 @@ OAuth access/refresh tokens, scoped to a session.
 | `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 
-**Indexes:**
-- `idx_user_tokens_user_id` on `(user_id)`
-- `idx_user_tokens_session_id` on `(session_id)`
-- `idx_user_tokens_session_unique` UNIQUE on `(session_id)`
-- `idx_user_tokens_expires_at` on `(expires_at)`
+**Indexes:** none — all four were dropped in migration 000003 (see "Dropped indexes" below). Note that `idx_user_tokens_session_unique` was a UNIQUE index; dropping it removed the one-token-per-session guarantee at the database level.
 
 **Foreign Keys:**
 - `user_id → users(id)` ON DELETE CASCADE
@@ -413,47 +407,40 @@ Individual graded cards bought under a campaign.
 | `snapshot_json` | TEXT | NOT NULL DEFAULT '' | Full market snapshot blob |
 | `snapshot_status` | TEXT | NOT NULL DEFAULT '', CHECK IN ('','pending','failed','exhausted') | |
 | `snapshot_retry_count` | INTEGER | NOT NULL DEFAULT 0 | |
-| `psa_listing_title` | TEXT | NOT NULL DEFAULT '' | Raw PSA title for LLM fallback; added migration 000003 |
-| `override_price_cents` | INTEGER | NOT NULL DEFAULT 0, CHECK >= 0 | User-set price override; added migration 000008 |
-| `override_source` | TEXT | NOT NULL DEFAULT '' | Source label for override; added migration 000008 |
-| `override_set_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of override; added migration 000008 |
-| `ai_suggested_price_cents` | INTEGER | NOT NULL DEFAULT 0, CHECK >= 0 | AI suggestion (pending user accept); added migration 000008 |
-| `ai_suggested_at` | TEXT | NOT NULL DEFAULT '' | Added migration 000008 |
-| `card_year` | TEXT | NOT NULL DEFAULT '' | Added migration 000018 |
-| `ebay_export_flagged_at` | TIMESTAMP | NULL | When flagged for eBay export; added migration 000018 |
-| `dh_card_id` | INTEGER | NOT NULL DEFAULT 0 | DH card identity from cert resolution; added migration 000030 |
-| `dh_inventory_id` | INTEGER | NOT NULL DEFAULT 0 | DH inventory item ID; added migration 000030 |
-| `dh_cert_status` | TEXT | NOT NULL DEFAULT '' | Resolution state: matched, ambiguous, not_found; added migration 000030 |
-| `dh_listing_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Current DH listing price; added migration 000030 |
-| `dh_channels_json` | TEXT | NOT NULL DEFAULT '' | Per-channel sync status JSON; added migration 000030 |
-| `reviewed_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Human-reviewed price; added migration 000020 |
-| `reviewed_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of review; added migration 000020 |
-| `review_source` | TEXT | NOT NULL DEFAULT '' | Source label for review; added migration 000020 |
-| `dh_status` | TEXT | NOT NULL DEFAULT '' | DH inventory status; added migration 000032 |
-| `dh_push_status` | TEXT | NOT NULL DEFAULT '' | Pipeline status: "", "pending", "matched", "unmatched", "manual"; added migration 000034 |
-| `dh_candidates` | TEXT | NOT NULL DEFAULT '' | Ambiguous cert resolution candidates JSON; added migration 000039 |
-| `gem_rate_id` | TEXT | NOT NULL DEFAULT '' | CardLadder gem rate identifier; added migration 000040 |
-| `psa_spec_id` | INTEGER | NOT NULL DEFAULT 0 | PSA spec identifier; added migration 000040 |
-| `dh_hold_reason` | TEXT | NOT NULL DEFAULT '' | Safety hold reason blocking DH push; added migration 000044 |
-| `mm_value_cents` | INTEGER | NOT NULL DEFAULT 0 | Market Movers valuation; added migration 000046 |
-| `card_player` | TEXT | NOT NULL DEFAULT '' | Player/character name from CL metadata; added migration 000047 |
-| `card_variation` | TEXT | NOT NULL DEFAULT '' | Card variation from CL metadata; added migration 000047 |
-| `card_category` | TEXT | NOT NULL DEFAULT '' | Card category from CL metadata; added migration 000047 |
-| `mm_trend_pct` | REAL | NOT NULL DEFAULT 0 | Market Movers price trend %; added migration 000048 |
-| `mm_sales_30d` | INTEGER | NOT NULL DEFAULT 0 | Market Movers 30-day sale count; added migration 000048 |
-| `mm_active_low_cents` | INTEGER | NOT NULL DEFAULT 0 | Market Movers lowest active listing; added migration 000048 |
-| `cl_synced_at` | TEXT | DEFAULT '' | When card was last synced to Card Ladder; added migration 000052 |
-| `mm_value_updated_at` | TEXT | NOT NULL DEFAULT '' | When MM value was last refreshed; added migration 000053 |
-| `received_at` | DATETIME | DEFAULT NULL | ISO datetime when PSA returned the card; added migration 000058 |
-| `psa_ship_date` | TEXT | NOT NULL DEFAULT '' | Date PSA shipped the card to user; added migration 000058 |
-| `dh_last_synced_at` | TEXT | NOT NULL DEFAULT '' | Last time DH push pipeline ran for this card; added migration 000059 |
-| `mm_last_error` | TEXT | NOT NULL DEFAULT '' | Last MM integration error message; added migration 000060 |
-| `mm_last_error_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of last MM error; added migration 000060 |
-| `cl_last_error` | TEXT | NOT NULL DEFAULT '' | Last Card Ladder integration error; added migration 000060 |
-| `cl_last_error_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of last CL error; added migration 000060 |
-| `cl_value_updated_at` | TEXT | NOT NULL DEFAULT '' | When CL value was last refreshed; added migration 000060 |
-| `mid_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Mid-market price from DH snapshot; added migration 000066 |
-| `last_sold_date` | TEXT | NOT NULL DEFAULT '' | ISO date of last DH sale; added migration 000066 |
+| `psa_listing_title` | TEXT | NOT NULL DEFAULT '' | Raw PSA title for LLM fallback; added migration 000001 |
+| `override_price_cents` | INTEGER | NOT NULL DEFAULT 0, CHECK >= 0 | User-set price override; added migration 000001 |
+| `override_source` | TEXT | NOT NULL DEFAULT '' | Source label for override; added migration 000001 |
+| `override_set_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of override; added migration 000001 |
+| `ai_suggested_price_cents` | INTEGER | NOT NULL DEFAULT 0, CHECK >= 0 | AI suggestion (pending user accept); added migration 000001 |
+| `ai_suggested_at` | TEXT | NOT NULL DEFAULT '' | Added migration 000001 |
+| `card_year` | TEXT | NOT NULL DEFAULT '' | Added migration 000001 |
+| `ebay_export_flagged_at` | TIMESTAMP | NULL | When flagged for eBay export; added migration 000001 |
+| `dh_card_id` | INTEGER | NOT NULL DEFAULT 0 | DH card identity from cert resolution; added migration 000001 |
+| `dh_inventory_id` | INTEGER | NOT NULL DEFAULT 0 | DH inventory item ID; added migration 000001 |
+| `dh_cert_status` | TEXT | NOT NULL DEFAULT '' | Resolution state: matched, ambiguous, not_found; added migration 000001 |
+| `dh_listing_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Current DH listing price; added migration 000001 |
+| `dh_channels_json` | TEXT | NOT NULL DEFAULT '' | Per-channel sync status JSON; added migration 000001 |
+| `reviewed_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Human-reviewed price; added migration 000001 |
+| `reviewed_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of review; added migration 000001 |
+| `review_source` | TEXT | NOT NULL DEFAULT '' | Source label for review; added migration 000001 |
+| `dh_status` | TEXT | NOT NULL DEFAULT '' | DH inventory status; added migration 000001 |
+| `dh_push_status` | TEXT | NOT NULL DEFAULT '' | Pipeline status: "", "pending", "matched", "unmatched", "manual"; added migration 000001 |
+| `dh_candidates` | TEXT | NOT NULL DEFAULT '' | Ambiguous cert resolution candidates JSON; added migration 000001 |
+| `gem_rate_id` | TEXT | NOT NULL DEFAULT '' | CardLadder gem rate identifier; added migration 000001 |
+| `psa_spec_id` | INTEGER | NOT NULL DEFAULT 0 | PSA spec identifier; added migration 000001 |
+| `dh_hold_reason` | TEXT | NOT NULL DEFAULT '' | Safety hold reason blocking DH push; added migration 000001 |
+| `card_player` | TEXT | NOT NULL DEFAULT '' | Player/character name from CL metadata; added migration 000001 |
+| `card_variation` | TEXT | NOT NULL DEFAULT '' | Card variation from CL metadata; added migration 000001 |
+| `card_category` | TEXT | NOT NULL DEFAULT '' | Card category from CL metadata; added migration 000001 |
+| `cl_synced_at` | TEXT | DEFAULT '' | When card was last synced to Card Ladder; added migration 000001 |
+| `received_at` | DATETIME | DEFAULT NULL | ISO datetime when PSA returned the card; added migration 000001 |
+| `psa_ship_date` | TEXT | NOT NULL DEFAULT '' | Date PSA shipped the card to user; added migration 000001 |
+| `dh_last_synced_at` | TEXT | NOT NULL DEFAULT '' | Last time DH push pipeline ran for this card; added migration 000001 |
+| `cl_last_error` | TEXT | NOT NULL DEFAULT '' | Last Card Ladder integration error; added migration 000001 |
+| `cl_last_error_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of last CL error; added migration 000001 |
+| `cl_value_updated_at` | TEXT | NOT NULL DEFAULT '' | When CL value was last refreshed; added migration 000001 |
+| `mid_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Mid-market price from DH snapshot; added migration 000001 |
+| `last_sold_date` | TEXT | NOT NULL DEFAULT '' | ISO date of last DH sale; added migration 000001 |
 | `cl_confidence_at_purchase` | SMALLINT | NULL | Card Ladder confidence at time of purchase; NULL=not captured; added migration 000022 |
 | `population_at_purchase` | BIGINT | NULL | PSA population snapshot at time of purchase; NULL=not captured; added migration 000022 |
 | `dh_confidence_at_purchase` | DOUBLE PRECISION | NULL | DH price confidence at time of purchase; NULL=not captured; added migration 000022 |
@@ -468,16 +455,12 @@ Individual graded cards bought under a campaign.
 - `idx_purchases_date` on `(purchase_date)`
 - `idx_purchases_campaign_date` on `(campaign_id, purchase_date DESC)`
 - `idx_purchases_snapshot_pending` on `(snapshot_status)` WHERE `snapshot_status != ''` (partial)
-- `idx_campaign_purchases_ebay_export_flagged_at` on `(ebay_export_flagged_at)` WHERE `ebay_export_flagged_at IS NOT NULL` (partial); added migration 000019
-- `idx_purchases_invoice_date` on `(invoice_date)` WHERE `invoice_date != ''` (partial); added migration 000027
-- `idx_purchases_dh_cert_status` on `(dh_cert_status)` WHERE `dh_cert_status != ''` (partial); added migration 000030
-- `idx_campaign_purchases_dh_push_status` on `(dh_push_status)` WHERE `dh_push_status != ''` (partial); added migration 000035
-- `idx_purchases_gem_rate_id` on `(gem_rate_id)` WHERE `gem_rate_id != ''` (partial); added migration 000040, converted to partial in 000043
-- `idx_purchases_mm_last_error` on `(mm_last_error)` WHERE `mm_last_error != ''` (partial); added migration 000060
-- `idx_purchases_cl_last_error` on `(cl_last_error)` WHERE `cl_last_error != ''` (partial); added migration 000060
-- `idx_campaign_purchases_received_at` on `(received_at)`; added migration 000002
-- `idx_campaign_purchases_updated_at` on `(updated_at)`; added migration 000002
+- `idx_purchases_invoice_date` on `(invoice_date)` WHERE `invoice_date != ''` (partial)
+- `idx_campaign_purchases_cert_number` on `(cert_number)`; added migration 000003
+- `idx_campaign_purchases_attribution_source` on `(attribution_source)`; added migration 000023
 - `idx_campaign_purchases_dh_inventory_id` on `(dh_inventory_id)`; added migration 000002
+- `idx_campaign_purchases_dh_push_status` on `(dh_push_status)` WHERE `dh_push_status != ''` (partial)
+- `idx_purchases_cl_last_error` on `(cl_last_error)` WHERE `cl_last_error != ''` (partial)
 
 **Foreign Keys:** `campaign_id → campaigns(id)` ON DELETE CASCADE
 
@@ -507,12 +490,12 @@ Sale records for purchased cards (one per purchase, enforced by UNIQUE).
 | `snapshot_json` | TEXT | NOT NULL DEFAULT '' | |
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `updated_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-| `original_list_price_cents` | INTEGER | NOT NULL DEFAULT 0 | List price at first posting; added migration 000007 |
-| `price_reductions` | INTEGER | NOT NULL DEFAULT 0 | Count of price drops; added migration 000007 |
-| `days_listed` | INTEGER | NOT NULL DEFAULT 0 | Added migration 000007 |
-| `sold_at_asking_price` | INTEGER | NOT NULL DEFAULT 0 | Boolean; added migration 000007 |
-| `was_cracked` | INTEGER | NOT NULL DEFAULT 0 | 1 if slab was cracked out; added migration 000012 |
-| `order_id` | TEXT | NOT NULL DEFAULT '' | DH order ID for poll idempotency; added migration 000030 |
+| `original_list_price_cents` | INTEGER | NOT NULL DEFAULT 0 | List price at first posting; added migration 000001 |
+| `price_reductions` | INTEGER | NOT NULL DEFAULT 0 | Count of price drops; added migration 000001 |
+| `days_listed` | INTEGER | NOT NULL DEFAULT 0 | Added migration 000001 |
+| `sold_at_asking_price` | INTEGER | NOT NULL DEFAULT 0 | Boolean; added migration 000001 |
+| `was_cracked` | INTEGER | NOT NULL DEFAULT 0 | 1 if slab was cracked out; added migration 000001 |
+| `order_id` | TEXT | NOT NULL DEFAULT '' | DH order ID for poll idempotency; added migration 000001 |
 | `sale_reason` | TEXT | NOT NULL DEFAULT '', CHECK IN ('', 'discretionary', 'invoice_pressure', 'aging_policy', 'bulk_lot', 'show_clearout') | Why the sale happened; empty is backfilled by the `campaign_sales_derive_reason` trigger (see below); added migration 000022 |
 | `cl_value_at_sale_cents` | BIGINT | NOT NULL DEFAULT 0 | Card Ladder value at time of sale; added migration 000022 |
 | `channel_fee_pct_at_sale` | DOUBLE PRECISION | NULL | Effective channel fee % at time of sale; NULL=not captured; added migration 000022 |
@@ -520,9 +503,8 @@ Sale records for purchased cards (one per purchase, enforced by UNIQUE).
 **Unique:** `(purchase_id)` — one sale record per purchase
 
 **Indexes:**
-- `idx_sales_channel` on `(sale_channel)`
 - `idx_sales_date` on `(sale_date)`
-- `idx_sales_order_id` on `(order_id)` WHERE `order_id != ''` (partial unique); added migration 000030
+- `idx_sales_order_id` UNIQUE on `(order_id)` WHERE `order_id != ''` (partial)
 
 **Foreign Keys:** `purchase_id → campaign_purchases(id)` ON DELETE CASCADE
 
@@ -555,11 +537,13 @@ PSA card items awaiting cert resolution or campaign matching. Tracks ambiguous o
 | `source` | TEXT | NOT NULL CHECK IN ('scheduler', 'manual') | How the item entered pending state |
 | `created_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
 | `resolved_at` | DATETIME | DEFAULT NULL | When resolution occurred (NULL if unresolved) |
-| `resolved_campaign_id` | TEXT | DEFAULT NULL | Campaign ID after resolution; added migration 000055 |
+| `resolved_campaign_id` | TEXT | DEFAULT NULL | Campaign ID after resolution; added migration 000001 |
 
-**Unique:** `(cert_number)`
+**Unique:** `(cert_number)` — enforced only for unresolved rows, via the partial unique index below
 
-**Indexes:** none
+**Indexes:**
+- `idx_pending_items_unresolved_cert` UNIQUE on `(cert_number)` WHERE `resolved_at IS NULL` (partial)
+- `idx_psa_pending_items_resolved_at` on `(resolved_at)`; added migration 000004
 
 **Foreign Keys:** none (external resolution may link to campaigns)
 
@@ -581,7 +565,7 @@ the main app only reads it (`GET /api/psa-campaigns`), never fetches from PSA it
 
 **Foreign Keys:** none
 
-**Added:** migration 000017
+**Added:** migration 000018
 
 ---
 
@@ -616,10 +600,11 @@ database cannot verify — which is what the claim guard above, and SLA-44, cove
 
 **Indexes:**
 - `idx_psa_push_queue_status` on `(status)`
+- `uq_psa_push_queue_create_unresolved` UNIQUE on `(internal_campaign_id)` WHERE `operation = 'create' AND status IN ('pending','approved','pushing')` (partial); added migration 000020
 
 **Foreign Keys:** none
 
-**Added:** migration 000017 (RLS enabled in 000029)
+**Added:** migration 000018 (RLS enabled in 000029)
 
 ---
 
@@ -660,6 +645,9 @@ Price data quality flags raised by users for review.
 **Indexes:**
 - `idx_price_flags_open` on `(resolved_at)` WHERE `resolved_at IS NULL` (partial)
 - `idx_price_flags_purchase` on `(purchase_id)`
+- `idx_price_flags_resolved_at` on `(resolved_at)`; added migration 000004
+- `idx_price_flags_flagged_by` on `(flagged_by)`; added migration 000003
+- `idx_price_flags_resolved_by` on `(resolved_by)`; added migration 000003
 
 **Foreign Keys:**
 - `purchase_id → campaign_purchases(id)` ON DELETE CASCADE
@@ -678,7 +666,7 @@ Singleton row holding Card Ladder API credentials.
 | `encrypted_refresh_token` | TEXT | NOT NULL | AES-encrypted |
 | `collection_id` | TEXT | NOT NULL | CL collection ID |
 | `firebase_api_key` | TEXT | NOT NULL | Firebase auth key |
-| `firebase_uid` | TEXT | NOT NULL DEFAULT '' | Firebase user ID; added migration 000025 |
+| `firebase_uid` | TEXT | NOT NULL DEFAULT '' | Firebase user ID; added migration 000001 |
 | `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 
 **Indexes:** none
@@ -719,14 +707,14 @@ Card Ladder sales comparables data (recent auction/sale records).
 | `seller` | TEXT | NOT NULL DEFAULT '' | |
 | `item_url` | TEXT | NOT NULL DEFAULT '' | |
 | `slab_serial` | TEXT | NOT NULL DEFAULT '' | |
-| `condition` | TEXT | NOT NULL DEFAULT '' | Grade-specific condition label; added migration 000040 |
+| `condition` | TEXT | NOT NULL DEFAULT '' | Grade-specific condition label; added migration 000001 |
 | `created_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
 
 **Unique:** `(gem_rate_id, condition, item_id)`
 
 **Indexes:**
-- `idx_cl_sales_comps_gem_rate` on `(gem_rate_id, sale_date DESC)`
-- `idx_cl_sales_comps_gem_cond_date` on `(gem_rate_id, condition, sale_date DESC)`; added migration 000041
+- `idx_cl_sales_comps_gem_cond_date` on `(gem_rate_id, condition, sale_date DESC)`
+- `idx_cl_sales_comps_item` UNIQUE on `(gem_rate_id, condition, item_id)`
 
 **Foreign Keys:** none
 
@@ -761,6 +749,7 @@ Market intelligence data from DoubleHolo (sentiment, forecasts, grading ROI).
 **Indexes:**
 - `idx_market_intelligence_dh_card_id` on `(dh_card_id)`
 - `idx_market_intelligence_fetched_at` on `(fetched_at)`
+- `idx_market_intelligence_velocity_last_fetch` on `(velocity_last_fetch)`; added migration 000003
 
 **Foreign Keys:** none
 
@@ -795,7 +784,7 @@ Daily buy/sell suggestions from DoubleHolo.
 
 **Indexes:**
 - `idx_dh_suggestions_date` on `(suggestion_date)`
-- `idx_dh_suggestions_card` on `(card_name, set_name)`
+- `idx_dh_suggestions_fetched_at` on `(fetched_at)`; added migration 000003
 
 **Foreign Keys:** none
 
@@ -817,30 +806,19 @@ Records of missing data encountered during scoring/analytics.
 
 **Indexes:**
 - `idx_scoring_gaps_recorded` on `(recorded_at)`
-- `idx_scoring_gaps_factor` on `(factor_name, recorded_at)`
 
 **Foreign Keys:** none
 
 ---
 
-### `sell_sheet_items`
-Global sell sheet item selections (persisted across sessions, not scoped to a user). Migrated to global in migration 000042.
+### ~~`sell_sheet_items`~~ — DROPPED (migration 000007)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `purchase_id` | TEXT | PK | |
-| `added_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-
-**Primary Key:** `purchase_id`
-
-**Indexes:** none
-
-**Foreign Keys:** none
+Dropped in migration 000007. Held global sell sheet item selections (`purchase_id` PK, `added_at`), persisted across sessions and not scoped to a user.
 
 ---
 
 ### `dh_push_config`
-Singleton row holding safety thresholds for the DH price push pipeline. Added in migration 000044.
+Singleton row holding safety thresholds for the DH price push pipeline. Added in migration 000001.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
@@ -858,26 +836,20 @@ Singleton row holding safety thresholds for the DH price push pipeline. Added in
 
 ---
 
-### `mm_card_mappings`
-Maps purchase cert numbers to Market Movers collectible IDs for value sync. Added in migration 000045.
+### ~~`marketmovers_config`~~ — DROPPED (migration 000030)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `slab_serial` | TEXT | PK | Cert number |
-| `mm_collectible_id` | INTEGER | NOT NULL | MM collectible identifier |
-| `mm_master_id` | INTEGER | NOT NULL DEFAULT 0 | MM master card ID; added migration 000049 |
-| `mm_search_title` | TEXT | NOT NULL DEFAULT '' | Search title used for MM lookup; added migration 000050 |
-| `mm_collection_item_id` | INTEGER | NOT NULL DEFAULT 0 | MM collection item ID; added migration 000051 |
-| `updated_at` | TEXT | NOT NULL DEFAULT '' | |
+Held Market Movers API credentials (singleton row: `username`, `encrypted_refresh_token`). Market Movers was retired in migration 000021, which dropped its siblings `mm_sales_comps` and `mm_card_mappings` by name but missed this one; 000030 finished the job. The single production row held a credential for the retired vendor and was discarded deliberately — `000030_drop_marketmovers_config.down.sql` restores the structure only.
 
-**Indexes:** none (PK lookup only)
+---
 
-**Foreign Keys:** none
+### ~~`mm_card_mappings`~~ — DROPPED (migration 000021)
+
+Dropped in migration 000021 alongside `mm_sales_comps` and the seven `mm_*` columns on `campaign_purchases`. Mapped purchase cert numbers to Market Movers collectible IDs for value sync. Market Movers was retired in favor of Card Ladder.
 
 ---
 
 ### `dh_card_cache`
-Per-card DH enterprise analytics + demand cache. Populated by the daily DH analytics refresh scheduler (`DH_ANALYTICS_REFRESH_ENABLED`). Keyed by `(card_id, window)`. Added in migration 000067.
+Per-card DH enterprise analytics + demand cache. Populated by the daily DH analytics refresh scheduler (`DH_ANALYTICS_REFRESH_ENABLED`). Keyed by `(card_id, window)`. Added in migration 000001.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
@@ -894,14 +866,14 @@ Per-card DH enterprise analytics + demand cache. Populated by the daily DH analy
 | `demand_computed_at` | TIMESTAMP | nullable | DH's `computed_at` for demand |
 | `fetched_at` | TIMESTAMP | NOT NULL | When we last upserted the row |
 
-**Indexes:** `idx_card_cache_demand_score` on `demand_score DESC`
+**Indexes:** none — `idx_card_cache_demand_score` was dropped in migration 000003 (see "Dropped indexes" below).
 
 **Foreign Keys:** none (DH card IDs aren't FK'd to our tables)
 
 ---
 
 ### `dh_character_cache`
-Per-character DH analytics + demand cache. Populated by the same scheduler as `dh_card_cache`. Keyed by `(character, window)`. Added in migration 000067.
+Per-character DH analytics + demand cache. Populated by the same scheduler as `dh_card_cache`. Keyed by `(character, window)`. Added in migration 000001.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
@@ -920,9 +892,157 @@ Per-character DH analytics + demand cache. Populated by the same scheduler as `d
 
 ---
 
+### `dh_card_tombstones`
+DH card IDs that repeatedly fail to resolve. Suppresses retry storms against the DH API for cards that will never match.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `dh_card_id` | BIGINT | PK | |
+| `first_seen_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | First failure |
+| `last_seen_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | Most recent failure |
+| `attempts` | INT | NOT NULL DEFAULT 1 | Cumulative failure count |
+| `last_error` | TEXT | NOT NULL DEFAULT '' | |
+
+**Indexes:** none (PK lookup only)
+
+**Foreign Keys:** none
+
+**Added:** migration 000011
+
+---
+
+### `dh_comp_cache`
+Pre-aggregated sales analytics from DH's graded-sales-analytics endpoint, keyed by card and grade. Read by liquidation comp pricing.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `dh_card_id` | INT | NOT NULL, PK part | |
+| `grade` | TEXT | NOT NULL, PK part | |
+| `total_sales` | INT | NOT NULL DEFAULT 0 | All-time sale count |
+| `recent_count_90d` | INT | NOT NULL DEFAULT 0 | Sales in trailing 90 days |
+| `median_cents` | INT | NOT NULL DEFAULT 0 | |
+| `avg_cents` | INT | NOT NULL DEFAULT 0 | |
+| `min_cents` | INT | NOT NULL DEFAULT 0 | |
+| `max_cents` | INT | NOT NULL DEFAULT 0 | |
+| `price_change_30d_pct` | REAL | nullable | NULL when not computable |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+**Primary Key:** `(dh_card_id, grade)`
+
+**Indexes:** none (PK lookup only)
+
+**Foreign Keys:** none
+
+**Added:** migration 000005
+
+---
+
+### `card_price_trajectory`
+Weekly rolled-up DH sale statistics per card, used for trend/velocity signals.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `dh_card_id` | TEXT | NOT NULL, PK part | Stored as TEXT here, unlike the BIGINT/INT `dh_card_id` on `dh_state_events` and `dh_comp_cache` |
+| `week_start` | TEXT | NOT NULL, PK part | ISO date of the week's Monday |
+| `sale_count` | BIGINT | NOT NULL | Sales observed that week |
+| `avg_price_cents` | BIGINT | NOT NULL | |
+| `median_price_cents` | BIGINT | NOT NULL | |
+| `refreshed_at` | TIMESTAMP | NOT NULL | |
+
+**Primary Key:** `(dh_card_id, week_start)`
+
+**Indexes:** none — `idx_card_price_trajectory_card` was created by 000001 and dropped by 000003. The PK `(dh_card_id, week_start)` still serves prefix lookups by card.
+
+**Foreign Keys:** none
+
+---
+
+### `dh_state_events`
+Append-only audit log of DH push/inventory state transitions. Maps to `dhevents.Event` (`internal/domain/dhevents/events.go`). Most columns are nullable because a given event type only fills the fields relevant to it.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | BIGSERIAL | PK | |
+| `purchase_id` | TEXT | nullable | Not an FK — events outlive the purchases they describe |
+| `cert_number` | TEXT | nullable | |
+| `event_at` | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
+| `event_type` | TEXT | NOT NULL | |
+| `prev_push_status` | TEXT | nullable | |
+| `new_push_status` | TEXT | nullable | |
+| `prev_dh_status` | TEXT | nullable | |
+| `new_dh_status` | TEXT | nullable | |
+| `dh_inventory_id` | BIGINT | nullable | |
+| `dh_card_id` | BIGINT | nullable | |
+| `dh_order_id` | TEXT | nullable | |
+| `sale_price_cents` | BIGINT | nullable | |
+| `source` | TEXT | NOT NULL | What produced the event (scheduler, handler, …) |
+| `notes` | TEXT | nullable | |
+
+**Indexes:**
+- `idx_dh_state_events_type_time` on `(event_type, event_at DESC)`
+
+`idx_dh_state_events_purchase` and `idx_dh_state_events_cert` were created by 000001 and dropped by 000003; lookups by `purchase_id` or `cert_number` are unindexed.
+
+**Foreign Keys:** none
+
+---
+
+### `scheduler_run_stats`
+One row per named background job recording its last run. Backs the scheduler status endpoints.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `name` | TEXT | PK | Job name |
+| `last_run_at` | TEXT | NOT NULL | RFC3339 timestamp |
+| `duration_ms` | BIGINT | NOT NULL | |
+| `stats_json` | TEXT | NOT NULL | Job-specific counters, shape varies by job |
+| `updated_at` | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
+
+**Indexes:** none (PK lookup only)
+
+**Foreign Keys:** none
+
+---
+
+### `psa_portal_token`
+Singleton row caching the PSA portal session access token.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | INTEGER | PK DEFAULT 1, CHECK(id = 1) | Enforces singleton |
+| `access_token` | TEXT | NOT NULL | |
+| `expires_at` | TIMESTAMPTZ | NOT NULL | |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+**Indexes:** none (PK lookup only)
+
+**Foreign Keys:** none
+
+**Added:** migration 000016
+
+---
+
+### `psa_portal_snapshot`
+Singleton row holding the most recent raw PSA portal fetch, so the app can serve portal data without re-hitting PSA.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | INTEGER | PK DEFAULT 1, CHECK(id = 1) | Enforces singleton |
+| `rows` | JSONB | NOT NULL | Raw portal rows as fetched |
+| `fetched_at` | TIMESTAMPTZ | NOT NULL | When PSA was called |
+| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+**Indexes:** none (PK lookup only)
+
+**Foreign Keys:** none
+
+**Added:** migration 000017
+
+---
+
 ## Views
 
-### ~~`stale_prices`~~ — DROPPED (migration 000038)
+### ~~`stale_prices`~~ — DROPPED (pre-cutover)
 
 Dropped with `price_history`. The refresh scheduler now queries `campaign_purchases` directly.
 
@@ -949,6 +1069,54 @@ Per-operation breakdown of AI call counts, error rates, latency, token usage, an
 
 ---
 
+## Dropped indexes
+
+Migration 000003 dropped 28 indexes that Supabase's advisor reported as never scanned, and
+migration 000021 dropped one more along with the Market Movers columns. 27 of 000003's 28
+are gone for good and are listed below; the 28th, `idx_oauth_states_expires`, was restored
+by migration 000026 and is live again (documented under `oauth_states` above). They are
+catalogued here because older docs, query plans, and commit messages still name them —
+none of the rows below exist in the current schema.
+
+| Index | Table | Dropped by |
+|-------|-------|-----------|
+| `idx_ai_calls_operation` | `ai_calls` | 000003 |
+| `idx_ai_calls_timestamp` | `ai_calls` | 000003 |
+| `idx_api_calls_errors` | `api_calls` | 000003 |
+| `idx_api_calls_timestamp` | `api_calls` | 000003 |
+| `idx_campaign_purchases_ebay_export_flagged_at` | `campaign_purchases` | 000003 |
+| `idx_campaign_purchases_received_at` | `campaign_purchases` | 000003 |
+| `idx_campaign_purchases_updated_at` | `campaign_purchases` | 000003 |
+| `idx_purchases_dh_cert_status` | `campaign_purchases` | 000003 |
+| `idx_purchases_gem_rate_id` | `campaign_purchases` | 000003 |
+| `idx_purchases_mm_last_error` | `campaign_purchases` | 000021 |
+| `idx_card_access_log_card_number` | `card_access_log` | 000003 |
+| `idx_card_cache_demand_score` | `dh_card_cache` | 000003 |
+| `idx_card_price_trajectory_card` | `card_price_trajectory` | 000003 |
+| `idx_cl_sales_comps_gem_rate` | `cl_sales_comps` | 000003 |
+| `idx_dh_state_events_cert` | `dh_state_events` | 000003 |
+| `idx_dh_state_events_purchase` | `dh_state_events` | 000003 |
+| `idx_dh_suggestions_card` | `dh_suggestions` | 000003 |
+| `idx_invoices_status` | `invoices` | 000003 |
+| `idx_revocation_flags_segment` | `revocation_flags` | 000003 |
+| `idx_revocation_flags_status` | `revocation_flags` | 000003 |
+| `idx_sales_channel` | `campaign_sales` | 000003 |
+| `idx_scoring_gaps_factor` | `scoring_data_gaps` | 000003 |
+| `idx_user_sessions_user_id` | `user_sessions` | 000003 |
+| `idx_user_tokens_expires_at` | `user_tokens` | 000003 |
+| `idx_user_tokens_session_id` | `user_tokens` | 000003 |
+| `idx_user_tokens_session_unique` (UNIQUE) | `user_tokens` | 000003 |
+| `idx_user_tokens_user_id` | `user_tokens` | 000003 |
+| `idx_users_google_id` | `users` | 000003 |
+
+Four more indexes went away with the object they belonged to rather than by an explicit
+`DROP INDEX`: `idx_sell_sheet_items_added_at` (created by 000003, dropped with its table
+in 000007), `idx_advisor_cache_type` (dropped with its table in 000013), and
+`idx_campaign_purchases_mm_value_cents` and `idx_mm_sales_comps_lookup` (removed by
+000021 with their column and table).
+
+---
+
 ## FK Dependency Graph
 
 ```
@@ -959,7 +1127,7 @@ users
 ├── allowed_emails         (added_by → users.id SET NULL)
 └── price_flags            (flagged_by → users.id, resolved_by → users.id)
 
-api_rate_limits                (standalone after price_refresh_queue dropped)
+api_rate_limits                (standalone; `price_refresh_queue` never existed in Postgres)
 
 campaigns
 └── campaign_purchases     (campaign_id → campaigns.id CASCADE DELETE)
@@ -971,21 +1139,29 @@ api_calls
 ai_calls
 card_access_log
 card_id_mappings
+card_price_trajectory
 sync_state
 cashflow_config
 invoices
 revocation_flags
-advisor_cache
 oauth_states
 cardladder_config
 cl_card_mappings
 cl_sales_comps
 market_intelligence
 dh_suggestions
+dh_state_events
+dh_card_tombstones
+dh_comp_cache
 scoring_data_gaps
-sell_sheet_items
+scheduler_run_stats
 dh_push_config
-mm_card_mappings
 dh_card_cache
 dh_character_cache
+psa_pending_items
+psa_portal_token
+psa_portal_snapshot
+psa_portal_catalog
+psa_campaign_snapshot
+psa_campaign_push_queue
 ```
