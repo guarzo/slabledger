@@ -60,7 +60,8 @@ type CapitalSummary struct {
 	RefundedCents             int           `json:"refundedCents"` // Total refunds
 	PaidCents                 int           `json:"paidCents"`     // Total paid
 	UnpaidInvoiceCount        int           `json:"unpaidInvoiceCount"`
-	// Invoice-cycle actuals (see ComputeInvoiceProjection in invoice_projection.go).
+	// Invoice-cycle actuals (populated by the finance service; see
+	// ComputeInvoiceProjection in internal/domain/finance/invoice_projection.go).
 	NextInvoiceDate                string             `json:"nextInvoiceDate,omitempty"`      // YYYY-MM-DD, empty if no unpaid
 	NextInvoiceDueDate             string             `json:"nextInvoiceDueDate,omitempty"`   // YYYY-MM-DD
 	NextInvoiceAmountCents         int                `json:"nextInvoiceAmountCents"`         // TotalCents - PaidCents of earliest unpaid invoice (amount still owed)
