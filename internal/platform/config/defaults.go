@@ -10,9 +10,6 @@ func Default() Config {
 			RateLimitRequests: 300, // Increased from 100 to handle concurrent UI requests
 			TrustProxy:        false,
 		},
-		Cache: CacheConfig{
-			Path: "data/cache.json",
-		},
 		Server: ServerConfig{
 			ListenAddr:               "127.0.0.1:8080",
 			ReadTimeout:              15 * time.Second,

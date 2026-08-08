@@ -3,8 +3,6 @@ package config
 import (
 	"encoding/hex"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -35,16 +33,6 @@ func (cfg *Config) Validate() error {
 	}
 	if cfg.Mode.RateLimitRequests > 10000 {
 		return apperrors.ConfigInvalid("rate-limit", cfg.Mode.RateLimitRequests, "cannot exceed 10000 requests per minute")
-	}
-
-	// Cache path syntax validation only — directory creation handled at startup
-	if cfg.Cache.Path != "" {
-		dir := filepath.Dir(cfg.Cache.Path)
-		if dir != "" && dir != "." {
-			if _, err := os.Stat(dir); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("cache directory path invalid: %w", err)
-			}
-		}
 	}
 
 	// Validate encryption key if provided (auth is enabled when key is set)
@@ -84,19 +72,6 @@ func (cfg *Config) Validate() error {
 		return apperrors.ConfigInvalid("psa-portal", "", "PSA_PORTAL_EMAIL and PSA_PORTAL_PASSWORD must both be set or both be empty")
 	}
 
-	return nil
-}
-
-// EnsureDirectories creates required directories for the application.
-func EnsureDirectories(cfg Config) error {
-	if cfg.Cache.Path != "" {
-		dir := filepath.Dir(cfg.Cache.Path)
-		if dir != "" && dir != "." {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				return fmt.Errorf("cache directory not writable: %w", err)
-			}
-		}
-	}
 	return nil
 }
 

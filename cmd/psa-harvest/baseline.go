@@ -16,9 +16,9 @@ import (
 )
 
 // parseBaselineFlag pulls -baseline-pull out of the raw CLI args before they
-// reach config.Load(args). config.FromFlags (internal/platform/config/loader.go:236-262)
-// builds its own flag.FlagSet defining only 9 flags (web, port, rate-limit,
-// trust-proxy, log-level, log-json, cache, database-url, migrations-path) and
+// reach config.Load(args). config.FromFlags (internal/platform/config/loader.go:231-266)
+// builds its own flag.FlagSet defining only 8 flags (web, port, rate-limit,
+// trust-proxy, log-level, log-json, database-url, migrations-path) and
 // fails with "flag provided but not defined" on anything else, so
 // -baseline-pull must never reach it. rest is every arg config.Load is still
 // allowed to see.
