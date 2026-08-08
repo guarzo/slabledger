@@ -24,8 +24,22 @@ jobs:
     timeout-minutes: 5
 
     steps:
+    - name: Fetch update metadata
+      # Reads the semver bump type off the PR without checking out its code.
+      id: meta
+      uses: dependabot/fetch-metadata@v2
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Enable auto-merge
       # Squash matches the repo's only permitted merge method.
+      #
+      # Majors are excluded deliberately. Of the last 60 Dependabot PRs, 46 merged and
+      # 7 were closed by hand (Dependabot's "I won't notify you again about this
+      # release" reply) — roughly one real decision in eight was "no", and the two that
+      # cost the most to undo were majors (eslint 9->10, react). Majors now stay open
+      # for a human, which is what already happened in practice.
+      if: steps.meta.outputs.update-type != 'version-update:semver-major'
       run: gh pr merge --auto --squash "$PR_URL"
       env:
         PR_URL: ${{ github.event.pull_request.html_url }}
