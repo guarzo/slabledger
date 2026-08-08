@@ -13,18 +13,13 @@ import "time"
 // CardCache is the domain view of a dh_card_cache row. Nullable SQL columns
 // map to pointer fields so callers can distinguish NULL from the zero value.
 type CardCache struct {
-	CardID                string
-	Window                string // "7d" or "30d"
-	DemandScore           *float64
-	DemandDataQuality     *string // "proxy" | "full"
-	DemandJSON            *string
-	VelocityJSON          *string
-	TrendJSON             *string
-	SaturationJSON        *string
-	PriceDistributionJSON *string
-	AnalyticsComputedAt   *time.Time
-	DemandComputedAt      *time.Time
-	FetchedAt             time.Time
+	CardID              string
+	Window              string // "7d" or "30d"
+	DemandScore         *float64
+	DemandDataQuality   *string // "proxy" | "full"
+	AnalyticsComputedAt *time.Time
+	DemandComputedAt    *time.Time
+	FetchedAt           time.Time
 }
 
 // CharacterCache is the domain view of a dh_character_cache row.

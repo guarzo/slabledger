@@ -33,25 +33,16 @@ func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row demand.Car
 		`INSERT INTO dh_card_cache (
 			card_id, "window",
 			demand_score, demand_data_quality,
-			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
 			analytics_computed_at, demand_computed_at, fetched_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT(card_id, "window") DO UPDATE SET
-			demand_score            = excluded.demand_score,
-			demand_data_quality     = excluded.demand_data_quality,
-			demand_json             = excluded.demand_json,
-			velocity_json           = excluded.velocity_json,
-			trend_json              = excluded.trend_json,
-			saturation_json         = excluded.saturation_json,
-			price_distribution_json = excluded.price_distribution_json,
-			analytics_computed_at   = excluded.analytics_computed_at,
-			demand_computed_at      = excluded.demand_computed_at,
-			fetched_at              = excluded.fetched_at`,
+			demand_score          = excluded.demand_score,
+			demand_data_quality   = excluded.demand_data_quality,
+			analytics_computed_at = excluded.analytics_computed_at,
+			demand_computed_at    = excluded.demand_computed_at,
+			fetched_at            = excluded.fetched_at`,
 		row.CardID, row.Window,
 		nullFloat64FromPtr(row.DemandScore), nullStringFromPtr(row.DemandDataQuality),
-		nullStringFromPtr(row.DemandJSON), nullStringFromPtr(row.VelocityJSON),
-		nullStringFromPtr(row.TrendJSON), nullStringFromPtr(row.SaturationJSON),
-		nullStringFromPtr(row.PriceDistributionJSON),
 		nullTimeFromPtr(row.AnalyticsComputedAt), nullTimeFromPtr(row.DemandComputedAt),
 		row.FetchedAt,
 	)
@@ -66,7 +57,6 @@ func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window st
 	row := r.db.QueryRowContext(ctx,
 		`SELECT card_id, "window",
 			demand_score, demand_data_quality,
-			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
 			analytics_computed_at, demand_computed_at, fetched_at
 		FROM dh_card_cache
 		WHERE card_id = $1 AND "window" = $2`,
@@ -187,22 +177,16 @@ func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window stri
 
 func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 	var (
-		row                   demand.CardCache
-		demandScore           sql.NullFloat64
-		demandDataQuality     sql.NullString
-		demandJSON            sql.NullString
-		velocityJSON          sql.NullString
-		trendJSON             sql.NullString
-		saturationJSON        sql.NullString
-		priceDistributionJSON sql.NullString
-		analyticsComputedAt   sql.NullTime
-		demandComputedAt      sql.NullTime
+		row                 demand.CardCache
+		demandScore         sql.NullFloat64
+		demandDataQuality   sql.NullString
+		analyticsComputedAt sql.NullTime
+		demandComputedAt    sql.NullTime
 	)
 
 	if err := s.Scan(
 		&row.CardID, &row.Window,
 		&demandScore, &demandDataQuality,
-		&demandJSON, &velocityJSON, &trendJSON, &saturationJSON, &priceDistributionJSON,
 		&analyticsComputedAt, &demandComputedAt, &row.FetchedAt,
 	); err != nil {
 		return nil, err
@@ -210,11 +194,6 @@ func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 
 	row.DemandScore = nullFloat64ToPtr(demandScore)
 	row.DemandDataQuality = nullStringToPtr(demandDataQuality)
-	row.DemandJSON = nullStringToPtr(demandJSON)
-	row.VelocityJSON = nullStringToPtr(velocityJSON)
-	row.TrendJSON = nullStringToPtr(trendJSON)
-	row.SaturationJSON = nullStringToPtr(saturationJSON)
-	row.PriceDistributionJSON = nullStringToPtr(priceDistributionJSON)
 	row.AnalyticsComputedAt = nullTimeToPtr(analyticsComputedAt)
 	row.DemandComputedAt = nullTimeToPtr(demandComputedAt)
 	return &row, nil
