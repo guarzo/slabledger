@@ -1,8 +1,10 @@
-package inventory
+package finance
 
 import (
 	"sort"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // InvoiceProjection holds the identifying fields for the earliest unpaid invoice.
@@ -28,13 +30,13 @@ type InvoiceProjection struct {
 //	invoices - full invoice list (any order; function sorts internally)
 //	now      - current time, injected for testability
 func ComputeInvoiceProjection(
-	invoices []Invoice,
+	invoices []inventory.Invoice,
 	now time.Time,
 ) InvoiceProjection {
 	const dueDateLayout = "2006-01-02"
 
 	type candidate struct {
-		invoice Invoice
+		invoice inventory.Invoice
 		dueDate time.Time
 	}
 
