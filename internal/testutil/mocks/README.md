@@ -88,7 +88,6 @@ svc := &mocks.MockInventoryService{
 | `finance.Service` | `MockFinanceService` |
 | `export.Service` | `MockExportService` |
 | `dhlisting.Service` | `MockDHListingService` |
-| `advisor.Service` | `MockAdvisorService` |
 
 Each follows the same pattern: set the `*Fn` field to override a method.
 
