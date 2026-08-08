@@ -60,19 +60,9 @@ func (h *CampaignsHandler) HandleFillRate(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	// Enrich with campaign's daily cap
-	campaign, capErr := h.service.GetCampaign(r.Context(), id)
-	if capErr != nil {
-		if inventory.IsCampaignNotFound(capErr) {
-			h.logger.Warn(r.Context(), "campaign not found for fill rate enrichment",
-				observability.String("campaign_id", id))
-		} else {
-			h.logger.Error(r.Context(), "failed to get campaign for fill rate enrichment",
-				observability.String("campaign_id", id),
-				observability.Err(capErr))
-		}
-	}
 
+	// CapCents and FillRatePct are populated by the service; this handler only
+	// converts cents to USD for the API.
 	type fillRateRow struct {
 		Date          string  `json:"date"`
 		SpendUSD      float64 `json:"spendUSD"`
@@ -82,19 +72,11 @@ func (h *CampaignsHandler) HandleFillRate(w http.ResponseWriter, r *http.Request
 	}
 	rows := make([]fillRateRow, len(daily))
 	for i, d := range daily {
-		capCents := d.CapCents
-		if capErr == nil && campaign != nil {
-			capCents = campaign.DailySpendCapCents
-		}
-		fillRate := d.FillRatePct
-		if capCents > 0 {
-			fillRate = float64(d.SpendCents) / float64(capCents)
-		}
 		rows[i] = fillRateRow{
 			Date:          d.Date,
 			SpendUSD:      float64(d.SpendCents) / 100.0,
-			CapUSD:        float64(capCents) / 100.0,
-			FillRatePct:   fillRate,
+			CapUSD:        float64(d.CapCents) / 100.0,
+			FillRatePct:   d.FillRatePct,
 			PurchaseCount: d.PurchaseCount,
 		}
 	}

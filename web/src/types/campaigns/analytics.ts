@@ -28,10 +28,11 @@ export interface ChannelPNL {
   avgDaysToSell: number;
 }
 
+/** Row shape of GET /api/campaigns/{id}/fill-rate. Money is USD, not cents. */
 export interface DailySpend {
   date: string;
-  spendCents: number;
-  capCents: number;
+  spendUSD: number;
+  capUSD: number;
   fillRatePct: number;
   purchaseCount: number;
 }

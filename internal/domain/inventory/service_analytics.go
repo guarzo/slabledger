@@ -23,7 +23,37 @@ func (s *service) GetPNLByChannel(ctx context.Context, campaignID string) ([]Cha
 }
 
 func (s *service) GetDailySpend(ctx context.Context, campaignID string, days int) ([]DailySpend, error) {
-	return s.analytics.GetDailySpend(ctx, campaignID, days)
+	daily, err := s.analytics.GetDailySpend(ctx, campaignID, days)
+	if err != nil {
+		return nil, err
+	}
+	// The cap lives on the campaign, not on campaign_purchases, so the rows
+	// arrive without it. A campaign we cannot read is not fatal: callers render
+	// zero caps rather than failing the request.
+	campaign, err := s.campaigns.GetCampaign(ctx, campaignID)
+	switch {
+	case err != nil:
+		// A deleted campaign is routine; anything else is a real failure. This
+		// split moved here from the handler — do not collapse it.
+		if s.logger != nil {
+			fields := []observability.Field{
+				observability.String("campaign_id", campaignID),
+				observability.Err(err),
+			}
+			if IsCampaignNotFound(err) {
+				s.logger.Warn(ctx, "inventory: campaign not found for fill-rate enrichment", fields...)
+			} else {
+				s.logger.Error(ctx, "inventory: failed to get campaign for fill-rate enrichment", fields...)
+			}
+		}
+		return daily, nil
+	case campaign == nil:
+		// CampaignRepository permits (nil, nil). Nothing to enrich from, and
+		// nothing worth logging — no implementation does this today.
+		return daily, nil
+	}
+	EnrichDailySpendFillRate(daily, campaign.DailySpendCapCents)
+	return daily, nil
 }
 
 func (s *service) GetDaysToSellDistribution(ctx context.Context, campaignID string) ([]DaysToSellBucket, error) {
