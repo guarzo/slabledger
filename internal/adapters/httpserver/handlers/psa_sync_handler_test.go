@@ -211,6 +211,69 @@ func TestPSASyncHandler_HandleAssignPendingItem(t *testing.T) {
 	}
 }
 
+// Reconcile enqueues pending items for purchases that already exist (a PSA
+// campaign name that no longer resolves), so assignment cannot assume it is
+// creating a new row: the unique index on (grader, cert_number) turned every
+// such assignment into a 409 the operator had no way past. Reassign the
+// existing purchase instead — which records attribution_source='manual' just
+// as the create path does.
+func TestPSASyncHandler_HandleAssignPendingItem_ReassignsExistingPurchase(t *testing.T) {
+	resolved := false
+	created := false
+	var reassignedID, reassignedCampaign string
+	pendingRepo := &mocks.MockPendingItemRepository{
+		GetPendingItemByIDFn: func(_ context.Context, id string) (*inventory.PendingItem, error) {
+			return &inventory.PendingItem{
+				ID: id, CertNumber: "CERT001", CardName: "Charizard",
+				Grade: 10, BuyCostCents: 1500, PurchaseDate: "2026-03-15",
+				Status: "unmatched", Candidates: []string{"Brady modern"},
+			}, nil
+		},
+		ResolvePendingItemFn: func(_ context.Context, _, _ string) error {
+			resolved = true
+			return nil
+		},
+	}
+	svc := &mocks.MockInventoryService{
+		GetPurchasesByCertNumbersFn: func(_ context.Context, certs []string) (map[string]*inventory.Purchase, error) {
+			return map[string]*inventory.Purchase{
+				certs[0]: {ID: "existing-purchase", CertNumber: certs[0], CampaignID: "c-old"},
+			}, nil
+		},
+		ReassignPurchaseFn: func(_ context.Context, purchaseID, newCampaignID string) error {
+			reassignedID, reassignedCampaign = purchaseID, newCampaignID
+			return nil
+		},
+		CreatePurchaseFn: func(_ context.Context, _ *inventory.Purchase) error {
+			created = true
+			return nil
+		},
+	}
+	h := handlers.NewPSASyncHandler(handlers.PSASyncHandlerConfig{
+		PendingRepo: pendingRepo,
+		Service:     svc,
+		Logger:      mocks.NewMockLogger(),
+	})
+	req := httptest.NewRequest("POST", "/api/purchases/psa-pending/pi-1/assign",
+		strings.NewReader(`{"campaignId": "c-new"}`))
+	req.SetPathValue("id", "pi-1")
+	rr := httptest.NewRecorder()
+	h.HandleAssignPendingItem(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if created {
+		t.Error("expected no purchase to be created — the cert already exists")
+	}
+	if reassignedID != "existing-purchase" || reassignedCampaign != "c-new" {
+		t.Errorf("reassigned (%q, %q), want (existing-purchase, c-new)", reassignedID, reassignedCampaign)
+	}
+	if !resolved {
+		t.Error("expected pending item to be resolved")
+	}
+}
+
 func TestPSASyncHandler_HandleDismissPendingItem(t *testing.T) {
 	dismissed := false
 	pendingRepo := &mocks.MockPendingItemRepository{

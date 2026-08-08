@@ -23,9 +23,14 @@ type PSASyncRefresher interface {
 	GetLastRunStats() *scheduler.PSASyncRunStats
 }
 
-// PSASyncPurchaseCreator creates purchases (subset of inventory.Service).
+// PSASyncPurchaseCreator resolves a pending item into a purchase (subset of
+// inventory.Service). Assignment is update-or-create rather than create-only:
+// the reconciler enqueues items for purchases that already exist, so the cert
+// lookup and reassignment are as load-bearing as the create.
 type PSASyncPurchaseCreator interface {
 	CreatePurchase(ctx context.Context, p *inventory.Purchase) error
+	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
+	ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error
 }
 
 // PSASyncHandlerConfig holds dependencies for the PSA sync handler.
@@ -171,6 +176,11 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if h.service == nil {
+		writeError(w, http.StatusServiceUnavailable, "purchase creation not available")
+		return
+	}
+
 	// A pending item exists precisely because the automated paths could not decide:
 	// FindMatchingCampaign returned "ambiguous"/"unmatched", or PSA named a campaign
 	// that did not resolve. Whichever campaign the operator posts — one of the
@@ -180,30 +190,11 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 	// suggestion" from "overrode it" — and it does not need to, since both are a
 	// human decision. Note for anyone reading attribution_source analytically:
 	// 'manual' here means "a person decided", not "a person disagreed with us".
-	purchase := &inventory.Purchase{
-		CampaignID:        body.CampaignID,
-		CertNumber:        item.CertNumber,
-		CardName:          item.CardName,
-		SetName:           item.SetName,
-		CardNumber:        item.CardNumber,
-		Grader:            "PSA",
-		GradeValue:        item.Grade,
-		BuyCostCents:      item.BuyCostCents,
-		PurchaseDate:      item.PurchaseDate,
-		AttributionSource: inventory.AttributionSourceManual,
-	}
-
-	if h.service == nil {
-		writeError(w, http.StatusServiceUnavailable, "purchase creation not available")
-		return
-	}
-	if err := h.service.CreatePurchase(ctx, purchase); err != nil {
-		if inventory.IsDuplicateCertNumber(err) {
-			writeError(w, http.StatusConflict, fmt.Sprintf("cert %s already exists", item.CertNumber))
-			return
-		}
-		h.logger.Error(ctx, "failed to create purchase from pending item", observability.Err(err))
-		writeError(w, http.StatusInternalServerError, "Internal server error")
+	//
+	// Both branches below record that source: CreatePurchase from the struct
+	// field, ReassignPurchase because UpdatePurchaseCampaign stamps 'manual'.
+	purchase, ok := h.resolvePendingItemToPurchase(ctx, w, item, body.CampaignID)
+	if !ok {
 		return
 	}
 
@@ -223,6 +214,70 @@ func (h *PSASyncHandler) HandleAssignPendingItem(w http.ResponseWriter, r *http.
 	}
 
 	writeJSON(w, http.StatusOK, purchase)
+}
+
+// resolvePendingItemToPurchase books the operator's campaign choice against the
+// item's cert: it reassigns the purchase when one already exists, and creates
+// one otherwise. Reconciliation enqueues items for certs we already own (a PSA
+// campaign name that stopped resolving), and campaign_purchases is UNIQUE on
+// (grader, cert_number) — so a create-only path answered those items with a 409
+// the operator could not clear from the UI.
+//
+// It writes its own error response and returns ok=false when the assignment
+// could not be booked.
+func (h *PSASyncHandler) resolvePendingItemToPurchase(
+	ctx context.Context, w http.ResponseWriter, item *inventory.PendingItem, campaignID string,
+) (*inventory.Purchase, bool) {
+	// A failed lookup is not "no such purchase": falling through to create on
+	// error is exactly the 409 this path exists to avoid.
+	existing, err := h.service.GetPurchasesByCertNumbers(ctx, []string{item.CertNumber})
+	if err != nil {
+		h.logger.Error(ctx, "failed to look up purchase for pending item", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return nil, false
+	}
+
+	if p := existing[item.CertNumber]; p != nil {
+		if err := h.service.ReassignPurchase(ctx, p.ID, campaignID); err != nil {
+			// A sold purchase's campaign is frozen: sale_fee_cents and
+			// net_profit_cents were computed from it. Say so rather than
+			// returning a bare 500.
+			if errors.Is(err, inventory.ErrPurchaseHasSale) {
+				writeError(w, http.StatusConflict,
+					fmt.Sprintf("cert %s has been sold and cannot be reassigned", item.CertNumber))
+				return nil, false
+			}
+			h.logger.Error(ctx, "failed to reassign purchase for pending item", observability.Err(err))
+			writeError(w, http.StatusInternalServerError, "Internal server error")
+			return nil, false
+		}
+		p.CampaignID = campaignID
+		p.AttributionSource = inventory.AttributionSourceManual
+		return p, true
+	}
+
+	purchase := &inventory.Purchase{
+		CampaignID:        campaignID,
+		CertNumber:        item.CertNumber,
+		CardName:          item.CardName,
+		SetName:           item.SetName,
+		CardNumber:        item.CardNumber,
+		Grader:            "PSA",
+		GradeValue:        item.Grade,
+		BuyCostCents:      item.BuyCostCents,
+		PurchaseDate:      item.PurchaseDate,
+		AttributionSource: inventory.AttributionSourceManual,
+	}
+	if err := h.service.CreatePurchase(ctx, purchase); err != nil {
+		if inventory.IsDuplicateCertNumber(err) {
+			writeError(w, http.StatusConflict, fmt.Sprintf("cert %s already exists", item.CertNumber))
+			return nil, false
+		}
+		h.logger.Error(ctx, "failed to create purchase from pending item", observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return nil, false
+	}
+	return purchase, true
 }
 
 // HandleDismissPendingItem removes a pending item without creating a purchase.
