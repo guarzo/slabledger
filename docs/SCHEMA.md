@@ -858,22 +858,6 @@ Singleton row holding safety thresholds for the DH price push pipeline. Added in
 
 ---
 
-### `marketmovers_config`
-Singleton row holding Market Movers API credentials. Added in migration 000045.
-
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, CHECK(id = 1) | Enforces singleton |
-| `username` | TEXT | NOT NULL DEFAULT '' | MM account username |
-| `encrypted_refresh_token` | TEXT | NOT NULL DEFAULT '' | AES-encrypted |
-| `updated_at` | TEXT | NOT NULL DEFAULT '' | |
-
-**Indexes:** none
-
-**Foreign Keys:** none
-
----
-
 ### `mm_card_mappings`
 Maps purchase cert numbers to Market Movers collectible IDs for value sync. Added in migration 000045.
 
@@ -1001,7 +985,6 @@ dh_suggestions
 scoring_data_gaps
 sell_sheet_items
 dh_push_config
-marketmovers_config
 mm_card_mappings
 dh_card_cache
 dh_character_cache
