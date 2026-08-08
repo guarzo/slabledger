@@ -94,8 +94,8 @@ func (a *dhCardIDResolverAdapter) resolveChunk(ctx context.Context, certs []stri
 	if err != nil {
 		return nil, fmt.Errorf("submit batch cert resolve: %w", err)
 	}
-	if batch == nil || batch.JobID == "" {
-		return nil, fmt.Errorf("batch cert resolve: empty job_id")
+	if batch == nil || batch.BatchID == "" {
+		return nil, fmt.Errorf("batch cert resolve: empty batch_id")
 	}
 
 	deadline := time.Now().Add(a.timeout)
@@ -103,16 +103,17 @@ func (a *dhCardIDResolverAdapter) resolveChunk(ctx context.Context, certs []stri
 	pollWait := a.initialPoll
 	for {
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("batch cert resolve: job %s did not complete within %s", batch.JobID, a.timeout)
+			return nil, fmt.Errorf("batch cert resolve: batch %s did not complete within %s", batch.BatchID, a.timeout)
 		}
 
-		job, err := a.client.GetCertResolutionJob(ctx, batch.JobID)
+		job, err := a.client.GetCertResolutionJob(ctx, batch.BatchID)
 		if err != nil {
-			return nil, fmt.Errorf("poll job %s: %w", batch.JobID, err)
+			return nil, fmt.Errorf("poll batch %s: %w", batch.BatchID, err)
 		}
 
 		switch job.Status {
-		case "completed":
+		// DH's terminal status is "complete", not "completed".
+		case "complete":
 			out := make(map[string]string, len(job.Results))
 			for _, r := range job.Results {
 				if r.Status == dh.CertStatusMatched && r.DHCardID > 0 && r.CertNumber != "" {
@@ -121,16 +122,16 @@ func (a *dhCardIDResolverAdapter) resolveChunk(ctx context.Context, certs []stri
 			}
 			return out, nil
 		case "failed":
-			return nil, fmt.Errorf("batch cert resolve: job %s failed", batch.JobID)
-		case "queued", "processing":
+			return nil, fmt.Errorf("batch cert resolve: batch %s failed", batch.BatchID)
+		case "processing":
 			// fall through to sleep
 		default:
 			unknownStatusCount++
 			a.logger.Warn(ctx, "batch cert resolve: unexpected job status",
-				observability.String("job_id", batch.JobID),
+				observability.String("batch_id", batch.BatchID),
 				observability.String("status", job.Status))
 			if unknownStatusCount >= 3 {
-				return nil, fmt.Errorf("batch cert resolve: job %s returned unexpected status %q %d times", batch.JobID, job.Status, unknownStatusCount)
+				return nil, fmt.Errorf("batch cert resolve: batch %s returned unexpected status %q %d times", batch.BatchID, job.Status, unknownStatusCount)
 			}
 		}
 
