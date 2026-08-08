@@ -170,7 +170,7 @@ func (h *CampaignsHandler) HandlePortfolioInsights(w http.ResponseWriter, r *htt
 
 // HandleCampaignSuggestions handles GET /api/portfolio/suggestions.
 func (h *CampaignsHandler) HandleCampaignSuggestions(w http.ResponseWriter, r *http.Request) {
-	suggestions, ok := serviceCall(w, r.Context(), h.logger, "failed to get campaign suggestions", func() (*inventory.SuggestionsResponse, error) {
+	suggestions, ok := serviceCall(w, r.Context(), h.logger, "failed to get campaign suggestions", func() (*portfolio.SuggestionsResponse, error) {
 		return h.portSvc.GetCampaignSuggestions(r.Context())
 	})
 	if !ok {

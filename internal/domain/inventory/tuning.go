@@ -186,9 +186,16 @@ func recUnderperformingTiers(byFixedTier []PriceTierPerformance) []TuningRecomme
 	return recs
 }
 
+// LowSellThroughPct is the sell-through percentage below which a campaign is
+// treated as underperforming. It is exported because two packages act on the
+// same threshold: recLowSellThrough below, and the campaign-suggestion rule in
+// internal/domain/portfolio that may suggest closing the campaign. Keep it here,
+// in the hub, so the two cannot drift apart.
+const LowSellThroughPct = 0.30
+
 // Rule 4: Low sell-through
 func recLowSellThrough(campaign *Campaign, pnl *CampaignPNL) *TuningRecommendation {
-	if pnl == nil || pnl.TotalPurchases < 20 || pnl.SellThroughPct >= suggLowSellThroughPct {
+	if pnl == nil || pnl.TotalPurchases < 20 || pnl.SellThroughPct >= LowSellThroughPct {
 		return nil
 	}
 
