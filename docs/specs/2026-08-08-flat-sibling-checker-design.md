@@ -108,9 +108,23 @@ nothing and reported success."** A derived list can regress the same way: change
 the module path, move the tree, and the derivation returns empty, the loop
 iterates zero times, and the script exits 0 with a passing message.
 
-The script must therefore assert that derivation actually found siblings and fail
-loudly if it did not. Without this we would replace a hardcoded blind spot with a
-silent one, and the ticket's core lesson would be lost.
+**The invariant to assert is the number of comparisons performed, not the size of
+the derived list.** A non-empty assertion is too weak: a derivation that yields
+exactly one package is non-empty, produces zero distinct ordered pairs, compares
+nothing, and still prints success — reproducing the very defect class this ticket
+exists to close.
+
+The script must therefore maintain a `pairs_checked` counter, incremented once per
+ordered `(pkg, other)` comparison actually executed, and fail with a distinct
+message if it is zero when the scan completes. Deriving fewer than two siblings is
+itself the failure condition; there is no legitimate tree state in which this
+script has nothing to compare.
+
+This must be enforced *inside the script*, on every `make check` run — not as a
+manual probe someone remembers to run once (Verification §3 exercises it, but a
+human running a probe is not a property the checker holds). Without this we would
+replace a hardcoded blind spot with a silent one, and the ticket's core lesson
+would be lost.
 
 ### 3. Script changes — `scripts/check-imports.sh`
 
@@ -118,11 +132,27 @@ Replace the `SUB_PACKAGES=` line and its double loop with:
 
 - derivation via `find` + `grep -l` over non-test `.go` files, mapped to
   directories and de-duplicated;
-- a non-empty assertion (§2);
+- a `pairs_checked` counter asserted `> 0` at the end of the scan (§2);
 - a per-package scan using `find -maxdepth 1`, so the nested `pricing/lookup` is
   scanned separately from `pricing` rather than being conflated with it;
 - guarding the empty-file-list case, so `grep` never falls through to reading
   stdin.
+
+**`grep` exit-code handling.** `grep` distinguishes 1 ("no match") from ≥2
+("error" — unreadable file, bad pattern). Under `set -euo pipefail` these need
+opposite treatment, and the two obvious shapes are both wrong:
+
+- a blanket `|| true` — what the current checker uses (`check-imports.sh:44-45`) —
+  swallows exit 2, so an unreadable source file reads as "no violations here" and
+  the scan silently loses coverage of that package;
+- omitting it entirely kills the script on the *expected* no-match path, which is
+  the common case for a clean tree.
+
+Each `grep` invocation must therefore capture its status explicitly and branch on
+it: `0` → violation found, record it; `1` → no match, continue; `≥2` → abort with
+the failing path and the status, exactly as loudly as a real violation. A read
+error is a coverage hole, and this script's whole purpose is to not report success
+over a coverage hole.
 
 Style follows `scripts/check-file-size.sh`: `set -euo pipefail`, `find` +
 `while IFS= read -r`, no dependency on `git` being present.
@@ -133,17 +163,26 @@ packages.
 ### 4. Go changes — remove the violation
 
 Move `DHInventoryStatusUpdate` from `internal/domain/dhlisting/types.go:135` into
-`internal/domain/inventory`, beside the `DHStatusInStock` / `DHStatusListed`
-constants it is already used with (`dhpricing/service.go:107`). `inventory`
-already owns the DH status vocabulary, so this is where the shared DH contract
-belongs under the existing "sub-packages depend only on `inventory` for shared
+`internal/domain/inventory`, which already owns the DH status vocabulary it is
+used with (`DHStatusInStock` / `DHStatusListed`, `types_core.go:23`, consumed at
+`dhpricing/service.go:107`). That makes `inventory` the right home for the shared
+DH contract under the existing "sub-packages depend only on `inventory` for shared
 types" guidance.
+
+**Destination: a new file, `internal/domain/inventory/dh_status_update.go`.** Not
+`types_core.go`, despite that being where the status constants live: it is already
+562 lines against a 500-line guideline (`CLAUDE.md:163`) and a 600-line hard
+failure in `scripts/check-file-size.sh`. Appending the DTO there spends part of a
+21-line margin for no benefit and moves a `make check` failure closer. A focused
+file for the DH status-update contract is also the split `CLAUDE.md:163` asks for
+when a file outgrows the budget.
 
 Both interfaces then reference `inventory.DHInventoryStatusUpdate` and the same
 adapter continues to satisfy both.
 
-Touched: `dhlisting/types.go`, `dhlisting/dh_listing_service.go` (call sites at
-`:281`, `:349`), `dhpricing/types.go`, `dhpricing/service.go`,
+Touched: **new** `inventory/dh_status_update.go`; `dhlisting/types.go`,
+`dhlisting/dh_listing_service.go` (call sites at `:281`, `:349`),
+`dhpricing/types.go`, `dhpricing/service.go`,
 `adapters/clients/dhlisting/adapter.go:175`, and affected tests.
 
 The `dhpricing` package doc becomes true again. The deliberately-inlined
@@ -162,8 +201,11 @@ left untouched; they record what was true when written.
 1. `bash scripts/check-imports.sh` exits 0 on the finished tree.
 2. **Liveness, not vacuity** — temporarily add a sibling edge (e.g. `finance`
    importing `export`) and confirm the script exits 1 and names it; revert.
-3. **Fail-closed** — temporarily break the derivation and confirm the script
-   exits 1 rather than printing a pass; revert.
+3. **Fail-closed** — two probes, both reverted after:
+   (a) break the derivation so it returns empty, and confirm the script exits 1
+   rather than printing a pass;
+   (b) constrain the derivation to a single package, and confirm the script still
+   exits 1 — zero pairs compared must not read as success.
 4. **Coverage** — confirm the derived list contains all 10 packages, including
    `demand`, `dhpricing`, `psacampaign` and `pricing/lookup`, none of which the
    old list reached.
