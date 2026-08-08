@@ -5,17 +5,6 @@ import (
 	"time"
 )
 
-// DHFieldsUpdate contains the DH v2 tracking fields to update on a purchase.
-type DHFieldsUpdate struct {
-	CardID            int
-	InventoryID       int
-	CertStatus        string
-	ListingPriceCents int
-	ChannelsJSON      string
-	DHStatus          DHStatus
-	LastSyncedAt      string // RFC3339; set to time.Now() on each inventory poll
-}
-
 // PSAUpdateFields contains the PSA-specific fields that can be updated on an existing purchase.
 type PSAUpdateFields struct {
 	PSAShipDate     string
@@ -27,9 +16,9 @@ type PSAUpdateFields struct {
 	PSAListingTitle string
 }
 
-// PurchaseRepository handles purchase persistence.
-type PurchaseRepository interface {
-	// CRUD
+// PurchaseCoreRepository handles purchase lifecycle and retrieval: create,
+// read, delete, and the list/count/lookup queries that return whole purchases.
+type PurchaseCoreRepository interface {
 	CreatePurchase(ctx context.Context, p *Purchase) error
 	GetPurchase(ctx context.Context, id string) (*Purchase, error)
 	DeletePurchase(ctx context.Context, id string) error
@@ -40,17 +29,21 @@ type PurchaseRepository interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]Purchase, error)
 	CountPurchasesByCampaign(ctx context.Context, campaignID string) (int, error)
 
-	// Cert-based lookups
+	// Cert- and ID-based lookups
 	GetPurchaseByCertNumber(ctx context.Context, grader string, certNumber string) (*Purchase, error)
 	GetPurchasesByGraderAndCertNumbers(ctx context.Context, grader string, certNumbers []string) (map[string]*Purchase, error)
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
 	GetPurchasesByIDs(ctx context.Context, ids []string) (map[string]*Purchase, error)
-	GetPurchasesByDHInventoryIDs(ctx context.Context, dhIDs []int) (map[int]*Purchase, error)
+}
 
-	// Field updates
+// PurchaseFieldRepository handles targeted column updates on an existing
+// purchase: card metadata, images, cost, receipt timing, and campaign
+// attribution. Every method here mutates a purchase that already exists.
+type PurchaseFieldRepository interface {
 	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error
 	UpdatePurchaseCLSyncedAt(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error
+	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error
 	UpdatePurchaseImages(ctx context.Context, id string, frontURL, backURL string) error
 	UpdatePurchaseGrade(ctx context.Context, id string, gradeValue float64) error
 	UpdateExternalPurchaseFields(ctx context.Context, id string, p *Purchase) error
@@ -58,6 +51,8 @@ type PurchaseRepository interface {
 	UpdatePurchaseCampaign(ctx context.Context, purchaseID string, campaignID string, sourcingFeeCents int) error
 	UpdatePurchasePSAFields(ctx context.Context, id string, fields PSAUpdateFields) error
 	UpdatePurchaseBuyCost(ctx context.Context, id string, buyCostCents int) error
+	// SetReceivedAt stamps the receipt time that gates the DH push pipeline.
+	SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error
 	// ReattributePurchase moves a purchase to a PSA-authoritative campaign and
 	// sets attribution_source='psa'. Returns ErrPurchaseHasSale if a linked sale
 	// exists — sold rows carry frozen sale-side financials that this does not repair.
@@ -65,93 +60,42 @@ type PurchaseRepository interface {
 	// UpdatePurchaseAttributionName records PSA's campaign name and attribution
 	// source without moving the campaign. Safe on sold purchases.
 	UpdatePurchaseAttributionName(ctx context.Context, purchaseID, psaName, source string) error
+}
 
-	// Price overrides & AI suggestions
+// PurchasePricingRepository handles the manual price override and AI
+// suggestion columns that drive the price review queue.
+type PurchasePricingRepository interface {
 	UpdatePurchasePriceOverride(ctx context.Context, purchaseID string, priceCents int, source string) error
 	UpdatePurchaseAISuggestion(ctx context.Context, purchaseID string, priceCents int) error
 	ClearPurchaseAISuggestion(ctx context.Context, purchaseID string) error
 	AcceptAISuggestion(ctx context.Context, purchaseID string, priceCents int) error
 	GetPriceOverrideStats(ctx context.Context) (*PriceOverrideStats, error)
+}
 
-	// Receipt tracking
-	SetReceivedAt(ctx context.Context, purchaseID string, receivedAt time.Time) error
-
-	// eBay export
+// PurchaseEbayExportRepository handles the eBay export flag marking purchases
+// queued for the next CSV export.
+type PurchaseEbayExportRepository interface {
 	SetEbayExportFlag(ctx context.Context, purchaseID string, flaggedAt time.Time) error
 	ClearEbayExportFlags(ctx context.Context, purchaseIDs []string) error
 	ListEbayFlaggedPurchases(ctx context.Context) ([]Purchase, error)
-	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error
+}
 
-	// Snapshot status
+// PurchaseSnapshotRepository handles the market-snapshot job state the
+// snapshot scheduler uses to find and advance pending work.
+type PurchaseSnapshotRepository interface {
 	ListSnapshotPurchasesByStatus(ctx context.Context, status SnapshotStatus, limit int) ([]Purchase, error)
 	UpdatePurchaseSnapshotStatus(ctx context.Context, id string, status SnapshotStatus, retryCount int) error
+}
 
-	// DH v2 fields
-	UpdatePurchaseDHFields(ctx context.Context, id string, update DHFieldsUpdate) error
-	GetPurchasesByDHCertStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
-	UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error
-	// IncrementDHPushAttempts atomically increments the per-purchase skip-attempt
-	// counter and returns the new value. Used by the DH push scheduler to cap
-	// indefinite retry loops for certs DH can't match.
-	IncrementDHPushAttempts(ctx context.Context, id string) (int, error)
-	// UpdatePurchaseDHStatus updates only the dh_status column on a purchase.
-	// This is a targeted update that does not touch any other DH fields, unlike
-	// UpdatePurchaseDHFields which overwrites the full field set.
-	UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error
-	// ListStaleDHStatusSoldPurchases returns IDs of purchases that have a linked
-	// sale but whose dh_status is not 'sold'. Used by the reconciler scheduler.
-	ListStaleDHStatusSoldPurchases(ctx context.Context) ([]string, error)
-	// UpdatePurchaseDHCardID updates only the dh_card_id column on a purchase.
-	// Targeted update that does not touch any other DH fields.
-	UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error
-	GetPurchasesByDHPushStatus(ctx context.Context, status string, limit int) ([]Purchase, error)
-	CountUnsoldByDHPushStatus(ctx context.Context) (map[string]int, error)
-	// CountDHPipelineHealth returns finer-grained counts for the DH push
-	// pipeline dashboard. PendingReceived matches what /api/dh/pending actually
-	// drains (dh_push_status='pending' AND received_at IS NOT NULL).
-	// UnenrolledReceived counts received, unsold rows with no push-pipeline
-	// state — the "black hole" bucket that was previously invisible.
-	CountDHPipelineHealth(ctx context.Context) (DHPipelineHealth, error)
-	UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error
-	UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error
-	// SetHeldWithReason atomically sets the push status to held and records
-	// the hold reason in a single transaction, preventing any reader from
-	// observing a held purchase with an empty reason.
-	SetHeldWithReason(ctx context.Context, purchaseID string, reason string) error
-	// ApproveHeldPurchase atomically clears the hold reason and sets the push
-	// status to pending in a single transaction, preventing the scheduler from
-	// observing a half-updated record.
-	ApproveHeldPurchase(ctx context.Context, purchaseID string) error
-	// ResetDHFieldsForRepush atomically clears the DH inventory linkage
-	// (inventory ID, listing price, channels, status) and sets push status to
-	// pending so the scheduler re-enrolls the purchase. Preserves dh_card_id,
-	// dh_cert_status, and dh_candidates (cert resolution remains valid).
-	// Used by reconciliation when DH inventory has drifted from local state.
-	ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error
-	// ResetDHFieldsForRepushDueToDelete mirrors ResetDHFieldsForRepush and
-	// additionally stamps dh_unlisted_detected_at so the UI can badge the row.
-	// Used when DH no longer has the item (it deleted it, or we marked it sold
-	// and the local sale was later reversed) and the purchase needs to flow
-	// back through the push pipeline.
-	ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error
-	// UpdatePurchaseDHPriceSync updates dh_listing_price_cents and
-	// dh_last_synced_at in a single targeted UPDATE. Unlike
-	// UpdatePurchaseDHFields, it does not touch any other DH columns.
-	// Used by the DH price re-sync path after a successful DH PATCH.
-	UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
-	// UnmatchPurchaseDH atomically clears all DH tracking fields (card ID,
-	// inventory ID, cert status, listing price, channels, DH status, last
-	// synced timestamp) and sets dh_push_status to pushStatus in a single
-	// UPDATE. dh_push_attempts is reset to 0 when pushStatus is "pending" or
-	// "matched" so a fresh re-enrollment starts with a clean retry budget.
-	// Used by the unmatch handler to avoid partial state between field-clear
-	// and status-update.
-	UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error
-
-	// ListDHPriceDrift returns unsold purchases where DH is known
-	// (dh_inventory_id > 0), the reviewed price is positive, and the
-	// reviewed price differs from the price DH currently has
-	// (dh_listing_price_cents). Excludes dismissed/held push statuses.
-	// Ordered oldest-synced first so stale items sync first.
-	ListDHPriceDrift(ctx context.Context) ([]Purchase, error)
+// PurchaseRepository is the full purchase persistence port, composed from the
+// focused interfaces above. Depend on the narrowest one that covers your use —
+// the Postgres PurchaseStore satisfies all of them. Take this composite only
+// when you genuinely span every concern, as inventory.Service does.
+type PurchaseRepository interface {
+	PurchaseCoreRepository
+	PurchaseFieldRepository
+	PurchasePricingRepository
+	PurchaseEbayExportRepository
+	PurchaseSnapshotRepository
+	PurchaseDHRepository
 }

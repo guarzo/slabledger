@@ -74,7 +74,7 @@ type SinglePurchasePricer interface {
 type PricingEnrichJob struct {
 	StopHandle
 	ch       chan string
-	repo     inventory.PurchaseRepository
+	repo     inventory.PurchaseCoreRepository
 	pricerMu sync.RWMutex
 	pricers  []SinglePurchasePricer
 	logger   observability.Logger
@@ -84,7 +84,7 @@ type PricingEnrichJob struct {
 // injected here or later via SetPricers — the latter is needed when the
 // provider schedulers are constructed after the inventory service that owns
 // the enqueuer reference.
-func NewPricingEnrichJob(repo inventory.PurchaseRepository, logger observability.Logger, pricers ...SinglePurchasePricer) *PricingEnrichJob {
+func NewPricingEnrichJob(repo inventory.PurchaseCoreRepository, logger observability.Logger, pricers ...SinglePurchasePricer) *PricingEnrichJob {
 	j := &PricingEnrichJob{
 		StopHandle: NewStopHandle(),
 		ch:         make(chan string, pricingQueueSize),
