@@ -12,16 +12,20 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// refreshCharacters runs Step 1: union characters from top-characters (overall +
-// per era), velocity, saturation, then upserts character cache rows. Returns
-// the (ranked) character-name set, top_cards IDs for step 2 seeding, and API
-// call count. Ranking is order-of-first-appearance across the four sources, so
+// refreshCharacters runs the character step: union characters from
+// top-characters (overall + per era), velocity, saturation, then upserts
+// character cache rows. Returns the (ranked) character-name set and API call
+// count. Ranking is order-of-first-appearance across the four sources, so
 // overall-top entries outrank per-era entries, which outrank velocity and
 // saturation entries — matters when the result is capped at
 // maxCharactersPerRun.
-func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
+//
+// qualityByChar carries the character-level data quality aggregated from the
+// card step, keyed by character name. DH never reports data_quality on a
+// character, so this is the only source for it; characters absent from the map
+// get no quality rather than a guessed one.
+func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context, qualityByChar map[string]string) (
 	characters map[string]struct{},
-	topCardIDs []int,
 	apiCalls int,
 ) {
 	characters = make(map[string]struct{})
@@ -36,7 +40,6 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		characters[name] = struct{}{}
 		orderedCharacters = append(orderedCharacters, name)
 	}
-	cardIDSet := make(map[int]struct{})
 
 	// 1a. Top characters overall.
 	apiCalls++
@@ -53,13 +56,6 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	}
 
 	// 1b. Top characters per era.
-	//
-	// NOTE: TopCharactersResponse.CharacterDemand entries do not include a
-	// top_cards field in our wire types today (see types_analytics.go) — the
-	// `top_cards` attribute lives on the DH response but hasn't been typed on
-	// CharacterDemandEntry. When T2 exposes that field the loop below will
-	// start producing card IDs. Until then, step 2 is seeded by unsold
-	// inventory only, which is the intended Phase-1 behavior anyway.
 	eraEntries := make([]stampedDemandEntry, 0, len(defaultAnalyticsEras)*topCharactersPerEraLimit)
 	for _, era := range defaultAnalyticsEras {
 		apiCalls++
@@ -114,10 +110,6 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		characters = trimmed
 	}
 
-	for id := range cardIDSet {
-		topCardIDs = append(topCardIDs, id)
-	}
-
 	now := time.Now()
 	demandByChar := indexDemand(append(overallEntries, eraEntries...))
 	velocityByChar := indexVelocity(velocityEntries)
@@ -130,7 +122,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			FetchedAt: now,
 		}
 		if entry, ok := demandByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry.blob()); encErr == nil {
+			if blob, encErr := json.Marshal(entry.blob(qualityByChar[name])); encErr == nil {
 				str := string(blob)
 				row.DemandJSON = &str
 			} else {
@@ -169,32 +161,37 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		}
 	}
 
-	return characters, topCardIDs, apiCalls
+	return characters, apiCalls
 }
 
-// buildCardSeed is the Step-2 seed: union of our unsold dh_card_ids and the
-// top_cards surfaced by Step 1. Capped at maxSeedCardIDs.
-func (s *DHAnalyticsRefreshScheduler) buildCardSeed(ctx context.Context, hotIDs []int) []int {
-	seen := make(map[int]struct{}, len(hotIDs))
-	for _, id := range hotIDs {
-		if id > 0 {
-			seen[id] = struct{}{}
-		}
+// buildCardSeed is the card step's seed: our unsold dh_card_ids, capped at
+// maxSeedCardIDs.
+//
+// It used to also union the "top cards" of each hot character. That path was
+// dead: DH's top_characters response carries no top_cards field on any variant
+// (verified against the live API on 2026-08-08 for the overall, per-era, and
+// by_era forms), so the set it contributed was always empty. Removing it also
+// removes the card step's dependency on the character step, which is what lets
+// cards run first and feed character data quality in the same run (SLA-63).
+func (s *DHAnalyticsRefreshScheduler) buildCardSeed(ctx context.Context) []int {
+	if s.cardLister == nil {
+		return nil
 	}
-	if s.cardLister != nil {
-		invIDs, err := s.cardLister.ListUnsoldDHCardIDs(ctx)
-		if err != nil {
-			s.logger.Warn(ctx, "list unsold dh card ids failed", observability.Err(err))
-		} else {
-			for _, id := range invIDs {
-				if id > 0 {
-					seen[id] = struct{}{}
-				}
-			}
-		}
+	invIDs, err := s.cardLister.ListUnsoldDHCardIDs(ctx)
+	if err != nil {
+		s.logger.Warn(ctx, "list unsold dh card ids failed", observability.Err(err))
+		return nil
 	}
-	ids := make([]int, 0, len(seen))
-	for id := range seen {
+	seen := make(map[int]struct{}, len(invIDs))
+	ids := make([]int, 0, len(invIDs))
+	for _, id := range invIDs {
+		if id <= 0 {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
 		ids = append(ids, id)
 		if len(ids) >= maxSeedCardIDs {
 			break
@@ -343,22 +340,29 @@ type stampedDemandEntry struct {
 }
 
 // characterDemandBlob is the persisted shape of a character's demand payload:
-// the DH entry's own fields plus the response-level computed_at. The embedded
-// struct is anonymous so encoding/json inlines its fields, keeping the blob
-// byte-identical to the previous shape apart from the added computed_at.
+// the DH entry's own fields plus the response-level computed_at and the
+// data quality aggregated from the character's cards. The embedded struct is
+// anonymous so encoding/json inlines its fields, keeping the blob
+// byte-identical to the previous shape apart from the two added keys.
 //
-// DataQuality is deliberately absent: DH exposes data_quality only per card
-// (dh.DemandSignal), and nothing in this flow maps a card to a character — the
-// card seed is our unsold inventory, not a character's cards. Populating it
-// needs a character-level aggregation rule and a card→character mapping that
-// does not exist yet. See SLA-63.
+// DataQuality does not come from DH: data_quality is reported per card
+// (dh.DemandSignal) and never per character. It is rolled up by
+// demand.AggregateCharacterQuality over the cards we have attributed, and is
+// omitted when we have attributed none of a character's cards — an absent key
+// reads as "unknown" downstream, which is correct, whereas defaulting to
+// "proxy" or "full" would assert something we did not measure.
 type characterDemandBlob struct {
 	dh.CharacterDemandEntry
-	ComputedAt string `json:"computed_at,omitempty"`
+	DataQuality string `json:"data_quality,omitempty"`
+	ComputedAt  string `json:"computed_at,omitempty"`
 }
 
-func (s stampedDemandEntry) blob() characterDemandBlob {
-	return characterDemandBlob{CharacterDemandEntry: s.Entry, ComputedAt: s.ComputedAt}
+func (s stampedDemandEntry) blob(dataQuality string) characterDemandBlob {
+	return characterDemandBlob{
+		CharacterDemandEntry: s.Entry,
+		DataQuality:          dataQuality,
+		ComputedAt:           s.ComputedAt,
+	}
 }
 
 func indexDemand(entries []stampedDemandEntry) map[string]stampedDemandEntry {

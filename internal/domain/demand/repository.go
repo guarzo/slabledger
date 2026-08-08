@@ -15,6 +15,13 @@ type Repository interface {
 	GetCardCache(ctx context.Context, cardID, window string) (*CardCache, error)
 	ListCardCacheByDemandScore(ctx context.Context, window string, limit int) ([]CardCache, error)
 	CardDataQualityStats(ctx context.Context, window string) (QualityStats, error)
+	// ListCardsMissingCharacter returns card IDs in the window whose cached row
+	// has no character attribution yet, oldest-cached first, capped at limit.
+	ListCardsMissingCharacter(ctx context.Context, window string, limit int) ([]string, error)
+	// ListCardCharacterQuality returns one row per attributed card in the
+	// window, pairing its character with the demand data quality DH reported.
+	// It is the input to AggregateCharacterQuality.
+	ListCardCharacterQuality(ctx context.Context, window string) ([]CardCharacterQuality, error)
 
 	// Character cache
 	UpsertCharacterCache(ctx context.Context, row CharacterCache) error

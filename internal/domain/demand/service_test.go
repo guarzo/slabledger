@@ -234,6 +234,51 @@ func TestService_Leaderboard_MinDataQualityFull_ExcludesProxy(t *testing.T) {
 	}
 }
 
+func TestService_Leaderboard_EraBucketsInheritCharacterQuality(t *testing.T) {
+	// The shape the refresh scheduler actually writes: data_quality is stamped
+	// on the character (rolled up from its cards) and DH's by_era entries carry
+	// none. Era buckets therefore have to inherit it, or MinDataQuality would
+	// discard every era bucket in production (SLA-63).
+	blob := func(character, quality string, score float64) string {
+		return `{
+			"character_name": "` + character + `",
+			"card_count": 10,
+			"avg_demand_score": ` + floatStr(score) + `,
+			"total_views": 400,
+			"total_wishlist_adds": 20,
+			"data_quality": "` + quality + `",
+			"by_era": {
+				"sword_shield": {"card_count": 6, "avg_demand_score": ` + floatStr(score) + `, "total_views": 240, "total_wishlist_adds": 12}
+			}
+		}`
+	}
+	rows := []demand.CharacterCache{
+		{Character: "FullChar", Window: "30d", DemandJSON: strPtr(blob("FullChar", demand.QualityFull, 0.6))},
+		{Character: "ProxyChar", Window: "30d", DemandJSON: strPtr(blob("ProxyChar", demand.QualityProxy, 0.9))},
+	}
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
+
+	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
+		Window:         "30d",
+		Grade:          10,
+		MinDataQuality: demand.QualityFull,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatalf("want the FullChar era bucket; got 0 — era buckets are not inheriting character quality")
+	}
+	for _, o := range out {
+		if o.Character != "FullChar" {
+			t.Fatalf("bucket for %q survived a full-quality filter", o.Character)
+		}
+		if o.Demand == nil || o.Demand.DataQuality != demand.QualityFull {
+			t.Fatalf("bucket %q/%q has demand %+v; want quality %q", o.Character, o.Era, o.Demand, demand.QualityFull)
+		}
+	}
+}
+
 func TestService_Leaderboard_SortDemandScoreDesc(t *testing.T) {
 	rows := []demand.CharacterCache{
 		{Character: "Low", Window: "7d", DemandJSON: strPtr(demandJSONWithEras("Low", 0.2, "full"))},

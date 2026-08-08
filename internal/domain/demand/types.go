@@ -14,7 +14,8 @@ import "time"
 // map to pointer fields so callers can distinguish NULL from the zero value.
 type CardCache struct {
 	CardID                string
-	Window                string // "7d" or "30d"
+	Window                string  // "7d" or "30d"
+	CharacterName         *string // DH character this card belongs to; nil until attributed
 	DemandScore           *float64
 	DemandDataQuality     *string // "proxy" | "full"
 	DemandJSON            *string

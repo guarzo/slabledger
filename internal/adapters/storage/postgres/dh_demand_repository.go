@@ -32,11 +32,18 @@ func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row demand.Car
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO dh_card_cache (
 			card_id, "window",
+			character_name,
 			demand_score, demand_data_quality,
 			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
 			analytics_computed_at, demand_computed_at, fetched_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT(card_id, "window") DO UPDATE SET
+			-- Character attribution is sticky: the analytics refresh rewrites every
+			-- row each run without knowing the character, and a plain
+			-- excluded.character_name would wipe the attribution we paid a
+			-- per-card API call for. COALESCE lets a new value overwrite but
+			-- never lets a NULL clear one (SLA-63).
+			character_name          = COALESCE(excluded.character_name, dh_card_cache.character_name),
 			demand_score            = excluded.demand_score,
 			demand_data_quality     = excluded.demand_data_quality,
 			demand_json             = excluded.demand_json,
@@ -48,6 +55,7 @@ func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row demand.Car
 			demand_computed_at      = excluded.demand_computed_at,
 			fetched_at              = excluded.fetched_at`,
 		row.CardID, row.Window,
+		nullStringFromPtr(row.CharacterName),
 		nullFloat64FromPtr(row.DemandScore), nullStringFromPtr(row.DemandDataQuality),
 		nullStringFromPtr(row.DemandJSON), nullStringFromPtr(row.VelocityJSON),
 		nullStringFromPtr(row.TrendJSON), nullStringFromPtr(row.SaturationJSON),
@@ -65,6 +73,7 @@ func (r *DHDemandRepository) UpsertCardCache(ctx context.Context, row demand.Car
 func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window string) (*demand.CardCache, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT card_id, "window",
+			character_name,
 			demand_score, demand_data_quality,
 			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
 			analytics_computed_at, demand_computed_at, fetched_at
@@ -88,6 +97,7 @@ func (r *DHDemandRepository) GetCardCache(ctx context.Context, cardID, window st
 func (r *DHDemandRepository) ListCardCacheByDemandScore(ctx context.Context, window string, limit int) (_ []demand.CardCache, err error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT card_id, "window",
+			character_name,
 			demand_score, demand_data_quality,
 			demand_json, velocity_json, trend_json, saturation_json, price_distribution_json,
 			analytics_computed_at, demand_computed_at, fetched_at
@@ -137,8 +147,71 @@ func (r *DHDemandRepository) CardDataQualityStats(ctx context.Context, window st
 	return stats, nil
 }
 
-// --- Character cache CRUD ---
+// ListCardsMissingCharacter returns card IDs in the window whose row has no
+// character attribution yet, oldest-cached first so a capped run works through
+// the backlog rather than re-examining the same head every time.
+func (r *DHDemandRepository) ListCardsMissingCharacter(ctx context.Context, window string, limit int) (_ []string, err error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT card_id
+		FROM dh_card_cache
+		WHERE "window" = $1 AND character_name IS NULL
+		ORDER BY fetched_at ASC, card_id ASC
+		LIMIT $2`,
+		window, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query dh_card_cache missing character: %w", err)
+	}
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
 
+	results := make([]string, 0, limit)
+	for rows.Next() {
+		var cardID string
+		if scanErr := rows.Scan(&cardID); scanErr != nil {
+			return nil, fmt.Errorf("scan dh_card_cache card_id: %w", scanErr)
+		}
+		results = append(results, cardID)
+	}
+	return results, rows.Err()
+}
+
+// ListCardCharacterQuality returns one row per attributed card in the window
+// that also has a demand data quality, for character-level aggregation. Rows
+// missing either field are excluded in SQL because they cannot contribute.
+func (r *DHDemandRepository) ListCardCharacterQuality(ctx context.Context, window string) (_ []demand.CardCharacterQuality, err error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT character_name, demand_data_quality
+		FROM dh_card_cache
+		WHERE "window" = $1
+		  AND character_name IS NOT NULL
+		  AND demand_data_quality IS NOT NULL`,
+		window,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query dh_card_cache character quality: %w", err)
+	}
+	defer func() {
+		if cerr := rows.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+
+	results := make([]demand.CardCharacterQuality, 0, 64)
+	for rows.Next() {
+		var row demand.CardCharacterQuality
+		if scanErr := rows.Scan(&row.CharacterName, &row.DataQuality); scanErr != nil {
+			return nil, fmt.Errorf("scan dh_card_cache character quality row: %w", scanErr)
+		}
+		results = append(results, row)
+	}
+	return results, rows.Err()
+}
+
+// --- Character cache CRUD ---
 // UpsertCharacterCache inserts or updates a dh_character_cache row keyed by (character, window).
 func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row demand.CharacterCache) error {
 	_, err := r.db.ExecContext(ctx,
@@ -223,6 +296,7 @@ func (r *DHDemandRepository) ListCharacterCache(ctx context.Context, window stri
 func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 	var (
 		row                   demand.CardCache
+		characterName         sql.NullString
 		demandScore           sql.NullFloat64
 		demandDataQuality     sql.NullString
 		demandJSON            sql.NullString
@@ -236,6 +310,7 @@ func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 
 	if err := s.Scan(
 		&row.CardID, &row.Window,
+		&characterName,
 		&demandScore, &demandDataQuality,
 		&demandJSON, &velocityJSON, &trendJSON, &saturationJSON, &priceDistributionJSON,
 		&analyticsComputedAt, &demandComputedAt, &row.FetchedAt,
@@ -243,6 +318,7 @@ func scanCardCacheRow(s scanner) (*demand.CardCache, error) {
 		return nil, err
 	}
 
+	row.CharacterName = nullStringToPtr(characterName)
 	row.DemandScore = nullFloat64ToPtr(demandScore)
 	row.DemandDataQuality = nullStringToPtr(demandDataQuality)
 	row.DemandJSON = nullStringToPtr(demandJSON)
