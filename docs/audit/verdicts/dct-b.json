@@ -1,0 +1,92 @@
+[
+  {
+    "id": "DCT-012",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran all four evidence commands independently. `grep -i mm` against live routes.go/router.go returns only \"GET /api/credit/summary\" (a false-positive substring match on 'summary', not a marketmovers route) — zero real marketmovers routes registered, while docs/API.md:2583-2666 documents five (`POST/GET /api/admin/marketmovers/{config,status,refresh,sync-collection,failures}`). Advisor: routes.go:213-214 registers only digest and liquidation-analysis; docs/API.md documents those plus purchase-assessment (1552), cache/{type} (1578), refresh/{type} (1601) — three phantom endpoints. Sell-sheet: routes.go:104,106 registers only GET /api/sell-sheet; docs/API.md documents campaigns/{id}/sell-sheet (856), sell-sheet/items CRUD (1715-1758), portfolio/sell-sheet (1768) — none exist in routes.go. Re-ran the comm -23 diff myself: it returns exactly 15 live routes absent from any ### heading in docs/API.md, satisfying \"at least 13.\"",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-013",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Ran `git grep -nE '\\bBASE_URL\\b' -- '*.go'` and `git grep -nE '\\bMEDIA_DIR\\b' -- '*.go'` myself: both return empty. Confirmed both names appear in .env.example at lines 64 and 68 respectively. No Go reference to either identifier anywhere in the module.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-014",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Confirmed cfg.Cache.Path is only referenced in internal/platform/config (loader.go:253 binds -cache flag, validation.go:41,92 validate/mkdir). Confirmed the only cache constructor that reads a Path (cache.New at internal/platform/cache/cache.go:37-50, using config.FilePath) has zero callers anywhere in the module (`git grep -n \"cache\\.New(\" -- '*.go'` returns nothing) — NewFileCacheBackend is instead called directly by tests and by cache.New itself, never by any wiring in cmd/slabledger that threads cfg.Cache.Path through. cmd/slabledger's cache-adjacent code (init_inventory_services.go, init_schedulers.go) only references unrelated DHCompCacheStore/projection caches, never cfg.Cache. The -cache CLI flag and its validation/EnsureDirectories side effects are genuinely dead plumbing.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-015",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "loader.go:173 reads ADVISOR_MAX_TOOL_ROUNDS; .env.example has no entry for it (grep returns nothing). CL_SEARCH_URL is read live via os.Getenv in internal/adapters/clients/cardladder/client.go:31 (not loader.go, but still a real live-read override per the finding's more general wording) and appears in .env.example:218 only as a commented-out example. SHUTDOWN_TIMEOUT_SECONDS is read at loader.go:115 and sits commented at .env.example:79. AZURE_AI_TIMEOUT is read at loader.go:192 and sits commented at .env.example:59. All four gaps reproduce exactly as described.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-016",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Confirmed price_refresh_test.go:25-27 carries the exact TODO text quoted. `git blame -L 25,27` and `git log -S \"TODO(Task 4)\"` both attribute the TODO's introduction to commit 20cfa6eeea1d71a44eb1e069fcd5b2e08e47e5d5, dated 2026-04-06, the same commit whose --stat touches both price_refresh.go and price_refresh_test.go. price_refresh.go:18,31,80 show refreshBatch already reads via `s.candidates.GetRefreshCandidates` (pricing.RefreshCandidateProvider), i.e. already purchase-driven as of that same commit — the TODO's premise was already false the moment it was written. `ls internal/adapters/storage/postgres/migrations/` confirms the highest migration is 000025, no 000038 exists. `grep '^func Test'` confirms all six test functions in the file (Health, DisabledScheduler, Stop, ContextCancellation, StopIdempotent, DefaultConfig) — none calls refreshBatch.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-017",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "`git ls-files internal/adapters/clients/dhlisting/` returns exactly one file, adapter.go (283 lines via wc -l), no test file. Confirmed all cited functions exist at the claimed lines: PSAImport (42, with 422 batch-rejection error paths at 71/73), UpdateInventoryStatus (175), MarkInventorySold (219/221), RotatePSAKey delegation at 92 and 154.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-018",
+    "verdict": "confirmed",
+    "evidence_reproduces": false,
+    "basis": "internal/domain/observability/ confirmed as doc.go+logger.go+noop.go with noop.go's 5 methods being one-line empty bodies. internal/domain/storage/ confirmed as doc.go only, no declarations; Cache interface confirmed to live at internal/platform/cache/cache.go:19. internal/testutil/config.go confirmed to contain only GetTestToken. However, `wc -l internal/testutil/config.go` actually returns 31, not the 25 quoted in the finding's evidence output — the file has a full doc comment above the function. The substantive conclusion (a single trivial helper function, low-risk, no test-coverage ticket warranted) still holds independently verified; only the specific line-count citation is wrong.",
+    "what_the_finding_got_wrong": "The wc -l output quoted for internal/testutil/config.go (\"25\") does not reproduce; the actual line count is 31. This is a citation error, not a conclusion error — the file is still a single 6-line function with a long doc comment, and the finding's own recommendation is 'no ticket required,' so the miscount does not send anyone anywhere.",
+    "corrected_severity": "",
+    "ticketable": false
+  },
+  {
+    "id": "DCT-019",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "CLAUDE.md:88 quoted text reproduces exactly, including SnapshotRepository as the eighth name. `git grep -n \"SnapshotRepository\"` returns only that CLAUDE.md line (plus this audit's own finding/pointer files, which don't count as repo source) — zero declarations in Go source. `git grep -n \"^type.*Repository interface\" internal/domain/inventory/*.go` finds eight interfaces, not seven as the finding's second evidence block states in isolation — but the eighth is PendingItemRepository (pending_items.go:44), not SnapshotRepository, and the finding's own third bullet already accounts for this, correctly arguing PendingItemRepository is wired only as an optional functional-option dependency (WithPendingItemRepository) rather than one of CLAUDE.md's core roster, so it doesn't rescue the '8 focused' claim. Method counts reproduce exactly: Purchase=55, others sum to 46 (5+2+7+8+10+14).",
+    "what_the_finding_got_wrong": "The blast_radius claim that this 'already misled an earlier pass of this audit's size-and-complexity lens into citing it as the violated convention' does not reproduce: docs/audit/findings/size-and-complexity.json's own PurchaseRepository finding correctly refers to 'seven sibling inventory repository interfaces' and never cites SnapshotRepository or CLAUDE.md's '8 focused' line as a violated convention. This is a narrative embellishment in blast_radius, not load-bearing for the core claim or its acceptance criteria, and doesn't affect ticketability.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-020",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "normalize.go:15 quoted exactly: `//\t-> stripCollectionSuffix -> extractVariantFromTitle -> resolvePSACategory`. `git grep -n resolvePSACategory` repo-wide returns only this one line. `grep -n \"^func \" internal/platform/cardutil/normalize.go` confirms no function of any name performs category resolution in this file today, consistent with the pipeline's last step never having been implemented (or having been removed) since the comment was written.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCT-021",
+    "verdict": "confirmed_lower_severity",
+    "evidence_reproduces": true,
+    "basis": "Confirmed all three cited instances independently (SnapshotRepository, resolvePSACategory, and the domain package-tree drift addressed by DCT-002/DCT-019/DCT-020 above). Confirmed `make check` (Makefile:146-149) runs exactly lint (go fmt, go vet, golangci-lint) plus check-imports.sh, check-file-size.sh, check-playwright-version.sh — read all four scripts' headers/logic and none parses markdown or Go comment text for symbol validity; go vet/golangci-lint only operate on compiled code, never doc-comment strings. The mechanism-gap claim is accurate.",
+    "what_the_finding_got_wrong": "The team lead's dispatch note for this finding explicitly required describing the gap without proposing a symbol-checker or doc-linter to build. proposed_fix nonetheless states 'a human may want to consider a lightweight doc-comment-symbol-linter... so a stale reference like these is caught before merge' — this is a tooling proposal, not merely a gap description, even though it is hedged as 'out of scope for this read-only audit to design or build.' That hedge scopes who builds it, not whether the finding proposes it; it should have stopped at describing the gap. Separately, the finding's own acceptance_criteria concede it has no independent ticketable action beyond DCT-002/DCT-019/DCT-020's own criteria — it is a grouping/pointer observation, not a standalone fix.",
+    "corrected_severity": "low — this is an accurate but non-actionable meta-observation grouping three already-independently-ticketed instances (DCT-002, DCT-019, DCT-020); its own remediation is fully covered by those tickets, and its incidental tooling suggestion should be dropped rather than carried into any ticket.",
+    "ticketable": false
+  }
+]
