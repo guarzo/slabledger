@@ -371,6 +371,69 @@ func TestOpportunityScore_CoverageAndSaturation(t *testing.T) {
 	}
 }
 
+// TestService_Leaderboard_MalformedVelocity_LogsWarn asserts that a
+// character row carrying a MalformedPayloads entry for "velocity" produces
+// exactly one Warn log naming the character, and that a malformed "demand"
+// entry produces none — the warn is velocity-specific per decision in the
+// SLA-41 spec's "Error handling" section.
+func TestService_Leaderboard_MalformedVelocity_LogsWarn(t *testing.T) {
+	rows := []demand.CharacterCache{
+		{
+			Character: "Pikachu",
+			Window:    "7d",
+			Demand: &demand.CharacterDemand{
+				CharacterName:  "Pikachu",
+				CardCount:      5,
+				AvgDemandScore: 0.8,
+			},
+			MalformedPayloads: []demand.MalformedPayload{
+				{Column: "velocity", Err: errors.New("unexpected end of JSON input")},
+			},
+		},
+		{
+			Character: "Charizard",
+			Window:    "7d",
+			Demand: &demand.CharacterDemand{
+				CharacterName:  "Charizard",
+				CardCount:      3,
+				AvgDemandScore: 0.6,
+			},
+			MalformedPayloads: []demand.MalformedPayload{
+				{Column: "demand", Err: errors.New("some demand decode error")},
+			},
+		},
+	}
+
+	logger := mocks.NewCapturingLogger()
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup()).WithLogger(logger)
+
+	if _, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "7d"}); err != nil {
+		t.Fatalf("Leaderboard: unexpected error: %v", err)
+	}
+
+	var warns []mocks.LogEntry
+	for _, e := range logger.Entries() {
+		if e.Level == "warn" {
+			warns = append(warns, e)
+		}
+	}
+	if len(warns) != 1 {
+		t.Fatalf("got %d warn entries, want 1: %+v", len(warns), warns)
+	}
+
+	entry := warns[0]
+	if entry.Message != "velocity_json unmarshal failed" {
+		t.Errorf("Message = %q, want %q", entry.Message, "velocity_json unmarshal failed")
+	}
+	character, ok := entry.FindField("character")
+	if !ok {
+		t.Fatal("warn entry has no \"character\" field")
+	}
+	if character != "Pikachu" {
+		t.Errorf("character field = %v, want %q", character, "Pikachu")
+	}
+}
+
 func TestOpportunityScore_VelocityClamp(t *testing.T) {
 	// velocityChangePct is DH's percentage-point form (15.2 = +15.2%), so
 	// anything with |v| > 50 must clamp to the ±0.5 fractional ceiling.

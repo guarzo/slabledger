@@ -101,7 +101,7 @@ func (s *Service) CampaignSignals(ctx context.Context) (CampaignSignalsResponse,
 	}
 
 	// Build an index from lowercased character name → signalEntry.
-	// Only rows with a valid VelocityJSON, non-nil AnalyticsComputedAt, and a
+	// Only rows with a non-nil Velocity, non-nil AnalyticsComputedAt, and a
 	// non-nil velocity_change_pct are included.
 	index, skippedRows := buildSignalIndex(rows)
 
@@ -129,11 +129,12 @@ func (s *Service) CampaignSignals(ctx context.Context) (CampaignSignalsResponse,
 }
 
 // buildSignalIndex constructs a map from lowercased character name to its
-// parsed signalEntry. Rows missing Velocity, AnalyticsComputedAt, or a nil
-// velocity_change_pct are silently skipped. The second return value is the
-// count of rows whose velocity payload was present but failed to decode (see
-// MalformedPayload) — a non-zero count indicates unexpected cache corruption
-// that the caller should surface for observability.
+// parsed signalEntry. Rows with a nil Velocity, a nil AnalyticsComputedAt, or
+// a nil velocity_change_pct are silently skipped. The second return value is
+// the count of rows whose velocity payload was present in the database but
+// failed to decode (reported by the adapter via MalformedPayloads) — a
+// non-zero count indicates cache corruption the caller should surface for
+// observability.
 func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 	idx := make(map[string]signalEntry, len(rows))
 	skipped := 0

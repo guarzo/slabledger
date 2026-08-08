@@ -2,6 +2,7 @@ package demand_test
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strconv"
 	"testing"
@@ -277,5 +278,49 @@ func TestCampaignSignals_MedianVelocity(t *testing.T) {
 				t.Errorf("want median=%v, got %v", tc.wantMedian, got)
 			}
 		})
+	}
+}
+
+func TestCampaignSignals_MalformedVelocityCountsAsSkipped(t *testing.T) {
+	computed := time.Date(2026, 4, 15, 3, 15, 0, 0, time.UTC)
+
+	rows := []demand.CharacterCache{
+		charRow("Pikachu", 11, 22.1, 34, computed),
+		{
+			Character:           "Charizard",
+			Window:              "30d",
+			AnalyticsComputedAt: &computed,
+			MalformedPayloads: []demand.MalformedPayload{
+				{Column: "velocity", Err: errors.New("unexpected end of JSON input")},
+			},
+		},
+		{
+			Character:           "Umbreon",
+			Window:              "30d",
+			AnalyticsComputedAt: &computed,
+			MalformedPayloads: []demand.MalformedPayload{
+				{Column: "demand", Err: errors.New("unexpected end of JSON input")},
+			},
+		},
+	}
+
+	campaigns := []demand.ActiveCampaign{{
+		ID:                "c1",
+		Name:              "Vintage Core",
+		SubjectFilterMode: inventory.SubjectFilterTarget,
+		Subjects:          []inventory.TargetSubject{{ID: 1, Name: "Pikachu"}},
+	}}
+
+	svc := demand.NewService(newRepoWithRows(rows), campaignLookupWith(campaigns))
+
+	resp, err := svc.CampaignSignals(context.Background())
+	if err != nil {
+		t.Fatalf("CampaignSignals: %v", err)
+	}
+	if resp.SkippedRows != 1 {
+		t.Errorf("SkippedRows = %d, want 1 (only the velocity-column failure counts)", resp.SkippedRows)
+	}
+	if len(resp.Signals) != 1 {
+		t.Fatalf("len(Signals) = %d, want 1", len(resp.Signals))
 	}
 }
