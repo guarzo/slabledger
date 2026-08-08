@@ -21,7 +21,6 @@ If `AZURE_AI_ENDPOINT` or `AZURE_AI_API_KEY` is empty, the advisor and picks LLM
 ### API versions
 
 - LLM (Responses API): `2025-04-01-preview`
-- Image generation: `2024-12-01-preview`
 
 ### Retry and rate limiting
 
@@ -48,10 +47,6 @@ Tracked as `$2.50 / 1M input tokens` + `$10.00 / 1M output tokens` (GPT-4o-class
 ```go
 type LLMProvider interface {
     StreamCompletion(ctx context.Context, req CompletionRequest, stream func(CompletionChunk)) error
-}
-
-type ImageGenerator interface {
-    GenerateImage(ctx context.Context, req ImageRequest) (*ImageResult, error)
 }
 ```
 
