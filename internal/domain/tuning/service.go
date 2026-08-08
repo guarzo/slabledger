@@ -12,7 +12,7 @@ import (
 
 // Service provides campaign tuning analytics.
 type Service interface {
-	GetCampaignTuning(ctx context.Context, campaignID string) (*inventory.TuningResponse, error)
+	GetCampaignTuning(ctx context.Context, campaignID string) (*TuningResponse, error)
 }
 
 type service struct {
@@ -34,7 +34,7 @@ func NewService(
 	}
 }
 
-func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*inventory.TuningResponse, error) {
+func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*TuningResponse, error) {
 	campaign, err := s.campaigns.GetCampaign(ctx, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("campaign lookup: %w", err)
@@ -106,21 +106,21 @@ func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*in
 	}
 	for i := range byGrade {
 		rois := gradeROIs[byGrade[i].Grade]
-		byGrade[i].RoiStddev, byGrade[i].CV = inventory.ComputeROIStats(rois)
+		byGrade[i].RoiStddev, byGrade[i].CV = ComputeROIStats(rois)
 	}
 
-	fixedTiers, relativeTiers := inventory.ComputePriceTierPerformance(data)
-	inventory.EnrichPriceTierStddev(fixedTiers, data)
-	inventory.EnrichPriceTierStddev(relativeTiers, data)
-	topPerformers, bottomPerformers := inventory.ComputeCardPerformance(data, 5)
-	threshold := inventory.ComputeBuyThresholdAnalysis(data, campaign.BuyTermsCLPct)
+	fixedTiers, relativeTiers := ComputePriceTierPerformance(data)
+	EnrichPriceTierStddev(fixedTiers, data)
+	EnrichPriceTierStddev(relativeTiers, data)
+	topPerformers, bottomPerformers := ComputeCardPerformance(data, 5)
+	threshold := ComputeBuyThresholdAnalysis(data, campaign.BuyTermsCLPct)
 
 	currentSnapshots := make(map[string]*inventory.MarketSnapshot)
 	for _, d := range data {
 		if d.Sale != nil {
 			continue
 		}
-		key := inventory.PurchaseKey(d.Purchase.CardName, d.Purchase.CardNumber, d.Purchase.SetName, d.Purchase.GradeValue)
+		key := PurchaseKey(d.Purchase.CardName, d.Purchase.CardNumber, d.Purchase.SetName, d.Purchase.GradeValue)
 		if _, exists := currentSnapshots[key]; exists {
 			continue
 		}
@@ -132,11 +132,11 @@ func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*in
 			currentSnapshots[key] = snap
 		}
 	}
-	alignment := inventory.ComputeMarketAlignment(data, currentSnapshots)
-	inventory.EnrichCardPerformance(topPerformers, currentSnapshots)
-	inventory.EnrichCardPerformance(bottomPerformers, currentSnapshots)
+	alignment := ComputeMarketAlignment(data, currentSnapshots)
+	EnrichCardPerformance(topPerformers, currentSnapshots)
+	EnrichCardPerformance(bottomPerformers, currentSnapshots)
 
-	recommendations := inventory.ComputeRecommendations(&inventory.TuningInput{
+	recommendations := ComputeRecommendations(&TuningInput{
 		Campaign:    campaign,
 		PNL:         pnl,
 		ByGrade:     byGrade,
@@ -147,7 +147,7 @@ func (s *service) GetCampaignTuning(ctx context.Context, campaignID string) (*in
 		ChannelPNL:  channelPNL,
 	})
 
-	return &inventory.TuningResponse{
+	return &TuningResponse{
 		CampaignID:       campaignID,
 		CampaignName:     campaign.Name,
 		ByGrade:          byGrade,

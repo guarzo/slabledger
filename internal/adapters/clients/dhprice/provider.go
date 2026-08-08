@@ -16,9 +16,8 @@ import (
 )
 
 const (
-	dhConfidence       = 0.90
-	providerKey        = "doubleholo"
-	tombstoneThreshold = 3
+	dhConfidence = 0.90
+	providerKey  = "doubleholo"
 )
 
 // MarketDataClient is the subset of the DH client needed for price lookups.
@@ -168,7 +167,7 @@ func (p *Provider) recordTombstone(ctx context.Context, cardID int, cause error)
 	if p.logger == nil {
 		return
 	}
-	if n >= tombstoneThreshold {
+	if pricing.IsDHTombstoned(n) {
 		p.logger.Info(ctx, "dhprice: dh card tombstoned, no further lookups",
 			observability.Int("dh_card_id", cardID),
 			observability.Int("attempts", n))

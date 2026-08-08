@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -53,17 +54,11 @@ func writePricingJSON(w http.ResponseWriter, status int, data any) {
 	_ = json.NewEncoder(w).Encode(data) //nolint:errcheck // response already committed; write error unactionable
 }
 
-// centsToDollars converts cents to dollars.
-// Integer cents always produce at most 2 decimal places.
-func centsToDollars(cents int) float64 {
-	return float64(cents) / 100
-}
-
 // buildPriceResult constructs a priceResult from a purchase, choosing the best price source.
 func buildPriceResult(certNumber string, p *inventory.Purchase) priceResult {
 	result := priceResult{
 		CertNumber:    certNumber,
-		ComputedPrice: centsToDollars(p.CLValueCents),
+		ComputedPrice: mathutil.ToDollarsInt(p.CLValueCents),
 		PriceSource:   "cl_value",
 		Currency:      "USD",
 	}
@@ -72,14 +67,14 @@ func buildPriceResult(certNumber string, p *inventory.Purchase) priceResult {
 
 	// Override takes priority
 	if p.OverridePriceCents > 0 {
-		result.OverridePrice = centsToDollars(p.OverridePriceCents)
+		result.OverridePrice = mathutil.ToDollarsInt(p.OverridePriceCents)
 		result.SuggestedPrice = result.OverridePrice
 		result.PriceSource = "override"
 	}
 
 	// Surface pending AI suggestion
 	if p.AISuggestedPriceCents > 0 {
-		result.AISuggestedPrice = centsToDollars(p.AISuggestedPriceCents)
+		result.AISuggestedPrice = mathutil.ToDollarsInt(p.AISuggestedPriceCents)
 	}
 
 	return result

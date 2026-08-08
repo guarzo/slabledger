@@ -16,7 +16,7 @@ type PortfolioSnapshot struct {
 	WeeklyReview    *inventory.WeeklyReviewSummary  `json:"weeklyReview"`
 	WeeklyHistory   []inventory.WeeklyReviewSummary `json:"weeklyHistory"`
 	ChannelVelocity []inventory.ChannelVelocity     `json:"channelVelocity"`
-	Suggestions     *inventory.SuggestionsResponse  `json:"suggestions"`
+	Suggestions     *SuggestionsResponse            `json:"suggestions"`
 	CreditSummary   *inventory.CapitalSummary       `json:"creditSummary"`
 	Invoices        []inventory.Invoice             `json:"invoices"`
 }
@@ -225,7 +225,7 @@ func (s *service) GetSnapshot(ctx context.Context) (*PortfolioSnapshot, error) {
 	health := ComputeHealthFromData(activeCampaigns, allData, healthByCampaign)
 
 	insights := inventory.ComputePortfolioInsights(allData, channelPNL, filterExternalCampaign(allCampaigns))
-	suggestions := inventory.GenerateSuggestions(ctx, insights, filterExternalCampaign(allCampaigns), healthByCampaign)
+	suggestions := GenerateSuggestions(ctx, insights, filterExternalCampaign(allCampaigns), healthByCampaign)
 
 	// Weekly review (current week)
 	now := time.Now()

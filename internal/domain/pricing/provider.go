@@ -204,6 +204,18 @@ const (
 	SourceDH = "doubleholo" // DB provider key — do not change the string value
 )
 
+// DHTombstoneThreshold is the number of failed DH lookups after which a card ID
+// is considered tombstoned. It lives here rather than in an adapter because both
+// the DH client and the storage adapter need it, and the architecture rules keep
+// those two from sharing anything of their own.
+const DHTombstoneThreshold = 3
+
+// IsDHTombstoned reports whether a card with the given failed-attempt count has
+// reached DHTombstoneThreshold.
+func IsDHTombstoned(attempts int) bool {
+	return attempts >= DHTombstoneThreshold
+}
+
 // DHCardTombstoneRepo tracks DH card IDs that have repeatedly 404'd so we can
 // stop hammering DH's lookup endpoint for IDs that no longer exist.
 //
@@ -213,8 +225,8 @@ type DHCardTombstoneRepo interface {
 	IsTombstoned(ctx context.Context, cardID int) (bool, error)
 
 	// RecordFailure increments the failure counter for cardID and returns the
-	// new attempt count. Callers should treat attempts >= 3 as the tombstone
-	// threshold.
+	// new attempt count. Callers should treat the card as tombstoned when
+	// IsDHTombstoned reports true for that count.
 	RecordFailure(ctx context.Context, cardID int, errMsg string) (attempts int, err error)
 
 	// Clear removes the tombstone for a single card ID.
@@ -223,6 +235,7 @@ type DHCardTombstoneRepo interface {
 	// ClearAll removes all tombstones and returns the number removed.
 	ClearAll(ctx context.Context) (cleared int, err error)
 
-	// Count returns the number of cards currently tombstoned (attempts >= 3).
+	// Count returns the number of cards currently tombstoned, i.e. those whose
+	// attempt count satisfies IsDHTombstoned.
 	Count(ctx context.Context) (int, error)
 }

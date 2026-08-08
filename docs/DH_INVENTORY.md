@@ -196,7 +196,8 @@ For `unmatched` cards:
 | DH API client | `internal/adapters/clients/dh/` |
 | API types | `internal/adapters/clients/dh/types_v2.go` |
 | Card name cleaning | `internal/domain/inventory/dh_helpers.go` |
-| Push status DB ops | `internal/adapters/storage/sqlite/purchases_repository_dh.go` |
-| Card ID mapping cache | `internal/adapters/storage/sqlite/card_id_mapping_repository.go` |
+| Push status DB writes | `internal/adapters/storage/postgres/purchase_dh_push_store.go` |
+| Push status DB queries | `internal/adapters/storage/postgres/purchase_dh_query_store.go` |
+| Card ID mapping cache | `internal/adapters/storage/postgres/card_id_mapping_repository.go` |
 | HTTP handlers | `internal/adapters/httpserver/handlers/dh_*.go` |
 | Scheduler wiring | `internal/adapters/scheduler/builder.go` |

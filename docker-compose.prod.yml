@@ -21,8 +21,6 @@ services:
     volumes:
       # Persistent data storage
       - ./data:/app/data
-      # Cache storage
-      - ./cache:/app/cache
 
     restart: unless-stopped
 

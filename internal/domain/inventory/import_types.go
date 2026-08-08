@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
 // ImportError captures a per-row import failure.
@@ -144,7 +146,7 @@ type ExternalImportItemResult struct {
 }
 
 // titleCleanupRegex strips grader/grade, condition, and seller note patterns from a product title.
-var titleCleanupRegex = regexp.MustCompile(`(?i)\b(CGC|BGS|PSA|SGC)\s*\d{1,2}(?:\.\d)?\b`)
+var titleCleanupRegex = regexp.MustCompile(`(?i)\b(?:` + cardutil.GraderPattern + `)\s*` + cardutil.GradePattern + `\b`)
 
 // conditionSuffixRegex matches trailing condition/note patterns like "- Near Mint", "NM", "LP", etc.
 var conditionSuffixRegex = regexp.MustCompile(`(?i)\s*[-–]\s*(near\s+mint|mint|nm|lp|mp|hp|damaged)\b.*$`)
@@ -161,7 +163,7 @@ func ExtractCardNameFromTitle(title string) string {
 	return cleaned
 }
 
-var graderGradeRegex = regexp.MustCompile(`(?i)\b(CGC|BGS|PSA|SGC)\s*(\d{1,2}(?:\.\d)?)\b`)
+var graderGradeRegex = regexp.MustCompile(`(?i)\b(` + cardutil.GraderPattern + `)\s*(` + cardutil.GradePattern + `)\b`)
 
 // ExtractGraderAndGrade extracts a grading company and numeric grade from a title string.
 // Returns empty string and 0 if no match is found.

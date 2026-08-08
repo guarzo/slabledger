@@ -55,8 +55,6 @@ services:
     volumes:
       # Persistent data storage (bind mount for proper permissions)
       - ./data:/app/data
-      # Cache storage (bind mount for proper permissions)
-      - ./cache:/app/cache
 
     # Run as current user to match bind mount permissions
     user: "${UID:-1000}:${GID:-1000}"

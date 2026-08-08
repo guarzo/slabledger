@@ -427,19 +427,19 @@ func TestHandlePortfolioInsights(t *testing.T) {
 func TestHandleCampaignSuggestions(t *testing.T) {
 	tests := []struct {
 		name       string
-		mockFn     func(_ context.Context) (*inventory.SuggestionsResponse, error)
+		mockFn     func(_ context.Context) (*portfolio.SuggestionsResponse, error)
 		wantStatus int
 	}{
 		{
 			name: "success",
-			mockFn: func(_ context.Context) (*inventory.SuggestionsResponse, error) {
-				return &inventory.SuggestionsResponse{}, nil
+			mockFn: func(_ context.Context) (*portfolio.SuggestionsResponse, error) {
+				return &portfolio.SuggestionsResponse{}, nil
 			},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name: "error",
-			mockFn: func(_ context.Context) (*inventory.SuggestionsResponse, error) {
+			mockFn: func(_ context.Context) (*portfolio.SuggestionsResponse, error) {
 				return nil, fmt.Errorf("service error")
 			},
 			wantStatus: http.StatusInternalServerError,

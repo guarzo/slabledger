@@ -1,14 +1,15 @@
-package inventory
+package portfolio
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
-func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestTopCharacterExpansion(_ context.Context, insights *inventory.PortfolioInsights, campaigns []inventory.Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	for _, seg := range insights.ByCharacter {
@@ -21,10 +22,10 @@ func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights
 
 		var missingCampaigns []string
 		for _, c := range campaigns {
-			if c.Phase != PhaseActive {
+			if c.Phase != inventory.PhaseActive {
 				continue
 			}
-			if !SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode) {
+			if !inventory.SubjectAxisMatches(seg.Label, c.Subjects, c.SubjectFilterMode) {
 				missingCampaigns = append(missingCampaigns, c.Name)
 			}
 		}
@@ -57,10 +58,10 @@ func suggestTopCharacterExpansion(_ context.Context, insights *PortfolioInsights
 	return suggestions
 }
 
-func suggestGradeSweetSpot(_ context.Context, insights *PortfolioInsights, campaigns []Campaign) []CampaignSuggestion {
+func suggestGradeSweetSpot(_ context.Context, insights *inventory.PortfolioInsights, campaigns []inventory.Campaign) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
-	var bestGrade *SegmentPerformance
+	var bestGrade *inventory.SegmentPerformance
 	for i := range insights.ByGrade {
 		seg := &insights.ByGrade[i]
 		if seg.SoldCount < suggMinSoldForConfidence {
@@ -77,7 +78,7 @@ func suggestGradeSweetSpot(_ context.Context, insights *PortfolioInsights, campa
 
 	activeCampaigns := 0
 	for _, c := range campaigns {
-		if c.Phase == PhaseActive {
+		if c.Phase == inventory.PhaseActive {
 			activeCampaigns++
 		}
 	}
@@ -88,7 +89,7 @@ func suggestGradeSweetSpot(_ context.Context, insights *PortfolioInsights, campa
 
 	suggestions = append(suggestions, CampaignSuggestion{
 		Type:  "new",
-		Title: fmt.Sprintf("%s Sweet Spot Campaign", bestGrade.Label),
+		Title: fmt.Sprintf("%s Sweet Spot inventory.Campaign", bestGrade.Label),
 		Rationale: fmt.Sprintf("%s is the best-performing grade at %.0f%% ROI with %d sales, covered by %d of %d campaigns",
 			bestGrade.Label, bestGrade.ROI*100, bestGrade.SoldCount, bestGrade.CampaignCount, activeCampaigns),
 		Confidence: mathutil.ConfidenceLabel(bestGrade.SoldCount),
@@ -108,7 +109,7 @@ func suggestGradeSweetSpot(_ context.Context, insights *PortfolioInsights, campa
 	return suggestions
 }
 
-func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights) []CampaignSuggestion {
+func suggestCoverageGapCampaigns(_ context.Context, insights *inventory.PortfolioInsights) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	for _, gap := range insights.CoverageGaps {
@@ -124,7 +125,7 @@ func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights)
 			Confidence: mathutil.ConfidenceLabel(seg.SoldCount),
 			DataPoints: seg.PurchaseCount,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:        fmt.Sprintf("%s Campaign", seg.Label),
+				Name:        fmt.Sprintf("%s inventory.Campaign", seg.Label),
 				Subjects:    []string{seg.Label},
 				PrimaryExit: string(seg.BestChannel),
 			},
@@ -150,7 +151,7 @@ func suggestCoverageGapCampaigns(_ context.Context, insights *PortfolioInsights)
 // buy terms to 28.57%") whenever any channel ran hot. Using the weighted
 // average of the realized mix keeps the rule honest and only fires when the
 // portfolio is actually underperforming on net.
-func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsights, campaigns []Campaign, now string) []CampaignSuggestion {
+func suggestChannelInformedBuyTerms(_ context.Context, insights *inventory.PortfolioInsights, campaigns []inventory.Campaign, now string) []CampaignSuggestion {
 	var suggestions []CampaignSuggestion
 
 	if len(insights.ByChannel) == 0 || insights.DataSummary.TotalSales < suggMinTotalSalesChannelAnalysis {
@@ -183,7 +184,7 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 	}
 
 	for _, c := range campaigns {
-		if c.Phase != PhaseActive {
+		if c.Phase != inventory.PhaseActive {
 			continue
 		}
 
@@ -217,7 +218,7 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 				// describe the post-adjustment state consistently.
 				ExpectedROI:       expectedROIFromMargin(suggTargetMargin, newTerms),
 				ExpectedMarginPct: suggTargetMargin,
-				// InsightsDataSummary does not track AvgDaysToSell, leave at zero.
+				// inventory.InsightsDataSummary does not track AvgDaysToSell, leave at zero.
 				DataConfidence: confidence,
 			},
 		})
@@ -238,14 +239,14 @@ func suggestChannelInformedBuyTerms(_ context.Context, insights *PortfolioInsigh
 // Distinct from suggestChannelInformedBuyTerms: that rule reacts to portfolio-
 // wide realized margin vs. target; this rule reacts to actual strictly-negative
 // inperson/cardshow sales on a specific campaign.
-func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []Campaign, healthByCampaign map[string]CampaignHealth) []CampaignSuggestion {
+func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []inventory.Campaign, healthByCampaign map[string]inventory.CampaignHealth) []CampaignSuggestion {
 	if len(healthByCampaign) == 0 {
 		return nil
 	}
 
 	var suggestions []CampaignSuggestion
 	for _, c := range campaigns {
-		if c.Phase != PhaseActive {
+		if c.Phase != inventory.PhaseActive {
 			continue
 		}
 		h, ok := healthByCampaign[c.ID]
@@ -293,7 +294,7 @@ func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []Campaign, hea
 			Type:  "adjust",
 			Title: fmt.Sprintf("Lower buy terms on %s (liquidation buffer)", c.Name),
 			Rationale: fmt.Sprintf(
-				"Campaign has $%.2f in liquidation losses across %d sales. Lowering CL%% from %.0f%% to %.0f%% creates a %.0f-point margin buffer on every fill, improving both eBay margin and liquidation tolerance.",
+				"inventory.Campaign has $%.2f in liquidation losses across %d sales. Lowering CL%% from %.0f%% to %.0f%% creates a %.0f-point margin buffer on every fill, improving both eBay margin and liquidation tolerance.",
 				float64(-h.LiquidationLossCents)/100,
 				h.LiquidationSaleCount,
 				c.BuyTermsCLPct*100,
@@ -335,7 +336,7 @@ func expectedROIFromMargin(margin, buyTermsCLPct float64) float64 {
 // into a deterministic buy-terms reduction bucket. The thresholds are tuned
 // so that a typical $500 card with a 15% liquidation hit (~$75/sale) lands in
 // the 8% bucket.
-func computeBuyTermsReduction(h CampaignHealth) float64 {
+func computeBuyTermsReduction(h inventory.CampaignHealth) float64 {
 	if h.LiquidationSaleCount <= 0 {
 		return 0
 	}
