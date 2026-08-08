@@ -172,7 +172,7 @@ func (a *InventoryAdapter) ResetPSAKeyRotation() {
 // price, and (when set) cert image URLs. When update.Status == "listed" and
 // a rotator is configured, PSA auth/rate-limit errors trigger key rotation.
 // On exhaustion, the returned error wraps dh.ErrPSAKeysExhausted.
-func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, update dhlisting.DHInventoryStatusUpdate) (int, error) {
+func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, update inventory.DHInventoryStatusUpdate) (int, error) {
 	dhUpdate := dh.InventoryUpdate{Status: update.Status}
 	if update.ListingPriceCents > 0 {
 		dhUpdate.ListingPriceCents = dh.IntPtr(update.ListingPriceCents)

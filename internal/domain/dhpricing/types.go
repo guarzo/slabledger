@@ -8,7 +8,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
@@ -54,7 +53,7 @@ type PurchaseLookup interface {
 // Returns the listing_price_cents DH has on the item after the update.
 // Satisfied by *clients/dhlisting.InventoryAdapter.
 type DHPriceUpdater interface {
-	UpdateInventoryStatus(ctx context.Context, inventoryID int, update dhlisting.DHInventoryStatusUpdate) (int, error)
+	UpdateInventoryStatus(ctx context.Context, inventoryID int, update inventory.DHInventoryStatusUpdate) (int, error)
 }
 
 // DHPriceWriter persists DH price + sync timestamp locally after a

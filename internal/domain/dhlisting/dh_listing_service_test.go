@@ -82,7 +82,7 @@ type mockInventoryLister struct {
 	syncCalls            int
 }
 
-func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, update DHInventoryStatusUpdate) (int, error) {
+func (m *mockInventoryLister) UpdateInventoryStatus(_ context.Context, _ int, update inventory.DHInventoryStatusUpdate) (int, error) {
 	m.updateCalls++
 	m.lastListingPriceSent = update.ListingPriceCents
 	return m.returnedListingPrice, m.updateStatusErr
@@ -525,13 +525,13 @@ func TestListPurchases_SkippedCounterIncrements(t *testing.T) {
 // PSAKeyRotator, so ListPurchases can type-assert and exercise the rotation
 // reset and exhaustion paths.
 type mockInventoryListerWithRotator struct {
-	updateFn func(ctx context.Context, id int, upd DHInventoryStatusUpdate) (int, error)
+	updateFn func(ctx context.Context, id int, upd inventory.DHInventoryStatusUpdate) (int, error)
 	syncFn   func(ctx context.Context, id int, channels []string) error
 	rotateFn func() bool
 	resetFn  func()
 }
 
-func (m *mockInventoryListerWithRotator) UpdateInventoryStatus(ctx context.Context, id int, upd DHInventoryStatusUpdate) (int, error) {
+func (m *mockInventoryListerWithRotator) UpdateInventoryStatus(ctx context.Context, id int, upd inventory.DHInventoryStatusUpdate) (int, error) {
 	return m.updateFn(ctx, id, upd)
 }
 
@@ -558,7 +558,7 @@ func (m *mockInventoryListerWithRotator) ResetPSAKeyRotation() {
 func TestListPurchases_ResetsPSARotationAtStart(t *testing.T) {
 	resetCalls := 0
 	lister := &mockInventoryListerWithRotator{
-		updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
+		updateFn: func(_ context.Context, _ int, upd inventory.DHInventoryStatusUpdate) (int, error) {
 			return upd.ListingPriceCents, nil
 		},
 		syncFn:  func(context.Context, int, []string) error { return nil },
@@ -589,11 +589,11 @@ func TestListPurchases_ResetsPSARotationAtStart(t *testing.T) {
 
 // TestListPurchases_PassesImagesOnStatusUpdate asserts that the primary
 // listing call threads FrontImageURL/BackImageURL through to
-// DHInventoryStatusUpdate so DH can skip its own PSA lookup.
+// inventory.DHInventoryStatusUpdate so DH can skip its own PSA lookup.
 func TestListPurchases_PassesImagesOnStatusUpdate(t *testing.T) {
-	var capturedUpdates []DHInventoryStatusUpdate
+	var capturedUpdates []inventory.DHInventoryStatusUpdate
 	lister := &mockInventoryListerWithRotator{
-		updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
+		updateFn: func(_ context.Context, _ int, upd inventory.DHInventoryStatusUpdate) (int, error) {
 			capturedUpdates = append(capturedUpdates, upd)
 			return upd.ListingPriceCents, nil
 		},
@@ -642,7 +642,7 @@ func TestListPurchases_PassesImagesOnStatusUpdate(t *testing.T) {
 // wrapped sentinel on DHListingResult.Error.
 func TestListPurchases_PSAExhaustionRecordsEventAndSurfacesError(t *testing.T) {
 	lister := &mockInventoryListerWithRotator{
-		updateFn: func(_ context.Context, _ int, _ DHInventoryStatusUpdate) (int, error) {
+		updateFn: func(_ context.Context, _ int, _ inventory.DHInventoryStatusUpdate) (int, error) {
 			return 0, fmt.Errorf("%w: underlying 401", ErrPSAKeysExhausted)
 		},
 		syncFn: func(context.Context, int, []string) error { return nil },
@@ -833,7 +833,7 @@ func TestListPurchases_RecordsChannelSyncFailureInFailedCerts(t *testing.T) {
 			}
 
 			lister := &mockInventoryListerWithRotator{
-				updateFn: func(_ context.Context, _ int, upd DHInventoryStatusUpdate) (int, error) {
+				updateFn: func(_ context.Context, _ int, upd inventory.DHInventoryStatusUpdate) (int, error) {
 					return upd.ListingPriceCents, nil
 				},
 				syncFn: func(_ context.Context, _ int, _ []string) error {

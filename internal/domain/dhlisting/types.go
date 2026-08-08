@@ -3,6 +3,8 @@ package dhlisting
 import (
 	"context"
 	"errors"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // ErrPSAKeysExhausted signals that a listing attempt failed because all
@@ -127,18 +129,6 @@ type DHPSAImporter interface {
 	PSAImport(ctx context.Context, items []DHPSAImportItem) ([]DHPSAImportResult, error)
 }
 
-// DHInventoryStatusUpdate carries the fields that UpdateInventoryStatus can
-// mutate on a DH inventory item. Image URLs are optional; when either is set
-// on a transition to "listed", DH uses them instead of doing its own PSA
-// lookup, which keeps the listing path functional when PSA is rate-limited
-// or authentication is failing.
-type DHInventoryStatusUpdate struct {
-	Status            string
-	ListingPriceCents int // 0 means omit
-	CertImageURLFront string
-	CertImageURLBack  string
-}
-
 // DHInventoryLister transitions DH inventory items to listed and syncs channels.
 //
 // UpdateInventoryStatus returns the listing_price_cents that DH has on the
@@ -147,7 +137,7 @@ type DHInventoryStatusUpdate struct {
 // through configured PSA keys; on exhaustion, the error wraps
 // dh.ErrPSAKeysExhausted (detectable via errors.Is).
 type DHInventoryLister interface {
-	UpdateInventoryStatus(ctx context.Context, inventoryID int, update DHInventoryStatusUpdate) (int, error)
+	UpdateInventoryStatus(ctx context.Context, inventoryID int, update inventory.DHInventoryStatusUpdate) (int, error)
 	SyncChannels(ctx context.Context, inventoryID int, channels []string) error
 }
 

@@ -278,7 +278,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 			continue
 		}
 
-		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
+		dhListingPrice, err := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHInventoryStatusUpdate{
 			Status:            inventory.DHStatusListed,
 			ListingPriceCents: listingPrice,
 			CertImageURLFront: p.FrontImageURL,
@@ -346,7 +346,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 				observability.Err(err))
 			failedCerts[cn] = err
 			// Revert status so the item doesn't stay "listed" without channel sync.
-			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, DHInventoryStatusUpdate{
+			if _, revertErr := s.lister.UpdateInventoryStatus(ctx, p.DHInventoryID, inventory.DHInventoryStatusUpdate{
 				Status: inventory.DHStatusInStock,
 			}); revertErr != nil {
 				s.logger.Error(ctx, "dh listing: failed to revert status after sync failure",
