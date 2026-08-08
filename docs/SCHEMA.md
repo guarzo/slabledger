@@ -838,11 +838,20 @@ Per-card DH enterprise analytics + demand cache. Populated by the daily DH analy
 | `window` | TEXT | PK part | `'7d'` or `'30d'` |
 | `demand_score` | REAL | nullable | From `/market/demand_signals`; NULL when card lacked demand data |
 | `demand_data_quality` | TEXT | nullable | `'proxy'` \| `'full'` \| NULL |
+| `character_name` | TEXT | nullable | DH character this card belongs to (migration 000033, SLA-63); NULL until the scheduler backfills it |
 | `analytics_computed_at` | TIMESTAMP | nullable | DH's `computed_at` for analytics; NULL = not computed (404) |
 | `demand_computed_at` | TIMESTAMP | nullable | DH's `computed_at` for demand |
 | `fetched_at` | TIMESTAMP | NOT NULL | When we last upserted the row |
 
-**Indexes:** none — `idx_card_cache_demand_score` was dropped in migration 000003 (see "Dropped indexes" below).
+`character_name` is sticky on upsert: the analytics refresh rewrites every row
+each run without knowing the character, so the `ON CONFLICT` clause uses
+`COALESCE(excluded.character_name, dh_card_cache.character_name)` — a new value
+overwrites, but a NULL never clears attribution we paid a per-card API call for.
+
+**Indexes:** `idx_card_cache_character_name` on `character_name`, partial
+(`WHERE character_name IS NOT NULL`) since unattributed rows are never selected
+— added in migration 000033. `idx_card_cache_demand_score` was dropped in
+migration 000003 (see "Dropped indexes" below).
 
 **Dropped columns:** `demand_json`, `velocity_json`, `trend_json`,
 `saturation_json` and `price_distribution_json` (all nullable TEXT, from 000001)
