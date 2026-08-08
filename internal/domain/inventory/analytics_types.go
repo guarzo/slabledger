@@ -26,11 +26,15 @@ type ChannelPNL struct {
 }
 
 // DailySpend holds actual spend vs cap for a given date.
+//
+// CapCents and FillRatePct are NOT populated by the repository — the cap lives
+// on campaigns, not campaign_purchases. They are filled in by the service layer
+// via EnrichDailySpendFillRate, using the campaign's current cap.
 type DailySpend struct {
 	Date          string  `json:"date"`
 	SpendCents    int     `json:"spendCents"`
 	CapCents      int     `json:"capCents"`
-	FillRatePct   float64 `json:"fillRatePct"` // spend / cap
+	FillRatePct   float64 `json:"fillRatePct"`
 	PurchaseCount int     `json:"purchaseCount"`
 }
 

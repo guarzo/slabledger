@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // mockRepo is a simple in-memory repository for testing unexported functions
@@ -21,6 +24,9 @@ type mockRepo struct {
 	channelVelocity []ChannelVelocity
 	dhPushConfig    *DHPushConfig
 	dhHoldReasons   map[string]string // purchaseID -> hold reason
+	dailySpend      []DailySpend
+	dailySpendErr   error
+	campaignErr     error
 }
 
 func newMockRepo() *mockRepo {
@@ -42,6 +48,9 @@ func (m *mockRepo) CreateCampaign(_ context.Context, c *Campaign) error {
 }
 
 func (m *mockRepo) GetCampaign(_ context.Context, id string) (*Campaign, error) {
+	if m.campaignErr != nil {
+		return nil, m.campaignErr
+	}
 	c, ok := m.campaigns[id]
 	if !ok {
 		return nil, ErrCampaignNotFound
@@ -266,7 +275,10 @@ func (m *mockRepo) GetPNLByChannel(_ context.Context, _ string) ([]ChannelPNL, e
 }
 
 func (m *mockRepo) GetDailySpend(_ context.Context, _ string, _ int) ([]DailySpend, error) {
-	return nil, nil
+	if m.dailySpendErr != nil {
+		return nil, m.dailySpendErr
+	}
+	return m.dailySpend, nil
 }
 
 func (m *mockRepo) GetDaysToSellDistribution(_ context.Context, _ string) ([]DaysToSellBucket, error) {
@@ -949,3 +961,34 @@ func (m *mockRepo) SaveDHPushConfig(_ context.Context, cfg *DHPushConfig) error 
 	m.dhPushConfig = cfg
 	return nil
 }
+
+// testLogger is a recording observability.Logger for tests. It records levels
+// rather than discarding them, so a Warn/Error split can be asserted directly
+// instead of being silently swallowed by a no-op logger.
+type testLogger struct {
+	mu      sync.Mutex
+	entries []string
+}
+
+func (t *testLogger) record(level string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.entries = append(t.entries, level)
+}
+
+// levels returns the levels logged so far, in order.
+func (t *testLogger) levels() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]string(nil), t.entries...)
+}
+
+func (t *testLogger) Debug(_ context.Context, _ string, _ ...observability.Field) { t.record("debug") }
+func (t *testLogger) Info(_ context.Context, _ string, _ ...observability.Field)  { t.record("info") }
+func (t *testLogger) Warn(_ context.Context, _ string, _ ...observability.Field)  { t.record("warn") }
+func (t *testLogger) Error(_ context.Context, _ string, _ ...observability.Field) { t.record("error") }
+func (t *testLogger) With(_ context.Context, _ ...observability.Field) observability.Logger {
+	return t
+}
+
+func newTestLogger() *testLogger { return &testLogger{} }
