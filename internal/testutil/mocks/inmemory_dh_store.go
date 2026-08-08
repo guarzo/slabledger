@@ -41,6 +41,11 @@ func (m *InMemoryCampaignStore) UpdatePurchaseDHStatus(ctx context.Context, id s
 	if m.UpdatePurchaseDHStatusFn != nil {
 		return m.UpdatePurchaseDHStatusFn(ctx, id, status)
 	}
+	p, ok := m.Purchases[id]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	p.DHStatus = status
 	return nil
 }
 

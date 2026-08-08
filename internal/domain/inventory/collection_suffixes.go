@@ -1,5 +1,10 @@
 package inventory
 
+import (
+	"strings"
+	"unicode/utf8"
+)
+
 // CollectionSuffix describes a promo collection name that should be stripped
 // from card names to avoid polluting pricing queries.
 type CollectionSuffix struct {
@@ -57,3 +62,57 @@ var anywhereSuffixes, trailingSuffixes = func() ([]CollectionSuffix, []Collectio
 	}
 	return anywhere, trailing
 }()
+
+// StripCollectionSuffix removes promo collection names from card names using
+// the pre-partitioned anywhereSuffixes / trailingSuffixes slices.
+// PSA cert Subject includes these but they pollute pricing queries.
+// E.g., "UMBREON EX PRISMATIC EVOLUTIONS PREMIUM FIGURE COLLECTION" → "UMBREON EX"
+func StripCollectionSuffix(name string) string {
+	upper := strings.ToUpper(name)
+
+	// Anywhere suffixes: find the leftmost match across all patterns.
+	// We scan all patterns and pick the earliest match position to avoid order-dependent
+	// behavior where a later-registered but earlier-occurring pattern would be missed.
+	minIdx := -1
+	for _, cs := range anywhereSuffixes {
+		if idx := strings.Index(upper, " "+cs.Pattern); idx > 0 {
+			if minIdx < 0 || idx < minIdx {
+				minIdx = idx
+			}
+		}
+	}
+	if minIdx > 0 {
+		stripped := strings.TrimSpace(name[:minIdx])
+		if stripped != "" {
+			return stripped
+		}
+	}
+
+	// Trailing-only suffixes: only strip when at the very end.
+	// Loop until no more match so stacked suffixes are fully removed.
+	// Recompute upper after each strip to keep byte offsets in sync
+	// (strings.ToUpper can change byte length for non-ASCII runes).
+	const maxSuffixIterations = 100
+	for iter := 0; iter < maxSuffixIterations; iter++ {
+		matched := false
+		for _, cs := range trailingSuffixes {
+			pat := " " + cs.Pattern
+			if strings.HasSuffix(upper, pat) {
+				runeCount := utf8.RuneCountInString(pat)
+				nameRunes := []rune(name)
+				stripped := strings.TrimSpace(string(nameRunes[:len(nameRunes)-runeCount]))
+				if stripped == "" {
+					break
+				}
+				name = stripped
+				upper = strings.ToUpper(name)
+				matched = true
+				break // restart outer loop with updated name
+			}
+		}
+		if !matched {
+			break
+		}
+	}
+	return name
+}

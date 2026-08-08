@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -103,7 +104,7 @@ func TestPushCampaign_ListValuedFieldUsesValueOverNew(t *testing.T) {
 	c := New(ff, Config{})
 	err = c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
 		[]psacampaign.FieldChange{
-			{Field: "selectedSubjects", Old: "1:Old", New: "1:Old", Value: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}}},
+			{Field: "selectedSubjects", Old: "4807:Charizard,4836:Umbreon,4842:Lugia,4844:Celebi,4851:Mudkip", New: "22210:Machamp", Value: []psacampaign.SubjectRef{{ID: 22210, Name: "Machamp"}}},
 		})
 	if err != nil {
 		t.Fatalf("PushCampaign: %v", err)
@@ -193,7 +194,7 @@ func TestPushCampaign_ErrorEnvelopeSurfacesBody(t *testing.T) {
 
 			c := New(ff, Config{})
 			err := c.PushCampaign(context.Background(), "660a980d-bf1c-4988-9958-1eb2d1853c66",
-				[]psacampaign.FieldChange{{Field: "priceMinimum", Old: "150", New: "200"}})
+				[]psacampaign.FieldChange{{Field: "priceMinimum", Old: "500", New: "200"}})
 			if err == nil {
 				t.Fatal("expected error for non-result envelope, got nil")
 			}
@@ -202,6 +203,160 @@ func TestPushCampaign_ErrorEnvelopeSurfacesBody(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A push whose FieldChange.Old no longer matches the live portal record would
+// silently overwrite an edit made after approval. The signature cannot catch
+// this — it proves the operator approved the diff, not that the portal still
+// holds what they were shown — so PushCampaign refuses before mutating anything.
+func TestPushCampaign_RefusesStaleChange(t *testing.T) {
+	tests := []struct {
+		name    string
+		change  psacampaign.FieldChange
+		wantErr error
+		wantIn  string
+	}{
+		{
+			name:   "live value matches approval",
+			change: psacampaign.FieldChange{Field: "bidPercentage", Old: "70", New: "80"},
+		},
+		{
+			// Someone raised the bid in the PSA UI after the operator approved.
+			name:    "scalar changed since approval",
+			change:  psacampaign.FieldChange{Field: "bidPercentage", Old: "65", New: "80"},
+			wantErr: psacampaign.ErrFieldStale,
+			wantIn:  `was "65" at approval, portal now holds "70"`,
+		},
+		{
+			name:    "list changed since approval",
+			change:  psacampaign.FieldChange{Field: "deniedSpecs", Old: "1:Gone", New: "", Value: []psacampaign.SubjectRef{}},
+			wantErr: psacampaign.ErrFieldStale,
+		},
+		{
+			// A field with no canonical rendering cannot be compare-and-swapped,
+			// and an unverifiable field is not a safe one to push.
+			name:    "unrenderable field refused",
+			change:  psacampaign.FieldChange{Field: "isActive", Old: "false", New: "true"},
+			wantErr: psacampaign.ErrNoRenderer,
+		},
+	}
+	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	if err != nil {
+		t.Fatalf("fixture missing: %v", err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			routes := bundleRoutes()
+			routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
+			routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
+			ff := &fakeFetcher{routes: routes}
+
+			err := New(ff, Config{}).PushCampaign(context.Background(),
+				"660a980d-bf1c-4988-9958-1eb2d1853c66", []psacampaign.FieldChange{tt.change})
+
+			_, posted := ff.captured["/buyercampaignmanager/_app/remote/abc123/updateCampaign"]
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("PushCampaign: %v", err)
+				}
+				if !posted {
+					t.Error("expected a POST to updateCampaign for a fresh change")
+				}
+				return
+			}
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantIn != "" && !strings.Contains(err.Error(), tt.wantIn) {
+				t.Errorf("err = %v, want it to contain %q", err, tt.wantIn)
+			}
+			if posted {
+				t.Error("refused push still POSTed to updateCampaign")
+			}
+		})
+	}
+}
+
+// The staleness check compares a FieldChange.Old rendered from the LIST endpoint
+// (TranslateToDiff's input) against the live EDIT FORM. Nothing in the types
+// forces those two portal views to agree, so this pins it with the one campaign
+// that appears in both captured fixtures. If PSA ever changes units or spelling
+// on one endpoint, this fails here rather than by refusing every real update.
+func TestPortalListAndEditFormRenderIdentically(t *testing.T) {
+	const campaignID = "660a980d-bf1c-4988-9958-1eb2d1853c66"
+
+	listRaw, err := os.ReadFile("../../../../docs/psa-campaigns-raw.json")
+	if err != nil {
+		t.Fatalf("list fixture missing: %v", err)
+	}
+	editRaw, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	if err != nil {
+		t.Fatalf("edit fixture missing: %v", err)
+	}
+
+	listRoot := decodeEnvelope(t, listRaw)
+	items, _, _, err := campaignItems(listRoot)
+	if err != nil {
+		t.Fatalf("campaignItems: %v", err)
+	}
+	var listSide psacampaign.CampaignFormData
+	var found bool
+	for _, it := range items {
+		pc, err := mapListItem(it)
+		if err != nil {
+			t.Fatalf("mapListItem: %v", err)
+		}
+		if pc.CampaignRequestID == campaignID {
+			listSide, found = psacampaign.PortalFormData(pc), true
+		}
+	}
+	if !found {
+		t.Fatalf("campaign %s not in the list fixture", campaignID)
+	}
+
+	editRoot, ok := decodeEnvelope(t, editRaw).(map[string]any)
+	if !ok {
+		t.Fatal("edit root not an object")
+	}
+	editSide, err := decodeFormData(editRoot["formData"].(map[string]any))
+	if err != nil {
+		t.Fatalf("decodeFormData: %v", err)
+	}
+
+	// Every field TranslateToDiff can emit. The three subject/spec-list fields
+	// are excluded: the list endpoint does not carry them at all (FetchCampaigns
+	// backfills them from this same edit form via applyFormData), so comparing
+	// the two views of them would only restate that projection.
+	for _, field := range []string{
+		"bidPercentage", "dailyBudget", "gradeMinimum", "gradeMaximum",
+		"yearMinimum", "yearMaximum", "priceMinimum", "priceMaximum",
+		"cardLadderConfidenceMinimum", "flatFee", "dailySpecLimit", "campaignName",
+	} {
+		t.Run(field, func(t *testing.T) {
+			fromList, ok := psacampaign.RenderFieldValue(field, listSide)
+			if !ok {
+				t.Fatalf("no renderer for %q", field)
+			}
+			fromEdit, _ := psacampaign.RenderFieldValue(field, editSide)
+			if fromList != fromEdit {
+				t.Errorf("list renders %q, edit form renders %q", fromList, fromEdit)
+			}
+		})
+	}
+}
+
+// decodeEnvelope resolves a captured SvelteKit __data.json fixture.
+func decodeEnvelope(t *testing.T, raw []byte) any {
+	t.Helper()
+	packed, err := packedFromEnvelope(raw)
+	if err != nil {
+		t.Fatalf("packedFromEnvelope: %v", err)
+	}
+	root, err := DecodeRefPacked(packed)
+	if err != nil {
+		t.Fatalf("DecodeRefPacked: %v", err)
+	}
+	return root
 }
 
 func TestTruncateBody(t *testing.T) {

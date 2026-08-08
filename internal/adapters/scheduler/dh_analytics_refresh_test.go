@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/demand"
@@ -589,5 +590,92 @@ func makeSatPage(startIdx, count, perPage, totalCount int) *dh.CharacterSaturati
 			PerPage:    perPage,
 			TotalCount: totalCount,
 		},
+	}
+}
+
+// TestDHAnalyticsRefresh_CharacterComputedAt asserts that the computed_at
+// carried by TopCharactersResponse is threaded into both the persisted demand
+// blob and CharacterCache.DemandComputedAt. Overall and per-era responses each
+// carry their own computed_at; when a character appears in both, the per-era
+// entry wins (indexDemand is last-write-wins) and its timestamp must travel
+// with it.
+func TestDHAnalyticsRefresh_CharacterComputedAt(t *testing.T) {
+	const (
+		overallStamp = "2026-04-15T00:00:00Z"
+		eraStamp     = "2026-04-16T00:00:00Z"
+	)
+	client := &fakeAnalyticsClient{
+		available: true,
+		topCharactersFn: func(_ context.Context, _ int, era string) (*dh.TopCharactersResponse, error) {
+			if era == "" {
+				return &dh.TopCharactersResponse{
+					ComputedAt: overallStamp,
+					CharacterDemand: []dh.CharacterDemandEntry{
+						{CharacterName: "Charizard", CardCount: 10, AvgDemandScore: 87.5},
+						{CharacterName: "Mewtwo", CardCount: 3, AvgDemandScore: 65},
+					},
+				}, nil
+			}
+			if era != defaultAnalyticsEras[0] {
+				return &dh.TopCharactersResponse{}, nil
+			}
+			// Mewtwo appears in both; the per-era entry overwrites the overall one.
+			return &dh.TopCharactersResponse{
+				ComputedAt: eraStamp,
+				CharacterDemand: []dh.CharacterDemandEntry{
+					{CharacterName: "Mewtwo", CardCount: 4, AvgDemandScore: 70},
+				},
+			}, nil
+		},
+	}
+
+	rows := map[string]demand.CharacterCache{}
+	repo := &mocks.DemandRepositoryMock{
+		UpsertCharacterCacheFn: func(_ context.Context, row demand.CharacterCache) error {
+			rows[row.Character] = row
+			return nil
+		},
+		UpsertCardCacheFn: func(_ context.Context, _ demand.CardCache) error { return nil },
+		CardDataQualityStatsFn: func(_ context.Context, _ string) (demand.QualityStats, error) {
+			return demand.QualityStats{}, nil
+		},
+	}
+	sched := NewDHAnalyticsRefreshScheduler(client, repo, &fakeCardLister{}, mocks.NewMockLogger(), newTestCfg())
+
+	sched.refresh(context.Background())
+
+	tests := []struct {
+		character string
+		want      string
+	}{
+		{character: "Charizard", want: overallStamp},
+		{character: "Mewtwo", want: eraStamp},
+	}
+	for _, tc := range tests {
+		t.Run(tc.character, func(t *testing.T) {
+			row, ok := rows[tc.character]
+			if !ok {
+				t.Fatalf("no character cache row upserted for %q", tc.character)
+			}
+			wantTime, err := time.Parse(time.RFC3339, tc.want)
+			if err != nil {
+				t.Fatalf("bad fixture timestamp: %v", err)
+			}
+			if row.DemandComputedAt == nil {
+				t.Fatalf("DemandComputedAt is nil; want %s", tc.want)
+			}
+			if !row.DemandComputedAt.Equal(wantTime) {
+				t.Errorf("DemandComputedAt = %s; want %s", row.DemandComputedAt, tc.want)
+			}
+			if row.Demand == nil {
+				t.Fatalf("Demand is nil")
+			}
+			if row.Demand.ComputedAt != tc.want {
+				t.Errorf("Demand.ComputedAt = %q; want %q", row.Demand.ComputedAt, tc.want)
+			}
+			if row.Demand.CharacterName != tc.character {
+				t.Errorf("Demand.CharacterName = %q; want %q", row.Demand.CharacterName, tc.character)
+			}
+		})
 	}
 }

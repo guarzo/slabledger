@@ -159,6 +159,42 @@ func (s *service) enrichAgingItem(_ context.Context, p *Purchase, campaignName s
 // below, and internal/domain/tuning's ComputeMarketAlignment.
 const MarketDriftThreshold = 0.05
 
+// MarketDrift is the three-way classification of a fractional price change
+// against MarketDriftThreshold.
+type MarketDrift int
+
+const (
+	// MarketDriftStable is drift strictly inside ±MarketDriftThreshold.
+	MarketDriftStable MarketDrift = iota
+	// MarketDriftUp is drift at or above +MarketDriftThreshold.
+	MarketDriftUp
+	// MarketDriftDown is drift at or below -MarketDriftThreshold.
+	MarketDriftDown
+)
+
+// ClassifyMarketDrift classifies delta, a fractional price change, against
+// MarketDriftThreshold.
+//
+// The boundary is inclusive: a delta of exactly ±MarketDriftThreshold is
+// Up/Down rather than Stable, matching "the fraction at which a card is
+// classified as appreciating or depreciating" above. Both appliers of the
+// constant route through here so the boundary cannot drift apart again —
+// they previously disagreed at exactly ±0.05 (SLA-60).
+//
+// Callers map the result onto their own vocabulary: the market signal below
+// uses rising/falling/stable, tuning's ComputeMarketAlignment counts
+// appreciating/depreciating/stable.
+func ClassifyMarketDrift(delta float64) MarketDrift {
+	switch {
+	case delta >= MarketDriftThreshold:
+		return MarketDriftUp
+	case delta <= -MarketDriftThreshold:
+		return MarketDriftDown
+	default:
+		return MarketDriftStable
+	}
+}
+
 // buildEnrichedSnapshot constructs a MarketSnapshot from purchase data, incorporating CL signals.
 func (s *service) buildEnrichedSnapshot(p *Purchase) *MarketSnapshot {
 	snap := SnapshotFromPurchase(p)
@@ -185,12 +221,15 @@ func (s *service) computeMarketSignal(p *Purchase, snap *MarketSnapshot, item *A
 	direction := "stable"
 	rec := "Either channel — local for speed, eBay for margin"
 
-	if deltaPct >= MarketDriftThreshold {
+	switch ClassifyMarketDrift(deltaPct) {
+	case MarketDriftUp:
 		direction = "rising"
 		rec = "Consider eBay/TCGPlayer — market ahead of valuations"
-	} else if deltaPct <= -MarketDriftThreshold {
+	case MarketDriftDown:
 		direction = "falling"
 		rec = "Consider local (GameStop at 90% CL) — lock in before drop"
+	case MarketDriftStable:
+		// Defaults above already describe the stable case.
 	}
 
 	item.Signal = &MarketSignal{

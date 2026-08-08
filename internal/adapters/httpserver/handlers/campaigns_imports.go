@@ -10,13 +10,29 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// importConfigured reports whether CSV/portal intake is wired, writing a 503 when
+// it is not. The import service is optional on the handler (WithImportService),
+// so the intake routes degrade instead of panicking when it is absent.
+func (h *CampaignsHandler) importConfigured(w http.ResponseWriter) bool {
+	if h.importSvc == nil {
+		writeError(w, http.StatusServiceUnavailable, "Import service not available")
+		return false
+	}
+	return true
+}
+
 // HandleGlobalImportPSA handles POST /api/purchases/import-psa.
 // Accepts a PSA export CSV file and imports graded card data across all inventory.
 func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.Request) {
+	if !h.importConfigured(w) {
+		return
+	}
+
 	rows, ok := h.parseGlobalCSVUpload(w, r)
 	if !ok {
 		return
@@ -28,6 +44,10 @@ func (h *CampaignsHandler) HandleGlobalImportPSA(w http.ResponseWriter, r *http.
 // HandleSyncPSASheets handles POST /api/purchases/sync-psa-sheets.
 // Fetches PSA data from the PSA portal via the stored access token and runs the standard import.
 func (h *CampaignsHandler) HandleSyncPSASheets(w http.ResponseWriter, r *http.Request) {
+	if !h.importConfigured(w) {
+		return
+	}
+
 	if h.rowProvider == nil {
 		writeError(w, http.StatusServiceUnavailable, "PSA portal sync not configured")
 		return
@@ -47,8 +67,8 @@ func (h *CampaignsHandler) HandleSyncPSASheets(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "PSA portal sync failed", func() (*inventory.PSAImportResult, error) {
-		return h.service.ImportPSAExportGlobal(r.Context(), psaRows)
+	result, ok := serviceCall(w, r.Context(), h.logger, "PSA portal sync failed", func() (*csvimport.PSAImportResult, error) {
+		return h.importSvc.ImportPSAExportGlobal(r.Context(), psaRows)
 	})
 	if !ok {
 		return
@@ -61,7 +81,7 @@ func (h *CampaignsHandler) HandleSyncPSASheets(w http.ResponseWriter, r *http.Re
 // writes the JSON response. source labels the origin ("CSV" or "sheet") for
 // error messages; logLabel identifies the operation in failure logs.
 func (h *CampaignsHandler) importPSARows(w http.ResponseWriter, r *http.Request, rows [][]string, source, logLabel string) {
-	psaRows, parseErrors, err := inventory.ParsePSAExportRows(rows)
+	psaRows, parseErrors, err := csvimport.ParsePSAExportRows(rows)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -77,8 +97,8 @@ func (h *CampaignsHandler) importPSARows(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, logLabel, func() (*inventory.PSAImportResult, error) {
-		return h.service.ImportPSAExportGlobal(r.Context(), psaRows)
+	result, ok := serviceCall(w, r.Context(), h.logger, logLabel, func() (*csvimport.PSAImportResult, error) {
+		return h.importSvc.ImportPSAExportGlobal(r.Context(), psaRows)
 	})
 	if !ok {
 		return
@@ -87,7 +107,7 @@ func (h *CampaignsHandler) importPSARows(w http.ResponseWriter, r *http.Request,
 	// Surface row-level parse errors in the response so the caller
 	// knows which rows were skipped and why.
 	for _, pe := range parseErrors {
-		result.Errors = append(result.Errors, inventory.ImportError{
+		result.Errors = append(result.Errors, csvimport.ImportError{
 			Row:   pe.Row,
 			Error: pe.Message,
 		})
@@ -99,21 +119,25 @@ func (h *CampaignsHandler) importPSARows(w http.ResponseWriter, r *http.Request,
 // HandleGlobalImportExternal handles POST /api/purchases/import-external.
 // Accepts a Shopify product export CSV file.
 func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *http.Request) {
+	if !h.importConfigured(w) {
+		return
+	}
+
 	rows, ok := h.parseGlobalCSVUpload(w, r)
 	if !ok {
 		return
 	}
 
-	shopifyRows, parseErrors, err := inventory.ParseShopifyExportRows(rows)
+	shopifyRows, parseErrors, err := csvimport.ParseShopifyExportRows(rows)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Convert ParseErrors to ImportErrors for the response.
-	var importErrors []inventory.ImportError
+	var importErrors []csvimport.ImportError
 	for _, pe := range parseErrors {
-		importErrors = append(importErrors, inventory.ImportError{
+		importErrors = append(importErrors, csvimport.ImportError{
 			Row:   pe.Row,
 			Error: pe.Message,
 		})
@@ -121,21 +145,21 @@ func (h *CampaignsHandler) HandleGlobalImportExternal(w http.ResponseWriter, r *
 
 	if len(shopifyRows) == 0 {
 		if len(importErrors) > 0 {
-			writeJSON(w, http.StatusOK, inventory.ExternalImportResult{
+			writeJSON(w, http.StatusOK, csvimport.ExternalImportResult{
 				Failed: len(importErrors),
 				Errors: importErrors,
 			})
 		} else {
-			writeJSON(w, http.StatusBadRequest, inventory.ExternalImportResult{
+			writeJSON(w, http.StatusBadRequest, csvimport.ExternalImportResult{
 				Failed: 1,
-				Errors: []inventory.ImportError{{Row: 0, Error: "No valid product rows found in CSV"}},
+				Errors: []csvimport.ImportError{{Row: 0, Error: "No valid product rows found in CSV"}},
 			})
 		}
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "external import failed", func() (*inventory.ExternalImportResult, error) {
-		return h.service.ImportExternalCSV(r.Context(), shopifyRows)
+	result, ok := serviceCall(w, r.Context(), h.logger, "external import failed", func() (*csvimport.ExternalImportResult, error) {
+		return h.importSvc.ImportExternalCSV(r.Context(), shopifyRows)
 	})
 	if !ok {
 		return
@@ -301,6 +325,10 @@ func (h *CampaignsHandler) HandleResolveCert(w http.ResponseWriter, r *http.Requ
 // Accepts an orders export CSV, matches PSA certs against inventory, and returns
 // categorized results for review before confirmation.
 func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Request) {
+	if !h.importConfigured(w) {
+		return
+	}
+
 	rows, ok := h.parseGlobalCSVUpload(w, r)
 	if !ok {
 		return
@@ -311,21 +339,21 @@ func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	orderRows, skipped, err := inventory.ParseOrdersExportRows(rows)
+	orderRows, skipped, err := csvimport.ParseOrdersExportRows(rows)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if len(orderRows) == 0 {
-		writeJSON(w, http.StatusOK, &inventory.OrdersImportResult{
+		writeJSON(w, http.StatusOK, &csvimport.OrdersImportResult{
 			Skipped: skipped,
 		})
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "orders import failed", func() (*inventory.OrdersImportResult, error) {
-		return h.service.ImportOrdersSales(r.Context(), orderRows)
+	result, ok := serviceCall(w, r.Context(), h.logger, "orders import failed", func() (*csvimport.OrdersImportResult, error) {
+		return h.importSvc.ImportOrdersSales(r.Context(), orderRows)
 	})
 	if !ok {
 		return
@@ -337,21 +365,21 @@ func (h *CampaignsHandler) HandleImportOrders(w http.ResponseWriter, r *http.Req
 }
 
 func (h *CampaignsHandler) handleEbayImport(w http.ResponseWriter, r *http.Request, rows [][]string) {
-	ebayRows, skipped, err := inventory.ParseEbayOrderRows(rows)
+	ebayRows, skipped, err := csvimport.ParseEbayOrderRows(rows)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if len(ebayRows) == 0 {
-		writeJSON(w, http.StatusOK, &inventory.OrdersImportResult{
+		writeJSON(w, http.StatusOK, &csvimport.OrdersImportResult{
 			Skipped: skipped,
 		})
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "eBay orders import failed", func() (*inventory.OrdersImportResult, error) {
-		return h.service.ImportEbayOrdersSales(r.Context(), ebayRows)
+	result, ok := serviceCall(w, r.Context(), h.logger, "eBay orders import failed", func() (*csvimport.OrdersImportResult, error) {
+		return h.importSvc.ImportEbayOrdersSales(r.Context(), ebayRows)
 	})
 	if !ok {
 		return
@@ -367,7 +395,7 @@ func isEbayCSV(rows [][]string) bool {
 	if len(rows) < 2 {
 		return false
 	}
-	headerMap := inventory.BuildHeaderMap(rows[1])
+	headerMap := csvimport.BuildHeaderMap(rows[1])
 	for _, col := range []string{"custom label", "item title", "sold for", "sale date", "order number"} {
 		if _, ok := headerMap[col]; !ok {
 			return false
@@ -379,10 +407,14 @@ func isEbayCSV(rows [][]string) bool {
 // HandleConfirmOrdersSales handles POST /api/purchases/import-orders/confirm.
 // Accepts confirmed matches and creates sale records.
 func (h *CampaignsHandler) HandleConfirmOrdersSales(w http.ResponseWriter, r *http.Request) {
+	if !h.importConfigured(w) {
+		return
+	}
+
 	const maxBytes = 1 << 20 // 1MB
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 
-	var items []inventory.OrdersConfirmItem
+	var items []csvimport.OrdersConfirmItem
 	if err := json.NewDecoder(r.Body).Decode(&items); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid JSON body")
 		return
@@ -393,7 +425,7 @@ func (h *CampaignsHandler) HandleConfirmOrdersSales(w http.ResponseWriter, r *ht
 	}
 
 	result, ok := serviceCall(w, r.Context(), h.logger, "confirm orders sales failed", func() (*inventory.BulkSaleResult, error) {
-		return h.service.ConfirmOrdersSales(r.Context(), items)
+		return h.importSvc.ConfirmOrdersSales(r.Context(), items)
 	})
 	if !ok {
 		return

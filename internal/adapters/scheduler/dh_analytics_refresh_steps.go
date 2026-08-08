@@ -11,16 +11,20 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// refreshCharacters runs Step 1: union characters from top-characters (overall +
-// per era), velocity, saturation, then upserts character cache rows. Returns
-// the (ranked) character-name set, top_cards IDs for step 2 seeding, and API
-// call count. Ranking is order-of-first-appearance across the four sources, so
+// refreshCharacters runs the character step: union characters from
+// top-characters (overall + per era), velocity, saturation, then upserts
+// character cache rows. Returns the (ranked) character-name set and API call
+// count. Ranking is order-of-first-appearance across the four sources, so
 // overall-top entries outrank per-era entries, which outrank velocity and
 // saturation entries — matters when the result is capped at
 // maxCharactersPerRun.
-func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
+//
+// qualityByChar carries the character-level data quality aggregated from the
+// card step, keyed by character name. DH never reports data_quality on a
+// character, so this is the only source for it; characters absent from the map
+// get no quality rather than a guessed one.
+func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context, qualityByChar map[string]string) (
 	characters map[string]struct{},
-	topCardIDs []int,
 	apiCalls int,
 ) {
 	characters = make(map[string]struct{})
@@ -35,7 +39,6 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		characters[name] = struct{}{}
 		orderedCharacters = append(orderedCharacters, name)
 	}
-	cardIDSet := make(map[int]struct{})
 
 	// 1a. Top characters overall.
 	apiCalls++
@@ -43,23 +46,16 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 	if err != nil && !errors.Is(err, dh.ErrAnalyticsNotComputed) {
 		s.logger.Warn(ctx, "top_characters overall failed", observability.Err(err))
 	}
-	var overallEntries []dh.CharacterDemandEntry
+	var overallEntries []stampedDemandEntry
 	if overallTop != nil {
-		overallEntries = overallTop.CharacterDemand
-		for _, e := range overallEntries {
+		for _, e := range overallTop.CharacterDemand {
 			addCharacter(e.CharacterName)
+			overallEntries = append(overallEntries, stampedDemandEntry{Entry: e, ComputedAt: overallTop.ComputedAt})
 		}
 	}
 
 	// 1b. Top characters per era.
-	//
-	// NOTE: TopCharactersResponse.CharacterDemand entries do not include a
-	// top_cards field in our wire types today (see types_analytics.go) — the
-	// `top_cards` attribute lives on the DH response but hasn't been typed on
-	// CharacterDemandEntry. When T2 exposes that field the loop below will
-	// start producing card IDs. Until then, step 2 is seeded by unsold
-	// inventory only, which is the intended Phase-1 behavior anyway.
-	eraEntries := make([]dh.CharacterDemandEntry, 0, len(defaultAnalyticsEras)*topCharactersPerEraLimit)
+	eraEntries := make([]stampedDemandEntry, 0, len(defaultAnalyticsEras)*topCharactersPerEraLimit)
 	for _, era := range defaultAnalyticsEras {
 		apiCalls++
 		resp, eraErr := s.dhClient.TopCharacters(ctx, topCharactersPerEraLimit, era)
@@ -76,7 +72,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		}
 		for _, e := range resp.CharacterDemand {
 			addCharacter(e.CharacterName)
-			eraEntries = append(eraEntries, e)
+			eraEntries = append(eraEntries, stampedDemandEntry{Entry: e, ComputedAt: resp.ComputedAt})
 		}
 	}
 
@@ -113,10 +109,6 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		characters = trimmed
 	}
 
-	for id := range cardIDSet {
-		topCardIDs = append(topCardIDs, id)
-	}
-
 	now := time.Now()
 	demandByChar := indexDemand(append(overallEntries, eraEntries...))
 	velocityByChar := indexVelocity(velocityEntries)
@@ -129,7 +121,10 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			FetchedAt: now,
 		}
 		if entry, ok := demandByChar[name]; ok {
-			row.Demand = mapCharacterDemand(entry)
+			row.Demand = mapCharacterDemand(entry, qualityByChar[name])
+			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
+				row.DemandComputedAt = &t
+			}
 		}
 		if entry, ok := velocityByChar[name]; ok {
 			row.Velocity = mapCharacterVelocity(entry.Velocity)
@@ -150,32 +145,37 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 		}
 	}
 
-	return characters, topCardIDs, apiCalls
+	return characters, apiCalls
 }
 
-// buildCardSeed is the Step-2 seed: union of our unsold dh_card_ids and the
-// top_cards surfaced by Step 1. Capped at maxSeedCardIDs.
-func (s *DHAnalyticsRefreshScheduler) buildCardSeed(ctx context.Context, hotIDs []int) []int {
-	seen := make(map[int]struct{}, len(hotIDs))
-	for _, id := range hotIDs {
-		if id > 0 {
-			seen[id] = struct{}{}
-		}
+// buildCardSeed is the card step's seed: our unsold dh_card_ids, capped at
+// maxSeedCardIDs.
+//
+// It used to also union the "top cards" of each hot character. That path was
+// dead: DH's top_characters response carries no top_cards field on any variant
+// (verified against the live API on 2026-08-08 for the overall, per-era, and
+// by_era forms), so the set it contributed was always empty. Removing it also
+// removes the card step's dependency on the character step, which is what lets
+// cards run first and feed character data quality in the same run (SLA-63).
+func (s *DHAnalyticsRefreshScheduler) buildCardSeed(ctx context.Context) []int {
+	if s.cardLister == nil {
+		return nil
 	}
-	if s.cardLister != nil {
-		invIDs, err := s.cardLister.ListUnsoldDHCardIDs(ctx)
-		if err != nil {
-			s.logger.Warn(ctx, "list unsold dh card ids failed", observability.Err(err))
-		} else {
-			for _, id := range invIDs {
-				if id > 0 {
-					seen[id] = struct{}{}
-				}
-			}
-		}
+	invIDs, err := s.cardLister.ListUnsoldDHCardIDs(ctx)
+	if err != nil {
+		s.logger.Warn(ctx, "list unsold dh card ids failed", observability.Err(err))
+		return nil
 	}
-	ids := make([]int, 0, len(seen))
-	for id := range seen {
+	seen := make(map[int]struct{}, len(invIDs))
+	ids := make([]int, 0, len(invIDs))
+	for _, id := range invIDs {
+		if id <= 0 {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
 		ids = append(ids, id)
 		if len(ids) >= maxSeedCardIDs {
 			break
@@ -276,11 +276,29 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 
 // --- helpers ---
 
+// stampedDemandEntry pairs a character demand entry with the computed_at of
+// the TopCharacters response it arrived in. DH reports computed_at once per
+// response rather than per entry, so the timestamp has to be carried alongside
+// the entry to survive the overall/per-era merge in indexDemand.
+type stampedDemandEntry struct {
+	Entry      dh.CharacterDemandEntry
+	ComputedAt string
+}
+
 // mapCharacterDemand converts a DH character-demand entry into the domain
-// payload persisted on CharacterCache.Demand. dh.CharacterDemandEntry has no
-// computed_at or data_quality field, so both are left "" on the mapped
-// struct — identical to what today's json.Marshal(entry) blob persists.
-func mapCharacterDemand(entry dh.CharacterDemandEntry) *demand.CharacterDemand {
+// payload persisted on CharacterCache.Demand.
+//
+// dataQuality does not come from DH: data_quality is reported per card
+// (dh.DemandSignal) and never per character. It is rolled up by
+// demand.AggregateCharacterQuality over the cards we have attributed, and is
+// left "" when we have attributed none of a character's cards — an empty
+// value reads as "unknown" downstream, which is correct, whereas defaulting
+// to "proxy" or "full" would assert something we did not measure.
+//
+// ComputedAt is the response-level timestamp carried on the stamped entry, so
+// the stored payload always describes the response it came from.
+func mapCharacterDemand(stamped stampedDemandEntry, dataQuality string) *demand.CharacterDemand {
+	entry := stamped.Entry
 	out := &demand.CharacterDemand{
 		CharacterName:     entry.CharacterName,
 		CardCount:         entry.CardCount,
@@ -288,6 +306,8 @@ func mapCharacterDemand(entry dh.CharacterDemandEntry) *demand.CharacterDemand {
 		TotalViews:        entry.TotalViews,
 		TotalSearchClicks: entry.TotalSearchClicks,
 		TotalWishlistAdds: entry.TotalWishlistAdds,
+		DataQuality:       dataQuality,
+		ComputedAt:        stamped.ComputedAt,
 	}
 	if len(entry.ByEra) > 0 {
 		out.ByEra = make(map[string]demand.ByEraDemand, len(entry.ByEra))
@@ -346,15 +366,17 @@ func mapCharacterSaturation(entry dh.CharacterSaturationEntry) *demand.Character
 	}
 }
 
-func indexDemand(entries []dh.CharacterDemandEntry) map[string]dh.CharacterDemandEntry {
-	m := make(map[string]dh.CharacterDemandEntry, len(entries))
+func indexDemand(entries []stampedDemandEntry) map[string]stampedDemandEntry {
+	m := make(map[string]stampedDemandEntry, len(entries))
 	for _, e := range entries {
-		if e.CharacterName == "" {
+		if e.Entry.CharacterName == "" {
 			continue
 		}
 		// Later entries (per-era) overwrite earlier (overall) so the persisted
-		// CharacterDemand carries ByEra when available.
-		m[e.CharacterName] = e
+		// CharacterDemand carries ByEra when available. The entry's own
+		// computed_at travels with it, so the stored timestamp always
+		// describes the stored payload.
+		m[e.Entry.CharacterName] = e
 	}
 	return m
 }

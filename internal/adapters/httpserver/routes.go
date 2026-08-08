@@ -54,9 +54,6 @@ func (rt *Router) registerAdminRoutes(mux *http.ServeMux) {
 		if rt.campaignsHandler != nil {
 			mux.Handle("GET /api/admin/price-override-stats", rt.authMW.RequireAdmin(http.HandlerFunc(rt.campaignsHandler.HandlePriceOverrideStats)))
 		}
-		if rt.aiUsageHandler != nil {
-			mux.Handle("GET /api/admin/ai-usage", rt.authMW.RequireAdmin(http.HandlerFunc(rt.aiUsageHandler.HandleAIUsage)))
-		}
 		if rt.priceFlagsHandler != nil {
 			mux.Handle("GET /api/admin/price-flags", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleListPriceFlags)))
 			mux.Handle("PATCH /api/admin/price-flags/{flagId}/resolve", rt.authMW.RequireAdmin(http.HandlerFunc(rt.priceFlagsHandler.HandleResolvePriceFlag)))
@@ -205,17 +202,6 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	rt.logger.Info(context.Background(), "campaign routes registered")
 }
 
-// registerAdvisorRoutes wires the AI advisor endpoints.
-func (rt *Router) registerAdvisorRoutes(mux *http.ServeMux) {
-	if rt.advisorHandler == nil || rt.authMW == nil {
-		return
-	}
-	mux.Handle("POST /api/advisor/digest", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleDigest)))
-	mux.Handle("POST /api/advisor/liquidation-analysis", rt.authMW.RequireAuth(http.HandlerFunc(rt.advisorHandler.HandleLiquidationAnalysis)))
-	mux.HandleFunc("/advisor", rt.spaHandler.HandleIndex)
-	rt.logger.Info(context.Background(), "AI advisor routes registered")
-}
-
 // registerPricingAPIRoutes wires the public pricing API endpoints (bearer token auth).
 func (rt *Router) registerPricingAPIRoutes(mux *http.ServeMux) {
 	if rt.pricingAPIHandler == nil {
@@ -259,6 +245,7 @@ func (rt *Router) registerDHRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/dh/suggestions", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetSuggestions)))
 	mux.Handle("GET /api/dh/suggestions/inventory-alerts", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleInventoryAlerts)))
 	mux.Handle("GET /api/dh/status", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetStatus)))
+	mux.Handle("GET /api/dh/events", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetEvents)))
 	mux.Handle("GET /api/dh/pending", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleGetDHPending)))
 	mux.Handle("POST /api/dh/fix-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleFixMatch)))
 	mux.Handle("POST /api/dh/select-match", rt.authMW.RequireAuth(http.HandlerFunc(rt.dhHandler.HandleSelectMatch)))

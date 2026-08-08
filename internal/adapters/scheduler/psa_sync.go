@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -31,7 +32,7 @@ type PSASyncRunStats struct {
 
 // RowProvider fetches PSA export rows from the portal.
 type RowProvider interface {
-	FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error)
+	FetchRows(ctx context.Context) ([]csvimport.PSAExportRow, error)
 }
 
 // TokenRefresher ensures the stored access token is fresh before each fetch.
@@ -41,7 +42,7 @@ type TokenRefresher interface {
 
 // PSAImporter runs the PSA import pipeline.
 type PSAImporter interface {
-	ImportPSAExportGlobal(ctx context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error)
+	ImportPSAExportGlobal(ctx context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error)
 }
 
 var _ Scheduler = (*PSASyncScheduler)(nil)

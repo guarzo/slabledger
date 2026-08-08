@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/export"
 	"github.com/guarzo/slabledger/internal/domain/finance"
@@ -19,7 +20,7 @@ import (
 
 // RowProvider fetches PSA export rows from the portal for manual import.
 type RowProvider interface {
-	FetchRows(ctx context.Context) ([]inventory.PSAExportRow, error)
+	FetchRows(ctx context.Context) ([]csvimport.PSAExportRow, error)
 }
 
 // DHPriceSyncer queues a DH price-sync for one purchase. Fire-and-forget
@@ -31,6 +32,7 @@ type DHPriceSyncer interface {
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
 	service        inventory.Service
+	importSvc      csvimport.Service // optional: CSV/portal intake
 	arbSvc         arbitrage.Service
 	portSvc        portfolio.Service
 	tuningSvc      tuning.Service
@@ -46,10 +48,17 @@ type CampaignsHandler struct {
 	psaSnapshots psacampaign.SnapshotStore  // optional: PSA portal campaign snapshot reader
 	psaQueue     psacampaign.PushQueueStore // optional: PSA propose/publish push queue
 	psaCatalog   psacampaign.CatalogStore   // optional: PSA spec-list/subject catalog reader
+	psaSigner    psacampaign.ApprovalSigner // optional: signs push approvals; without it, publish is refused
 }
 
 // CampaignsHandlerOption configures optional dependencies on CampaignsHandler.
 type CampaignsHandlerOption func(*CampaignsHandler)
+
+// WithImportService enables the CSV and PSA-portal intake endpoints. Without it
+// those routes answer 503; every other campaign route is unaffected.
+func WithImportService(svc csvimport.Service) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.importSvc = svc }
+}
 
 // WithDHListingService enables DH listing after cert import.
 func WithDHListingService(svc dhlisting.Service) CampaignsHandlerOption {
@@ -90,6 +99,14 @@ func WithPSAPushQueue(q psacampaign.PushQueueStore) CampaignsHandlerOption {
 // the translators need (via a Resolver) to push list-valued targeting.
 func WithPSACatalogStore(s psacampaign.CatalogStore) CampaignsHandlerOption {
 	return func(h *CampaignsHandler) { h.psaCatalog = s }
+}
+
+// WithPSAApprovalSigner supplies the key that signs push approvals. Without it
+// the publish endpoint refuses to approve anything: an unsigned approval is one
+// the drain will reject later anyway, so failing at the point a human is
+// watching beats failing silently in a background job an hour on.
+func WithPSAApprovalSigner(s psacampaign.ApprovalSigner) CampaignsHandlerOption {
+	return func(h *CampaignsHandler) { h.psaSigner = s }
 }
 
 // NewCampaignsHandler creates a new campaigns handler.

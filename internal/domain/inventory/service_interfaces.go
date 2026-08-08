@@ -21,18 +21,16 @@ type AnalyticsService interface {
 	GetFlaggedInventory(ctx context.Context) ([]AgingItem, error)
 }
 
-// ImportService handles CSV imports, cert entry, and external data ingestion.
-type ImportService interface {
-	ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow) (*PSAImportResult, error)
-	ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)
-
-	EnsureExternalCampaign(ctx context.Context) (*Campaign, error)
-	ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow) (*ExternalImportResult, error)
-
-	ImportOrdersSales(ctx context.Context, rows []OrdersExportRow) (*OrdersImportResult, error)
-	ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow) (*OrdersImportResult, error)
-	ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmItem) (*BulkSaleResult, error)
-
+// CertService handles cert-number entry and lookup — the by-hand intake path,
+// as opposed to the file-driven one.
+//
+// CSV ingestion used to live here too, alongside these methods, under the name
+// ImportService. It moved to internal/domain/csvimport (SLA-35): the CSV half
+// carried its own row and result types, and keeping them here made every
+// consumer of a cert method compile against the parser vocabulary as well.
+// Cert entry stays in inventory because it drives purchases directly through
+// this service rather than through a parsed row.
+type CertService interface {
 	ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error)
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
 	ScanCert(ctx context.Context, certNumber string) (*ScanCertResult, error)

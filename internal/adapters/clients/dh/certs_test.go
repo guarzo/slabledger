@@ -56,10 +56,14 @@ func TestClient_ResolveCert(t *testing.T) {
 	require.Equal(t, 1487500, resp.CurrentMarketPriceCents)
 }
 
+// The fakes below write DH's response bodies as raw JSON literals rather than
+// marshalling our own structs. Encoding the struct back into the fake makes the
+// test tautological: it passes for any field naming we choose, which is how the
+// job_id/total_certs shape survived DH's 2026-04-23 rename undetected.
 func TestClient_ResolveCertsBatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/api/v1/enterprise/certs/resolve_batch", r.URL.Path)
+		require.Equal(t, "/api/v1/enterprise/dev/certs/resolve_batch", r.URL.Path)
 		require.Equal(t, "Bearer test_api_key", r.Header.Get(enterpriseAuthHeader))
 
 		var req CertResolveBatchRequest
@@ -68,13 +72,16 @@ func TestClient_ResolveCertsBatch(t *testing.T) {
 		require.Equal(t, "12345678", req.Certs[0].CertNumber)
 		require.Equal(t, "87654321", req.Certs[1].CertNumber)
 
-		resp := CertResolveBatchResponse{
-			JobID:      "job_xyz789",
-			Status:     "queued",
-			TotalCerts: 2,
-		}
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(resp))
+		// 202 Accepted, and poll_url is served without the /dev/ segment — we must
+		// ignore it and build the poll path ourselves.
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{
+			"batch_id": "b1f2c3d4-0000-4000-8000-000000000001",
+			"status": "processing",
+			"total": 2,
+			"poll_url": "/api/v1/enterprise/certs/batch_status/b1f2c3d4-0000-4000-8000-000000000001"
+		}`))
 	}))
 	defer server.Close()
 
@@ -85,54 +92,43 @@ func TestClient_ResolveCertsBatch(t *testing.T) {
 	}
 	resp, err := c.ResolveCertsBatch(context.Background(), certs)
 	require.NoError(t, err)
-	require.Equal(t, "job_xyz789", resp.JobID)
-	require.Equal(t, "queued", resp.Status)
-	require.Equal(t, 2, resp.TotalCerts)
+	require.Equal(t, "b1f2c3d4-0000-4000-8000-000000000001", resp.BatchID)
+	require.Equal(t, "processing", resp.Status)
+	require.Equal(t, 2, resp.Total)
 }
 
 func TestClient_GetCertResolutionJob(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/api/v1/enterprise/certs/resolve_batch/job_abc123", r.URL.Path)
+		require.Equal(t, "/api/v1/enterprise/dev/certs/batch_status/batch_abc123", r.URL.Path)
 		require.Equal(t, "Bearer test_api_key", r.Header.Get(enterpriseAuthHeader))
 
-		resp := CertResolutionJobStatus{
-			JobID:         "job_abc123",
-			Status:        "completed",
-			TotalCerts:    2,
-			ResolvedCount: 2,
-			Results: []CertResolution{
-				{
-					CertNumber: "12345678",
-					Status:     "matched",
-					DHCardID:   42,
-					CardName:   "Charizard",
-					SetName:    "Base Set",
-					Grade:      "10.0",
-				},
-				{
-					CertNumber: "87654321",
-					Status:     "matched",
-					DHCardID:   101,
-					CardName:   "Pikachu",
-					SetName:    "Jungle",
-					Grade:      "9.0",
-				},
-			},
-		}
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(resp))
+		// Terminal status is "complete", not "completed", and the body carries no
+		// batch_id echo.
+		_, _ = w.Write([]byte(`{
+			"status": "complete",
+			"completed": 2,
+			"total": 2,
+			"updated_at": "2026-08-08T12:00:00Z",
+			"results": [
+				{"cert_number": "12345678", "status": "matched", "dh_card_id": 42,
+				 "card_name": "Charizard", "set_name": "Base Set", "grade": "10.0"},
+				{"cert_number": "87654321", "status": "matched", "dh_card_id": 101,
+				 "card_name": "Pikachu", "set_name": "Jungle", "grade": "9.0"}
+			]
+		}`))
 	}))
 	defer server.Close()
 
 	c := newTestClient(server.URL)
-	resp, err := c.GetCertResolutionJob(context.Background(), "job_abc123")
+	resp, err := c.GetCertResolutionJob(context.Background(), "batch_abc123")
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	require.Equal(t, "job_abc123", resp.JobID)
-	require.Equal(t, "completed", resp.Status)
-	require.Equal(t, 2, resp.TotalCerts)
-	require.Equal(t, 2, resp.ResolvedCount)
+	require.Equal(t, "complete", resp.Status)
+	require.Equal(t, 2, resp.Completed)
+	require.Equal(t, 2, resp.Total)
+	require.Equal(t, "2026-08-08T12:00:00Z", resp.UpdatedAt)
 	require.Len(t, resp.Results, 2)
 	require.Equal(t, "12345678", resp.Results[0].CertNumber)
 	require.Equal(t, "matched", resp.Results[0].Status)
@@ -144,7 +140,7 @@ func TestClient_GetCertResolutionJob(t *testing.T) {
 func TestClient_ConfirmMatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/api/v1/enterprise/certs/confirm_match", r.URL.Path)
+		require.Equal(t, "/api/v1/enterprise/dev/certs/confirm_match", r.URL.Path)
 		require.Equal(t, "Bearer test_api_key", r.Header.Get(enterpriseAuthHeader))
 
 		var req ConfirmMatchRequest
@@ -192,7 +188,7 @@ func TestClient_ConfirmMatch(t *testing.T) {
 func TestClient_ConfirmMatchBatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/api/v1/enterprise/certs/confirm_match", r.URL.Path)
+		require.Equal(t, "/api/v1/enterprise/dev/certs/confirm_match", r.URL.Path)
 		require.Equal(t, "Bearer test_api_key", r.Header.Get(enterpriseAuthHeader))
 
 		var req ConfirmMatchBatchRequest

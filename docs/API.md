@@ -96,6 +96,12 @@ Returns overall system health.
 }
 ```
 
+`database` is `"healthy"`, `"unhealthy: <reason>"`, or `"not configured"` when no
+health checker is wired. Anything other than `"healthy"` — except `"not
+configured"` — makes `status` `"degraded"` and the code `503`.
+
+**Errors:** `405` method other than GET or HEAD
+
 ---
 
 ### `GET /api/v1/health`
@@ -141,45 +147,6 @@ Returns API call statistics for all pricing providers.
 
 ---
 
-### `GET /api/admin/ai-usage`
-
-Auth: RequireAdmin
-
-Returns AI call usage statistics broken down by operation.
-
-**Response:** `200 OK`
-```json
-{
-  "configured": true,
-  "summary": {
-    "totalCalls": 42,
-    "successRate": 97.6,
-    "totalInputTokens": 100000,
-    "totalOutputTokens": 20000,
-    "totalTokens": 120000,
-    "avgLatencyMs": 4500.0,
-    "rateLimitHits": 1,
-    "callsLast24h": 10,
-    "lastCallAt": "2025-01-01T00:00:00Z",
-    "totalCostCents": 240
-  },
-  "operations": [
-    {
-      "operation": "digest",
-      "calls": 5,
-      "errors": 0,
-      "successRate": 100.0,
-      "avgLatencyMs": 5200.0,
-      "totalTokens": 30000,
-      "totalCostCents": 90
-    }
-  ],
-  "timestamp": "2025-01-01T00:00:00Z"
-}
-```
-
----
-
 ## Card Catalog
 
 ### `GET /api/cards/catalog`
@@ -207,18 +174,30 @@ Searches the Card Ladder card catalog by query string.
       "psaSpecId": 45678,
       "label": "Charizard",
       "player": "",
+      "playerIndexId": "",
       "set": "Base Set",
       "year": "1999",
       "number": "4",
+      "variation": "",
       "category": "Pokemon",
       "condition": "10",
       "gradingCompany": "PSA",
       "currentValue": 1200.00,
       "marketValue": 1195.00,
+      "pop": 1420,
       "numSales": 12,
+      "marketCap": 1704000.00,
       "score": 0.95,
+      "weeklyPercentChange": 0.4,
+      "monthlyPercentChange": -1.2,
+      "quarterlyPercentChange": 3.8,
+      "annualPercentChange": 11.5,
+      "priceMovement": 5.0,
       "lastSoldDate": "2025-04-10",
-      "image": "https://..."
+      "slug": "1999-base-set-4-charizard",
+      "keyCard": true,
+      "image": "https://...",
+      "ebayQuery": "1999 Pokemon Base Set Charizard PSA 10"
     }
   ],
   "totalHits": 1
@@ -226,6 +205,10 @@ Searches the Card Ladder card catalog by query string.
 ```
 
 **Errors:** `400` missing `q`; `500` search failed
+
+`pop` and `marketCap` are nullable. `currentValue`, `marketValue`, and
+`marketCap` are Card Ladder values in **dollars**, not cents — this endpoint
+proxies the CL catalog rather than SlabLedger's own inventory.
 
 ---
 
@@ -468,11 +451,21 @@ Lists campaigns.
     "psaSourcingFeeCents": 300,
     "ebayFeePct": 0.1235,
     "expectedFillRate": 80.0,
+    "psaCampaignRequestId": "psa-req-1",
     "createdAt": "2025-01-01T00:00:00Z",
-    "updatedAt": "2025-01-01T00:00:00Z"
+    "updatedAt": "2025-01-01T00:00:00Z",
+    "kind": "standard"
   }
 ]
 ```
+
+`kind` is derived at the HTTP layer (`"standard"` or `"external"`) and is not
+persisted. `psaCampaignRequestId` is omitted when the campaign has no linked PSA
+portal campaign. `targetLanguages` empty means an open net — the campaign buys
+any language; the only accepted tokens are `"english"` and `"japanese"`.
+`inclusionList` and `exclusionMode` are a **legacy write-only mirror** derived
+from `subjects`/`subjectFilterMode` on every write and read by nothing; do not
+build against them (`core_types.go:202-213`).
 
 ---
 
@@ -664,12 +657,49 @@ Lists sales for a campaign (paginated).
     "saleDate": "2025-02-01",
     "daysToSell": 31,
     "netProfitCents": 29645,
+    "orderId": "dh-order-1",
+    "originalListPriceCents": 145000,
+    "priceReductions": 2,
+    "daysListed": 28,
+    "soldAtAskingPrice": false,
     "wasCracked": false,
+    "forcedLiquidation": false,
+    "saleReason": "discretionary",
+    "clValueAtSaleCents": 128000,
+    "channelFeePctAtSale": 0.1235,
+    "lastSoldCents": 131000,
+    "lowestListCents": 139900,
+    "conservativeCents": 120000,
+    "medianCents": 129500,
+    "midPriceCents": 133000,
+    "lastSoldDate": "2025-01-28",
+    "activeListings": 14,
+    "salesLast30d": 6,
+    "trend30d": -0.03,
+    "snapshotDate": "2025-02-01",
     "createdAt": "2025-02-01T00:00:00Z",
     "updatedAt": "2025-02-01T00:00:00Z"
   }
 ]
 ```
+
+Only `id`, `purchaseId`, `saleChannel`, `salePriceCents`, `saleFeeCents`,
+`saleDate`, `daysToSell`, `netProfitCents`, `forcedLiquidation`, `createdAt`,
+and `updatedAt` are always present; every other field is `omitempty` and absent
+at its zero value. `saleReason` is one of `discretionary`, `invoice_pressure`,
+`aging_policy`, `bulk_lot`, `show_clearout` — frozen at sale-creation time.
+
+`lastSoldCents` through `snapshotDate` are the embedded `MarketSnapshotData`
+market snapshot at sale time (best-effort, may be entirely absent). Its
+`snapshotJSON`, `confidence`, `sourceCountRaw`, and `marketDataObserved` fields
+are `json:"-"` and never appear on the wire (`core_types.go:117-136`).
+
+`clValueAtSaleCents` and `channelFeePctAtSale` freeze the values in effect at
+sale time and use **different unknown encodings**, mirroring the columns:
+`cl_value_at_sale_cents` is non-null, so a recorded `0` is ambiguous for sales
+predating migration 000022 (genuinely zero vs never recorded);
+`channel_fee_pct_at_sale` is nullable, so its absence is unambiguous
+(`core_types.go:496-507`).
 
 ---
 
@@ -725,7 +755,7 @@ Deletes the sale recorded against a purchase, returning the purchase to unsold. 
 
 **Response:** `204 No Content`
 
-**Errors:** `404` purchase not in campaign, or no sale recorded for this purchase; `500` internal error
+**Errors:** `400` missing path param; `403` purchase does not belong to this campaign; `404` purchase not found, or no sale recorded for this purchase; `500` internal error
 
 ---
 
@@ -1032,11 +1062,17 @@ Required CSV columns: `handle`, `title`. PSA cert extracted from `cert number`, 
   "skipped": 3,
   "updated": 2,
   "failed": 0,
+  "errors": [{ "row": 7, "error": "missing title" }],
   "results": [
     { "certNumber": "12345678", "status": "imported", "cardName": "Charizard" }
   ]
 }
 ```
+
+`errors` and `results` are both `omitempty`. `errors` carries one
+`{row, error}` entry per rejected CSV row. `row` is 1-based over the **data
+rows**, excluding the header line — so `row: 7` is the 7th data row, the 8th
+line of the file (`csvimport/service_import_external.go:73`).
 
 ---
 
@@ -1064,18 +1100,6 @@ Imports purchases by cert number list (fetches card metadata via PSA API).
   ]
 }
 ```
-
----
-
-### DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale
-
-Remove the sale record for a purchase, returning the item to unsold inventory.
-
-**Response:** `204 No Content`
-
-**Errors:**
-- `404` — Purchase not found, or no sale exists for this purchase
-- `403` — Purchase does not belong to the specified campaign
 
 ---
 
@@ -1230,9 +1254,30 @@ Returns current capital exposure summary with recovery velocity.
   "alertLevel": "warning",
   "refundedCents": 0,
   "paidCents": 500000,
-  "unpaidInvoiceCount": 1
+  "unpaidInvoiceCount": 1,
+  "nextInvoiceDate": "2025-02-15",
+  "nextInvoiceDueDate": "2025-03-01",
+  "nextInvoiceAmountCents": 340000,
+  "daysUntilInvoiceDue": 14,
+  "nextInvoicePendingReceiptCents": 60000,
+  "nextInvoiceSellThrough": {
+    "totalPurchaseCount": 40,
+    "soldCount": 18,
+    "totalCostCents": 340000,
+    "saleRevenueCents": 210000
+  }
 }
 ```
+
+The `nextInvoice*` fields are invoice-cycle actuals for the earliest unpaid
+invoice, populated by the finance service (`finance/invoice_projection.go`).
+`nextInvoiceDate` and `nextInvoiceDueDate` are `omitempty` and absent when
+there is no unpaid invoice. `daysUntilInvoiceDue` counts from now to the due
+date and goes **negative when overdue**. `nextInvoiceAmountCents` is the amount
+still owed (`totalCents - paidCents`), not the invoice's original total.
+`nextInvoiceSellThrough` covers only returned, non-refunded purchases for that
+invoice date. `weeksToCover` is `99` when there is no recovery data
+(`WeeksToCoverNoData`).
 
 ---
 
@@ -1287,13 +1332,19 @@ Lists all PSA invoices.
     "invoiceDate": "2025-01-15",
     "totalCents": 840000,
     "paidCents": 0,
+    "pendingReceiptCents": 60000,
     "dueDate": "2025-01-30",
+    "paidDate": "2025-01-28",
     "status": "unpaid",
     "createdAt": "2025-01-15T00:00:00Z",
     "updatedAt": "2025-01-15T00:00:00Z"
   }
 ]
 ```
+
+`status` is `"unpaid"`, `"partial"`, or `"paid"`. `dueDate` and `paidDate` are
+`omitempty`; `paidDate` is absent until the invoice is settled.
+`pendingReceiptCents` is the cost of cards on this invoice still at PSA.
 
 ---
 
@@ -1425,10 +1476,14 @@ Lists all PSA revocation flags.
     "reason": "Market declined below buy basis",
     "status": "pending",
     "emailText": "",
-    "createdAt": "2025-01-01T00:00:00Z"
+    "createdAt": "2025-01-01T00:00:00Z",
+    "sentAt": "2025-01-02T00:00:00Z"
   }
 ]
 ```
+
+`status` is `"pending"` or `"sent"`. `sentAt` is omitted while the flag is
+still `"pending"`.
 
 ---
 
@@ -1514,10 +1569,14 @@ Returns the Monday weekly review summary (WoW spend, revenue, sales comparisons)
   "profitLastWeekCents": 85000,
   "byChannel": [...],
   "weeksToCover": 3.5,
+  "daysIntoWeek": 1,
   "topPerformers": [...],
   "bottomPerformers": [...]
 }
 ```
+
+`daysIntoWeek` is `0`=Sunday … `6`=Saturday, letting a client tell a partial
+week from a complete one before comparing the WoW figures.
 
 ---
 
@@ -1554,43 +1613,6 @@ Looks up a PSA cert number and returns card info plus current market snapshot.
 ```
 
 **Errors:** `404` cert lookup failed
-
----
-
-## AI Advisor
-
-All advisor endpoints stream responses via **Server-Sent Events (SSE)**. Set `Accept: text/event-stream` or handle the `text/event-stream` content type. Each event is `data: <JSON>\n\n`. The stream ends with `data: [DONE]\n\n`.
-
-Event shape:
-```json
-{ "type": "content", "content": "Markdown text chunk..." }
-```
-Error event:
-```json
-{ "type": "error", "content": "Error message" }
-```
-
-### `POST /api/advisor/digest`
-
-Auth: RequireAuth
-
-Streams a weekly portfolio intelligence digest.
-
-**Body:** (empty)
-
-**Response:** `200 OK` — SSE stream
-
----
-
-### `POST /api/advisor/liquidation-analysis`
-
-Auth: RequireAuth
-
-Streams liquidation candidate recommendations across all campaigns.
-
-**Body:** (empty)
-
-**Response:** `200 OK` — SSE stream
 
 ---
 
@@ -1768,6 +1790,15 @@ Imports an orders export CSV, matches PSA cert numbers against unsold inventory,
 }
 ```
 
+Each matched row may also carry `campaignLookupFailed: true`
+(`csvimport/import_types.go:199`, `omitempty` so absent in the normal case). It means the
+row's campaign could not be loaded, so `saleFeeCents` was computed against a
+zero-fee campaign and both it and `netProfitCents` are **optimistic estimates**
+rather than the values the confirm step will persist
+(`csvimport/service_import_orders.go:67-96`). `reason` on the `alreadySold` / `notFound` /
+`skipped` entries is one of `already_sold`, `not_found`, `duplicate`, `not_psa`,
+`unknown_channel`.
+
 ---
 
 ### `POST /api/purchases/import-orders/confirm`
@@ -1822,13 +1853,31 @@ Scans a cert number to determine if it exists in inventory, has been sold, or is
   "campaignId": "uuid",
   "buyCostCents": 100000,
   "market": { "gradePriceCents": 150000, "clValueCents": 140000 },
+  "frontImageUrl": "https://…/cert-front.jpg",
+  "setName": "Base Set",
+  "cardNumber": "4",
+  "cardYear": "1999",
+  "gradeValue": 10,
+  "population": 1234,
+  "dhSearchQuery": "1999 base set charizard 4 psa 10",
   "dhCardId": 98765,
   "dhInventoryId": 12345,
   "dhPushStatus": "matched",
-  "dhStatus": "in_stock"
+  "dhStatus": "in_stock",
+  "dhListingPriceCents": 145000,
+  "receivedAt": "2025-02-01T00:00:00Z"
 }
 ```
 `status` values: `existing` (unsold in inventory), `sold` (has a sale record), `new` (not in system).
+
+Every field except `status` is `omitempty` (`cert_import_types.go:43-76`), so a
+`new` cert returns `{"status":"new"}` and nothing else. The card metadata block
+(`frontImageUrl` … `population`) and `dhSearchQuery` are populated only for
+`existing` and `sold`, from the matched `Purchase` record. `dhSearchQuery` is
+built with the same `cardutil` normalization the backend uses for DH card
+matching, so the operator's "Search on DH" link lands on the candidates DH's own
+matcher would consider. `receivedAt` being non-empty is the in-hand signal;
+`dhListingPriceCents` is the card's current DH listing price.
 
 `dhPushStatus` values (existing/sold only): `pending`, `matched`, `unmatched` (push gave up — intake should surface Fix DH Match), `manual`, `held`, `dismissed`. `dhInventoryId > 0` is the canonical "ready to list on DH" signal; the intake screen gates its price-and-list UI on this rather than on snapshot data.
 
@@ -1923,18 +1972,18 @@ Preconditions: the purchase must be received, not already listed, and carry a hu
 **Response:** `200 OK` — `DHListingResult`
 ```json
 {
-  "Listed": 1,
-  "Synced": 1,
-  "Skipped": 0,
-  "Total": 1,
-  "Paused": false,
-  "Error": null,
-  "FailedCerts": null
+  "listed": 1,
+  "synced": 1,
+  "skipped": 0,
+  "total": 1,
+  "paused": false
 }
 ```
-This struct carries no JSON tags, so the field names are the Go names.
+`paused` is always `false` on a `200` — the pause case is reported as a `409`. The
+struct's two `error`-typed fields are `json:"-"`: the handler turns them into the
+status codes below before writing a success body.
 
-**Errors:** `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused; `502` PSA authentication temporarily unavailable — retry shortly; `503` DH listing service not configured; `500` internal error
+**Errors:** `400` missing `purchaseId`; `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused; `502` PSA authentication temporarily unavailable — retry shortly, or listing failed with no recorded upstream error; `503` DH listing service not configured; `500` internal error
 
 ---
 
@@ -2189,22 +2238,33 @@ Returns the latest DH buy/sell suggestions.
 {
   "suggestions": [
     {
-      "SuggestionDate": "2025-01-15",
-      "Type": "cards",
-      "Category": "hottest_cards",
-      "Rank": 1,
-      "CardName": "Charizard",
-      "SetName": "Base Set",
-      "CardNumber": "4",
-      "ImageURL": "https://...",
-      "CurrentPriceCents": 120000,
-      "ConfidenceScore": 0.95,
-      "Reasoning": "Strong demand..."
+      "suggestionDate": "2025-01-15",
+      "type": "cards",
+      "category": "hottest_cards",
+      "rank": 1,
+      "isManual": false,
+      "dhCardId": "12345",
+      "cardName": "Charizard",
+      "setName": "Base Set",
+      "cardNumber": "4",
+      "imageUrl": "https://...",
+      "currentPriceCents": 120000,
+      "confidenceScore": 0.95,
+      "reasoning": "Strong demand...",
+      "structuredReasoning": "{...}",
+      "metrics": "{...}",
+      "sentimentScore": 0.4,
+      "sentimentTrend": 0.1,
+      "sentimentMentions": 12,
+      "fetchedAt": "2025-01-15T10:00:00Z"
     }
   ],
   "count": 10
 }
 ```
+
+`structuredReasoning` and `metrics` hold pre-encoded JSON and are strings on the
+wire, not objects.
 
 ---
 
@@ -2240,10 +2300,12 @@ Returns aggregate stats for the DH integration including match counts, API healt
   "suggestions_count": 20,
   "suggestions_last_fetch": "2025-01-15T10:00:00Z",
   "unmatched_count": 5,
+  "dismissed_count": 2,
   "pending_count": 3,
   "mapped_count": 120,
   "bulk_match_running": false,
-  "bulk_match_error": "",
+  "bulk_match_last_matched": 118,
+  "bulk_match_last_failed": 2,
   "api_health": {
     "totalCalls": 100,
     "successRate": 98.5,
@@ -2251,9 +2313,92 @@ Returns aggregate stats for the DH integration including match counts, API healt
   },
   "dh_inventory_count": 130,
   "dh_listings_count": 80,
-  "dh_orders_count": 45
+  "dh_orders_count": 45,
+  "last_orders_poll_at": "2025-01-15T10:00:00Z",
+  "orders_matched_count_24h": 12,
+  "orders_orphan_count_24h": 1,
+  "orders_already_sold_count_24h": 0,
+  "pending_received_count": 2,
+  "unenrolled_received_count": 0
 }
 ```
+
+This is the only endpoint in the API that uses `snake_case` keys throughout
+(`dh_status_handler.go:168-199`) — it mirrors DH's own naming rather than the
+camelCase used everywhere else. Do not "fix" a client that reads these keys.
+
+`bulk_match_error` is `omitempty` and therefore **absent** when the last bulk
+match succeeded; it carries the error string otherwise. `api_health`,
+`dh_inventory_count`, `dh_listings_count`, `dh_orders_count`,
+`last_orders_poll_at` and the three `orders_*_24h` counters are likewise
+`omitempty`. The remaining keys are always present.
+
+Two of the counts are deliberately different views of "pending", and the gap
+between them is the diagnostic:
+
+- `pending_count` — every row with `dh_push_status='pending'`.
+- `pending_received_count` — what `GET /api/dh/pending` actually drains
+  (`dh_push_status='pending'` **and** `received_at IS NOT NULL`). It lags
+  `pending_count` when a CardLadder refresh has enrolled rows that have not been
+  received yet; the difference points at the receipt gap.
+- `unenrolled_received_count` — received, unsold rows carrying no push-pipeline
+  state at all. Non-zero means Cert Intake is creating rows the DH sync cannot
+  see; it should normally be `0`.
+
+---
+
+### `GET /api/dh/events`
+
+Auth: RequireAuth
+
+Returns the recorded DH pipeline state-transition trail for a single purchase or cert,
+newest first. `/api/dh/status` answers "is the pipeline healthy"; this answers "why is
+this one item stuck".
+
+**Query parameters:**
+
+| Param | Required | Description |
+|-------|----------|-------------|
+| `purchaseId` | one of | Purchase UUID. Mutually exclusive with `cert`. |
+| `cert` | one of | PSA cert number. Reaches orphan events that carry no purchase id. |
+| `limit` | no | Max rows (default 100, capped at 500). |
+
+Exactly one of `purchaseId` or `cert` must be supplied — an unfiltered listing is
+deliberately not offered.
+
+**Response:** `200 OK`
+```json
+{
+  "events": [
+    {
+      "id": 4821,
+      "event_at": "2025-01-15T10:00:00Z",
+      "purchase_id": "uuid",
+      "cert_number": "12345678",
+      "type": "pushed",
+      "source": "dh_push",
+      "prev_push_status": "pending",
+      "new_push_status": "pushed",
+      "dh_inventory_id": 67890,
+      "dh_card_id": 12345,
+      "sale_price_cents": 4500,
+      "notes": ""
+    }
+  ],
+  "count": 1,
+  "limit": 100
+}
+```
+
+Monetary values keep the explicit `_cents` suffix rather than converting to USD: this is
+a diagnostic view of what was written to `dh_state_events`, and a reader comparing it
+against the row wants the stored value. Empty fields are omitted.
+
+**Errors:** `400` neither or both subjects supplied, or a non-positive/non-numeric
+`limit`; `500` lookup failed; `503` DH event history not configured
+
+Rows are pruned by the DH event cleanup scheduler (`DH_EVENT_RETENTION_DAYS`, default 90
+days) — see [SCHEDULERS.md](SCHEDULERS.md).
 
 ---
 
@@ -2387,9 +2532,16 @@ Returns the current DH push safety configuration (thresholds for price swing, di
   "unreviewedChangePctThreshold": 15,
   "unreviewedChangeMinCents": 3000,
   "initialPushValueFloorPct": 50,
+  "listingsPaused": false,
   "updatedAt": "2025-01-01T00:00:00Z"
 }
 ```
+
+`listingsPaused: true` short-circuits `ListPurchases` before the inline
+`psa_import` push: nothing is sent to DoubleHolo and the `in_stock` → `listed`
+flip is skipped, so items stay unlisted on DH. It exists for card-show
+liquidation windows where local sales should not be undercut by live DH
+listings (`dh_types.go:13-18`).
 
 **Errors:** `503` DH approve service not configured
 
@@ -2470,6 +2622,13 @@ Lists price flags for admin review.
 }
 ```
 
+Each element is a `PriceFlagWithContext`, which embeds `PriceFlag` — so `id`,
+`purchaseId`, `flaggedBy`, `flaggedAt`, `reason`, `resolvedAt` and `resolvedBy`
+are promoted from the embedded type (`price_flags.go:43-51`). `resolvedAt` and
+`resolvedBy` are `omitempty` pointers: they are **absent** for open flags, and
+populated only in the `status=resolved` and `status=all` responses. `setName`,
+`cardNumber` and `sourcePrices` are also `omitempty`.
+
 **Errors:** `400` invalid status value
 
 ---
@@ -2528,14 +2687,36 @@ Returns the current Card Ladder connection status including mapped card count an
   "email": "user@example.com",
   "collectionId": "collection-uuid",
   "cardsMapped": 120,
+  "priceStats": {
+    "unsoldTotal": 200,
+    "withCLValue": 180,
+    "syncedCount": 175,
+    "oldestUpdate": "2025-01-01T00:00:00Z",
+    "newestUpdate": "2025-01-15T10:00:00Z",
+    "staleCount": 12
+  },
   "lastRun": {
-    "startedAt": "2025-01-15T10:00:00Z",
-    "duration": "2m30s",
+    "lastRunAt": "2025-01-15T10:00:00Z",
+    "durationMs": 150000,
+    "totalPurchases": 200,
     "updated": 15,
-    "failed": 0
+    "resolved": 3,
+    "noCert": 1,
+    "certResolveFailed": 0,
+    "estimateFailed": 0,
+    "noValue": 2,
+    "quotaExhausted": false,
+    "skippedQuota": 0,
+    "cardsPushed": 4,
+    "cardsRemoved": 1
   }
 }
 ```
+
+`email` and `collectionId` are present only when `configured` is `true`.
+`cardsMapped`, `priceStats`, and `lastRun` are each omitted if their underlying
+lookup fails or, for `lastRun`, if no run has been recorded — the handler logs
+and continues rather than failing the whole response.
 
 ---
 
@@ -2583,6 +2764,11 @@ Adds a single card to the Card Ladder collection by cert number.
 }
 ```
 
+`status` is `"synced"`, `"skipped"`, or `"error"`; an `error` string field is
+present only when `status` is `"error"`. `investment` (request) and
+`estimatedValue` (response) are in **dollars**, not cents — this endpoint
+speaks Card Ladder's units rather than SlabLedger's.
+
 **Errors:** `400` missing certNumber; `412` Card Ladder not configured; `503` client not configured
 
 ---
@@ -2612,6 +2798,10 @@ Pushes all unsold purchases with cert numbers to the Card Ladder collection. Car
   ]
 }
 ```
+
+Each entry in `results` is the same shape as the `add-card` response: `status`
+is `"synced"`, `"skipped"`, or `"error"`, with an `error` string present only
+in the `"error"` case, and `estimatedValue` in **dollars**.
 
 **Errors:** `412` Card Ladder not configured; `503` client or purchase lister not available
 
@@ -2702,13 +2892,13 @@ Returns PSA sync configuration and last-run stats.
 ```json
 {
   "configured": true,
-  "spreadsheetId": "1ABC...",
   "interval": "24h",
   "pendingCount": 3,
   "snapshotFetchedAt": "2026-07-12T09:00:00Z",  // when the harvester last stored portal rows (omitted before first harvest)
   "lastRun": {
     "lastRunAt": "2025-01-15T10:00:00Z",
     "durationMs": 4500,
+    "lastError": "",
     "allocated": 8,
     "updated": 2,
     "refunded": 0,
@@ -2716,11 +2906,15 @@ Returns PSA sync configuration and last-run stats.
     "ambiguous": 1,
     "skipped": 0,
     "failed": 0,
-    "totalRows": 12,
-    "parseErrors": 0
+    "totalRows": 12
   }
 }
 ```
+
+`lastError` is omitted when the run succeeded. `pendingCount` and `lastRun` are
+omitted when their lookup fails or no run has been recorded; `configured` reports
+whether the portal sync is wired at all, which is separate from whether the daily
+run is enabled via `PSA_SYNC_ENABLED`.
 
 ---
 
@@ -2768,6 +2962,11 @@ Lists all pending PSA import items awaiting manual resolution (ambiguous or unma
   ]
 }
 ```
+
+`status` is `"ambiguous"` or `"unmatched"`; `source` is `"scheduler"` or
+`"manual"`. `PendingItem` also carries `resolvedAt` and `resolvedCampaignId`,
+but this endpoint queries `WHERE resolved_at IS NULL`
+(`postgres/pending_items.go:94`), so both are always absent here.
 
 ---
 
@@ -2837,7 +3036,7 @@ Rejected if the campaign is already linked, or if a create for it is already que
 
 ### `GET /api/psa-campaigns`
 
-Auth: required (session)
+Auth: RequireAuth
 
 Returns the most recent PSA portal campaign snapshot (written by the harvester).
 
@@ -2880,7 +3079,7 @@ Returns the most recent PSA portal campaign snapshot (written by the harvester).
 
 ### `GET /api/psa/subjects`
 
-Auth: required (session)
+Auth: RequireAuth
 
 Returns the persisted PSA subject catalog (Pokemon category) harvested by
 `cmd/psa-harvest`, for the campaign form's subject-name typeahead. Served
@@ -2900,7 +3099,7 @@ entirely from the database — the main server never contacts psacard.com.
 
 ### `POST /api/campaigns/{id}/psa-link`
 
-Auth: required (session)
+Auth: RequireAuth
 
 Links an internal campaign to a PSA portal campaign by request ID.
 
@@ -2919,7 +3118,7 @@ Links an internal campaign to a PSA portal campaign by request ID.
 
 ### `POST /api/campaigns/{id}/psa-propose`
 
-Auth: required (session)
+Auth: RequireAuth
 
 Computes the diff between an internal campaign and its linked PSA portal campaign (from
 the latest snapshot) and enqueues it as a `pending` row in the push queue for human
@@ -2950,7 +3149,7 @@ portal campaign; `404` campaign not found or linked PSA campaign not found in sn
 
 ### `POST /api/campaigns/{id}/psa-publish`
 
-Auth: required (session)
+Auth: RequireAuth
 
 Approves a pending push-queue row. This does not contact PSA directly — the row is
 marked `approved` and the next harvester run drains it via `updateCampaign`.
@@ -2974,7 +3173,7 @@ internal error
 
 ### `GET /api/psa-pushes`
 
-Auth: required (session)
+Auth: RequireAuth
 
 Returns the most recent push-queue row per internal campaign (any status), for the
 UI's pending/in-flight/failed indicators and the publish modal. Creates echo the full

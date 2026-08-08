@@ -174,11 +174,11 @@ func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req Q
 	return p, nil
 }
 
-// freezeSaleProvenance validates and defaults SaleReason, then overwrites the
+// FreezeSaleProvenance validates and defaults SaleReason, then overwrites the
 // derived, server-authoritative provenance fields (CLValueAtSaleCents,
 // ChannelFeePctAtSale, ForcedLiquidation) at sale-creation time. SaleReason
 // itself is legitimate client input and is preserved when valid.
-func freezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
+func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
 	if sa.SaleReason != "" && !ValidSaleReason(sa.SaleReason) {
 		return ErrInvalidSaleReason
 	}
@@ -228,7 +228,7 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	if invErr != nil {
 		invoices = nil // heuristic degrades to false; never block a sale on invoice lookup
 	}
-	if err := freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)); err != nil {
+	if err := FreezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)); err != nil {
 		return err
 	}
 
@@ -338,7 +338,7 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 		}
 
 		sa.NetProfitCents = CalculateNetProfit(sa.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, sa.SaleFeeCents)
-		if err := freezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, bulkInvoices)); err != nil {
+		if err := FreezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, bulkInvoices)); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, BulkSaleError{PurchaseID: item.PurchaseID, Error: err.Error()})
 			continue

@@ -179,11 +179,12 @@ type CertInfo struct {
 // sub-interface because no consumer wants it on its own.
 type Service interface {
 	AnalyticsService
-	ImportService
+	CertService
 	PricingService
 	CertLookupService
 	SnapshotService
 	DHService
+	IntakeSupportService
 
 	CreateCampaign(ctx context.Context, c *Campaign) error
 	GetCampaign(ctx context.Context, id string) (*Campaign, error)
@@ -393,11 +394,12 @@ func (s *service) Close() {
 
 // Compile-time checks: service satisfies Service and each sub-interface.
 var (
-	_ Service           = (*service)(nil)
-	_ AnalyticsService  = (*service)(nil)
-	_ ImportService     = (*service)(nil)
-	_ PricingService    = (*service)(nil)
-	_ CertLookupService = (*service)(nil)
-	_ SnapshotService   = (*service)(nil)
-	_ DHService         = (*service)(nil)
+	_ Service              = (*service)(nil)
+	_ AnalyticsService     = (*service)(nil)
+	_ CertService          = (*service)(nil)
+	_ PricingService       = (*service)(nil)
+	_ CertLookupService    = (*service)(nil)
+	_ SnapshotService      = (*service)(nil)
+	_ DHService            = (*service)(nil)
+	_ IntakeSupportService = (*service)(nil)
 )

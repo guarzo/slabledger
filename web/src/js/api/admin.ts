@@ -2,7 +2,7 @@
  * Admin-related API methods
  */
 
-import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, AIUsageResponse, DHStatusResponse, DHBulkMatchResponse, DHFixMatchRequest, DHFixMatchResponse, DHRetryMatchResponse, DHPushConfig, DHReconcileTriggerResult } from '../../types/apiStatus';
+import type { APIUsageResponse, PricingDiagnosticsResponse, PriceOverrideStats, DHStatusResponse, DHBulkMatchResponse, DHFixMatchRequest, DHFixMatchResponse, DHRetryMatchResponse, DHPushConfig, DHReconcileTriggerResult } from '../../types/apiStatus';
 import type { AllowedEmail, AdminUser, CLStatusResponse, CLSyncResult, IntegrationFailuresReport, PSASyncStatusResponse } from '../../types/admin';
 import type { APIClient } from './client';
 import { APIError } from './client';
@@ -20,7 +20,6 @@ declare module './client' {
     getAdminApiUsage(): Promise<APIUsageResponse>;
     getPricingDiagnostics(): Promise<PricingDiagnosticsResponse>;
     getPriceOverrideStats(): Promise<PriceOverrideStats>;
-    getAIUsage(): Promise<AIUsageResponse>;
     getBackup(): Promise<Blob>;
     getCardLadderStatus(): Promise<CLStatusResponse>;
     getCardLadderFailures(limit?: number): Promise<IntegrationFailuresReport>;
@@ -81,10 +80,6 @@ proto.getPricingDiagnostics = async function (this: APIClient): Promise<PricingD
 
 proto.getPriceOverrideStats = async function (this: APIClient): Promise<PriceOverrideStats> {
   return this.get<PriceOverrideStats>('/admin/price-override-stats');
-};
-
-proto.getAIUsage = async function (this: APIClient): Promise<AIUsageResponse> {
-  return this.get<AIUsageResponse>('/admin/ai-usage');
 };
 
 proto.getBackup = async function (this: APIClient): Promise<Blob> {

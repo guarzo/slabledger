@@ -23,6 +23,7 @@ func TestScanCardCacheRow(t *testing.T) {
 			name: "all columns populated",
 			values: []any{
 				"sv1-25", "30d",
+				sql.NullString{String: "Charizard", Valid: true},
 				sql.NullFloat64{Float64: 0.82, Valid: true},
 				sql.NullString{String: "full", Valid: true},
 				sql.NullTime{Time: analyticsComputedAt, Valid: true},
@@ -35,6 +36,9 @@ func TestScanCardCacheRow(t *testing.T) {
 				}
 				if row.Window != "30d" {
 					t.Errorf("Window = %q, want %q", row.Window, "30d")
+				}
+				if row.CharacterName == nil || *row.CharacterName != "Charizard" {
+					t.Errorf("CharacterName = %v, want \"Charizard\"", row.CharacterName)
 				}
 				if row.DemandScore == nil || *row.DemandScore != 0.82 {
 					t.Errorf("DemandScore = %v, want 0.82", row.DemandScore)
@@ -57,6 +61,7 @@ func TestScanCardCacheRow(t *testing.T) {
 			name: "every nullable column NULL",
 			values: []any{
 				"sv1-26", "7d",
+				sql.NullString{},
 				sql.NullFloat64{},
 				sql.NullString{},
 				sql.NullTime{},
@@ -64,6 +69,9 @@ func TestScanCardCacheRow(t *testing.T) {
 				fetchedAt,
 			},
 			assert: func(t *testing.T, row *demand.CardCache) {
+				if row.CharacterName != nil {
+					t.Errorf("CharacterName = %v, want nil", row.CharacterName)
+				}
 				if row.DemandScore != nil {
 					t.Errorf("DemandScore = %v, want nil", row.DemandScore)
 				}

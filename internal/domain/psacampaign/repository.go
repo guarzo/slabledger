@@ -22,6 +22,9 @@ var ErrPushNotClaimed = errors.New("psacampaign: push row is not claimed for pus
 // enforced atomically by a partial unique index.
 var ErrDuplicateCreate = errors.New("psacampaign: a create is already queued for this campaign")
 
+// ErrPushNotFound is returned by Get when no push row has the requested id.
+var ErrPushNotFound = errors.New("psacampaign: push row not found")
+
 // PushRow is one queued edit awaiting approval/push to the PSA portal.
 type PushRow struct {
 	ID                 string
@@ -34,6 +37,14 @@ type PushRow struct {
 	Status             PushStatus
 	Error              string    // last push error, set when Status is failed
 	UpdatedAt          time.Time // last lifecycle transition
+
+	// Approval signature (see approval.go). These are written together by
+	// Approve and are all empty/zero on a row that has not been approved, or on
+	// one approved before signing existed.
+	ApprovedAt        time.Time // when the approval was signed
+	PayloadDigest     string    // hex SHA-256 of the canonical Diff at approval time
+	ApprovalSignature string    // hex HMAC over the envelope from SigningInput
+	SignatureKeyID    string    // which key signed, so rotation does not strand in-flight rows
 }
 
 // SnapshotStore persists the most recent portal campaign snapshot.
@@ -45,7 +56,14 @@ type SnapshotStore interface {
 // PushQueueStore persists queued edits and their approval/push lifecycle.
 type PushQueueStore interface {
 	Enqueue(ctx context.Context, p PushRow) error
-	Approve(ctx context.Context, id, approvedBy string) error
+	// Get returns a single row by id, or ErrPushNotFound. The approve path
+	// reads the row before approving so it can digest and sign the exact
+	// payload being authorized.
+	Get(ctx context.Context, id string) (PushRow, error)
+	// Approve marks a pending row approved and records the signed approval
+	// atomically with the status transition. It returns ErrPushNotPending if
+	// the row is not currently pending.
+	Approve(ctx context.Context, id string, a Approval) error
 	ListByStatus(ctx context.Context, status PushStatus) ([]PushRow, error)
 	// MarkResult records the outcome of a push attempt. Only valid for a row
 	// the caller has claimed: it returns ErrPushNotClaimed unless the row is

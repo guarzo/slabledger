@@ -58,14 +58,23 @@ func (s *PSACampaignPushQueueStore) Enqueue(ctx context.Context, p psacampaign.P
 	return nil
 }
 
-// Approve marks a pending row approved. Returns psacampaign.ErrPushNotPending
-// if the row is not currently pending.
-func (s *PSACampaignPushQueueStore) Approve(ctx context.Context, id, approvedBy string) error {
+// Approve marks a pending row approved, recording the signed approval in the
+// same statement as the status transition so a row can never be approved
+// without its signature. Returns psacampaign.ErrPushNotPending if the row is
+// not currently pending.
+func (s *PSACampaignPushQueueStore) Approve(ctx context.Context, id string, a psacampaign.Approval) error {
 	const q = `
 		UPDATE psa_campaign_push_queue
-		   SET status = 'approved', approved_by = $2, updated_at = now()
+		   SET status = 'approved',
+		       approved_by = $2,
+		       approved_at = $3,
+		       payload_digest = $4,
+		       approval_signature = $5,
+		       signature_key_id = $6,
+		       updated_at = now()
 		 WHERE id = $1 AND status = 'pending'`
-	res, err := s.db.ExecContext(ctx, q, id, approvedBy)
+	res, err := s.db.ExecContext(ctx, q, id, a.ApprovedBy, a.ApprovedAt.UTC(),
+		a.PayloadDigest, a.ApprovalSignature, a.SignatureKeyID)
 	if err != nil {
 		return fmt.Errorf("psa_campaign_push_queue: approve: %w", err)
 	}
@@ -77,6 +86,27 @@ func (s *PSACampaignPushQueueStore) Approve(ctx context.Context, id, approvedBy 
 		return psacampaign.ErrPushNotPending
 	}
 	return nil
+}
+
+// Get returns a single row by id.
+func (s *PSACampaignPushQueueStore) Get(ctx context.Context, id string) (psacampaign.PushRow, error) {
+	const q = `
+		SELECT ` + pushRowColumns + `
+		  FROM psa_campaign_push_queue
+		 WHERE id = $1`
+	rows, err := s.db.QueryContext(ctx, q, id)
+	if err != nil {
+		return psacampaign.PushRow{}, fmt.Errorf("psa_campaign_push_queue: get: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out, err := scanPushRows(rows, "get")
+	if err != nil {
+		return psacampaign.PushRow{}, err
+	}
+	if len(out) == 0 {
+		return psacampaign.PushRow{}, psacampaign.ErrPushNotFound
+	}
+	return out[0], nil
 }
 
 // Claim atomically transitions row id from approved to pushing, returning
@@ -99,7 +129,8 @@ func (s *PSACampaignPushQueueStore) Claim(ctx context.Context, id string) (bool,
 
 // pushRowColumns is the SELECT column list consumed by scanPushRows.
 const pushRowColumns = `id, COALESCE(psa_campaign_id, ''), COALESCE(internal_campaign_id, ''), operation, proposed_diff, status,
-	       COALESCE(requested_by, ''), COALESCE(approved_by, ''), COALESCE(error, ''), updated_at`
+	       COALESCE(requested_by, ''), COALESCE(approved_by, ''), COALESCE(error, ''), updated_at,
+	       approved_at, COALESCE(payload_digest, ''), COALESCE(approval_signature, ''), COALESCE(signature_key_id, '')`
 
 // scanPushRows drains rows selected with pushRowColumns into PushRow values.
 // opLabel names the calling query in error contexts.
@@ -109,9 +140,16 @@ func scanPushRows(rows *sql.Rows, opLabel string) ([]psacampaign.PushRow, error)
 		var r psacampaign.PushRow
 		var diff []byte
 		var op string
+		// approved_at stays nullable: rows approved before signing existed, and
+		// every row still pending, have no approval timestamp.
+		var approvedAt sql.NullTime
 		if err := rows.Scan(&r.ID, &r.PSACampaignID, &r.InternalCampaignID, &op, &diff, &r.Status,
-			&r.RequestedBy, &r.ApprovedBy, &r.Error, &r.UpdatedAt); err != nil {
+			&r.RequestedBy, &r.ApprovedBy, &r.Error, &r.UpdatedAt,
+			&approvedAt, &r.PayloadDigest, &r.ApprovalSignature, &r.SignatureKeyID); err != nil {
 			return nil, fmt.Errorf("psa_campaign_push_queue: %s scan: %w", opLabel, err)
+		}
+		if approvedAt.Valid {
+			r.ApprovedAt = approvedAt.Time.UTC()
 		}
 		r.Operation = psacampaign.Operation(op)
 		if err := json.Unmarshal(diff, &r.Diff); err != nil {

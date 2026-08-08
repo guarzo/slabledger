@@ -11,7 +11,7 @@ declare module './client' {
     psaLink(id: string, psaCampaignRequestId: string): Promise<Campaign>;
     psaPropose(id: string): Promise<PSAProposeResponse>;
     psaProposeCreate(id: string): Promise<PSAProposeCreateResponse>;
-    psaPublish(id: string, pushId: string): Promise<PSAPublishResponse>;
+    psaPublish(id: string, pushId: string, payloadDigest?: string): Promise<PSAPublishResponse>;
     listPSAPushes(): Promise<ListPSAPushesResponse>;
     listPSASubjects(): Promise<PSASubjectsResponse>;
   }
@@ -36,8 +36,12 @@ proto.psaProposeCreate = async function (this: APIClient, id: string): Promise<P
   return this.post<PSAProposeCreateResponse>(`/campaigns/${encodeURIComponent(id)}/psa-propose-create`, {});
 };
 
-proto.psaPublish = async function (this: APIClient, id: string, pushId: string): Promise<PSAPublishResponse> {
-  return this.post<PSAPublishResponse>(`/campaigns/${encodeURIComponent(id)}/psa-publish`, { pushId });
+// payloadDigest binds the approval to the payload the operator was shown: the
+// server re-digests the queued row and rejects with 409 if it no longer matches.
+// It is optional on the wire so an older client still works, but this client
+// always sends it when the propose response or push row carried one.
+proto.psaPublish = async function (this: APIClient, id: string, pushId: string, payloadDigest?: string): Promise<PSAPublishResponse> {
+  return this.post<PSAPublishResponse>(`/campaigns/${encodeURIComponent(id)}/psa-publish`, { pushId, payloadDigest });
 };
 
 proto.listPSAPushes = async function (this: APIClient): Promise<ListPSAPushesResponse> {

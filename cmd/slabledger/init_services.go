@@ -1,27 +1,20 @@
 package main
 
-// init_services.go initializes optional external services: price providers, AI-powered services
-// (advisor), and third-party integrations (Card Ladder, Market Movers). Core inventory/campaign
-// services are initialized in init_inventory_services.go. Scheduler initialization is in
+// init_services.go initializes optional external services: price providers and
+// third-party integrations (Card Ladder). Core inventory/campaign services are
+// initialized in init_inventory_services.go. Scheduler initialization is in
 // init_schedulers.go.
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/advisortool"
-	"github.com/guarzo/slabledger/internal/adapters/clients/azureai"
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dhprice"
-	scoringadapter "github.com/guarzo/slabledger/internal/adapters/scoring"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
-	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
@@ -44,56 +37,6 @@ func initializePriceProviders(
 	provider := dhprice.New(dhClient, cardIDMappingRepo, opts...)
 	logger.Info(ctx, "DH price provider initialized")
 	return provider, nil
-}
-
-// initializeAdvisorService creates the Azure AI client and advisor service.
-// All return values may be nil/zero if Azure AI is not configured. This is not
-// an error.
-func initializeAdvisorService(
-	ctx context.Context,
-	cfg *config.Config,
-	logger observability.Logger,
-	db *postgres.DB,
-	aiCallRepo *postgres.AICallRepository,
-	campaignsService inventory.Service,
-	scoringOpts []scoringadapter.ProviderOption,
-	toolOpts ...advisortool.ExecutorOption,
-) (llmProvider advisor.LLMProvider, advisorSvc advisor.Service, err error) {
-	if cfg.Adapters.AzureAIEndpoint == "" || cfg.Adapters.AzureAIKey == "" {
-		return nil, nil, nil
-	}
-
-	client, err := azureai.NewClient(azureai.Config{
-		Endpoint:       cfg.Adapters.AzureAIEndpoint,
-		APIKey:         cfg.Adapters.AzureAIKey,
-		DeploymentName: cfg.Adapters.AzureAIDeployment,
-	}, azureai.WithLogger(logger), azureai.WithCompletionTimeout(cfg.Adapters.AzureAICompletionTimeout))
-	if err != nil {
-		return nil, nil, fmt.Errorf("initialize azure ai client: %w", err)
-	}
-	llmProvider = client
-
-	toolExec := advisortool.NewCampaignToolExecutor(campaignsService, toolOpts...)
-	advisorOpts := []advisor.ServiceOption{
-		advisor.WithLogger(logger),
-		advisor.WithAITracker(aiCallRepo),
-	}
-	if cfg.AdvisorRefresh.MaxToolRounds > 0 {
-		advisorOpts = append(advisorOpts, advisor.WithMaxToolRounds(cfg.AdvisorRefresh.MaxToolRounds))
-	}
-
-	// Scoring engine: pre-compute factor scores for advisor flows
-	scoringProvider := scoringadapter.NewProvider(campaignsService, scoringOpts...)
-	advisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))
-
-	// Data gap tracking for scoring quality reports
-	advisorOpts = append(advisorOpts, advisor.WithGapStore(postgres.NewGapStore(db.DB)))
-
-	advisorSvc = advisor.NewService(client, toolExec, advisorOpts...)
-	logger.Info(ctx, "AI advisor initialized",
-		observability.String("deployment", cfg.Adapters.AzureAIDeployment))
-
-	return llmProvider, advisorSvc, nil
 }
 
 // initializeCardLadder creates the Card Ladder client, auth, and store.

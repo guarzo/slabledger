@@ -7,15 +7,15 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // mapRows converts flattened Lightdash rows into PSAExportRows. One malformed
 // row must not abort the whole sync; log and skip it, matching the CSV import
 // path (importPSARows). Rows without a cert number are silently dropped.
-func mapRows(ctx context.Context, raw []map[string]string, logger observability.Logger) ([]inventory.PSAExportRow, error) {
-	rows := make([]inventory.PSAExportRow, 0, len(raw))
+func mapRows(ctx context.Context, raw []map[string]string, logger observability.Logger) ([]csvimport.PSAExportRow, error) {
+	rows := make([]csvimport.PSAExportRow, 0, len(raw))
 	droppedNoCert := 0
 	for _, r := range raw {
 		m, err := mapRow(r)

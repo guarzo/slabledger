@@ -17,6 +17,7 @@ import (
 	// Domain interfaces (what we depend on - Dependency Inversion Principle)
 	domainArbitrage "github.com/guarzo/slabledger/internal/domain/arbitrage"
 	domainAuth "github.com/guarzo/slabledger/internal/domain/auth"
+	domainCSVImport "github.com/guarzo/slabledger/internal/domain/csvimport"
 	domainDHListing "github.com/guarzo/slabledger/internal/domain/dhlisting"
 	domainDHPricing "github.com/guarzo/slabledger/internal/domain/dhpricing"
 	domainExport "github.com/guarzo/slabledger/internal/domain/export"
@@ -37,6 +38,7 @@ type ServerDependencies struct {
 	APITracker                domainPricing.APITracker
 	AuthService               domainAuth.Service
 	CampaignsService          domainCampaigns.Service
+	ImportService             domainCSVImport.Service // optional: CSV/portal intake routes
 	ArbitrageService          domainArbitrage.Service
 	PortfolioService          domainPortfolio.Service
 	TuningService             domainTuning.Service
@@ -44,8 +46,6 @@ type ServerDependencies struct {
 	PricingDiagnosticsHandler *handlers.PricingDiagnosticsHandler
 	CampaignsRepo             handlers.CertPriceLookup         // For pricing API (cert price lookup)
 	PricingAPIKey             string                           // Bearer token; empty = pricing API disabled
-	AdvisorHandler            *handlers.AdvisorHandler         // AI advisor; nil = disabled
-	AIStatusHandler           *handlers.AIStatusHandler        // AI usage stats; nil = disabled
 	PriceFlagsHandler         *handlers.PriceFlagsHandler      // Price flag admin; nil = disabled
 	CardLadderHandler         *handlers.CardLadderHandler      // Card Ladder admin; nil = disabled
 	PSASyncHandler            *handlers.PSASyncHandler         // PSA pending items + admin status; nil = disabled
@@ -65,6 +65,7 @@ type ServerDependencies struct {
 	PSASnapshotStore          psacampaign.SnapshotStore        // optional: PSA campaign snapshot reader
 	PSAPushQueue              psacampaign.PushQueueStore       // optional: PSA campaign push-queue reader/writer
 	PSACatalogStore           psacampaign.CatalogStore         // optional: PSA portal catalog reader (spec lists + subjects)
+	PSAApprovalSigner         psacampaign.ApprovalSigner       // optional: signs push approvals; nil = publish endpoint disabled
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -189,8 +190,6 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 		PricingDiagnosticsHandler: deps.PricingDiagnosticsHandler,
 		PricingAPIKey:             deps.PricingAPIKey,
 		CampaignsRepo:             deps.CampaignsRepo,
-		AdvisorHandler:            deps.AdvisorHandler,
-		AIStatusHandler:           deps.AIStatusHandler,
 		PriceFlagsHandler:         deps.PriceFlagsHandler,
 		CardLadderHandler:         deps.CardLadderHandler,
 		PSASyncHandler:            deps.PSASyncHandler,
@@ -304,6 +303,9 @@ func campaignsHandlerOptions(deps ServerDependencies) []handlers.CampaignsHandle
 	if deps.ExportService != nil {
 		opts = append(opts, handlers.WithExportService(deps.ExportService))
 	}
+	if deps.ImportService != nil {
+		opts = append(opts, handlers.WithImportService(deps.ImportService))
+	}
 	if deps.PSARowProvider != nil {
 		opts = append(opts, handlers.WithPSARowProvider(deps.PSARowProvider))
 	}
@@ -315,6 +317,9 @@ func campaignsHandlerOptions(deps ServerDependencies) []handlers.CampaignsHandle
 	}
 	if deps.PSACatalogStore != nil {
 		opts = append(opts, handlers.WithPSACatalogStore(deps.PSACatalogStore))
+	}
+	if deps.PSAApprovalSigner != nil {
+		opts = append(opts, handlers.WithPSAApprovalSigner(deps.PSAApprovalSigner))
 	}
 	return opts
 }

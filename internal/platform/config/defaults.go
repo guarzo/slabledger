@@ -32,6 +32,9 @@ func Default() Config {
 			AccessLogRetentionDays:   30,             // Keep 30 days of access logs
 			AccessLogCleanupInterval: 24 * time.Hour, // Run cleanup daily
 			AccessLogCleanupEnabled:  true,           // Enable by default
+			DHEventRetentionDays:     90,             // Keep 90 days of DH state events
+			DHEventCleanupInterval:   24 * time.Hour, // Run prune daily
+			DHEventCleanupEnabled:    true,           // Enable by default
 		},
 		// PriceRefresh controls the background scheduler that keeps cached prices fresh.
 		// Each source enforces its own per-request rate limit at the client level.
@@ -72,9 +75,6 @@ func Default() Config {
 			RetryInterval: 30 * time.Minute,
 			BatchSize:     3,
 			MaxRetries:    5,
-		},
-		AdvisorRefresh: AdvisorRefreshConfig{
-			MaxToolRounds: 5, // hard cap; prompt guides LLM to 2 rounds, service default is 3, 5 is safety margin
 		},
 		CardLadder: CardLadderConfig{
 			Enabled:     true, // runs automatically when credentials are configured

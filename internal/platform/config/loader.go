@@ -125,6 +125,9 @@ func FromEnv(base Config) Config {
 	envInt("ACCESS_LOG_RETENTION_DAYS", &cfg.Maintenance.AccessLogRetentionDays)
 	envDuration("ACCESS_LOG_CLEANUP_INTERVAL", &cfg.Maintenance.AccessLogCleanupInterval)
 	envBool("ACCESS_LOG_CLEANUP_ENABLED", &cfg.Maintenance.AccessLogCleanupEnabled, true)
+	envInt("DH_EVENT_RETENTION_DAYS", &cfg.Maintenance.DHEventRetentionDays)
+	envDuration("DH_EVENT_CLEANUP_INTERVAL", &cfg.Maintenance.DHEventCleanupInterval)
+	envBool("DH_EVENT_CLEANUP_ENABLED", &cfg.Maintenance.DHEventCleanupEnabled, true)
 	envBool("BACKFILL_IMAGES", &cfg.Maintenance.BackfillImages, false)
 
 	// Auth
@@ -164,9 +167,6 @@ func FromEnv(base Config) Config {
 	envDurationPositive("SNAPSHOT_ENRICH_RETRY_INTERVAL", &cfg.SnapshotEnrich.RetryInterval)
 	envIntPositive("SNAPSHOT_ENRICH_MAX_RETRIES", &cfg.SnapshotEnrich.MaxRetries)
 
-	// Advisor service
-	envIntPositive("ADVISOR_MAX_TOOL_ROUNDS", &cfg.AdvisorRefresh.MaxToolRounds)
-
 	// Card Ladder scheduler
 	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)
 	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, 0, 23)
@@ -176,15 +176,8 @@ func FromEnv(base Config) Config {
 	cfg.Adapters.PricingAPIKey = os.Getenv("PRICING_API_KEY")
 	cfg.Adapters.GoogleOAuthEnv = os.Getenv("GOOGLE_OAUTH_ENV")
 	cfg.Adapters.LocalAPIToken = os.Getenv("LOCAL_API_TOKEN")
-	cfg.Adapters.AzureAIEndpoint = os.Getenv("AZURE_AI_ENDPOINT")
-	cfg.Adapters.AzureAIKey = os.Getenv("AZURE_AI_API_KEY")
-	cfg.Adapters.AzureAIDeployment = os.Getenv("AZURE_AI_DEPLOYMENT")
-	if cfg.Adapters.AzureAIDeployment == "" {
-		cfg.Adapters.AzureAIDeployment = "gpt-5.4"
-	}
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
-	envDurationPositive("AZURE_AI_TIMEOUT", &cfg.Adapters.AzureAICompletionTimeout)
 	envIntPositive("DH_CACHE_TTL_HOURS", &cfg.DH.CacheTTLHours)
 	envIntPositive("DH_RATE_LIMIT_RPS", &cfg.DH.RateLimitRPS)
 	cfg.DH.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DH.Enabled)
@@ -213,6 +206,8 @@ func FromEnv(base Config) Config {
 	cfg.PSAPortal.Email = os.Getenv("PSA_PORTAL_EMAIL")
 	cfg.PSAPortal.Password = os.Getenv("PSA_PORTAL_PASSWORD")
 	cfg.PSAPortal.ProxyURL = os.Getenv("PSA_PORTAL_PROXY_URL")
+	cfg.PSAPortal.PushSigningKey = os.Getenv("PSA_PUSH_SIGNING_KEY")
+	cfg.PSAPortal.PushSigningKeyID = os.Getenv("PSA_PUSH_SIGNING_KEY_ID")
 	// Default: enabled when credentials are present (harvester app). The
 	// reader-only main app holds no credentials, so PSA_PORTAL_ENABLED lets it
 	// turn on the token reader explicitly.

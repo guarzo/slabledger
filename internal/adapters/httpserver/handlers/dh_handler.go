@@ -143,6 +143,14 @@ type EventCountsStore interface {
 	CountByTypeSince(ctx context.Context, t dhevents.Type, since time.Time) (int, error)
 }
 
+// EventHistoryStore reads the per-subject event trail. Aggregate counts answer
+// "is the pipeline healthy"; this answers "why is this purchase stuck".
+// Satisfied by *postgres.DHEventStore.
+type EventHistoryStore interface {
+	ByPurchase(ctx context.Context, purchaseID string, limit int) ([]dhevents.StoredEvent, error)
+	ByCert(ctx context.Context, certNumber string, limit int) ([]dhevents.StoredEvent, error)
+}
+
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
 	certResolver      DHCertResolver
@@ -174,6 +182,7 @@ type DHHandler struct {
 	eventRec          dhevents.Recorder   // optional: records DH state-change events
 	syncStateReader   SyncStateReader     // optional: reads dh_orders_last_poll timestamp
 	eventCountsStore  EventCountsStore    // optional: 24h event counts for orders ingest health
+	eventHistoryStore EventHistoryStore   // optional: per-purchase/per-cert event trail reads
 
 	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
 
@@ -225,6 +234,7 @@ type DHHandlerDeps struct {
 	EventRecorder     dhevents.Recorder    // optional: records DH state-change events
 	SyncStateReader   SyncStateReader      // optional: reads dh_orders_last_poll timestamp
 	EventCountsStore  EventCountsStore     // optional: 24h event counts for orders ingest health
+	EventHistoryStore EventHistoryStore    // optional: enables GET /api/dh/events
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
@@ -265,6 +275,7 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		eventRec:          deps.EventRecorder,
 		syncStateReader:   deps.SyncStateReader,
 		eventCountsStore:  deps.EventCountsStore,
+		eventHistoryStore: deps.EventHistoryStore,
 	}
 	h.bulkMatchError.Store("")
 	return h

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -34,6 +35,13 @@ type DHOrdersClient interface {
 	GetOrders(ctx context.Context, filters dh.OrderFilters) (*dh.OrdersResponse, error)
 }
 
+// DHOrdersImporter is the slice of CSV/orders intake this scheduler needs: match
+// DH order rows against inventory, then record the confirmed ones as sales.
+type DHOrdersImporter interface {
+	ImportOrdersSales(ctx context.Context, rows []csvimport.OrdersExportRow) (*csvimport.OrdersImportResult, error)
+	ConfirmOrdersSales(ctx context.Context, items []csvimport.OrdersConfirmItem) (*inventory.BulkSaleResult, error)
+}
+
 // DHOrdersPollConfig controls the orders poll scheduler.
 type DHOrdersPollConfig struct {
 	Enabled  bool
@@ -45,7 +53,7 @@ type DHOrdersPollScheduler struct {
 	StopHandle
 	client      DHOrdersClient
 	syncState   SyncStateStore
-	campaignSvc inventory.ImportService
+	campaignSvc DHOrdersImporter
 	eventRec    dhevents.Recorder // may be nil
 	logger      observability.Logger
 	config      DHOrdersPollConfig
@@ -55,7 +63,7 @@ type DHOrdersPollScheduler struct {
 func NewDHOrdersPollScheduler(
 	client DHOrdersClient,
 	syncState SyncStateStore,
-	campaignSvc inventory.ImportService,
+	campaignSvc DHOrdersImporter,
 	eventRec dhevents.Recorder, // may be nil for tests / unwired
 	logger observability.Logger,
 	config DHOrdersPollConfig,
@@ -124,7 +132,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 		return summary, nil
 	}
 
-	rows := make([]inventory.OrdersExportRow, 0, len(allOrders))
+	rows := make([]csvimport.OrdersExportRow, 0, len(allOrders))
 	certToOrderID := make(map[string]string, len(allOrders))
 	certToPriceCents := make(map[string]int, len(allOrders))
 	for _, order := range allOrders {
@@ -136,7 +144,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 				observability.String("grade", order.Grade),
 				observability.Err(err))
 		}
-		rows = append(rows, inventory.OrdersExportRow{
+		rows = append(rows, csvimport.OrdersExportRow{
 			OrderNumber:  order.OrderID,
 			Date:         parseDHSoldAt(order.SoldAt),
 			SalesChannel: mapDHChannel(ctx, order.Channel, s.logger),
@@ -182,9 +190,9 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 		return summary, nil
 	}
 
-	confirmItems := make([]inventory.OrdersConfirmItem, 0, len(importResult.Matched))
+	confirmItems := make([]csvimport.OrdersConfirmItem, 0, len(importResult.Matched))
 	for _, m := range importResult.Matched {
-		confirmItems = append(confirmItems, inventory.OrdersConfirmItem{
+		confirmItems = append(confirmItems, csvimport.OrdersConfirmItem{
 			PurchaseID:     m.PurchaseID,
 			SaleChannel:    m.SaleChannel,
 			SaleDate:       m.SaleDate,

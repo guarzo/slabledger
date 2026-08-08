@@ -44,14 +44,21 @@ type Service interface {
 }
 
 // DHListingResult summarises a batch listing operation.
+//
+// The counter fields are serialised directly as the 200 body of
+// POST /api/purchases/{purchaseId}/list-on-dh, so their JSON tags are part of
+// that endpoint's contract. The two error-typed fields are deliberately not:
+// a non-nil error has no exported fields and marshals as a useless `{}`, and
+// the handler converts both into HTTP status codes before it ever writes a
+// 200 (campaigns_dh_listing.go), so on the wire they would always be null.
 type DHListingResult struct {
-	Listed      int              // items successfully set to listed + synced
-	Synced      int              // items with channels synced
-	Skipped     int              // items skipped (unenrolled, inline push failed, update/sync error, etc)
-	Total       int              // total purchases found
-	Paused      bool             // true when the whole batch was skipped because the global ListingsPaused toggle is on
-	Error       error            // set when a fatal error prevented listing (e.g. DB lookup failure)
-	FailedCerts map[string]error // per-cert failure reasons; nil if no skip/revert recorded an error
+	Listed      int              `json:"listed"`  // items successfully set to listed + synced
+	Synced      int              `json:"synced"`  // items with channels synced
+	Skipped     int              `json:"skipped"` // items skipped (unenrolled, inline push failed, update/sync error, etc)
+	Total       int              `json:"total"`   // total purchases found
+	Paused      bool             `json:"paused"`  // true when the whole batch was skipped because the global ListingsPaused toggle is on
+	Error       error            `json:"-"`       // set when a fatal error prevented listing (e.g. DB lookup failure)
+	FailedCerts map[string]error `json:"-"`       // per-cert failure reasons; nil if no skip/revert recorded an error
 }
 
 // --- Domain-level abstractions for DH external operations ---

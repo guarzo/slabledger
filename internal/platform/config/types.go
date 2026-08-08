@@ -49,6 +49,22 @@ type MaintenanceConfig struct {
 	// Default: true
 	AccessLogCleanupEnabled bool
 
+	// DHEventRetentionDays controls how long dh_state_events rows are retained.
+	// The table is append-only and nothing else deletes from it, so this is the
+	// only bound on its growth.
+	// Default: 90 days — longer than the access log because this is a diagnostic
+	// trail for failures noticed on the scale of weeks. 0 or negative disables
+	// the prune entirely (the builder skips the scheduler).
+	DHEventRetentionDays int
+
+	// DHEventCleanupInterval controls how often the dh_state_events prune runs.
+	// Default: 24 hours (daily).
+	DHEventCleanupInterval time.Duration
+
+	// DHEventCleanupEnabled controls whether the dh_state_events prune is active.
+	// Default: true
+	DHEventCleanupEnabled bool
+
 	// BackfillImages enqueues unsold PSA purchases with empty image URLs onto
 	// the cert-enrichment queue at startup so they pick up front/back slab
 	// images from PSA. Opt-in because it consumes PSA daily budget.
@@ -94,16 +110,12 @@ type AuthConfig struct {
 // These are read from environment variables centrally and passed to adapter
 // constructors — adapters never read env vars directly.
 type AdapterConfig struct {
-	PSAToken                 string        // PSA_ACCESS_TOKEN - PSA cert lookup (comma-separated for rotation)
-	PricingAPIKey            string        // PRICING_API_KEY - Bearer token for pricing API auth
-	GoogleOAuthEnv           string        // GOOGLE_OAUTH_ENV - controls login button visibility ("production" shows it)
-	LocalAPIToken            string        // LOCAL_API_TOKEN - dev-mode bearer bypass; empty = disabled
-	AzureAIEndpoint          string        // AZURE_AI_ENDPOINT - Azure AI Foundry endpoint URL
-	AzureAIKey               string        // AZURE_AI_API_KEY - Azure AI API key
-	AzureAIDeployment        string        // AZURE_AI_DEPLOYMENT - Model deployment name (default: gpt-5.4)
-	DHEnterpriseKey          string        // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
-	DHBaseURL                string        // DH_API_BASE_URL
-	AzureAICompletionTimeout time.Duration // AZURE_AI_TIMEOUT - Completion poll fallback timeout (default: 3m)
+	PSAToken        string // PSA_ACCESS_TOKEN - PSA cert lookup (comma-separated for rotation)
+	PricingAPIKey   string // PRICING_API_KEY - Bearer token for pricing API auth
+	GoogleOAuthEnv  string // GOOGLE_OAUTH_ENV - controls login button visibility ("production" shows it)
+	LocalAPIToken   string // LOCAL_API_TOKEN - dev-mode bearer bypass; empty = disabled
+	DHEnterpriseKey string // DH_ENTERPRISE_API_KEY - Bearer token for enterprise endpoints
+	DHBaseURL       string // DH_API_BASE_URL
 }
 
 // DHConfig holds DH scheduler and rate limiting settings.
@@ -158,7 +170,6 @@ type Config struct {
 	SessionCleanup     SessionCleanupConfig
 	InventoryRefresh   InventoryRefreshConfig
 	SnapshotEnrich     SnapshotEnrichConfig
-	AdvisorRefresh     AdvisorRefreshConfig
 	CardLadder         CardLadderConfig
 	PSAPortal          PSAPortalConfig
 	PSASync            PSASyncConfig
@@ -229,13 +240,6 @@ func (c *DHPriceSyncConfig) ApplyDefaults() {
 	}
 }
 
-// AdvisorRefreshConfig configures the on-demand AI advisor service. The
-// background refresh scheduler was removed when the /insights overview was
-// retired; only the per-call tool-loop bound remains.
-type AdvisorRefreshConfig struct {
-	MaxToolRounds int // max LLM tool-calling rounds per analysis (default: 5)
-}
-
 // SnapshotEnrichConfig controls the background snapshot enrichment scheduler.
 type SnapshotEnrichConfig struct {
 	Enabled       bool
@@ -275,6 +279,16 @@ type PSAPortalConfig struct {
 	// datacenter IP). Optional; empty = direct egress. Format:
 	// http://user:pass@host:port or socks5://host:port.
 	ProxyURL string
+	// PushSigningKey authenticates push-queue approvals (PSA_PUSH_SIGNING_KEY).
+	// It must be the same value in the web app that approves and the harvester
+	// that pushes, and it must not be the database's to read: the whole point is
+	// that a database writer cannot mint an approval. At least 32 characters;
+	// generate with: openssl rand -hex 32.
+	PushSigningKey string
+	// PushSigningKeyID labels the key in the rows it signs so it can be rotated
+	// without stranding approvals already queued (PSA_PUSH_SIGNING_KEY_ID).
+	// Optional; defaults to "default".
+	PushSigningKeyID string
 }
 
 // PSASyncConfig controls the background PSA portal sync scheduler.

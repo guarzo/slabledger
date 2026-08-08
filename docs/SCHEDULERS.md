@@ -131,6 +131,28 @@ Runs a `DELETE FROM card_access_log WHERE accessed_at < ...` query using the `ac
 
 **Note:** Enabled check is handled in `BuildGroup` rather than in `Start()`.
 
+### DH Event Cleanup
+
+**File:** `dh_event_cleanup.go`
+**Purpose:** Deletes old `dh_state_events` rows to prevent unbounded table growth.
+
+The table is append-only — every push, poll, reconcile, and manual match writes a row,
+and no other code path deletes one — so this scheduler is the only bound on its size.
+Runs a `DELETE FROM dh_state_events WHERE event_at < ...`.
+
+| Config | Env Var | Default | Description |
+|--------|---------|---------|-------------|
+| `Enabled` | `DH_EVENT_CLEANUP_ENABLED` | `true` | Enable/disable |
+| `Interval` | `DH_EVENT_CLEANUP_INTERVAL` | `24h` | How often to run |
+| `RetentionDays` | `DH_EVENT_RETENTION_DAYS` | `90` | Days of events to keep |
+
+Retention is deliberately longer than the access log's 30 days: this is a diagnostic
+trail for a pipeline whose failures surface over weeks, so the history has to outlive
+the gap between a failure and someone looking for it (`GET /api/dh/events`).
+
+**Note:** Enabled check is handled in `BuildGroup` rather than in `Start()`; the builder
+also returns nil when no pruner is wired.
+
 ### Session Cleanup
 
 **File:** `session_cleanup.go`
@@ -184,5 +206,6 @@ internal/adapters/scheduler/
 ├── inventory_refresh.go     # Inventory snapshot refresh scheduler
 ├── cache_warmup.go          # Card cache warmup scheduler
 ├── access_log_cleanup.go    # Access log cleanup scheduler
+├── dh_event_cleanup.go      # dh_state_events retention scheduler
 └── session_cleanup.go       # Session cleanup scheduler
 ```

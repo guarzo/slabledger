@@ -58,6 +58,9 @@ export interface ProposedDiff {
 export interface PSAProposeResponse {
   pushId?: string;
   diff: ProposedDiff;
+  /** Hex SHA-256 of the canonical payload. Echoed back on publish so approval
+      is bound to the payload that was actually rendered for review. */
+  payloadDigest?: string;
 }
 
 export interface PSAPublishResponse {
@@ -93,6 +96,8 @@ export interface CampaignFormData {
 export interface PSAProposeCreateResponse {
   pushId: string;
   formData: CampaignFormData;
+  /** See PSAProposeResponse.payloadDigest. */
+  payloadDigest?: string;
 }
 
 export type PSAPushStatus = 'pending' | 'approved' | 'pushing' | 'pushed' | 'failed';
@@ -109,6 +114,9 @@ export interface PSAPushRow {
   requestedBy?: string;
   approvedBy?: string;
   updatedAt: string;
+  /** Digest of this row's payload as stored, so the modal can bind approval to
+      the row it rendered rather than to whatever the row holds at publish time. */
+  payloadDigest?: string;
 }
 
 export interface ListPSAPushesResponse {

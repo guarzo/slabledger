@@ -41,13 +41,13 @@ Use these **hardcoded** segment definitions:
 | # | Name | Paths |
 |---|------|-------|
 | 1 | `domain/inventory` | `internal/domain/inventory/` |
-| 2 | `domain/advisor+social+scoring` | `internal/domain/advisor/`, `internal/domain/social/`, `internal/domain/scoring/` |
+| 2 | `domain/demand+dhpricing+psacampaign+liquidation` | `internal/domain/demand/`, `internal/domain/dhpricing/`, `internal/domain/psacampaign/`, `internal/domain/liquidation/`, `internal/domain/dhevents/`, `internal/domain/llmutil/` |
 | 3 | `domain/favorites+picks+cards+auth+small` | `internal/domain/favorites/`, `internal/domain/picks/`, `internal/domain/cards/`, `internal/domain/auth/`, `internal/domain/errors/`, `internal/domain/constants/`, `internal/domain/observability/`, `internal/domain/storage/`, `internal/domain/intelligence/`, `internal/domain/timeutil/`, `internal/domain/mathutil/`, `internal/domain/pricing/` |
 | 4 | `domain/decomposed-siblings` | `internal/domain/arbitrage/`, `internal/domain/portfolio/`, `internal/domain/tuning/`, `internal/domain/finance/`, `internal/domain/export/`, `internal/domain/dhlisting/`, `internal/domain/csvimport/`, `internal/domain/mmutil/` |
 | 5 | `adapters/httpserver` | `internal/adapters/httpserver/` |
 | 6 | `adapters/storage/sqlite` | `internal/adapters/storage/sqlite/` |
 | 7 | `adapters/clients` | `internal/adapters/clients/` |
-| 8 | `adapters/scheduler+scoring+advisor` | `internal/adapters/scheduler/`, `internal/adapters/scoring/`, `internal/adapters/advisortool/` |
+| 8 | `adapters/scheduler` | `internal/adapters/scheduler/` |
 | 9 | `platform` | `internal/platform/` |
 | 10 | `cmd` | `cmd/` |
 | 11 | `testutil` | `internal/testutil/` |
@@ -283,7 +283,7 @@ After all segments are processed, append a summary table to `docs/polish-report.
 | Segment | Improve | Fixed | Needs Review | Status |
 |---------|---------|-------|-------------|--------|
 | domain/inventory | 7 | 4 | 12 | ✓ |
-| domain/advisor+social+scoring | 5 | 2 | 8 | ✓ |
+| domain/demand+dhpricing+psacampaign+liquidation | 5 | 2 | 8 | ✓ |
 | ... | ... | ... | ... | ... |
 | **Total** | **N** | **N** | **N** | **N/12 done** |
 ```

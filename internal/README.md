@@ -42,7 +42,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │    ├── mathutil/       (math utilities)         │
  │    ├── observability/  (logger interfaces)      │
  │    ├── pricing/        (price interfaces/models)│
- │    ├── scoring/        (price scoring factors)  │
  │    └── storage/        (storage interfaces)     │
 └───────────────────┬─────────────────────────────┘
                     │ (uses)
@@ -93,7 +92,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | `mathutil/` | Math utility functions |
 | `observability/` | Logger, MetricsRecorder interfaces |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
-| `scoring/` | Price scoring factors and profiles |
 | `storage/` | Storage interfaces |
 
 **Rules**:
@@ -102,6 +100,45 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 - ❌ NO imports from `internal/adapters`
 - ❌ NO direct API calls or database queries
 - ❌ NO framework dependencies (gin, echo, etc.)
+
+#### Leaf and non-leaf packages
+
+Which domain packages may import which is decided by one derived test (SLA-48):
+
+> A package under `internal/domain/` is a **leaf** if its transitive import closure within
+> `internal/domain/` excludes `internal/domain/inventory`. It is **non-leaf** otherwise —
+> the hub itself, plus every package that depends on it directly or transitively.
+>
+> Any domain package may import a **leaf**, or the **hub**. Importing any other non-leaf
+> is a violation.
+
+Derived, never listed — a hardcoded roster is the failure mode SLA-12 removed. To see the
+current partition:
+
+```bash
+for p in $(go list ./internal/domain/...); do
+  go list -deps "$p" | grep -q '/internal/domain/inventory$' \
+    && echo "non-leaf: $p" || echo "leaf:     $p"
+done
+```
+
+**This is already enforced; no separate check exists or is needed.** `scripts/check-imports.sh`
+derives its governed set as the *direct* hub importers, while the taxonomy's non-leaf set is
+the *transitive* ones. The two differ only for a package reaching the hub through another
+non-leaf — and that package imports a governed sibling, which the checker already flags. So
+on any tree that passes, `governed sibling ≡ non-leaf minus the hub`, and the target-side
+scan is exactly "no domain package may import a non-leaf other than the hub."
+
+A corollary worth knowing before you propose strengthening the checker: making membership
+transitive is a **no-op**. Closure can only add a package that imports an already-governed
+one, which is itself a violation, so the fixed point is reached at iteration zero wherever
+the checker passes.
+
+Edges that look like exceptions but are not — each target is a leaf, so all are legal:
+`advisor → ai`, `advisor → scoring`, `dhlisting → dhevents`, `pricing/lookup → pricing`,
+`inventory → dhevents`, `inventory → intelligence`.
+
+Full reasoning: `docs/specs/2026-08-08-domain-leaf-taxonomy-design.md`.
 
 **Adding New Domain Logic**:
 ```go
@@ -390,17 +427,26 @@ func (w *MyWorker) Run(ctx context.Context) {
 }
 ```
 
-**Step 3**: Register the worker in `BuildGroup()` with any prerequisite checks
+**Step 3**: Add a `buildMyWorkerScheduler` helper in `internal/adapters/scheduler/builder_schedulers.go` that returns `nil` when the worker's prerequisites are unmet, then call it from `BuildGroup` in `builder.go`
 ```go
-// internal/adapters/scheduler/group.go
-if cfg.MyWorkerEnabled {
-    g.workers = append(g.workers, &MyWorker{
-        service: svc,
-        logger:  logger,
+// internal/adapters/scheduler/builder_schedulers.go
+func buildMyWorkerScheduler(cfg *config.Config, deps BuildDeps) *MyWorker {
+    if !cfg.MyWorkerEnabled || deps.MyService == nil {
+        return nil
+    }
+    return &MyWorker{
+        service: deps.MyService,
+        logger:  deps.Logger,
         cfg:     MyWorkerConfig{Interval: cfg.MyWorkerInterval},
-    })
+    }
+}
+
+// internal/adapters/scheduler/builder.go, inside BuildGroup
+if s := buildMyWorkerScheduler(cfg, deps); s != nil {
+    schedulers = append(schedulers, s)
 }
 ```
+Return the concrete `*MyWorker`, not `Scheduler` — a nil `*MyWorker` stored in a `Scheduler` interface compares non-nil, and the group would then call `Start` on it. If callers outside the group need the instance (as PSA sync and cert enrichment do), also add a field for it on `BuildResult`.
 
 **Step 4**: If the scheduler needs a domain type that doesn't match an existing adapter directly, add a thin wrapper in `main.go` to convert between types before passing the service in.
 

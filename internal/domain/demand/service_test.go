@@ -70,6 +70,76 @@ func demandPayload(character string, baseScore float64, quality string) *demand.
 
 // --- Tests ---
 
+// demandWithComputedAt builds a payload carrying a response-level computed_at.
+// withEras controls whether the character has a ByEra map, which is what
+// decides between era buckets and the single "" character-overall bucket.
+func demandWithComputedAt(character, computedAt string, withEras bool) *demand.CharacterDemand {
+	d := &demand.CharacterDemand{
+		CharacterName:     character,
+		CardCount:         10,
+		AvgDemandScore:    0.8,
+		TotalViews:        400,
+		TotalSearchClicks: 80,
+		TotalWishlistAdds: 20,
+		ComputedAt:        computedAt,
+	}
+	if withEras {
+		d.ByEra = map[string]demand.ByEraDemand{
+			"sword_shield": {CardCount: 6, AvgDemandScore: 0.85, TotalViews: 240, TotalWishlistAdds: 12},
+		}
+	}
+	return d
+}
+
+// TestService_Leaderboard_ComputedAt covers the timestamp the scheduler now
+// writes into the demand payload. Era rows deliberately inherit the
+// character-level value — DH reports computed_at once per response, not per
+// by_era bucket (see eraDemandFor).
+func TestService_Leaderboard_ComputedAt(t *testing.T) {
+	const stamp = "2026-04-15T00:00:00Z"
+	want, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		t.Fatalf("bad fixture timestamp: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		withEras bool
+		wantEra  string
+	}{
+		{name: "character overall row", withEras: false, wantEra: ""},
+		{name: "era row inherits character timestamp", withEras: true, wantEra: "sword_shield"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := []demand.CharacterCache{{
+				Character: "Umbreon",
+				Window:    "30d",
+				Demand:    demandWithComputedAt("Umbreon", stamp, tc.withEras),
+			}}
+			svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
+
+			out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "30d", Limit: 10})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out) == 0 {
+				t.Fatalf("expected at least one opportunity")
+			}
+			got := out[0]
+			if got.Era != tc.wantEra {
+				t.Errorf("Era = %q; want %q", got.Era, tc.wantEra)
+			}
+			if got.Demand == nil {
+				t.Fatalf("Demand is nil")
+			}
+			if !got.Demand.ComputedAt.Equal(want) {
+				t.Errorf("ComputedAt = %s; want %s", got.Demand.ComputedAt, want)
+			}
+		})
+	}
+}
+
 func TestService_Leaderboard_EmptyCache(t *testing.T) {
 	repo := newRepoWithRows(nil)
 	svc := demand.NewService(repo, uncoveredLookup())
@@ -157,6 +227,51 @@ func TestService_Leaderboard_MinDataQualityFull_ExcludesProxy(t *testing.T) {
 	}
 	if len(out) == 0 {
 		t.Fatalf("want at least the FullChar buckets; got 0")
+	}
+}
+
+func TestService_Leaderboard_EraBucketsInheritCharacterQuality(t *testing.T) {
+	// The shape the refresh scheduler actually writes: data_quality is stamped
+	// on the character (rolled up from its cards) and DH's by_era entries carry
+	// none. Era buckets therefore have to inherit it, or MinDataQuality would
+	// discard every era bucket in production (SLA-63).
+	payload := func(character, quality string, score float64) *demand.CharacterDemand {
+		return &demand.CharacterDemand{
+			CharacterName:     character,
+			CardCount:         10,
+			AvgDemandScore:    score,
+			TotalViews:        400,
+			TotalWishlistAdds: 20,
+			DataQuality:       quality,
+			ByEra: map[string]demand.ByEraDemand{
+				"sword_shield": {CardCount: 6, AvgDemandScore: score, TotalViews: 240, TotalWishlistAdds: 12},
+			},
+		}
+	}
+	rows := []demand.CharacterCache{
+		{Character: "FullChar", Window: "30d", Demand: payload("FullChar", demand.QualityFull, 0.6)},
+		{Character: "ProxyChar", Window: "30d", Demand: payload("ProxyChar", demand.QualityProxy, 0.9)},
+	}
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
+
+	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
+		Window:         "30d",
+		Grade:          10,
+		MinDataQuality: demand.QualityFull,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatalf("want the FullChar era bucket; got 0 — era buckets are not inheriting character quality")
+	}
+	for _, o := range out {
+		if o.Character != "FullChar" {
+			t.Fatalf("bucket for %q survived a full-quality filter", o.Character)
+		}
+		if o.Demand == nil || o.Demand.DataQuality != demand.QualityFull {
+			t.Fatalf("bucket %q/%q has demand %+v; want quality %q", o.Character, o.Era, o.Demand, demand.QualityFull)
+		}
 	}
 }
 

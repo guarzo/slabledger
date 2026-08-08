@@ -9,12 +9,13 @@ type CharacterDemand struct {
 	TotalViews        int     `json:"total_views"`
 	TotalSearchClicks int     `json:"total_search_clicks"`
 	TotalWishlistAdds int     `json:"total_wishlist_adds"`
-	// DataQuality is read by qualityAllowed but has no writer: DH's
-	// character demand endpoint does not report it. Character niches
-	// therefore always carry "". Tracked as SLA-61.
+	// DataQuality does not come from DH — data_quality is reported per card,
+	// never per character. The scheduler rolls it up over the cards we have
+	// attributed to the character (SLA-63) and leaves it "" when none are.
 	DataQuality string `json:"data_quality"`
-	// ComputedAt is likewise unwritten by DH's character demand endpoint and
-	// is always empty in practice.
+	// ComputedAt is the computed_at of the DH TopCharacters response this
+	// payload arrived in — DH reports it once per response, not per entry, so
+	// the scheduler carries it alongside the entry (SLA-61).
 	ComputedAt string                 `json:"computed_at"`
 	ByEra      map[string]ByEraDemand `json:"by_era,omitempty"`
 }
@@ -25,6 +26,11 @@ type ByEraDemand struct {
 	TotalViews        int     `json:"total_views"`
 	TotalSearchClicks int     `json:"total_search_clicks"`
 	TotalWishlistAdds int     `json:"total_wishlist_adds"`
+	// DataQuality has its own per-era slot in the persisted payload, but
+	// nothing writes it today (see CharacterDemand.DataQuality). It is kept so
+	// eraDemandFor can prefer a per-era value over the character-level one if a
+	// writer ever appears, and so legacy rows that carry one still decode it.
+	DataQuality string `json:"data_quality"`
 }
 
 type CharacterVelocity struct {

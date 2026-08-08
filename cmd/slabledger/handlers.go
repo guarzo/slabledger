@@ -10,10 +10,9 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/advisor"
-	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/dhpricing"
@@ -26,6 +25,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/platform/config"
+	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
 // handlerInputs bundles all values needed to construct HTTP handlers and
@@ -39,6 +39,7 @@ type handlerInputs struct {
 	PriceRepo            *postgres.DBTracker
 	AuthService          auth.Service
 	CampaignsService     inventory.Service
+	ImportService        csvimport.Service
 	ArbitrageService     arbitrage.Service
 	DHPriceSyncService   dhpricing.Service
 	PortfolioService     portfolio.Service
@@ -52,9 +53,6 @@ type handlerInputs struct {
 	TrajectoryRepo       *postgres.CardPriceTrajectoryRepository
 	SuggestionsRepo      *postgres.DHSuggestionsRepository
 	DemandRepo           *postgres.DHDemandRepository
-	AdvisorService       advisor.Service
-	AzureAIClient        advisor.LLMProvider
-	AICallRepo           *postgres.AICallRepository
 	CLClient             *cardladder.Client
 	CLStore              *postgres.CardLadderStore
 	DHClient             *dh.Client
@@ -71,8 +69,7 @@ type handlerInputs struct {
 // handlerOutputs holds the constructed handlers that are also needed post-
 // server for graceful shutdown (Wait calls).
 type handlerOutputs struct {
-	DHHandler      *handlers.DHHandler
-	AdvisorHandler *handlers.AdvisorHandler
+	DHHandler *handlers.DHHandler
 }
 
 // createHandlers constructs all HTTP handlers, wires scheduler refresh
@@ -172,6 +169,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			EventRecorder:     in.DHEventStore,
 			SyncStateReader:   in.SyncStateRepo,
 			EventCountsStore:  in.DHEventStore,
+			EventHistoryStore: in.DHEventStore,
 		})
 		logger.Info(ctx, "DH handler initialized")
 	}
@@ -218,19 +216,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	pricingDiagRepo := postgres.NewPricingDiagnosticsRepository(in.DB.DB)
 	pricingDiagHandler := handlers.NewPricingDiagnosticsHandler(pricingDiagRepo, logger)
 
-	// Advisor handler (if advisor was initialized)
-	var advisorHandler *handlers.AdvisorHandler
-	if in.AdvisorService != nil {
-		advisorHandler = handlers.NewAdvisorHandler(in.AdvisorService, logger)
-	}
-
-	// AI status handler — only wire tracker when an LLM provider is configured
-	var aiTracker ai.AICallTracker
-	if in.AzureAIClient != nil {
-		aiTracker = in.AICallRepo
-	}
-	aiStatusHandler := handlers.NewAIStatusHandler(aiTracker, logger)
-
 	// Price flags handler
 	priceFlagsHandler := handlers.NewPriceFlagsHandler(in.CampaignsService, logger)
 
@@ -261,6 +246,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		APITracker:                in.PriceRepo,
 		AuthService:               in.AuthService,
 		CampaignsService:          in.CampaignsService,
+		ImportService:             in.ImportService,
 		ArbitrageService:          in.ArbitrageService,
 		PortfolioService:          in.PortfolioService,
 		TuningService:             in.TuningService,
@@ -268,8 +254,6 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		PricingDiagnosticsHandler: pricingDiagHandler,
 		CampaignsRepo:             in.PurchaseStore,
 		PricingAPIKey:             in.Cfg.Adapters.PricingAPIKey,
-		AdvisorHandler:            advisorHandler,
-		AIStatusHandler:           aiStatusHandler,
 		PriceFlagsHandler:         priceFlagsHandler,
 		CardLadderHandler:         clHandler,
 		PSASyncHandler:            psaSyncHandler,
@@ -339,9 +323,20 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		deps.PSACatalogStore = postgres.NewPSAPortalCatalogStore(in.DB.DB)
 	}
 
+	// Wire the approval signer. Without a configured key the publish endpoint
+	// answers 503 rather than writing an approval the harvester would refuse an
+	// hour later — the failure belongs where a human is watching for it.
+	if in.Cfg != nil && in.Cfg.PSAPortal.PushSigningKey != "" {
+		signer, err := crypto.NewHMACSigner(in.Cfg.PSAPortal.PushSigningKey, in.Cfg.PSAPortal.PushSigningKeyID)
+		if err != nil {
+			logger.Error(ctx, "PSA push signing key rejected, publish endpoint disabled", observability.Err(err))
+		} else {
+			deps.PSAApprovalSigner = signer
+		}
+	}
+
 	out := handlerOutputs{
-		DHHandler:      dhHandler,
-		AdvisorHandler: advisorHandler,
+		DHHandler: dhHandler,
 	}
 	return deps, out
 }

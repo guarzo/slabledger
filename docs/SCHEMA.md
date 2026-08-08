@@ -109,26 +109,9 @@ Log of every outbound pricing API call for observability and rate analysis.
 
 ---
 
-### `ai_calls`
-Log of every AI (Azure OpenAI) call including token usage and estimated cost.
+### ~~`ai_calls`~~ — DROPPED (migration 000035)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `operation` | TEXT | NOT NULL, CHECK IN ('digest','campaign_analysis','liquidation','purchase_assessment','social_caption','social_suggestion') | |
-| `status` | TEXT | NOT NULL, CHECK IN ('success','error','rate_limited') | |
-| `error_message` | TEXT | DEFAULT '' | |
-| `latency_ms` | INTEGER | NOT NULL DEFAULT 0 | |
-| `tool_rounds` | INTEGER | NOT NULL DEFAULT 0 | Number of tool-use iterations |
-| `input_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
-| `output_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
-| `total_tokens` | INTEGER | NOT NULL DEFAULT 0 | |
-| `cost_estimate_cents` | INTEGER | NOT NULL DEFAULT 0 | Added in migration 000001 |
-| `timestamp` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
-
-**Indexes:** none — both were dropped in migration 000003 (see "Dropped indexes" below).
-
-**Foreign Keys:** none
+Dropped in migration 000035 with the removal of the Azure AI advisor. Logged every LLM call — operation, status, latency, tool rounds, token counts, and estimated cost in cents. Its two indexes were already gone (dropped in migration 000003, listed under "Dropped indexes" below).
 
 ---
 
@@ -409,7 +392,7 @@ Individual graded cards bought under a campaign.
 | `snapshot_json` | TEXT | NOT NULL DEFAULT '' | Full market snapshot blob |
 | `snapshot_status` | TEXT | NOT NULL DEFAULT '', CHECK IN ('','pending','failed','exhausted') | |
 | `snapshot_retry_count` | INTEGER | NOT NULL DEFAULT 0 | |
-| `psa_listing_title` | TEXT | NOT NULL DEFAULT '' | Raw PSA title for LLM fallback; added migration 000001 |
+| `psa_listing_title` | TEXT | NOT NULL DEFAULT '' | Raw PSA title used for DH card matching; added migration 000001 |
 | `override_price_cents` | INTEGER | NOT NULL DEFAULT 0, CHECK >= 0 | User-set price override; added migration 000001 |
 | `override_source` | TEXT | NOT NULL DEFAULT '' | Source label for override; added migration 000001 |
 | `override_set_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime of override; added migration 000001 |
@@ -597,8 +580,19 @@ database cannot verify — which is what the claim guard above, and SLA-44, cove
 | `approved_by` | TEXT | | Username that approved the change |
 | `result_json` | JSONB | | Result payload from the push attempt |
 | `error` | TEXT | | Error message if `status = 'failed'` |
+| `approved_at` | TIMESTAMPTZ | | When the approval was signed; part of the signed envelope |
+| `payload_digest` | TEXT | | Hex SHA-256 of the canonical `proposed_diff` at approval time |
+| `approval_signature` | TEXT | | Hex HMAC-SHA256 over the approval envelope; key never stored here |
+| `signature_key_id` | TEXT | | Identifier of the signing key, so rotation does not strand in-flight approvals |
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+The four signature columns (migration 000034, SLA-44) are nullable: rows approved
+before that migration carry no signature, and the drain refuses them rather than
+treating an unsigned row as authorized. The signature is what closes the gap the
+paragraph above describes — `status = 'approved'` is a claim the database cannot
+verify, but the HMAC is minted with `PSA_PUSH_SIGNING_KEY`, which lives only in the
+application environment. See [docs/psa-harvester.md](psa-harvester.md).
 
 **Indexes:**
 - `idx_psa_push_queue_status` on `(status)`
@@ -606,7 +600,7 @@ database cannot verify — which is what the claim guard above, and SLA-44, cove
 
 **Foreign Keys:** none
 
-**Added:** migration 000018 (RLS enabled in 000029)
+**Added:** migration 000018 (RLS enabled in 000029; approval signature columns in 000034)
 
 ---
 
@@ -792,24 +786,9 @@ Daily buy/sell suggestions from DoubleHolo.
 
 ---
 
-### `scoring_data_gaps`
-Records of missing data encountered during scoring/analytics.
+### ~~`scoring_data_gaps`~~ — DROPPED (migration 000035)
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| `id` | INTEGER | PK, AUTOINCREMENT | |
-| `factor_name` | TEXT | NOT NULL | Scoring factor that had missing data |
-| `reason` | TEXT | NOT NULL | Why data was missing |
-| `entity_type` | TEXT | NOT NULL | e.g. 'purchase', 'campaign' |
-| `entity_id` | TEXT | NOT NULL | |
-| `card_name` | TEXT | NOT NULL DEFAULT '' | |
-| `set_name` | TEXT | NOT NULL DEFAULT '' | |
-| `recorded_at` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | |
-
-**Indexes:**
-- `idx_scoring_gaps_recorded` on `(recorded_at)`
-
-**Foreign Keys:** none
+Dropped in migration 000035 with the removal of the scoring domain. Recorded missing data encountered during scoring — factor name, reason, entity type and id, card and set name. Its surviving index `idx_scoring_gaps_recorded` went with the table; `idx_scoring_gaps_factor` had already been dropped in migration 000003.
 
 ---
 
@@ -992,8 +971,16 @@ Append-only audit log of DH push/inventory state transitions. Maps to `dhevents.
 
 **Indexes:**
 - `idx_dh_state_events_type_time` on `(event_type, event_at DESC)`
+- `idx_dh_state_events_purchase` on `(purchase_id, event_at)`
+- `idx_dh_state_events_cert` on `(cert_number, event_at)`
 
-`idx_dh_state_events_purchase` and `idx_dh_state_events_cert` were created by 000001 and dropped by 000003; lookups by `purchase_id` or `cert_number` are unindexed.
+The last two were created by 000001, dropped by 000003 as unscanned — correct at the
+time, since nothing read the table per row — and restored by 000032 when SLA-58 added
+the read path (`GET /api/dh/events`).
+
+**Retention:** the table is append-only and no write path ever deletes from it. The
+`dh-event-cleanup` scheduler prunes rows older than `DH_EVENT_RETENTION_DAYS`
+(default 90) — see [SCHEDULERS.md](SCHEDULERS.md).
 
 **Foreign Keys:** none
 
@@ -1073,20 +1060,21 @@ Sessions where `expires_at > now()`, joined to `users` for username/google_id, w
 ### `expired_sessions`
 Session IDs where `expires_at <= now()`, used by the session-cleanup scheduler.
 
-### `ai_usage_summary`
-Aggregate AI call statistics for the last 7 days: total calls, success/error/rate-limited counts, token totals, and estimated cost.
+### ~~`ai_usage_summary`~~ — DROPPED (migration 000035)
+Dropped in migration 000035 with `ai_calls`. Aggregated AI call statistics for the last 7 days: total calls, success/error/rate-limited counts, token totals, and estimated cost.
 
-### `ai_usage_by_operation`
-Per-operation breakdown of AI call counts, error rates, latency, token usage, and cost for the last 7 days.
+### ~~`ai_usage_by_operation`~~ — DROPPED (migration 000035)
+Dropped in migration 000035 with `ai_calls`. Per-operation breakdown of AI call counts, error rates, latency, token usage, and cost for the last 7 days.
 
 ---
 
 ## Dropped indexes
 
 Migration 000003 dropped 28 indexes that Supabase's advisor reported as never scanned, and
-migration 000021 dropped one more along with the Market Movers columns. 27 of 000003's 28
-are gone for good and are listed below; the 28th, `idx_oauth_states_expires`, was restored
-by migration 000026 and is live again (documented under `oauth_states` above). They are
+migration 000021 dropped one more along with the Market Movers columns. 25 of 000003's 28
+are gone for good and are listed below. Three have since been restored and are live again,
+documented under their tables above: `idx_oauth_states_expires` (by 000026), and
+`idx_dh_state_events_purchase` / `idx_dh_state_events_cert` (by 000032). They are
 catalogued here because older docs, query plans, and commit messages still name them —
 none of the rows below exist in the current schema.
 
@@ -1106,8 +1094,6 @@ none of the rows below exist in the current schema.
 | `idx_card_cache_demand_score` | `dh_card_cache` | 000003 |
 | `idx_card_price_trajectory_card` | `card_price_trajectory` | 000003 |
 | `idx_cl_sales_comps_gem_rate` | `cl_sales_comps` | 000003 |
-| `idx_dh_state_events_cert` | `dh_state_events` | 000003 |
-| `idx_dh_state_events_purchase` | `dh_state_events` | 000003 |
 | `idx_dh_suggestions_card` | `dh_suggestions` | 000003 |
 | `idx_invoices_status` | `invoices` | 000003 |
 | `idx_revocation_flags_segment` | `revocation_flags` | 000003 |
@@ -1155,7 +1141,6 @@ campaigns
 
 ── Standalone tables (no FK dependencies) ──
 api_calls
-ai_calls
 card_access_log
 card_id_mappings
 card_price_trajectory
@@ -1172,7 +1157,6 @@ dh_suggestions
 dh_state_events
 dh_card_tombstones
 dh_comp_cache
-scoring_data_gaps
 scheduler_run_stats
 dh_push_config
 dh_card_cache

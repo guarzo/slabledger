@@ -1,5 +1,6 @@
-// Package dhevents defines the DH pipeline state-transition event model and
-// the Recorder/CountsStore interfaces consumed by domain and adapter code.
+// Package dhevents defines the DH pipeline state-transition event model and the
+// Recorder/CountsStore/HistoryStore/Pruner interfaces consumed by domain and
+// adapter code.
 // Flat sibling of dhlisting/inventory/etc — no cross-imports with other
 // domain siblings.
 package dhevents
@@ -67,6 +68,34 @@ type Event struct {
 	Notes          string
 }
 
+// StoredEvent is an Event read back from storage, carrying the two columns the
+// writer does not supply: the row id and the timestamp storage stamped on it.
+type StoredEvent struct {
+	Event
+	ID      int64
+	EventAt time.Time
+}
+
+// History limits bound a per-subject read. The table is append-only and a
+// single purchase accumulates one row per transition, so a bounded read is
+// always enough to answer "what happened to this one" without risking an
+// unbounded scan.
+const (
+	// DefaultHistoryLimit applies when a caller passes limit <= 0.
+	DefaultHistoryLimit = 100
+	// MaxHistoryLimit caps what a caller can ask for.
+	MaxHistoryLimit = 500
+)
+
+// ClampHistoryLimit normalizes a caller-supplied limit into [1, MaxHistoryLimit],
+// substituting DefaultHistoryLimit for non-positive values.
+func ClampHistoryLimit(limit int) int {
+	if limit <= 0 {
+		return DefaultHistoryLimit
+	}
+	return min(limit, MaxHistoryLimit)
+}
+
 // Recorder writes events to storage. Implementations should be best-effort:
 // a failure is logged by the caller but does not abort the calling operation.
 type Recorder interface {
@@ -76,4 +105,21 @@ type Recorder interface {
 // CountsStore exposes aggregate reads used by /api/dh/status.
 type CountsStore interface {
 	CountByTypeSince(ctx context.Context, t Type, since time.Time) (int, error)
+}
+
+// HistoryStore exposes the per-subject reads that make the trail auditable.
+// Aggregate counts answer "is the pipeline healthy"; these answer "why is this
+// purchase stuck", which is the question the row-level columns exist for.
+// Both return newest-first.
+type HistoryStore interface {
+	ByPurchase(ctx context.Context, purchaseID string, limit int) ([]StoredEvent, error)
+	ByCert(ctx context.Context, certNumber string, limit int) ([]StoredEvent, error)
+}
+
+// Pruner enforces retention on the append-only trail. Nothing else in the
+// system deletes from it, so without a Pruner the table grows without bound.
+type Pruner interface {
+	// DeleteOlderThan removes events stamped strictly before cutoff and
+	// returns how many rows were deleted.
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }

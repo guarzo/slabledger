@@ -3,7 +3,7 @@ package psaportal
 import (
 	"testing"
 
-	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 )
 
 func TestMapRow(t *testing.T) {
@@ -11,7 +11,7 @@ func TestMapRow(t *testing.T) {
 		name    string
 		in      map[string]string
 		wantErr bool
-		check   func(t *testing.T, row inventory.PSAExportRow)
+		check   func(t *testing.T, row csvimport.PSAExportRow)
 	}{
 		{
 			name: "full row",
@@ -28,7 +28,7 @@ func TestMapRow(t *testing.T) {
 				colFrontImage: "https://img/f.jpg",
 				colBackImage:  "https://img/b.jpg",
 			},
-			check: func(t *testing.T, row inventory.PSAExportRow) {
+			check: func(t *testing.T, row csvimport.PSAExportRow) {
 				if row.CertNumber != "12345678" {
 					t.Errorf("cert: %q", row.CertNumber)
 				}
@@ -59,7 +59,7 @@ func TestMapRow(t *testing.T) {
 				colGrade:    "8.5",
 				colRefunded: "true",
 			},
-			check: func(t *testing.T, row inventory.PSAExportRow) {
+			check: func(t *testing.T, row csvimport.PSAExportRow) {
 				if row.Grade != 8.5 {
 					t.Errorf("grade: %v", row.Grade)
 				}
