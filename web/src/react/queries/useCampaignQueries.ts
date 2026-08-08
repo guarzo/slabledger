@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
-import type { Campaign, CreateCampaignInput, CreatePurchaseInput, CreateSaleInput, Purchase, Sale, Invoice, BulkSaleItemInput } from '../../types/campaigns';
+import type { Campaign, CreateCampaignInput, Invoice } from '../../types/campaigns';
 import { queryKeys } from './queryKeys';
 import { createParamQuery, createStaticQuery } from './createQuery';
 
@@ -29,13 +29,8 @@ export function useCampaigns(activeOnly: boolean) {
   });
 }
 
-export const useCampaignPNL = createParamQuery(
-  queryKeys.campaigns.pnl, (id) => api.getCampaignPNL(id), { staleTime: ANALYTICS_STALE_TIME },
-);
-
 /**
  * Query options factory for campaign PNL — use with useQueries() for bulk fetching.
- * Using this ensures cache key consistency with useCampaignPNL hook.
  */
 export const campaignPNLQueryOptions = (id: string) => ({
   queryKey: queryKeys.campaigns.pnl(id),
@@ -43,16 +38,6 @@ export const campaignPNLQueryOptions = (id: string) => ({
   enabled: !!id,
   staleTime: ANALYTICS_STALE_TIME,
 });
-
-export function useInventory(campaignId: string, opts?: { enabled?: boolean }) {
-  const query = useQuery({
-    queryKey: queryKeys.campaigns.inventory(campaignId),
-    queryFn: () => api.getInventory(campaignId),
-    enabled: !!campaignId && (opts?.enabled ?? true),
-    staleTime: ANALYTICS_STALE_TIME,
-  });
-  return { ...query, data: query.data?.items, warnings: query.data?.warnings };
-}
 
 // Capital & Invoice queries
 
@@ -66,14 +51,6 @@ export const useInvoices = createStaticQuery(
 
 export const usePortfolioHealth = createStaticQuery(
   queryKeys.portfolio.health, () => api.getPortfolioHealth(), { staleTime: ANALYTICS_STALE_TIME },
-);
-
-export const usePortfolioChannelVelocity = createStaticQuery(
-  queryKeys.portfolio.channelVelocity, () => api.getPortfolioChannelVelocity(),
-);
-
-export const usePortfolioInsights = createStaticQuery(
-  queryKeys.portfolio.insights, () => api.getPortfolioInsights(), { staleTime: ANALYTICS_STALE_TIME },
 );
 
 export const useWeeklyReview = createStaticQuery(
@@ -106,22 +83,6 @@ export function useUpdateInvoice() {
   });
 }
 
-export function useImportPSA() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (file: File) => api.globalImportPSA(file),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.credit.summary });
-      queryClient.invalidateQueries({ queryKey: queryKeys.credit.invoices });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.suggestions });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
-    },
-  });
-}
-
 // Mutations
 
 export function useCreateCampaign() {
@@ -141,157 +102,6 @@ export function useUpdateCampaign() {
       api.updateCampaign(id, data, ifUnmodifiedSince),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
-    },
-  });
-}
-
-export function useCreatePurchase(campaignId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreatePurchaseInput) => api.createPurchase(campaignId, data),
-    onMutate: async (newPurchase) => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.campaigns.purchases(campaignId),
-      });
-      const previous = queryClient.getQueryData(
-        queryKeys.campaigns.purchases(campaignId),
-      );
-      queryClient.setQueryData(
-        queryKeys.campaigns.purchases(campaignId),
-        (old: Purchase[] = []) => [
-          ...old,
-          {
-            ...newPurchase,
-            id: `optimistic-${Date.now()}`,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      );
-      return { previous };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(
-          queryKeys.campaigns.purchases(campaignId),
-          context.previous,
-        );
-      }
-    },
-    onSettled: () => {
-      invalidatePurchaseRelatedQueries(queryClient, campaignId);
-    },
-  });
-}
-
-export function useDeletePurchase(campaignId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (purchaseId: string) => api.deletePurchase(campaignId, purchaseId),
-    onMutate: async (purchaseId) => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.campaigns.purchases(campaignId),
-      });
-      const previous = queryClient.getQueryData(
-        queryKeys.campaigns.purchases(campaignId),
-      );
-      queryClient.setQueryData(
-        queryKeys.campaigns.purchases(campaignId),
-        (old: Purchase[] = []) => old.filter(p => p.id !== purchaseId),
-      );
-      return { previous };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(
-          queryKeys.campaigns.purchases(campaignId),
-          context.previous,
-        );
-      }
-    },
-    onSettled: () => {
-      invalidatePurchaseRelatedQueries(queryClient, campaignId);
-    },
-  });
-}
-
-export function useReassignPurchase(campaignId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ purchaseId, targetCampaignId }: { purchaseId: string; targetCampaignId: string }) =>
-      api.reassignPurchase(purchaseId, targetCampaignId),
-    onMutate: async ({ purchaseId }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.campaigns.purchases(campaignId) });
-      const previous = queryClient.getQueryData(queryKeys.campaigns.purchases(campaignId));
-      queryClient.setQueryData(
-        queryKeys.campaigns.purchases(campaignId),
-        (old: Purchase[] = []) => old.filter(p => p.id !== purchaseId),
-      );
-      return { previous };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.campaigns.purchases(campaignId), context.previous);
-      }
-    },
-    onSettled: (_data, _err, vars) => {
-      invalidatePurchaseRelatedQueries(queryClient, campaignId);
-      invalidatePurchaseRelatedQueries(queryClient, vars.targetCampaignId);
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.suggestions });
-    },
-  });
-}
-
-export function useCreateSale(campaignId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateSaleInput) => api.createSale(campaignId, data),
-    onMutate: async (newSale) => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.campaigns.sales(campaignId),
-      });
-      const previous = queryClient.getQueryData(
-        queryKeys.campaigns.sales(campaignId),
-      );
-      queryClient.setQueryData(
-        queryKeys.campaigns.sales(campaignId),
-        (old: Sale[] = []) => [
-          ...old,
-          {
-            ...newSale,
-            id: `optimistic-${Date.now()}`,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      );
-      return { previous };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(
-          queryKeys.campaigns.sales(campaignId),
-          context.previous,
-        );
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.sales(campaignId) });
-      invalidatePurchaseRelatedQueries(queryClient, campaignId);
-    },
-  });
-}
-
-export function useCreateBulkSales(campaignId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { saleChannel: string; saleDate: string; items: BulkSaleItemInput[] }) =>
-      api.createBulkSales(campaignId, data.saleChannel, data.saleDate, data.items),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.sales(campaignId) });
-      invalidatePurchaseRelatedQueries(queryClient, campaignId);
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.health });
-      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.insights });
     },
   });
 }

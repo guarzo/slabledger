@@ -184,17 +184,6 @@ export function useTriggerDHBulkMatch() {
   });
 }
 
-export function useUnmatchDH() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (purchaseId: string) => api.unmatchDH(purchaseId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhUnmatched });
-      qc.invalidateQueries({ queryKey: queryKeys.admin.dhStatus });
-    },
-  });
-}
-
 export function useTriggerDHReconcile() {
   const qc = useQueryClient();
   return useMutation({
