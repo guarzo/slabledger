@@ -96,24 +96,29 @@ type Insights struct {
 }
 
 // Suggestion represents a daily DH buy/sell pick.
+//
+// Served as-is by GET /api/dh/suggestions and
+// GET /api/dh/suggestions/inventory-alerts, so the tags are the API contract.
+// StructuredReasoning and Metrics hold pre-encoded JSON and are strings on the
+// wire, not objects.
 type Suggestion struct {
-	SuggestionDate      string
-	Type                string // "cards" or "sealed"
-	Category            string // "hottest_cards" or "consider_selling"
-	Rank                int
-	IsManual            bool
-	DHCardID            string
-	CardName            string
-	SetName             string
-	CardNumber          string
-	ImageURL            string
-	CurrentPriceCents   int64
-	ConfidenceScore     float64
-	Reasoning           string
-	StructuredReasoning string // JSON
-	Metrics             string // JSON
-	SentimentScore      float64
-	SentimentTrend      float64
-	SentimentMentions   int
-	FetchedAt           time.Time
+	SuggestionDate      string    `json:"suggestionDate"`
+	Type                string    `json:"type"`     // "cards" or "sealed"
+	Category            string    `json:"category"` // "hottest_cards" or "consider_selling"
+	Rank                int       `json:"rank"`
+	IsManual            bool      `json:"isManual"`
+	DHCardID            string    `json:"dhCardId"`
+	CardName            string    `json:"cardName"`
+	SetName             string    `json:"setName"`
+	CardNumber          string    `json:"cardNumber"`
+	ImageURL            string    `json:"imageUrl"`
+	CurrentPriceCents   int64     `json:"currentPriceCents"`
+	ConfidenceScore     float64   `json:"confidenceScore"`
+	Reasoning           string    `json:"reasoning"`
+	StructuredReasoning string    `json:"structuredReasoning"` // JSON
+	Metrics             string    `json:"metrics"`             // JSON
+	SentimentScore      float64   `json:"sentimentScore"`
+	SentimentTrend      float64   `json:"sentimentTrend"`
+	SentimentMentions   int       `json:"sentimentMentions"`
+	FetchedAt           time.Time `json:"fetchedAt"`
 }

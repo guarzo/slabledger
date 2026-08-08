@@ -2314,35 +2314,33 @@ Returns the latest DH buy/sell suggestions.
 {
   "suggestions": [
     {
-      "SuggestionDate": "2025-01-15",
-      "Type": "cards",
-      "Category": "hottest_cards",
-      "Rank": 1,
-      "IsManual": false,
-      "DHCardID": "12345",
-      "CardName": "Charizard",
-      "SetName": "Base Set",
-      "CardNumber": "4",
-      "ImageURL": "https://...",
-      "CurrentPriceCents": 120000,
-      "ConfidenceScore": 0.95,
-      "Reasoning": "Strong demand...",
-      "StructuredReasoning": "{...}",
-      "Metrics": "{...}",
-      "SentimentScore": 0.4,
-      "SentimentTrend": 0.1,
-      "SentimentMentions": 12,
-      "FetchedAt": "2025-01-15T10:00:00Z"
+      "suggestionDate": "2025-01-15",
+      "type": "cards",
+      "category": "hottest_cards",
+      "rank": 1,
+      "isManual": false,
+      "dhCardId": "12345",
+      "cardName": "Charizard",
+      "setName": "Base Set",
+      "cardNumber": "4",
+      "imageUrl": "https://...",
+      "currentPriceCents": 120000,
+      "confidenceScore": 0.95,
+      "reasoning": "Strong demand...",
+      "structuredReasoning": "{...}",
+      "metrics": "{...}",
+      "sentimentScore": 0.4,
+      "sentimentTrend": 0.1,
+      "sentimentMentions": 12,
+      "fetchedAt": "2025-01-15T10:00:00Z"
     }
   ],
   "count": 10
 }
 ```
 
-`intelligence.Suggestion` carries no JSON tags, so the keys are the Go field
-names — this is the only endpoint in the API that does not use camelCase.
-`StructuredReasoning` and `Metrics` are JSON encoded as strings. SLA-64 tracks
-adding the tags and rewriting this entry to the camelCase shape.
+`structuredReasoning` and `metrics` hold pre-encoded JSON and are strings on the
+wire, not objects.
 
 ---
 
