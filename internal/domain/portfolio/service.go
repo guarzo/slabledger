@@ -16,7 +16,7 @@ type Service interface {
 	GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioHealth, error)
 	GetPortfolioChannelVelocity(ctx context.Context) ([]inventory.ChannelVelocity, error)
 	GetPortfolioInsights(ctx context.Context) (*inventory.PortfolioInsights, error)
-	GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error)
+	GetCampaignSuggestions(ctx context.Context) (*SuggestionsResponse, error)
 	GetCapitalTimeline(ctx context.Context) (*inventory.CapitalTimeline, error)
 	GetWeeklyReviewSummary(ctx context.Context) (*inventory.WeeklyReviewSummary, error)
 	GetWeeklyHistory(ctx context.Context, weeks int) ([]inventory.WeeklyReviewSummary, error)
@@ -283,7 +283,7 @@ func computeInHandStatsByCampaign(data []inventory.PurchaseWithSale) map[string]
 	return result
 }
 
-func (s *service) GetCampaignSuggestions(ctx context.Context) (*inventory.SuggestionsResponse, error) {
+func (s *service) GetCampaignSuggestions(ctx context.Context) (*SuggestionsResponse, error) {
 	data, err := s.analytics.GetAllPurchasesWithSales(ctx, inventory.WithExcludeArchived(), inventory.WithExcludeExternal())
 	if err != nil {
 		return nil, fmt.Errorf("all purchases with sales: %w", err)
@@ -303,7 +303,7 @@ func (s *service) GetCampaignSuggestions(ctx context.Context) (*inventory.Sugges
 	insights := inventory.ComputePortfolioInsights(data, channelPNL, campaigns)
 	healthByCampaign := computeChannelHealthByCampaign(data)
 
-	return inventory.GenerateSuggestions(ctx, insights, campaigns, healthByCampaign), nil
+	return GenerateSuggestions(ctx, insights, campaigns, healthByCampaign), nil
 }
 
 // --- Capital Timeline ---

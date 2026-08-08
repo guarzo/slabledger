@@ -1,4 +1,4 @@
-package inventory
+package portfolio
 
 import (
 	"context"
@@ -6,11 +6,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 func TestGenerateSuggestions_Empty(t *testing.T) {
-	insights := &PortfolioInsights{
-		DataSummary: InsightsDataSummary{TotalPurchases: 0},
+	insights := &inventory.PortfolioInsights{
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 0},
 	}
 	resp := GenerateSuggestions(context.Background(), insights, nil, nil)
 	if resp == nil {
@@ -25,14 +27,14 @@ func TestGenerateSuggestions_Empty(t *testing.T) {
 }
 
 func TestGenerateSuggestions_TopCharacterExpansion(t *testing.T) {
-	insights := &PortfolioInsights{
-		ByCharacter: []SegmentPerformance{
-			{Label: "Charizard", ROI: 0.25, SoldCount: 10, CampaignCount: 1, PurchaseCount: 15, BestChannel: SaleChannelEbay, AvgMarginPct: 0.20, AvgDaysToSell: 14},
+	insights := &inventory.PortfolioInsights{
+		ByCharacter: []inventory.SegmentPerformance{
+			{Label: "Charizard", ROI: 0.25, SoldCount: 10, CampaignCount: 1, PurchaseCount: 15, BestChannel: inventory.SaleChannelEbay, AvgMarginPct: 0.20, AvgDaysToSell: 14},
 		},
-		DataSummary: InsightsDataSummary{TotalPurchases: 50},
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50},
 	}
-	campaigns := []Campaign{
-		{Name: "Campaign A", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: SubjectFilterTarget},
+	campaigns := []inventory.Campaign{
+		{Name: "inventory.Campaign A", Phase: inventory.PhaseActive, Subjects: []inventory.TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: inventory.SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
@@ -55,16 +57,16 @@ func TestGenerateSuggestions_TopCharacterExpansion(t *testing.T) {
 }
 
 func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
-	insights := &PortfolioInsights{
-		ByCharacter: []SegmentPerformance{
+	insights := &inventory.PortfolioInsights{
+		ByCharacter: []inventory.SegmentPerformance{
 			{Label: "Charizard", ROI: 0.30, SoldCount: 10, PurchaseCount: 12, CampaignCount: 2, AvgMarginPct: 0.22, AvgDaysToSell: 18},
 			{Label: "Pikachu", ROI: -0.10, SoldCount: 8, PurchaseCount: 15, CampaignCount: 1},
 			{Label: "Blastoise", ROI: 0.20, SoldCount: 6, PurchaseCount: 8, CampaignCount: 1},
 		},
-		DataSummary: InsightsDataSummary{TotalPurchases: 35},
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 35},
 	}
-	campaigns := []Campaign{
-		{Name: "Test Campaign", Phase: PhaseActive, Subjects: []TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: SubjectFilterTarget},
+	campaigns := []inventory.Campaign{
+		{Name: "Test inventory.Campaign", Phase: inventory.PhaseActive, Subjects: []inventory.TargetSubject{{Name: "Pikachu"}, {Name: "Blastoise"}}, SubjectFilterMode: inventory.SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
@@ -74,7 +76,7 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 	foundAdd := false
 	for _, s := range resp.Adjustments {
 		if s.Type == "adjust" {
-			if s.Title == "Remove underperformers from Test Campaign" {
+			if s.Title == "Remove underperformers from Test inventory.Campaign" {
 				foundRemove = true
 				// SubjectsAction must disambiguate polarity: a client applying
 				// suggestedParams programmatically has only Subjects + this
@@ -91,7 +93,7 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 					t.Errorf("expected Subjects [Pikachu] on remove suggestion, got %v", s.SuggestedParams.Subjects)
 				}
 			}
-			if s.Title == "Add top performers to Test Campaign" {
+			if s.Title == "Add top performers to Test inventory.Campaign" {
 				foundAdd = true
 				if s.SuggestedParams.SubjectsAction != SubjectsActionAdd {
 					t.Errorf("expected SubjectsAction %q on add suggestion, got %q", SubjectsActionAdd, s.SuggestedParams.SubjectsAction)
@@ -121,17 +123,17 @@ func TestGenerateSuggestions_CharacterAdjustments(t *testing.T) {
 }
 
 func TestGenerateSuggestions_CoverageGap(t *testing.T) {
-	insights := &PortfolioInsights{
-		ByCharacter: []SegmentPerformance{
-			{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, CampaignCount: 1, Dimension: "character", BestChannel: SaleChannelInPerson},
+	insights := &inventory.PortfolioInsights{
+		ByCharacter: []inventory.SegmentPerformance{
+			{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, CampaignCount: 1, Dimension: "character", BestChannel: inventory.SaleChannelInPerson},
 		},
-		CoverageGaps: []CoverageGap{
+		CoverageGaps: []inventory.CoverageGap{
 			{
-				Segment: SegmentPerformance{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, Dimension: "character", BestChannel: SaleChannelInPerson},
+				Segment: inventory.SegmentPerformance{Label: "Gengar", ROI: 0.30, SoldCount: 6, PurchaseCount: 10, Dimension: "character", BestChannel: inventory.SaleChannelInPerson},
 				Reason:  "Gengar has 30% ROI but not in any active campaign",
 			},
 		},
-		DataSummary: InsightsDataSummary{TotalPurchases: 50},
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, nil, nil)
@@ -150,8 +152,8 @@ func TestGenerateSuggestions_CoverageGap(t *testing.T) {
 func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 	cases := []struct {
 		name            string
-		insights        *PortfolioInsights
-		campaigns       []Campaign
+		insights        *inventory.PortfolioInsights
+		campaigns       []inventory.Campaign
 		wantCampaign    string // empty means no suggestion expected
 		wantNewTerms    float64
 		wantExact       bool
@@ -160,36 +162,36 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 		{
 			name: "weighted margin already meets target",
 			// totalRev 100000, totalNet 12000 => weighted 12% (above 10% target)
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 70000, NetProfitCents: 7000},
-					{Channel: SaleChannelInPerson, SaleCount: 10, RevenueCents: 30000, NetProfitCents: 5000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 20, RevenueCents: 70000, NetProfitCents: 7000},
+					{Channel: inventory.SaleChannelInPerson, SaleCount: 10, RevenueCents: 30000, NetProfitCents: 5000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 30},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, TotalSales: 30},
 			},
-			campaigns: []Campaign{{Name: "Healthy", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns: []inventory.Campaign{{Name: "Healthy", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 		{
 			name: "gap below reduction buffer",
 			// weighted 8%, target 10%, gap 2% < 5% buffer
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 8000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 8000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns: []Campaign{{Name: "Near Target", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns: []inventory.Campaign{{Name: "Near Target", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 		{
 			name: "gap exceeds buffer — suggest reduction",
 			// weighted 3%, target 10%, gap 7% → lower 0.85 to 0.78
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 3000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 3000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns:       []Campaign{{Name: "Underperformer", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns:       []inventory.Campaign{{Name: "Underperformer", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			wantCampaign:    "Underperformer",
 			wantNewTerms:    0.78,
 			wantExact:       true,
@@ -198,13 +200,13 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 		{
 			name: "floor respected at 70%",
 			// weighted -5%, target 10%, gap 15% → 0.74 - 0.15 = 0.59, floored to 0.70
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: -5000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: -5000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns:       []Campaign{{Name: "Bleeding", Phase: PhaseActive, BuyTermsCLPct: 0.74}},
+			campaigns:       []inventory.Campaign{{Name: "Bleeding", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.74}},
 			wantCampaign:    "Bleeding",
 			wantNewTerms:    0.70,
 			wantExact:       true,
@@ -212,22 +214,22 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 		},
 		{
 			name: "no channel data",
-			insights: &PortfolioInsights{
+			insights: &inventory.PortfolioInsights{
 				ByChannel:   nil,
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns: []Campaign{{Name: "X", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns: []inventory.Campaign{{Name: "X", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 		{
 			name: "single channel — weighted == channel margin",
 			// single eBay channel at 2% → gap 8% → 0.85 - 0.08 = 0.77
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 25, RevenueCents: 50000, NetProfitCents: 1000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 25, RevenueCents: 50000, NetProfitCents: 1000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 40, TotalSales: 25},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 40, TotalSales: 25},
 			},
-			campaigns:       []Campaign{{Name: "Solo eBay", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns:       []inventory.Campaign{{Name: "Solo eBay", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			wantCampaign:    "Solo eBay",
 			wantNewTerms:    0.77,
 			wantExact:       true,
@@ -237,56 +239,56 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 			name: "mixed channels below buffer",
 			// eBay +20% on 60% of rev, InPerson -15% on 40% → weighted = 0.12*0.6 + -0.15*0.4 = 0.072 - 0.06 = 0.012
 			// Actually: 0.20*0.6 + -0.15*0.4 = 0.12 - 0.06 = 0.06 → gap 4% (below buffer)
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 18, RevenueCents: 60000, NetProfitCents: 12000},
-					{Channel: SaleChannelInPerson, SaleCount: 8, RevenueCents: 40000, NetProfitCents: -6000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 18, RevenueCents: 60000, NetProfitCents: 12000},
+					{Channel: inventory.SaleChannelInPerson, SaleCount: 8, RevenueCents: 40000, NetProfitCents: -6000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 40, TotalSales: 26},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 40, TotalSales: 26},
 			},
-			campaigns: []Campaign{{Name: "Mixed", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns: []inventory.Campaign{{Name: "Mixed", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 		{
 			name: "archived campaign skipped",
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 3000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 20, RevenueCents: 100000, NetProfitCents: 3000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, TotalSales: 20},
 			},
-			campaigns: []Campaign{{Name: "Closed", Phase: PhaseClosed, BuyTermsCLPct: 0.85}},
+			campaigns: []inventory.Campaign{{Name: "Closed", Phase: inventory.PhaseClosed, BuyTermsCLPct: 0.85}},
 		},
 		{
 			name: "zero revenue edge case",
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 0, RevenueCents: 0, NetProfitCents: 0},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 0, RevenueCents: 0, NetProfitCents: 0},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 30, TotalSales: 20},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 30, TotalSales: 20},
 			},
-			campaigns: []Campaign{{Name: "Empty", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns: []inventory.Campaign{{Name: "Empty", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 		{
 			name: "production smoke: Modern eBay +26.6% no longer fires",
 			// eBay margin +26.6% on full revenue → weighted 26.6% ≫ 10% target → no suggestion.
 			// Regression guard for the old "lower Modern to 28.57%" bad output.
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 30, RevenueCents: 500000, NetProfitCents: 133000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 30, RevenueCents: 500000, NetProfitCents: 133000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 60, TotalSales: 30},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 60, TotalSales: 30},
 			},
-			campaigns: []Campaign{{Name: "Modern", Phase: PhaseActive, BuyTermsCLPct: 0.85, EbayFeePct: 0.1235}},
+			campaigns: []inventory.Campaign{{Name: "Modern", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85, EbayFeePct: 0.1235}},
 		},
 		{
 			name: "below minimum total sales — skipped",
-			insights: &PortfolioInsights{
-				ByChannel: []ChannelPNL{
-					{Channel: SaleChannelEbay, SaleCount: 5, RevenueCents: 20000, NetProfitCents: -2000},
+			insights: &inventory.PortfolioInsights{
+				ByChannel: []inventory.ChannelPNL{
+					{Channel: inventory.SaleChannelEbay, SaleCount: 5, RevenueCents: 20000, NetProfitCents: -2000},
 				},
-				DataSummary: InsightsDataSummary{TotalPurchases: 20, TotalSales: 5},
+				DataSummary: inventory.InsightsDataSummary{TotalPurchases: 20, TotalSales: 5},
 			},
-			campaigns: []Campaign{{Name: "Sparse", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns: []inventory.Campaign{{Name: "Sparse", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 		},
 	}
 
@@ -346,12 +348,12 @@ func TestGenerateSuggestions_ChannelInformedBuyTerms(t *testing.T) {
 }
 
 func TestGenerateSuggestions_SpendCapRebalancing(t *testing.T) {
-	insights := &PortfolioInsights{
-		DataSummary: InsightsDataSummary{TotalPurchases: 50, OverallROI: 0.20},
+	insights := &inventory.PortfolioInsights{
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, OverallROI: 0.20},
 	}
-	campaigns := []Campaign{
-		{Name: "Low Cap", Phase: PhaseActive, DailySpendCapCents: 5000},   // $50/day
-		{Name: "High Cap", Phase: PhaseActive, DailySpendCapCents: 50000}, // $500/day
+	campaigns := []inventory.Campaign{
+		{Name: "Low Cap", Phase: inventory.PhaseActive, DailySpendCapCents: 5000},   // $50/day
+		{Name: "High Cap", Phase: inventory.PhaseActive, DailySpendCapCents: 50000}, // $500/day
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
@@ -379,23 +381,23 @@ func TestGenerateSuggestions_SpendCapRebalancing(t *testing.T) {
 }
 
 func TestGenerateSuggestions_GradeSweetSpot(t *testing.T) {
-	insights := &PortfolioInsights{
-		ByGrade: []SegmentPerformance{
+	insights := &inventory.PortfolioInsights{
+		ByGrade: []inventory.SegmentPerformance{
 			{Label: "PSA 9", ROI: 0.30, SoldCount: 15, PurchaseCount: 20, CampaignCount: 1, AvgMarginPct: 0.25, AvgDaysToSell: 10},
 			{Label: "PSA 10", ROI: 0.05, SoldCount: 10, PurchaseCount: 15, CampaignCount: 2},
 		},
-		DataSummary: InsightsDataSummary{TotalPurchases: 35},
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 35},
 	}
-	campaigns := []Campaign{
-		{Phase: PhaseActive, GradeRange: "9-10"},
-		{Phase: PhaseActive, GradeRange: "8-10"},
+	campaigns := []inventory.Campaign{
+		{Phase: inventory.PhaseActive, GradeRange: "9-10"},
+		{Phase: inventory.PhaseActive, GradeRange: "8-10"},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.NewCampaigns {
-		if s.Title == "PSA 9 Sweet Spot Campaign" {
+		if s.Title == "PSA 9 Sweet Spot inventory.Campaign" {
 			found = true
 			if math.Abs(s.ExpectedMetrics.ExpectedROI-0.30) > 1e-6 {
 				t.Errorf("expected ROI ~0.30, got %f", s.ExpectedMetrics.ExpectedROI)
@@ -411,31 +413,31 @@ func TestDeduplicateSuggestions(t *testing.T) {
 	suggestions := []CampaignSuggestion{
 		{
 			Type:       "adjust",
-			Title:      "Lower buy terms on Campaign A",
+			Title:      "Lower buy terms on inventory.Campaign A",
 			Confidence: "high",
 			DataPoints: 30,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:          "Campaign A",
+				Name:          "inventory.Campaign A",
 				BuyTermsCLPct: 0.60,
 			},
 		},
 		{
 			Type:       "adjust",
-			Title:      "Lower buy terms on Campaign A (dup)",
+			Title:      "Lower buy terms on inventory.Campaign A (dup)",
 			Confidence: "medium",
 			DataPoints: 10,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:          "Campaign A",
+				Name:          "inventory.Campaign A",
 				BuyTermsCLPct: 0.55,
 			},
 		},
 		{
 			Type:       "adjust",
-			Title:      "Add top performers to Campaign A",
+			Title:      "Add top performers to inventory.Campaign A",
 			Confidence: "medium",
 			DataPoints: 20,
 			SuggestedParams: CampaignSuggestionParams{
-				Name:     "Campaign A",
+				Name:     "inventory.Campaign A",
 				Subjects: []string{"Charizard"},
 			},
 		},
@@ -456,16 +458,16 @@ func TestDeduplicateSuggestions(t *testing.T) {
 }
 
 func TestROIWeightedSpendCaps(t *testing.T) {
-	insights := &PortfolioInsights{
-		DataSummary: InsightsDataSummary{TotalPurchases: 50, OverallROI: 0.20},
-		CampaignMetrics: []CampaignPNLBrief{
+	insights := &inventory.PortfolioInsights{
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, OverallROI: 0.20},
+		CampaignMetrics: []inventory.CampaignPNLBrief{
 			{CampaignID: "c1", ROI: 0.40, SpendCents: 100000, ProfitCents: 40000, SoldCount: 15, PurchaseCount: 20},
 			{CampaignID: "c2", ROI: 0.05, SpendCents: 200000, ProfitCents: 10000, SoldCount: 10, PurchaseCount: 30},
 		},
 	}
-	campaigns := []Campaign{
-		{ID: "c1", Name: "High ROI", Phase: PhaseActive, DailySpendCapCents: 5000},
-		{ID: "c2", Name: "Low ROI", Phase: PhaseActive, DailySpendCapCents: 50000},
+	campaigns := []inventory.Campaign{
+		{ID: "c1", Name: "High ROI", Phase: inventory.PhaseActive, DailySpendCapCents: 5000},
+		{ID: "c2", Name: "Low ROI", Phase: inventory.PhaseActive, DailySpendCapCents: 50000},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
@@ -493,21 +495,21 @@ func TestROIWeightedSpendCaps(t *testing.T) {
 }
 
 func TestPhaseTransition_ArchiveUnderperformer(t *testing.T) {
-	insights := &PortfolioInsights{
-		DataSummary: InsightsDataSummary{TotalPurchases: 50, OverallROI: 0.10},
-		CampaignMetrics: []CampaignPNLBrief{
+	insights := &inventory.PortfolioInsights{
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50, OverallROI: 0.10},
+		CampaignMetrics: []inventory.CampaignPNLBrief{
 			{CampaignID: "c1", ROI: -0.20, SpendCents: 100000, ProfitCents: -20000, SoldCount: 5, PurchaseCount: 25},
 		},
 	}
-	campaigns := []Campaign{
-		{ID: "c1", Name: "Losing Campaign", Phase: PhaseActive},
+	campaigns := []inventory.Campaign{
+		{ID: "c1", Name: "Losing inventory.Campaign", Phase: inventory.PhaseActive},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
 
 	found := false
 	for _, s := range resp.Adjustments {
-		if s.Title == "Consider closing Losing Campaign" {
+		if s.Title == "Consider closing Losing inventory.Campaign" {
 			found = true
 		}
 	}
@@ -517,17 +519,17 @@ func TestPhaseTransition_ArchiveUnderperformer(t *testing.T) {
 }
 
 func TestPhaseTransition_ActivatePending(t *testing.T) {
-	insights := &PortfolioInsights{
-		ByCharacter: []SegmentPerformance{
+	insights := &inventory.PortfolioInsights{
+		ByCharacter: []inventory.SegmentPerformance{
 			{Label: "Charizard", ROI: 0.25, SoldCount: 10, PurchaseCount: 15, Dimension: "character"},
 		},
-		DataSummary: InsightsDataSummary{TotalPurchases: 50},
-		CampaignMetrics: []CampaignPNLBrief{
+		DataSummary: inventory.InsightsDataSummary{TotalPurchases: 50},
+		CampaignMetrics: []inventory.CampaignPNLBrief{
 			{CampaignID: "c1", PurchaseCount: 0},
 		},
 	}
-	campaigns := []Campaign{
-		{ID: "c1", Name: "Pending Charizard", Phase: PhasePending, Subjects: []TargetSubject{{Name: "Charizard"}}, SubjectFilterMode: SubjectFilterTarget},
+	campaigns := []inventory.Campaign{
+		{ID: "c1", Name: "Pending Charizard", Phase: inventory.PhasePending, Subjects: []inventory.TargetSubject{{Name: "Charizard"}}, SubjectFilterMode: inventory.SubjectFilterTarget},
 	}
 
 	resp := GenerateSuggestions(context.Background(), insights, campaigns, nil)
@@ -558,17 +560,17 @@ func containsAll(s string, substrings ...string) bool {
 
 func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 	// Minimal insights that won't trigger any unrelated rule. The
-	// liquidation-aware rule reads CampaignHealth directly, not insights.
-	baseInsights := func() *PortfolioInsights {
-		return &PortfolioInsights{
-			DataSummary: InsightsDataSummary{TotalPurchases: 0, TotalSales: 0},
+	// liquidation-aware rule reads inventory.CampaignHealth directly, not insights.
+	baseInsights := func() *inventory.PortfolioInsights {
+		return &inventory.PortfolioInsights{
+			DataSummary: inventory.InsightsDataSummary{TotalPurchases: 0, TotalSales: 0},
 		}
 	}
 
 	cases := []struct {
 		name           string
-		campaigns      []Campaign
-		health         map[string]CampaignHealth
+		campaigns      []inventory.Campaign
+		health         map[string]inventory.CampaignHealth
 		wantCampaign   string // empty means no suggestion expected
 		wantNewTerms   float64
 		wantConfidence string
@@ -578,16 +580,16 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		{
 			name: "below loss threshold",
 			// $400 loss over 10 sales — below $500 threshold, skip.
-			campaigns: []Campaign{{ID: "c1", Name: "LowLoss", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c1", Name: "LowLoss", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]inventory.CampaignHealth{
 				"c1": {CampaignID: "c1", LiquidationLossCents: -40000, LiquidationSaleCount: 10},
 			},
 		},
 		{
 			name: "below sample size",
 			// $600 loss but only 4 sales — below 5-sample guard, skip.
-			campaigns: []Campaign{{ID: "c2", Name: "TooFewSales", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c2", Name: "TooFewSales", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]inventory.CampaignHealth{
 				"c2": {CampaignID: "c2", LiquidationLossCents: -60000, LiquidationSaleCount: 4},
 			},
 		},
@@ -595,8 +597,8 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			name: "bucket $15-30/sale → reduction 3%, medium confidence",
 			// $25/sale × 22 sales = $550 total, avg $25. Bucket is 3%.
 			// Marketplace margin positive so the gate allows the rule.
-			campaigns: []Campaign{{ID: "c3", Name: "Mid-Era", Phase: PhaseActive, BuyTermsCLPct: 0.80}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c3", Name: "Mid-Era", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.80}},
+			health: map[string]inventory.CampaignHealth{
 				"c3": {CampaignID: "c3", LiquidationLossCents: -55000, LiquidationSaleCount: 22, EbayChannelMarginPct: 0.18},
 			},
 			wantCampaign:   "Mid-Era",
@@ -608,8 +610,8 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		{
 			name: "bucket $30-50/sale → reduction 5%",
 			// $40/sale avg × 13 sales = $520. Bucket is 5%. 13 sales → high confidence.
-			campaigns: []Campaign{{ID: "c4", Name: "Vintage Core", Phase: PhaseActive, BuyTermsCLPct: 0.80}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c4", Name: "Vintage Core", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.80}},
+			health: map[string]inventory.CampaignHealth{
 				"c4": {CampaignID: "c4", LiquidationLossCents: -52000, LiquidationSaleCount: 13, EbayChannelMarginPct: 0.20},
 			},
 			wantCampaign:   "Vintage Core",
@@ -621,8 +623,8 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		{
 			name: "bucket >$50/sale → reduction 8%",
 			// $80/sale avg × 8 sales = $640. Bucket is 8%. 8 sales → medium confidence (below 10).
-			campaigns: []Campaign{{ID: "c5", Name: "Vintage Low Grade", Phase: PhaseActive, BuyTermsCLPct: 0.82}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c5", Name: "Vintage Low Grade", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.82}},
+			health: map[string]inventory.CampaignHealth{
 				"c5": {CampaignID: "c5", LiquidationLossCents: -64000, LiquidationSaleCount: 8, EbayChannelMarginPct: 0.22},
 			},
 			wantCampaign:   "Vintage Low Grade",
@@ -634,8 +636,8 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		{
 			name: "floor clamps reduction",
 			// Campaign at 74% with 8% bucket ($80/sale × 10) → 74-8=66, clamped to 70.
-			campaigns: []Campaign{{ID: "c6", Name: "NearFloor", Phase: PhaseActive, BuyTermsCLPct: 0.74}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c6", Name: "NearFloor", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.74}},
+			health: map[string]inventory.CampaignHealth{
 				"c6": {CampaignID: "c6", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "NearFloor",
@@ -647,24 +649,24 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		{
 			name: "already at floor — skip",
 			// 70% + 8% bucket = would be 62, clamped to 70, which equals current → skip.
-			campaigns: []Campaign{{ID: "c7", Name: "AtFloor", Phase: PhaseActive, BuyTermsCLPct: 0.70}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c7", Name: "AtFloor", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.70}},
+			health: map[string]inventory.CampaignHealth{
 				"c7": {CampaignID: "c7", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
 			name: "below floor — skip",
 			// 0.68 < 0.70 floor → clamped to 0.70 which is > current → skip (rule never raises terms).
-			campaigns: []Campaign{{ID: "c8", Name: "BelowFloor", Phase: PhaseActive, BuyTermsCLPct: 0.68}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c8", Name: "BelowFloor", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.68}},
+			health: map[string]inventory.CampaignHealth{
 				"c8": {CampaignID: "c8", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
 			name: "sample size tier — 10 sales → high",
 			// avg $60/sale × 10 = $600, bucket 8%. Tier boundary: 10 sales → high.
-			campaigns: []Campaign{{ID: "c9", Name: "Boundary10", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c9", Name: "Boundary10", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]inventory.CampaignHealth{
 				"c9": {CampaignID: "c9", LiquidationLossCents: -60000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "Boundary10",
@@ -676,8 +678,8 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		{
 			name: "sample size tier — 9 sales → medium",
 			// avg ~$67/sale × 9 = $600, bucket 8%. 9 sales → medium.
-			campaigns: []Campaign{{ID: "c10", Name: "Boundary9", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c10", Name: "Boundary9", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]inventory.CampaignHealth{
 				"c10": {CampaignID: "c10", LiquidationLossCents: -60000, LiquidationSaleCount: 9, EbayChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "Boundary9",
@@ -688,23 +690,23 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		},
 		{
 			name: "archived campaign skipped",
-			campaigns: []Campaign{
-				{ID: "c11", Name: "Archived", Phase: PhaseClosed, BuyTermsCLPct: 0.85},
+			campaigns: []inventory.Campaign{
+				{ID: "c11", Name: "Archived", Phase: inventory.PhaseClosed, BuyTermsCLPct: 0.85},
 			},
-			health: map[string]CampaignHealth{
+			health: map[string]inventory.CampaignHealth{
 				"c11": {CampaignID: "c11", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
 			name:      "missing health row — no panic, no suggestion",
-			campaigns: []Campaign{{ID: "c12", Name: "NoHealth", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c12", Name: "NoHealth", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]inventory.CampaignHealth{
 				"other": {CampaignID: "other", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
 			},
 		},
 		{
 			name:         "nil health map — rule skips cleanly",
-			campaigns:    []Campaign{{ID: "c13", Name: "NilHealth", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
+			campaigns:    []inventory.Campaign{{ID: "c13", Name: "NilHealth", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			health:       nil,
 			wantCampaign: "",
 		},
@@ -712,8 +714,8 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			name: "zero marketplace margin — rule skips (no marketplace sales to baseline)",
 			// Plenty of liquidation damage, but no marketplace sales means we
 			// don't have a trustworthy margin baseline to recommend from.
-			campaigns: []Campaign{{ID: "c14", Name: "NoMarketplaceSales", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c14", Name: "NoMarketplaceSales", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]inventory.CampaignHealth{
 				"c14": {CampaignID: "c14", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.0},
 			},
 		},
@@ -721,8 +723,8 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			name: "negative marketplace margin — rule skips (channel itself is broken)",
 			// Lowering buy terms won't rescue a campaign whose marketplace
 			// channel is already underwater. Fix the channel first.
-			campaigns: []Campaign{{ID: "c15", Name: "BrokenMarketplace", Phase: PhaseActive, BuyTermsCLPct: 0.85}},
-			health: map[string]CampaignHealth{
+			campaigns: []inventory.Campaign{{ID: "c15", Name: "BrokenMarketplace", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
+			health: map[string]inventory.CampaignHealth{
 				"c15": {CampaignID: "c15", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: -0.05},
 			},
 		},
@@ -806,7 +808,7 @@ func TestComputeBuyTermsReduction(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := CampaignHealth{
+			h := inventory.CampaignHealth{
 				LiquidationLossCents: tc.lossCents,
 				LiquidationSaleCount: tc.saleCount,
 			}
