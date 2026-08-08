@@ -1,9 +1,10 @@
 // Package demand defines the domain types, repository contract, and service
 // that compute niche-opportunity leaderboards from DoubleHolo (DH) market
 // analytics and demand signals. It is a flat sibling under internal/domain/
-// and does not import any adapter or other domain-sibling packages — DH JSON
-// payloads are parsed here into domain-local structs so the scoring logic
-// stays decoupled from the wire format.
+// and does not import any adapter or other domain-sibling packages. DH JSON
+// payloads are decoded by the postgres adapter into the exported structs in
+// payloads.go, so the scoring logic here depends only on those domain types,
+// not the wire format.
 package demand
 
 import "time"
@@ -26,12 +27,23 @@ type CardCache struct {
 type CharacterCache struct {
 	Character           string
 	Window              string
-	DemandJSON          *string
-	VelocityJSON        *string
-	SaturationJSON      *string
+	Demand              *CharacterDemand
+	Velocity            *CharacterVelocity
+	Saturation          *CharacterSaturation
 	DemandComputedAt    *time.Time
 	AnalyticsComputedAt *time.Time
 	FetchedAt           time.Time
+	// MalformedPayloads records payload columns that were present but failed
+	// to decode, with the decode error preserved. See postgres.scanCharacterCacheRow.
+	MalformedPayloads []MalformedPayload
+}
+
+// MalformedPayload names a payload column that failed to decode and carries
+// the error, so the domain can log the same diagnostic the adapter cannot.
+type MalformedPayload struct {
+	// Column is "demand", "velocity", or "saturation".
+	Column string
+	Err    error
 }
 
 // QualityStats summarises demand_data_quality distribution for a given

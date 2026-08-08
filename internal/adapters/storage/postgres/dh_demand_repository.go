@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -96,7 +97,20 @@ func (r *DHDemandRepository) CardDataQualityStats(ctx context.Context, window st
 
 // UpsertCharacterCache inserts or updates a dh_character_cache row keyed by (character, window).
 func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row demand.CharacterCache) error {
-	_, err := r.db.ExecContext(ctx,
+	demandBlob, err := marshalPayload(row.Demand)
+	if err != nil {
+		return fmt.Errorf("encode dh_character_cache demand payload: %w", err)
+	}
+	velocityBlob, err := marshalPayload(row.Velocity)
+	if err != nil {
+		return fmt.Errorf("encode dh_character_cache velocity payload: %w", err)
+	}
+	saturationBlob, err := marshalPayload(row.Saturation)
+	if err != nil {
+		return fmt.Errorf("encode dh_character_cache saturation payload: %w", err)
+	}
+
+	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO dh_character_cache (
 			character, "window",
 			demand_json, velocity_json, saturation_json,
@@ -110,8 +124,7 @@ func (r *DHDemandRepository) UpsertCharacterCache(ctx context.Context, row deman
 			analytics_computed_at = excluded.analytics_computed_at,
 			fetched_at            = excluded.fetched_at`,
 		row.Character, row.Window,
-		nullStringFromPtr(row.DemandJSON), nullStringFromPtr(row.VelocityJSON),
-		nullStringFromPtr(row.SaturationJSON),
+		demandBlob, velocityBlob, saturationBlob,
 		nullTimeFromPtr(row.DemandComputedAt), nullTimeFromPtr(row.AnalyticsComputedAt),
 		row.FetchedAt,
 	)
@@ -217,12 +230,51 @@ func scanCharacterCacheRow(s scanner) (*demand.CharacterCache, error) {
 		return nil, err
 	}
 
-	row.DemandJSON = nullStringToPtr(demandJSON)
-	row.VelocityJSON = nullStringToPtr(velocityJSON)
-	row.SaturationJSON = nullStringToPtr(saturationJSON)
+	if v, decErr := unmarshalPayload[demand.CharacterDemand](demandJSON); decErr != nil {
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: "demand", Err: decErr})
+	} else {
+		row.Demand = v
+	}
+	if v, decErr := unmarshalPayload[demand.CharacterVelocity](velocityJSON); decErr != nil {
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: "velocity", Err: decErr})
+	} else {
+		row.Velocity = v
+	}
+	if v, decErr := unmarshalPayload[demand.CharacterSaturation](saturationJSON); decErr != nil {
+		row.MalformedPayloads = append(row.MalformedPayloads, demand.MalformedPayload{Column: "saturation", Err: decErr})
+	} else {
+		row.Saturation = v
+	}
+
 	row.DemandComputedAt = nullTimeToPtr(demandComputedAt)
 	row.AnalyticsComputedAt = nullTimeToPtr(analyticsComputedAt)
 	return &row, nil
+}
+
+// marshalPayload encodes a payload struct into a nullable column value. A nil
+// pointer maps to SQL NULL.
+func marshalPayload[T any](p *T) (sql.NullString, error) {
+	if p == nil {
+		return sql.NullString{}, nil
+	}
+	blob, err := json.Marshal(p)
+	if err != nil {
+		return sql.NullString{}, err
+	}
+	return sql.NullString{String: string(blob), Valid: true}, nil
+}
+
+// unmarshalPayload decodes a nullable column value into a payload struct. A
+// NULL column maps to a nil pointer with no error.
+func unmarshalPayload[T any](n sql.NullString) (*T, error) {
+	if !n.Valid {
+		return nil, nil
+	}
+	var v T
+	if err := json.Unmarshal([]byte(n.String), &v); err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // --- pointer <-> sql.Null* helpers ---

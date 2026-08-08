@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -130,31 +129,16 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context) (
 			FetchedAt: now,
 		}
 		if entry, ok := demandByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry); encErr == nil {
-				str := string(blob)
-				row.DemandJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal character demand JSON", observability.String("character", name), observability.Err(encErr))
-			}
+			row.Demand = mapCharacterDemand(entry)
 		}
 		if entry, ok := velocityByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry.Velocity); encErr == nil {
-				str := string(blob)
-				row.VelocityJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal character velocity JSON", observability.String("character", name), observability.Err(encErr))
-			}
+			row.Velocity = mapCharacterVelocity(entry.Velocity)
 			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
 				row.AnalyticsComputedAt = &t
 			}
 		}
 		if entry, ok := saturationByChar[name]; ok {
-			if blob, encErr := json.Marshal(entry); encErr == nil {
-				str := string(blob)
-				row.SaturationJSON = &str
-			} else {
-				s.logger.Warn(ctx, "marshal character saturation JSON", observability.String("character", name), observability.Err(encErr))
-			}
+			row.Saturation = mapCharacterSaturation(entry)
 			if t, tErr := parseDHTimestamp(entry.ComputedAt); tErr == nil {
 				row.AnalyticsComputedAt = &t
 			}
@@ -291,6 +275,75 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 }
 
 // --- helpers ---
+
+// mapCharacterDemand converts a DH character-demand entry into the domain
+// payload persisted on CharacterCache.Demand. dh.CharacterDemandEntry has no
+// computed_at or data_quality field, so both are left "" on the mapped
+// struct — identical to what today's json.Marshal(entry) blob persists.
+func mapCharacterDemand(entry dh.CharacterDemandEntry) *demand.CharacterDemand {
+	out := &demand.CharacterDemand{
+		CharacterName:     entry.CharacterName,
+		CardCount:         entry.CardCount,
+		AvgDemandScore:    entry.AvgDemandScore,
+		TotalViews:        entry.TotalViews,
+		TotalSearchClicks: entry.TotalSearchClicks,
+		TotalWishlistAdds: entry.TotalWishlistAdds,
+	}
+	if len(entry.ByEra) > 0 {
+		out.ByEra = make(map[string]demand.ByEraDemand, len(entry.ByEra))
+		for era, e := range entry.ByEra {
+			out.ByEra[era] = demand.ByEraDemand{
+				CardCount:         e.CardCount,
+				AvgDemandScore:    e.AvgDemandScore,
+				TotalViews:        e.TotalViews,
+				TotalSearchClicks: e.TotalSearchClicks,
+				TotalWishlistAdds: e.TotalWishlistAdds,
+			}
+		}
+	}
+	return out
+}
+
+// mapCharacterVelocity converts DH's flat velocity block into the domain
+// payload. AvgDaysToSell and SellThrough are the two accepted losses (see
+// the SLA-41 design doc, "Accepted losses") — nothing in the domain reads
+// them, so they are not carried into demand.CharacterVelocity.
+func mapCharacterVelocity(v dh.CharacterVelocityFields) *demand.CharacterVelocity {
+	out := &demand.CharacterVelocity{
+		MedianDaysToSell:   v.MedianDaysToSell,
+		SampleSize:         v.SampleSize,
+		VelocityChangePct:  v.VelocityChangePct,
+		AvgDailySales:      v.AvgDailySales,
+		SellThroughRate30d: v.SellThroughRate30d,
+		SalesVolume7d:      v.SalesVolume7d,
+		SalesVolume30d:     v.SalesVolume30d,
+		SupplyCount:        v.SupplyCount,
+	}
+	if len(v.ByGrade) > 0 {
+		out.ByGrade = make(map[string]demand.VelocityTierStat, len(v.ByGrade))
+		for tier, stat := range v.ByGrade {
+			out.ByGrade[tier] = demand.VelocityTierStat{MedianDays: stat.MedianDays, SampleSize: stat.SampleSize}
+		}
+	}
+	if len(v.ByPriceTier) > 0 {
+		out.ByPriceTier = make(map[string]demand.VelocityTierStat, len(v.ByPriceTier))
+		for tier, stat := range v.ByPriceTier {
+			out.ByPriceTier[tier] = demand.VelocityTierStat{MedianDays: stat.MedianDays, SampleSize: stat.SampleSize}
+		}
+	}
+	return out
+}
+
+// mapCharacterSaturation converts DH's nested saturation entry into the flat
+// domain payload. This is where Defect 1 dies: reading
+// entry.Saturation.ActiveListingCount directly is an explicit assignment the
+// compiler checks, and there is no marshal depth left to get wrong.
+func mapCharacterSaturation(entry dh.CharacterSaturationEntry) *demand.CharacterSaturation {
+	return &demand.CharacterSaturation{
+		ActiveListingCount: entry.Saturation.ActiveListingCount,
+		ComputedAt:         entry.ComputedAt,
+	}
+}
 
 func indexDemand(entries []dh.CharacterDemandEntry) map[string]dh.CharacterDemandEntry {
 	m := make(map[string]dh.CharacterDemandEntry, len(entries))

@@ -2,7 +2,6 @@ package demand
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -123,10 +122,10 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 
 	out := make([]NicheOpportunity, 0, len(rows)*len(grades))
 	for _, row := range rows {
-		demand, ok := parseCharacterDemand(row)
-		if !ok {
+		if row.Demand == nil {
 			continue
 		}
+		demand := row.Demand
 
 		// Build one bucket per (era, grade), plus the "all eras" bucket for
 		// characters whose demand_json has no by_era breakdown.
@@ -250,113 +249,11 @@ func velocityOf(o NicheOpportunity) float64 {
 	return *o.Market.VelocityChangePct
 }
 
-// --- JSON parsing helpers ---
-
-// characterDemandJSON mirrors the shape of the cached demand_json blob for a
-// character row. It is a domain-local struct to keep the demand package free
-// of adapter imports.
-type characterDemandJSON struct {
-	CharacterName     string               `json:"character_name"`
-	CardCount         int                  `json:"card_count"`
-	AvgDemandScore    float64              `json:"avg_demand_score"`
-	TotalViews        int                  `json:"total_views"`
-	TotalSearchClicks int                  `json:"total_search_clicks"`
-	TotalWishlistAdds int                  `json:"total_wishlist_adds"`
-	DataQuality       string               `json:"data_quality"`
-	ComputedAt        string               `json:"computed_at"`
-	ByEra             map[string]byEraJSON `json:"by_era,omitempty"`
-}
-
-type byEraJSON struct {
-	CardCount         int     `json:"card_count"`
-	AvgDemandScore    float64 `json:"avg_demand_score"`
-	TotalViews        int     `json:"total_views"`
-	TotalSearchClicks int     `json:"total_search_clicks"`
-	TotalWishlistAdds int     `json:"total_wishlist_adds"`
-	DataQuality       string  `json:"data_quality"`
-}
-
-// velocityBlobJSON / characterSaturationJSON mirror the cached JSON
-// blobs for a character row's velocity + saturation surfaces.
-// The blob stores CharacterVelocityFields directly (not the full entry),
-// so all fields are at the top level. Both Leaderboard and CampaignSignals
-// decode this same blob; they extract the fields they need.
-type velocityBlobJSON struct {
-	MedianDaysToSell   *float64 `json:"median_days_to_sell"`
-	SampleSize         int      `json:"sample_size"`
-	VelocityChangePct  *float64 `json:"velocity_change_pct"`
-	AvgDailySales      *float64 `json:"avg_daily_sales"`
-	SellThroughRate30d *float64 `json:"sell_through_rate_30d"`
-	SalesVolume7d      *int     `json:"sales_volume_7d"`
-	SalesVolume30d     *int     `json:"sales_volume_30d"`
-	SupplyCount        *int     `json:"supply_count"`
-}
-
-type characterSaturationJSON struct {
-	ActiveListingCount int    `json:"active_listing_count"`
-	ComputedAt         string `json:"computed_at"`
-}
-
-// parseCharacterDemand extracts the demand-axis view from a character cache
-// row. Returns (nil, false) if the demand JSON is missing or unparseable.
-func parseCharacterDemand(row CharacterCache) (*characterDemandJSON, bool) {
-	if row.DemandJSON == nil {
-		return nil, false
-	}
-	var cd characterDemandJSON
-	if err := json.Unmarshal([]byte(*row.DemandJSON), &cd); err != nil {
-		return nil, false
-	}
-	return &cd, true
-}
-
-// parseCharacterMarket extracts the market-axis view (velocity + saturation)
-// from a character cache row. Returns nil if both surfaces are absent.
-func (s *Service) parseCharacterMarket(ctx context.Context, row CharacterCache) *NicheMarket {
-	m := &NicheMarket{}
-	has := false
-
-	if row.VelocityJSON != nil {
-		var v velocityBlobJSON
-		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {
-			s.logger.Warn(ctx, "velocity_json unmarshal failed",
-				observability.String("character", row.Character),
-				observability.Err(err))
-		} else {
-			m.MedianDaysToSell = v.MedianDaysToSell
-			m.VelocityChangePct = v.VelocityChangePct
-			m.SampleSize = v.SampleSize
-			m.AvgDailySales = v.AvgDailySales
-			m.SellThroughRate30d = v.SellThroughRate30d
-			m.SalesVolume7d = v.SalesVolume7d
-			m.SalesVolume30d = v.SalesVolume30d
-			m.SupplyCount = v.SupplyCount
-			has = true
-		}
-	}
-	if row.SaturationJSON != nil {
-		var s characterSaturationJSON
-		if err := json.Unmarshal([]byte(*row.SaturationJSON), &s); err == nil {
-			m.ActiveListingCount = s.ActiveListingCount
-			has = true
-		}
-	}
-	if !has {
-		// Row has no analytics — flag for callers.
-		if row.AnalyticsComputedAt == nil {
-			return &NicheMarket{AnalyticsNotComputed: true}
-		}
-		return nil
-	}
-	m.ComputedAt = row.AnalyticsComputedAt
-	return m
-}
-
 // erasForRow returns the set of eras to emit buckets for. If the caller
 // filtered by opts.Era we honour it; otherwise we emit every era present in
-// the demand_json's by_era map. If there is no by_era map, we emit a single
-// "" bucket for the character overall.
-func erasForRow(demand *characterDemandJSON, filter string) []string {
+// the row's ByEra map. If there is no ByEra map, we emit a single "" bucket
+// for the character overall.
+func erasForRow(demand *CharacterDemand, filter string) []string {
 	if filter != "" {
 		return []string{filter}
 	}
@@ -372,8 +269,8 @@ func erasForRow(demand *characterDemandJSON, filter string) []string {
 }
 
 // eraDemandFor returns the NicheDemand for a given era within a character's
-// demand JSON. An empty era means "character overall".
-func eraDemandFor(demand *characterDemandJSON, era string) (*NicheDemand, bool) {
+// demand payload. An empty era means "character overall".
+func eraDemandFor(demand *CharacterDemand, era string) (*NicheDemand, bool) {
 	if era == "" {
 		return &NicheDemand{
 			Score:        demand.AvgDemandScore,
@@ -387,17 +284,54 @@ func eraDemandFor(demand *characterDemandJSON, era string) (*NicheDemand, bool) 
 	if !ok {
 		return nil, false
 	}
-	quality := entry.DataQuality
-	if quality == "" {
-		quality = demand.DataQuality
-	}
 	return &NicheDemand{
 		Score:        entry.AvgDemandScore,
 		Views:        entry.TotalViews,
 		WishlistAdds: entry.TotalWishlistAdds,
-		DataQuality:  quality,
+		DataQuality:  demand.DataQuality,
 		ComputedAt:   parseTime(demand.ComputedAt),
 	}, true
+}
+
+// parseCharacterMarket extracts the market-axis view (velocity + saturation)
+// from a character cache row. Returns nil if both surfaces are absent.
+func (s *Service) parseCharacterMarket(ctx context.Context, row CharacterCache) *NicheMarket {
+	m := &NicheMarket{}
+	has := false
+
+	if row.Velocity != nil {
+		v := row.Velocity
+		m.MedianDaysToSell = v.MedianDaysToSell
+		m.VelocityChangePct = v.VelocityChangePct
+		m.SampleSize = v.SampleSize
+		m.AvgDailySales = v.AvgDailySales
+		m.SellThroughRate30d = v.SellThroughRate30d
+		m.SalesVolume7d = v.SalesVolume7d
+		m.SalesVolume30d = v.SalesVolume30d
+		m.SupplyCount = v.SupplyCount
+		has = true
+	}
+	if row.Saturation != nil {
+		m.ActiveListingCount = row.Saturation.ActiveListingCount
+		has = true
+	}
+	for _, mp := range row.MalformedPayloads {
+		if mp.Column != "velocity" {
+			continue
+		}
+		s.logger.Warn(ctx, "velocity_json unmarshal failed",
+			observability.String("character", row.Character),
+			observability.Err(mp.Err))
+	}
+	if !has {
+		// Row has no analytics — flag for callers.
+		if row.AnalyticsComputedAt == nil {
+			return &NicheMarket{AnalyticsNotComputed: true}
+		}
+		return nil
+	}
+	m.ComputedAt = row.AnalyticsComputedAt
+	return m
 }
 
 // qualityAllowed returns true if the row's data_quality satisfies the filter.

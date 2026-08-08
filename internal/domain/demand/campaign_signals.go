@@ -2,7 +2,6 @@ package demand
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -130,35 +129,37 @@ func (s *Service) CampaignSignals(ctx context.Context) (CampaignSignalsResponse,
 }
 
 // buildSignalIndex constructs a map from lowercased character name to its
-// parsed signalEntry. Rows missing VelocityJSON, AnalyticsComputedAt, invalid
-// JSON, or a nil velocity_change_pct are silently skipped. The second return
-// value is the count of rows that had a non-nil VelocityJSON but failed to
-// parse — a non-zero count indicates unexpected cache corruption that the
-// caller should surface for observability.
+// parsed signalEntry. Rows missing Velocity, AnalyticsComputedAt, or a nil
+// velocity_change_pct are silently skipped. The second return value is the
+// count of rows whose velocity payload was present but failed to decode (see
+// MalformedPayload) — a non-zero count indicates unexpected cache corruption
+// that the caller should surface for observability.
 func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {
 	idx := make(map[string]signalEntry, len(rows))
 	skipped := 0
 	for _, row := range rows {
-		// Nil VelocityJSON or AnalyticsComputedAt is expected for newly-ingested
-		// rows before the scheduler has run; skip silently. If all rows for a
-		// campaign are nil-guarded out, that campaign will be absent from the
-		// response entirely (not shown with TrackedCharacters=0).
-		if row.VelocityJSON == nil || row.AnalyticsComputedAt == nil {
+		for _, mp := range row.MalformedPayloads {
+			if mp.Column == "velocity" {
+				skipped++
+			}
+		}
+		// Nil Velocity or AnalyticsComputedAt is expected for newly-ingested
+		// rows before the scheduler has run, or when the velocity payload
+		// failed to decode (counted above); skip silently either way. If all
+		// rows for a campaign are nil-guarded out, that campaign will be
+		// absent from the response entirely (not shown with
+		// TrackedCharacters=0).
+		if row.Velocity == nil || row.AnalyticsComputedAt == nil {
 			continue
 		}
-		var v velocityBlobJSON
-		if err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {
-			skipped++ // non-nil velocity_json failed to parse — unexpected
-			continue
-		}
-		if v.VelocityChangePct == nil {
+		if row.Velocity.VelocityChangePct == nil {
 			continue // no change metric — exclude from contributors
 		}
 		idx[strings.ToLower(row.Character)] = signalEntry{
 			displayName: row.Character,
-			vChange:     *v.VelocityChangePct,
-			medianDays:  v.MedianDaysToSell,
-			sampleSize:  v.SampleSize,
+			vChange:     *row.Velocity.VelocityChangePct,
+			medianDays:  row.Velocity.MedianDaysToSell,
+			sampleSize:  row.Velocity.SampleSize,
 			computedAt:  row.AnalyticsComputedAt,
 		}
 	}

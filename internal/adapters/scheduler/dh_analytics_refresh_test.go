@@ -235,6 +235,31 @@ func TestDHAnalyticsRefresh_HappyPath(t *testing.T) {
 		t.Fatalf("expected %d top_characters calls (overall + per-era), got %d",
 			1+len(defaultAnalyticsEras), client.topCharactersCalls)
 	}
+
+	var charizard, pikachu *demand.CharacterCache
+	for i := range upsertCharacters {
+		switch upsertCharacters[i].Character {
+		case "Charizard":
+			charizard = &upsertCharacters[i]
+		case "Pikachu":
+			pikachu = &upsertCharacters[i]
+		}
+	}
+	if pikachu == nil || pikachu.Saturation == nil {
+		t.Fatalf("expected Pikachu row with a Saturation payload; got %+v", pikachu)
+	}
+	if pikachu.Saturation.ActiveListingCount != 42 {
+		t.Fatalf("want Pikachu ActiveListingCount=42 (Defect 1 regression); got %d", pikachu.Saturation.ActiveListingCount)
+	}
+	if charizard == nil || charizard.Velocity == nil {
+		t.Fatalf("expected Charizard row with a Velocity payload; got %+v", charizard)
+	}
+	if charizard.Velocity.MedianDaysToSell == nil || *charizard.Velocity.MedianDaysToSell != 14.5 {
+		t.Fatalf("want Charizard MedianDaysToSell=14.5; got %v", charizard.Velocity.MedianDaysToSell)
+	}
+	if charizard.Velocity.SampleSize != 120 {
+		t.Fatalf("want Charizard SampleSize=120; got %d", charizard.Velocity.SampleSize)
+	}
 }
 
 func TestDHAnalyticsRefresh_EmptyTopCharacters_StillRunsCards(t *testing.T) {

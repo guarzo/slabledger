@@ -12,39 +12,36 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// velocityJSON builds a velocity_json blob matching the CharacterVelocityFields
-// stored format: all numeric fields are JSON numbers (not strings).
-func velocityJSON(medianDays, vChangePct float64, sample int) string {
-	return `{
-		"median_days_to_sell": ` + strconv.FormatFloat(medianDays, 'f', -1, 64) + `,
-		"sell_through": {},
-		"sample_size": ` + strconv.Itoa(sample) + `,
-		"velocity_change_pct": ` + strconv.FormatFloat(vChangePct, 'f', -1, 64) + `
-	}`
+// velocityPayload builds a CharacterVelocity payload matching the
+// CharacterVelocityFields stored format.
+func velocityPayload(medianDays, vChangePct float64, sample int) *demand.CharacterVelocity {
+	return &demand.CharacterVelocity{
+		MedianDaysToSell:  f64Ptr(medianDays),
+		SampleSize:        sample,
+		VelocityChangePct: f64Ptr(vChangePct),
+	}
 }
 
-// velocityJSONNoChange omits velocity_change_pct — used to verify the service
-// excludes characters with no change metric from contributors.
-func velocityJSONNoChange() string {
-	return `{"median_days_to_sell": 10, "sell_through": {}, "sample_size": 5}`
+// velocityPayloadNoChange omits VelocityChangePct — used to verify the
+// service excludes characters with no change metric from contributors.
+func velocityPayloadNoChange() *demand.CharacterVelocity {
+	return &demand.CharacterVelocity{MedianDaysToSell: f64Ptr(10), SampleSize: 5}
 }
 
 func charRow(name string, medianDays, vChangePct float64, sample int, computed time.Time) demand.CharacterCache {
-	vj := velocityJSON(medianDays, vChangePct, sample)
 	return demand.CharacterCache{
 		Character:           name,
 		Window:              "30d",
-		VelocityJSON:        &vj,
+		Velocity:            velocityPayload(medianDays, vChangePct, sample),
 		AnalyticsComputedAt: &computed,
 	}
 }
 
 func charRowNoChange(name string, computed time.Time) demand.CharacterCache {
-	vj := velocityJSONNoChange()
 	return demand.CharacterCache{
 		Character:           name,
 		Window:              "30d",
-		VelocityJSON:        &vj,
+		Velocity:            velocityPayloadNoChange(),
 		AnalyticsComputedAt: &computed,
 	}
 }

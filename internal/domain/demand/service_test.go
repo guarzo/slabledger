@@ -3,15 +3,12 @@ package demand_test
 import (
 	"context"
 	"errors"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
-
-func strPtr(s string) *string { return &s }
 
 // newRepoWithRows builds a DemandRepositoryMock whose ListCharacterCache
 // returns the given rows verbatim.
@@ -51,24 +48,24 @@ func coveredOnlyForLookup(character, era string, grade int, ids []string, unsold
 
 // --- Fixtures ---
 
-func floatStr(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
+func f64Ptr(f float64) *float64 { return &f }
 
-// demandJSONWithEras constructs a demand_json blob for a character with two
+// demandPayload constructs a CharacterDemand payload for a character with two
 // eras. baseScore is the character-level avg; per-era scores are baseScore±0.05.
-func demandJSONWithEras(character string, baseScore float64, quality string) string {
-	return `{
-		"character_name": "` + character + `",
-		"card_count": 10,
-		"avg_demand_score": ` + floatStr(baseScore) + `,
-		"total_views": 400,
-		"total_search_clicks": 80,
-		"total_wishlist_adds": 20,
-		"data_quality": "` + quality + `",
-		"by_era": {
-			"sword_shield":    {"card_count": 6, "avg_demand_score": ` + floatStr(baseScore+0.05) + `, "total_views": 240, "total_wishlist_adds": 12, "data_quality": "` + quality + `"},
-			"scarlet_violet":  {"card_count": 4, "avg_demand_score": ` + floatStr(baseScore-0.05) + `, "total_views": 160, "total_wishlist_adds":  8, "data_quality": "` + quality + `"}
-		}
-	}`
+func demandPayload(character string, baseScore float64, quality string) *demand.CharacterDemand {
+	return &demand.CharacterDemand{
+		CharacterName:     character,
+		CardCount:         10,
+		AvgDemandScore:    baseScore,
+		TotalViews:        400,
+		TotalSearchClicks: 80,
+		TotalWishlistAdds: 20,
+		DataQuality:       quality,
+		ByEra: map[string]demand.ByEraDemand{
+			"sword_shield":   {CardCount: 6, AvgDemandScore: baseScore + 0.05, TotalViews: 240, TotalWishlistAdds: 12},
+			"scarlet_violet": {CardCount: 4, AvgDemandScore: baseScore - 0.05, TotalViews: 160, TotalWishlistAdds: 8},
+		},
+	}
 }
 
 // --- Tests ---
@@ -101,9 +98,9 @@ func TestService_Leaderboard_GradeFilter_BucketCountAndSort(t *testing.T) {
 	// 3 characters, each with 2 eras in demand_json. Grade filter 10 → exactly
 	// one grade bucket per (character, era) → 3 * 2 = 6 buckets.
 	rows := []demand.CharacterCache{
-		{Character: "Umbreon", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("Umbreon", 0.9, "full"))},
-		{Character: "Charizard", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("Charizard", 0.6, "full"))},
-		{Character: "Blastoise", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("Blastoise", 0.3, "full"))},
+		{Character: "Umbreon", Window: "30d", Demand: demandPayload("Umbreon", 0.9, "full")},
+		{Character: "Charizard", Window: "30d", Demand: demandPayload("Charizard", 0.6, "full")},
+		{Character: "Blastoise", Window: "30d", Demand: demandPayload("Blastoise", 0.3, "full")},
 	}
 	repo := newRepoWithRows(rows)
 	svc := demand.NewService(repo, uncoveredLookup())
@@ -137,8 +134,8 @@ func TestService_Leaderboard_GradeFilter_BucketCountAndSort(t *testing.T) {
 
 func TestService_Leaderboard_MinDataQualityFull_ExcludesProxy(t *testing.T) {
 	rows := []demand.CharacterCache{
-		{Character: "ProxyChar", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("ProxyChar", 0.9, "proxy"))},
-		{Character: "FullChar", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("FullChar", 0.6, "full"))},
+		{Character: "ProxyChar", Window: "30d", Demand: demandPayload("ProxyChar", 0.9, "proxy")},
+		{Character: "FullChar", Window: "30d", Demand: demandPayload("FullChar", 0.6, "full")},
 	}
 	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
@@ -165,8 +162,8 @@ func TestService_Leaderboard_MinDataQualityFull_ExcludesProxy(t *testing.T) {
 
 func TestService_Leaderboard_SortDemandScoreDesc(t *testing.T) {
 	rows := []demand.CharacterCache{
-		{Character: "Low", Window: "7d", DemandJSON: strPtr(demandJSONWithEras("Low", 0.2, "full"))},
-		{Character: "High", Window: "7d", DemandJSON: strPtr(demandJSONWithEras("High", 0.8, "full"))},
+		{Character: "Low", Window: "7d", Demand: demandPayload("Low", 0.2, "full")},
+		{Character: "High", Window: "7d", Demand: demandPayload("High", 0.8, "full")},
 	}
 	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
@@ -185,8 +182,8 @@ func TestService_Leaderboard_SortDemandScoreDesc(t *testing.T) {
 
 func TestService_Leaderboard_SortLowCoverage_UncoveredFirst(t *testing.T) {
 	rows := []demand.CharacterCache{
-		{Character: "CoveredChar", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("CoveredChar", 0.9, "full"))},
-		{Character: "UncoveredChar", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("UncoveredChar", 0.5, "full"))},
+		{Character: "CoveredChar", Window: "30d", Demand: demandPayload("CoveredChar", 0.9, "full")},
+		{Character: "UncoveredChar", Window: "30d", Demand: demandPayload("UncoveredChar", 0.5, "full")},
 	}
 	// Only a single grade-10 sword_shield bucket for CoveredChar is covered;
 	// everything else (including its scarlet_violet bucket) is uncovered.
@@ -215,7 +212,7 @@ func TestService_Leaderboard_SortLowCoverage_UncoveredFirst(t *testing.T) {
 
 func TestService_Leaderboard_EraFilter(t *testing.T) {
 	rows := []demand.CharacterCache{
-		{Character: "C1", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("C1", 0.7, "full"))},
+		{Character: "C1", Window: "30d", Demand: demandPayload("C1", 0.7, "full")},
 	}
 	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
@@ -237,7 +234,7 @@ func TestService_Leaderboard_EraFilter(t *testing.T) {
 
 func TestService_Leaderboard_DefaultGrades_EmitsAllFour(t *testing.T) {
 	rows := []demand.CharacterCache{
-		{Character: "C1", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("C1", 0.7, "full"))},
+		{Character: "C1", Window: "30d", Demand: demandPayload("C1", 0.7, "full")},
 	}
 	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
@@ -264,8 +261,8 @@ func TestService_Leaderboard_DefaultGrades_EmitsAllFour(t *testing.T) {
 
 func TestService_Leaderboard_LimitTruncates(t *testing.T) {
 	rows := []demand.CharacterCache{
-		{Character: "A", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("A", 0.9, "full"))},
-		{Character: "B", Window: "30d", DemandJSON: strPtr(demandJSONWithEras("B", 0.5, "full"))},
+		{Character: "A", Window: "30d", Demand: demandPayload("A", 0.9, "full")},
+		{Character: "B", Window: "30d", Demand: demandPayload("B", 0.5, "full")},
 	}
 	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
 
@@ -284,7 +281,7 @@ func TestService_Leaderboard_LimitTruncates(t *testing.T) {
 
 func TestService_Leaderboard_Acceleration(t *testing.T) {
 	computedAt := time.Date(2026, 4, 15, 3, 0, 0, 0, time.UTC)
-	velocityWithChange := `{"median_days_to_sell":9.5,"sample_size":120,"velocity_change_pct":14.2}`
+	velocityWithChange := &demand.CharacterVelocity{MedianDaysToSell: f64Ptr(9.5), SampleSize: 120, VelocityChangePct: f64Ptr(14.2)}
 
 	tests := []struct {
 		name                    string
@@ -299,8 +296,8 @@ func TestService_Leaderboard_Acceleration(t *testing.T) {
 			rows: []demand.CharacterCache{{
 				Character:           "Umbreon",
 				Window:              "30d",
-				DemandJSON:          strPtr(demandJSONWithEras("Umbreon", 0.9, "full")),
-				VelocityJSON:        strPtr(velocityWithChange),
+				Demand:              demandPayload("Umbreon", 0.9, "full"),
+				Velocity:            velocityWithChange,
 				AnalyticsComputedAt: &computedAt,
 			}},
 			wantAccelerationPresent: true,
@@ -311,9 +308,9 @@ func TestService_Leaderboard_Acceleration(t *testing.T) {
 		{
 			name: "nil when row has no velocity data",
 			rows: []demand.CharacterCache{{
-				Character:  "Umbreon",
-				Window:     "30d",
-				DemandJSON: strPtr(demandJSONWithEras("Umbreon", 0.9, "full")),
+				Character: "Umbreon",
+				Window:    "30d",
+				Demand:    demandPayload("Umbreon", 0.9, "full"),
 			}},
 			wantAccelerationPresent: false,
 		},
