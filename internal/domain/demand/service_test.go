@@ -410,8 +410,9 @@ func TestOpportunityScore_CoverageAndSaturation(t *testing.T) {
 // TestService_Leaderboard_MalformedVelocity_LogsWarn asserts that a
 // character row carrying a MalformedPayloads entry for "velocity" produces
 // exactly one Warn log naming the character, and that a malformed "demand"
-// entry produces none — the warn is velocity-specific per decision in the
-// SLA-41 spec's "Error handling" section.
+// entry on a row with a non-nil Demand produces none — the demand-column
+// warn (see TestService_Leaderboard_MalformedDemand_LogsWarn) only fires
+// when row.Demand is actually nil.
 func TestService_Leaderboard_MalformedVelocity_LogsWarn(t *testing.T) {
 	rows := []demand.CharacterCache{
 		{
@@ -460,6 +461,60 @@ func TestService_Leaderboard_MalformedVelocity_LogsWarn(t *testing.T) {
 	entry := warns[0]
 	if entry.Message != "velocity_json unmarshal failed" {
 		t.Errorf("Message = %q, want %q", entry.Message, "velocity_json unmarshal failed")
+	}
+	character, ok := entry.FindField("character")
+	if !ok {
+		t.Fatal("warn entry has no \"character\" field")
+	}
+	if character != "Pikachu" {
+		t.Errorf("character field = %v, want %q", character, "Pikachu")
+	}
+}
+
+// TestService_Leaderboard_MalformedDemand_LogsWarn asserts that a row whose
+// demand payload failed to decode (row.Demand == nil, with a matching
+// MalformedPayloads entry) produces exactly one Warn naming the character,
+// and that an ordinary row with a legitimately absent (nil, no malformed
+// entry) demand payload produces none. Getting this distinction wrong either
+// spams the log for every routine nil-demand row or silently drops a
+// character from the leaderboard with no signal at all (SLA-41 item 1).
+func TestService_Leaderboard_MalformedDemand_LogsWarn(t *testing.T) {
+	rows := []demand.CharacterCache{
+		{
+			Character: "Pikachu",
+			Window:    "7d",
+			Demand:    nil,
+			MalformedPayloads: []demand.MalformedPayload{
+				{Column: demand.MalformedColumnDemand, Err: errors.New("unexpected end of JSON input")},
+			},
+		},
+		{
+			Character: "Charizard",
+			Window:    "7d",
+			Demand:    nil,
+		},
+	}
+
+	logger := mocks.NewCapturingLogger()
+	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup()).WithLogger(logger)
+
+	if _, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "7d"}); err != nil {
+		t.Fatalf("Leaderboard: unexpected error: %v", err)
+	}
+
+	var warns []mocks.LogEntry
+	for _, e := range logger.Entries() {
+		if e.Level == "warn" {
+			warns = append(warns, e)
+		}
+	}
+	if len(warns) != 1 {
+		t.Fatalf("got %d warn entries, want 1: %+v", len(warns), warns)
+	}
+
+	entry := warns[0]
+	if entry.Message != "demand_json unmarshal failed" {
+		t.Errorf("Message = %q, want %q", entry.Message, "demand_json unmarshal failed")
 	}
 	character, ok := entry.FindField("character")
 	if !ok {
