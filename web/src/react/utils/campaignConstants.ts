@@ -19,32 +19,6 @@ export const saleChannelLabels: Record<SaleChannel, string> = {
   doubleholo: 'In Person',
 };
 
-/** Normalizes a legacy channel to one of the 3 active channels. */
-export function normalizeChannel(ch: SaleChannel): SaleChannel {
-  switch (ch) {
-    case 'ebay':
-    case 'tcgplayer':
-      return 'ebay';
-    case 'website':
-      return 'website';
-    default:
-      return 'inperson';
-  }
-}
-
-export const saleChannelColors: Record<SaleChannel, string> = {
-  ebay: 'bg-blue-500',
-  website: 'bg-indigo-500',
-  inperson: 'bg-green-500',
-  // Legacy channels map to their normalized color
-  tcgplayer: 'bg-blue-500',
-  local: 'bg-green-500',
-  other: 'bg-green-500',
-  gamestop: 'bg-green-500',
-  cardshow: 'bg-green-500',
-  doubleholo: 'bg-green-500',
-};
-
 export const phaseHexColors: Record<Phase, string> = {
   active: '#059669',
   pending: '#f59e0b',

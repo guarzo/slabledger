@@ -113,72 +113,6 @@ export function fmtDateShort(dateStr: string): string {
   return `${parseInt(m, 10)}/${parseInt(d, 10)}`;
 }
 
-/** Build a rich tooltip for the market cell. */
-export function marketTooltip(snap: MarketSnapshot, costBasisCents: number): string {
-  const lines: string[] = [];
-
-  // Price range
-  if (snap.conservativeCents && snap.optimisticCents) {
-    lines.push(`Range: ${formatCents(snap.conservativeCents)} - ${formatCents(snap.optimisticCents)}`);
-  }
-  if (snap.p10Cents && snap.p90Cents) {
-    lines.push(`P10-P90: ${formatCents(snap.p10Cents)} - ${formatCents(snap.p90Cents)}`);
-  }
-
-  // Last sold
-  if (snap.lastSoldCents > 0) {
-    let line = `Last sold: ${formatCents(snap.lastSoldCents)}`;
-    if (snap.lastSoldDate) line += ` (${snap.lastSoldDate})`;
-    lines.push(line);
-  }
-
-  // 7-day average
-  if (snap.avg7DayCents && snap.avg7DayCents > 0) {
-    lines.push(`7-day avg: ${formatCents(snap.avg7DayCents)}`);
-  }
-
-  // Listings
-  if (snap.lowestListCents) {
-    let line = `Lowest list: ${formatCents(snap.lowestListCents)}`;
-    if (snap.activeListings) line += ` (${snap.activeListings} active)`;
-    lines.push(line);
-  }
-
-  // Velocity
-  if (snap.salesLast30d) lines.push(`${snap.salesLast30d} sales (30d)`);
-  if (snap.salesLast90d) lines.push(`${snap.salesLast90d} sales (90d)`);
-  if (snap.dailyVelocity && snap.dailyVelocity > 0) {
-    lines.push(`Velocity: ${snap.dailyVelocity.toFixed(1)}/day`);
-  }
-
-  // Trend
-  if (snap.trend30d != null && snap.trend30d !== 0) {
-    const sign = snap.trend30d > 0 ? '+' : '';
-    lines.push(`30d trend: ${sign}${(snap.trend30d * 100).toFixed(0)}%`);
-  }
-
-  // P/L (tooltip context has only the snapshot, so derive from snapshot signals)
-  const snapPrice = bestPriceFromSnap(snap);
-  if (snapPrice > 0) {
-    const pl = snapPrice - costBasisCents;
-    const sign = pl >= 0 ? '+' : '';
-    lines.push(`Est. P/L: ${sign}${formatCents(pl)}`);
-  }
-
-  // Sources
-  if (snap.sourcePrices && snap.sourcePrices.length > 0) {
-    lines.push('');
-    snap.sourcePrices.forEach(sp => {
-      let line = `${sp.source}: ${formatCents(sp.priceCents)}`;
-      if (sp.saleCount) line += ` (${sp.saleCount} sales)`;
-      if (sp.avg7DayCents) line += ` 7d: ${formatCents(sp.avg7DayCents)}`;
-      lines.push(line);
-    });
-  }
-
-  return lines.join('\n');
-}
-
 /** Color for P/L display. */
 export function plColor(pl: number): string {
   if (pl > 0) return 'text-[var(--success)]';
@@ -276,20 +210,6 @@ export function reviewUrgencySort(a: AgingItem, b: AgingItem): number {
   const priorityDiff = STATUS_PRIORITY[statusA] - STATUS_PRIORITY[statusB];
   if (priorityDiff !== 0) return priorityDiff;
   return b.daysHeld - a.daysHeld;
-}
-
-export function statusBorderColor(status: ReviewStatus): string {
-  switch (status) {
-    case 'flagged':
-    case 'large_gap':
-      return 'var(--danger)';
-    case 'needs_review':
-      return 'var(--warning)';
-    case 'reviewed':
-      return 'var(--success)';
-    case 'no_data':
-      return 'var(--text-muted)';
-  }
 }
 
 export function statusBadge(item: AgingItem): { label: string; color: string } {
