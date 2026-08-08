@@ -31,7 +31,7 @@ type ServiceOption func(*service)
 // service implements Service.
 type service struct {
 	campaigns   inventory.CampaignRepository
-	purchases   inventory.PurchaseRepository
+	purchases   inventory.PurchaseCoreRepository
 	analytics   inventory.AnalyticsRepository
 	finance     inventory.FinanceRepository
 	priceProv   inventory.PriceLookup
@@ -88,7 +88,7 @@ func (s *service) requestScopedPriceProv() inventory.PriceLookup {
 // NewService creates a new arbitrage Service.
 func NewService(
 	campaigns inventory.CampaignRepository,
-	purchases inventory.PurchaseRepository,
+	purchases inventory.PurchaseCoreRepository,
 	analytics inventory.AnalyticsRepository,
 	finance inventory.FinanceRepository,
 	opts ...ServiceOption,
