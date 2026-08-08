@@ -6,13 +6,14 @@
 ## Problem
 
 `scripts/check-imports.sh` enforces the flat sibling rule: inventory sub-packages must not
-import each other, but *may* import the hub and "leaf packages." The script has no idea
-what a leaf package is. Neither does any document in the repository.
+import each other, but *may* import the hub and "leaf packages" (`check-imports.sh:12-13`).
+The script has no definition of a leaf package. Neither does any document in the
+repository.
 
 Two rules already lean on the term. SLA-45 declined to close its residual escape hatch
 specifically because the fix "is a definition, not a check" — a package that stops
 importing the hub arguably *has* become a leaf, and importing a leaf is legal under the
-rule as written. You cannot enforce against a target set nobody has defined.
+rule as written. You cannot reason about a target set nobody has defined.
 
 The constraint that makes this hard: hardcoding a leaf allowlist reintroduces the
 stale-list failure mode SLA-12 was opened to eliminate. Any answer must be derived from
@@ -44,8 +45,8 @@ Six edges target something else:
 | `inventory → intelligence` | **no** |
 
 The ticket lists four because it counted only non-hub *sources*. The hub's own two
-outbound non-leaf edges are subject to the same taxonomy and must be ruled on, or they
-read as violations under any rule phrased as "non-leaf may not import non-leaf."
+outbound edges are subject to the same taxonomy and must be ruled on, or they read as
+violations under any rule phrased as "non-leaf may not import non-leaf."
 
 ## Decision
 
@@ -58,9 +59,8 @@ read as violations under any rule phrased as "non-leaf may not import non-leaf."
 > Any domain package may import a leaf, or the hub. Importing any other non-leaf is a
 > violation.
 
-This is fully derived; there is no list to maintain. Verified against the tree, it
-partitions all 26 packages, yielding exactly the 10 governed siblings plus the hub as
-non-leaf:
+Fully derived; there is no list to maintain. Verified against the tree, it partitions all
+26 packages:
 
 ```
 non-leaf: inventory (hub), arbitrage, demand, dhlisting, dhpricing,
@@ -69,9 +69,6 @@ leaf:     advisor, ai, auth, constants, dhevents, errors, intelligence,
           liquidation, llmutil, mathutil, observability, pricing, scoring,
           storage, timeutil
 ```
-
-"Governed sibling" and "non-leaf other than the hub" are the same set by construction.
-That identity is why one derivation can drive both rules.
 
 ### Rulings on the six edges
 
@@ -88,77 +85,97 @@ All six are **legal**: every target is a leaf.
 
 No package moves. All 42 current edges conform to the taxonomy as written.
 
-### Enforcement
+### Enforcement: already in place, no script change
 
-Membership derivation in `check-imports.sh` changes from **direct** hub import to
-**transitive** hub dependency:
+**The existing checker already enforces this taxonomy.** Naming the rule revealed that
+SLA-45's target-side scan had been implementing it all along.
 
-- Build the direct `domain → domain` edge set by grep, as today.
-- Seed the governed set with packages importing the hub directly.
-- Iterate to a fixed point: if `X → Y` and `Y` is governed, govern `X`.
+The argument is an identity between two sets:
 
-Everything downstream — the fail-closed `< 2 siblings` guard, the two-pass check
-accounting, target-side enforcement — consumes the derived set unchanged.
+1. `check-imports.sh:63-81` derives the governed set as the packages importing the hub
+   **directly**.
+2. The taxonomy's non-leaf set is the packages depending on the hub **transitively**,
+   minus the hub itself.
 
-Against the current tree this yields the same 10 packages, so there is **no behavior
-change today**. It is forward hardening: a package can no longer leave the governed set by
-routing its hub dependency through an intermediary.
+These differ only for a package that reaches the hub *through another non-leaf* — and such
+a package imports a governed sibling, which `check-imports.sh:125-155` already flags. So on
+any tree that **passes** the checker the two sets are identical, and on any tree where they
+diverge the checker is already failing. `governed sibling ≡ non-leaf minus the hub` holds
+exactly where it needs to.
 
-### Why not `go list -deps`
+Because pass 2 scans every non-test file under `internal/domain/` against every governed
+sibling regardless of the importer's own membership, the rule it enforces is precisely:
 
-`go list` would resolve the real build graph, but `check-imports-test.sh:4-6` documents
-that the checker never compiles — its five fixture cases are directory trees containing
-the right import *text*, with no `go.mod`. Adopting `go list` would require rewriting
-every fixture as a compilable module, discarding that property and slowing the self-test.
-Transitive closure over the grep-derived edge set needs no toolchain and preserves the
-harness.
+> no package under `internal/domain/` may import a non-leaf other than the hub
 
-### Why not enforce leaf-targeting universally
+which is the taxonomy. Nothing to add.
 
-A stricter rule — "no domain package may import any non-leaf except the hub" — is
-implementable and currently has zero violations. It is out of scope because it would newly
-constrain the `advisor`, `pricing`, and `scoring` families, which the flat sibling rule has
-never governed, without evidence that those families have a problem. Recorded here as a
-considered and rejected option, not an oversight.
+### Rejected: transitive (fixed-point) membership
+
+An earlier draft proposed changing membership from direct to transitive hub dependency, on
+the theory that a package could otherwise escape governance by routing its hub dependency
+through an intermediary. **This was wrong, and is recorded here so it is not re-proposed.**
+
+Transitive closure can only add a package that imports an already-governed package. That
+import is itself a violation. So the fixed point is reached at iteration zero on every
+conforming tree: the change is not "no behavior change today," it is provably a no-op
+wherever the checker passes.
+
+The accompanying regression fixture was also invalid — it duplicated existing Case 1
+(`check-imports-test.sh:74-83`: `rogue → beta`, `beta → hub`, `rogue` ungoverned), which
+already pins exactly that behavior.
+
+Credit: caught in independent review, not by the author.
+
+### On `go list -deps`
+
+The definition is phrased over the transitive closure, but no code needs to compute it —
+see the identity above. This matters because the checker deliberately never compiles:
+`check-imports-test.sh:4-6` documents that its fixtures are directory trees containing the
+right import *text*, with no `go.mod`. Any future proposal to resolve the taxonomy with
+`go list` would require rewriting every fixture as a compilable module. The `go list`
+command in **Measurement** above is for humans auditing the tree, not for the checker.
 
 ## Effect on SLA-45's residual limitation
 
 **Re-assessed. Not closed.** The reason is now grounded in a definition rather than
 deferred to this ticket.
 
-The transitive upgrade narrows the hatch: a package can no longer escape by re-routing its
-hub dependency through an intermediary, because the intermediary's governance propagates
-back to it.
+If `dhlisting` severs *all* hub dependency it becomes a leaf under this taxonomy, and
+`dhpricing → dhlisting` becomes legal — correctly so, by the rule as written. Whether a
+package that has shed its hub dependency still *belongs* to the inventory family is a
+question about intent, not topology. No derivation over the import graph can answer it,
+and encoding the answer by hand is the hardcoded list this taxonomy exists to avoid.
 
-It does not close it. If `dhlisting` severs *all* hub dependency, it becomes a leaf under
-this taxonomy, and `dhpricing → dhlisting` becomes legal — correctly so, by the rule as
-written. Whether a package that has shed its hub dependency still *belongs* to the
-inventory family is a question about intent, not topology. No derivation over the import
-graph can answer it, and encoding the answer by hand is the hardcoded list this taxonomy
-exists to avoid.
+The residual is a deliberate boundary of the approach, not an unfinished task. SLA-48 does
+not narrow it: the rejected fixed-point change would not have narrowed it either.
+`docs/specs/2026-08-08-flat-sibling-escape-hatch-design.md` is updated to say so, and to
+stop pointing at SLA-48 as pending work.
 
-The residual is therefore a deliberate boundary of the approach, not an unfinished task.
-`docs/specs/2026-08-08-flat-sibling-escape-hatch-design.md` is updated to say so.
+## Changes to make
 
-## Testing
+Documentation only. No behavior change.
 
-- **New fixture Case 6** in `check-imports-test.sh`: `A → L`, `L → hub`, `A → beta` (a
-  governed sibling). Under direct membership `A` is ungoverned and the `A → beta`
-  violation is missed; under transitive membership both `A` and `L` are governed and the
-  violation is flagged. This case fails on the old script and passes on the new one.
-- **Cases 1–5 unmodified** — they are the regression signal that the derived set for a
-  conforming tree is unchanged.
-- `./scripts/check-imports.sh` still reports 10 sub-packages.
-- `make check`, `go test -race ./...`.
+- `internal/README.md` — canonical statement of the taxonomy, the six rulings, the
+  derivation command, and the identity that makes the existing check sufficient.
+- `CLAUDE.md` — short pointer from the existing flat-sibling section; no duplicated
+  package list.
+- `scripts/check-imports.sh` — extend the header comment (`:12-13`) so "leaf packages"
+  cites the definition instead of leaving it undefined. Comment only.
+- `docs/specs/2026-08-08-flat-sibling-escape-hatch-design.md` — Residual limitation
+  section updated per above.
 
-## Documentation
+## Verification
 
-- `internal/README.md` — canonical statement of the taxonomy, the rulings, and the derivation command.
-- `CLAUDE.md` — short pointer from the existing flat-sibling section; no duplicated package list.
-- `docs/specs/2026-08-08-flat-sibling-escape-hatch-design.md` — Residual limitation section updated.
+- `./scripts/check-imports-test.sh` — all five existing cases still pass, unmodified.
+- `./scripts/check-imports.sh` — still reports 10 sub-packages, 1610 checks.
+- `make check`.
+- No new fixture case: the behavior a new case would have pinned is already pinned by
+  Case 1.
 
 ## Out of scope
 
-- Universal leaf-target enforcement outside the inventory family (rejected above).
 - Any change to `internal/domain/` package structure.
+- Any change to checker logic. This ticket names a rule that already exists; it does not
+  add one.
 - Re-litigating the six edges' design merits; this rules on their *legality* only.
