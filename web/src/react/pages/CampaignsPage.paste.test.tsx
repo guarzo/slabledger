@@ -154,26 +154,16 @@ it('still applies the fields the paste text does carry', async () => {
   expect(data.dailySpendCapCents).toBe(75000);
 });
 
-it('checks staleness over the network rather than from cached campaign data', async () => {
+it('re-reads over the network rather than building the payload from cached data', async () => {
   getCampaign.mockResolvedValue(campaign);
   await clickPaste();
 
   await waitFor(() => expect(getCampaign).toHaveBeenCalledWith('c1'));
 });
 
-it('skips the update when the campaign changed since the list loaded', async () => {
-  // The racing writer is the psa-harvest baseline pull; writing here would put
-  // the cached row's targeting ids back over the newer baseline.
-  getCampaign.mockResolvedValue({ ...campaign, updatedAt: '2026-03-03T00:00:00Z' });
-  await clickPaste();
-
-  await waitFor(() => expect(getCampaign).toHaveBeenCalled());
-  expect(updateCampaign).not.toHaveBeenCalled();
-  expect(await screen.findByText(/harvester baseline pull/i)).toBeInTheDocument();
-});
-
-it('skips the update when the staleness check itself fails', async () => {
-  // Fail closed, same as the edit form.
+it('skips the update when the pre-flight read fails', async () => {
+  // Fail closed, same as the edit form: the cached row's targeting ids would go
+  // back over a newer baseline.
   getCampaign.mockRejectedValue(new Error('network down'));
   await clickPaste();
 
@@ -182,11 +172,12 @@ it('skips the update when the staleness check itself fails', async () => {
   expect(await screen.findByText(/could not confirm the campaign is unchanged/i)).toBeInTheDocument();
 });
 
-it('sends the fresh updatedAt as the write precondition', async () => {
-  // The advisory comparison above can be overtaken between the GET and the PUT.
-  // Only this parameter makes the server compare-and-write in one statement, so
-  // its absence would silently reopen the race the guard exists to close.
-  getCampaign.mockResolvedValue(campaign);
+it('sends the list-load updatedAt as the write precondition, not the fresh one', async () => {
+  // `fresh` was read milliseconds ago, so asserting its timestamp would almost
+  // always pass. The list-load value is the baseline the operator's paste was
+  // actually written against, and the only one that catches a harvester write
+  // landing between the list loading and the import running.
+  getCampaign.mockResolvedValue({ ...campaign, updatedAt: '2026-03-03T00:00:00Z' });
   await clickPaste();
 
   await waitFor(() => expect(updateCampaign).toHaveBeenCalled());
@@ -205,5 +196,5 @@ it('records a 409 as a per-campaign error and keeps importing the rest', async (
   // must still run after the conflict on 'Vintage Core'.
   await waitFor(() => expect(createCampaign).toHaveBeenCalled());
   expect(createCampaign.mock.calls[0][0].name).toBe('Second Wave');
-  expect(await screen.findByText(/changed while the update was in flight/i)).toBeInTheDocument();
+  expect(await screen.findByText(/changed since the campaign list loaded/i)).toBeInTheDocument();
 });

@@ -120,28 +120,30 @@ it('round-trips existing portal subject ids byte-for-byte', async () => {
   expect(data.subjectFilterMode).toBe('Target');
 });
 
-it('checks staleness over the network rather than from cached campaign data', async () => {
+it('re-reads over the network rather than building the payload from cached data', async () => {
   // useCampaigns holds data fresh for 30s and cannot observe a write made by
-  // the psa-harvest process, so the guard must actually hit the server.
+  // the psa-harvest process, so the full-row payload must come from the server.
   vi.mocked(api.getCampaign).mockResolvedValue(campaign);
   await openEditAndSave();
 
   await waitFor(() => expect(api.getCampaign).toHaveBeenCalledWith('c1'));
 });
 
-it('aborts the save when the campaign changed since the form opened', async () => {
+it('sends the form-open updatedAt as the write precondition, not the fresh one', async () => {
+  // This is the whole staleness guard. `fresh` was read milliseconds ago, so
+  // asserting its timestamp would almost always pass and would miss a harvester
+  // write that landed while the form sat open. Only the form-open value makes
+  // the server's compare-and-write cover that span.
   vi.mocked(api.getCampaign).mockResolvedValue({ ...campaign, updatedAt: '2026-03-03T00:00:00Z' });
   await openEditAndSave();
 
-  await waitFor(() => expect(api.getCampaign).toHaveBeenCalled());
-  expect(updateMutateAsync).not.toHaveBeenCalled();
-  expect(await screen.findByText(/harvester baseline pull/i)).toBeInTheDocument();
-  // The form stays open so the operator does not lose their edits.
-  expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+  await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
+  expect(updateMutateAsync.mock.calls[0][0].ifUnmodifiedSince).toBe('2026-02-02T00:00:00Z');
 });
 
-it('aborts the save when the staleness check itself fails', async () => {
-  // Fail closed: saving anyway would reintroduce the race the check closes.
+it('aborts the save when the pre-flight read fails', async () => {
+  // Fail closed: saving from the cached row would write its stale targeting ids
+  // back over a newer baseline, the exact write this path exists to prevent.
   vi.mocked(api.getCampaign).mockRejectedValue(new Error('network down'));
   await openEditAndSave();
 
@@ -150,27 +152,16 @@ it('aborts the save when the staleness check itself fails', async () => {
   expect(await screen.findByText(/could not confirm/i)).toBeInTheDocument();
 });
 
-it('sends the fresh updatedAt as the write precondition', async () => {
-  // The comparison in the previous test is advisory: it can be overtaken between
-  // the GET and the PUT. This parameter is what makes the server compare-and-write
-  // in a single statement, so dropping it silently reopens the race.
-  vi.mocked(api.getCampaign).mockResolvedValue(campaign);
-  await openEditAndSave();
-
-  await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
-  expect(updateMutateAsync.mock.calls[0][0].ifUnmodifiedSince).toBe('2026-02-02T00:00:00Z');
-});
-
 it('reports a 409 as a conflict rather than a generic failure', async () => {
-  // The row moved inside the GET→PUT window, so the advisory check passed and
-  // only the server could catch it. The operator needs the same "nothing was
-  // saved, re-open Edit" guidance as the pre-flight rejection.
+  // The server rejected the precondition, meaning the row moved somewhere
+  // between the form opening and the write. That is the only staleness signal
+  // this path has now, so it has to carry the full "nothing was saved" guidance.
   vi.mocked(api.getCampaign).mockResolvedValue(campaign);
   updateMutateAsync.mockRejectedValue(new APIError('Campaign changed since it was loaded', 409));
   await openEditAndSave();
 
   await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled());
-  expect(await screen.findByText(/changed while the save was in flight/i)).toBeInTheDocument();
+  expect(await screen.findByText(/changed while you were editing it/i)).toBeInTheDocument();
   // The form stays open so the operator does not lose their edits.
   expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument();
 });
