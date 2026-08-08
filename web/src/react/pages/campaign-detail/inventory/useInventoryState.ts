@@ -42,10 +42,16 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
   }, [campaignId, queryClient]);
 
+  // Destructured so the dep arrays below name a plain identifier. Read off a
+  // member expression (`selection.setExpandedId`), exhaustive-deps cannot tell
+  // the member is stable and demands the whole `selection` object — which would
+  // rebuild these callbacks on every selection change.
+  const { expandedId, setExpandedId } = selection;
+
   const handleReviewed = useCallback(() => {
     invalidateInventory();
-    selection.setExpandedId(null);
-  }, [invalidateInventory, selection.setExpandedId]);
+    setExpandedId(null);
+  }, [invalidateInventory, setExpandedId]);
 
   const dhActions = useDHActions({
     toast,
@@ -175,12 +181,12 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     try {
       await api.deletePurchase(item.purchase.campaignId, item.purchase.id);
       toast.success(`Deleted "${name}"`);
-      if (selection.expandedId === item.purchase.id) selection.setExpandedId(null);
+      if (expandedId === item.purchase.id) setExpandedId(null);
       invalidateInventory();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to delete purchase'));
     }
-  }, [toast, selection.expandedId, invalidateInventory, selection.setExpandedId]);
+  }, [toast, expandedId, invalidateInventory, setExpandedId]);
 
   const { totalCost, totalMarket, totalPL } = filteredTotals;
   const fullInventoryTotals = summary;
