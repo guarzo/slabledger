@@ -1,0 +1,1646 @@
+{
+  "scout": "config-map",
+  "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+  "status": "complete",
+  "declared_totals": {
+    "env_vars": 71
+  },
+  "records_count": 149,
+  "gaps": [
+    "ADVISOR_MAX_TOOL_ROUNDS is read by loader.go:173 (envIntPositive) but has no corresponding entry in .env.example \u2014 an undocumented knob discovered while cross-checking config fields; not counted in the declared 71 since it is not present in .env.example.",
+    "CL_SEARCH_URL, SHUTDOWN_TIMEOUT_SECONDS, and AZURE_AI_TIMEOUT appear in .env.example only as commented-out example lines (not live `KEY=` entries), so they are excluded from the declared_totals count of 71, even though SHUTDOWN_TIMEOUT_SECONDS and AZURE_AI_TIMEOUT are read by loader.go and CL_SEARCH_URL is read directly by internal/adapters/clients/cardladder/client.go \u2014 all three are live consumers despite being commented in the example file.",
+    "GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI are read via a separate loader path (config.LoadGoogleOAuthConfig in google_oauth.go) that is NOT part of the central Config struct in types.go \u2014 flagged as a structural inconsistency, not a defect.",
+    "PSASync.Interval and PSASync.InitialDelay, CardLadder.Interval, DHSoldReconciler.Enabled/Interval have no .env.example entry (default-only; the whole PSASync/CardLadder structs are passed wholesale to their scheduler constructors per builder.go, so they are live despite no direct env override)."
+  ],
+  "records": [
+    {
+      "identity": "env:GOOGLE_CLIENT_ID",
+      "kind": "env_var",
+      "defined_at": ".env.example:13",
+      "command": "git grep -n '\"GOOGLE_CLIENT_ID\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/google_oauth.go:16",
+        "cmd/slabledger/server.go:96"
+      ]
+    },
+    {
+      "identity": "env:GOOGLE_CLIENT_SECRET",
+      "kind": "env_var",
+      "defined_at": ".env.example:14",
+      "command": "git grep -n '\"GOOGLE_CLIENT_SECRET\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/google_oauth.go:17",
+        "cmd/slabledger/server.go:97"
+      ]
+    },
+    {
+      "identity": "env:GOOGLE_REDIRECT_URI",
+      "kind": "env_var",
+      "defined_at": ".env.example:15",
+      "command": "git grep -n '\"GOOGLE_REDIRECT_URI\"' -- '*.go'",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/platform/config/google_oauth.go:18"
+      ]
+    },
+    {
+      "identity": "env:GOOGLE_OAUTH_ENV",
+      "kind": "env_var",
+      "defined_at": ".env.example:20",
+      "command": "git grep -n '\"GOOGLE_OAUTH_ENV\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:182",
+        "cmd/slabledger/server.go:209"
+      ]
+    },
+    {
+      "identity": "env:ENCRYPTION_KEY",
+      "kind": "env_var",
+      "defined_at": ".env.example:28",
+      "command": "git grep -n '\"ENCRYPTION_KEY\"' -- '*.go'",
+      "external_refs": 4,
+      "ref_sites": [
+        "internal/platform/config/loader.go:136",
+        "cmd/slabledger/main.go:225",
+        "cmd/slabledger/server.go:90",
+        "cmd/psa-harvest/main.go:86"
+      ]
+    },
+    {
+      "identity": "env:ADMIN_EMAILS",
+      "kind": "env_var",
+      "defined_at": ".env.example:32",
+      "command": "git grep -n '\"ADMIN_EMAILS\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:137",
+        "cmd/slabledger/server.go:206"
+      ]
+    },
+    {
+      "identity": "env:LOCAL_API_TOKEN",
+      "kind": "env_var",
+      "defined_at": ".env.example:36",
+      "command": "git grep -n '\"LOCAL_API_TOKEN\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:183",
+        "cmd/slabledger/server.go:210"
+      ]
+    },
+    {
+      "identity": "env:PSA_ACCESS_TOKEN",
+      "kind": "env_var",
+      "defined_at": ".env.example:45",
+      "command": "git grep -n '\"PSA_ACCESS_TOKEN\"' -- '*.go'",
+      "external_refs": 3,
+      "ref_sites": [
+        "internal/platform/config/loader.go:180",
+        "cmd/slabledger/init_inventory_services.go:96",
+        "cmd/slabledger/main.go:255"
+      ]
+    },
+    {
+      "identity": "env:PRICING_API_KEY",
+      "kind": "env_var",
+      "defined_at": ".env.example:49",
+      "command": "git grep -n '\"PRICING_API_KEY\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:181",
+        "cmd/slabledger/handlers.go:270"
+      ]
+    },
+    {
+      "identity": "env:AZURE_AI_ENDPOINT",
+      "kind": "env_var",
+      "defined_at": ".env.example:56",
+      "command": "git grep -n '\"AZURE_AI_ENDPOINT\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:184",
+        "cmd/slabledger/init_services.go:67"
+      ]
+    },
+    {
+      "identity": "env:AZURE_AI_API_KEY",
+      "kind": "env_var",
+      "defined_at": ".env.example:57",
+      "command": "git grep -n '\"AZURE_AI_API_KEY\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:185",
+        "cmd/slabledger/init_services.go:68"
+      ]
+    },
+    {
+      "identity": "env:AZURE_AI_DEPLOYMENT",
+      "kind": "env_var",
+      "defined_at": ".env.example:58",
+      "command": "git grep -n '\"AZURE_AI_DEPLOYMENT\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:186",
+        "cmd/slabledger/init_services.go:69"
+      ]
+    },
+    {
+      "identity": "env:BASE_URL",
+      "kind": "env_var_orphan",
+      "defined_at": ".env.example:64",
+      "command": "git grep -n 'BASE_URL' -- '*.go' (no results outside .env.example)",
+      "external_refs": 0,
+      "ref_sites": []
+    },
+    {
+      "identity": "env:MEDIA_DIR",
+      "kind": "env_var_orphan",
+      "defined_at": ".env.example:68",
+      "command": "git grep -n 'MEDIA_DIR' -- '*.go' (no results outside .env.example)",
+      "external_refs": 0,
+      "ref_sites": []
+    },
+    {
+      "identity": "env:HTTP_LISTEN_ADDR",
+      "kind": "env_var",
+      "defined_at": ".env.example:74",
+      "command": "git grep -n '\"HTTP_LISTEN_ADDR\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:111",
+        "cmd/slabledger/server.go:218"
+      ]
+    },
+    {
+      "identity": "env:HTTP_READ_TIMEOUT",
+      "kind": "env_var",
+      "defined_at": ".env.example:75",
+      "command": "git grep -n '\"HTTP_READ_TIMEOUT\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:112",
+        "cmd/slabledger/server.go:225"
+      ]
+    },
+    {
+      "identity": "env:HTTP_WRITE_TIMEOUT",
+      "kind": "env_var",
+      "defined_at": ".env.example:76",
+      "command": "git grep -n '\"HTTP_WRITE_TIMEOUT\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:113",
+        "cmd/slabledger/server.go:226"
+      ]
+    },
+    {
+      "identity": "env:HTTP_IDLE_TIMEOUT",
+      "kind": "env_var",
+      "defined_at": ".env.example:77",
+      "command": "git grep -n '\"HTTP_IDLE_TIMEOUT\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:114",
+        "cmd/slabledger/server.go:227"
+      ]
+    },
+    {
+      "identity": "env:RATE_LIMIT_REQUESTS",
+      "kind": "env_var",
+      "defined_at": ".env.example:83",
+      "command": "git grep -n '\"RATE_LIMIT_REQUESTS\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:122",
+        "cmd/slabledger/server.go:138"
+      ]
+    },
+    {
+      "identity": "env:RATE_LIMIT_TRUST_PROXY",
+      "kind": "env_var",
+      "defined_at": ".env.example:87",
+      "command": "git grep -n '\"RATE_LIMIT_TRUST_PROXY\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:123",
+        "cmd/slabledger/server.go:138"
+      ]
+    },
+    {
+      "identity": "env:ALLOWED_ORIGIN",
+      "kind": "env_var",
+      "defined_at": ".env.example:91",
+      "command": "git grep -n '\"ALLOWED_ORIGIN\"' -- '*.go'",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/adapters/httpserver/middleware/cors.go:25"
+      ]
+    },
+    {
+      "identity": "env:LOG_LEVEL",
+      "kind": "env_var",
+      "defined_at": ".env.example:97",
+      "command": "git grep -n '\"LOG_LEVEL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:107",
+        "cmd/slabledger/main.go:120"
+      ]
+    },
+    {
+      "identity": "env:LOG_JSON",
+      "kind": "env_var",
+      "defined_at": ".env.example:98",
+      "command": "git grep -n '\"LOG_JSON\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:108",
+        "cmd/slabledger/main.go:120"
+      ]
+    },
+    {
+      "identity": "env:DATABASE_URL",
+      "kind": "env_var",
+      "defined_at": ".env.example:106",
+      "command": "git grep -n '\"DATABASE_URL\"' -- '*.go'",
+      "external_refs": 3,
+      "ref_sites": [
+        "internal/platform/config/loader.go:126",
+        "cmd/slabledger/main.go",
+        "cmd/psa-harvest/main.go:75"
+      ]
+    },
+    {
+      "identity": "env:MIGRATIONS_PATH",
+      "kind": "env_var",
+      "defined_at": ".env.example:110",
+      "command": "git grep -n '\"MIGRATIONS_PATH\"' -- '*.go'",
+      "external_refs": 3,
+      "ref_sites": [
+        "internal/platform/config/loader.go:127",
+        "cmd/slabledger/main.go:210",
+        "cmd/slabledger/admin_analyze.go:94"
+      ]
+    },
+    {
+      "identity": "env:ACCESS_LOG_CLEANUP_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:116",
+      "command": "git grep -n '\"ACCESS_LOG_CLEANUP_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:132",
+        "internal/adapters/scheduler/builder.go:170"
+      ]
+    },
+    {
+      "identity": "env:ACCESS_LOG_RETENTION_DAYS",
+      "kind": "env_var",
+      "defined_at": ".env.example:117",
+      "command": "git grep -n '\"ACCESS_LOG_RETENTION_DAYS\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:130",
+        "internal/adapters/scheduler/builder.go:170"
+      ]
+    },
+    {
+      "identity": "env:ACCESS_LOG_CLEANUP_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:118",
+      "command": "git grep -n '\"ACCESS_LOG_CLEANUP_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:131",
+        "internal/adapters/scheduler/builder.go:174"
+      ]
+    },
+    {
+      "identity": "env:BACKFILL_IMAGES",
+      "kind": "env_var",
+      "defined_at": ".env.example:123",
+      "command": "git grep -n '\"BACKFILL_IMAGES\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:133",
+        "cmd/slabledger/init_inventory_services.go:106"
+      ]
+    },
+    {
+      "identity": "env:PRICE_REFRESH_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:129",
+      "command": "git grep -n '\"PRICE_REFRESH_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:152",
+        "internal/adapters/scheduler/builder.go:151"
+      ]
+    },
+    {
+      "identity": "env:PRICE_REFRESH_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:130",
+      "command": "git grep -n '\"PRICE_REFRESH_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:146",
+        "internal/adapters/scheduler/builder.go:145"
+      ]
+    },
+    {
+      "identity": "env:PRICE_BATCH_SIZE",
+      "kind": "env_var",
+      "defined_at": ".env.example:131",
+      "command": "git grep -n '\"PRICE_BATCH_SIZE\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:147",
+        "internal/adapters/scheduler/builder.go:146"
+      ]
+    },
+    {
+      "identity": "env:PRICE_BATCH_DELAY",
+      "kind": "env_var",
+      "defined_at": ".env.example:132",
+      "command": "git grep -n '\"PRICE_BATCH_DELAY\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:148",
+        "internal/adapters/scheduler/builder.go:147"
+      ]
+    },
+    {
+      "identity": "env:PRICE_MAX_BURST_CALLS",
+      "kind": "env_var",
+      "defined_at": ".env.example:133",
+      "command": "git grep -n '\"PRICE_MAX_BURST_CALLS\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:149",
+        "internal/adapters/scheduler/builder.go:148"
+      ]
+    },
+    {
+      "identity": "env:PRICE_MAX_CALLS_PER_HOUR",
+      "kind": "env_var",
+      "defined_at": ".env.example:134",
+      "command": "git grep -n '\"PRICE_MAX_CALLS_PER_HOUR\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:150",
+        "internal/adapters/scheduler/builder.go:149"
+      ]
+    },
+    {
+      "identity": "env:PRICE_BURST_PAUSE_DURATION",
+      "kind": "env_var",
+      "defined_at": ".env.example:135",
+      "command": "git grep -n '\"PRICE_BURST_PAUSE_DURATION\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:151",
+        "internal/adapters/scheduler/builder.go:150"
+      ]
+    },
+    {
+      "identity": "env:SESSION_CLEANUP_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:141",
+      "command": "git grep -n '\"SESSION_CLEANUP_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:155",
+        "internal/adapters/scheduler/builder.go:163"
+      ]
+    },
+    {
+      "identity": "env:SESSION_CLEANUP_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:142",
+      "command": "git grep -n '\"SESSION_CLEANUP_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:156",
+        "internal/adapters/scheduler/builder.go:164"
+      ]
+    },
+    {
+      "identity": "env:DH_API_BASE_URL",
+      "kind": "env_var",
+      "defined_at": ".env.example:148",
+      "command": "git grep -n '\"DH_API_BASE_URL\"' -- '*.go'",
+      "external_refs": 3,
+      "ref_sites": [
+        "internal/platform/config/loader.go:191",
+        "cmd/slabledger/admin_analyze.go:107",
+        "cmd/slabledger/main.go:251"
+      ]
+    },
+    {
+      "identity": "env:DH_CACHE_TTL_HOURS",
+      "kind": "env_var",
+      "defined_at": ".env.example:149",
+      "command": "git grep -n '\"DH_CACHE_TTL_HOURS\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:193",
+        "internal/adapters/scheduler/builder.go:233"
+      ]
+    },
+    {
+      "identity": "env:DH_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:150",
+      "command": "git grep -n '\"DH_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:195",
+        "internal/adapters/scheduler/builder.go:232"
+      ]
+    },
+    {
+      "identity": "env:DH_ENTERPRISE_API_KEY",
+      "kind": "env_var",
+      "defined_at": ".env.example:154",
+      "command": "git grep -n '\"DH_ENTERPRISE_API_KEY\"' -- '*.go'",
+      "external_refs": 3,
+      "ref_sites": [
+        "internal/platform/config/loader.go:190",
+        "cmd/slabledger/admin_analyze.go:110",
+        "cmd/slabledger/main.go:254"
+      ]
+    },
+    {
+      "identity": "env:DH_RATE_LIMIT_RPS",
+      "kind": "env_var",
+      "defined_at": ".env.example:155",
+      "command": "git grep -n '\"DH_RATE_LIMIT_RPS\"' -- '*.go'",
+      "external_refs": 3,
+      "ref_sites": [
+        "internal/platform/config/loader.go:194",
+        "cmd/slabledger/admin_analyze.go:109",
+        "cmd/slabledger/main.go:253"
+      ]
+    },
+    {
+      "identity": "env:DH_ORDERS_POLL_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:159",
+      "command": "git grep -n '\"DH_ORDERS_POLL_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:196",
+        "internal/adapters/scheduler/builder.go:300"
+      ]
+    },
+    {
+      "identity": "env:DH_INVENTORY_POLL_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:163",
+      "command": "git grep -n '\"DH_INVENTORY_POLL_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:197",
+        "internal/adapters/scheduler/builder.go:317"
+      ]
+    },
+    {
+      "identity": "env:DH_ANALYTICS_REFRESH_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:168",
+      "command": "git grep -n '\"DH_ANALYTICS_REFRESH_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:201",
+        "internal/adapters/scheduler/builder.go:255 (whole struct cfg.DHAnalyticsRefresh passed)"
+      ]
+    },
+    {
+      "identity": "env:DH_ANALYTICS_REFRESH_HOUR",
+      "kind": "env_var",
+      "defined_at": ".env.example:171",
+      "command": "git grep -n '\"DH_ANALYTICS_REFRESH_HOUR\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:202",
+        "internal/adapters/scheduler/builder.go:255 (whole struct cfg.DHAnalyticsRefresh passed)"
+      ]
+    },
+    {
+      "identity": "env:DH_ANALYTICS_REFRESH_WINDOW",
+      "kind": "env_var",
+      "defined_at": ".env.example:173",
+      "command": "git grep -n '\"DH_ANALYTICS_REFRESH_WINDOW\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:203",
+        "internal/adapters/scheduler/builder.go:255 (whole struct cfg.DHAnalyticsRefresh passed)"
+      ]
+    },
+    {
+      "identity": "env:DH_RECONCILE_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:178",
+      "command": "git grep -n '\"DH_RECONCILE_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:206",
+        "internal/adapters/scheduler/builder.go:381"
+      ]
+    },
+    {
+      "identity": "env:DH_RECONCILE_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:179",
+      "command": "git grep -n '\"DH_RECONCILE_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:207",
+        "internal/adapters/scheduler/builder.go:382"
+      ]
+    },
+    {
+      "identity": "env:DH_PRICE_SYNC_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:185",
+      "command": "git grep -n '\"DH_PRICE_SYNC_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:214",
+        "internal/adapters/scheduler/builder.go:395"
+      ]
+    },
+    {
+      "identity": "env:DH_PRICE_SYNC_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:186",
+      "command": "git grep -n '\"DH_PRICE_SYNC_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:215",
+        "internal/adapters/scheduler/builder.go:396"
+      ]
+    },
+    {
+      "identity": "env:INVENTORY_REFRESH_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:192",
+      "command": "git grep -n '\"INVENTORY_REFRESH_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:159",
+        "internal/adapters/scheduler/builder.go:186"
+      ]
+    },
+    {
+      "identity": "env:INVENTORY_REFRESH_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:193",
+      "command": "git grep -n '\"INVENTORY_REFRESH_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:160",
+        "internal/adapters/scheduler/builder.go:187"
+      ]
+    },
+    {
+      "identity": "env:INVENTORY_REFRESH_STALE_THRESHOLD",
+      "kind": "env_var",
+      "defined_at": ".env.example:194",
+      "command": "git grep -n '\"INVENTORY_REFRESH_STALE_THRESHOLD\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:161",
+        "internal/adapters/scheduler/builder.go:188"
+      ]
+    },
+    {
+      "identity": "env:INVENTORY_REFRESH_BATCH_SIZE",
+      "kind": "env_var",
+      "defined_at": ".env.example:195",
+      "command": "git grep -n '\"INVENTORY_REFRESH_BATCH_SIZE\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:162",
+        "internal/adapters/scheduler/builder.go:189"
+      ]
+    },
+    {
+      "identity": "env:INVENTORY_REFRESH_BATCH_DELAY",
+      "kind": "env_var",
+      "defined_at": ".env.example:196",
+      "command": "git grep -n '\"INVENTORY_REFRESH_BATCH_DELAY\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:163",
+        "internal/adapters/scheduler/builder.go:190"
+      ]
+    },
+    {
+      "identity": "env:SNAPSHOT_ENRICH_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:202",
+      "command": "git grep -n '\"SNAPSHOT_ENRICH_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:166",
+        "internal/adapters/scheduler/builder.go:202 (whole struct cfg.SnapshotEnrich passed)"
+      ]
+    },
+    {
+      "identity": "env:SNAPSHOT_ENRICH_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:203",
+      "command": "git grep -n '\"SNAPSHOT_ENRICH_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:167",
+        "internal/adapters/scheduler/builder.go:202 (whole struct cfg.SnapshotEnrich passed)"
+      ]
+    },
+    {
+      "identity": "env:SNAPSHOT_ENRICH_BATCH_SIZE",
+      "kind": "env_var",
+      "defined_at": ".env.example:204",
+      "command": "git grep -n '\"SNAPSHOT_ENRICH_BATCH_SIZE\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:168",
+        "internal/adapters/scheduler/builder.go:202 (whole struct cfg.SnapshotEnrich passed)"
+      ]
+    },
+    {
+      "identity": "env:SNAPSHOT_ENRICH_RETRY_INTERVAL",
+      "kind": "env_var",
+      "defined_at": ".env.example:205",
+      "command": "git grep -n '\"SNAPSHOT_ENRICH_RETRY_INTERVAL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:169",
+        "internal/adapters/scheduler/builder.go:202 (whole struct cfg.SnapshotEnrich passed)"
+      ]
+    },
+    {
+      "identity": "env:SNAPSHOT_ENRICH_MAX_RETRIES",
+      "kind": "env_var",
+      "defined_at": ".env.example:206",
+      "command": "git grep -n '\"SNAPSHOT_ENRICH_MAX_RETRIES\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:170",
+        "internal/adapters/scheduler/builder.go:202 (whole struct cfg.SnapshotEnrich passed)"
+      ]
+    },
+    {
+      "identity": "env:CARDLADDER_REFRESH_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:212",
+      "command": "git grep -n '\"CARDLADDER_REFRESH_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:176",
+        "internal/adapters/scheduler/builder.go:222 (whole struct cfg.CardLadder passed)"
+      ]
+    },
+    {
+      "identity": "env:CARDLADDER_REFRESH_HOUR",
+      "kind": "env_var",
+      "defined_at": ".env.example:213",
+      "command": "git grep -n '\"CARDLADDER_REFRESH_HOUR\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:177",
+        "internal/adapters/scheduler/builder.go:222 (whole struct cfg.CardLadder passed)"
+      ]
+    },
+    {
+      "identity": "env:PSA_PORTAL_EMAIL",
+      "kind": "env_var",
+      "defined_at": ".env.example:227",
+      "command": "git grep -n '\"PSA_PORTAL_EMAIL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:218",
+        "cmd/psa-harvest/main.go:98"
+      ]
+    },
+    {
+      "identity": "env:PSA_PORTAL_PASSWORD",
+      "kind": "env_var",
+      "defined_at": ".env.example:228",
+      "command": "git grep -n '\"PSA_PORTAL_PASSWORD\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:219",
+        "cmd/psa-harvest/main.go:98"
+      ]
+    },
+    {
+      "identity": "env:PSA_PORTAL_PROXY_URL",
+      "kind": "env_var",
+      "defined_at": ".env.example:234",
+      "command": "git grep -n '\"PSA_PORTAL_PROXY_URL\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:220",
+        "cmd/psa-harvest/main.go:98"
+      ]
+    },
+    {
+      "identity": "env:PSA_PORTAL_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:241",
+      "command": "git grep -n '\"PSA_PORTAL_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:225",
+        "cmd/slabledger/main.go:350"
+      ]
+    },
+    {
+      "identity": "env:PSA_SYNC_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:248",
+      "command": "git grep -n '\"PSA_SYNC_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:228",
+        "internal/adapters/scheduler/builder.go:410 (whole struct cfg.PSASync passed)"
+      ]
+    },
+    {
+      "identity": "env:PSA_SYNC_HOUR",
+      "kind": "env_var",
+      "defined_at": ".env.example:249",
+      "command": "git grep -n '\"PSA_SYNC_HOUR\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:229",
+        "internal/adapters/scheduler/builder.go:410 (whole struct cfg.PSASync passed)"
+      ]
+    },
+    {
+      "identity": "env:PSA_CAMPAIGN_SYNC_ENABLED",
+      "kind": "env_var",
+      "defined_at": ".env.example:250",
+      "command": "git grep -n '\"PSA_CAMPAIGN_SYNC_ENABLED\"' -- '*.go'",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:230",
+        "cmd/psa-harvest/main.go:124"
+      ]
+    },
+    {
+      "identity": "config:Config.Mode.WebMode",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:7",
+      "command": "git grep -nE '\\.Mode\\.WebMode\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/platform/config/loader.go:243 (CLI flag -web, no .env.example entry)"
+      ]
+    },
+    {
+      "identity": "config:Config.Mode.WebPort",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:8",
+      "command": "git grep -nE '\\.Mode\\.WebPort\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "internal/platform/config/loader.go:244 (CLI flag -port, no .env.example entry)",
+        "cmd/slabledger/server.go:220"
+      ]
+    },
+    {
+      "identity": "config:Config.Mode.RateLimitRequests",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:11",
+      "command": "git grep -nE '\\.Mode\\.RateLimitRequests\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:RATE_LIMIT_REQUESTS",
+        "cmd/slabledger/server.go:138"
+      ]
+    },
+    {
+      "identity": "config:Config.Mode.TrustProxy",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:12",
+      "command": "git grep -nE '\\.Mode\\.TrustProxy\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:RATE_LIMIT_TRUST_PROXY",
+        "cmd/slabledger/server.go:138"
+      ]
+    },
+    {
+      "identity": "config:Config.Cache.Path",
+      "kind": "config_field_dead",
+      "defined_at": "internal/platform/config/types.go:17",
+      "command": "git grep -nE '\\.Cache\\.Path\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 0,
+      "ref_sites": []
+    },
+    {
+      "identity": "config:Config.Server.ListenAddr",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:22",
+      "command": "git grep -nE '\\.Server\\.ListenAddr\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:HTTP_LISTEN_ADDR",
+        "cmd/slabledger/server.go:218"
+      ]
+    },
+    {
+      "identity": "config:Config.Server.ReadTimeout",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:23",
+      "command": "git grep -nE '\\.Server\\.ReadTimeout\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:HTTP_READ_TIMEOUT",
+        "cmd/slabledger/server.go:225"
+      ]
+    },
+    {
+      "identity": "config:Config.Server.WriteTimeout",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:24",
+      "command": "git grep -nE '\\.Server\\.WriteTimeout\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:HTTP_WRITE_TIMEOUT",
+        "cmd/slabledger/server.go:226"
+      ]
+    },
+    {
+      "identity": "config:Config.Server.IdleTimeout",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:25",
+      "command": "git grep -nE '\\.Server\\.IdleTimeout\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:HTTP_IDLE_TIMEOUT",
+        "cmd/slabledger/server.go:227"
+      ]
+    },
+    {
+      "identity": "config:Config.Server.ShutdownTimeout",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:26",
+      "command": "git grep -nE '\\.Server\\.ShutdownTimeout\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "cmd/slabledger/server.go:268 (no .env.example entry; fixed default only)"
+      ]
+    },
+    {
+      "identity": "config:Config.Server.SchedulerShutdownTimeout",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:27",
+      "command": "git grep -nE '\\.Server\\.SchedulerShutdownTimeout\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SHUTDOWN_TIMEOUT_SECONDS (commented example only, loader.go:115)",
+        "cmd/slabledger/main.go:447"
+      ]
+    },
+    {
+      "identity": "config:Config.Logging.Level",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:32",
+      "command": "git grep -nE '\\.Logging\\.Level\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:LOG_LEVEL",
+        "cmd/slabledger/main.go:120"
+      ]
+    },
+    {
+      "identity": "config:Config.Logging.JSON",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:33",
+      "command": "git grep -nE '\\.Logging\\.JSON\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:LOG_JSON",
+        "cmd/slabledger/main.go:120"
+      ]
+    },
+    {
+      "identity": "config:Config.Database.URL",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:38",
+      "command": "git grep -nE '\\.Database\\.URL\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 4,
+      "ref_sites": [
+        "env:DATABASE_URL",
+        "cmd/slabledger/main.go:170",
+        "cmd/psa-harvest/main.go:79",
+        "cmd/slabledger/admin_analyze.go:84"
+      ]
+    },
+    {
+      "identity": "config:Config.Database.MigrationsPath",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:39",
+      "command": "git grep -nE '\\.Database\\.MigrationsPath\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:MIGRATIONS_PATH",
+        "cmd/slabledger/main.go:210"
+      ]
+    },
+    {
+      "identity": "config:Config.Maintenance.AccessLogRetentionDays",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:47",
+      "command": "git grep -nE '\\.Maintenance\\.AccessLogRetentionDays\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:ACCESS_LOG_RETENTION_DAYS",
+        "internal/adapters/scheduler/builder.go:165"
+      ]
+    },
+    {
+      "identity": "config:Config.Maintenance.AccessLogCleanupInterval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:51",
+      "command": "git grep -nE '\\.Maintenance\\.AccessLogCleanupInterval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:ACCESS_LOG_CLEANUP_INTERVAL",
+        "internal/adapters/scheduler/builder.go:164"
+      ]
+    },
+    {
+      "identity": "config:Config.Maintenance.AccessLogCleanupEnabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:55",
+      "command": "git grep -nE '\\.Maintenance\\.AccessLogCleanupEnabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:ACCESS_LOG_CLEANUP_ENABLED",
+        "internal/adapters/scheduler/builder.go:163"
+      ]
+    },
+    {
+      "identity": "config:Config.Maintenance.BackfillImages",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:60",
+      "command": "git grep -nE '\\.Maintenance\\.BackfillImages\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:BACKFILL_IMAGES",
+        "cmd/slabledger/init_inventory_services.go:106"
+      ]
+    },
+    {
+      "identity": "config:Config.PriceRefresh.RefreshInterval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:66",
+      "command": "git grep -nE '\\.PriceRefresh\\.RefreshInterval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICE_REFRESH_INTERVAL",
+        "internal/adapters/scheduler/builder.go:134"
+      ]
+    },
+    {
+      "identity": "config:Config.PriceRefresh.BatchSize",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:68",
+      "command": "git grep -nE '\\.PriceRefresh\\.BatchSize\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICE_BATCH_SIZE",
+        "internal/adapters/scheduler/builder.go:135"
+      ]
+    },
+    {
+      "identity": "config:Config.PriceRefresh.BatchDelay",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:70",
+      "command": "git grep -nE '\\.PriceRefresh\\.BatchDelay\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICE_BATCH_DELAY",
+        "internal/adapters/scheduler/builder.go:136"
+      ]
+    },
+    {
+      "identity": "config:Config.PriceRefresh.MaxBurstCalls",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:72",
+      "command": "git grep -nE '\\.PriceRefresh\\.MaxBurstCalls\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICE_MAX_BURST_CALLS",
+        "internal/adapters/scheduler/builder.go:137"
+      ]
+    },
+    {
+      "identity": "config:Config.PriceRefresh.MaxCallsPerHour",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:74",
+      "command": "git grep -nE '\\.PriceRefresh\\.MaxCallsPerHour\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICE_MAX_CALLS_PER_HOUR",
+        "internal/adapters/scheduler/builder.go:138"
+      ]
+    },
+    {
+      "identity": "config:Config.PriceRefresh.BurstPauseDuration",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:76",
+      "command": "git grep -nE '\\.PriceRefresh\\.BurstPauseDuration\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICE_BURST_PAUSE_DURATION",
+        "internal/adapters/scheduler/builder.go:139"
+      ]
+    },
+    {
+      "identity": "config:Config.PriceRefresh.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:78",
+      "command": "git grep -nE '\\.PriceRefresh\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICE_REFRESH_ENABLED",
+        "internal/adapters/scheduler/builder.go:140"
+      ]
+    },
+    {
+      "identity": "config:Config.SessionCleanup.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:83",
+      "command": "git grep -nE '\\.SessionCleanup\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SESSION_CLEANUP_ENABLED",
+        "internal/adapters/scheduler/builder.go:151"
+      ]
+    },
+    {
+      "identity": "config:Config.SessionCleanup.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:84",
+      "command": "git grep -nE '\\.SessionCleanup\\.Interval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SESSION_CLEANUP_INTERVAL",
+        "internal/adapters/scheduler/builder.go:152"
+      ]
+    },
+    {
+      "identity": "config:Config.Auth.EncryptionKey",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:91",
+      "command": "git grep -nE '\\.Auth\\.EncryptionKey\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 3,
+      "ref_sites": [
+        "env:ENCRYPTION_KEY",
+        "cmd/slabledger/main.go:225",
+        "cmd/psa-harvest/main.go:86"
+      ]
+    },
+    {
+      "identity": "config:Config.Auth.AdminEmails",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:95",
+      "command": "git grep -nE '\\.Auth\\.AdminEmails\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:ADMIN_EMAILS",
+        "cmd/slabledger/server.go:206"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.PSAToken",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:102",
+      "command": "git grep -nE '\\.Adapters\\.PSAToken\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_ACCESS_TOKEN",
+        "cmd/slabledger/init_inventory_services.go:96"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.PricingAPIKey",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:103",
+      "command": "git grep -nE '\\.Adapters\\.PricingAPIKey\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PRICING_API_KEY",
+        "cmd/slabledger/handlers.go:270"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.GoogleOAuthEnv",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:104",
+      "command": "git grep -nE '\\.Adapters\\.GoogleOAuthEnv\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:GOOGLE_OAUTH_ENV",
+        "cmd/slabledger/server.go:209"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.LocalAPIToken",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:105",
+      "command": "git grep -nE '\\.Adapters\\.LocalAPIToken\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:LOCAL_API_TOKEN",
+        "cmd/slabledger/server.go:210"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.AzureAIEndpoint",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:106",
+      "command": "git grep -nE '\\.Adapters\\.AzureAIEndpoint\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:AZURE_AI_ENDPOINT",
+        "cmd/slabledger/init_services.go:67"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.AzureAIKey",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:107",
+      "command": "git grep -nE '\\.Adapters\\.AzureAIKey\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:AZURE_AI_API_KEY",
+        "cmd/slabledger/init_services.go:68"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.AzureAIDeployment",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:108",
+      "command": "git grep -nE '\\.Adapters\\.AzureAIDeployment\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:AZURE_AI_DEPLOYMENT",
+        "cmd/slabledger/init_services.go:69"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.DHEnterpriseKey",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:109",
+      "command": "git grep -nE '\\.Adapters\\.DHEnterpriseKey\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_ENTERPRISE_API_KEY",
+        "cmd/slabledger/main.go:254"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.DHBaseURL",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:110",
+      "command": "git grep -nE '\\.Adapters\\.DHBaseURL\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_API_BASE_URL",
+        "cmd/slabledger/main.go:251"
+      ]
+    },
+    {
+      "identity": "config:Config.Adapters.AzureAICompletionTimeout",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:111",
+      "command": "git grep -nE '\\.Adapters\\.AzureAICompletionTimeout\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "cmd/slabledger/init_services.go:70 (env:AZURE_AI_TIMEOUT, commented example only in .env.example)"
+      ]
+    },
+    {
+      "identity": "config:Config.DH.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:116",
+      "command": "git grep -nE '\\.DH\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_ENABLED",
+        "internal/adapters/scheduler/builder.go:238"
+      ]
+    },
+    {
+      "identity": "config:Config.DH.CacheTTLHours",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:117",
+      "command": "git grep -nE '\\.DH\\.CacheTTLHours\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_CACHE_TTL_HOURS",
+        "internal/adapters/scheduler/builder.go:240"
+      ]
+    },
+    {
+      "identity": "config:Config.DH.RateLimitRPS",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:118",
+      "command": "git grep -nE '\\.DH\\.RateLimitRPS\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_RATE_LIMIT_RPS",
+        "cmd/slabledger/main.go:253"
+      ]
+    },
+    {
+      "identity": "config:Config.DH.OrdersPollInterval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:119",
+      "command": "git grep -nE '\\.DH\\.OrdersPollInterval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_ORDERS_POLL_INTERVAL",
+        "internal/adapters/scheduler/builder.go:298"
+      ]
+    },
+    {
+      "identity": "config:Config.DH.InventoryPollInterval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:120",
+      "command": "git grep -nE '\\.DH\\.InventoryPollInterval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_INVENTORY_POLL_INTERVAL",
+        "internal/adapters/scheduler/builder.go:315"
+      ]
+    },
+    {
+      "identity": "config:Config.DH.PushInterval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:121",
+      "command": "git grep -nE '\\.DH\\.PushInterval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/adapters/scheduler/builder.go:374 (no .env.example entry; DH_PUSH_INTERVAL is read in loader.go:198 but undocumented)"
+      ]
+    },
+    {
+      "identity": "config:Config.InventoryRefresh.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:127",
+      "command": "git grep -nE '\\.InventoryRefresh\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:INVENTORY_REFRESH_ENABLED",
+        "internal/adapters/scheduler/builder.go:181"
+      ]
+    },
+    {
+      "identity": "config:Config.InventoryRefresh.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:129",
+      "command": "git grep -nE '\\.InventoryRefresh\\.Interval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:INVENTORY_REFRESH_INTERVAL",
+        "internal/adapters/scheduler/builder.go:182"
+      ]
+    },
+    {
+      "identity": "config:Config.InventoryRefresh.StaleThreshold",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:131",
+      "command": "git grep -nE '\\.InventoryRefresh\\.StaleThreshold\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:INVENTORY_REFRESH_STALE_THRESHOLD",
+        "internal/adapters/scheduler/builder.go:183"
+      ]
+    },
+    {
+      "identity": "config:Config.InventoryRefresh.BatchSize",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:133",
+      "command": "git grep -nE '\\.InventoryRefresh\\.BatchSize\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:INVENTORY_REFRESH_BATCH_SIZE",
+        "internal/adapters/scheduler/builder.go:184"
+      ]
+    },
+    {
+      "identity": "config:Config.InventoryRefresh.BatchDelay",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:135",
+      "command": "git grep -nE '\\.InventoryRefresh\\.BatchDelay\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:INVENTORY_REFRESH_BATCH_DELAY",
+        "internal/adapters/scheduler/builder.go:185"
+      ]
+    },
+    {
+      "identity": "config:Config.SnapshotEnrich.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:247",
+      "command": "git grep -nE '\\.SnapshotEnrich\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SNAPSHOT_ENRICH_ENABLED",
+        "internal/adapters/scheduler/builder.go:197 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.SnapshotEnrich.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:248",
+      "command": "git grep -nE '\\.SnapshotEnrich\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SNAPSHOT_ENRICH_INTERVAL",
+        "internal/adapters/scheduler/builder.go:197 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.SnapshotEnrich.RetryInterval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:249",
+      "command": "git grep -nE '\\.SnapshotEnrich\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SNAPSHOT_ENRICH_RETRY_INTERVAL",
+        "internal/adapters/scheduler/builder.go:197 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.SnapshotEnrich.BatchSize",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:250",
+      "command": "git grep -nE '\\.SnapshotEnrich\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SNAPSHOT_ENRICH_BATCH_SIZE",
+        "internal/adapters/scheduler/builder.go:197 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.SnapshotEnrich.MaxRetries",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:251",
+      "command": "git grep -nE '\\.SnapshotEnrich\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:SNAPSHOT_ENRICH_MAX_RETRIES",
+        "internal/adapters/scheduler/builder.go:197 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.PSAPortal.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:276",
+      "command": "git grep -nE '\\.PSAPortal\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_PORTAL_ENABLED",
+        "cmd/slabledger/main.go:350"
+      ]
+    },
+    {
+      "identity": "config:Config.PSAPortal.Email",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:277",
+      "command": "git grep -nE '\\.PSAPortal\\.Email\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_PORTAL_EMAIL",
+        "cmd/psa-harvest/main.go:98"
+      ]
+    },
+    {
+      "identity": "config:Config.PSAPortal.Password",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:278",
+      "command": "git grep -nE '\\.PSAPortal\\.Password\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_PORTAL_PASSWORD",
+        "cmd/psa-harvest/main.go:98"
+      ]
+    },
+    {
+      "identity": "config:Config.PSAPortal.ProxyURL",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:283",
+      "command": "git grep -nE '\\.PSAPortal\\.ProxyURL\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_PORTAL_PROXY_URL",
+        "cmd/psa-harvest/main.go:98"
+      ]
+    },
+    {
+      "identity": "config:Config.PSASync.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:288",
+      "command": "git grep -nE '\\.PSASync\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_SYNC_ENABLED",
+        "internal/adapters/scheduler/builder.go:408 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.PSASync.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:289",
+      "command": "git grep -nE '\\.PSASync\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/adapters/scheduler/builder.go:408 (whole struct passed; no .env.example entry, default only)"
+      ]
+    },
+    {
+      "identity": "config:Config.PSASync.InitialDelay",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:290",
+      "command": "git grep -nE '\\.PSASync\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/adapters/scheduler/builder.go:408 (whole struct passed; no .env.example entry, default only)"
+      ]
+    },
+    {
+      "identity": "config:Config.PSASync.SyncHour",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:291",
+      "command": "git grep -nE '\\.PSASync\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_SYNC_HOUR",
+        "internal/adapters/scheduler/builder.go:408 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.PSASync.CampaignSyncEnabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:292",
+      "command": "git grep -nE '\\.PSASync\\.CampaignSyncEnabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:PSA_CAMPAIGN_SYNC_ENABLED",
+        "cmd/psa-harvest/main.go:124"
+      ]
+    },
+    {
+      "identity": "config:Config.CardLadder.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:297",
+      "command": "git grep -nE '\\.CardLadder\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:CARDLADDER_REFRESH_ENABLED",
+        "internal/adapters/scheduler/builder.go:229 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.CardLadder.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:298",
+      "command": "git grep -nE '\\.CardLadder\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/adapters/scheduler/builder.go:229 (whole struct passed; no .env.example entry, default only)"
+      ]
+    },
+    {
+      "identity": "config:Config.CardLadder.RefreshHour",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:299",
+      "command": "git grep -nE '\\.CardLadder\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:CARDLADDER_REFRESH_HOUR",
+        "internal/adapters/scheduler/builder.go:229 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.DHAnalyticsRefresh.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:185",
+      "command": "git grep -nE '\\.DHAnalyticsRefresh\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_ANALYTICS_REFRESH_ENABLED",
+        "internal/adapters/scheduler/builder.go:262 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.DHAnalyticsRefresh.RefreshHour",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:186",
+      "command": "git grep -nE '\\.DHAnalyticsRefresh\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_ANALYTICS_REFRESH_HOUR",
+        "internal/adapters/scheduler/builder.go:262 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.DHAnalyticsRefresh.Window",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:187",
+      "command": "git grep -nE '\\.DHAnalyticsRefresh\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_ANALYTICS_REFRESH_WINDOW",
+        "internal/adapters/scheduler/builder.go:262 (whole struct passed)"
+      ]
+    },
+    {
+      "identity": "config:Config.DHReconcile.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:196",
+      "command": "git grep -nE '\\.DHReconcile\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_RECONCILE_ENABLED",
+        "internal/adapters/scheduler/builder.go:345"
+      ]
+    },
+    {
+      "identity": "config:Config.DHReconcile.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:197",
+      "command": "git grep -nE '\\.DHReconcile\\.Interval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_RECONCILE_INTERVAL",
+        "internal/adapters/scheduler/builder.go:346"
+      ]
+    },
+    {
+      "identity": "config:Config.DHSoldReconciler.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:210",
+      "command": "git grep -nE '\\.DHSoldReconciler\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/adapters/scheduler/builder.go:331 (no .env.example entry, default only)"
+      ]
+    },
+    {
+      "identity": "config:Config.DHSoldReconciler.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:211",
+      "command": "git grep -nE '\\.DHSoldReconciler\\.Interval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "internal/adapters/scheduler/builder.go:332 (no .env.example entry, default only)"
+      ]
+    },
+    {
+      "identity": "config:Config.DHPriceSync.Enabled",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:227",
+      "command": "git grep -nE '\\.DHPriceSync\\.Enabled\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_PRICE_SYNC_ENABLED",
+        "internal/adapters/scheduler/builder.go:362"
+      ]
+    },
+    {
+      "identity": "config:Config.DHPriceSync.Interval",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:228",
+      "command": "git grep -nE '\\.DHPriceSync\\.Interval\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 2,
+      "ref_sites": [
+        "env:DH_PRICE_SYNC_INTERVAL",
+        "internal/adapters/scheduler/builder.go:363"
+      ]
+    },
+    {
+      "identity": "config:Config.AdvisorRefresh.MaxToolRounds",
+      "kind": "config_field",
+      "defined_at": "internal/platform/config/types.go:242",
+      "command": "git grep -nE '\\.AdvisorRefresh\\.MaxToolRounds\\b' -- '*.go' | grep -v _test.go",
+      "external_refs": 1,
+      "ref_sites": [
+        "cmd/slabledger/init_services.go:82 (ADVISOR_MAX_TOOL_ROUNDS read in loader.go:173 but absent from .env.example; no scheduler consumer)"
+      ]
+    }
+  ]
+}

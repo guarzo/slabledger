@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Adversarial verdict",
+  "description": "Phase 3 output: one record per finding the verifier was briefed to refute. The verdicts/ directory had no schema until now, which is how a full prose paragraph reached corrected_severity and leaked into REPORT.md verbatim.",
+  "type": "object",
+  "required": [
+    "id",
+    "verdict",
+    "basis",
+    "evidence_reproduces",
+    "ticketable",
+    "corrected_severity",
+    "what_the_finding_got_wrong"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Z]+-[0-9]{3}$"
+    },
+    "verdict": {
+      "enum": [
+        "confirmed",
+        "confirmed_lower_severity",
+        "refuted"
+      ]
+    },
+    "basis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_reproduces": {
+      "type": "boolean",
+      "description": "Did the finding's own recorded command/output pair reproduce at the baseline revision? A confirmed verdict on non-reproducing evidence is legal \u2014 the claim can be true while the citation is wrong \u2014 but it must be recorded as false."
+    },
+    "ticketable": {
+      "type": "boolean"
+    },
+    "corrected_severity": {
+      "description": "A bare severity token, or \"\" when the verdict leaves the filed severity alone. Never prose: build-report.py renders this value verbatim into REPORT.md, so a paragraph here becomes a paragraph in the severity line.",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        ""
+      ]
+    },
+    "what_the_finding_got_wrong": {
+      "description": "Free prose, or \"\" when the finding was accurate as filed. This \u2014 not corrected_severity \u2014 is where narrative belongs.",
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "confirmed_lower_severity"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "corrected_severity": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "refuted"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "ticketable": {
+            "const": false
+          }
+        }
+      }
+    }
+  ]
+}

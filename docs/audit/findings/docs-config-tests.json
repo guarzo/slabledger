@@ -1,0 +1,651 @@
+[
+  {
+    "id": "DCT-001",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "CLAUDE.md:137 Pricing Pipeline section" },
+    "category": "docs",
+    "title": "CLAUDE.md falsely claims DH is the sole price source; CardLadder is a fully-wired second pipeline, entirely unmentioned",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "CLAUDE.md:137 states 'DH (DoubleHolo) is the sole price source via DHPriceProvider'.",
+        "command": "grep -n 'Pricing Pipeline' -A3 CLAUDE.md",
+        "output": "135:## Pricing Pipeline\n137:DH (DoubleHolo) is the sole price source via `DHPriceProvider` (`internal/adapters/clients/dhprice/`). ...",
+        "file_line": "CLAUDE.md:137"
+      },
+      {
+        "claim": "CardLadder is a second, independently-wired price/comp source with its own client, scheduler, store, admin API, and config-driven enable flag.",
+        "command": "grep -n CardLadder cmd/slabledger/init_services.go; wc -l internal/adapters/scheduler/cardladder_refresh.go; grep -n 'admin/cardladder' internal/adapters/httpserver/routes.go; grep -n CARDLADDER_REFRESH_ENABLED internal/platform/config/loader.go",
+        "output": "cmd/slabledger/init_services.go:99: // initializeCardLadder creates the Card Ladder client, auth, and store.\n525 internal/adapters/scheduler/cardladder_refresh.go\nroutes.go:65-71: 7 registered /api/admin/cardladder/* routes (config, status, failures, refresh, add-card, sync-to-cl, coverage)\nloader.go:176: envBool(\"CARDLADDER_REFRESH_ENABLED\", &cfg.CardLadder.Enabled, false)"
+      },
+      {
+        "claim": "CardLadder values (clValueCents) feed real comp-price computation in the liquidation domain, independent of DHPriceProvider.",
+        "command": "sed -n '1,15p' internal/domain/liquidation/comp_price.go",
+        "output": "func ComputeCompPrice(comps []SaleComp, clValueCents int) CompPriceResult { ... }",
+        "file_line": "internal/domain/liquidation/comp_price.go:9"
+      },
+      {
+        "claim": "The internal/domain/dhpricing package (service.go, types.go) also exists and is unmentioned anywhere in CLAUDE.md's package tree or pricing-pipeline narrative.",
+        "command": "git ls-files internal/domain/dhpricing/",
+        "output": "internal/domain/dhpricing/service.go\ninternal/domain/dhpricing/service_test.go\ninternal/domain/dhpricing/types.go"
+      }
+    ],
+    "searched_universe": "git-tracked CLAUDE.md; cmd/slabledger/init_services.go; internal/adapters/scheduler/; internal/adapters/httpserver/routes.go; internal/platform/config/loader.go; internal/domain/liquidation/, internal/domain/dhpricing/",
+    "proposed_fix": "Rewrite the Pricing Pipeline section to describe both DH (DHPriceProvider) and CardLadder (client + scheduler + admin endpoints + liquidation comp pricing) as the two live price/valuation sources, or explicitly scope the 'sole price source' claim to a named subsystem (e.g. campaign market-signal pricing) if that narrower claim is what was intended.",
+    "blast_radius": ["CLAUDE.md (every agent session in this repo loads this as project instructions)"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "CLAUDE.md's Pricing Pipeline section mentions CardLadder by name alongside DH, or the 'sole price source' claim is scoped precisely enough that it no longer contradicts the CardLadder client/scheduler/routes/config that exist in the repo.",
+      "A reviewer re-running the grep commands in this finding's evidence sees the CardLadder wiring accounted for in the doc text."
+    ]
+  },
+  {
+    "id": "DCT-002",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "CLAUDE.md:34-58 internal/domain/ package tree" },
+    "category": "docs",
+    "title": "CLAUDE.md's internal/domain/ package listing is wrong in both directions: lists two removed packages, omits six live ones",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "CLAUDE.md lists 'cards/  # CardRepository interface' and 'favorites/  # Favorites management' under internal/domain/, but neither package exists.",
+        "command": "go list ./internal/domain/... | grep -iE 'cards|favorites'",
+        "output": "(no output)"
+      },
+      {
+        "claim": "CLAUDE.md's domain package list omits six packages that currently exist under internal/domain/.",
+        "command": "go list ./internal/domain/... | sed 's#.*/domain/##' | sort",
+        "output": "advisor\nai\narbitrage\nauth\nconstants\ndemand\ndhevents\ndhlisting\ndhpricing\nerrors\nexport\nfinance\nintelligence\ninventory\nliquidation\nllmutil\nmathutil\nobservability\nportfolio\npricing\npricing/lookup\npsacampaign\nscoring\nstorage\ntimeutil\ntuning\n\n-> demand, dhevents, dhpricing, liquidation, psacampaign, and pricing/lookup do not appear anywhere in CLAUDE.md's tree (dhlisting IS listed)."
+      }
+    ],
+    "searched_universe": "`go list ./internal/domain/...` against the full git-tracked module at baseline; CLAUDE.md:34-58",
+    "proposed_fix": "Regenerate the domain package tree in CLAUDE.md from `go list ./internal/domain/...`, removing cards/ and favorites/, and adding demand/, dhevents/, dhpricing/, liquidation/, psacampaign/ with one-line descriptions each.",
+    "blast_radius": ["CLAUDE.md"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every directory returned by `go list ./internal/domain/...` appears in CLAUDE.md's tree, and every entry in CLAUDE.md's tree corresponds to a real directory."
+    ]
+  },
+  {
+    "id": "DCT-003",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "CLAUDE.md:60-65 internal/adapters/clients/ tree" },
+    "category": "docs",
+    "title": "CLAUDE.md's adapters/clients/ tree lists a moved package and a removed package, and omits five that exist",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "CLAUDE.md:62 lists 'pricelookup/ # PriceLookup adapter (wraps PriceProvider for campaigns)' under adapters/clients/, but that adapter now lives at internal/domain/pricing/lookup/, and CLAUDE.md:63 lists 'tcgdex/' which was removed entirely.",
+        "command": "find internal/adapters/clients -maxdepth 1 -type d; git log --diff-filter=D --oneline -- internal/adapters/clients/tcgdex | head -3",
+        "output": "internal/adapters/clients/ subdirs present: cardladder, dh, dhlisting, dhprice, google, httpx, azureai, psa, psaportal (no pricelookup, no tcgdex)\nd555333b removed internal/adapters/clients/tcgdex"
+      },
+      {
+        "claim": "adapters/clients/ contains five directories not listed in CLAUDE.md's tree.",
+        "command": "ls internal/adapters/clients/",
+        "output": "azureai  cardladder  dh  dhlisting  dhprice  google  httpx  psa  psaportal\n-> cardladder, dh, dhlisting, psa, psaportal are absent from CLAUDE.md:60-65"
+      }
+    ],
+    "searched_universe": "internal/adapters/clients/ directory listing at baseline; CLAUDE.md:60-65; git history for tcgdex removal",
+    "proposed_fix": "Update the adapters/clients/ tree in CLAUDE.md: drop pricelookup/ and tcgdex/, add cardladder/, dh/, dhlisting/, psa/, psaportal/ with one-line descriptions, and correct the PriceLookup adapter's real location (internal/domain/pricing/lookup/) elsewhere in the doc if it's referenced.",
+    "blast_radius": ["CLAUDE.md"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`ls internal/adapters/clients/` and CLAUDE.md's tree list the exact same set of directories."
+    ]
+  },
+  {
+    "id": "DCT-004",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "CLAUDE.md:125-133 Environment Variables key groups" },
+    "category": "docs",
+    "title": "CLAUDE.md's env-var 'Key groups' summary omits CardLadder entirely, consistent with the pricing-pipeline drift in DCT-001",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "CLAUDE.md:125-133 lists DH, AI, Auth, and Schedulers groups (PRICE_REFRESH_ENABLED only) with no CardLadder group, despite CARDLADDER_REFRESH_ENABLED/CARDLADDER_REFRESH_HOUR/CL_SEARCH_URL existing in .env.example and being live-read config.",
+        "command": "grep -n -A10 '^## Environment Variables' CLAUDE.md; grep -n 'CARDLADDER\\|CL_SEARCH_URL' .env.example; grep -n 'CARDLADDER_REFRESH_ENABLED' internal/platform/config/loader.go",
+        "output": "CLAUDE.md groups: Required, DH, AI, Auth, Schedulers (PRICE_REFRESH_ENABLED only)\n.env.example:212-218: CARDLADDER_REFRESH_ENABLED, CARDLADDER_REFRESH_HOUR, CL_SEARCH_URL (commented example)\nloader.go:176: envBool(\"CARDLADDER_REFRESH_ENABLED\", &cfg.CardLadder.Enabled, false)"
+      }
+    ],
+    "searched_universe": "CLAUDE.md:125-133; .env.example; internal/platform/config/loader.go",
+    "proposed_fix": "Add a CardLadder group to the Key groups list (CARDLADDER_REFRESH_ENABLED, CARDLADDER_REFRESH_HOUR).",
+    "blast_radius": ["CLAUDE.md"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "CLAUDE.md's Environment Variables section lists a CardLadder group alongside DH/AI/Auth/Schedulers."
+    ]
+  },
+  {
+    "id": "DCT-005",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "CLAUDE.md:145 'make check' description" },
+    "category": "docs",
+    "title": "CLAUDE.md describes 'make check' as three steps but the Makefile target runs a fourth, undocumented script",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "CLAUDE.md:145 says 'make check — runs lint + architecture import check + file size check', omitting a fourth step the Makefile actually runs.",
+        "command": "grep -n -A5 '^check:' Makefile",
+        "output": "check: lint\n\t./scripts/check-imports.sh\n\t./scripts/check-file-size.sh\n\t./scripts/check-playwright-version.sh",
+        "file_line": "Makefile:146"
+      }
+    ],
+    "searched_universe": "Makefile; CLAUDE.md:145",
+    "proposed_fix": "Add the playwright-version coupling check to CLAUDE.md's description of `make check`.",
+    "blast_radius": ["CLAUDE.md"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "CLAUDE.md's description of `make check` lists every script the Makefile target actually invokes."
+    ]
+  },
+  {
+    "id": "DCT-006",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "internal/README.md sqlite paths and Large File Awareness table" },
+    "category": "docs",
+    "title": "internal/README.md still describes a sqlite/ storage adapter (removed) and its Large File Awareness table is stale in both directions",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "internal/README.md references internal/adapters/storage/sqlite/ in three places; no such directory exists — postgres/ is the only storage backend.",
+        "command": "grep -n sqlite internal/README.md; find internal/adapters/storage -maxdepth 1 -type d",
+        "output": "internal/README.md:31,164,271 reference storage/sqlite/\nfind: only internal/adapters/storage/postgres exists"
+      },
+      {
+        "claim": "The Large File Awareness table (internal/README.md:578-582) claims domain/arbitrage/service.go is 530 lines; it is now 217 (split since). It omits domain/portfolio/service.go (540 lines, over the 500-line budget) and adapters/scheduler/cardladder_refresh.go (525 lines, over budget), neither of which is listed.",
+        "command": "wc -l internal/domain/arbitrage/service.go internal/domain/portfolio/service.go internal/adapters/scheduler/cardladder_refresh.go",
+        "output": "217 internal/domain/arbitrage/service.go\n540 internal/domain/portfolio/service.go\n525 internal/adapters/scheduler/cardladder_refresh.go"
+      }
+    ],
+    "searched_universe": "internal/README.md; internal/adapters/storage/ directory listing; wc -l on the three named files",
+    "proposed_fix": "Replace all storage/sqlite/ references with storage/postgres/, and regenerate the Large File Awareness table from current `wc -l` output, adding portfolio/service.go and cardladder_refresh.go.",
+    "blast_radius": ["internal/README.md"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "internal/README.md contains no reference to a sqlite storage path.",
+      "The Large File Awareness table's line counts match current `wc -l` output and includes every file currently over 500 lines."
+    ]
+  },
+  {
+    "id": "DCT-007",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "docs/ARCHITECTURE.md stack/diagram/domain-package claims" },
+    "category": "docs",
+    "title": "docs/ARCHITECTURE.md documents a SQLite stack/storage layer and a removed 'picks' package, and still describes Favorites/cards domain packages",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "docs/ARCHITECTURE.md:7 states 'Stack: Go 1.26 | SQLite (WAL) | ...' and :18/:84 diagram/tree a SQLite storage adapter; the project runs on Postgres exclusively.",
+        "command": "grep -n 'SQLite' docs/ARCHITECTURE.md; grep -n jackc/pgx go.mod",
+        "output": "docs/ARCHITECTURE.md:7 Stack line names SQLite (WAL)\ndocs/ARCHITECTURE.md:18 diagram box 'SQLite Storage'\ndocs/ARCHITECTURE.md:84 storage/sqlite/ tree entry\ngo.mod: github.com/jackc/pgx/v5 present; no sqlite driver"
+      },
+      {
+        "claim": "docs/ARCHITECTURE.md:70 documents a 'picks/' domain package (AI-driven acquisition watchlist); it was removed.",
+        "command": "go list ./internal/domain/... | grep -i picks; git log --oneline --diff-filter=D -- internal/domain/picks | head -3",
+        "output": "(no output from go list)\n474072bd \"remove: reduce surface area — card search, watchlists, picks, orphaned tables (#152)\""
+      },
+      {
+        "claim": "docs/ARCHITECTURE.md references Favorites domain/service/repository and cards/ CardRepository in several places; neither package exists.",
+        "command": "go list ./internal/domain/... | grep -iE 'favorites|cards'",
+        "output": "(no output)"
+      }
+    ],
+    "searched_universe": "docs/ARCHITECTURE.md; go.mod; go list ./internal/domain/...; git log --diff-filter=D",
+    "proposed_fix": "Replace the SQLite stack line, diagram box, and tree entry with Postgres; remove the picks/ package section; remove or clearly mark the Favorites/cards sections as removed.",
+    "blast_radius": ["docs/ARCHITECTURE.md"],
+    "effort": "M",
+    "acceptance_criteria": [
+      "docs/ARCHITECTURE.md contains no SQLite references and no mention of a picks/, favorites/, or cards/ domain package."
+    ]
+  },
+  {
+    "id": "DCT-008",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "docs/LLM_USAGE.md:17,19,114-173 Picks pipeline" },
+    "category": "docs",
+    "title": "docs/LLM_USAGE.md documents a detailed 3-stage 'Picks' AI pipeline for a domain package that was removed",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "docs/LLM_USAGE.md:114-173 describes a 3-stage Picks pipeline in internal/domain/picks/ with a daily 03:00 UTC refresh; the package and its scheduler entry point do not exist.",
+        "command": "go list ./internal/domain/... | grep -i picks; git grep -n 'picks.NewService' internal cmd",
+        "output": "(no output from either command)"
+      }
+    ],
+    "searched_universe": "docs/LLM_USAGE.md; go list ./internal/domain/...; git grep across internal/ and cmd/",
+    "proposed_fix": "Remove the Picks pipeline section from docs/LLM_USAGE.md, or replace it with a description of whatever AI-driven feature (if any) superseded it.",
+    "blast_radius": ["docs/LLM_USAGE.md"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "docs/LLM_USAGE.md contains no description of a Picks pipeline unless internal/domain/picks (or an equivalent) actually exists in the repo."
+    ]
+  },
+  {
+    "id": "DCT-009",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "docs/DH_INVENTORY.md:199-200 file path table" },
+    "category": "docs",
+    "title": "docs/DH_INVENTORY.md cites two repository file paths under a sqlite/ directory that doesn't exist",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "docs/DH_INVENTORY.md:199-200 cites internal/adapters/storage/sqlite/purchases_repository_dh.go and .../card_id_mapping_repository.go; both files now live under postgres/, and no sqlite/ directory exists.",
+        "command": "find internal/adapters/storage -maxdepth 1 -type d; ls internal/adapters/storage/postgres | grep -i card_id_mapping",
+        "output": "only internal/adapters/storage/postgres exists\ncard_id_mapping_repository.go present under postgres/"
+      }
+    ],
+    "searched_universe": "docs/DH_INVENTORY.md:199-200; internal/adapters/storage/ directory listing",
+    "proposed_fix": "Update both file paths in the table to internal/adapters/storage/postgres/.",
+    "blast_radius": ["docs/DH_INVENTORY.md"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "The two file paths in docs/DH_INVENTORY.md's table resolve to real files at their cited locations."
+    ]
+  },
+  {
+    "id": "DCT-010",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "docs/USER_GUIDE.md:30,45,244-250 Favorites feature" },
+    "category": "docs",
+    "title": "docs/USER_GUIDE.md documents a dedicated Favorites feature/page that does not exist in the product",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "docs/USER_GUIDE.md:30,45,244-250 instructs end users on a Favorites page (add/remove favorites); there is no /api/favorites* route and no favorites domain package.",
+        "command": "git grep -n favorites internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go; go list ./internal/domain/... | grep -i favorites",
+        "output": "(no output from either command)"
+      }
+    ],
+    "searched_universe": "docs/USER_GUIDE.md; internal/adapters/httpserver/routes.go, router.go; go list ./internal/domain/...",
+    "proposed_fix": "Remove the Favorites sections from docs/USER_GUIDE.md, or restore the feature if it is intended to exist and was accidentally dropped (verify with product owner before assuming either direction).",
+    "blast_radius": ["docs/USER_GUIDE.md", "end users following this guide"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "docs/USER_GUIDE.md does not instruct users to use a feature that has no backing route or domain package, unless the feature is restored."
+    ]
+  },
+  {
+    "id": "DCT-011",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "docs/SCHEMA.md price_history migration number and dropped-table sections" },
+    "category": "docs",
+    "title": "docs/SCHEMA.md cites a migration number that doesn't exist and still documents three dropped tables/columns as if they were live",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "docs/SCHEMA.md:210,212 says price_history was dropped by migration 000038; the migrations directory only goes up to 000025.",
+        "command": "ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l; ls internal/adapters/storage/postgres/migrations/000038* 2>&1",
+        "output": "25\nls: cannot access '...000038*': No such file or directory"
+      },
+      {
+        "claim": "docs/SCHEMA.md:250-267,985 fully documents the advisor_cache table (including its trigger/index) though migration 000013 dropped it.",
+        "command": "cat internal/adapters/storage/postgres/migrations/000013_drop_advisor_cache.up.sql",
+        "output": "DROP TABLE IF EXISTS advisor_cache; (plus its trigger/function/policy)"
+      },
+      {
+        "claim": "docs/SCHEMA.md:438,852,868,995-996 documents mm_value_cents, marketmovers_config, mm_card_mappings, and related indexes, all dropped by migration 000021; zero Go references remain outside one stale comment.",
+        "command": "cat internal/adapters/storage/postgres/migrations/000021_drop_market_movers.up.sql; git grep -ci marketmovers internal cmd | grep -v ':0'",
+        "output": "migration drops mm_sales_comps, mm_card_mappings, and 7 mm_* columns on campaign_purchases\ncmd/slabledger/init_services.go:4: 1 (a stale comment only)"
+      }
+    ],
+    "searched_universe": "docs/SCHEMA.md; internal/adapters/storage/postgres/migrations/*; git grep for marketmovers in internal/ and cmd/",
+    "proposed_fix": "Fix the migration number cited for price_history's removal (or remove the citation if the real migration number is unknown at this revision), and delete or clearly mark as historical the advisor_cache and marketmovers table/column sections.",
+    "blast_radius": ["docs/SCHEMA.md"],
+    "effort": "M",
+    "acceptance_criteria": [
+      "docs/SCHEMA.md cites only migration numbers that exist in internal/adapters/storage/postgres/migrations/.",
+      "docs/SCHEMA.md no longer documents advisor_cache, marketmovers_config, mm_card_mappings, mm_value_cents, or mm_sales_comps as live schema."
+    ]
+  },
+  {
+    "id": "DCT-012",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "docs/API.md endpoint documentation" },
+    "category": "docs",
+    "title": "docs/API.md documents removed marketmovers/advisor/sell-sheet endpoints and is missing at least 13 live endpoints",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "docs/API.md documents 5 marketmovers admin endpoints plus export-mm/refresh-mm purchase endpoints; none are registered.",
+        "command": "grep -ohE '\"(GET|POST|PUT|PATCH|DELETE) [^\"]+\"' internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go | grep -i mm",
+        "output": "(no output)"
+      },
+      {
+        "claim": "docs/API.md documents GET/POST /api/advisor/cache/{id}, POST /api/advisor/refresh/{id}, POST /api/advisor/purchase-assessment; only /api/advisor/digest and /api/advisor/liquidation-analysis are registered.",
+        "command": "grep -n advisor internal/adapters/httpserver/routes.go",
+        "output": "routes.go:213-214: POST /api/advisor/digest, POST /api/advisor/liquidation-analysis (only these two)"
+      },
+      {
+        "claim": "docs/API.md documents POST /api/campaigns/{id}/sell-sheet, POST /api/portfolio/sell-sheet, and a full /api/sell-sheet/items CRUD set; only GET /api/sell-sheet is registered.",
+        "command": "grep -n sell-sheet internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go",
+        "output": "routes.go:104: GET /api/sell-sheet (HandleGlobalSellSheet) only"
+      },
+      {
+        "claim": "At least 13 live routes have no corresponding ### heading in docs/API.md.",
+        "command": "comm -23 <(grep -ohE '\"(GET|POST|PUT|PATCH|DELETE) [^\"]+\"' internal/adapters/httpserver/routes.go internal/adapters/httpserver/router.go | tr -d '\"' | sed -E 's#\\{[a-zA-Z_]+\\}#{}#g' | sort -u) <(grep -oE '### `(GET|POST|PUT|PATCH|DELETE) [^`]+`' docs/API.md | sed -E 's/### `//; s/`//' | sed -E 's#\\{[a-zA-Z_]+\\}#{}#g' | sort -u)",
+        "output": "GET /api/dh/pending, POST /api/dh/dismiss, POST /api/dh/undismiss, POST /api/dh/reconcile, POST /api/liquidation/preview, POST /api/liquidation/apply, POST /api/campaigns/{id}/psa-propose-create, POST /api/purchases/sync-psa-sheets, PUT /api/credit/config, GET /api/intelligence/campaign-signals, GET /api/portfolio/weekly-history, GET /api/admin/dh-tombstones/count, POST /api/admin/dh-tombstones/clear, DELETE /api/campaigns/{id}/purchases/{id}/sale, POST /api/purchases/{id}/list-on-dh"
+      }
+    ],
+    "searched_universe": "internal/adapters/httpserver/routes.go, router.go; docs/API.md",
+    "proposed_fix": "Remove the marketmovers, extra advisor, and extra sell-sheet endpoint sections from docs/API.md; add sections for the 13+ live routes identified. A field-level pass (request/response shapes) was explicitly out of scope for this sweep and would likely surface more drift.",
+    "blast_radius": ["docs/API.md", "API consumers relying on it as ground truth"],
+    "effort": "L",
+    "acceptance_criteria": [
+      "Running the `comm -23` command in this finding's evidence against the regenerated docs/API.md returns no live routes missing from the doc.",
+      "docs/API.md no longer documents any marketmovers, advisor cache/refresh/purchase-assessment, or extra sell-sheet endpoint that doesn't exist in routes.go/router.go."
+    ]
+  },
+  {
+    "id": "DCT-013",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "env", "identity": "env:BASE_URL, env:MEDIA_DIR" },
+    "category": "dead-code",
+    "title": "BASE_URL and MEDIA_DIR are declared in .env.example but read by zero Go code",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "BASE_URL (.env.example:64) has no Go reference anywhere in the module.",
+        "command": "git grep -nE '\\bBASE_URL\\b' -- '*.go'",
+        "output": "(no output)"
+      },
+      {
+        "claim": "MEDIA_DIR (.env.example:68) has no Go reference anywhere in the module.",
+        "command": "git grep -nE '\\bMEDIA_DIR\\b' -- '*.go'",
+        "output": "(no output)"
+      }
+    ],
+    "searched_universe": "git-tracked *.go files, word-boundary grep, default build (no -tags integration search performed for these two identifiers since they are env var names, not Go symbols subject to build tags)",
+    "exclusions": ["Search restricted to *.go files; shell scripts, Dockerfiles, and CI config were not checked for these two names."],
+    "proposed_fix": "Remove BASE_URL and MEDIA_DIR from .env.example, or wire them into config.Config/loader.go if they were meant to configure something (verify intent before deleting, since env var presence alone doesn't rule out a planned-but-unimplemented feature).",
+    "blast_radius": [".env.example"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`git grep -nE '\\bBASE_URL\\b|\\bMEDIA_DIR\\b' -- '*.go'` continues to return nothing after removal, and .env.example no longer lists either variable (or both are wired into config.go and the grep now returns hits)."
+    ]
+  },
+  {
+    "id": "DCT-014",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "config", "identity": "config:Config.Cache.Path" },
+    "category": "dead-code",
+    "title": "Config.Cache.Path is validated and directory-created at startup but its value is never passed to any cache backend — the field is fully wired plumbing to nowhere",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Config.Cache.Path (types.go:17) is bound to the -cache CLI flag, syntax-validated in Validate(), and has its directory created in EnsureDirectories() — but is never read by any cache constructor.",
+        "command": "git grep -n \"Path\" -- '*.go' | grep -v internal/platform/config/ | grep -v _test.go",
+        "output": "(no output — zero non-config, non-test references to this field)"
+      },
+      {
+        "claim": "The only place a file-based cache is actually constructed reads its path from a different type (cache.SimpleCacheConfig.FilePath), not from config.Config.Cache.Path.",
+        "command": "git grep -n \"NewFileCacheBackend\" -- '*.go'",
+        "output": "internal/platform/cache/cache.go:49: return NewFileCacheBackend(config.FilePath, simpleCfg)  # config here is cache.SimpleCacheConfig, unrelated to platform/config.Config\ninternal/integration/pricing_test.go:45, cache_bench_test.go, cache_test.go: all call NewFileCacheBackend directly with test-local paths"
+      },
+      {
+        "claim": "cfg.Cache.Path is referenced only inside internal/platform/config itself (validation.go:41,92 and loader.go:253) — no caller outside that package ever reads it.",
+        "command": "git grep -n \"cfg\\.Cache\" -- '*.go'",
+        "output": "internal/platform/config/loader.go:253\ninternal/platform/config/validation.go:41\ninternal/platform/config/validation.go:92"
+      }
+    ],
+    "searched_universe": "internal/platform/config/*.go; internal/platform/cache/*.go; git grep for NewFileCacheBackend across the module",
+    "exclusions": ["Interface-satisfaction and functional-options checks were not run since this is a plain string field, not an interface or option; in-package-only usage was checked and confirmed per this finding's evidence (preamble trap #1: an in-package caller proves nothing about external reachability, and here there is no external caller at all)."],
+    "proposed_fix": "Either wire cfg.Cache.Path into the actual cache backend construction path in cmd/slabledger (so the -cache flag/CACHE_PATH env var does something), or remove the field, its CLI flag, and its validation/directory-creation code if the file-based cache is meant to be configured a different way.",
+    "blast_radius": ["internal/platform/config/types.go", "internal/platform/config/loader.go", "internal/platform/config/validation.go", "cmd/slabledger (wherever cache construction happens)"],
+    "effort": "M",
+    "acceptance_criteria": [
+      "Either `go build ./...` passes with Config.Cache.Path (and its flag/validation/EnsureDirectories logic) removed and no cache functionality regresses, OR the -cache flag's value is demonstrably threaded through to a live NewFileCacheBackend call and a test proves it."
+    ]
+  },
+  {
+    "id": "DCT-015",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": ".env.example vs loader.go config-doc mismatches" },
+    "category": "docs",
+    "title": "Four config knobs are undocumented or mis-documented in .env.example relative to what loader.go actually reads",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "ADVISOR_MAX_TOOL_ROUNDS is read live by loader.go:173 but has no entry at all in .env.example.",
+        "command": "grep -n ADVISOR_MAX_TOOL_ROUNDS internal/platform/config/loader.go .env.example",
+        "output": "loader.go:173: envIntPositive(\"ADVISOR_MAX_TOOL_ROUNDS\", ...)\n.env.example: (no match)"
+      },
+      {
+        "claim": "CL_SEARCH_URL, SHUTDOWN_TIMEOUT_SECONDS, and AZURE_AI_TIMEOUT are live-read config but appear in .env.example only as commented-out example lines, understating that they are real, working overrides.",
+        "command": "grep -n '^#.*\\(CL_SEARCH_URL\\|SHUTDOWN_TIMEOUT_SECONDS\\|AZURE_AI_TIMEOUT\\)' .env.example",
+        "output": ".env.example:218: # CL_SEARCH_URL=\"...\" (commented)\n(SHUTDOWN_TIMEOUT_SECONDS and AZURE_AI_TIMEOUT similarly commented per config-map.json gaps)"
+      }
+    ],
+    "searched_universe": ".env.example; internal/platform/config/loader.go — this finding reproduces gaps already surfaced by the config-map scout's `gaps` field verbatim, spot-checked here",
+    "proposed_fix": "Add ADVISOR_MAX_TOOL_ROUNDS as a live (uncommented) entry in .env.example, and uncomment CL_SEARCH_URL/SHUTDOWN_TIMEOUT_SECONDS/AZURE_AI_TIMEOUT or add a comment noting they have working defaults and don't need to be set.",
+    "blast_radius": [".env.example"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every env var read in loader.go with envBool/envInt/envString-family helpers has a corresponding non-commented entry in .env.example, or an explicit comment explaining why it's commented out."
+    ]
+  },
+  {
+    "id": "DCT-016",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "test", "identity": "internal/adapters/scheduler/price_refresh_test.go TODO(Task 4)" },
+    "category": "docs",
+    "title": "A 4-month-stale TODO blocks re-enabling scheduler tests for a precondition that was satisfied in the same commit that added the TODO",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "price_refresh_test.go:25-27 carries a TODO saying tests should be re-enabled/rewritten 'once refreshBatch is reimplemented as a purchase-driven refresh (stale_prices VIEW was dropped in migration 000038)'.",
+        "command": "sed -n '25,27p' internal/adapters/scheduler/price_refresh_test.go",
+        "output": "// TODO(Task 4): Re-enable and rewrite scheduler tests once refreshBatch is\n// reimplemented as a purchase-driven refresh (stale_prices VIEW was dropped in\n// migration 000038)."
+      },
+      {
+        "claim": "The TODO and the refreshBatch rewrite it's waiting on were both introduced in the exact same commit, 20cfa6ee ('pricing pipeline simplification — DH-only', 2026-04-06) — refreshBatch already reads via pricing.RefreshCandidateProvider (candidates), i.e. it is already purchase-driven.",
+        "command": "git log -1 --format='%H %ad %s' --date=short -L 25,27:internal/adapters/scheduler/price_refresh_test.go; git show 20cfa6ee --stat | grep price_refresh; grep -n 'candidates.GetRefreshCandidates\\|pricing.RefreshCandidateProvider' internal/adapters/scheduler/price_refresh.go",
+        "output": "20cfa6eeea1d71a44eb1e069fcd5b2e08e47e5d5 2026-04-06 refactor: pricing pipeline simplification — DH-only (#57) [introduced the TODO]\nprice_refresh.go:18: candidates pricing.RefreshCandidateProvider\nprice_refresh.go:80: cards, err := s.candidates.GetRefreshCandidates(ctx, s.config.BatchSize)"
+      },
+      {
+        "claim": "No 000038 migration exists at this revision (only up to 000025), further confirming the comment's premise no longer describes reality.",
+        "command": "ls internal/adapters/storage/postgres/migrations/000038* 2>&1",
+        "output": "ls: cannot access '...000038*': No such file or directory"
+      },
+      {
+        "claim": "The current test file has no test that exercises refreshBatch's actual logic (candidate batching, rate-limit/budget checks, provider-blocked handling) — only Start/Stop/Health/DefaultConfig are tested.",
+        "command": "grep -n '^func Test' internal/adapters/scheduler/price_refresh_test.go",
+        "output": "TestPriceRefreshScheduler_Health, TestPriceRefreshScheduler_DisabledScheduler, TestPriceRefreshScheduler_Stop, TestPriceRefreshScheduler_ContextCancellation, TestPriceRefreshScheduler_StopIdempotent, TestConfig_DefaultConfig — none calls refreshBatch directly"
+      }
+    ],
+    "searched_universe": "internal/adapters/scheduler/price_refresh.go, price_refresh_test.go; git log/show for commit 20cfa6ee",
+    "proposed_fix": "Write direct tests for refreshBatch covering: candidate-fetch error handling and consecutive-failure counting, empty-candidates no-op, provider-blocked skip, and hourly-budget-exhausted skip — then delete the stale TODO comment.",
+    "blast_radius": ["internal/adapters/scheduler/price_refresh.go", "internal/adapters/scheduler/price_refresh_test.go"],
+    "effort": "M",
+    "acceptance_criteria": [
+      "price_refresh_test.go contains at least one test that calls refreshBatch directly and asserts on its rate-limit/budget/provider-blocked branches.",
+      "The TODO(Task 4) comment referencing migration 000038 and the pre-rewrite refreshBatch is removed."
+    ]
+  },
+  {
+    "id": "DCT-017",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "package", "identity": "internal/adapters/clients/dhlisting" },
+    "category": "docs",
+    "title": "The dhlisting adapter package — PSA import batch translation, inventory sold-transitions, and PSA key-rotation delegation — has zero test coverage",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "internal/adapters/clients/dhlisting/ contains one 283-line source file and no test file.",
+        "command": "git ls-files internal/adapters/clients/dhlisting/",
+        "output": "internal/adapters/clients/dhlisting/adapter.go"
+      },
+      {
+        "claim": "The package contains non-trivial, money- and inventory-state-adjacent logic: PSA import batch-rejection error surfacing (422 handling), and MarkInventorySold/UpdateInventoryStatus transitions with PSA-key-rotation delegation.",
+        "command": "grep -n 'func \\|psa_import batch rejected\\|MarkInventorySold' internal/adapters/clients/dhlisting/adapter.go",
+        "output": "adapter.go:42 PSAImport (translates domain items, surfaces batch-rejection errors from a 422 response)\nadapter.go:175 UpdateInventoryStatus\nadapter.go:221 MarkInventorySold\nadapter.go:92,154 RotatePSAKey delegation"
+      }
+    ],
+    "searched_universe": "git ls-files internal/adapters/clients/dhlisting/; the package's single source file, read in full",
+    "proposed_fix": "Add table-driven tests for PSAImporterAdapter.PSAImport (success, batch-rejected-with-reason, batch-rejected-without-reason) and InventoryAdapter's status-transition and rotation-delegation paths, following the internal/testutil/mocks Fn-field pattern used elsewhere in the adapters layer.",
+    "blast_radius": ["internal/adapters/clients/dhlisting/adapter.go"],
+    "effort": "M",
+    "acceptance_criteria": [
+      "internal/adapters/clients/dhlisting/adapter_test.go exists and exercises the batch-rejection and sold-transition branches identified in this finding's evidence.",
+      "`go test ./internal/adapters/clients/dhlisting/...` passes."
+    ]
+  },
+  {
+    "id": "DCT-019",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "CLAUDE.md:88 '8 focused repository interfaces'" },
+    "category": "docs",
+    "title": "CLAUDE.md names a repository interface that has never existed, and mislabels the one member that dwarfs the rest as 'focused'",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "CLAUDE.md:88 lists eight names, one of which — SnapshotRepository — has zero occurrences anywhere else in the repository.",
+        "command": "git grep -n \"SnapshotRepository\"",
+        "output": "CLAUDE.md:88:- **8 focused repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository, AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository, SnapshotRepository\n(no other match — the identifier is declared nowhere in Go source)",
+        "file_line": "CLAUDE.md:88"
+      },
+      {
+        "claim": "Only seven repository interfaces of this kind actually exist under internal/domain/inventory/.",
+        "command": "git grep -n \"^type.*Repository interface\" internal/domain/inventory/*.go",
+        "output": "repository_analytics.go:6 AnalyticsRepository\nrepository_campaign.go:6 CampaignRepository\nrepository_dh.go:6 DHRepository\nrepository_finance.go:9 FinanceRepository\nrepository_pricing.go:6 PricingRepository\nrepository_purchase.go:31 PurchaseRepository\nrepository_sale.go:6 SaleRepository\n(PendingItemRepository also exists in pending_items.go, but is wired in only as an optional functional-option dependency via WithPendingItemRepository, not one of the core constructor-required repositories this sentence describes — so it does not make the claimed count of 8 correct either.)"
+      },
+      {
+        "claim": "PurchaseRepository has 55 methods — more than the other six combined (46) — directly contradicting 'focused' as a description applied uniformly to all eight.",
+        "command": "for f in repository_analytics repository_campaign repository_dh repository_finance repository_pricing repository_purchase repository_sale; do echo -n \"$f: \"; sed -n '/^type.*Repository interface {/,/^}/p' internal/domain/inventory/$f.go | grep -cE '^\\s*[A-Z][A-Za-z0-9]*\\('; done",
+        "output": "repository_analytics: 10\nrepository_campaign: 5\nrepository_dh: 2\nrepository_finance: 14\nrepository_pricing: 8\nrepository_purchase: 55\nrepository_sale: 7\n(2+5+7+8+10+14 = 46 < 55)"
+      }
+    ],
+    "searched_universe": "CLAUDE.md:88; internal/domain/inventory/repository_*.go and pending_items.go, full interface bodies read",
+    "proposed_fix": "Correct the sentence to name the seven interfaces that actually exist (drop SnapshotRepository), fix the count to 7 (or explicitly mention PendingItemRepository as an eighth, optional repository if that's the intended scope), and stop describing PurchaseRepository as 'focused' — either split it (see the size-and-complexity lens's related finding on PurchaseRepository's breadth) or describe it accurately as the exception.",
+    "blast_radius": ["CLAUDE.md", "any agent using this sentence as the authority on inventory repository conventions (this already misled an earlier pass of this audit's size-and-complexity lens into citing it as the violated convention)"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "CLAUDE.md:88 lists only interface names that `git grep \"^type.*Repository interface\"` finds under internal/domain/inventory/.",
+      "CLAUDE.md no longer describes PurchaseRepository as 'focused' without qualification, given its method count relative to its siblings."
+    ]
+  },
+  {
+    "id": "DCT-020",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "internal/platform/cardutil/normalize.go:15 resolvePSACategory" },
+    "category": "docs",
+    "title": "A package doc comment names a pipeline function, resolvePSACategory, that does not exist anywhere in the repo",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "normalize.go:15's doc comment describes a normalization pipeline ending in 'resolvePSACategory'; the identifier has zero declarations or references anywhere else.",
+        "command": "grep -n resolvePSACategory internal/platform/cardutil/normalize.go; git grep -n resolvePSACategory",
+        "output": "normalize.go:15:// -> stripCollectionSuffix -> extractVariantFromTitle -> resolvePSACategory\n(git grep across the whole repo returns only this one line — the function is declared nowhere)",
+        "file_line": "internal/platform/cardutil/normalize.go:15"
+      }
+    ],
+    "searched_universe": "internal/platform/cardutil/normalize.go; repo-wide git grep for the identifier",
+    "proposed_fix": "Either rename the doc comment's last pipeline step to the function that actually performs category resolution today, or remove the step if no equivalent exists (verify which by reading the current normalization call chain before editing).",
+    "blast_radius": ["internal/platform/cardutil/normalize.go"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every function name in normalize.go's doc comment pipeline resolves to a real declared function in the package."
+    ]
+  },
+  {
+    "id": "DCT-021",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "claim", "identity": "class: doc/comment references to nonexistent Go symbols, unguarded by any check" },
+    "category": "docs",
+    "title": "Prose referencing nonexistent symbols (function and interface names) is a recurring class, and nothing in the repo's tooling can ever catch it",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Three independent instances of documentation/comments naming a Go symbol that does not exist have been confirmed in this audit: CLAUDE.md:88 names SnapshotRepository (never declared); internal/platform/cardutil/normalize.go:15 names resolvePSACategory (never declared); CLAUDE.md's internal/domain/ package tree names packages (cards/, favorites/) that don't exist and omits ones that do.",
+        "command": "git grep -n SnapshotRepository; git grep -n resolvePSACategory; go list ./internal/domain/... | grep -iE 'cards|favorites'",
+        "output": "SnapshotRepository: 1 hit, in CLAUDE.md prose only\nresolvePSACategory: 1 hit, in a doc comment only\ncards/favorites: 0 hits from go list (see DCT-002 for the full package-tree finding)"
+      },
+      {
+        "claim": "`make check` — the repo's only automated quality gate — runs lint, an import-boundary script, a file-size script, and a Playwright-version-coupling script; none of them parse prose or doc comments for symbol references.",
+        "command": "grep -n -A5 '^check:' Makefile; grep -n -A5 '^lint:' Makefile",
+        "output": "check: lint\n\t./scripts/check-imports.sh\n\t./scripts/check-file-size.sh\n\t./scripts/check-playwright-version.sh\nlint:\n\tgo fmt ./...\n\tgo vet ./...\n\tgolangci-lint run\n(none of these six steps read markdown or comment text for symbol validity — go vet/golangci-lint only see compiled Go code, and a comment string is never type-checked)"
+      }
+    ],
+    "searched_universe": "The three specific instances cited in this and other findings (DCT-002, DCT-019, DCT-020); Makefile check/lint targets read in full",
+    "exclusions": ["This is a class-level observation grouping three already-filed instances, not a fourth independent instance; no broader repo-wide sweep for additional stale-symbol references was performed beyond what surfaced during this audit."],
+    "proposed_fix": "Fix the three instances individually per DCT-002, DCT-019, and DCT-020. Separately, a human may want to consider a lightweight doc-comment-symbol-linter (out of scope for this read-only audit to design or build) so a stale reference like these is caught before merge rather than discovered by an audit months later.",
+    "blast_radius": ["CLAUDE.md", "internal/platform/cardutil/normalize.go", "any future doc comment naming a Go symbol"],
+    "effort": "S",
+    "acceptance_criteria": [
+      "This finding is used to justify prioritizing DCT-002/DCT-019/DCT-020 together rather than as unrelated one-offs; no separate acceptance test beyond those three findings' own criteria."
+    ]
+  },
+  {
+    "id": "DCT-018",
+    "lens": "docs-config-tests",
+    "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+    "subject": { "kind": "package", "identity": "internal/domain/observability, internal/domain/storage, internal/testutil" },
+    "category": "docs",
+    "title": "The remaining three untested packages are low-risk and don't warrant a coverage ticket",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "internal/domain/observability contains only a Logger interface, a Field value-type with trivial constructors, and a NoopLogger stub whose methods are all empty bodies.",
+        "command": "git ls-files internal/domain/observability/*.go; grep -n '^func' internal/domain/observability/noop.go",
+        "output": "doc.go, logger.go, noop.go\nnoop.go: 5 one-line no-op method bodies"
+      },
+      {
+        "claim": "internal/domain/storage is documentation-only — its single file is a package doc comment with no declarations; the real Cache interface it once described now lives in internal/platform/cache.",
+        "command": "git ls-files internal/domain/storage/; git grep -n 'type Cache interface'",
+        "output": "internal/domain/storage/doc.go (only file, doc comment only)\ninternal/platform/cache/cache.go:19: type Cache interface { ... }"
+      },
+      {
+        "claim": "internal/testutil (outside its mocks/ subpackage) is a single 25-line helper function, GetTestToken.",
+        "command": "git ls-files internal/testutil/*.go; wc -l internal/testutil/config.go",
+        "output": "internal/testutil/config.go\n25 internal/testutil/config.go"
+      }
+    ],
+    "searched_universe": "internal/domain/observability/, internal/domain/storage/, internal/testutil/ (non-mocks files), read in full",
+    "proposed_fix": "No action needed for coverage. Separately: internal/domain/storage being doc-only while CLAUDE.md still describes it as containing 'Cache and storage interfaces' (CLAUDE.md:57) is itself a minor doc-drift instance — fold into DCT-002's package-tree fix if that finding is actioned.",
+    "blast_radius": [],
+    "effort": "S",
+    "acceptance_criteria": [
+      "No ticket required; recorded so a fixer doesn't re-derive the same 'untested package' list and mistakenly treat all four as equally risky."
+    ]
+  }
+]

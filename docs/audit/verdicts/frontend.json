@@ -1,0 +1,74 @@
+[
+  {
+    "id": "FE-001",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran both evidence commands verbatim: jq against frontend-reference-map.json returns the same 5 identities with external_refs==0, and the per-method git grep (excluding web/src/js/api/) returns empty for all 5. Independently re-checked declaration sites (campaigns.ts:27/53, campaignAnalytics.ts:30/32/80/88, campaignImports.ts:23/24/63/68) and confirmed no bracket/string-keyed access (`api['...']`) or dynamic dispatch exists anywhere in web/src that could hide a caller from word-boundary grep. deleteCampaign has exactly one non-declaration hit, campaigns.test.ts:39, a parameterized contract-test mock-table row, not a product caller — consistent with the finding's own exclusion. These are named methods (not default exports), so the default-export re-binding trap does not apply.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "FE-002",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran the path-substring import search for all 5 default exports (git grep -n \"from '.*NAME'\") and the word-boundary search for the 2 named exports; both reproduced empty except each component's own declaration line, exactly as claimed (InventoryRow.tsx:5's CSS-module import is a filename coincidence, confirmed). Extended the check beyond the finding's own evidence: searched for `lazy(` usage across web/src (only 7 hits, all in App.tsx targeting top-level pages, none of the 7 components) and grepped each bare component name with no path anchor to catch any lazy/registry reference the path-substring search might miss — zero additional hits for all 7. The path-substring method is sound against the default-export trap because it keys on the file path, not the locally-bound import name, so a renamed default import would still surface.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "FE-003",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran the word-boundary grep for all 11 hook names; each returns exactly one hit (its own export line), except useCampaignPNL which has a second hit that is a JSDoc comment in a sibling function's docstring (`campaignPNLQueryOptions`), not executable code, matching the finding's stated exclusion. Independently checked whether the factories `createParamQuery`/`createStaticQuery` register hooks under a string key anywhere (they don't — they return the hook function directly) and grepped test files for any of the 11 names — none found, so no test-only usage caveat applies here either. These are all named exports; the default-export trap is inapplicable.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "FE-004",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran the total-hit-count grep for all 10 symbols; each returns exactly 1 (own declaration), matching the finding. Re-ran the sellSheetHelpers.tsx import check confirming it's a mixed file (checkHotSeller live via utils.ts:3, clPriceDisplayCents/formatLastSaleDate live via the test file) while formatCardName/gradeDisplay/cardSubtitle/marginCode are genuinely unreferenced. Independently verified the finding's own exclusion of DEFAULT_TIMEOUT_MS/UPLOAD_TIMEOUT_MS (client.ts:35,38) — both are read within the same file at lines 60 and 303, so they are correctly excluded as in-file-used, not part of the dead set. ProgressBar (a component, capitalized) is a named export (admin/shared.tsx:1), so the default-export trap does not apply and its single hit is genuinely just its declaration.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "FE-005",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran both commands verbatim: UserPreferencesProvider is imported and rendered in both main.tsx and App.tsx (confirming the context genuinely mounts in production), while useUserPreferences has zero call sites — its only two hits are its own declaration (line 157) and a JSDoc example in its own docstring (line 152), and no import statement anywhere targets the context's file path other than for the Provider itself. This is a real 'live-but-unconsumed' finding, not simple dead code: the Provider's state/localStorage-sync logic runs on every render for a value nothing ever reads, which is a meaningful runtime cost distinct from the file-deletion cases in FE-002/FE-004.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "FE-006",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran the jq query against frontend-reference-map.json — same 5 zero-ref types among the 7 in pricing.ts (GradeKey=9, PriceHint=6 correctly excluded as live). Re-ran the cross-file grep confirming zero hits outside pricing.ts, and the Go-side grep for GradeDetail/EbayGradeDetail/EstimateGradeDetail and price-estimate route/API-client references — both empty as claimed. Read pricing.ts directly (lines 1-45): confirmed EbayGradeData, EstimateGradeData, GradeData, MarketOverview, and SalesVelocity are declared with no internal cross-references to each other beyond GradeData's own field types (which are themselves in the dead set), and no re-export alias exists under a different name.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "FE-007",
+    "verdict": "confirmed_lower_severity",
+    "evidence_reproduces": true,
+    "basis": "Re-ran `sed` on types_core.go:491 — ForcedLiquidation bool `json:\"forcedLiquidation\"` has no omitempty, so it is always present on the wire. Re-ran the web/src grep for forcedLiquidation|ForcedLiquidation — zero hits. Read the TS Sale interface directly (core.ts:114-141) and confirmed no forcedLiquidation field exists anywhere in it. This is a genuine type-sync gap per CLAUDE.md's stated convention that web/src/types/ types are manually maintained to mirror Go JSON tags.",
+    "what_the_finding_got_wrong": "The stated severity of 'medium' overstates the runtime consequence: a field present in the JSON response but absent from the TS interface is dropped by nothing — it simply isn't typed, so no runtime error, crash, or data loss occurs. TypeScript's structural typing means extra wire fields are inert until something tries to read them; this is a type-completeness/documentation gap, not a defect with an active symptom. The real consequence is that any future code wanting to read forcedLiquidation has no compiler-checked field to use, and a reviewer scanning the Sale type would not know the field exists.",
+    "corrected_severity": "low",
+    "ticketable": true
+  },
+  {
+    "id": "FE-008",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-ran all three evidence commands verbatim: analytics_types.go:108-122 confirms TargetSellPrice/MinimumAcceptPrice sit among Cents-suffixed siblings without the suffix; service_sell_sheet.go confirms both are populated from cent-denominated sources (computeTargetPrice/ConservativeCents); sellSheetHelpers.tsx:40-42 confirms the frontend treats targetSellPrice as cents with no /100 conversion. The naming defect and cross-boundary propagation into the TS mirror are real and reproduce exactly as described.",
+    "what_the_finding_got_wrong": "Nothing factually wrong, but it is filed as a suspected-tier pointer to the naming-and-boundaries lens rather than a frontend-health ticket candidate. Per LENS-BRIEF.md section 5, 'suspected' findings are recorded, not ticketed, and the finding's own exclusions block explicitly assigns ownership elsewhere. It should not be actioned or ticketed under frontend-health; ownership and any ticket decision belong to naming-and-boundaries.",
+    "corrected_severity": "",
+    "ticketable": false
+  }
+]
