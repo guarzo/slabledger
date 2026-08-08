@@ -26,16 +26,18 @@ Keep the narrow membership test. Move enforcement to the **target** side.
 ### Why not broad membership
 
 The ticket asks whether the derived set should instead be "every directory under
-`internal/domain/` except the hub." Measured against the current tree, that flags **27
-edges**, of which ~23 are legitimate leaf dependencies (`errors`, `observability`,
-`constants`, `mathutil`, `timeutil`). Making it usable requires a hardcoded *leaf
+`internal/domain/` except the hub." Measured against the current tree, that flags **24
+edges**, of which **20** are legitimate leaf dependencies (`errors`, `observability`,
+`constants`, `mathutil`, `timeutil`). (Counting the hub's own imports of non-hub
+packages, which the proposed all-file scan would also walk, the figure is 31.)
+Making it usable requires a hardcoded *leaf
 allowlist* — reintroducing the stale-hardcoded-list failure mode SLA-12 exists to
 eliminate. The remaining four (`advisor → ai`, `advisor → scoring`,
 `dhlisting → dhevents`, `pricing/lookup → pricing`) sit outside the inventory family and
 appear intentional.
 
 Whether `internal/domain/` needs a formal leaf/non-leaf taxonomy is a real question, but
-a separate one. It gets its own ticket.
+a separate one. It is tracked as SLA-48.
 
 ### Cost of the chosen option
 
@@ -106,10 +108,25 @@ hub; enforcement applies to any importer of a governed sibling.
 
 ## Residual limitation (documented, not fixed)
 
-If *both* ends of an edge drop their hub import, neither is governed and the edge escapes
-again. This is no longer a silent single-package refactor — it requires severing two
-packages from the hub at once, at which point they are not inventory sub-packages in any
-meaningful sense. The leaf-taxonomy follow-up is where this gets settled.
+This does not close the single-package escape hatch. It halves it.
+
+Today both endpoints must be governed for an edge to be checked (`check-imports.sh:83`
+and `:97` iterate the same derived set), so *either* package can escape by dropping its
+hub import. Target-based enforcement removes the source-side escape: a governed target is
+protected from every importer under `internal/domain/`, whether or not that importer is
+itself governed.
+
+The **target** can still escape unilaterally. If `dhlisting` drops its hub import
+(`internal/domain/dhlisting/dh_listing_service.go:12`), `dhpricing → dhlisting` becomes
+legal even though `dhpricing` remains governed. No mechanism here prevents that, and the
+spec does not claim otherwise.
+
+We accept this rather than fix it, because the fix is a definition, not a check: a
+package that stops importing the hub arguably *has* become a leaf, and importing a leaf
+is legal under the rule as written. Deciding when that is true requires the leaf/non-leaf
+taxonomy for `internal/domain/`, which is SLA-48. Enforcing against a
+target set we cannot yet define would mean hardcoding one — the failure mode SLA-12 was
+opened to remove.
 
 ## Verification
 
@@ -121,6 +138,6 @@ meaningful sense. The leaf-taxonomy follow-up is where this gets settled.
 
 ## Out of scope
 
-- Leaf/non-leaf taxonomy for `internal/domain/` — separate ticket
+- Leaf/non-leaf taxonomy for `internal/domain/` — SLA-48
 - The four existing non-inventory edges surfaced by the broad option
 - Any change to `internal/domain/` package structure; this is a checker + docs change
