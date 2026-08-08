@@ -29,11 +29,6 @@ func Load(args []string) (Config, error) {
 		return cfg, err
 	}
 
-	// Create required directories
-	if err := EnsureDirectories(cfg); err != nil {
-		return cfg, err
-	}
-
 	return cfg, nil
 }
 
@@ -248,9 +243,6 @@ func FromFlags(base Config, args []string) (Config, error) {
 	// Logging flags
 	fs.StringVar(&cfg.Logging.Level, "log-level", cfg.Logging.Level, "Log level: debug, info, warn, error")
 	fs.BoolVar(&cfg.Logging.JSON, "log-json", cfg.Logging.JSON, "Output JSON logs instead of text")
-
-	// Cache flags
-	fs.StringVar(&cfg.Cache.Path, "cache", cfg.Cache.Path, "Cache file location")
 
 	// Database flags
 	fs.StringVar(&cfg.Database.URL, "database-url", cfg.Database.URL, "PostgreSQL connection URL")
