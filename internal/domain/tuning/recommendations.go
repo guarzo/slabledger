@@ -1,9 +1,11 @@
-package inventory
+package tuning
 
 import (
 	"fmt"
 	"math"
 	"strconv"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 const (
@@ -22,40 +24,11 @@ const (
 	// spendCapLowUtilization: spending less than 20% of daily cap suggests
 	// buy parameters are too restrictive. Surfaced in tuning recommendations.
 	spendCapLowUtilization = 0.20
-
-	// marketDriftThreshold: 5% price change threshold for classifying cards
-	// as appreciating or depreciating.
-	marketDriftThreshold = 0.05
 )
 
 // purchaseKey builds a lookup key for a card identity and grade combination.
 func PurchaseKey(cardName, cardNumber, setName string, grade float64) string {
 	return cardName + "|" + cardNumber + "|" + setName + "|" + strconv.FormatFloat(grade, 'f', -1, 64)
-}
-
-// Fixed price tier boundaries (in cents).
-var fixedTiers = []struct {
-	Label    string
-	MinCents int
-	MaxCents int
-}{
-	{"$0-50", 0, 5000},
-	{"$50-100", 5000, 10000},
-	{"$100-200", 10000, 20000},
-	{"$200-500", 20000, 50000},
-	{"$500+", 50000, math.MaxInt},
-}
-
-// TuningInput bundles all inputs needed by computeRecommendations.
-type TuningInput struct {
-	Campaign    *Campaign
-	PNL         *CampaignPNL
-	ByGrade     []GradePerformance
-	ByFixedTier []PriceTierPerformance
-	Threshold   *BuyThresholdAnalysis
-	Alignment   *MarketAlignment
-	DailySpend  []DailySpend
-	ChannelPNL  []ChannelPNL
 }
 
 // computeRecommendations generates tuning recommendations from all analysis data.
@@ -80,7 +53,7 @@ func ComputeRecommendations(input *TuningInput) []TuningRecommendation {
 }
 
 // Rule 1: Buy threshold too high
-func recBuyThreshold(campaign *Campaign, threshold *BuyThresholdAnalysis) *TuningRecommendation {
+func recBuyThreshold(campaign *inventory.Campaign, threshold *BuyThresholdAnalysis) *TuningRecommendation {
 	if threshold == nil || threshold.SampleSize < 10 {
 		return nil
 	}
@@ -113,7 +86,7 @@ func recBuyThreshold(campaign *Campaign, threshold *BuyThresholdAnalysis) *Tunin
 }
 
 // Rule 2: Underperforming grade
-func recUnderperformingGrades(campaign *Campaign, byGrade []GradePerformance) []TuningRecommendation {
+func recUnderperformingGrades(campaign *inventory.Campaign, byGrade []inventory.GradePerformance) []TuningRecommendation {
 	if len(byGrade) < 2 {
 		return nil
 	}
@@ -186,16 +159,9 @@ func recUnderperformingTiers(byFixedTier []PriceTierPerformance) []TuningRecomme
 	return recs
 }
 
-// LowSellThroughPct is the sell-through percentage below which a campaign is
-// treated as underperforming. It is exported because two packages act on the
-// same threshold: recLowSellThrough below, and the campaign-suggestion rule in
-// internal/domain/portfolio that may suggest closing the campaign. Keep it here,
-// in the hub, so the two cannot drift apart.
-const LowSellThroughPct = 0.30
-
 // Rule 4: Low sell-through
-func recLowSellThrough(campaign *Campaign, pnl *CampaignPNL) *TuningRecommendation {
-	if pnl == nil || pnl.TotalPurchases < 20 || pnl.SellThroughPct >= LowSellThroughPct {
+func recLowSellThrough(campaign *inventory.Campaign, pnl *inventory.CampaignPNL) *TuningRecommendation {
+	if pnl == nil || pnl.TotalPurchases < 20 || pnl.SellThroughPct >= inventory.LowSellThroughPct {
 		return nil
 	}
 
@@ -203,7 +169,7 @@ func recLowSellThrough(campaign *Campaign, pnl *CampaignPNL) *TuningRecommendati
 		return &TuningRecommendation{
 			Parameter:    "phase",
 			CurrentVal:   string(campaign.Phase),
-			SuggestedVal: string(PhasePending),
+			SuggestedVal: string(inventory.PhasePending),
 			Reasoning: fmt.Sprintf("Sell-through is %.0f%% with avg %.0f days to sell. Capital is being tied up in slow-moving inventory",
 				pnl.SellThroughPct*100, pnl.AvgDaysToSell),
 			Impact:     "high",
@@ -225,7 +191,7 @@ func recLowSellThrough(campaign *Campaign, pnl *CampaignPNL) *TuningRecommendati
 }
 
 // Rule 5: Daily spend cap utilization
-func recSpendCapUtilization(campaign *Campaign, pnl *CampaignPNL, dailySpend []DailySpend) *TuningRecommendation {
+func recSpendCapUtilization(campaign *inventory.Campaign, pnl *inventory.CampaignPNL, dailySpend []inventory.DailySpend) *TuningRecommendation {
 	if len(dailySpend) < 14 || campaign.DailySpendCapCents <= 0 {
 		return nil
 	}
@@ -236,13 +202,13 @@ func recSpendCapUtilization(campaign *Campaign, pnl *CampaignPNL, dailySpend []D
 		recent = recent[len(recent)-14:]
 	}
 
-	// Compute from the cap we already hold rather than trusting FillRatePct to
+	// Compute from the cap we already hold rather than trusting inventory.FillRatePct to
 	// have been enriched. An unenriched row reads as 0% utilized, which passes
 	// the low-use branch below and emits confident "widen your criteria" advice
 	// for a campaign that may be pegged at its cap.
 	var totalFill float64
 	for _, ds := range recent {
-		totalFill += FillRatePct(ds.SpendCents, campaign.DailySpendCapCents)
+		totalFill += inventory.FillRatePct(ds.SpendCents, campaign.DailySpendCapCents)
 	}
 	avgFill := totalFill / float64(len(recent))
 
@@ -277,7 +243,7 @@ func recSpendCapUtilization(campaign *Campaign, pnl *CampaignPNL, dailySpend []D
 }
 
 // Rule 6: Market alignment warning
-func recMarketAlignment(campaign *Campaign, alignment *MarketAlignment) []TuningRecommendation {
+func recMarketAlignment(campaign *inventory.Campaign, alignment *MarketAlignment) []TuningRecommendation {
 	if alignment == nil {
 		return nil
 	}
@@ -287,7 +253,7 @@ func recMarketAlignment(campaign *Campaign, alignment *MarketAlignment) []Tuning
 		recs = append(recs, TuningRecommendation{
 			Parameter:    "phase",
 			CurrentVal:   string(campaign.Phase),
-			SuggestedVal: string(PhasePending),
+			SuggestedVal: string(inventory.PhasePending),
 			Reasoning:    alignment.SignalReason,
 			Impact:       "high",
 			Confidence:   alignment.SampleSize,
@@ -316,13 +282,13 @@ func recMarketAlignment(campaign *Campaign, alignment *MarketAlignment) []Tuning
 }
 
 // Rule 7: Channel optimization
-func recChannelOptimization(channelPNL []ChannelPNL) []TuningRecommendation {
+func recChannelOptimization(channelPNL []inventory.ChannelPNL) []TuningRecommendation {
 	if len(channelPNL) < 2 {
 		return nil
 	}
 
 	// Find best and worst channels by avg net profit per sale
-	var best, worst *ChannelPNL
+	var best, worst *inventory.ChannelPNL
 	for i := range channelPNL {
 		ch := &channelPNL[i]
 		if ch.SaleCount < 5 {

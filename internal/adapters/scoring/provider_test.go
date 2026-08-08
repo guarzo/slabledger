@@ -6,6 +6,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
@@ -41,9 +42,9 @@ func TestCampaignData(t *testing.T) {
 				},
 			},
 			tuningSvc: &mocks.MockTuningService{
-				GetCampaignTuningFn: func(_ context.Context, _ string) (*inventory.TuningResponse, error) {
-					return &inventory.TuningResponse{
-						MarketAlignment: &inventory.MarketAlignment{AvgTrend30d: -0.03},
+				GetCampaignTuningFn: func(_ context.Context, _ string) (*tuning.TuningResponse, error) {
+					return &tuning.TuningResponse{
+						MarketAlignment: &tuning.MarketAlignment{AvgTrend30d: -0.03},
 					}, nil
 				},
 			},
