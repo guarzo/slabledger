@@ -10,6 +10,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/advisor"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/dhpricing"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -32,6 +33,7 @@ type schedulerDeps struct {
 	PurchaseStore              *postgres.PurchaseStore
 	DHStore                    *postgres.DHStore
 	CampaignsService           inventory.Service
+	ImportService              csvimport.Service // CSV/orders intake, used by the DH orders poll and PSA sync
 	CertLookup                 inventory.CertLookup
 	CertEnrichJob              *scheduler.CertEnrichJob    // pre-built; nil if PSA not configured
 	PricingEnrichJob           *scheduler.PricingEnrichJob // pre-built; wired into inventory service as the pricing enqueuer
@@ -112,6 +114,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		}
 		if deps.CampaignsService != nil {
 			buildDeps.CampaignService = deps.CampaignsService
+		}
+		if deps.ImportService != nil {
+			buildDeps.OrdersImporter = deps.ImportService
 		}
 	}
 	if deps.DHIntelligenceRepo != nil {
@@ -201,7 +206,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	if deps.PSARowProvider != nil {
 		buildDeps.PSARowProvider = deps.PSARowProvider
 		buildDeps.PSATokenRefresher = deps.PSATokenRefresher
-		buildDeps.PSAImporter = deps.CampaignsService
+		buildDeps.PSAImporter = deps.ImportService
 	}
 
 	// Wire cert enrichment (nil-safe)

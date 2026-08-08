@@ -1,10 +1,11 @@
-package inventory
+package csvimport
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/guarzo/slabledger/internal/domain/errors"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -21,8 +22,8 @@ func (s *service) ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow
 		}
 	}
 
-	dhMap := make(map[int]*Purchase)
-	certMap := make(map[string]*Purchase)
+	dhMap := make(map[int]*inventory.Purchase)
+	certMap := make(map[string]*inventory.Purchase)
 
 	if len(dhIDs) > 0 {
 		var err error
@@ -49,7 +50,7 @@ func (s *service) ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow
 	seen := make(map[string]bool)
 
 	for _, r := range rows {
-		var purchase *Purchase
+		var purchase *inventory.Purchase
 		var certNumber string
 
 		if r.DHInventoryID != 0 {
@@ -81,7 +82,7 @@ func (s *service) ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow
 		}
 
 		existingSale, saleErr := s.sales.GetSaleByPurchaseID(ctx, purchase.ID)
-		if saleErr != nil && !errors.HasErrorCode(saleErr, ErrCodeSaleNotFound) {
+		if saleErr != nil && !errors.HasErrorCode(saleErr, inventory.ErrCodeSaleNotFound) {
 			result.NotFound = append(result.NotFound, OrdersImportSkip{
 				CertNumber:   certNumber,
 				ProductTitle: r.ProductTitle,
@@ -108,17 +109,17 @@ func (s *service) ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow
 					observability.String("campaignID", purchase.CampaignID),
 					observability.Err(err))
 			}
-			campaign = &Campaign{}
+			campaign = &inventory.Campaign{}
 			campaignLookupFailed = true
 		}
 
-		saleFeeCents := CalculateSaleFee(SaleChannelEbay, r.SalePriceCents, campaign)
-		netProfit := CalculateNetProfit(r.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, saleFeeCents)
+		saleFeeCents := inventory.CalculateSaleFee(inventory.SaleChannelEbay, r.SalePriceCents, campaign)
+		netProfit := inventory.CalculateNetProfit(r.SalePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, saleFeeCents)
 
 		result.Matched = append(result.Matched, OrdersImportMatch{
 			CertNumber:           purchase.CertNumber,
 			ProductTitle:         r.ProductTitle,
-			SaleChannel:          SaleChannelEbay,
+			SaleChannel:          inventory.SaleChannelEbay,
 			SaleDate:             r.Date,
 			SalePriceCents:       r.SalePriceCents,
 			SaleFeeCents:         saleFeeCents,

@@ -1,44 +1,17 @@
-package inventory
+package csvimport
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 )
 
 // --- External Purchases ---
 
-func (s *service) EnsureExternalCampaign(ctx context.Context) (*Campaign, error) {
-	c, err := s.campaigns.GetCampaign(ctx, ExternalCampaignID)
-	if err == nil {
-		return c, nil
-	}
-	if !IsCampaignNotFound(err) {
-		return nil, fmt.Errorf("lookup external campaign: %w", err)
-	}
-	now := time.Now()
-	c = &Campaign{
-		ID:                  ExternalCampaignID,
-		Name:                ExternalCampaignName,
-		Phase:               PhaseActive,
-		PSASourcingFeeCents: 0,
-		CreatedAt:           now,
-		UpdatedAt:           now,
-	}
-	if err := s.campaigns.CreateCampaign(ctx, c); err != nil {
-		// Race condition: another goroutine may have created it concurrently
-		if existing, getErr := s.campaigns.GetCampaign(ctx, ExternalCampaignID); getErr == nil {
-			return existing, nil
-		}
-		return nil, fmt.Errorf("create external campaign: %w", err)
-	}
-	return c, nil
-}
-
 func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow) (*ExternalImportResult, error) {
-	campaign, err := s.EnsureExternalCampaign(ctx)
+	campaign, err := inventory.EnsureExternalCampaign(ctx, s.campaigns)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +49,7 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 
 		buyCostCents := mathutil.ToCentsInt(row.CostPerItem)
 
-		p := &Purchase{
+		p := &inventory.Purchase{
 			ID:                  s.idGen(),
 			CampaignID:          campaign.ID,
 			CardName:            row.CardName,
@@ -95,7 +68,7 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 			UpdatedAt:           now,
 		}
 
-		if err := ValidateAndNormalizeExternalPurchase(p); err != nil {
+		if err := inventory.ValidateAndNormalizeExternalPurchase(p); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{Row: i + 1, Error: err.Error()})
 			result.Results = append(result.Results, ExternalImportItemResult{
@@ -109,7 +82,7 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 
 		// Check if cert already exists — update if so
 		existing, existErr := s.purchases.GetPurchaseByCertNumber(ctx, row.Grader, certNumber)
-		if existErr != nil && !IsPurchaseNotFound(existErr) {
+		if existErr != nil && !inventory.IsPurchaseNotFound(existErr) {
 			// Unexpected read failure — treat as failed row
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{Row: i + 1, Error: existErr.Error()})
@@ -135,9 +108,9 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 				continue
 			}
 			result.Updated++
-			if p.GradeValue > 0 && p.CardName != "" && !IsGenericSetName(p.SetName) {
+			if p.GradeValue > 0 && p.CardName != "" && !inventory.IsGenericSetName(p.SetName) {
 				// Use existing for purchase identity (correct ID), p for card identity (updated values)
-				_, _ = s.captureMarketSnapshot(ctx, existing, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
+				s.inv.CapturePurchaseSnapshot(ctx, existing, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
 			}
 			result.Results = append(result.Results, ExternalImportItemResult{
 				CertNumber: certNumber,
@@ -150,7 +123,7 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 		}
 
 		if err := s.purchases.CreatePurchase(ctx, p); err != nil {
-			if IsDuplicateCertNumber(err) {
+			if inventory.IsDuplicateCertNumber(err) {
 				result.Skipped++
 				result.Results = append(result.Results, ExternalImportItemResult{
 					CertNumber: certNumber,
@@ -172,8 +145,8 @@ func (s *service) ImportExternalCSV(ctx context.Context, rows []ShopifyExportRow
 		}
 
 		result.Imported++
-		if p.GradeValue > 0 && p.CardName != "" && !IsGenericSetName(p.SetName) {
-			_, _ = s.captureMarketSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
+		if p.GradeValue > 0 && p.CardName != "" && !inventory.IsGenericSetName(p.SetName) {
+			s.inv.CapturePurchaseSnapshot(ctx, p, p.ToCardIdentity(), p.GradeValue, p.CLValueCents)
 		}
 		result.Results = append(result.Results, ExternalImportItemResult{
 			CertNumber: certNumber,

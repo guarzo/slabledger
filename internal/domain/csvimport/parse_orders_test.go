@@ -1,7 +1,9 @@
-package inventory
+package csvimport
 
 import (
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 func TestParseOrdersExportRows(t *testing.T) {
@@ -34,7 +36,7 @@ func TestParseOrdersExportRows(t *testing.T) {
 	if rows[0].CertNumber != "194544353" {
 		t.Errorf("row 0 cert: got %q, want 194544353", rows[0].CertNumber)
 	}
-	if rows[0].SalesChannel != SaleChannelEbay {
+	if rows[0].SalesChannel != inventory.SaleChannelEbay {
 		t.Errorf("row 0 channel: got %q, want ebay", rows[0].SalesChannel)
 	}
 	if rows[0].UnitPrice != 259.35 {
@@ -48,7 +50,7 @@ func TestParseOrdersExportRows(t *testing.T) {
 	if rows[1].CertNumber != "191055511" {
 		t.Errorf("row 1 cert: got %q, want 191055511", rows[1].CertNumber)
 	}
-	if rows[1].SalesChannel != SaleChannelEbay {
+	if rows[1].SalesChannel != inventory.SaleChannelEbay {
 		t.Errorf("row 1 channel: got %q, want ebay", rows[1].SalesChannel)
 	}
 
@@ -98,7 +100,7 @@ func TestParseOrdersExportRows_OnlineStoreChannel(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
 	}
-	if rows[0].SalesChannel != SaleChannelWebsite {
+	if rows[0].SalesChannel != inventory.SaleChannelWebsite {
 		t.Errorf("channel: got %q, want website", rows[0].SalesChannel)
 	}
 }

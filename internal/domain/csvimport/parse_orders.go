@@ -1,22 +1,24 @@
-package inventory
+package csvimport
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // mapOrdersChannel maps CSV "Sales Channel" values to SaleChannel constants.
 // This currently handles Shopify orders export CSVs which use "eBay" and "Online Store"
 // as channel values. Unknown channel values return empty string, causing the row to be
 // skipped during parsing.
-func mapOrdersChannel(raw string) SaleChannel {
+func mapOrdersChannel(raw string) inventory.SaleChannel {
 	switch strings.TrimSpace(raw) {
 	case "eBay":
-		return SaleChannelEbay
+		return inventory.SaleChannelEbay
 	case "Online Store":
-		return SaleChannelWebsite
+		return inventory.SaleChannelWebsite
 	default:
 		return ""
 	}

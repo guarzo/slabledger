@@ -1,8 +1,10 @@
-package inventory
+package csvimport_test
 
 import (
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
@@ -15,6 +17,11 @@ import (
 // so "PSA 9.55" yielded 9.55 on the PSA CSV path and 9 on the Shopify path. The
 // explicit decision is that both ACCEPT the multi-digit form and let the shared
 // 1-10 range check be the thing that rejects nonsense.
+//
+// It lives in csvimport since SLA-35 split CSV intake out: ExtractGraderAndGrade
+// went with the parsers, while ExtractGrade stayed in inventory because cert
+// lookup and snapshots use it too. Testing the pair from outside both packages
+// is the only way to keep asserting they agree.
 func TestExtractGrade_AgreesWithExtractGraderAndGrade(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -38,18 +45,18 @@ func TestExtractGrade_AgreesWithExtractGraderAndGrade(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotGrade := ExtractGrade(tt.title)
+			gotGrade := inventory.ExtractGrade(tt.title)
 			if gotGrade != tt.want {
-				t.Errorf("ExtractGrade(%q) = %v, want %v", tt.title, gotGrade, tt.want)
+				t.Errorf("inventory.ExtractGrade(%q) = %v, want %v", tt.title, gotGrade, tt.want)
 			}
 
-			gotGrader, gotPaired := ExtractGraderAndGrade(tt.title)
+			gotGrader, gotPaired := csvimport.ExtractGraderAndGrade(tt.title)
 			if gotPaired != tt.want {
-				t.Errorf("ExtractGraderAndGrade(%q) grade = %v, want %v (must agree with ExtractGrade)",
+				t.Errorf("csvimport.ExtractGraderAndGrade(%q) grade = %v, want %v (must agree with ExtractGrade)",
 					tt.title, gotPaired, tt.want)
 			}
 			if tt.want != 0 && gotGrader != "PSA" {
-				t.Errorf("ExtractGraderAndGrade(%q) grader = %q, want %q", tt.title, gotGrader, "PSA")
+				t.Errorf("csvimport.ExtractGraderAndGrade(%q) grader = %q, want %q", tt.title, gotGrader, "PSA")
 			}
 		})
 	}
@@ -72,14 +79,14 @@ func TestExtractGraderAndGrade_NonPSAGraders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotGrader, gotGrade := ExtractGraderAndGrade(tt.title)
+			gotGrader, gotGrade := csvimport.ExtractGraderAndGrade(tt.title)
 			if gotGrader != tt.wantGrader || gotGrade != tt.wantGrade {
-				t.Errorf("ExtractGraderAndGrade(%q) = (%q, %v), want (%q, %v)",
+				t.Errorf("csvimport.ExtractGraderAndGrade(%q) = (%q, %v), want (%q, %v)",
 					tt.title, gotGrader, gotGrade, tt.wantGrader, tt.wantGrade)
 			}
 			// ExtractGrade is PSA-only by contract.
-			if got := ExtractGrade(tt.title); got != 0 {
-				t.Errorf("ExtractGrade(%q) = %v, want 0 (PSA-only)", tt.title, got)
+			if got := inventory.ExtractGrade(tt.title); got != 0 {
+				t.Errorf("inventory.ExtractGrade(%q) = %v, want 0 (PSA-only)", tt.title, got)
 			}
 		})
 	}
@@ -101,8 +108,8 @@ func TestGradeStrippingUsesSharedPattern(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if got := ExtractCardNameFromTitle(tt.title); got != tt.want {
-					t.Errorf("ExtractCardNameFromTitle(%q) = %q, want %q", tt.title, got, tt.want)
+				if got := csvimport.ExtractCardNameFromTitle(tt.title); got != tt.want {
+					t.Errorf("csvimport.ExtractCardNameFromTitle(%q) = %q, want %q", tt.title, got, tt.want)
 				}
 			})
 		}

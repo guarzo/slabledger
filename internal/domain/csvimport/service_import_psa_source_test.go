@@ -1,9 +1,10 @@
-package inventory_test
+package csvimport_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -54,7 +55,7 @@ func TestService_ImportPSAExportGlobal_PurchaseSourceGuard(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := mocks.NewInMemoryCampaignStore()
-			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+			svc, imp := newServices(repo, nil)
 			ctx := context.Background()
 
 			c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
@@ -77,13 +78,13 @@ func TestService_ImportPSAExportGlobal_PurchaseSourceGuard(t *testing.T) {
 				t.Fatalf("setup CreatePurchase: %v", err)
 			}
 
-			rows := []inventory.PSAExportRow{{
+			rows := []csvimport.PSAExportRow{{
 				CertNumber: "PSA100", ListingTitle: "Charizard", Grade: 9,
 				PricePaid: 500, ShipDate: "2026-02-01", InvoiceDate: "2026-02-01",
 				PurchaseSource: tt.incomingSource,
 			}}
 
-			result, err := svc.ImportPSAExportGlobal(ctx, rows)
+			result, err := imp.ImportPSAExportGlobal(ctx, rows)
 			if err != nil {
 				t.Fatalf("ImportPSAExportGlobal: %v", err)
 			}

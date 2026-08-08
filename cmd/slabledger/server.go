@@ -17,6 +17,7 @@ import (
 	// Domain interfaces (what we depend on - Dependency Inversion Principle)
 	domainArbitrage "github.com/guarzo/slabledger/internal/domain/arbitrage"
 	domainAuth "github.com/guarzo/slabledger/internal/domain/auth"
+	domainCSVImport "github.com/guarzo/slabledger/internal/domain/csvimport"
 	domainDHListing "github.com/guarzo/slabledger/internal/domain/dhlisting"
 	domainDHPricing "github.com/guarzo/slabledger/internal/domain/dhpricing"
 	domainExport "github.com/guarzo/slabledger/internal/domain/export"
@@ -37,6 +38,7 @@ type ServerDependencies struct {
 	APITracker                domainPricing.APITracker
 	AuthService               domainAuth.Service
 	CampaignsService          domainCampaigns.Service
+	ImportService             domainCSVImport.Service // optional: CSV/portal intake routes
 	ArbitrageService          domainArbitrage.Service
 	PortfolioService          domainPortfolio.Service
 	TuningService             domainTuning.Service
@@ -303,6 +305,9 @@ func campaignsHandlerOptions(deps ServerDependencies) []handlers.CampaignsHandle
 	}
 	if deps.ExportService != nil {
 		opts = append(opts, handlers.WithExportService(deps.ExportService))
+	}
+	if deps.ImportService != nil {
+		opts = append(opts, handlers.WithImportService(deps.ImportService))
 	}
 	if deps.PSARowProvider != nil {
 		opts = append(opts, handlers.WithPSARowProvider(deps.PSARowProvider))

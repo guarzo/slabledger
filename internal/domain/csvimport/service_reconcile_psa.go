@@ -1,10 +1,11 @@
-package inventory
+package csvimport
 
 import (
 	"context"
 	"errors"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
@@ -75,7 +76,7 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 
 		if p.CampaignID == campaignID {
 			res.Agreed++
-			if err := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, row.PSACampaignName, AttributionSourcePSA); err != nil {
+			if err := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, row.PSACampaignName, inventory.AttributionSourcePSA); err != nil {
 				res.Failed++
 				s.logReconcileFailure(ctx, row.CertNumber, err)
 			}
@@ -90,14 +91,14 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 			continue
 		}
 
-		err = s.purchases.ReattributePurchase(ctx, p.ID, Reattribution{
+		err = s.purchases.ReattributePurchase(ctx, p.ID, inventory.Reattribution{
 			CampaignID:             campaignID,
 			PSACampaignName:        row.PSACampaignName,
 			PSASourcingFeeCents:    campaign.PSASourcingFeeCents,
 			CLConfidenceAtPurchase: clConfidenceForReattribution(p.PurchaseDate, campaign),
 		})
 		switch {
-		case errors.Is(err, ErrPurchaseHasSale):
+		case errors.Is(err, inventory.ErrPurchaseHasSale):
 			// p.AttributionSource is "" when the column is NULL (NULL scans to ""
 			// in purchase_scan_helpers.go), and "" violates the CHECK constraint
 			// from migration 000023 — writing it would fail the row instead of
@@ -105,7 +106,7 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 			// what the store defaults to on create.
 			source := p.AttributionSource
 			if source == "" {
-				source = AttributionSourceInferred
+				source = inventory.AttributionSourceInferred
 			}
 			// Counted once: either the row is recorded as sold-skipped or it failed.
 			if nErr := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, row.PSACampaignName, source); nErr != nil {
@@ -146,7 +147,7 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 // all since the purchase". Everything else returns nil (stored as NULL): the 8/15
 // buy-terms experiment turns on this column, and a fabricated anachronistic value
 // corrupts it silently, whereas a NULL is visible.
-func clConfidenceForReattribution(purchaseDate string, campaign *Campaign) *int {
+func clConfidenceForReattribution(purchaseDate string, campaign *inventory.Campaign) *int {
 	d, err := time.Parse("2006-01-02", purchaseDate)
 	if err != nil {
 		return nil
@@ -155,14 +156,14 @@ func clConfidenceForReattribution(purchaseDate string, campaign *Campaign) *int 
 	if campaign.UpdatedAt.After(d.AddDate(0, 0, 1)) {
 		return nil
 	}
-	c, ok := ParseCLConfidenceMin(campaign.CLConfidence)
+	c, ok := inventory.ParseCLConfidenceMin(campaign.CLConfidence)
 	if !ok {
 		return nil
 	}
 	return &c
 }
 
-func (s *service) recordUnresolvedAttribution(ctx context.Context, pendingByCert map[string]string, p *Purchase, psaName string) error {
+func (s *service) recordUnresolvedAttribution(ctx context.Context, pendingByCert map[string]string, p *inventory.Purchase, psaName string) error {
 	// Keep the existing campaign; record PSA's name so a portal-side deletion
 	// never loses it again.
 	//
@@ -172,9 +173,9 @@ func (s *service) recordUnresolvedAttribution(ctx context.Context, pendingByCert
 	// else becomes inferred, since it was never an authoritative source to
 	// begin with. This is a human ruling, not the brief's original text, which
 	// hardcoded inferred for every case.
-	source := AttributionSourceInferred
-	if p.AttributionSource == AttributionSourceManual {
-		source = AttributionSourceManual
+	source := inventory.AttributionSourceInferred
+	if p.AttributionSource == inventory.AttributionSourceManual {
+		source = inventory.AttributionSourceManual
 	}
 	if err := s.purchases.UpdatePurchaseAttributionName(ctx, p.ID, psaName, source); err != nil {
 		return err
@@ -190,7 +191,7 @@ func (s *service) recordUnresolvedAttribution(ctx context.Context, pendingByCert
 	//
 	// The External sentinel does not count: it is where unattributed cards
 	// land, so it is the absence of an answer, not one.
-	if p.CampaignID != "" && p.CampaignID != ExternalCampaignID {
+	if p.CampaignID != "" && p.CampaignID != inventory.ExternalCampaignID {
 		// Retire any item enqueued before this guard existed. Those rows are
 		// otherwise stuck forever: resolveStalePendingItem only fires when the
 		// PSA name resolves, and a deleted portal campaign's name never will.
@@ -223,11 +224,11 @@ func (s *service) logSoldSkip(ctx context.Context, cert, psaName string) {
 // is the psa_campaign_name column just written on the purchase; this is only
 // the operator work queue. SavePendingItems upserts by cert_number and skips
 // already-resolved items, so re-running a harvest is idempotent.
-func (s *service) enqueueUnresolvedPendingItem(ctx context.Context, p *Purchase, psaName string) error {
+func (s *service) enqueueUnresolvedPendingItem(ctx context.Context, p *inventory.Purchase, psaName string) error {
 	if s.pendingItemRepo == nil {
 		return nil
 	}
-	item := PendingItem{
+	item := inventory.PendingItem{
 		ID:           s.idGen(),
 		CertNumber:   p.CertNumber,
 		CardName:     p.CardName,
@@ -240,7 +241,7 @@ func (s *service) enqueueUnresolvedPendingItem(ctx context.Context, p *Purchase,
 		Candidates:   []string{psaName},
 		Source:       "scheduler",
 	}
-	return s.pendingItemRepo.SavePendingItems(ctx, []PendingItem{item})
+	return s.pendingItemRepo.SavePendingItems(ctx, []inventory.PendingItem{item})
 }
 
 // loadPendingItemIDs indexes the unresolved pending-item queue by cert number,

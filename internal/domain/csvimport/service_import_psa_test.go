@@ -1,10 +1,11 @@
-package inventory_test
+package csvimport_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -26,13 +27,11 @@ func (r stubPSAResolver) ResolveCampaignID(_ context.Context, psaName string) (s
 // newPSAImportFixture builds a service wired with an in-memory campaign store,
 // a stub PSA resolver, and both a PSA-resolvable campaign ("camp-psa") and an
 // inference-only fallback campaign ("camp-inferred").
-func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool, resolveErr error) (inventory.Service, *mocks.InMemoryCampaignStore) {
+func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool, resolveErr error) (csvimport.Service, *mocks.InMemoryCampaignStore) {
 	t.Helper()
 	repo := mocks.NewInMemoryCampaignStore()
 	resolver := stubPSAResolver{campaignID: resolveTo, ok: resolveOK, err: resolveErr}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
-		withTestIDGen(), withDisabledBackgroundWorkers(),
-		inventory.WithPSACampaignResolver(resolver))
+	svc, imp := newServicesWithResolver(repo, nil, resolver, inventory.WithDisableBackgroundWorkers())
 	ctx := context.Background()
 
 	// The PSA-resolved campaign. Its subject axis intentionally cannot match
@@ -59,7 +58,7 @@ func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool, resolve
 		t.Fatalf("CreateCampaign(inferred): %v", err)
 	}
 
-	return svc, repo
+	return imp, repo
 }
 
 // runSingleRowImport imports a single PSA row with the given raw PSA campaign
@@ -69,15 +68,15 @@ func newPSAImportFixture(t *testing.T, resolveTo string, resolveOK bool, resolve
 // maps to any known campaign.
 func runSingleRowImport(t *testing.T, psaName string, resolveErr error) *inventory.Purchase {
 	t.Helper()
-	svc, repo := newPSAImportFixture(t, "camp-psa", psaName == "Modern", resolveErr)
+	imp, repo := newPSAImportFixture(t, "camp-psa", psaName == "Modern", resolveErr)
 	ctx := context.Background()
 
-	row := inventory.PSAExportRow{
+	row := csvimport.PSAExportRow{
 		CertNumber: "163772677", ListingTitle: "UMBREON PSA 9", Grade: 9,
 		PricePaid: 789.96, Date: "2026-08-01", Category: "Pokemon",
 		PSACampaignName: psaName,
 	}
-	result, err := svc.ImportPSAExportGlobal(ctx, []inventory.PSAExportRow{row})
+	result, err := imp.ImportPSAExportGlobal(ctx, []csvimport.PSAExportRow{row})
 	if err != nil {
 		t.Fatalf("ImportPSAExportGlobal: %v", err)
 	}
@@ -149,12 +148,9 @@ func TestImportPSA_ResolvedRowIsAllocatedNotPending(t *testing.T) {
 			return nil
 		},
 	}
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
-		withTestIDGen(), withDisabledBackgroundWorkers(),
-		inventory.WithPSACampaignResolver(stubPSAResolver{campaignID: "camp-psa", ok: true}),
-		inventory.WithPendingItemRepository(pendingRepo))
+	_, imp := newServicesWithResolver(repo, pendingRepo, stubPSAResolver{campaignID: "camp-psa", ok: true}, inventory.WithDisableBackgroundWorkers())
 
-	res, err := svc.ImportPSAExportGlobal(ctx, []inventory.PSAExportRow{
+	res, err := imp.ImportPSAExportGlobal(ctx, []csvimport.PSAExportRow{
 		{CertNumber: "123", PSACampaignName: "Modern", ListingTitle: "UMBREON PSA 9", Grade: 9, PricePaid: 789.96, Date: "2026-08-01", Category: "Pokemon"},
 	})
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/ai"
 	"github.com/guarzo/slabledger/internal/domain/arbitrage"
 	"github.com/guarzo/slabledger/internal/domain/auth"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/demand"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/dhpricing"
@@ -39,6 +40,7 @@ type handlerInputs struct {
 	PriceRepo            *postgres.DBTracker
 	AuthService          auth.Service
 	CampaignsService     inventory.Service
+	ImportService        csvimport.Service
 	ArbitrageService     arbitrage.Service
 	DHPriceSyncService   dhpricing.Service
 	PortfolioService     portfolio.Service
@@ -261,6 +263,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		APITracker:                in.PriceRepo,
 		AuthService:               in.AuthService,
 		CampaignsService:          in.CampaignsService,
+		ImportService:             in.ImportService,
 		ArbitrageService:          in.ArbitrageService,
 		PortfolioService:          in.PortfolioService,
 		TuningService:             in.TuningService,

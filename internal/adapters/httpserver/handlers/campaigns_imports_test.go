@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -377,11 +378,24 @@ func TestHandleResolveCert_EmptyCert(t *testing.T) {
 
 // --- HandleGlobalImportPSA ---
 
+// newTestHandlerWithImport builds a handler whose CSV/portal intake routes are
+// wired. Those routes answer 503 without WithImportService, so every import test
+// goes through here rather than newTestHandler.
+func newTestHandlerWithImport(imp csvimport.Service, opts ...CampaignsHandlerOption) *CampaignsHandler {
+	base := []CampaignsHandlerOption{
+		WithFinanceService(&mocks.MockFinanceService{}),
+		WithExportService(&mocks.MockExportService{}),
+		WithImportService(imp),
+	}
+	return NewCampaignsHandler(&mocks.MockInventoryService{}, nil, nil, nil,
+		mocks.NewMockLogger(), nil, append(base, opts...)...)
+}
+
 func TestHandleGlobalImportPSA(t *testing.T) {
 	tests := []struct {
 		name     string
 		setupReq func(t *testing.T) (*bytes.Buffer, string)
-		setupSvc func() *mocks.MockInventoryService
+		setupSvc func() *mocks.MockImportService
 		wantCode int
 		check    func(t *testing.T, rec *httptest.ResponseRecorder)
 	}{
@@ -394,17 +408,17 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 					{"12345678", "2020 Pokémon Charizard PSA 9", "9"},
 				})
 			},
-			setupSvc: func() *mocks.MockInventoryService {
-				return &mocks.MockInventoryService{
-					ImportPSAExportGlobalFn: func(_ context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
-						return &inventory.PSAImportResult{Allocated: len(rows)}, nil
+			setupSvc: func() *mocks.MockImportService {
+				return &mocks.MockImportService{
+					ImportPSAExportGlobalFn: func(_ context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
+						return &csvimport.PSAImportResult{Allocated: len(rows)}, nil
 					},
 				}
 			},
 			wantCode: http.StatusOK,
 			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				t.Helper()
-				var result inventory.PSAImportResult
+				var result csvimport.PSAImportResult
 				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 					t.Fatalf("decode: %v", err)
 				}
@@ -422,7 +436,7 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 				writer.Close()
 				return &buf, writer.FormDataContentType()
 			},
-			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
+			setupSvc: func() *mocks.MockImportService { return &mocks.MockImportService{} },
 			wantCode: http.StatusBadRequest,
 		},
 		{
@@ -434,7 +448,7 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 					{"12345678", "Charizard", "9"},
 				})
 			},
-			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
+			setupSvc: func() *mocks.MockImportService { return &mocks.MockImportService{} },
 			wantCode: http.StatusBadRequest,
 		},
 		{
@@ -446,9 +460,9 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 					{"12345678", "Charizard PSA 9", "9"},
 				})
 			},
-			setupSvc: func() *mocks.MockInventoryService {
-				return &mocks.MockInventoryService{
-					ImportPSAExportGlobalFn: func(_ context.Context, _ []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
+			setupSvc: func() *mocks.MockImportService {
+				return &mocks.MockImportService{
+					ImportPSAExportGlobalFn: func(_ context.Context, _ []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
 						return nil, fmt.Errorf("database failure")
 					},
 				}
@@ -459,7 +473,7 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newTestHandler(tc.setupSvc())
+			h := newTestHandlerWithImport(tc.setupSvc())
 			body, contentType := tc.setupReq(t)
 			req := httptest.NewRequest(http.MethodPost, "/api/purchases/import-psa", body)
 			req.Header.Set("Content-Type", contentType)
@@ -481,42 +495,42 @@ func TestHandleGlobalImportPSA(t *testing.T) {
 func TestHandleSyncPSASheets(t *testing.T) {
 	tests := []struct {
 		name         string
-		setupHandler func(svc *mocks.MockInventoryService) *CampaignsHandler
-		setupSvc     func() *mocks.MockInventoryService
+		setupHandler func(svc *mocks.MockImportService) *CampaignsHandler
+		setupSvc     func() *mocks.MockImportService
 		wantCode     int
 		check        func(t *testing.T, rec *httptest.ResponseRecorder)
 	}{
 		{
 			name: "not configured",
-			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
-				return newTestHandler(svc) // no WithPSARowProvider
+			setupHandler: func(svc *mocks.MockImportService) *CampaignsHandler {
+				return newTestHandlerWithImport(svc) // no WithPSARowProvider
 			},
-			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
+			setupSvc: func() *mocks.MockImportService { return &mocks.MockImportService{} },
 			wantCode: http.StatusServiceUnavailable,
 		},
 		{
 			name: "success",
-			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
+			setupHandler: func(svc *mocks.MockImportService) *CampaignsHandler {
 				provider := &mocks.PSARowProviderMock{
-					FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
-						return []inventory.PSAExportRow{
+					FetchRowsFn: func(_ context.Context) ([]csvimport.PSAExportRow, error) {
+						return []csvimport.PSAExportRow{
 							{CertNumber: "12345678", Grade: 9, PricePaid: 0},
 						}, nil
 					},
 				}
-				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithPSARowProvider(provider))
+				return newTestHandlerWithImport(svc, WithPSARowProvider(provider))
 			},
-			setupSvc: func() *mocks.MockInventoryService {
-				return &mocks.MockInventoryService{
-					ImportPSAExportGlobalFn: func(_ context.Context, rows []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
-						return &inventory.PSAImportResult{Allocated: len(rows)}, nil
+			setupSvc: func() *mocks.MockImportService {
+				return &mocks.MockImportService{
+					ImportPSAExportGlobalFn: func(_ context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
+						return &csvimport.PSAImportResult{Allocated: len(rows)}, nil
 					},
 				}
 			},
 			wantCode: http.StatusOK,
 			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				t.Helper()
-				var result inventory.PSAImportResult
+				var result csvimport.PSAImportResult
 				if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 					t.Fatalf("decode: %v", err)
 				}
@@ -527,15 +541,15 @@ func TestHandleSyncPSASheets(t *testing.T) {
 		},
 		{
 			name: "portal fetch error",
-			setupHandler: func(svc *mocks.MockInventoryService) *CampaignsHandler {
+			setupHandler: func(svc *mocks.MockImportService) *CampaignsHandler {
 				provider := &mocks.PSARowProviderMock{
-					FetchRowsFn: func(_ context.Context) ([]inventory.PSAExportRow, error) {
+					FetchRowsFn: func(_ context.Context) ([]csvimport.PSAExportRow, error) {
 						return nil, fmt.Errorf("portal API error")
 					},
 				}
-				return NewCampaignsHandler(svc, nil, nil, nil, mocks.NewMockLogger(), nil, WithPSARowProvider(provider))
+				return newTestHandlerWithImport(svc, WithPSARowProvider(provider))
 			},
-			setupSvc: func() *mocks.MockInventoryService { return &mocks.MockInventoryService{} },
+			setupSvc: func() *mocks.MockImportService { return &mocks.MockImportService{} },
 			wantCode: http.StatusBadGateway,
 		},
 	}

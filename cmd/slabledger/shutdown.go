@@ -6,6 +6,7 @@ import (
 
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -19,6 +20,7 @@ func shutdownGracefully(
 	schedulerResult *scheduler.BuildResult,
 	hOut handlerOutputs,
 	campaignsService inventory.Service,
+	importService csvimport.Service,
 	shutdownTimeout time.Duration,
 ) {
 	logger.Info(ctx, "shutting down schedulers")
@@ -52,6 +54,12 @@ func shutdownGracefully(
 	// Shut down campaign service background workers
 	if campaignsService != nil {
 		campaignsService.Close()
+	}
+
+	// CSV/portal intake runs its own background work (card-ID backfill, DH sold
+	// notifications), so it has to drain before db.Close() the same way.
+	if importService != nil {
+		importService.Close()
 	}
 }
 

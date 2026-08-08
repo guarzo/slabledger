@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -69,13 +70,13 @@ func (builderStubPurchaseByCertLookup) GetDHStatusByCertNumber(context.Context, 
 
 type builderStubRowProvider struct{}
 
-func (builderStubRowProvider) FetchRows(context.Context) ([]inventory.PSAExportRow, error) {
+func (builderStubRowProvider) FetchRows(context.Context) ([]csvimport.PSAExportRow, error) {
 	return nil, nil
 }
 
 type builderStubPSAImporter struct{}
 
-func (builderStubPSAImporter) ImportPSAExportGlobal(context.Context, []inventory.PSAExportRow) (*inventory.PSAImportResult, error) {
+func (builderStubPSAImporter) ImportPSAExportGlobal(context.Context, []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
 	return nil, nil
 }
 

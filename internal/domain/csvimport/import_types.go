@@ -1,4 +1,4 @@
-package inventory
+package csvimport
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/platform/cardutil"
 )
 
@@ -14,14 +15,6 @@ import (
 type ImportError struct {
 	Row   int    `json:"row"`
 	Error string `json:"error"`
-}
-
-// QuickAddRequest contains the minimal data needed to create a purchase from a cert number.
-type QuickAddRequest struct {
-	CertNumber   string `json:"certNumber"`
-	BuyCostCents int    `json:"buyCostCents"`
-	CLValueCents int    `json:"clValueCents,omitempty"`
-	PurchaseDate string `json:"purchaseDate,omitempty"` // defaults to today
 }
 
 // PSAExportRow represents a single row parsed from a PSA communication spreadsheet.
@@ -78,16 +71,6 @@ type PSAImportItemResult struct {
 	PurchaseDate string   `json:"purchaseDate,omitempty"`
 	SetName      string   `json:"setName,omitempty"`
 	CardNumber   string   `json:"cardNumber,omitempty"`
-}
-
-// PSACardMetadata bundles card identity fields parsed from a PSA listing title.
-// Passed through the import pipeline to avoid multi-return and many-parameter functions.
-type PSACardMetadata struct {
-	CardName     string
-	CardNumber   string
-	SetName      string
-	CardYear     int
-	ParseWarning string // non-empty when fallback parsing was used
 }
 
 // ParsePSADate converts PSA date formats to YYYY-MM-DD.
@@ -183,8 +166,8 @@ func ExtractGraderAndGrade(title string) (string, float64) {
 // OrdersExportRow represents a single row parsed from an orders export CSV.
 type OrdersExportRow struct {
 	OrderNumber  string
-	Date         string      // YYYY-MM-DD
-	SalesChannel SaleChannel // Mapped from CSV value
+	Date         string                // YYYY-MM-DD
+	SalesChannel inventory.SaleChannel // Mapped from CSV value
 	ProductTitle string
 	Grader       string
 	CertNumber   string
@@ -202,18 +185,18 @@ type OrdersImportResult struct {
 
 // OrdersImportMatch represents a CSV row matched to an unsold inventory purchase.
 type OrdersImportMatch struct {
-	CertNumber           string      `json:"certNumber"`
-	ProductTitle         string      `json:"productTitle"`
-	SaleChannel          SaleChannel `json:"saleChannel"`
-	SaleDate             string      `json:"saleDate"`
-	SalePriceCents       int         `json:"salePriceCents"`
-	SaleFeeCents         int         `json:"saleFeeCents"`
-	PurchaseID           string      `json:"purchaseId"`
-	CampaignID           string      `json:"campaignId"`
-	CardName             string      `json:"cardName"`
-	BuyCostCents         int         `json:"buyCostCents"`
-	NetProfitCents       int         `json:"netProfitCents"`
-	CampaignLookupFailed bool        `json:"campaignLookupFailed,omitempty"`
+	CertNumber           string                `json:"certNumber"`
+	ProductTitle         string                `json:"productTitle"`
+	SaleChannel          inventory.SaleChannel `json:"saleChannel"`
+	SaleDate             string                `json:"saleDate"`
+	SalePriceCents       int                   `json:"salePriceCents"`
+	SaleFeeCents         int                   `json:"saleFeeCents"`
+	PurchaseID           string                `json:"purchaseId"`
+	CampaignID           string                `json:"campaignId"`
+	CardName             string                `json:"cardName"`
+	BuyCostCents         int                   `json:"buyCostCents"`
+	NetProfitCents       int                   `json:"netProfitCents"`
+	CampaignLookupFailed bool                  `json:"campaignLookupFailed,omitempty"`
 }
 
 // OrdersImportSkip represents a CSV row that was skipped or couldn't be matched.
@@ -225,11 +208,11 @@ type OrdersImportSkip struct {
 
 // OrdersConfirmItem carries the data needed to create a sale from a confirmed import match.
 type OrdersConfirmItem struct {
-	PurchaseID     string      `json:"purchaseId"`
-	SaleChannel    SaleChannel `json:"saleChannel"`
-	SaleDate       string      `json:"saleDate"`
-	SalePriceCents int         `json:"salePriceCents"`
-	OrderID        string      `json:"orderId,omitempty"`
+	PurchaseID     string                `json:"purchaseId"`
+	SaleChannel    inventory.SaleChannel `json:"saleChannel"`
+	SaleDate       string                `json:"saleDate"`
+	SalePriceCents int                   `json:"salePriceCents"`
+	OrderID        string                `json:"orderId,omitempty"`
 }
 
 // cardNumberPattern matches expected card number formats (digits, alphanumeric, with optional slash separator).

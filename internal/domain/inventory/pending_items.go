@@ -32,8 +32,8 @@ func WithImportSource(ctx context.Context, source string) context.Context {
 	return context.WithValue(ctx, importSourceKey{}, source)
 }
 
-// importSourceFromContext returns the import source from context, defaulting to "manual".
-func importSourceFromContext(ctx context.Context) string {
+// ImportSourceFromContext returns the import source from context, defaulting to "manual".
+func ImportSourceFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(importSourceKey{}).(string); ok && v != "" {
 		return v
 	}

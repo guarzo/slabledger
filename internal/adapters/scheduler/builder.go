@@ -67,6 +67,10 @@ type BuildDeps struct {
 	PurchaseByCertLookup  PurchaseByCertLookup
 	CampaignService       domainCampaigns.Service
 
+	// OrdersImporter lands polled DH orders as sales. Separate from
+	// CampaignService since CSV/orders intake lives in domain/csvimport.
+	OrdersImporter DHOrdersImporter
+
 	// DH push dependencies (optional)
 	DHPushPendingLister DHPushPendingLister
 	DHPushStatusUpdater DHPushStatusUpdater

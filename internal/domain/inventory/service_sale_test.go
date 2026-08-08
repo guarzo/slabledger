@@ -326,33 +326,3 @@ func TestCreateBulkSales_CopiesPerItemFields(t *testing.T) {
 		}
 	}
 }
-
-func TestConfirmOrdersSales_FreezesProvenance(t *testing.T) {
-	repo := mocks.NewInMemoryCampaignStore()
-	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
-	ctx := context.Background()
-
-	c, p := setupSaleFixture(t, repo, svc)
-
-	result, err := svc.ConfirmOrdersSales(ctx, []inventory.OrdersConfirmItem{
-		{PurchaseID: p.ID, SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-06-20", SalePriceCents: 20000},
-	})
-	if err != nil {
-		t.Fatalf("ConfirmOrdersSales: %v", err)
-	}
-	if result.Created != 1 {
-		t.Fatalf("created = %d, want 1 (errors: %v)", result.Created, result.Errors)
-	}
-
-	sale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
-	if sale.SaleReason != inventory.SaleReasonDiscretionary {
-		t.Errorf("SaleReason = %q, want %q", sale.SaleReason, inventory.SaleReasonDiscretionary)
-	}
-	if sale.CLValueAtSaleCents != p.CLValueCents {
-		t.Errorf("CLValueAtSaleCents = %d, want %d", sale.CLValueAtSaleCents, p.CLValueCents)
-	}
-	wantPct := inventory.EffectiveChannelFeePct(inventory.SaleChannelEbay, c)
-	if sale.ChannelFeePctAtSale == nil || *sale.ChannelFeePctAtSale != wantPct {
-		t.Errorf("ChannelFeePctAtSale = %v, want %v", sale.ChannelFeePctAtSale, wantPct)
-	}
-}
