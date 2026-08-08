@@ -69,9 +69,10 @@ type LeaderboardOpts struct {
 }
 
 // Leaderboard returns the top niche opportunities with 3-axis scoring.
-// It reads character-cache rows for the given window, parses each row's
-// demand_json (including by_era aggregates), enumerates grade buckets, joins
-// to campaign coverage, computes opportunity scores, sorts, and limits.
+// It reads character-cache rows for the given window — already decoded into
+// CharacterDemand/CharacterVelocity/CharacterSaturation by the adapter —
+// enumerates grade buckets, joins to campaign coverage, computes opportunity
+// scores, sorts, and limits.
 func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]NicheOpportunity, error) {
 	if opts.Window != "7d" && opts.Window != "30d" {
 		return nil, ErrInvalidWindow
@@ -128,7 +129,7 @@ func (s *Service) Leaderboard(ctx context.Context, opts LeaderboardOpts) ([]Nich
 		demand := row.Demand
 
 		// Build one bucket per (era, grade), plus the "all eras" bucket for
-		// characters whose demand_json has no by_era breakdown.
+		// characters whose decoded demand payload has no ByEra breakdown.
 		market := s.parseCharacterMarket(ctx, row)
 		eras := erasForRow(demand, opts.Era)
 		for _, era := range eras {
@@ -294,7 +295,9 @@ func eraDemandFor(demand *CharacterDemand, era string) (*NicheDemand, bool) {
 }
 
 // parseCharacterMarket extracts the market-axis view (velocity + saturation)
-// from a character cache row. Returns nil if both surfaces are absent.
+// from a character cache row. Returns nil if both surfaces are absent. It also
+// emits a Warn for each MalformedPayloads entry naming the velocity column, so
+// a decode failure the adapter could not log is still visible.
 func (s *Service) parseCharacterMarket(ctx context.Context, row CharacterCache) *NicheMarket {
 	m := &NicheMarket{}
 	has := false

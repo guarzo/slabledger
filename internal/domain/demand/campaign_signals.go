@@ -66,7 +66,7 @@ type CampaignSignal struct {
 type CampaignSignalContributor struct {
 	Character         string // Display name (original casing from the cache row).
 	VelocityChangePct float64
-	MedianDaysToSell  *float64 // Nil if DH's string value failed to parse.
+	MedianDaysToSell  *float64 // Nil when the decoded velocity payload omits it.
 	SampleSize        int
 }
 
