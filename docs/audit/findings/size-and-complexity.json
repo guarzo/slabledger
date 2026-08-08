@@ -8,37 +8,40 @@
       "identity": "internal/domain/inventory.PurchaseRepository"
     },
     "category": "size",
-    "title": "PurchaseRepository interface has 55 methods — more than the other six sibling inventory repository interfaces combined",
+    "title": "PurchaseRepository interface has 55 methods \u2014 more than the other six sibling inventory repository interfaces combined",
     "severity": "high",
     "confidence": "strong",
     "evidence": [
       {
-        "claim": "PurchaseRepository declares 55 methods in one interface — more than the sum of the other six sibling *Repository interfaces declared alongside it in internal/domain/inventory/ (CampaignRepository 5, SaleRepository 7, AnalyticsRepository 10, FinanceRepository 14, PricingRepository 8, DHRepository 2 = 46 combined).",
+        "claim": "PurchaseRepository declares 55 methods in one interface \u2014 more than the sum of the other six sibling *Repository interfaces declared alongside it in internal/domain/inventory/ (CampaignRepository 5, SaleRepository 7, AnalyticsRepository 10, FinanceRepository 14, PricingRepository 8, DHRepository 2 = 46 combined).",
         "command": "for f in repository_campaign.go repository_purchase.go repository_sale.go repository_analytics.go repository_finance.go repository_pricing.go repository_dh.go; do name=$(grep -oE '^type [A-Za-z]+Repository' internal/domain/inventory/$f | awk '{print $2}'); count=$(awk -v n=\"$name\" '$0 ~ \"^type \"n\" interface\"{f=1;next} f && /^}/{exit} f && /^[[:space:]]+[A-Za-z]+\\(/{c++} END{print c+0}' internal/domain/inventory/$f); echo \"$name: $count\"; done",
         "output": "CampaignRepository: 5\nPurchaseRepository: 55\nSaleRepository: 7\nAnalyticsRepository: 10\nFinanceRepository: 14\nPricingRepository: 8\nDHRepository: 2",
         "file_line": "internal/domain/inventory/repository_purchase.go:31-157"
       },
       {
-        "claim": "The interface is internally organized by the author into ad-hoc comment groups (CRUD, list/count, cert lookups, field updates, price overrides, receipt tracking, ebay export, snapshot status, DH v2 fields, ListDHPriceDrift) rather than separate interfaces — the DH v2 fields group alone is ~25 methods.",
+        "claim": "The interface is internally organized by the author into ad-hoc comment groups (CRUD, list/count, cert lookups, field updates, price overrides, receipt tracking, ebay export, snapshot status, DH v2 fields, ListDHPriceDrift) rather than separate interfaces \u2014 the DH v2 fields group alone is ~25 methods.",
         "command": "grep -nE '^\\t// [A-Z]' internal/domain/inventory/repository_purchase.go",
         "output": "32:\t// CRUD\n37:\t// List and count\n43:\t// Cert-based lookups\n50:\t// Field updates\n69:\t// Price overrides & AI suggestions\n76:\t// Receipt tracking\n79:\t// eBay export\n85:\t// Snapshot status\n89:\t// DH v2 fields",
         "file_line": "internal/domain/inventory/repository_purchase.go:32-89"
       },
       {
-        "claim": "The concrete Postgres implementation of this single interface is already split across 6 separate files by exactly these concerns — the seam already exists on the implementation side, just not on the interface side.",
+        "claim": "The concrete Postgres implementation of this single interface is already split across 6 separate files by exactly these concerns \u2014 the seam already exists on the implementation side, just not on the interface side.",
         "command": "grep -c \"^func (ps \\*PurchaseStore)\" internal/adapters/storage/postgres/purchase_store.go internal/adapters/storage/postgres/purchase_cert_store.go internal/adapters/storage/postgres/purchase_dh_push_store.go internal/adapters/storage/postgres/purchase_dh_query_store.go internal/adapters/storage/postgres/purchase_price_store.go internal/adapters/storage/postgres/purchase_psa_store.go",
         "output": "internal/adapters/storage/postgres/purchase_store.go:21\ninternal/adapters/storage/postgres/purchase_cert_store.go:7\ninternal/adapters/storage/postgres/purchase_dh_push_store.go:15\ninternal/adapters/storage/postgres/purchase_dh_query_store.go:12\ninternal/adapters/storage/postgres/purchase_price_store.go:10\ninternal/adapters/storage/postgres/purchase_psa_store.go:5",
         "file_line": "internal/adapters/storage/postgres/purchase_dh_push_store.go, purchase_dh_query_store.go"
       },
       {
-        "claim": "Consumers already avoid depending on the full interface: the scheduler package independently declares its own narrow structural interfaces (DHFieldsUpdater, PurchaseByCertLookup) satisfied by the same *PurchaseStore, rather than taking PurchaseRepository directly — direct evidence that callers use disjoint subsets of the 55 methods.",
+        "claim": "Consumers already avoid depending on the full interface: the scheduler package independently declares its own narrow structural interfaces (DHFieldsUpdater, PurchaseByCertLookup) satisfied by the same *PurchaseStore, rather than taking PurchaseRepository directly \u2014 direct evidence that callers use disjoint subsets of the 55 methods.",
         "command": "git grep -n 'type DHFieldsUpdater interface\\|type PurchaseByCertLookup interface' internal/adapters/scheduler/dh_inventory_poll.go",
         "output": "internal/adapters/scheduler/dh_inventory_poll.go:25:type DHFieldsUpdater interface {\ninternal/adapters/scheduler/dh_inventory_poll.go:32:type PurchaseByCertLookup interface {",
         "file_line": "internal/adapters/scheduler/dh_inventory_poll.go:25,32"
       }
     ],
-    "searched_universe": "All git-tracked *.go files (git ls-files '*.go'), excluding _test.go, searched for `^type [A-Za-z_]+ interface` and counted method lines per interface block. PurchaseRepository (55) is the largest in the repo. auth.Repository (24) and auth.Service (19) were investigated as the next-largest candidates and found cohesive rather than over-broad: their consumers' method usage was traced directly (grep for `<var>.Method(` call sites across internal/adapters/httpserver/handlers/auth.go, admin.go, internal/adapters/httpserver/middleware/auth.go, internal/adapters/scheduler/session_cleanup.go, internal/domain/auth/service_impl.go, internal/adapters/clients/google/oauth.go) and no disjoint-concern split emerged — see summary reported to the team lead; not filed as a finding.",
-    "exclusions": ["_test.go files", "generated/mock files"],
+    "searched_universe": "All git-tracked *.go files (git ls-files '*.go'), excluding _test.go, searched for `^type [A-Za-z_]+ interface` and counted method lines per interface block. PurchaseRepository (55) is the largest in the repo. auth.Repository (24) and auth.Service (19) were investigated as the next-largest candidates and found cohesive rather than over-broad: their consumers' method usage was traced directly (grep for `<var>.Method(` call sites across internal/adapters/httpserver/handlers/auth.go, admin.go, internal/adapters/httpserver/middleware/auth.go, internal/adapters/scheduler/session_cleanup.go, internal/domain/auth/service_impl.go, internal/adapters/clients/google/oauth.go) and no disjoint-concern split emerged \u2014 see summary reported to the team lead; not filed as a finding.",
+    "exclusions": [
+      "_test.go files",
+      "generated/mock files"
+    ],
     "proposed_fix": "Split PurchaseRepository along the same lines the Postgres implementation already uses: extract a PurchaseDHRepository (or similarly named) interface for the ~25 DH v2 / push-pipeline methods (mirroring the existing internal/domain/inventory/repository_dh.go DHRepository naming), and consider a smaller PurchasePricingRepository for the price-override/AI-suggestion group. Keep CRUD + list/count + cert lookups as the remaining PurchaseRepository. Update internal/domain/inventory/service.go's `purchases PurchaseRepository` field to compose the split interfaces (embedding), and update internal/testutil/mocks/inventory_purchase_repo.go accordingly.",
     "blast_radius": [
       "internal/domain/inventory/repository_purchase.go",
@@ -74,20 +77,24 @@
         "file_line": "internal/domain/dhlisting/dh_listing_service.go:157"
       },
       {
-        "claim": "Within the single `for _, cn := range sortedCerts` loop the function performs: PSA-received eligibility gating, inline match+push, no-op detection, DH status update with three distinct error branches (stale inventory ID reset, PSA key exhaustion short-circuit, generic failure), channel sync with revert-on-failure, and local persistence + event recording — all inline rather than delegated to a helper.",
+        "claim": "Within the single `for _, cn := range sortedCerts` loop the function performs: PSA-received eligibility gating, inline match+push, no-op detection, DH status update with three distinct error branches (stale inventory ID reset, PSA key exhaustion short-circuit, generic failure), channel sync with revert-on-failure, and local persistence + event recording \u2014 all inline rather than delegated to a helper.",
         "command": "sed -n '210,429p' internal/domain/dhlisting/dh_listing_service.go | grep -c 'continue'",
         "output": "9",
         "file_line": "internal/domain/dhlisting/dh_listing_service.go:210-429"
       }
     ],
     "searched_universe": "All git-tracked *.go files under internal/, non-test, functions measured by brace-depth span via awk. ListPurchases is the 3rd-largest function in the repo by line count (286), after cmd/-only wiring functions BuildGroup and runServer/createHandlers which are excluded as DI boilerplate.",
-    "exclusions": ["_test.go files"],
-    "proposed_fix": "Extract the per-purchase body (everything inside the `for _, cn := range sortedCerts` loop) into a helper method, e.g. `(s *dhListingService) listOnePurchase(ctx, p Purchase) (outcome listOutcome, err error)`, returning a small result enum (listed/synced/skipped/aborted) plus the failure reason. ListPurchases would then own only: the pause gate, batch lookup, iteration, and aggregation of the per-item outcomes — matching the shape of the existing pause-gate/aggregation code that already precedes and follows the loop.",
-    "blast_radius": ["internal/domain/dhlisting/dh_listing_service.go"],
+    "exclusions": [
+      "_test.go files"
+    ],
+    "proposed_fix": "Split inmemory_campaign_store.go along its own existing section markers into per-interface files sharing the same InMemoryCampaignStore struct (e.g. inmemory_campaign_store.go for the struct + CampaignRepository methods, inmemory_purchase_store.go, inmemory_sale_store.go, inmemory_analytics_store.go, inmemory_finance_store.go, inmemory_pricing_store.go, inmemory_dh_store.go), matching the split already used for the production Postgres implementation (purchase_store.go / purchase_cert_store.go / purchase_dh_push_store.go / etc., see SIZE-001). The section markers alone are not sufficient: the PurchaseRepository block is 191-685 (494 lines) on its own, so it needs a further sub-split (mirroring the production purchase_store / purchase_cert_store / purchase_dh_push_store division), and the trailing 'PurchaseRepository: Snapshot Status Methods' block at 1295 belongs with it rather than with DHRepository.",
+    "blast_radius": [
+      "internal/domain/dhlisting/dh_listing_service.go"
+    ],
     "effort": "M",
     "acceptance_criteria": [
-      "go test ./internal/domain/dhlisting/... passes unchanged after the extraction (existing table-driven tests should require no behavior changes, only possibly new unit tests for the extracted helper).",
-      "ListPurchases itself drops to roughly the length of its pre-loop batch-lookup section plus a short iteration/aggregation loop."
+      "go build ./... and go test ./... pass unchanged (pure file split, same package, no exported surface change).",
+      "No resulting file in internal/testutil/mocks/ from this split exceeds ~250 lines \u2014 which requires sub-splitting the 494-line PurchaseRepository section, not just cutting on the seven top-level section markers."
     ]
   },
   {
@@ -116,16 +123,21 @@
         "file_line": "internal/adapters/scheduler/builder.go:146-425"
       },
       {
-        "claim": "The BuildDeps struct that feeds BuildGroup already has 52 fields grouped by the same per-scheduler comment headers (DH dependencies, DH push dependencies, Card Ladder dependencies, PSA sync dependencies, etc.), mirroring the blocks in BuildGroup — the grouping the split would follow is already documented in the struct.",
+        "claim": "The BuildDeps struct that feeds BuildGroup already has 52 fields grouped by the same per-scheduler comment headers (DH dependencies, DH push dependencies, Card Ladder dependencies, PSA sync dependencies, etc.), mirroring the blocks in BuildGroup \u2014 the grouping the split would follow is already documented in the struct.",
         "command": "awk '/^type BuildDeps struct/,/^}/' internal/adapters/scheduler/builder.go | grep -cE '^\\s+[A-Za-z]+\\s+[A-Za-z*\\[\\]]'",
         "output": "52",
         "file_line": "internal/adapters/scheduler/builder.go:24-112"
       }
     ],
     "searched_universe": "All git-tracked *.go files under internal/ and cmd/, non-test, functions measured by brace-depth span. BuildGroup (312 lines) is the largest non-cmd function; cmd/slabledger/main.go:runServer (299) and cmd/slabledger/handlers.go:createHandlers (266) are structurally identical DI-wiring functions in cmd/ and are not flagged here since cmd/ wiring of this shape is an accepted convention per internal/README.md's scheduler-registration recipe.",
-    "exclusions": ["_test.go files", "cmd/ package (DI entrypoints, same shape accepted by convention)"],
+    "exclusions": [
+      "_test.go files",
+      "cmd/ package (DI entrypoints, same shape accepted by convention)"
+    ],
     "proposed_fix": "Extract each `if deps.X != nil { ... }` block into its own `buildXScheduler(cfg *config.Config, deps BuildDeps) Scheduler` (or equivalent, for the four blocks that also populate a named BuildResult field) helper function in builder.go, following the same one-concern-per-function shape already used for the CSV parsers (parse_psa.go / parse_mm.go / parse_shopify.go). BuildGroup itself would become a flat sequence of `if s := buildXScheduler(cfg, deps); s != nil { schedulers = append(schedulers, s) }` calls plus the four named-result assignments.",
-    "blast_radius": ["internal/adapters/scheduler/builder.go"],
+    "blast_radius": [
+      "internal/adapters/scheduler/builder.go"
+    ],
     "effort": "M",
     "acceptance_criteria": [
       "go build ./... and go test ./internal/adapters/scheduler/... pass unchanged.",
@@ -166,9 +178,13 @@
       }
     ],
     "searched_universe": "All git-tracked *.go files (git ls-files '*.go'), including test-support files under internal/testutil/, which check-file-size.sh's own find expression excludes via `! -path '*/testutil/*'`.",
-    "exclusions": ["Genuine _test.go files, which the script also excludes and which this finding does not target"],
+    "exclusions": [
+      "Genuine _test.go files, which the script also excludes and which this finding does not target"
+    ],
     "proposed_fix": "Split inmemory_campaign_store.go along its own existing section markers into per-interface files sharing the same InMemoryCampaignStore struct (e.g. inmemory_campaign_store.go for the struct + CampaignRepository methods, inmemory_purchase_store.go, inmemory_sale_store.go, inmemory_analytics_store.go, inmemory_finance_store.go, inmemory_pricing_store.go, inmemory_dh_store.go), matching the split already used for the production Postgres implementation (purchase_store.go / purchase_cert_store.go / purchase_dh_push_store.go / etc., see SIZE-001).",
-    "blast_radius": ["internal/testutil/mocks/inmemory_campaign_store.go"],
+    "blast_radius": [
+      "internal/testutil/mocks/inmemory_campaign_store.go"
+    ],
     "effort": "M",
     "acceptance_criteria": [
       "go build ./... and go test ./... pass unchanged (pure file split, same package, no exported surface change).",

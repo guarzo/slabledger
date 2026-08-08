@@ -31,7 +31,7 @@
         "file_line": "internal/adapters/httpserver/handlers/campaigns_analytics.go:86-93"
       },
       {
-        "claim": "The same rule is implemented a second time, independently, inside the domain tuning rule — also ignoring ds.CapCents and using the campaign's current cap.",
+        "claim": "The same rule is implemented a second time, independently, inside the domain tuning rule \u2014 also ignoring ds.CapCents and using the campaign's current cap.",
         "command": "sed -n '232,240p' internal/domain/inventory/tuning.go",
         "output": "\tvar totalFill float64\n\tfor _, ds := range recent {\n\t\tif campaign.DailySpendCapCents > 0 {\n\t\t\ttotalFill += float64(ds.SpendCents) / float64(campaign.DailySpendCapCents)\n\t\t}\n\t}\n\tavgFill := totalFill / float64(len(recent))",
         "file_line": "internal/domain/inventory/tuning.go:232-238"
@@ -73,7 +73,7 @@
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
     "subject": {
       "kind": "symbol",
-      "identity": "internal/domain/demand.Repository — CardCache/CharacterCache JSON blob fields (DemandJSON, VelocityJSON, TrendJSON, SaturationJSON, PriceDistributionJSON)"
+      "identity": "internal/domain/demand.Repository \u2014 CardCache/CharacterCache JSON blob fields (DemandJSON, VelocityJSON, TrendJSON, SaturationJSON, PriceDistributionJSON)"
     },
     "category": "architecture",
     "title": "The demand repository contract passes opaque vendor JSON blobs through the domain; writer and reader share no Go type, so the compiler enforces nothing across the seam",
@@ -94,18 +94,18 @@
       },
       {
         "claim": "The blob is consumed in the domain by unmarshalling into a hand-mirrored, unexported struct that duplicates the field names as string tags. Nothing ties the two structs together at compile time.",
-        "command": "sed -n '279,293p' internal/domain/demand/service.go",
+        "command": "sed -n '279,297p' internal/domain/demand/service.go",
         "output": "// velocityBlobJSON / characterSaturationJSON mirror the cached JSON\n// blobs for a character row's velocity + saturation surfaces.\n...\ntype velocityBlobJSON struct {\n\tMedianDaysToSell   *float64 `json:\"median_days_to_sell\"`\n\tSampleSize         int      `json:\"sample_size\"`\n\tVelocityChangePct  *float64 `json:\"velocity_change_pct\"`",
         "file_line": "internal/domain/demand/service.go:279-297"
       },
       {
         "claim": "A storage-decoding failure mode has leaked all the way into the API response type: the domain counts unparseable blobs and returns the count as a response field.",
         "command": "sed -n '137,156p' internal/domain/demand/campaign_signals.go",
-        "output": "func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {\n\t...\n\t\tvar v velocityBlobJSON\n\t\tif err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {\n\t\t\tskipped++ // non-nil velocity_json failed to parse — unexpected",
+        "output": "func buildSignalIndex(rows []CharacterCache) (map[string]signalEntry, int) {\n\t...\n\t\tvar v velocityBlobJSON\n\t\tif err := json.Unmarshal([]byte(*row.VelocityJSON), &v); err != nil {\n\t\t\tskipped++ // non-nil velocity_json failed to parse \u2014 unexpected",
         "file_line": "internal/domain/demand/campaign_signals.go:137-152"
       },
       {
-        "claim": "The package doc states the intended decoupling that this seam does not achieve — the wire format is exactly what crosses the repository interface.",
+        "claim": "The package doc states the intended decoupling that this seam does not achieve \u2014 the wire format is exactly what crosses the repository interface.",
         "command": "sed -n '1,7p' internal/domain/demand/types.go",
         "output": "// Package demand ... DH JSON\n// payloads are parsed here into domain-local structs so the scoring logic\n// stays decoupled from the wire format.",
         "file_line": "internal/domain/demand/types.go:1-7"
@@ -157,7 +157,7 @@
         "output": "internal/adapters/clients/dhprice/provider.go:21:\ttombstoneThreshold = 3\ninternal/adapters/clients/dhprice/provider.go:171:\tif n >= tombstoneThreshold {\ninternal/adapters/storage/postgres/dh_card_tombstone_store.go:10:const tombstoneThreshold = 3\ninternal/adapters/storage/postgres/dh_card_tombstone_store.go:32:\treturn attempts >= tombstoneThreshold, nil\ninternal/adapters/storage/postgres/dh_card_tombstone_store.go:77:\t\ttombstoneThreshold,"
       },
       {
-        "claim": "The domain interface encodes the rule only as English in a doc comment — there is no domain-level constant or predicate the two adapters could share.",
+        "claim": "The domain interface encodes the rule only as English in a doc comment \u2014 there is no domain-level constant or predicate the two adapters could share.",
         "command": "sed -n '206,228p' internal/domain/pricing/provider.go",
         "output": "type DHCardTombstoneRepo interface {\n\t// IsTombstoned returns true if the card has reached the tombstone threshold.\n\tIsTombstoned(ctx context.Context, cardID int) (bool, error)\n\n\t// RecordFailure increments the failure counter for cardID and returns the\n\t// new attempt count. Callers should treat attempts >= 3 as the tombstone\n\t// threshold.\n\t...\n\t// Count returns the number of cards currently tombstoned (attempts >= 3).",
         "file_line": "internal/domain/pricing/provider.go:206-228"
@@ -169,7 +169,7 @@
         "file_line": "scripts/check-imports.sh:23-34"
       },
       {
-        "claim": "No shareable tombstone threshold identifier exists anywhere under internal/domain or internal/platform — the rule appears there only inside comments (provider.go:212, :226), never as code.",
+        "claim": "No shareable tombstone threshold identifier exists anywhere under internal/domain or internal/platform \u2014 the rule appears there only inside comments (provider.go:212, :226), never as code.",
         "command": "git grep -nE '^[^/]*[Tt]ombstoneThreshold' -- 'internal/domain/**/*.go' 'internal/platform/**/*.go'",
         "output": "(no output; exit status 1)"
       }
@@ -212,7 +212,7 @@
       {
         "claim": "The Service union documents the segregation as its purpose.",
         "command": "sed -n '170,185p' internal/domain/inventory/service.go",
-        "output": "// Service is the full campaigns API — a composition of all sub-interfaces.\n// Consumers that only need a subset should depend on the narrower interface\n// (e.g. AnalyticsService, ImportService) to follow the Interface Segregation Principle.\ntype Service interface {\n\tCRUDService\n\tAnalyticsService\n\tImportService\n\tPricingService\n\tCertLookupService\n\tSnapshotService\n\tDHService",
+        "output": "// Service is the full campaigns API \u2014 a composition of all sub-interfaces.\n// Consumers that only need a subset should depend on the narrower interface\n// (e.g. AnalyticsService, ImportService) to follow the Interface Segregation Principle.\ntype Service interface {\n\tCRUDService\n\tAnalyticsService\n\tImportService\n\tPricingService\n\tCertLookupService\n\tSnapshotService\n\tDHService",
         "file_line": "internal/domain/inventory/service.go:170-186"
       },
       {
@@ -256,7 +256,7 @@
     "effort": "M",
     "acceptance_criteria": [
       "Every interface declared in internal/domain/inventory/service_interfaces.go has at least one non-test consumer, verifiable with a single git grep per name.",
-      "No adapter declares a comment matching 'subset of inventory.Service' — narrow needs are met by a published interface.",
+      "No adapter declares a comment matching 'subset of inventory.Service' \u2014 narrow needs are met by a published interface.",
       "`go build ./...`, `go test -race ./...`, and `make check` pass.",
       "No change to any HTTP response shape: the handler test suite passes unmodified."
     ]
@@ -292,7 +292,7 @@
     "build_tags": [
       "default"
     ],
-    "proposed_fix": "Dead-code lens to confirm reachability. If the setter is genuinely unreachable, note that the sole reader (resilience/retry.go:142) uses the field to hold an UPSTREAM provider's response status for retry decisions, not a status to emit — so the surviving concept may want renaming rather than deletion. That naming question belongs to the naming-and-boundaries lens.",
+    "proposed_fix": "Dead-code lens to confirm reachability. If the setter is genuinely unreachable, note that the sole reader (resilience/retry.go:142) uses the field to hold an UPSTREAM provider's response status for retry decisions, not a status to emit \u2014 so the surviving concept may want renaming rather than deletion. That naming question belongs to the naming-and-boundaries lens.",
     "blast_radius": [
       "internal/domain/errors/errors.go",
       "internal/platform/resilience/retry.go"

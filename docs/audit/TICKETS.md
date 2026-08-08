@@ -235,7 +235,7 @@ Produced by the read-only tech-debt audit. Every claim below survived an adversa
 
 ## Claim
 
-The flat-sibling rule enforces a hardcoded six-package list that has not kept pace with the ten domain siblings that now exist; dhpricing already imports dhlisting uncaught
+The flat-sibling rule enforces a hardcoded six-package list that has not kept pace with the twelve domain siblings that now exist; dhpricing already imports dhlisting uncaught
 
 **Subject:** `{'kind': 'config', 'identity': 'scripts/check-imports.sh:39 SUB_PACKAGES'}`
 
@@ -246,7 +246,7 @@ The flat-sibling rule enforces a hardcoded six-package list that has not kept pa
 - The flat-sibling rule is enforced against a hardcoded list of exactly six packages.
   - `scripts/check-imports.sh:39`
   - Reproduce: `grep -n 'SUB_PACKAGES=' scripts/check-imports.sh`
-- internal/domain/ actually contains 24 packages, of which demand, dhevents, dhpricing, liquidation, psacampaign and intelligence are inventory-siblings absent from the enforced list.
+- internal/domain/ actually contains 25 top-level packages, of which demand, dhevents, dhpricing, liquidation, psacampaign and intelligence are inventory-siblings absent from the enforced list.
   - Reproduce: `git ls-files 'internal/domain' | awk -F/ 'NF>3{print $3}' | sort -u | tr '\n' ' '`
 - internal/domain/dhpricing imports sibling internal/domain/dhlisting in two production files. The check passes only because dhpricing is not in SUB_PACKAGES.
   - `internal/domain/dhpricing/service.go:7`
@@ -1212,7 +1212,7 @@ Owned by the docs-config-tests lens. Correct the CLAUDE.md roster to the eight i
 Produced by the read-only tech-debt audit. Every claim below survived an adversarial verification pass whose brief was to refute it. Full record: `docs/audit/REPORT.md`.
 
 > [!IMPORTANT]
-> Seven live tables missing, three dropped tables documented as live, two wrong migration numbers, and pre-cutover SQLite migration numbers up to 000051 that have no corresponding file in this repo — making most 'Added: migration NNNNN' provenance notes unverifiable or actively misleading.
+> Seven live tables missing, three dropped tables documented as live, two wrong migration numbers, and 26 distinct pre-cutover SQLite migration numbers up to 000067 that have no corresponding file in this repo — making most 'Added: migration NNNNN' provenance notes unverifiable or actively misleading.
 
 ## DBSCHEMA-005 — docs/SCHEMA.md omits seven currently-live tables entirely
 
@@ -1297,7 +1297,7 @@ Change both 'Added: migration 000017' citations in docs/SCHEMA.md to '000018' fo
 - [ ] Both sections read 'Added: migration 000018'.
 - [ ] grep -n 'Added: migration 000017' docs/SCHEMA.md no longer matches either section.
 
-## DBSCHEMA-008 — docs/SCHEMA.md still cites pre-cutover SQLite migration numbers (up to 000051) that have no corresponding file in this repo's 25-migration Postgres history, making most of its 'Added: migration NNNNN' provenance notes unverifiable or actively misleading
+## DBSCHEMA-008 — docs/SCHEMA.md still cites pre-cutover SQLite migration numbers (up to 000067) that have no corresponding file in this repo's 25-migration Postgres history, making most of its 'Added: migration NNNNN' provenance notes unverifiable or actively misleading
 
 **Subject:** `{'kind': 'table', 'identity': 'docs/SCHEMA.md (stale pre-cutover migration numbering)'}`
 
@@ -1305,8 +1305,8 @@ Change both 'Added: migration 000017' citations in docs/SCHEMA.md to '000018' fo
 
 ### Evidence
 
-- docs/SCHEMA.md cites migration numbers up to 000051, but the repo's Postgres migration set (post-SQLite-cutover) only goes up to 000025.
-  - Reproduce: `grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sort -u | tail -5; echo ---; ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l`
+- docs/SCHEMA.md cites migration numbers up to 000067 — 26 distinct numbers above 000025 — but the repo's Postgres migration set (post-SQLite-cutover) only goes up to 000025.
+  - Reproduce: `grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sort -u | tail -5; echo ---; grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sed 's/migration //' | sort -u | awk '$1>25' | wc -l; echo ---; ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l`
 - CLAUDE.md documents that 000001_initial_schema 'represents the final-state schema after cutover from SQLite' — i.e. the current 25 migrations are a fresh Postgres history, and any doc citation above 000025 necessarily refers to the old, now-collapsed SQLite migration sequence, not a file that exists in this repo.
   - Reproduce: `grep -n 'final-state schema after cutover' CLAUDE.md`
 - The overlap is not merely historical trivia: some SCHEMA.md citations in the 000001-000025 range collide with real, different current migrations (see DBSCHEMA-007, where 'migration 000017' is cited for a table actually created by current migration 000018), so a reader cannot tell from the document alone which 'migration NNNNN' citations are pre-cutover artifacts and which refer to a real file in this repo.
@@ -2256,7 +2256,7 @@ ListPurchases is a 286-line function fusing batch aggregation with a large per-p
 
 ### Proposed fix
 
-Extract the per-purchase body (everything inside the `for _, cn := range sortedCerts` loop) into a helper method, e.g. `(s *dhListingService) listOnePurchase(ctx, p Purchase) (outcome listOutcome, err error)`, returning a small result enum (listed/synced/skipped/aborted) plus the failure reason. ListPurchases would then own only: the pause gate, batch lookup, iteration, and aggregation of the per-item outcomes — matching the shape of the existing pause-gate/aggregation code that already precedes and follows the loop.
+Split inmemory_campaign_store.go along its own existing section markers into per-interface files sharing the same InMemoryCampaignStore struct (e.g. inmemory_campaign_store.go for the struct + CampaignRepository methods, inmemory_purchase_store.go, inmemory_sale_store.go, inmemory_analytics_store.go, inmemory_finance_store.go, inmemory_pricing_store.go, inmemory_dh_store.go), matching the split already used for the production Postgres implementation (purchase_store.go / purchase_cert_store.go / purchase_dh_push_store.go / etc., see SIZE-001). The section markers alone are not sufficient: the PurchaseRepository block is 191-685 (494 lines) on its own, so it needs a further sub-split (mirroring the production purchase_store / purchase_cert_store / purchase_dh_push_store division), and the trailing 'PurchaseRepository: Snapshot Status Methods' block at 1295 belongs with it rather than with DHRepository.
 
 ### Blast radius
 
@@ -2264,8 +2264,8 @@ Extract the per-purchase body (everything inside the `for _, cn := range sortedC
 
 ### Acceptance criteria
 
-- [ ] go test ./internal/domain/dhlisting/... passes unchanged after the extraction (existing table-driven tests should require no behavior changes, only possibly new unit tests for the extracted helper).
-- [ ] ListPurchases itself drops to roughly the length of its pre-loop batch-lookup section plus a short iteration/aggregation loop.
+- [ ] go build ./... and go test ./... pass unchanged (pure file split, same package, no exported surface change).
+- [ ] No resulting file in internal/testutil/mocks/ from this split exceeds ~250 lines — which requires sub-splitting the 494-line PurchaseRepository section, not just cutting on the seven top-level section markers.
 
 ### Definition of done
 
@@ -2423,7 +2423,7 @@ The demand repository contract passes opaque vendor JSON blobs through the domai
   - Reproduce: `sed -n '139,146p' internal/adapters/scheduler/dh_analytics_refresh_steps.go`
 - The blob is consumed in the domain by unmarshalling into a hand-mirrored, unexported struct that duplicates the field names as string tags. Nothing ties the two structs together at compile time.
   - `internal/domain/demand/service.go:279-297`
-  - Reproduce: `sed -n '279,293p' internal/domain/demand/service.go`
+  - Reproduce: `sed -n '279,297p' internal/domain/demand/service.go`
 - A storage-decoding failure mode has leaked all the way into the API response type: the domain counts unparseable blobs and returns the count as a response field.
   - `internal/domain/demand/campaign_signals.go:137-152`
   - Reproduce: `sed -n '137,156p' internal/domain/demand/campaign_signals.go`

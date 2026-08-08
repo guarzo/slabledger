@@ -13,7 +13,17 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIT = HERE + "/.."
-BASELINE = "740976ec"
+# Same single source as build-report.py and validate.sh: the schema's pinned
+# revision, abbreviated for display. A hand-typed short hash here could drift
+# from the revision the gate actually enforces, and a ticket that cites the
+# wrong baseline sends its fixer to the wrong tree.
+BASELINE = json.load(open(f"{AUDIT}/schema/finding.schema.json")
+                     )["properties"]["revision"]["const"][:8]
+
+# Where the filing script picks up the bodies to POST. Defaults inside the repo
+# so a reboot or a /tmp sweep between "generate" and "file" cannot strand a
+# half-filed run; override for a scratch run.
+MANIFEST = os.environ.get("TICKET_MANIFEST", f"{AUDIT}/ticket-manifest.json")
 
 # Reuse the controller's cluster map without re-declaring it.
 src = open(f"{HERE}/build-report.py").read()
@@ -175,6 +185,15 @@ def main():
             print(f"linear-ids.json does not cover the emitted fix units: "
                   f"missing={missing} extra={extra}", file=sys.stderr)
             sys.exit(1)
+        # Covering every FU is not enough: a record missing `id` used to raise a
+        # bare KeyError mid-render, and one missing `url` rendered a live-looking
+        # link to nowhere. Both are cheap to check and expensive to notice later.
+        broken = sorted(f"{fu}({', '.join(k for k in ('id', 'url') if not rec.get(k))})"
+                        for fu, rec in ids.items()
+                        if not isinstance(rec, dict) or not rec.get("id") or not rec.get("url"))
+        if broken:
+            print(f"linear-ids.json records missing id/url: {broken}", file=sys.stderr)
+            sys.exit(1)
     out = []
     w = out.append
     w("# Audit Tickets — draft bodies\n")
@@ -206,10 +225,12 @@ def main():
                              linear=(rec or {}).get("id", ""),
                              body=ticket_body(u, F, V)))
 
-    open(f"{AUDIT}/TICKETS.md", "w").write("\n".join(out) + "\n")
-    json.dump(manifest, open("/tmp/ticket-manifest.json", "w"), indent=1)
+    with open(f"{AUDIT}/TICKETS.md", "w") as fh:
+        fh.write("\n".join(out) + "\n")
+    with open(MANIFEST, "w") as fh:
+        json.dump(manifest, fh, indent=1)
     print(f"drafted {len(manifest)} tickets -> docs/audit/TICKETS.md")
-    print(f"manifest -> /tmp/ticket-manifest.json")
+    print(f"manifest -> {MANIFEST}")
     for m in manifest:
         print(f"  {m['fu']}  [{m['label']}/P{m['priority']}]  {m['title']}")
 

@@ -12,7 +12,11 @@ import os
 import sys
 
 AUDIT = os.path.dirname(os.path.abspath(__file__)) + "/.."
-BASELINE = "740976ecf80a4f2ccdaa611d7790ccaa95b48773"
+# Single source of truth: the revision every finding is pinned to lives in the
+# schema, which validate.sh enforces on each findings file. Duplicating the
+# literal here would let REPORT.md advertise a baseline the gate never checked.
+BASELINE = json.load(open(f"{AUDIT}/schema/finding.schema.json")
+                     )["properties"]["revision"]["const"]
 
 # ---------------------------------------------------------------------------
 # Controller cluster map. Each fix unit is ONE independently mergeable PR.
@@ -134,7 +138,8 @@ UNITS = [
       ids=["DBSCHEMA-005", "DBSCHEMA-006", "DBSCHEMA-007", "DBSCHEMA-008", "DCT-011"],
       effort="L",
       note="Seven live tables missing, three dropped tables documented as live, two wrong "
-           "migration numbers, and pre-cutover SQLite migration numbers up to 000051 that "
+           "migration numbers, and 26 distinct pre-cutover SQLite migration numbers up to "
+           "000067 that "
            "have no corresponding file in this repo — making most 'Added: migration NNNNN' "
            "provenance notes unverifiable or actively misleading."),
  dict(n="Reconcile docs/API.md with the live route table",
@@ -239,17 +244,43 @@ def load():
     findings, verdicts = {}, {}
     for p in sorted(glob.glob(f"{AUDIT}/findings/*.json")):
         for f in json.load(open(p)):
+            if f["id"] in findings:
+                sys.exit(f"duplicate finding id {f['id']} (second copy in {p})")
             findings[f["id"]] = f
     for p in sorted(glob.glob(f"{AUDIT}/verdicts/*.json")):
         for v in json.load(open(p)):
+            if v["id"] in verdicts:
+                sys.exit(f"duplicate verdict id {v['id']} (second copy in {p})")
             verdicts[v["id"]] = v
+    # Every finding must have been adversarially verified and every verdict must
+    # belong to a real finding. Without this, an unverified finding surfaces
+    # later as a bare KeyError from whichever line happens to touch V[i] first.
+    unverified = sorted(set(findings) - set(verdicts))
+    orphaned = sorted(set(verdicts) - set(findings))
+    if unverified or orphaned:
+        sys.exit(f"findings/verdicts do not correspond: "
+                 f"unverified={unverified} orphan_verdicts={orphaned}")
     return findings, verdicts
 
 
+SEVERITIES = ("high", "medium", "low")
+
+
 def sev_of(f, v):
+    """The severity to render — the verifier's correction when it downgraded.
+
+    Validated because this value is written verbatim into REPORT.md: a verifier
+    that explained its re-grounding here instead of in what_the_finding_got_wrong
+    once put a whole paragraph where a one-word severity belongs, and nothing
+    downstream noticed.
+    """
+    sev = f["severity"]
     if v["verdict"] == "confirmed_lower_severity" and v.get("corrected_severity"):
-        return v["corrected_severity"]
-    return f["severity"]
+        sev = v["corrected_severity"]
+    if sev not in SEVERITIES:
+        sys.exit(f"{f['id']}: severity {sev!r} is not one of {SEVERITIES} — "
+                 f"check corrected_severity in the verdict")
+    return sev
 
 
 def main():
@@ -381,16 +412,28 @@ def main():
             w(f"**What the finding got wrong:** {v['what_the_finding_got_wrong']}\n")
 
     # ---- refuted ----
+    refuted = [i for i in sorted(F) if V[i]["verdict"] == "refuted"]
+    refuted_mech = [i for i in refuted if F[i]["confidence"] == "mechanical"]
+    WORDS = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six",
+             7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten"}
+    n_ref = WORDS.get(len(refuted), str(len(refuted)))
+    n_mech = WORDS.get(len(refuted_mech), str(len(refuted_mech)))
+    # Singular vs plural matters here: this paragraph used to hardcode "Two were
+    # mechanical-tier" when only DEADGO-001 ever was, and nothing recomputed it.
+    if len(refuted_mech) == 1:
+        mech_clause = (f"{n_mech} was **mechanical-tier** — the audit's highest "
+                       "confidence band — and it would have driven a developer to "
+                       "break an hourly production job.")
+    else:
+        mech_clause = (f"{n_mech} were **mechanical-tier** — the audit's highest "
+                       "confidence band — and one of those would have driven a "
+                       "developer to break an hourly production job.")
     w("\n---\n")
     w("## Refuted findings — the audit's own error rate\n")
-    w("Four of 63 findings did not survive adversarial verification. Two were "
-      "**mechanical-tier** — the audit's highest confidence band — and one of those would "
-      "have driven a developer to break an hourly production job. This section stays in the "
-      "record permanently.\n")
-    for i in sorted(F):
+    w(f"{n_ref} of {len(F)} findings did not survive adversarial verification. "
+      f"{mech_clause} This section stays in the record permanently.\n")
+    for i in refuted:
         v = V[i]
-        if v["verdict"] != "refuted":
-            continue
         w(f"### {i} — {F[i]['title']}\n")
         w(f"*Claimed confidence:* `{F[i]['confidence']}` · *Lens:* `{F[i]['lens']}`\n")
         w(f"**How it was refuted:** {v.get('basis', '')}\n")

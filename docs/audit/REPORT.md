@@ -203,7 +203,7 @@ Ranked by risk × effort. A fix unit is **one independently mergeable PR**. Tier
 
 > **Controller note.** ADJUDICATED — confirmed and widened by the controller. check-imports.sh:39 hardcodes six package names; `git ls-files 'internal/domain/*'` yields 25. The checker iterates the name list rather than the directory, so 19 packages are never opened. Confirmed uncaught violation: dhpricing imports dhlisting from three files. Consequence: every 'make check passes, so the hexagonal invariant holds' claim rests on a check with a 19-of-25 blind spot. The ticket must ASK whether a sub-package may import the inventory core rather than presume it — check-imports.sh:7-8 documents only sibling-to-sibling.
 
-#### NB-001 — The flat-sibling rule enforces a hardcoded six-package list that has not kept pace with the ten domain siblings that now exist; dhpricing already imports dhlisting uncaught
+#### NB-001 — The flat-sibling rule enforces a hardcoded six-package list that has not kept pace with the twelve domain siblings that now exist; dhpricing already imports dhlisting uncaught
 
 *Lens:* `naming-and-boundaries` · *Confidence:* `strong` · *Verdict:* `confirmed` · *Severity:* high
 
@@ -216,7 +216,7 @@ Ranked by risk × effort. A fix unit is **one independently mergeable PR**. Tier
 - The flat-sibling rule is enforced against a hardcoded list of exactly six packages.
   - `scripts/check-imports.sh:39`
   - Reproduce: `grep -n 'SUB_PACKAGES=' scripts/check-imports.sh`
-- internal/domain/ actually contains 24 packages, of which demand, dhevents, dhpricing, liquidation, psacampaign and intelligence are inventory-siblings absent from the enforced list.
+- internal/domain/ actually contains 25 top-level packages, of which demand, dhevents, dhpricing, liquidation, psacampaign and intelligence are inventory-siblings absent from the enforced list.
   - Reproduce: `git ls-files 'internal/domain' | awk -F/ 'NF>3{print $3}' | sort -u | tr '\n' ' '`
 - internal/domain/dhpricing imports sibling internal/domain/dhlisting in two production files. The check passes only because dhpricing is not in SUB_PACKAGES.
   - `internal/domain/dhpricing/service.go:7`
@@ -926,7 +926,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
 
 **Severity:** medium · **Effort:** L · **Rolls up:** DBSCHEMA-005, DBSCHEMA-006, DBSCHEMA-007, DBSCHEMA-008, DCT-011
 
-> **Controller note.** Seven live tables missing, three dropped tables documented as live, two wrong migration numbers, and pre-cutover SQLite migration numbers up to 000051 that have no corresponding file in this repo — making most 'Added: migration NNNNN' provenance notes unverifiable or actively misleading.
+> **Controller note.** Seven live tables missing, three dropped tables documented as live, two wrong migration numbers, and 26 distinct pre-cutover SQLite migration numbers up to 000067 that have no corresponding file in this repo — making most 'Added: migration NNNNN' provenance notes unverifiable or actively misleading.
 
 #### DBSCHEMA-005 — docs/SCHEMA.md omits seven currently-live tables entirely
 
@@ -1008,7 +1008,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
 - [ ] Both sections read 'Added: migration 000018'.
 - [ ] grep -n 'Added: migration 000017' docs/SCHEMA.md no longer matches either section.
 
-#### DBSCHEMA-008 — docs/SCHEMA.md still cites pre-cutover SQLite migration numbers (up to 000051) that have no corresponding file in this repo's 25-migration Postgres history, making most of its 'Added: migration NNNNN' provenance notes unverifiable or actively misleading
+#### DBSCHEMA-008 — docs/SCHEMA.md still cites pre-cutover SQLite migration numbers (up to 000067) that have no corresponding file in this repo's 25-migration Postgres history, making most of its 'Added: migration NNNNN' provenance notes unverifiable or actively misleading
 
 *Lens:* `db-schema` · *Confidence:* `strong` · *Verdict:* `confirmed` · *Severity:* medium
 
@@ -1018,8 +1018,8 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
 
 **Evidence:**
 
-- docs/SCHEMA.md cites migration numbers up to 000051, but the repo's Postgres migration set (post-SQLite-cutover) only goes up to 000025.
-  - Reproduce: `grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sort -u | tail -5; echo ---; ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l`
+- docs/SCHEMA.md cites migration numbers up to 000067 — 26 distinct numbers above 000025 — but the repo's Postgres migration set (post-SQLite-cutover) only goes up to 000025.
+  - Reproduce: `grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sort -u | tail -5; echo ---; grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sed 's/migration //' | sort -u | awk '$1>25' | wc -l; echo ---; ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l`
 - CLAUDE.md documents that 000001_initial_schema 'represents the final-state schema after cutover from SQLite' — i.e. the current 25 migrations are a fresh Postgres history, and any doc citation above 000025 necessarily refers to the old, now-collapsed SQLite migration sequence, not a file that exists in this repo.
   - Reproduce: `grep -n 'final-state schema after cutover' CLAUDE.md`
 - The overlap is not merely historical trivia: some SCHEMA.md citations in the 000001-000025 range collide with real, different current migrations (see DBSCHEMA-007, where 'migration 000017' is cited for a table actually created by current migration 000018), so a reader cannot tell from the document alone which 'migration NNNNN' citations are pre-cutover artifacts and which refer to a real file in this repo.
@@ -1714,7 +1714,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
   - `internal/domain/dhlisting/dh_listing_service.go:210-429`
   - Reproduce: `sed -n '210,429p' internal/domain/dhlisting/dh_listing_service.go | grep -c 'continue'`
 
-**Proposed fix:** Extract the per-purchase body (everything inside the `for _, cn := range sortedCerts` loop) into a helper method, e.g. `(s *dhListingService) listOnePurchase(ctx, p Purchase) (outcome listOutcome, err error)`, returning a small result enum (listed/synced/skipped/aborted) plus the failure reason. ListPurchases would then own only: the pause gate, batch lookup, iteration, and aggregation of the per-item outcomes — matching the shape of the existing pause-gate/aggregation code that already precedes and follows the loop.
+**Proposed fix:** Split inmemory_campaign_store.go along its own existing section markers into per-interface files sharing the same InMemoryCampaignStore struct (e.g. inmemory_campaign_store.go for the struct + CampaignRepository methods, inmemory_purchase_store.go, inmemory_sale_store.go, inmemory_analytics_store.go, inmemory_finance_store.go, inmemory_pricing_store.go, inmemory_dh_store.go), matching the split already used for the production Postgres implementation (purchase_store.go / purchase_cert_store.go / purchase_dh_push_store.go / etc., see SIZE-001). The section markers alone are not sufficient: the PurchaseRepository block is 191-685 (494 lines) on its own, so it needs a further sub-split (mirroring the production purchase_store / purchase_cert_store / purchase_dh_push_store division), and the trailing 'PurchaseRepository: Snapshot Status Methods' block at 1295 belongs with it rather than with DHRepository.
 
 **Blast radius:**
 
@@ -1722,8 +1722,8 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
 
 **Acceptance criteria:**
 
-- [ ] go test ./internal/domain/dhlisting/... passes unchanged after the extraction (existing table-driven tests should require no behavior changes, only possibly new unit tests for the extracted helper).
-- [ ] ListPurchases itself drops to roughly the length of its pre-loop batch-lookup section plus a short iteration/aggregation loop.
+- [ ] go build ./... and go test ./... pass unchanged (pure file split, same package, no exported surface change).
+- [ ] No resulting file in internal/testutil/mocks/ from this split exceeds ~250 lines — which requires sub-splitting the 494-line PurchaseRepository section, not just cutting on the seven top-level section markers.
 
 ### FU-31 — Decompose the 312-line BuildGroup scheduler constructor
 
@@ -1825,7 +1825,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
   - Reproduce: `sed -n '139,146p' internal/adapters/scheduler/dh_analytics_refresh_steps.go`
 - The blob is consumed in the domain by unmarshalling into a hand-mirrored, unexported struct that duplicates the field names as string tags. Nothing ties the two structs together at compile time.
   - `internal/domain/demand/service.go:279-297`
-  - Reproduce: `sed -n '279,293p' internal/domain/demand/service.go`
+  - Reproduce: `sed -n '279,297p' internal/domain/demand/service.go`
 - A storage-decoding failure mode has leaked all the way into the API response type: the domain counts unparseable blobs and returns the count as a response field.
   - `internal/domain/demand/campaign_signals.go:137-152`
   - Reproduce: `sed -n '137,156p' internal/domain/demand/campaign_signals.go`
@@ -1940,7 +1940,7 @@ print('cardutil match:', normalize_cardutil(purchase) == normalize_cardutil(cand
 
 #### DUP-002 — Two independently-maintained grader/grade regexes accept different fractional-grade formats for the same concept
 
-*Lens:* `duplication` · *Confidence:* `strong` · *Verdict:* `confirmed_lower_severity` · *Severity:* low (confirmed as filed, but re-grounded: this is a pure maintainability/duplication concern, not a demonstrated live defect -- the divergence cannot be exercised by any valid grader title)
+*Lens:* `duplication` · *Confidence:* `strong` · *Verdict:* `confirmed_lower_severity` · *Severity:* low
 
 **Subject:** `{'kind': 'symbol', 'identity': 'inventory.ExtractGrade vs inventory.ExtractGraderAndGrade (grader-and-grade regex)'}`
 
@@ -2004,7 +2004,7 @@ These are real observations that a developer could not act on and prove correct 
 
 **Why not ticketed:** Confirmed all three cited instances independently (SnapshotRepository, resolvePSACategory, and the domain package-tree drift addressed by DCT-002/DCT-019/DCT-020 above). Confirmed `make check` (Makefile:146-149) runs exactly lint (go fmt, go vet, golangci-lint) plus check-imports.sh, check-file-size.sh, check-playwright-version.sh — read all four scripts' headers/logic and none parses markdown or Go comment text for symbol validity; go vet/golangci-lint only operate on compiled code, never doc-comment strings. The mechanism-gap claim is accurate.
 
-**What the finding got wrong:** The team lead's dispatch note for this finding explicitly required describing the gap without proposing a symbol-checker or doc-linter to build. proposed_fix nonetheless states 'a human may want to consider a lightweight doc-comment-symbol-linter... so a stale reference like these is caught before merge' — this is a tooling proposal, not merely a gap description, even though it is hedged as 'out of scope for this read-only audit to design or build.' That hedge scopes who builds it, not whether the finding proposes it; it should have stopped at describing the gap. Separately, the finding's own acceptance_criteria concede it has no independent ticketable action beyond DCT-002/DCT-019/DCT-020's own criteria — it is a grouping/pointer observation, not a standalone fix.
+**What the finding got wrong:** The team lead's dispatch note for this finding explicitly required describing the gap without proposing a symbol-checker or doc-linter to build. proposed_fix nonetheless states 'a human may want to consider a lightweight doc-comment-symbol-linter... so a stale reference like these is caught before merge' — this is a tooling proposal, not merely a gap description, even though it is hedged as 'out of scope for this read-only audit to design or build.' That hedge scopes who builds it, not whether the finding proposes it; it should have stopped at describing the gap. Separately, the finding's own acceptance_criteria concede it has no independent ticketable action beyond DCT-002/DCT-019/DCT-020's own criteria — it is a grouping/pointer observation, not a standalone fix. Re-grounded severity: low — an accurate but non-actionable meta-observation grouping three already-independently-ticketed instances (DCT-002, DCT-019, DCT-020), whose remediation is fully covered by those tickets; its incidental tooling suggestion should be dropped rather than carried into any ticket.
 
 ### FE-008 — Pointer: two SellSheetItem price fields carry cent values but their name (and JSON tag) omit the Cents suffix used everywhere else in the codebase
 
@@ -2019,7 +2019,7 @@ These are real observations that a developer could not act on and prove correct 
 
 ## Refuted findings — the audit's own error rate
 
-Four of 63 findings did not survive adversarial verification. Two were **mechanical-tier** — the audit's highest confidence band — and one of those would have driven a developer to break an hourly production job. This section stays in the record permanently.
+Four of 63 findings did not survive adversarial verification. One was **mechanical-tier** — the audit's highest confidence band — and it would have driven a developer to break an hourly production job. This section stays in the record permanently.
 
 ### DCT-005 — CLAUDE.md describes 'make check' as three steps but the Makefile target runs a fourth, undocumented script
 

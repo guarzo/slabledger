@@ -5,7 +5,7 @@
   "declared_totals": {},
   "records_count": 24,
   "gaps": [
-    "docs/API.md (3083 lines, ~130 endpoints) and docs/SCHEMA.md (999 lines, ~40 tables) were checked systematically for structural drift (endpoint existence, table existence) but not verified field-by-field (every request/response shape, every column type/constraint) — a full field-level pass would likely surface more, smaller drift than reported here.",
+    "docs/API.md (3083 lines, ~130 endpoints) and docs/SCHEMA.md (999 lines, ~40 tables) were checked systematically for structural drift (endpoint existence, table existence) but not verified field-by-field (every request/response shape, every column type/constraint) \u2014 a full field-level pass would likely surface more, smaller drift than reported here.",
     "docs/USER_GUIDE.md, docs/DH_INVENTORY.md, docs/SCHEDULERS.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/LOOP.md, docs/inventory-friction-analysis.md, docs/runbooks/cl-profileid-backfill.md were grepped for known-stale terms (sqlite, favorites, picks, marketmovers, cardhedger, etc.) and spot-checked, but not read claim-by-claim line-by-line in full.",
     "docs/superpowers/plans/*.md and docs/superpowers/specs/*.md (16 dated, point-in-time feature design docs) were swept for the same stale-terms list (clean) and spot-checked on the two most recent (2026-08-07 campaign-targeting-edit and psa-campaign-attribution) with confirmed-accurate file:line citations; the other 14 were not individually verified claim-by-claim."
   ],
@@ -19,7 +19,7 @@
       "ref_sites": [
         "cmd/slabledger/init_services.go:99 (initializeCardLadder)",
         "internal/adapters/scheduler/cardladder_refresh.go (525 lines, CardLadderRefreshScheduler refreshes CL values daily)",
-        "internal/adapters/httpserver/routes.go:65-71 (6 registered /api/admin/cardladder/* routes)",
+        "internal/adapters/httpserver/routes.go:65-71 (7 registered /api/admin/cardladder/* routes)",
         "internal/domain/liquidation/comp_price.go (CL-derived comp pricing)"
       ],
       "verdict": "refuted"
@@ -138,7 +138,7 @@
       "command": "go list ./internal/domain/... | grep -i picks; git log --oneline --diff-filter=D -- internal/domain/picks",
       "external_refs": 0,
       "ref_sites": [
-        "commit 474072bd \"remove: reduce surface area — card search, watchlists, picks, orphaned tables (#152)\" removed the picks domain package"
+        "commit 474072bd \"remove: reduce surface area \u2014 card search, watchlists, picks, orphaned tables (#152)\" removed the picks domain package"
       ],
       "verdict": "refuted"
     },
@@ -189,7 +189,7 @@
     {
       "identity": "schema-md-price-history-migration-number",
       "kind": "claim",
-      "defined_at": "docs/SCHEMA.md:210,212 (\"~~price_history~~ — DROPPED (migration 000038)\")",
+      "defined_at": "docs/SCHEMA.md:210,212 (\"~~price_history~~ \u2014 DROPPED (migration 000038)\")",
       "command": "ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l; ls internal/adapters/storage/postgres/migrations/000038* 2>&1",
       "external_refs": 0,
       "ref_sites": [

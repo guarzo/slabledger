@@ -2,37 +2,149 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Scout report",
   "type": "object",
-  "required": ["scout", "revision", "status", "declared_totals", "records_count", "records"],
+  "required": [
+    "scout",
+    "revision",
+    "status",
+    "declared_totals",
+    "records_count",
+    "records"
+  ],
   "properties": {
-    "scout":    {"type": "string"},
-    "revision": {"type": "string", "const": "740976ecf80a4f2ccdaa611d7790ccaa95b48773"},
-    "status":   {"enum": ["complete", "partial", "failed"]},
+    "scout": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string",
+      "const": "740976ecf80a4f2ccdaa611d7790ccaa95b48773"
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "partial",
+        "failed"
+      ]
+    },
     "declared_totals": {
       "type": "object",
       "description": "Counts this scout claims to have covered; reconciled against baseline.",
-      "additionalProperties": {"type": "integer"}
+      "additionalProperties": {
+        "type": "integer"
+      }
     },
     "records_count": {
       "type": "integer",
       "minimum": 0,
       "description": "Must equal records.length; cross-checks the declared_totals payload against actual output."
     },
-    "gaps":    {"type": "array", "items": {"type": "string"}},
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "records": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["identity", "kind", "defined_at", "command"],
+        "required": [
+          "identity",
+          "kind",
+          "defined_at",
+          "command"
+        ],
         "properties": {
-          "identity":        {"type": "string"},
-          "kind":            {"type": "string"},
-          "defined_at":      {"type": "string"},
-          "external_refs":   {"type": "integer", "minimum": 0},
-          "ref_sites":       {"type": "array", "items": {"type": "string"}},
-          "build_tags":      {"type": "array", "items": {"type": "string"}},
-          "registration_sites": {"type": "array", "items": {"type": "string"}},
-          "command":         {"type": "string"}
-        }
+          "identity": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "api-client-method",
+              "claim",
+              "class",
+              "column",
+              "component-or-fn",
+              "config_field",
+              "config_field_dead",
+              "const",
+              "coverage-gap",
+              "env_var",
+              "env_var_orphan",
+              "func",
+              "function",
+              "index",
+              "method",
+              "rls_policy",
+              "route",
+              "table",
+              "type",
+              "var",
+              "view"
+            ],
+            "description": "Closed vocabulary. A new record kind is a deliberate schema change, not a typo."
+          },
+          "defined_at": {
+            "type": "string"
+          },
+          "external_refs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ref_sites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "build_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "registration_sites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "command": {
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "confirmed",
+              "incomplete",
+              "refuted"
+            ],
+            "description": "Claim-check outcome, on `claim` and `coverage-gap` records only: did the documented assertion hold against the tree? Deliberately NOT the phase-3 vocabulary in verdict.schema.json — a scout can report `incomplete` (the claim is partly true), which no adversarial verdict may be, and it has no `confirmed_lower_severity` because a scout assigns no severity."
+          },
+          "distinct_definitions_for_name": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "How many separate definitions in the tree share this record's bare name. >1 is the same-name-collision trap: an apparent caller may be calling something else entirely."
+          },
+          "name_ambiguous": {
+            "type": "boolean",
+            "description": "Shorthand for distinct_definitions_for_name > 1, so a consumer can filter without arithmetic."
+          },
+          "integration_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "References from build-tagged integration tests. Tracked apart from ref_sites because they do not compile in a default build, so they neither prove liveness nor prove death on their own."
+          },
+          "test_only": {
+            "type": "boolean",
+            "description": "Every external reference is from a _test.go file. Present only when true."
+          },
+          "note": {
+            "type": "string",
+            "description": "Scout-authored qualifier on this record, e.g. the migration that dropped a table or a name collision the counts alone do not explain."
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

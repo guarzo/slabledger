@@ -15,7 +15,7 @@
       {
         "claim": "cache.New (the only function that reaches NewFileCacheBackend from within the package) has zero callers anywhere in the tree.",
         "command": "git grep -nE '\\bcache\\.New\\(' -- '*.go'",
-        "output": "(no output — zero matches)"
+        "output": "(no output \u2014 zero matches)"
       },
       {
         "claim": "NewFileCacheBackend itself is only called from cache.New (in-package) and from internal/integration/pricing_test.go, which is gated by the integration build tag.",
@@ -30,15 +30,15 @@
       {
         "claim": "cmd/slabledger (the production binary's wiring root) never imports internal/platform/cache at all.",
         "command": "git grep -n 'platform/cache' cmd/slabledger/*.go",
-        "output": "(no output — zero matches)"
+        "output": "(no output \u2014 zero matches)"
       },
       {
-        "claim": "cfg.Cache.Path / cfg.Cache is read nowhere outside internal/platform/config itself (not even in cmd/slabledger, which owns all other config field consumption).",
-        "command": "git grep -nE '\\.Cache\\.Path\\b|\\.Cache\\b' -- '*.go' | grep -v internal/platform/config",
-        "output": "internal/integration/pricing_test.go:42:func newTestCache(t *testing.T) cache.Cache {  (this line references the cache.Cache TYPE, not cfg.Cache; no cfg.Cache reference outside internal/platform/config exists)"
+        "claim": "cfg.Cache.Path / cfg.Cache is read nowhere outside internal/platform/config itself (not even in cmd/slabledger, which owns all other config field consumption). The one line the broad `.Cache` pattern returns is a reference to the cache.Cache TYPE in an integration test, not to the cfg.Cache field; the narrower `\\.Cache\\.Path\\b` pattern returns nothing at all.",
+        "command": "git grep -nE '\\.Cache\\.Path\\b|\\.Cache\\b' -- '*.go' | grep -v internal/platform/config; echo '--- narrow:'; git grep -nE '\\.Cache\\.Path\\b' -- '*.go' | grep -v internal/platform/config",
+        "output": "internal/integration/pricing_test.go:42:func newTestCache(t *testing.T) cache.Cache {\n--- narrow:\n(no output \u2014 zero matches)"
       },
       {
-        "claim": "EnsureDirectories (the mkdir side effect keyed on cfg.Cache.Path) is called from exactly one site, loader.go:33, which is in the same package (config) as its own definition — an in-package caller of an in-package helper, proving nothing about external reachability (preamble trap #1).",
+        "claim": "EnsureDirectories (the mkdir side effect keyed on cfg.Cache.Path) is called from exactly one site, loader.go:33, which is in the same package (config) as its own definition \u2014 an in-package caller of an in-package helper, proving nothing about external reachability (preamble trap #1).",
         "command": "git grep -n 'EnsureDirectories' -- '*.go'",
         "output": "internal/platform/config/loader.go:33:\tif err := EnsureDirectories(cfg); err != nil {\ninternal/platform/config/validation.go:91:func EnsureDirectories(cfg Config) error {"
       },
@@ -54,13 +54,19 @@
       }
     ],
     "searched_universe": "git-tracked *.go files at revision 740976ecf80a4f2ccdaa611d7790ccaa95b48773, both default and integration build tags, including _test.go files; go-reference-map.json used as the starting candidate list, all claims re-verified with targeted git grep per PREAMBLE rule 4",
-    "exclusions": ["internal/platform/cache/cache_test.go and cache_bench_test.go excluded as in-package-only test usage", "internal/integration/pricing_test.go excluded from production reachability because it is gated by //go:build integration"],
-    "build_tags": ["default", "integration"],
+    "exclusions": [
+      "internal/platform/cache/cache_test.go and cache_bench_test.go excluded as in-package-only test usage",
+      "internal/integration/pricing_test.go excluded from production reachability because it is gated by //go:build integration"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
     "runtime_checks": {
-      "interface_satisfaction": "FileCache structurally satisfies the Cache interface, but no code outside the package holds a Cache value produced by this package (the only constructor, cache.New, is itself uncalled) — interface satisfaction does not create a hidden external caller here.",
+      "interface_satisfaction": "FileCache structurally satisfies the Cache interface, but no code outside the package holds a Cache value produced by this package (the only constructor, cache.New, is itself uncalled) \u2014 interface satisfaction does not create a hidden external caller here.",
       "functional_options": "cache.Option / WithLogger exist for NewFileCacheBackend but are only exercised by in-package tests and the integration-tagged test; no production wiring passes any Option, consistent with the constructor never being reached from cmd/.",
       "embedding": "No embedding of FileCache or Cache found in any other struct (git grep for 'cache.Cache' and 'cache.FileCache' as embedded fields returns nothing).",
-      "serialization": "Entry has JSON tags for its own on-disk cache file format (self-serialization), not an external API contract — irrelevant to reachability of the constructors.",
+      "serialization": "Entry has JSON tags for its own on-disk cache file format (self-serialization), not an external API contract \u2014 irrelevant to reachability of the constructors.",
       "go_embed": "No //go:embed directives in this package.",
       "build_tags": "Package itself carries no build tag; the only non-test external reference (pricing_test.go) is integration-tagged and therefore excluded from default builds.",
       "registration": "No entry in cmd/slabledger/init_services.go, init_schedulers.go, routes.go, or any scheduler builder references internal/platform/cache or cache.New.",
@@ -68,7 +74,15 @@
       "reflection_or_string": "No string-keyed lookup or reflection-based construction found; Config.Type is read once in cache.New's own switch statement, which is itself unreachable."
     },
     "proposed_fix": "Remove the platform/cache package (cache.go, cache_test.go, cache_bench_test.go, associated files), the Config.Cache field / CacheConfig type, the -cache CLI flag registration in loader.go, the two Cache.Path blocks in validation.go and EnsureDirectories, and update internal/integration/pricing_test.go to either be removed or to construct its own throwaway file cache inline if the integration test still has independent value. Confirm no other unlisted file references internal/platform/cache before deleting.",
-    "blast_radius": ["internal/platform/cache/*", "internal/platform/config/types.go (CacheConfig, Config.Cache)", "internal/platform/config/defaults.go", "internal/platform/config/loader.go (-cache flag, EnsureDirectories call)", "internal/platform/config/validation.go (EnsureDirectories, two Cache.Path checks)", "internal/integration/pricing_test.go", ".env.example / docs mentioning the -cache flag or CACHE_PATH-style env var if present"],
+    "blast_radius": [
+      "internal/platform/cache/*",
+      "internal/platform/config/types.go (CacheConfig, Config.Cache)",
+      "internal/platform/config/defaults.go",
+      "internal/platform/config/loader.go (-cache flag, EnsureDirectories call)",
+      "internal/platform/config/validation.go (EnsureDirectories, two Cache.Path checks)",
+      "internal/integration/pricing_test.go",
+      ".env.example / docs mentioning the -cache flag or CACHE_PATH-style env var if present"
+    ],
     "effort": "M",
     "acceptance_criteria": [
       "go build ./... and go test ./... (including -tags integration, after updating or removing pricing_test.go) pass with the package and config plumbing removed.",
@@ -95,24 +109,24 @@
         "output": "internal/adapters/clients/azureai/image_client.go:32: (doc comment)\ninternal/adapters/clients/azureai/image_client.go:35:func NewImageClient(cfg Config, opts ...ImageOption) (*ImageClient, error) {"
       },
       {
-        "claim": "The azureai package is imported in exactly one production file (cmd/slabledger/init_services.go), and that file calls azureai.NewClient (the unrelated text/LLM client) — never NewImageClient.",
+        "claim": "The azureai package is imported in exactly one production file (cmd/slabledger/init_services.go), and that file calls azureai.NewClient (the unrelated text/LLM client) \u2014 never NewImageClient.",
         "command": "git grep -n '\"github.com/guarzo/slabledger/internal/adapters/clients/azureai\"' -- '*.go'; git grep -n 'azureai\\.' cmd/slabledger/init_services.go",
         "output": "cmd/slabledger/init_services.go:14:\t\"github.com/guarzo/slabledger/internal/adapters/clients/azureai\"\ncmd/slabledger/init_services.go:66:\tclient, err := azureai.NewClient(azureai.Config{...}, azureai.WithLogger(logger), azureai.WithCompletionTimeout(...))"
       },
       {
-        "claim": "GenerateImage, the method implementing the interface, is called nowhere — its only two occurrences are its own definition and the interface method declaration it satisfies.",
+        "claim": "GenerateImage, the method implementing the interface, is called nowhere \u2014 its only two occurrences are its own definition and the interface method declaration it satisfies.",
         "command": "git grep -n 'GenerateImage' -- '*.go'",
         "output": "internal/adapters/clients/azureai/image_client.go:79: (doc comment)\ninternal/adapters/clients/azureai/image_client.go:82:func (c *ImageClient) GenerateImage(ctx context.Context, req ai.ImageRequest) (*ai.ImageResult, error) {\ninternal/domain/ai/image.go:7:\tGenerateImage(ctx context.Context, req ImageRequest) (*ImageResult, error)"
       },
       {
-        "claim": "ai.ImageGenerator, ai.ImageRequest, ai.ImageResult have references only from the single azureai/image_client.go file that declares/implements the interface — no third consumer (e.g. an HTTP handler or scheduler) exists anywhere.",
+        "claim": "ai.ImageGenerator, ai.ImageRequest, ai.ImageResult have references only from the single azureai/image_client.go file that declares/implements the interface \u2014 no third consumer (e.g. an HTTP handler or scheduler) exists anywhere.",
         "command": "git grep -nE '\\bImageGenerator\\b|\\bImageRequest\\b|\\bImageResult\\b' -- '*.go'",
         "output": "internal/adapters/clients/azureai/image_client.go:24 (comment), :61 (var _ ai.ImageGenerator = (*ImageClient)(nil)), :82, :136\ninternal/domain/ai/image.go:6,7,11,18 (declarations)"
       },
       {
-        "claim": "No _test.go file anywhere references ImageClient, ImageGenerator, GenerateImage, ImageRequest, or ImageResult — the cluster is untested as well as unwired.",
+        "claim": "No _test.go file anywhere references ImageClient, ImageGenerator, GenerateImage, ImageRequest, or ImageResult \u2014 the cluster is untested as well as unwired.",
         "command": "git grep -lnE '\\bImageClient\\b|\\bImageGenerator\\b|\\bGenerateImage\\b|\\bImageRequest\\b|\\bImageResult\\b' -- '*_test.go'",
-        "output": "(no output — zero matches)"
+        "output": "(no output \u2014 zero matches)"
       },
       {
         "claim": "go-reference-map independently flags WithImageLogger, NewImageClient, ImageClient, and ImageOption as external_refs==0.",
@@ -122,9 +136,12 @@
     ],
     "searched_universe": "git-tracked *.go files at revision 740976ecf80a4f2ccdaa611d7790ccaa95b48773, both default and integration build tags, including _test.go files",
     "exclusions": [],
-    "build_tags": ["default", "integration"],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
     "runtime_checks": {
-      "interface_satisfaction": "ImageClient satisfies ai.ImageGenerator via the explicit compile-time assertion `var _ ai.ImageGenerator = (*ImageClient)(nil)` at image_client.go:61 — this is the ONLY reference to the interface from the implementation, and no third party ever declares a variable of type ai.ImageGenerator or accepts one as a parameter, so the assertion does not hide an external consumer.",
+      "interface_satisfaction": "ImageClient satisfies ai.ImageGenerator via the explicit compile-time assertion `var _ ai.ImageGenerator = (*ImageClient)(nil)` at image_client.go:61 \u2014 this is the ONLY reference to the interface from the implementation, and no third party ever declares a variable of type ai.ImageGenerator or accepts one as a parameter, so the assertion does not hide an external consumer.",
       "functional_options": "ImageOption / WithImageLogger exist but are never passed to NewImageClient anywhere because NewImageClient itself is never called.",
       "embedding": "ImageClient is not embedded in any other struct.",
       "serialization": "imageGenerationRequest (unexported, internal request-body struct) carries JSON tags for the Azure API call inside GenerateImage, but GenerateImage is itself unreachable, so this is not an external contract in use.",
@@ -135,7 +152,10 @@
       "reflection_or_string": "No string-keyed lookup or reflection-based dispatch constructs an ImageGenerator."
     },
     "proposed_fix": "Delete internal/adapters/clients/azureai/image_client.go and internal/domain/ai/image.go, unless there is a near-term product plan to wire AI image generation (advisor/campaign card imagery), in which case leave a tracking issue instead of deleting.",
-    "blast_radius": ["internal/adapters/clients/azureai/image_client.go", "internal/domain/ai/image.go"],
+    "blast_radius": [
+      "internal/adapters/clients/azureai/image_client.go",
+      "internal/domain/ai/image.go"
+    ],
     "effort": "S",
     "acceptance_criteria": [
       "go build ./... and go test ./... pass with both files removed.",
@@ -167,22 +187,25 @@
         "output": "internal/domain/advisor/service.go:46:func WithTemperature(t float64) ServiceOption {"
       },
       {
-        "claim": "The only production construction of the advisor service (cmd/slabledger/init_services.go) builds its ServiceOption slice from WithLogger, WithAITracker, conditionally WithMaxToolRounds, WithScoringDataProvider, and WithGapStore — WithMaxTokens/WithTemperature are absent, so s.maxTokens and s.temperature are always left at defaultMaxTokens/defaultTemperature.",
+        "claim": "The only production construction of the advisor service (cmd/slabledger/init_services.go) builds its ServiceOption slice from WithLogger, WithAITracker, conditionally WithMaxToolRounds, WithScoringDataProvider, and WithGapStore \u2014 WithMaxTokens/WithTemperature are absent, so s.maxTokens and s.temperature are always left at defaultMaxTokens/defaultTemperature.",
         "command": "sed -n '77,92p' cmd/slabledger/init_services.go",
         "output": "advisorOpts := []advisor.ServiceOption{advisor.WithLogger(logger), advisor.WithAITracker(aiCallRepo)}\nif cfg.AdvisorRefresh.MaxToolRounds > 0 { advisorOpts = append(advisorOpts, advisor.WithMaxToolRounds(...)) }\nadvisorOpts = append(advisorOpts, advisor.WithScoringDataProvider(scoringProvider))\nadvisorOpts = append(advisorOpts, advisor.WithGapStore(postgres.NewGapStore(db.DB)))\nadvisorSvc = advisor.NewService(client, toolExec, advisorOpts...)"
       },
       {
-        "claim": "s.maxTokens and s.temperature are read only in tool_loop.go, confirming the fields are live business state — it is specifically the setter options that are unreachable, not the fields.",
+        "claim": "s.maxTokens and s.temperature are read only in tool_loop.go, confirming the fields are live business state \u2014 it is specifically the setter options that are unreachable, not the fields.",
         "command": "git grep -n 'maxTokens\\|temperature' internal/domain/advisor/*.go",
         "output": "service_impl.go:55,56 (field decls), :65,66 (defaults set in constructor), tool_loop.go:49 (temp := s.temperature), tool_loop.go:55 (MaxTokens: s.maxTokens)"
       }
     ],
     "searched_universe": "git-tracked *.go files at revision 740976ecf80a4f2ccdaa611d7790ccaa95b48773, both default and integration build tags, including _test.go files",
     "exclusions": [],
-    "build_tags": ["default", "integration"],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
     "runtime_checks": {
-      "interface_satisfaction": "ServiceOption is a concrete func type (func(*service)), not an interface method — no structural-typing indirection is possible here.",
-      "functional_options": "This IS the functional-options mechanism under direct examination: both options are defined and would compile fine if deleted, silently leaving maxTokens/temperature at their hardcoded defaults forever — matching preamble mechanism #2 exactly.",
+      "interface_satisfaction": "ServiceOption is a concrete func type (func(*service)), not an interface method \u2014 no structural-typing indirection is possible here.",
+      "functional_options": "This IS the functional-options mechanism under direct examination: both options are defined and would compile fine if deleted, silently leaving maxTokens/temperature at their hardcoded defaults forever \u2014 matching preamble mechanism #2 exactly.",
       "embedding": "Not applicable; no embedding involved.",
       "serialization": "Not applicable; no JSON tags on these fields.",
       "go_embed": "Not applicable.",
@@ -191,8 +214,10 @@
       "init_side_effects": "No init() side effects construct these options.",
       "reflection_or_string": "No reflection or string-keyed dispatch invokes these options."
     },
-    "proposed_fix": "Either remove WithMaxTokens and WithTemperature (and hardcode/derive the defaults instead of exposing unreachable configurability), or wire them into cmd/slabledger/init_services.go from config if tunable max-tokens/temperature was the intent (e.g. via cfg.AdvisorRefresh, mirroring how MaxToolRounds is conditionally wired). This is a product decision, not a mechanical deletion call — flagging for the fixer to choose.",
-    "blast_radius": ["internal/domain/advisor/service.go"],
+    "proposed_fix": "Either remove WithMaxTokens and WithTemperature (and hardcode/derive the defaults instead of exposing unreachable configurability), or wire them into cmd/slabledger/init_services.go from config if tunable max-tokens/temperature was the intent (e.g. via cfg.AdvisorRefresh, mirroring how MaxToolRounds is conditionally wired). This is a product decision, not a mechanical deletion call \u2014 flagging for the fixer to choose.",
+    "blast_radius": [
+      "internal/domain/advisor/service.go"
+    ],
     "effort": "S",
     "acceptance_criteria": [
       "go build ./... and go test ./... pass after either removing the two options or wiring them into cmd/slabledger/init_services.go.",
@@ -209,46 +234,49 @@
       "identity": "internal/domain/auth.Repository: GetTokens, GetTokensByUserID, UpdateTokens, DeleteTokens, DeleteAllUserTokens, CleanupExpiredOAuthStates"
     },
     "category": "dead-code",
-    "title": "Six of auth.Repository's 24 methods are never called through the interface anywhere — five form a dead token-lifecycle path, the sixth is a separately-dead OAuth-state cleanup",
+    "title": "Six of auth.Repository's 24 methods are never called through the interface anywhere \u2014 five form a dead token-lifecycle path, the sixth is a separately-dead OAuth-state cleanup",
     "severity": "medium",
     "confidence": "mechanical",
     "evidence": [
       {
-        "claim": "For each of the six candidate methods, the only occurrences anywhere in the tree are the interface declaration, the Postgres implementation, and the two test mocks — no call site through any variable of interface type auth.Repository or auth.Service exists, in production or in tests.",
+        "claim": "For each of the six candidate methods, the only occurrences anywhere in the tree are the interface declaration, the Postgres implementation, and the two test mocks \u2014 no call site through any variable of interface type auth.Repository or auth.Service exists, in production or in tests.",
         "command": "for fn in GetTokens GetTokensByUserID UpdateTokens DeleteTokens DeleteAllUserTokens CleanupExpiredOAuthStates; do git grep -n \"\\b$fn\\b\" -- '*.go'; done",
-        "output": "Each of the six names resolves to exactly 4 lines: internal/domain/auth/repository.go (interface decl), internal/adapters/storage/postgres/{auth_token_store.go|auth_oauth_state_store.go} (impl), internal/testutil/mocks/auth_inmemory.go (mock), internal/testutil/mocks/auth_repository.go (mock) — zero call sites."
+        "output": "Each of the six names resolves to exactly 4 lines: internal/domain/auth/repository.go (interface decl), internal/adapters/storage/postgres/{auth_token_store.go|auth_oauth_state_store.go} (impl), internal/testutil/mocks/auth_inmemory.go (mock), internal/testutil/mocks/auth_repository.go (mock) \u2014 zero call sites."
       },
       {
-        "claim": "Sanity check: the same grep technique correctly surfaces live call chains for sibling methods on the same interface (StoreTokens, GetSession, DeleteSession), which show call sites in google/oauth.go, service_impl.go, and httpserver handlers — confirming the absence of such call sites for the six candidates is a real signal, not a blind spot in the search.",
+        "claim": "Sanity check: the same grep technique correctly surfaces live call chains for sibling methods on the same interface (StoreTokens, GetSession, DeleteSession), which show call sites in google/oauth.go, service_impl.go, and httpserver handlers \u2014 confirming the absence of such call sites for the six candidates is a real signal, not a blind spot in the search.",
         "command": "for fn in StoreTokens GetSession DeleteSession; do git grep -n \"\\b$fn\\b\" -- '*.go' | grep -v auth_token_store.go; done",
         "output": "StoreTokens: internal/adapters/clients/google/oauth.go:307-308 (OAuthService.StoreTokens calls s.repo.StoreTokens), internal/adapters/httpserver/handlers/auth.go:208 (h.authService.StoreTokens). GetSession/DeleteSession show equivalent chains through service_impl.go and google/oauth.go."
       },
       {
-        "claim": "auth.Service — the interface every consumer above the repository actually holds and calls through (handlers, middleware, schedulers) — does not expose GetTokens, GetTokensByUserID, UpdateTokens, DeleteTokens, DeleteAllUserTokens, or CleanupExpiredOAuthStates at all; it only exposes StoreTokens from the token group, and CleanupExpiredSessions (a different method, for session records) instead of CleanupExpiredOAuthStates.",
+        "claim": "auth.Service \u2014 the interface every consumer above the repository actually holds and calls through (handlers, middleware, schedulers) \u2014 does not expose GetTokens, GetTokensByUserID, UpdateTokens, DeleteTokens, DeleteAllUserTokens, or CleanupExpiredOAuthStates at all; it only exposes StoreTokens from the token group, and CleanupExpiredSessions (a different method, for session records) instead of CleanupExpiredOAuthStates.",
         "command": "sed -n '1,48p' internal/domain/auth/service.go",
-        "output": "Service interface lists: GetLoginURL, ExchangeCodeForTokens, GetUserInfo, StoreOAuthState, ConsumeOAuthState, CreateSession, ValidateSession, DeleteSession, CleanupExpiredSessions, GetOrCreateUser, GetUserByID, UpdateLastLogin, StoreTokens, IsEmailAllowed, ListAllowedEmails, AddAllowedEmail, RemoveAllowedEmail, ListUsers, SetUserAdmin — the six candidates are absent."
+        "output": "Service interface lists: GetLoginURL, ExchangeCodeForTokens, GetUserInfo, StoreOAuthState, ConsumeOAuthState, CreateSession, ValidateSession, DeleteSession, CleanupExpiredSessions, GetOrCreateUser, GetUserByID, UpdateLastLogin, StoreTokens, IsEmailAllowed, ListAllowedEmails, AddAllowedEmail, RemoveAllowedEmail, ListUsers, SetUserAdmin \u2014 the six candidates are absent."
       },
       {
-        "claim": "authService.s.repo (the concrete implementation backing auth.Service) never calls any of the six methods on its embedded repo field — every s.repo.X() call in service_impl.go is enumerated and none of the six appear.",
+        "claim": "authService.s.repo (the concrete implementation backing auth.Service) never calls any of the six methods on its embedded repo field \u2014 every s.repo.X() call in service_impl.go is enumerated and none of the six appear.",
         "command": "git grep -n 's\\.repo\\.' internal/domain/auth/service_impl.go",
         "output": "18 call sites listed: StoreOAuthState, ConsumeOAuthState, CreateSession, GetSession, GetUserByID, DeleteSession, DeleteExpiredSessions, GetUserByGoogleID, CreateUser, GetUserByID, UpdateUser, StoreTokens, IsEmailAllowed, ListAllowedEmails, AddAllowedEmail, RemoveAllowedEmail, ListUsers, SetUserAdmin. None of the six candidates."
       },
       {
-        "claim": "The only other two holders of an auth.Repository-typed variable are cmd/slabledger/main.go's authRepo (assigned then only passed into a constructor, never called directly) and google.OAuthService's embedded repo field (whose own methods — StoreTokens/GetSession/DeleteSession/etc. — were individually grepped and never call the six candidates either).",
+        "claim": "The only other two holders of an auth.Repository-typed variable are cmd/slabledger/main.go's authRepo (assigned then only passed into a constructor, never called directly) and google.OAuthService's embedded repo field (whose own methods \u2014 StoreTokens/GetSession/DeleteSession/etc. \u2014 were individually grepped and never call the six candidates either).",
         "command": "git grep -n 'auth\\.Repository\\b' -- '*.go' | grep -v '_test.go\\|mocks'; git grep -n 'authRepo\\.' cmd/slabledger/*.go",
-        "output": "auth.Repository held by: cmd/slabledger/main.go:222 (var authRepo auth.Repository), google/oauth.go:51/62 (repo field), postgres/auth_repository.go:33 (var _ auth.Repository = ...). `authRepo.` search in cmd/slabledger produced zero method-call matches — authRepo is only assigned (main.go:231) and passed as a constructor argument (main.go:235), never has a method called on it directly."
+        "output": "auth.Repository held by: cmd/slabledger/main.go:222 (var authRepo auth.Repository), google/oauth.go:51/62 (repo field), postgres/auth_repository.go:33 (var _ auth.Repository = ...). `authRepo.` search in cmd/slabledger produced zero method-call matches \u2014 authRepo is only assigned (main.go:231) and passed as a constructor argument (main.go:235), never has a method called on it directly."
       },
       {
         "claim": "No admin/session-management handler references token revocation, per-session deletion, or OAuth-state cleanup by name, ruling out an unnamed indirect path.",
         "command": "git grep -niE 'revoke|logout.?all|delete.*token' internal/adapters/httpserver/handlers/*.go | grep -v _test.go",
-        "output": "(no output — zero matches)"
+        "output": "(no output \u2014 zero matches)"
       }
     ],
     "searched_universe": "git-tracked *.go files at revision 740976ecf80a4f2ccdaa611d7790ccaa95b48773, both default and integration build tags, including _test.go files and mock files under internal/testutil/mocks/",
     "exclusions": [],
-    "build_tags": ["default", "integration"],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
     "runtime_checks": {
-      "interface_satisfaction": "This is the central check for this finding, per the team lead's framing. auth.Repository is satisfied by exactly one concrete type (postgres.AuthRepository, asserted at auth_repository.go:33) plus two test mocks. The interface value itself is held in only two places (google.OAuthService.repo, cmd/slabledger's authRepo local) and neither ever calls any of the six methods through that interface value — confirmed by exhaustively grepping every call site of each method name, not by inspecting the interface declaration alone.",
+      "interface_satisfaction": "This is the central check for this finding, per the team lead's framing. auth.Repository is satisfied by exactly one concrete type (postgres.AuthRepository, asserted at auth_repository.go:33) plus two test mocks. The interface value itself is held in only two places (google.OAuthService.repo, cmd/slabledger's authRepo local) and neither ever calls any of the six methods through that interface value \u2014 confirmed by exhaustively grepping every call site of each method name, not by inspecting the interface declaration alone.",
       "functional_options": "Not applicable; these are plain interface methods, not functional options.",
       "embedding": "postgres.AuthRepository implements all six methods directly (no promotion via embedding); no other struct embeds AuthRepository or auth.Repository in a way that would promote these methods to a new, differently-named call site.",
       "serialization": "None of the six methods are invoked via JSON-tag-driven (de)serialization; they are plain CRUD operations on OAuth tokens/state, not struct fields with tags.",
@@ -258,13 +286,19 @@
       "init_side_effects": "No init() function constructs or calls through auth.Repository.",
       "reflection_or_string": "No reflection or string-keyed dispatch invokes these methods; all six are called (in principle) via ordinary Go method syntax, which the exhaustive grep above covers."
     },
-    "proposed_fix": "Two logically distinct removals, since the six methods split into a coherent token-lifecycle group and one unrelated method: (1) remove GetTokens, GetTokensByUserID, UpdateTokens, DeleteTokens, DeleteAllUserTokens from the auth.Repository interface, postgres.AuthRepository (auth_token_store.go), and both mocks — the per-session multi-device token read/update/delete path is entirely unused; only StoreTokens (create) is live. (2) separately remove CleanupExpiredOAuthStates from the interface, implementation (auth_oauth_state_store.go), and both mocks, or wire it into the existing session-cleanup scheduler (internal/adapters/scheduler/session_cleanup.go) if unbounded growth of the oauth_states table is an operational concern — that scheduler currently only calls CleanupExpiredSessions, not this method. Keep the auth.Repository interface itself; only these six methods and their implementations are in scope.",
-    "blast_radius": ["internal/domain/auth/repository.go", "internal/adapters/storage/postgres/auth_token_store.go", "internal/adapters/storage/postgres/auth_oauth_state_store.go", "internal/testutil/mocks/auth_inmemory.go", "internal/testutil/mocks/auth_repository.go"],
+    "proposed_fix": "Two logically distinct removals, since the six methods split into a coherent token-lifecycle group and one unrelated method: (1) remove GetTokens, GetTokensByUserID, UpdateTokens, DeleteTokens, DeleteAllUserTokens from the auth.Repository interface, postgres.AuthRepository (auth_token_store.go), and both mocks \u2014 the per-session multi-device token read/update/delete path is entirely unused; only StoreTokens (create) is live. (2) separately remove CleanupExpiredOAuthStates from the interface, implementation (auth_oauth_state_store.go), and both mocks, or wire it into the existing session-cleanup scheduler (internal/adapters/scheduler/session_cleanup.go) if unbounded growth of the oauth_states table is an operational concern \u2014 that scheduler currently only calls CleanupExpiredSessions, not this method. Keep the auth.Repository interface itself; only these six methods and their implementations are in scope.",
+    "blast_radius": [
+      "internal/domain/auth/repository.go",
+      "internal/adapters/storage/postgres/auth_token_store.go",
+      "internal/adapters/storage/postgres/auth_oauth_state_store.go",
+      "internal/testutil/mocks/auth_inmemory.go",
+      "internal/testutil/mocks/auth_repository.go"
+    ],
     "effort": "S",
     "acceptance_criteria": [
       "go build ./... and go test ./... pass with the six methods removed from the interface, the Postgres implementation, and both mocks (or, for CleanupExpiredOAuthStates, with it wired into session_cleanup.go and covered by a scheduler test).",
       "git grep for each of the six method names returns no results (or, for whichever is wired instead of removed, shows exactly one new call site in the scheduler plus its test).",
-      "The underlying Postgres tables/queries these methods issued are reviewed separately by the db lens before any migration is considered — this finding covers only the Go-level dead methods, not schema changes."
+      "The underlying Postgres tables/queries these methods issued are reviewed separately by the db lens before any migration is considered \u2014 this finding covers only the Go-level dead methods, not schema changes."
     ]
   }
 ]

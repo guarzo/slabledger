@@ -3,9 +3,12 @@
     "id": "DBSCHEMA-001",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "psa_portal_token" },
+    "subject": {
+      "kind": "table",
+      "identity": "psa_portal_token"
+    },
     "category": "db",
-    "title": "psa_portal_token — a table storing an (encrypted) PSA portal access token — was created after the 000003 blanket RLS grant and has never had RLS enabled",
+    "title": "psa_portal_token \u2014 a table storing an (encrypted) PSA portal access token \u2014 was created after the 000003 blanket RLS grant and has never had RLS enabled",
     "severity": "high",
     "confidence": "strong",
     "evidence": [
@@ -17,7 +20,7 @@
       {
         "claim": "No RLS statement for this table exists in any migration (grep across all 25 .up.sql files, filtered to this table name, is empty).",
         "command": "grep -n 'ENABLE ROW LEVEL SECURITY\\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w psa_portal_token",
-        "output": "(no output — zero matches)"
+        "output": "(no output \u2014 zero matches)"
       },
       {
         "claim": "db-map.json's own scout-computed rls_status for this table agrees: none, and dates its creation as after the 000003 blanket pass.",
@@ -25,7 +28,7 @@
         "output": "grep -n 'ENABLE ROW LEVEL SECURITY\\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w psa_portal_token | rls_status=none (no ENABLE ROW LEVEL SECURITY and no CREATE POLICY for this table in any of the 25 migrations -- created after 000003's blanket grant and never retrofitted)"
       },
       {
-        "claim": "The stored value is application-layer encrypted before insert and decrypted only in Go (PSAPortalTokenStore uses crypto.Encryptor), so a PostgREST reader without the app's ENCRYPTION_KEY gets ciphertext, not the plaintext PSA token — this narrows but does not eliminate the exposure (ciphertext + ability to overwrite/delete the singleton row and observe expires_at are still exposed).",
+        "claim": "The stored value is application-layer encrypted before insert and decrypted only in Go (PSAPortalTokenStore uses crypto.Encryptor), so a PostgREST reader without the app's ENCRYPTION_KEY gets ciphertext, not the plaintext PSA token \u2014 this narrows but does not eliminate the exposure (ciphertext + ability to overwrite/delete the singleton row and observe expires_at are still exposed).",
         "command": "git grep -n 'Encrypt\\|Decrypt' internal/adapters/storage/postgres/psa_portal_token_store.go",
         "output": "internal/adapters/storage/postgres/psa_portal_token_store.go:44:\ttok, err := s.enc.Decrypt(enc)\ninternal/adapters/storage/postgres/psa_portal_token_store.go:53:\tenc, err := s.enc.Encrypt(token)"
       },
@@ -55,16 +58,19 @@
     "id": "DBSCHEMA-002",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "psa_campaign_push_queue" },
+    "subject": {
+      "kind": "table",
+      "identity": "psa_campaign_push_queue"
+    },
     "category": "db",
-    "title": "psa_campaign_push_queue has no RLS, and the harvester's DrainPushQueue trusts the DB's status column alone — an unauthenticated PostgREST write of a forged 'approved' row would be pushed live to the PSA portal",
+    "title": "psa_campaign_push_queue has no RLS, and the harvester's DrainPushQueue trusts the DB's status column alone \u2014 an unauthenticated PostgREST write of a forged 'approved' row would be pushed live to the PSA portal",
     "severity": "high",
     "confidence": "strong",
     "evidence": [
       {
         "claim": "psa_campaign_push_queue is created in 000018 with no ENABLE ROW LEVEL SECURITY / CREATE POLICY anywhere in any of the 25 migrations.",
         "command": "grep -n 'ENABLE ROW LEVEL SECURITY\\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w psa_campaign_push_queue",
-        "output": "(no output — zero matches)"
+        "output": "(no output \u2014 zero matches)"
       },
       {
         "claim": "DrainPushQueue's only gate before pushing a row live to PSA is the DB row's own status column ('approved'); there is no additional application-level signature or re-authorization check at drain time.",
@@ -95,16 +101,19 @@
     "id": "DBSCHEMA-003",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "dh_comp_cache" },
+    "subject": {
+      "kind": "table",
+      "identity": "dh_comp_cache"
+    },
     "category": "db",
-    "title": "Five more live tables (dh_comp_cache, dh_card_tombstones, psa_portal_snapshot, psa_campaign_snapshot, psa_portal_catalog) were created after the 000003 blanket RLS grant and never received RLS — grouped because the fix is identical for each",
+    "title": "Five more live tables (dh_comp_cache, dh_card_tombstones, psa_portal_snapshot, psa_campaign_snapshot, psa_portal_catalog) were created after the 000003 blanket RLS grant and never received RLS \u2014 grouped because the fix is identical for each",
     "severity": "high",
     "confidence": "strong",
     "evidence": [
       {
         "claim": "None of these five tables has an ENABLE ROW LEVEL SECURITY or CREATE POLICY statement anywhere in the 25 migrations.",
         "command": "for t in dh_comp_cache dh_card_tombstones psa_portal_snapshot psa_campaign_snapshot psa_portal_catalog; do grep -n 'ENABLE ROW LEVEL SECURITY\\|CREATE POLICY' internal/adapters/storage/postgres/migrations/*.up.sql | grep -w \"$t\"; done",
-        "output": "(no output — zero matches for all five)"
+        "output": "(no output \u2014 zero matches for all five)"
       },
       {
         "claim": "All five are live (non-zero Go external_refs, i.e. not dead/dropped tables) per db-map.json.",
@@ -114,7 +123,7 @@
       {
         "claim": "None of the five is dropped by any later migration (confirmed by scanning every migration for DROP TABLE of each name).",
         "command": "for t in dh_comp_cache dh_card_tombstones psa_portal_snapshot psa_campaign_snapshot psa_portal_catalog; do grep -l \"DROP TABLE.*$t\\b\" internal/adapters/storage/postgres/migrations/*.up.sql; done",
-        "output": "(no output — none dropped)"
+        "output": "(no output \u2014 none dropped)"
       },
       {
         "claim": "The eighth table this seed originally flagged, mm_sales_comps, is NOT part of this gap: it was dropped by 000021 (DROP TABLE IF EXISTS mm_sales_comps;) and no longer exists at HEAD, so there is nothing to retrofit RLS onto. Reported here to correct the seed's count from 8 down to 7 live tables (this finding's 5 + DBSCHEMA-001's psa_portal_token + DBSCHEMA-002's psa_campaign_push_queue).",
@@ -140,16 +149,19 @@
     "id": "DBSCHEMA-004",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "marketmovers_config" },
+    "subject": {
+      "kind": "table",
+      "identity": "marketmovers_config"
+    },
     "category": "db",
-    "title": "marketmovers_config is dead schema: created in 000001, RLS-granted in 000003, but — unlike its sibling mm_* tables — never dropped when Market Movers was removed in 000021, and has zero Go references anywhere",
+    "title": "marketmovers_config is dead schema: created in 000001, RLS-granted in 000003, but \u2014 unlike its sibling mm_* tables \u2014 never dropped when Market Movers was removed in 000021, and has zero Go references anywhere",
     "severity": "low",
     "confidence": "mechanical",
     "evidence": [
       {
         "claim": "marketmovers_config has zero references anywhere in tracked .go files (word-boundary, includes _test.go).",
         "command": "git grep -nE '\\bmarketmovers_config\\b' -- '*.go'",
-        "output": "(no output — zero matches, exit code 1)"
+        "output": "(no output \u2014 zero matches, exit code 1)"
       },
       {
         "claim": "db-map.json independently confirms external_refs=0.",
@@ -157,30 +169,33 @@
         "output": "0"
       },
       {
-        "claim": "000021 (the migration that retired Market Movers) explicitly drops mm_sales_comps and mm_card_mappings by name but does not mention marketmovers_config at all — it was left behind.",
+        "claim": "000021 (the migration that retired Market Movers) explicitly drops mm_sales_comps and mm_card_mappings by name but does not mention marketmovers_config at all \u2014 it was left behind.",
         "command": "cat internal/adapters/storage/postgres/migrations/000021_drop_market_movers.up.sql",
         "output": "-- Drop the Market Movers (MM) integration.\n...\nDROP INDEX IF EXISTS idx_mm_sales_comps_lookup;\nDROP TABLE IF EXISTS mm_sales_comps;\nDROP TABLE IF EXISTS mm_card_mappings;\n...\n(marketmovers_config not mentioned anywhere in this file)"
       },
       {
         "claim": "No later migration (000022-000025) references marketmovers_config either.",
         "command": "grep -rl 'marketmovers_config' internal/adapters/storage/postgres/migrations/000022*.sql internal/adapters/storage/postgres/migrations/000023*.sql internal/adapters/storage/postgres/migrations/000024*.sql internal/adapters/storage/postgres/migrations/000025*.sql",
-        "output": "(no output — zero matches)"
+        "output": "(no output \u2014 zero matches)"
       },
       {
-        "claim": "The table's 000001 comment ('marketmovers_config: sqlite.MarketMoversConfig [marketmovers_store.go:17]') is one of five identical-form stale sqlite provenance comments in 000001; the other four (cardladder_config, cl_card_mappings, scheduler_run_stats — all live — and mm_card_mappings — dropped by 000021) were individually checked and are NOT additional dead-schema findings: three are actively used by Go code and one no longer exists as a table at all. Only marketmovers_config is both present in the schema and unreferenced.",
+        "claim": "The table's 000001 comment ('marketmovers_config: sqlite.MarketMoversConfig [marketmovers_store.go:17]') is one of five identical-form stale sqlite provenance comments in 000001; the other four (cardladder_config, cl_card_mappings, scheduler_run_stats \u2014 all live \u2014 and mm_card_mappings \u2014 dropped by 000021) were individually checked and are NOT additional dead-schema findings: three are actively used by Go code and one no longer exists as a table at all. Only marketmovers_config is both present in the schema and unreferenced.",
         "command": "for t in cardladder_config cl_card_mappings scheduler_run_stats mm_card_mappings; do echo \"== $t ==\"; git grep -cE \"\\\\b$t\\\\b\" -- '*.go'; done",
-        "output": "== cardladder_config ==\n1\n== cl_card_mappings ==\n8\n== scheduler_run_stats ==\n2\n== mm_card_mappings ==\n0 (and additionally DROPPED by 000021 — table no longer exists)"
+        "output": "== cardladder_config ==\n1\n== cl_card_mappings ==\n8\n== scheduler_run_stats ==\n2\n== mm_card_mappings ==\n0 (and additionally DROPPED by 000021 \u2014 table no longer exists)"
       }
     ],
     "searched_universe": "git-tracked *.go files (default and integration build tags, including _test.go); internal/adapters/storage/postgres/migrations/*.up.sql (all 25 migrations); cmd/ wiring files",
     "exclusions": [],
-    "build_tags": ["default", "integration"],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
     "runtime_checks": {
-      "interface_satisfaction": "N/A — subject is a database table, not a Go type; no interface reasoning applies.",
-      "functional_options": "N/A — not a Go constructor.",
-      "embedding": "N/A — not a Go struct.",
+      "interface_satisfaction": "N/A \u2014 subject is a database table, not a Go type; no interface reasoning applies.",
+      "functional_options": "N/A \u2014 not a Go constructor.",
+      "embedding": "N/A \u2014 not a Go struct.",
       "serialization": "Checked for JSON/struct tags referencing 'marketmovers_config' or a Go type wrapping it; none found (the table's only Go-side counterpart, marketmovers_store.go, was removed along with the rest of the MM integration).",
-      "go_embed": "The migrations directory is embedded via embed.FS and the CREATE TABLE statement therefore executes at migrate-up time (the table gets created), but nothing thereafter reads or writes rows in it — go:embed only explains why the table exists, not why it would still be used.",
+      "go_embed": "The migrations directory is embedded via embed.FS and the CREATE TABLE statement therefore executes at migrate-up time (the table gets created), but nothing thereafter reads or writes rows in it \u2014 go:embed only explains why the table exists, not why it would still be used.",
       "build_tags": "Checked both default and integration-tagged .go files; zero matches in either.",
       "registration": "cmd/slabledger and cmd/psa-harvest wiring files never reference marketmovers_config or any MarketMovers* type.",
       "init_side_effects": "No init() function in the tree references marketmovers_config or MarketMovers-prefixed identifiers.",
@@ -202,7 +217,10 @@
     "id": "DBSCHEMA-005",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "docs/SCHEMA.md (missing tables)" },
+    "subject": {
+      "kind": "table",
+      "identity": "docs/SCHEMA.md (missing tables)"
+    },
     "category": "db",
     "title": "docs/SCHEMA.md omits seven currently-live tables entirely",
     "severity": "medium",
@@ -214,7 +232,7 @@
         "output": "card_price_trajectory\ndh_card_tombstones\ndh_comp_cache\ndh_state_events\nmm_sales_comps\npsa_exchange_policy\npsa_portal_snapshot\npsa_portal_token\nscheduler_run_stats"
       },
       {
-        "claim": "Of those 9 raw hits, 2 (mm_sales_comps, psa_exchange_policy) are correctly absent because both tables are dropped (000021, 000014 respectively) — their absence from the docs is correct, not drift. The remaining 7 are live tables with real Go callers and are genuinely undocumented.",
+        "claim": "Of those 9 raw hits, 2 (mm_sales_comps, psa_exchange_policy) are correctly absent because both tables are dropped (000021, 000014 respectively) \u2014 their absence from the docs is correct, not drift. The remaining 7 are live tables with real Go callers and are genuinely undocumented.",
         "command": "for t in card_price_trajectory dh_card_tombstones dh_comp_cache dh_state_events psa_portal_snapshot psa_portal_token scheduler_run_stats; do git grep -cE \"\\\\b$t\\\\b\" -- '*.go' | awk -v t=$t '{print t\": \"$0}'; done",
         "output": "card_price_trajectory: 2\ndh_card_tombstones: 1\ndh_comp_cache: 1\ndh_state_events: 6\npsa_portal_snapshot: 1\npsa_portal_token: 1\nscheduler_run_stats: 2"
       }
@@ -224,7 +242,9 @@
       "mm_sales_comps and psa_exchange_policy excluded from this finding: both are dropped tables and their absence from SCHEMA.md is correct, not drift."
     ],
     "proposed_fix": "Add a `### table_name` section to docs/SCHEMA.md for each of card_price_trajectory, dh_card_tombstones, dh_comp_cache, dh_state_events, psa_portal_snapshot, psa_portal_token, and scheduler_run_stats, following the existing column/index/FK table format used throughout the doc.",
-    "blast_radius": ["docs/SCHEMA.md"],
+    "blast_radius": [
+      "docs/SCHEMA.md"
+    ],
     "effort": "M",
     "acceptance_criteria": [
       "Each of the 7 tables listed has a `### table_name` section in docs/SCHEMA.md with a column table matching its CREATE TABLE definition in migrations.",
@@ -235,7 +255,10 @@
     "id": "DBSCHEMA-006",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "docs/SCHEMA.md (stale dropped-table sections)" },
+    "subject": {
+      "kind": "table",
+      "identity": "docs/SCHEMA.md (stale dropped-table sections)"
+    },
     "category": "db",
     "title": "docs/SCHEMA.md still documents three tables as live that have been dropped by migrations (advisor_cache, sell_sheet_items, mm_card_mappings)",
     "severity": "medium",
@@ -260,7 +283,9 @@
     "searched_universe": "docs/SCHEMA.md sections for advisor_cache, sell_sheet_items, mm_card_mappings vs migration files that DROP TABLE each name",
     "exclusions": [],
     "proposed_fix": "Delete the `### advisor_cache`, `### sell_sheet_items`, and `### mm_card_mappings` sections from docs/SCHEMA.md, or replace each with a one-line 'Dropped in migration NNNNN' note consistent with how other removed tables (e.g. psa_exchange_policy, cardhedger-era tables) are already handled elsewhere in the doc, if such a convention exists.",
-    "blast_radius": ["docs/SCHEMA.md"],
+    "blast_radius": [
+      "docs/SCHEMA.md"
+    ],
     "effort": "S",
     "acceptance_criteria": [
       "docs/SCHEMA.md no longer presents advisor_cache, sell_sheet_items, or mm_card_mappings as live tables with column definitions.",
@@ -271,7 +296,10 @@
     "id": "DBSCHEMA-007",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "docs/SCHEMA.md (wrong migration provenance)" },
+    "subject": {
+      "kind": "table",
+      "identity": "docs/SCHEMA.md (wrong migration provenance)"
+    },
     "category": "db",
     "title": "docs/SCHEMA.md cites the wrong migration number for two current tables: psa_campaign_snapshot and psa_campaign_push_queue both say 'Added: migration 000017', but both are actually created in 000018",
     "severity": "low",
@@ -297,18 +325,20 @@
     "exclusions": [],
     "build_tags": [],
     "runtime_checks": {
-      "interface_satisfaction": "N/A — this is a documentation-accuracy claim about a migration citation, not a Go reachability claim.",
+      "interface_satisfaction": "N/A \u2014 this is a documentation-accuracy claim about a migration citation, not a Go reachability claim.",
       "functional_options": "N/A",
       "embedding": "N/A",
       "serialization": "N/A",
-      "go_embed": "N/A — migrations are embedded via embed.FS but that mechanism is unrelated to this doc-citation error.",
+      "go_embed": "N/A \u2014 migrations are embedded via embed.FS but that mechanism is unrelated to this doc-citation error.",
       "build_tags": "N/A",
       "registration": "N/A",
       "init_side_effects": "N/A",
-      "reflection_or_string": "N/A — verified purely by comparing migration file contents against the doc's cited number; no reflection or string-built SQL involved."
+      "reflection_or_string": "N/A \u2014 verified purely by comparing migration file contents against the doc's cited number; no reflection or string-built SQL involved."
     },
     "proposed_fix": "Change both 'Added: migration 000017' citations in docs/SCHEMA.md to '000018' for psa_campaign_snapshot and psa_campaign_push_queue.",
-    "blast_radius": ["docs/SCHEMA.md"],
+    "blast_radius": [
+      "docs/SCHEMA.md"
+    ],
     "effort": "S",
     "acceptance_criteria": [
       "Both sections read 'Added: migration 000018'.",
@@ -319,19 +349,22 @@
     "id": "DBSCHEMA-008",
     "lens": "db-schema",
     "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
-    "subject": { "kind": "table", "identity": "docs/SCHEMA.md (stale pre-cutover migration numbering)" },
+    "subject": {
+      "kind": "table",
+      "identity": "docs/SCHEMA.md (stale pre-cutover migration numbering)"
+    },
     "category": "db",
-    "title": "docs/SCHEMA.md still cites pre-cutover SQLite migration numbers (up to 000051) that have no corresponding file in this repo's 25-migration Postgres history, making most of its 'Added: migration NNNNN' provenance notes unverifiable or actively misleading",
+    "title": "docs/SCHEMA.md still cites pre-cutover SQLite migration numbers (up to 000067) that have no corresponding file in this repo's 25-migration Postgres history, making most of its 'Added: migration NNNNN' provenance notes unverifiable or actively misleading",
     "severity": "medium",
     "confidence": "strong",
     "evidence": [
       {
-        "claim": "docs/SCHEMA.md cites migration numbers up to 000051, but the repo's Postgres migration set (post-SQLite-cutover) only goes up to 000025.",
-        "command": "grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sort -u | tail -5; echo ---; ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l",
-        "output": "migration 000048\nmigration 000049\nmigration 000050\nmigration 000051\n---\n25"
+        "claim": "docs/SCHEMA.md cites migration numbers up to 000067 \u2014 26 distinct numbers above 000025 \u2014 but the repo's Postgres migration set (post-SQLite-cutover) only goes up to 000025.",
+        "command": "grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sort -u | tail -5; echo ---; grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md | sed 's/migration //' | sort -u | awk '$1>25' | wc -l; echo ---; ls internal/adapters/storage/postgres/migrations/*.up.sql | wc -l",
+        "output": "migration 000058\nmigration 000059\nmigration 000060\nmigration 000066\nmigration 000067\n---\n26\n---\n25"
       },
       {
-        "claim": "CLAUDE.md documents that 000001_initial_schema 'represents the final-state schema after cutover from SQLite' — i.e. the current 25 migrations are a fresh Postgres history, and any doc citation above 000025 necessarily refers to the old, now-collapsed SQLite migration sequence, not a file that exists in this repo.",
+        "claim": "CLAUDE.md documents that 000001_initial_schema 'represents the final-state schema after cutover from SQLite' \u2014 i.e. the current 25 migrations are a fresh Postgres history, and any doc citation above 000025 necessarily refers to the old, now-collapsed SQLite migration sequence, not a file that exists in this repo.",
         "command": "grep -n 'final-state schema after cutover' CLAUDE.md",
         "output": "Migration files: `internal/adapters/storage/postgres/migrations/`. `000001_initial_schema`\nrepresents the final-state schema after cutover from SQLite; subsequent migrations are\nincremental ..."
       },
@@ -346,7 +379,9 @@
       "This finding does not itself enumerate which of the ~100 citations are individually wrong versus merely pre-cutover-but-coincidentally-harmless; DBSCHEMA-006 and DBSCHEMA-007 are the two concretely-verified instances found during this pass. A full doc rewrite is needed to resolve the rest, which is why this is filed as its own (larger-effort) finding rather than folded into those two."
     ],
     "proposed_fix": "Rewrite docs/SCHEMA.md's per-table provenance notes to cite only the current 25-migration Postgres history (internal/adapters/storage/postgres/migrations/000001..000025), removing or clearly marking as historical any citation above 000025. Tables entirely defined in 000001_initial_schema should say so rather than citing a pre-cutover number.",
-    "blast_radius": ["docs/SCHEMA.md"],
+    "blast_radius": [
+      "docs/SCHEMA.md"
+    ],
     "effort": "L",
     "acceptance_criteria": [
       "grep -oE 'migration 0000[0-9][0-9]' docs/SCHEMA.md, when sorted, has no value greater than 000025.",
