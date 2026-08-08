@@ -155,8 +155,6 @@ func TestRLSCoverage_NoUntrackedGaps(t *testing.T) {
 	knownWithoutRLS := map[string]string{
 		// golang-migrate's own version-tracking table, not application data.
 		"schema_migrations": "migration tooling table",
-		// Tracked separately — its fix is not mechanical.
-		"psa_campaign_push_queue": "ticketed separately (SLA-9)",
 	}
 
 	rows, err := db.QueryContext(ctx, `
