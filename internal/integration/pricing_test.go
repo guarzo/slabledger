@@ -7,9 +7,6 @@ package integration
 
 import (
 	"strings"
-	"testing"
-
-	"github.com/guarzo/slabledger/internal/platform/cache"
 )
 
 // inventoryCard represents a card currently in our inventory.
@@ -37,16 +34,6 @@ func currentInventory() []inventoryCard {
 		cards[i] = e.toInventoryCard()
 	}
 	return cards
-}
-
-func newTestCache(t *testing.T) cache.Cache {
-	t.Helper()
-	dir := t.TempDir()
-	c, err := cache.NewFileCacheBackend(dir+"/test.cache", cache.SimpleCacheConfig{})
-	if err != nil {
-		t.Fatalf("failed to create test cache: %v", err)
-	}
-	return c
 }
 
 func containsCI(s, substr string) bool {

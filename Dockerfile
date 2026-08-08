@@ -80,7 +80,7 @@ COPY --from=frontend-builder --chown=app:app /app/web/dist ./web/dist
 
 # Create necessary directories with correct ownership
 # These will be used as mount points for volumes
-RUN mkdir -p /app/data /app/cache && \
+RUN mkdir -p /app/data && \
     chown -R app:app /app
 
 # Switch to non-root user
