@@ -23,10 +23,12 @@ type PSASyncRefresher interface {
 	GetLastRunStats() *scheduler.PSASyncRunStats
 }
 
-// PSASyncPurchaseCreator resolves a pending item into a purchase (subset of
-// inventory.Service). Assignment is update-or-create rather than create-only:
-// the reconciler enqueues items for purchases that already exist, so the cert
-// lookup and reassignment are as load-bearing as the create.
+// PSASyncPurchaseCreator resolves a pending item into a purchase. It spans two
+// of inventory.Service's concerns — purchase CRUD and cert-keyed lookup — so no
+// single published sub-interface covers it. Assignment is update-or-create
+// rather than create-only: the reconciler enqueues items for purchases that
+// already exist, so the cert lookup and reassignment are as load-bearing as the
+// create.
 type PSASyncPurchaseCreator interface {
 	CreatePurchase(ctx context.Context, p *inventory.Purchase) error
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)

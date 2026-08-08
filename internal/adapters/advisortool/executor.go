@@ -20,9 +20,21 @@ import (
 // toolHandler is a function that executes a tool and returns JSON.
 type toolHandler func(ctx context.Context, args string) (string, error)
 
-// CampaignToolExecutor implements ai.ToolExecutor by calling inventory.Service methods.
+// InventoryService is the slice of inventory.Service the advisor tools actually
+// call: read-only analytics, price suggestion, and cert lookup, plus campaign
+// listing. It is composed from the domain's published sub-interfaces rather
+// than redeclaring their methods, so it tracks them automatically.
+type InventoryService interface {
+	inventory.AnalyticsService
+	inventory.PricingService
+	inventory.CertLookupService
+
+	ListCampaigns(ctx context.Context, activeOnly bool) ([]inventory.Campaign, error)
+}
+
+// CampaignToolExecutor implements ai.ToolExecutor by calling InventoryService methods.
 type CampaignToolExecutor struct {
-	svc            inventory.Service
+	svc            InventoryService
 	financeService finance.Service
 	exportService  export.Service
 	arbSvc         arbitrage.Service
@@ -79,7 +91,7 @@ func WithExportService(svc export.Service) ExecutorOption {
 }
 
 // NewCampaignToolExecutor creates a ToolExecutor backed by the campaigns service.
-func NewCampaignToolExecutor(svc inventory.Service, opts ...ExecutorOption) *CampaignToolExecutor {
+func NewCampaignToolExecutor(svc InventoryService, opts ...ExecutorOption) *CampaignToolExecutor {
 	e := &CampaignToolExecutor{
 		svc:      svc,
 		handlers: make(map[string]toolHandler),
