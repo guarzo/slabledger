@@ -27,6 +27,7 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/pricing"
 	"github.com/guarzo/slabledger/internal/domain/tuning"
 	"github.com/guarzo/slabledger/internal/platform/config"
+	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
 // handlerInputs bundles all values needed to construct HTTP handlers and
@@ -341,6 +342,18 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		deps.PSASnapshotStore = postgres.NewPSACampaignSnapshotStore(in.DB.DB)
 		deps.PSAPushQueue = postgres.NewPSACampaignPushQueueStore(in.DB.DB)
 		deps.PSACatalogStore = postgres.NewPSAPortalCatalogStore(in.DB.DB)
+	}
+
+	// Wire the approval signer. Without a configured key the publish endpoint
+	// answers 503 rather than writing an approval the harvester would refuse an
+	// hour later — the failure belongs where a human is watching for it.
+	if in.Cfg != nil && in.Cfg.PSAPortal.PushSigningKey != "" {
+		signer, err := crypto.NewHMACSigner(in.Cfg.PSAPortal.PushSigningKey, in.Cfg.PSAPortal.PushSigningKeyID)
+		if err != nil {
+			logger.Error(ctx, "PSA push signing key rejected, publish endpoint disabled", observability.Err(err))
+		} else {
+			deps.PSAApprovalSigner = signer
+		}
 	}
 
 	out := handlerOutputs{

@@ -216,6 +216,8 @@ func FromEnv(base Config) Config {
 	cfg.PSAPortal.Email = os.Getenv("PSA_PORTAL_EMAIL")
 	cfg.PSAPortal.Password = os.Getenv("PSA_PORTAL_PASSWORD")
 	cfg.PSAPortal.ProxyURL = os.Getenv("PSA_PORTAL_PROXY_URL")
+	cfg.PSAPortal.PushSigningKey = os.Getenv("PSA_PUSH_SIGNING_KEY")
+	cfg.PSAPortal.PushSigningKeyID = os.Getenv("PSA_PUSH_SIGNING_KEY_ID")
 	// Default: enabled when credentials are present (harvester app). The
 	// reader-only main app holds no credentials, so PSA_PORTAL_ENABLED lets it
 	// turn on the token reader explicitly.

@@ -32,7 +32,8 @@ func (m *SnapshotStoreMock) GetSnapshot(ctx context.Context) ([]psacampaign.Port
 // PushQueueStoreMock implements psacampaign.PushQueueStore with the Fn-field pattern.
 type PushQueueStoreMock struct {
 	EnqueueFn           func(ctx context.Context, p psacampaign.PushRow) error
-	ApproveFn           func(ctx context.Context, id, approvedBy string) error
+	GetFn               func(ctx context.Context, id string) (psacampaign.PushRow, error)
+	ApproveFn           func(ctx context.Context, id string, a psacampaign.Approval) error
 	ListByStatusFn      func(ctx context.Context, status psacampaign.PushStatus) ([]psacampaign.PushRow, error)
 	MarkResultFn        func(ctx context.Context, id string, status psacampaign.PushStatus, resultJSON, errMsg string) error
 	ClaimFn             func(ctx context.Context, id string) (bool, error)
@@ -48,9 +49,16 @@ func (m *PushQueueStoreMock) Enqueue(ctx context.Context, p psacampaign.PushRow)
 	return nil
 }
 
-func (m *PushQueueStoreMock) Approve(ctx context.Context, id, approvedBy string) error {
+func (m *PushQueueStoreMock) Get(ctx context.Context, id string) (psacampaign.PushRow, error) {
+	if m.GetFn != nil {
+		return m.GetFn(ctx, id)
+	}
+	return psacampaign.PushRow{ID: id, Status: psacampaign.PushPending}, nil
+}
+
+func (m *PushQueueStoreMock) Approve(ctx context.Context, id string, a psacampaign.Approval) error {
 	if m.ApproveFn != nil {
-		return m.ApproveFn(ctx, id, approvedBy)
+		return m.ApproveFn(ctx, id, a)
 	}
 	return nil
 }

@@ -79,6 +79,42 @@ func (c *Client) FetchCampaigns(ctx context.Context) ([]psacampaign.PortalCampai
 	return out, catalog, nil
 }
 
+// fetchCampaignNames paginates the campaign list endpoint and returns each
+// campaign's id and name, skipping the per-campaign edit-form enrichment
+// FetchCampaigns does. The create-path existence check only needs names, and it
+// runs before every create — paying one edit-form round trip per existing
+// campaign to answer "does this name exist" would make the guard expensive
+// enough to be tempting to remove.
+func (c *Client) fetchCampaignNames(ctx context.Context) ([]psacampaign.PortalCampaign, error) {
+	var out []psacampaign.PortalCampaign
+	page := 1
+	for {
+		root, err := c.getRefPacked(ctx, fmt.Sprintf("%s%s&page=%d", c.baseURL(), campaignsListPath, page))
+		if err != nil {
+			return nil, err
+		}
+		items, pageSize, totalCount, err := campaignItems(root)
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range items {
+			pc, err := mapListItem(it)
+			if err != nil {
+				// A row we cannot decode is a row we cannot rule out. Fail the
+				// whole check rather than report "no match" from a partial list
+				// and create a duplicate campaign.
+				return nil, fmt.Errorf("psaportal: undecodable campaign in list: %w", err)
+			}
+			out = append(out, pc)
+		}
+		if len(items) == 0 || len(items) < pageSize || len(out) >= totalCount {
+			break
+		}
+		page++
+	}
+	return out, nil
+}
+
 // fetchCampaignFormData fetches and decodes the edit-page formData for one
 // campaign, along with the curated spec-list catalog embedded alongside it.
 func (c *Client) fetchCampaignFormData(ctx context.Context, campaignID string) (psacampaign.CampaignFormData, []psacampaign.SpecListRef, error) {

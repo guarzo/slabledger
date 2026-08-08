@@ -67,6 +67,7 @@ type ServerDependencies struct {
 	PSASnapshotStore          psacampaign.SnapshotStore        // optional: PSA campaign snapshot reader
 	PSAPushQueue              psacampaign.PushQueueStore       // optional: PSA campaign push-queue reader/writer
 	PSACatalogStore           psacampaign.CatalogStore         // optional: PSA portal catalog reader (spec lists + subjects)
+	PSAApprovalSigner         psacampaign.ApprovalSigner       // optional: signs push approvals; nil = publish endpoint disabled
 }
 
 // EnvVarValidation holds the result of environment variable validation
@@ -320,6 +321,9 @@ func campaignsHandlerOptions(deps ServerDependencies) []handlers.CampaignsHandle
 	}
 	if deps.PSACatalogStore != nil {
 		opts = append(opts, handlers.WithPSACatalogStore(deps.PSACatalogStore))
+	}
+	if deps.PSAApprovalSigner != nil {
+		opts = append(opts, handlers.WithPSAApprovalSigner(deps.PSAApprovalSigner))
 	}
 	return opts
 }

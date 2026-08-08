@@ -72,13 +72,15 @@ One-time setup:
 # 1) Create the app (no HTTP service, no machines yet).
 fly apps create slabledger-psa-harvest
 
-# 2) Secrets — all four required. ENCRYPTION_KEY and DATABASE_URL MUST be byte-identical
-#    to the main `slabledger` app (the app decrypts what the harvester encrypts).
+# 2) Secrets. ENCRYPTION_KEY, DATABASE_URL and PSA_PUSH_SIGNING_KEY MUST be byte-identical
+#    to the main `slabledger` app (the app decrypts what the harvester encrypts, and
+#    signs the approvals the harvester verifies).
 fly secrets set -a slabledger-psa-harvest \
   PSA_PORTAL_EMAIL='...' \
   PSA_PORTAL_PASSWORD='...' \
   ENCRYPTION_KEY='<same as slabledger>' \
-  DATABASE_URL='<same Postgres URL as slabledger>'
+  DATABASE_URL='<same Postgres URL as slabledger>' \
+  PSA_PUSH_SIGNING_KEY='<same as slabledger>'
 
 # 3) Build & push the image (does NOT start a run on its own).
 #    --image-label pins a stable tag (:harvest); without it fly deploy pushes a
@@ -210,14 +212,18 @@ four env vars from a Secret.
 | `ENCRYPTION_KEY` | harvester + app | AES key; token encrypted at rest |
 | `DATABASE_URL` | harvester + app | shared Postgres |
 | `PSA_CAMPAIGN_SYNC_ENABLED` | harvester only | gates the campaign snapshot fetch + push-queue drain described above; the app reads/writes the tables regardless but never contacts PSA itself |
+| `PSA_PUSH_SIGNING_KEY` | harvester + app | HMAC key authenticating push approvals; **must be byte-identical on both** or the harvester rejects every approval the app signs. ≥32 chars (`openssl rand -hex 32`). Unset ⇒ `psa-publish` returns 503 |
+| `PSA_PUSH_SIGNING_KEY_ID` | harvester + app | opaque label for the key above, for rotation; not a secret. Defaults to `default` |
 
 The **main app** needs `ENCRYPTION_KEY` + `DATABASE_URL` (to decrypt/read the token),
 `PSA_SYNC_ENABLED=true` to run the daily import, **and** `PSA_PORTAL_EMAIL` +
 `PSA_PORTAL_PASSWORD`. The app never logs in, but it only *wires* the portal sync when
 those credentials are present (`PSAPortal.Enabled = email != "" && password != ""` in
 `config/loader.go`; the client is constructed in `cmd/slabledger/main.go`). Config also
-rejects setting just one of the pair — set both or neither. So in practice all four vars
-go on both apps, with `ENCRYPTION_KEY`/`DATABASE_URL` identical across them.
+rejects setting just one of the pair — set both or neither. So in practice the four
+credential vars go on both apps, with `ENCRYPTION_KEY`/`DATABASE_URL` identical across
+them — plus `PSA_PUSH_SIGNING_KEY`, which must also match on both for the push path to
+work at all.
 
 ## Campaign sync
 
@@ -280,11 +286,53 @@ Campaign edits are never pushed automatically. The flow is:
    (`POST /api/campaigns/{id}/psa-publish`), which flips the row to `approved` — this is
    the only state transition the app can perform on a queue row.
 3. The next `cmd/psa-harvest` run (or a manual invocation) finds the `approved` row via
-   `DrainPushQueue` and actually calls `updateCampaign` against psacard.com, marking the
-   row `pushed` or `failed`.
+   `DrainPushQueue`, **verifies the approval signature**, and only then calls
+   `updateCampaign` against psacard.com, marking the row `pushed` or `failed`.
 
 So there is always at least one human click, plus one harvester run, between a proposed
 change and it reaching PSA.
+
+#### Why the approval is signed (SLA-44)
+
+The `approved` status is a column, and the threat model is an adversary who can write
+columns — a leaked `service_role` key, a compromised PostgREST path, or direct database
+access. Flipping `status` to `approved` would otherwise be enough to make the harvester
+push arbitrary campaign changes to psacard.com on the next run. RLS (migrations 000027–
+000029) closes the anon/authenticated path but not the `service_role` one.
+
+So the approval carries an HMAC-SHA256 signature over a canonical encoding of the row's
+identity **and a digest of the exact payload the operator was shown**
+(`internal/domain/psacampaign/approval.go`, signed by `internal/platform/crypto`). The
+key lives only in `PSA_PUSH_SIGNING_KEY` in the environment — never in the database — so
+a writer who can set `status` cannot forge the signature that makes it count.
+`DrainPushQueue` verifies before any portal call and marks an unverifiable row `failed`
+rather than pushing it.
+
+Two further guards close the ways a *valid* signature could still be replayed against the
+wrong target:
+
+- **Creates** are checked against the portal itself before pushing, so a re-approved
+  create cannot duplicate a campaign that already exists.
+- **Updates** compare-and-swap against the live portal record: if the campaign changed
+  since the diff was computed, the push is refused rather than clobbering the newer
+  state. Both sides render through one shared canonical renderer, pinned by
+  `TestPortalListAndEditFormRenderIdentically`, so an unordered portal response never
+  reads as drift.
+
+**Operationally this means an approval is bound to one payload.** If a queued push is
+edited, superseded, or fails and is retried, it must be re-proposed and re-approved — the
+old signature will not verify against the new payload, and the UI will refuse the publish
+with a 409 rather than pushing something the operator did not review.
+
+**Key rotation:** `PSA_PUSH_SIGNING_KEY_ID` labels the key in each row it signs, so a
+rotation does not strand approvals already queued. Rotate by setting a new key **and** a
+new key ID on both the app and the harvester together. Any row approved under the old key
+must be re-approved — a rotation invalidates in-flight approvals by design.
+
+**If the key is unset,** `psa-publish` refuses with `503 PSA push approval signing is not
+configured` — nothing can be approved at all, and the drain independently fails any row
+it cannot verify. Set the key on both apps (see Env below) before relying on the push
+path.
 
 ## Version coupling
 

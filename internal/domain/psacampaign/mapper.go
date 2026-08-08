@@ -15,66 +15,78 @@ import (
 // axes (spec list, subject filter, denied specs).
 func TranslateToDiff(internal inventory.Campaign, portal PortalCampaign, r Resolver) (ProposedDiff, error) {
 	var d ProposedDiff
-	add := func(field, old, newv string) {
+	// The old side of every change is rendered by RenderFieldValue rather than
+	// inline, because the portal adapter re-renders the live record through the
+	// same function to compare-and-swap before writing. Two renderings that can
+	// drift would make that check meaningless.
+	oldFD := PortalFormData(portal)
+	var renderErr error
+	add := func(field, newv string) {
+		old, ok := RenderFieldValue(field, oldFD)
+		if !ok {
+			renderErr = fmt.Errorf("%w: %q", ErrNoRenderer, field)
+			return
+		}
 		if old != newv {
 			d.Changes = append(d.Changes, FieldChange{Field: field, Old: old, New: newv})
 		}
 	}
-	// addList is add's list-valued sibling: field, old, its canonical
-	// (order-insensitive, sorted) rendering, new's rendering, and the typed
-	// new value push.go sends to the portal instead of a string.
-	addList := func(field, oldRendering, newRendering string, value any) {
-		if oldRendering != newRendering {
-			d.Changes = append(d.Changes, FieldChange{Field: field, Old: oldRendering, New: newRendering, Value: value})
+	// addList is add's list-valued sibling: it carries the typed new value
+	// push.go sends to the portal instead of the display string in New.
+	addList := func(field, newRendering string, value any) {
+		old, ok := RenderFieldValue(field, oldFD)
+		if !ok {
+			renderErr = fmt.Errorf("%w: %q", ErrNoRenderer, field)
+			return
+		}
+		if old != newRendering {
+			d.Changes = append(d.Changes, FieldChange{Field: field, Old: old, New: newRendering, Value: value})
 		}
 	}
 
 	newBid := strconv.Itoa(int(internal.BuyTermsCLPct*100 + 0.5))
-	add("bidPercentage", strconv.Itoa(portal.BuyPercentClv), newBid)
+	add("bidPercentage", newBid)
 
-	add("dailyBudget", strconv.Itoa(portal.DailyBudgetCents/100),
-		strconv.Itoa(internal.DailySpendCapCents/100))
+	add("dailyBudget", strconv.Itoa(internal.DailySpendCapCents/100))
 
 	gMin, gMax, err := splitRange(internal.GradeRange)
 	if err != nil {
 		return d, fmt.Errorf("psacampaign: grade range: %w", err)
 	}
-	add("gradeMinimum", portal.BuyBox.GradeMin, gMin)
-	add("gradeMaximum", portal.BuyBox.GradeMax, gMax)
+	add("gradeMinimum", gMin)
+	add("gradeMaximum", gMax)
 
 	yMin, yMax, err := splitRange(internal.YearRange)
 	if err != nil {
 		return d, fmt.Errorf("psacampaign: year range: %w", err)
 	}
-	add("yearMinimum", strconv.Itoa(portal.BuyBox.YearMin), yMin)
-	add("yearMaximum", strconv.Itoa(portal.BuyBox.YearMax), yMax)
+	add("yearMinimum", yMin)
+	add("yearMaximum", yMax)
 
 	pMin, pMax, err := splitRange(internal.PriceRange)
 	if err != nil {
 		return d, fmt.Errorf("psacampaign: price range: %w", err)
 	}
-	add("priceMinimum", strconv.Itoa(portal.BuyBox.PriceMinCents/100), pMin)
-	add("priceMaximum", strconv.Itoa(portal.BuyBox.PriceMaxCents/100), pMax)
+	add("priceMinimum", pMin)
+	add("priceMaximum", pMax)
 
 	if cMin, _, err := splitRange(internal.CLConfidence); err == nil {
-		add("cardLadderConfidenceMinimum", strconv.Itoa(portal.BuyBox.ClvConfidenceMin), cMin)
+		add("cardLadderConfidenceMinimum", cMin)
 	}
 
-	add("subjectFilterType", portal.SubjectFilter.Type, internal.SubjectFilterMode)
+	add("subjectFilterType", internal.SubjectFilterMode)
 
 	selectedSubjects, err := toSubjectRefs(internal.Subjects, r)
 	if err != nil {
 		return d, err
 	}
-	addList("selectedSubjects",
-		renderSubjectRefs(portal.SubjectFilter.Subjects), renderSubjectRefs(selectedSubjects), selectedSubjects)
+	addList("selectedSubjects", renderSubjectRefs(selectedSubjects), selectedSubjects)
 
 	deniedSpecs, err := toSubjectRefs(internal.DeniedSpecs, r)
 	if err != nil {
 		return d, err
 	}
-	addList("deniedSpecs",
-		renderSubjectRefs(portal.DeniedSpecs), renderSubjectRefs(deniedSpecs), deniedSpecs)
+	addList("deniedSpecs", renderSubjectRefs(deniedSpecs), deniedSpecs)
 
 	// An empty TargetLanguages set means either that this campaign has no
 	// spec-list axis to propose yet (legacy/unlinked), or that it is a
@@ -89,10 +101,12 @@ func TranslateToDiff(internal inventory.Campaign, portal PortalCampaign, r Resol
 		if err != nil {
 			return d, fmt.Errorf("psacampaign: resolve spec lists for languages %v: %w", internal.TargetLanguages, err)
 		}
-		addList("prepackagedSpecListIds",
-			renderStringList(portal.SpecListIDs), renderStringList(specListIDs), specListIDs)
+		addList("prepackagedSpecListIds", renderStringList(specListIDs), specListIDs)
 	}
 
+	if renderErr != nil {
+		return ProposedDiff{}, renderErr
+	}
 	return d, nil
 }
 

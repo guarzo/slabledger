@@ -52,6 +52,34 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 		return fmt.Errorf("psaportal: formData not an object")
 	}
 
+	// Compare-and-swap against the live record before mutating anything. The
+	// approval signature proves the operator approved *this diff*; it cannot
+	// prove the portal still holds what they were shown. Between approval and
+	// drain the campaign may have moved — someone edited it in the PSA UI, or a
+	// database writer re-queued a stale approved row (SLA-44's threat model).
+	// FieldChange.Old is what the approver saw as the current value, so if the
+	// live record no longer renders to it, this push would silently clobber a
+	// change nobody approved. Refuse instead, before the first mutation.
+	live, err := decodeFormData(formData)
+	if err != nil {
+		return fmt.Errorf("psaportal: decode live formData for staleness check: %w", err)
+	}
+	for _, ch := range changes {
+		liveValue, ok := psacampaign.RenderFieldValue(ch.Field, live)
+		if !ok {
+			return fmt.Errorf("%w: %q", psacampaign.ErrNoRenderer, ch.Field)
+		}
+		if liveValue != ch.Old {
+			c.logger.Error(ctx, "psaportal: refusing stale update",
+				observability.String("campaign_id", id),
+				observability.String("field", ch.Field),
+				observability.String("approved_old", truncateValue(ch.Old)),
+				observability.String("live", truncateValue(liveValue)))
+			return fmt.Errorf("%w: field %q was %q at approval, portal now holds %q",
+				psacampaign.ErrFieldStale, ch.Field, ch.Old, liveValue)
+		}
+	}
+
 	for _, ch := range changes {
 		if _, exists := formData[ch.Field]; !exists {
 			return fmt.Errorf("psaportal: unknown campaign field %q", ch.Field)

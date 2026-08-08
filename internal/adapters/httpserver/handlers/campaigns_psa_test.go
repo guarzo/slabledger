@@ -12,10 +12,11 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/psacampaign"
+	"github.com/guarzo/slabledger/internal/platform/crypto"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-func newTestPSAHandler(snap *mocks.SnapshotStoreMock, queue *mocks.PushQueueStoreMock) *CampaignsHandler {
+func newTestPSAHandler(snap *mocks.SnapshotStoreMock, queue *mocks.PushQueueStoreMock, extra ...CampaignsHandlerOption) *CampaignsHandler {
 	var opts []CampaignsHandlerOption
 	if snap != nil {
 		opts = append(opts, WithPSASnapshotStore(snap))
@@ -23,7 +24,35 @@ func newTestPSAHandler(snap *mocks.SnapshotStoreMock, queue *mocks.PushQueueStor
 	if queue != nil {
 		opts = append(opts, WithPSAPushQueue(queue))
 	}
+	opts = append(opts, extra...)
 	return NewCampaignsHandler(nil, nil, nil, nil, observability.NewNoopLogger(), context.Background(), opts...)
+}
+
+// testApprovalSigner mints the signer the publish endpoint needs. Without one
+// HandlePSAPublish answers 503, so every publish test that expects to reach the
+// queue must pass this.
+func testApprovalSigner(t *testing.T) psacampaign.ApprovalSigner {
+	t.Helper()
+	s, err := crypto.NewHMACSigner(strings.Repeat("k", 32), "test-key")
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	return s
+}
+
+// pendingPushRow is the row Get returns for publish tests: a plausible pending
+// update whose diff is what the approval signature ends up covering.
+func pendingPushRow(id string) psacampaign.PushRow {
+	return psacampaign.PushRow{
+		ID:                 id,
+		Operation:          psacampaign.OpUpdate,
+		InternalCampaignID: "c1",
+		PSACampaignID:      "pc1",
+		Status:             psacampaign.PushPending,
+		Diff: psacampaign.ProposedDiff{
+			Changes: []psacampaign.FieldChange{{Field: "bidPercentage", Old: "70", New: "72"}},
+		},
+	}
 }
 
 // freshCatalog returns a CatalogStoreMock whose fetchedAt is always "now", so
@@ -113,35 +142,76 @@ func TestHandleListPSACampaigns_Success(t *testing.T) {
 func TestHandlePSAPublish(t *testing.T) {
 	tests := []struct {
 		name       string
+		body       string
+		getErr     error
 		approveErr error
+		signed     bool
 		wantStatus int
 	}{
 		{
 			name:       "pending row approved",
-			approveErr: nil,
+			body:       `{"pushId":"push-123"}`,
+			signed:     true,
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "not pending",
+			body:       `{"pushId":"push-123"}`,
+			signed:     true,
 			approveErr: psacampaign.ErrPushNotPending,
 			wantStatus: http.StatusConflict,
+		},
+		{
+			name:       "row disappeared",
+			body:       `{"pushId":"push-123"}`,
+			signed:     true,
+			getErr:     psacampaign.ErrPushNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			// The approver reviewed one payload and the queued row now holds
+			// another. Approving here would sign changes nobody looked at.
+			name:       "payload changed since review",
+			body:       `{"pushId":"push-123","payloadDigest":"stale-digest"}`,
+			signed:     true,
+			wantStatus: http.StatusConflict,
+		},
+		{
+			// Fail closed: an unsigned approval is one the harvester would
+			// refuse an hour later, so refuse to write it now.
+			name:       "no signing key configured",
+			body:       `{"pushId":"push-123"}`,
+			signed:     false,
+			wantStatus: http.StatusServiceUnavailable,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotID, gotApprovedBy string
+			var gotID string
+			var gotApproval psacampaign.Approval
+			approveCalled := false
 			queue := &mocks.PushQueueStoreMock{
-				ApproveFn: func(ctx context.Context, id, approvedBy string) error {
+				GetFn: func(ctx context.Context, id string) (psacampaign.PushRow, error) {
+					if tt.getErr != nil {
+						return psacampaign.PushRow{}, tt.getErr
+					}
+					return pendingPushRow(id), nil
+				},
+				ApproveFn: func(ctx context.Context, id string, a psacampaign.Approval) error {
+					approveCalled = true
 					gotID = id
-					gotApprovedBy = approvedBy
+					gotApproval = a
 					return tt.approveErr
 				},
 			}
-			h := newTestPSAHandler(nil, queue)
+			var extra []CampaignsHandlerOption
+			if tt.signed {
+				extra = append(extra, WithPSAApprovalSigner(testApprovalSigner(t)))
+			}
+			h := newTestPSAHandler(nil, queue, extra...)
 
-			body := `{"pushId":"push-123"}`
-			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-publish", strings.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-publish", strings.NewReader(tt.body))
 			req.SetPathValue("id", "c1")
 			ctx := context.WithValue(req.Context(), middleware.UserContextKey, &auth.User{Username: "alice"})
 			req = req.WithContext(ctx)
@@ -151,10 +221,31 @@ func TestHandlePSAPublish(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("expected %d, got %d: %s", tt.wantStatus, rec.Code, rec.Body.String())
 			}
-			if tt.approveErr == nil {
-				if gotID != "push-123" || gotApprovedBy != "alice" {
-					t.Fatalf("Approve called with wrong args: id=%s approvedBy=%s", gotID, gotApprovedBy)
+			if tt.wantStatus != http.StatusOK {
+				if tt.approveErr == nil && approveCalled {
+					t.Fatal("Approve must not be called when the request is rejected")
 				}
+				return
+			}
+			if gotID != "push-123" || gotApproval.ApprovedBy != "alice" {
+				t.Fatalf("Approve called with wrong args: id=%s approvedBy=%s", gotID, gotApproval.ApprovedBy)
+			}
+			// The stored approval must be verifiable on its own — that is the
+			// whole point of writing it.
+			if gotApproval.ApprovalSignature == "" || gotApproval.PayloadDigest == "" {
+				t.Fatalf("approval missing signature/digest: %+v", gotApproval)
+			}
+			if gotApproval.SignatureKeyID != "test-key" {
+				t.Fatalf("expected key id test-key, got %q", gotApproval.SignatureKeyID)
+			}
+			row := pendingPushRow("push-123")
+			row.ApprovedBy = gotApproval.ApprovedBy
+			row.ApprovedAt = gotApproval.ApprovedAt
+			row.PayloadDigest = gotApproval.PayloadDigest
+			row.ApprovalSignature = gotApproval.ApprovalSignature
+			row.SignatureKeyID = gotApproval.SignatureKeyID
+			if err := psacampaign.VerifyApproval(row, testApprovalSigner(t), time.Now()); err != nil {
+				t.Fatalf("approval written by the handler does not verify: %v", err)
 			}
 		})
 	}
@@ -174,12 +265,16 @@ func TestHandlePSAPublish_NoQueue(t *testing.T) {
 
 func TestHandlePSAPublish_Unauthenticated(t *testing.T) {
 	queue := &mocks.PushQueueStoreMock{
-		ApproveFn: func(ctx context.Context, id, approvedBy string) error {
+		GetFn: func(ctx context.Context, id string) (psacampaign.PushRow, error) {
+			t.Fatal("Get should not be called without an authenticated user")
+			return psacampaign.PushRow{}, nil
+		},
+		ApproveFn: func(ctx context.Context, id string, a psacampaign.Approval) error {
 			t.Fatal("Approve should not be called without an authenticated user")
 			return nil
 		},
 	}
-	h := newTestPSAHandler(nil, queue)
+	h := newTestPSAHandler(nil, queue, WithPSAApprovalSigner(testApprovalSigner(t)))
 	body := `{"pushId":"push-123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/psa-publish", strings.NewReader(body))
 	req.SetPathValue("id", "c1")
