@@ -51,6 +51,13 @@ func (e LogEntry) FindField(key string) (any, bool) {
 type CapturingLogger struct {
 	mu      sync.Mutex
 	entries []LogEntry
+
+	// root is nil on the logger NewCapturingLogger returns and points at it on
+	// every logger produced by With, so a chain of children all append to the
+	// one entries slice the test holds. fields are the With fields inherited
+	// down that chain, prepended to each call's own fields.
+	root   *CapturingLogger
+	fields []observability.Field
 }
 
 var _ observability.Logger = (*CapturingLogger)(nil)
@@ -60,10 +67,26 @@ func NewCapturingLogger() *CapturingLogger {
 	return &CapturingLogger{}
 }
 
+// sink returns the logger that owns the entries slice.
+func (c *CapturingLogger) sink() *CapturingLogger {
+	if c.root != nil {
+		return c.root
+	}
+	return c
+}
+
 func (c *CapturingLogger) record(level, msg string, fields []observability.Field) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries = append(c.entries, LogEntry{Level: level, Message: msg, Fields: fields})
+	entry := LogEntry{Level: level, Message: msg, Fields: fields}
+	if len(c.fields) > 0 {
+		combined := make([]observability.Field, 0, len(c.fields)+len(fields))
+		combined = append(combined, c.fields...)
+		combined = append(combined, fields...)
+		entry.Fields = combined
+	}
+	sink := c.sink()
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	sink.entries = append(sink.entries, entry)
 }
 
 func (c *CapturingLogger) Debug(_ context.Context, msg string, fields ...observability.Field) {
@@ -82,20 +105,26 @@ func (c *CapturingLogger) Error(_ context.Context, msg string, fields ...observa
 	c.record("error", msg, fields)
 }
 
-// With returns the same logger so that fields captured via chained loggers
-// still land in the one Entries() slice callers inspect. Production Loggers
-// return a child logger that prepends fields to every subsequent call; a
-// test double has no such need since assertions read fields directly off
-// each LogEntry.
-func (c *CapturingLogger) With(_ context.Context, _ ...observability.Field) observability.Logger {
-	return c
+// With returns a child logger that shares the parent's entries slice and
+// carries the supplied fields, so a call made through the child records the
+// inherited fields ahead of its own and Entries() on the original logger still
+// sees everything. Chained With calls accumulate.
+func (c *CapturingLogger) With(_ context.Context, fields ...observability.Field) observability.Logger {
+	if len(fields) == 0 {
+		return c
+	}
+	inherited := make([]observability.Field, 0, len(c.fields)+len(fields))
+	inherited = append(inherited, c.fields...)
+	inherited = append(inherited, fields...)
+	return &CapturingLogger{root: c.sink(), fields: inherited}
 }
 
 // Entries returns a copy of every log call recorded so far.
 func (c *CapturingLogger) Entries() []LogEntry {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := make([]LogEntry, len(c.entries))
-	copy(out, c.entries)
+	sink := c.sink()
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	out := make([]LogEntry, len(sink.entries))
+	copy(out, sink.entries)
 	return out
 }

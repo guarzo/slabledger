@@ -318,8 +318,9 @@ func eraDemandFor(demand *CharacterDemand, era string) (*NicheDemand, bool) {
 
 // parseCharacterMarket extracts the market-axis view (velocity + saturation)
 // from a character cache row. Returns nil if both surfaces are absent. It also
-// emits a Warn for each MalformedPayloads entry naming the velocity column, so
-// a decode failure the adapter could not log is still visible.
+// emits a Warn for each MalformedPayloads entry naming the velocity or
+// saturation column, so a decode failure the adapter could not log is still
+// visible.
 func (s *Service) parseCharacterMarket(ctx context.Context, row CharacterCache) *NicheMarket {
 	m := &NicheMarket{}
 	has := false
@@ -341,12 +342,20 @@ func (s *Service) parseCharacterMarket(ctx context.Context, row CharacterCache) 
 		has = true
 	}
 	for _, mp := range row.MalformedPayloads {
-		if mp.Column != MalformedColumnVelocity {
-			continue
+		switch mp.Column {
+		case MalformedColumnVelocity:
+			s.logger.Warn(ctx, "velocity_json unmarshal failed",
+				observability.String("character", row.Character),
+				observability.Err(mp.Err))
+		case MalformedColumnSaturation:
+			// Saturation failing to decode is quieter than velocity — the row
+			// still yields a NicheMarket, just with ActiveListingCount stuck at
+			// zero, which the saturation penalty in scoring reads as "no
+			// competition". Warn so that silent fallback is attributable.
+			s.logger.Warn(ctx, "saturation_json unmarshal failed",
+				observability.String("character", row.Character),
+				observability.Err(mp.Err))
 		}
-		s.logger.Warn(ctx, "velocity_json unmarshal failed",
-			observability.String("character", row.Character),
-			observability.Err(mp.Err))
 	}
 	if !has {
 		// Row has no analytics — flag for callers.

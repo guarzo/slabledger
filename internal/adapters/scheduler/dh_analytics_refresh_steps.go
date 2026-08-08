@@ -72,7 +72,7 @@ func (s *DHAnalyticsRefreshScheduler) refreshCharacters(ctx context.Context, qua
 		}
 		for _, e := range resp.CharacterDemand {
 			addCharacter(e.CharacterName)
-			eraEntries = append(eraEntries, stampedDemandEntry{Entry: e, ComputedAt: resp.ComputedAt})
+			eraEntries = append(eraEntries, stampedDemandEntry{Entry: e, ComputedAt: resp.ComputedAt, Era: era})
 		}
 	}
 
@@ -277,12 +277,15 @@ func (s *DHAnalyticsRefreshScheduler) refreshCards(ctx context.Context, cardIDs 
 // --- helpers ---
 
 // stampedDemandEntry pairs a character demand entry with the computed_at of
-// the TopCharacters response it arrived in. DH reports computed_at once per
-// response rather than per entry, so the timestamp has to be carried alongside
-// the entry to survive the overall/per-era merge in indexDemand.
+// the TopCharacters response it arrived in, and with the era that response was
+// filtered to ("" for the unfiltered overall call). DH reports computed_at
+// once per response rather than per entry, and does not echo the era onto the
+// entries at all, so both have to be carried alongside the entry to survive
+// the overall/per-era merge in indexDemand.
 type stampedDemandEntry struct {
 	Entry      dh.CharacterDemandEntry
 	ComputedAt string
+	Era        string
 }
 
 // mapCharacterDemand converts a DH character-demand entry into the domain
@@ -366,19 +369,74 @@ func mapCharacterSaturation(entry dh.CharacterSaturationEntry) *demand.Character
 	}
 }
 
+// indexDemand folds every TopCharacters entry for a character into a single
+// record: the overall (era-unfiltered) entry supplies the character-level
+// totals and timestamp, and every entry contributes era buckets.
+//
+// Overwriting instead of merging lost real data. defaultAnalyticsEras holds
+// ten eras, so the last one iterated replaced both the character's overall
+// totals and every earlier era's buckets — at most one era survived a run.
+//
+// DH's top_characters endpoint takes `era` as a filter, so an era-filtered
+// entry is itself that era's aggregate and carries no by_era map of its own.
+// In that case the entry is keyed under the era we asked for. When an entry
+// does carry by_era, that map is merged instead, so a response shape that
+// starts reporting the breakdown directly wins over our inference.
 func indexDemand(entries []stampedDemandEntry) map[string]stampedDemandEntry {
 	m := make(map[string]stampedDemandEntry, len(entries))
 	for _, e := range entries {
-		if e.Entry.CharacterName == "" {
+		name := e.Entry.CharacterName
+		if name == "" {
 			continue
 		}
-		// Later entries (per-era) overwrite earlier (overall) so the persisted
-		// CharacterDemand carries ByEra when available. The entry's own
-		// computed_at travels with it, so the stored timestamp always
-		// describes the stored payload.
-		m[e.Entry.CharacterName] = e
+		cur, seen := m[name]
+		switch {
+		case !seen:
+			// First sighting seeds the record. ByEra is cleared rather than
+			// aliased so merging never mutates the response we were handed;
+			// mergeByEra rebuilds it from this same entry below.
+			cur = e
+			cur.Entry.ByEra = nil
+		case e.Era == "" && cur.Era != "":
+			// The overall entry outranks an era-scoped one for the
+			// character-level totals, whichever order they arrive in. Buckets
+			// accumulated so far carry over.
+			buckets := cur.Entry.ByEra
+			cur = e
+			cur.Entry.ByEra = buckets
+		}
+		cur.Entry.ByEra = mergeByEra(cur.Entry.ByEra, e)
+		m[name] = cur
 	}
 	return m
+}
+
+// mergeByEra folds one entry's era buckets into dst and returns the (possibly
+// newly allocated) map. An era already present is left alone, matching the
+// order-of-first-appearance rule the rest of the refresh uses.
+func mergeByEra(dst map[string]dh.ByEraEntry, e stampedDemandEntry) map[string]dh.ByEraEntry {
+	src := e.Entry.ByEra
+	if len(src) == 0 && e.Era != "" {
+		src = map[string]dh.ByEraEntry{e.Era: {
+			CardCount:         e.Entry.CardCount,
+			AvgDemandScore:    e.Entry.AvgDemandScore,
+			TotalViews:        e.Entry.TotalViews,
+			TotalSearchClicks: e.Entry.TotalSearchClicks,
+			TotalWishlistAdds: e.Entry.TotalWishlistAdds,
+		}}
+	}
+	if len(src) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = make(map[string]dh.ByEraEntry, len(src))
+	}
+	for era, bucket := range src {
+		if _, exists := dst[era]; !exists {
+			dst[era] = bucket
+		}
+	}
+	return dst
 }
 
 func indexVelocity(entries []dh.CharacterVelocityEntry) map[string]dh.CharacterVelocityEntry {

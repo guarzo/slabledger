@@ -281,26 +281,45 @@ func TestCampaignSignals_MedianVelocity(t *testing.T) {
 	}
 }
 
+// TestCampaignSignals_MalformedVelocityCountsAsSkipped pins which malformed
+// column feeds SkippedRows: only the velocity payload does, because that is
+// the one CampaignSignals actually reads. A demand-column failure on an
+// otherwise unrelated row must not inflate the count.
 func TestCampaignSignals_MalformedVelocityCountsAsSkipped(t *testing.T) {
 	computed := time.Date(2026, 4, 15, 3, 15, 0, 0, time.UTC)
 
-	rows := []demand.CharacterCache{
-		charRow("Pikachu", 11, 22.1, 34, computed),
-		{
-			Character:           "Charizard",
+	malformed := func(character, column string) demand.CharacterCache {
+		return demand.CharacterCache{
+			Character:           character,
 			Window:              "30d",
 			AnalyticsComputedAt: &computed,
 			MalformedPayloads: []demand.MalformedPayload{
-				{Column: demand.MalformedColumnVelocity, Err: errors.New("unexpected end of JSON input")},
+				{Column: column, Err: errors.New("unexpected end of JSON input")},
 			},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		rows        []demand.CharacterCache
+		wantSkipped int
+		wantSignals int
+	}{
+		{
+			name: "only the velocity-column failure counts",
+			rows: []demand.CharacterCache{
+				charRow("Pikachu", 11, 22.1, 34, computed),
+				malformed("Charizard", demand.MalformedColumnVelocity),
+				malformed("Umbreon", demand.MalformedColumnDemand),
+			},
+			wantSkipped: 1,
+			wantSignals: 1,
 		},
 		{
-			Character:           "Umbreon",
-			Window:              "30d",
-			AnalyticsComputedAt: &computed,
-			MalformedPayloads: []demand.MalformedPayload{
-				{Column: demand.MalformedColumnDemand, Err: errors.New("unexpected end of JSON input")},
-			},
+			name:        "no malformed payloads skips nothing",
+			rows:        []demand.CharacterCache{charRow("Pikachu", 11, 22.1, 34, computed)},
+			wantSkipped: 0,
+			wantSignals: 1,
 		},
 	}
 
@@ -311,16 +330,20 @@ func TestCampaignSignals_MalformedVelocityCountsAsSkipped(t *testing.T) {
 		Subjects:          []inventory.TargetSubject{{ID: 1, Name: "Pikachu"}},
 	}}
 
-	svc := demand.NewService(newRepoWithRows(rows), campaignLookupWith(campaigns))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := demand.NewService(newRepoWithRows(tc.rows), campaignLookupWith(campaigns))
 
-	resp, err := svc.CampaignSignals(context.Background())
-	if err != nil {
-		t.Fatalf("CampaignSignals: %v", err)
-	}
-	if resp.SkippedRows != 1 {
-		t.Errorf("SkippedRows = %d, want 1 (only the velocity-column failure counts)", resp.SkippedRows)
-	}
-	if len(resp.Signals) != 1 {
-		t.Fatalf("len(Signals) = %d, want 1", len(resp.Signals))
+			resp, err := svc.CampaignSignals(context.Background())
+			if err != nil {
+				t.Fatalf("CampaignSignals: %v", err)
+			}
+			if resp.SkippedRows != tc.wantSkipped {
+				t.Errorf("SkippedRows = %d, want %d", resp.SkippedRows, tc.wantSkipped)
+			}
+			if len(resp.Signals) != tc.wantSignals {
+				t.Fatalf("len(Signals) = %d, want %d", len(resp.Signals), tc.wantSignals)
+			}
+		})
 	}
 }

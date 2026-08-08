@@ -7,46 +7,98 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/demand"
 )
 
-// TestCharacterDemand_DecodesLegacyByEraBlob pins two backward-compatibility
+// TestCharacterDemand_DecodesLegacyByEraBlob pins the backward-compatibility
 // behaviors the persisted rows depend on: an obsolete by_era.data_quality key
-// (no longer a field, per SLA-61) is ignored rather than rejected, and an
-// omitted total_search_clicks defaults to zero rather than failing to decode.
+// (no longer a field, per SLA-61) is ignored rather than rejected, an omitted
+// total_search_clicks defaults to zero rather than failing to decode, and an
+// absent by_era key leaves a nil map rather than erroring.
 func TestCharacterDemand_DecodesLegacyByEraBlob(t *testing.T) {
-	blob := `{
-		"character_name": "Umbreon",
-		"card_count": 10,
-		"avg_demand_score": 0.9,
-		"total_views": 400,
-		"total_wishlist_adds": 20,
-		"data_quality": "full",
-		"by_era": {
-			"sword_shield": {
-				"card_count": 6,
-				"avg_demand_score": 0.95,
-				"total_views": 240,
-				"total_wishlist_adds": 12,
-				"data_quality": "full"
+	tests := []struct {
+		name              string
+		blob              string
+		wantSearchClicks  int
+		wantEra           string // "" = expect no by_era entry
+		wantEraCards      int
+		wantEraScore      float64
+		wantEraSearchClks int
+	}{
+		{
+			name: "obsolete by_era.data_quality is ignored and omitted search clicks default to zero",
+			blob: `{
+				"character_name": "Umbreon",
+				"card_count": 10,
+				"avg_demand_score": 0.9,
+				"total_views": 400,
+				"total_wishlist_adds": 20,
+				"data_quality": "full",
+				"by_era": {
+					"sword_shield": {
+						"card_count": 6,
+						"avg_demand_score": 0.95,
+						"total_views": 240,
+						"total_wishlist_adds": 12,
+						"data_quality": "full"
+					}
+				}
+			}`,
+			wantSearchClicks: 0,
+			wantEra:          "sword_shield",
+			wantEraCards:     6,
+			wantEraScore:     0.95,
+		},
+		{
+			name: "present search clicks are preserved at both levels",
+			blob: `{
+				"character_name": "Umbreon",
+				"total_search_clicks": 7,
+				"by_era": {
+					"sword_shield": {
+						"card_count": 6,
+						"avg_demand_score": 0.95,
+						"total_search_clicks": 3
+					}
+				}
+			}`,
+			wantSearchClicks:  7,
+			wantEra:           "sword_shield",
+			wantEraCards:      6,
+			wantEraScore:      0.95,
+			wantEraSearchClks: 3,
+		},
+		{
+			name:             "absent by_era leaves an empty map",
+			blob:             `{"character_name":"Umbreon","card_count":10}`,
+			wantSearchClicks: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got demand.CharacterDemand
+			if err := json.Unmarshal([]byte(tc.blob), &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
 			}
-		}
-	}`
 
-	var got demand.CharacterDemand
-	if err := json.Unmarshal([]byte(blob), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	if got.TotalSearchClicks != 0 {
-		t.Errorf("TotalSearchClicks = %d, want 0 (omitted field defaults to zero)", got.TotalSearchClicks)
-	}
-	era, ok := got.ByEra["sword_shield"]
-	if !ok {
-		t.Fatalf("by_era[sword_shield] missing")
-	}
-	if era.TotalSearchClicks != 0 {
-		t.Errorf("era TotalSearchClicks = %d, want 0", era.TotalSearchClicks)
-	}
-	if era.CardCount != 6 || era.AvgDemandScore != 0.95 {
-		t.Errorf("era decoded wrong: %+v", era)
+			if got.TotalSearchClicks != tc.wantSearchClicks {
+				t.Errorf("TotalSearchClicks = %d, want %d", got.TotalSearchClicks, tc.wantSearchClicks)
+			}
+			if tc.wantEra == "" {
+				if len(got.ByEra) != 0 {
+					t.Errorf("ByEra = %+v, want empty", got.ByEra)
+				}
+				return
+			}
+			era, ok := got.ByEra[tc.wantEra]
+			if !ok {
+				t.Fatalf("by_era[%s] missing", tc.wantEra)
+			}
+			if era.TotalSearchClicks != tc.wantEraSearchClks {
+				t.Errorf("era TotalSearchClicks = %d, want %d", era.TotalSearchClicks, tc.wantEraSearchClks)
+			}
+			if era.CardCount != tc.wantEraCards || era.AvgDemandScore != tc.wantEraScore {
+				t.Errorf("era decoded wrong: %+v", era)
+			}
+		})
 	}
 }
 
@@ -55,26 +107,68 @@ func TestCharacterDemand_DecodesLegacyByEraBlob(t *testing.T) {
 // avg_days_to_sell — are silently dropped, and that an absent by_grade key
 // decodes to a nil map rather than an empty one.
 func TestCharacterVelocity_DecodesLegacyFlatBlob(t *testing.T) {
-	blob := `{
-		"median_days_to_sell": 9.5,
-		"sample_size": 120,
-		"sell_through": {},
-		"avg_days_to_sell": 8.1
-	}`
-
-	var got demand.CharacterVelocity
-	if err := json.Unmarshal([]byte(blob), &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	tests := []struct {
+		name           string
+		blob           string
+		wantSampleSize int
+		wantMedian     *float64 // nil = expect a nil pointer
+		wantByGrade    map[string]demand.VelocityTierStat
+	}{
+		{
+			name: "obsolete sell_through and avg_days_to_sell keys are dropped",
+			blob: `{
+				"median_days_to_sell": 9.5,
+				"sample_size": 120,
+				"sell_through": {},
+				"avg_days_to_sell": 8.1
+			}`,
+			wantSampleSize: 120,
+			wantMedian:     f64Ptr(9.5),
+		},
+		{
+			name:           "absent median_days_to_sell stays nil",
+			blob:           `{"sample_size": 4}`,
+			wantSampleSize: 4,
+		},
+		{
+			name:           "present by_grade decodes into the tier map",
+			blob:           `{"sample_size":4,"by_grade":{"10":{"median_days":6.5,"sample_size":30}}}`,
+			wantSampleSize: 4,
+			wantByGrade:    map[string]demand.VelocityTierStat{"10": {MedianDays: 6.5, SampleSize: 30}},
+		},
 	}
 
-	if got.SampleSize != 120 {
-		t.Errorf("SampleSize = %d, want 120", got.SampleSize)
-	}
-	if got.MedianDaysToSell == nil || *got.MedianDaysToSell != 9.5 {
-		t.Errorf("MedianDaysToSell = %v, want 9.5", got.MedianDaysToSell)
-	}
-	if got.ByGrade != nil {
-		t.Errorf("ByGrade = %v, want nil (absent key)", got.ByGrade)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got demand.CharacterVelocity
+			if err := json.Unmarshal([]byte(tc.blob), &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+
+			if got.SampleSize != tc.wantSampleSize {
+				t.Errorf("SampleSize = %d, want %d", got.SampleSize, tc.wantSampleSize)
+			}
+			switch {
+			case tc.wantMedian == nil && got.MedianDaysToSell != nil:
+				t.Errorf("MedianDaysToSell = %v, want nil", *got.MedianDaysToSell)
+			case tc.wantMedian != nil && (got.MedianDaysToSell == nil || *got.MedianDaysToSell != *tc.wantMedian):
+				t.Errorf("MedianDaysToSell = %v, want %v", got.MedianDaysToSell, *tc.wantMedian)
+			}
+			if tc.wantByGrade == nil {
+				if got.ByGrade != nil {
+					t.Errorf("ByGrade = %v, want nil (absent key)", got.ByGrade)
+				}
+				return
+			}
+			if len(got.ByGrade) != len(tc.wantByGrade) {
+				t.Fatalf("ByGrade = %+v, want %+v", got.ByGrade, tc.wantByGrade)
+			}
+			for grade, want := range tc.wantByGrade {
+				if got.ByGrade[grade] != want {
+					t.Errorf("ByGrade[%q] = %+v, want %+v", grade, got.ByGrade[grade], want)
+				}
+			}
+		})
 	}
 }
 

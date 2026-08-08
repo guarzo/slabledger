@@ -479,31 +479,73 @@ func TestService_Leaderboard_Acceleration(t *testing.T) {
 // what the API returns. A regression here — e.g. mapCharacterSaturation
 // reverting to marshal the whole nested entry — would otherwise pass every
 // existing test and silently zero the count again.
+// TestService_Leaderboard_ActiveListingCount asserts that a row's Saturation
+// payload reaches NicheOpportunity.Market.ActiveListingCount unchanged. This
+// guards the read side of the Defect-1 fix: the write side
+// (mapCharacterSaturation) and the JSON decode are both tested elsewhere, but
+// nothing previously checked that the decoded value survives all the way to
+// what the API returns. A regression here — e.g. mapCharacterSaturation
+// reverting to marshal the whole nested entry — would otherwise pass every
+// existing test and silently zero the count again.
 func TestService_Leaderboard_ActiveListingCount(t *testing.T) {
-	rows := []demand.CharacterCache{{
-		Character:  "Pikachu",
-		Window:     "30d",
-		Demand:     demandPayload("Pikachu", 0.9, "full"),
-		Saturation: &demand.CharacterSaturation{ActiveListingCount: 42},
-	}}
+	tests := []struct {
+		name       string
+		row        demand.CharacterCache
+		wantMarket bool
+		wantCount  int
+	}{
+		{
+			name: "decoded saturation survives to the API view",
+			row: demand.CharacterCache{
+				Character:  "Pikachu",
+				Window:     "30d",
+				Demand:     demandPayload("Pikachu", 0.9, "full"),
+				Saturation: &demand.CharacterSaturation{ActiveListingCount: 42},
+			},
+			wantMarket: true,
+			wantCount:  42,
+		},
+		{
+			name: "malformed saturation falls back to zero without dropping the row",
+			row: demand.CharacterCache{
+				Character: "Pikachu",
+				Window:    "30d",
+				Demand:    demandPayload("Pikachu", 0.9, "full"),
+				MalformedPayloads: []demand.MalformedPayload{
+					{Column: demand.MalformedColumnSaturation, Err: errors.New("unexpected end of JSON input")},
+				},
+				Velocity: &demand.CharacterVelocity{SampleSize: 5},
+			},
+			wantMarket: true,
+			wantCount:  0,
+		},
+	}
 
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup())
-	out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
-		Window: "30d",
-		Era:    "sword_shield",
-		Grade:  10,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(out) != 1 {
-		t.Fatalf("want 1 bucket; got %d", len(out))
-	}
-	if out[0].Market == nil {
-		t.Fatalf("want Market populated; got nil")
-	}
-	if out[0].Market.ActiveListingCount != 42 {
-		t.Errorf("Market.ActiveListingCount = %d, want 42", out[0].Market.ActiveListingCount)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := demand.NewService(newRepoWithRows([]demand.CharacterCache{tc.row}), uncoveredLookup()).
+				WithLogger(mocks.NewCapturingLogger())
+			out, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{
+				Window: "30d",
+				Era:    "sword_shield",
+				Grade:  10,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out) != 1 {
+				t.Fatalf("want 1 bucket; got %d", len(out))
+			}
+			if (out[0].Market != nil) != tc.wantMarket {
+				t.Fatalf("Market populated = %v, want %v", out[0].Market != nil, tc.wantMarket)
+			}
+			if !tc.wantMarket {
+				return
+			}
+			if out[0].Market.ActiveListingCount != tc.wantCount {
+				t.Errorf("Market.ActiveListingCount = %d, want %d", out[0].Market.ActiveListingCount, tc.wantCount)
+			}
+		})
 	}
 }
 
@@ -522,121 +564,131 @@ func TestOpportunityScore_CoverageAndSaturation(t *testing.T) {
 	}
 }
 
-// TestService_Leaderboard_MalformedVelocity_LogsWarn asserts that a
-// character row carrying a MalformedPayloads entry for "velocity" produces
-// exactly one Warn log naming the character, and that a malformed "demand"
-// entry on a row with a non-nil Demand produces none — the demand-column
-// warn (see TestService_Leaderboard_MalformedDemand_LogsWarn) only fires
-// when row.Demand is actually nil.
-func TestService_Leaderboard_MalformedVelocity_LogsWarn(t *testing.T) {
-	rows := []demand.CharacterCache{
+// TestService_Leaderboard_MalformedPayloads_LogsWarn asserts that each
+// malformed-payload column the service knows how to report produces exactly
+// one Warn naming the character, and that the near-miss row alongside it
+// produces none. The near misses are the point: a malformed "demand" entry on
+// a row with a non-nil Demand must stay quiet (the demand warn only fires when
+// row.Demand is actually nil), and an ordinary row with a legitimately absent
+// demand payload must stay quiet too. Getting that distinction wrong either
+// spams the log for every routine nil-demand row or silently drops a character
+// from the leaderboard with no signal at all (SLA-41 item 1).
+func TestService_Leaderboard_MalformedPayloads_LogsWarn(t *testing.T) {
+	tests := []struct {
+		name        string
+		rows        []demand.CharacterCache
+		wantMessage string
+		wantChar    string
+	}{
 		{
-			Character: "Pikachu",
-			Window:    "7d",
-			Demand: &demand.CharacterDemand{
-				CharacterName:  "Pikachu",
-				CardCount:      5,
-				AvgDemandScore: 0.8,
+			name: "velocity decode failure warns; malformed demand beside a live payload does not",
+			rows: []demand.CharacterCache{
+				{
+					Character: "Pikachu",
+					Window:    "7d",
+					Demand: &demand.CharacterDemand{
+						CharacterName:  "Pikachu",
+						CardCount:      5,
+						AvgDemandScore: 0.8,
+					},
+					MalformedPayloads: []demand.MalformedPayload{
+						{Column: demand.MalformedColumnVelocity, Err: errors.New("unexpected end of JSON input")},
+					},
+				},
+				{
+					Character: "Charizard",
+					Window:    "7d",
+					Demand: &demand.CharacterDemand{
+						CharacterName:  "Charizard",
+						CardCount:      3,
+						AvgDemandScore: 0.6,
+					},
+					MalformedPayloads: []demand.MalformedPayload{
+						{Column: demand.MalformedColumnDemand, Err: errors.New("some demand decode error")},
+					},
+				},
 			},
-			MalformedPayloads: []demand.MalformedPayload{
-				{Column: demand.MalformedColumnVelocity, Err: errors.New("unexpected end of JSON input")},
-			},
+			wantMessage: "velocity_json unmarshal failed",
+			wantChar:    "Pikachu",
 		},
 		{
-			Character: "Charizard",
-			Window:    "7d",
-			Demand: &demand.CharacterDemand{
-				CharacterName:  "Charizard",
-				CardCount:      3,
-				AvgDemandScore: 0.6,
+			name: "demand decode failure warns; a plain absent payload does not",
+			rows: []demand.CharacterCache{
+				{
+					Character: "Pikachu",
+					Window:    "7d",
+					Demand:    nil,
+					MalformedPayloads: []demand.MalformedPayload{
+						{Column: demand.MalformedColumnDemand, Err: errors.New("unexpected end of JSON input")},
+					},
+				},
+				{
+					Character: "Charizard",
+					Window:    "7d",
+					Demand:    nil,
+				},
 			},
-			MalformedPayloads: []demand.MalformedPayload{
-				{Column: demand.MalformedColumnDemand, Err: errors.New("some demand decode error")},
-			},
-		},
-	}
-
-	logger := mocks.NewCapturingLogger()
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup()).WithLogger(logger)
-
-	if _, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "7d"}); err != nil {
-		t.Fatalf("Leaderboard: unexpected error: %v", err)
-	}
-
-	var warns []mocks.LogEntry
-	for _, e := range logger.Entries() {
-		if e.Level == "warn" {
-			warns = append(warns, e)
-		}
-	}
-	if len(warns) != 1 {
-		t.Fatalf("got %d warn entries, want 1: %+v", len(warns), warns)
-	}
-
-	entry := warns[0]
-	if entry.Message != "velocity_json unmarshal failed" {
-		t.Errorf("Message = %q, want %q", entry.Message, "velocity_json unmarshal failed")
-	}
-	character, ok := entry.FindField("character")
-	if !ok {
-		t.Fatal("warn entry has no \"character\" field")
-	}
-	if character != "Pikachu" {
-		t.Errorf("character field = %v, want %q", character, "Pikachu")
-	}
-}
-
-// TestService_Leaderboard_MalformedDemand_LogsWarn asserts that a row whose
-// demand payload failed to decode (row.Demand == nil, with a matching
-// MalformedPayloads entry) produces exactly one Warn naming the character,
-// and that an ordinary row with a legitimately absent (nil, no malformed
-// entry) demand payload produces none. Getting this distinction wrong either
-// spams the log for every routine nil-demand row or silently drops a
-// character from the leaderboard with no signal at all (SLA-41 item 1).
-func TestService_Leaderboard_MalformedDemand_LogsWarn(t *testing.T) {
-	rows := []demand.CharacterCache{
-		{
-			Character: "Pikachu",
-			Window:    "7d",
-			Demand:    nil,
-			MalformedPayloads: []demand.MalformedPayload{
-				{Column: demand.MalformedColumnDemand, Err: errors.New("unexpected end of JSON input")},
-			},
+			wantMessage: "demand_json unmarshal failed",
+			wantChar:    "Pikachu",
 		},
 		{
-			Character: "Charizard",
-			Window:    "7d",
-			Demand:    nil,
+			// Saturation failing to decode used to be swallowed entirely: the
+			// row still yields a NicheMarket, just with ActiveListingCount
+			// stuck at 0, which the saturation penalty reads as "no
+			// competition". The fallback stays (see
+			// TestService_Leaderboard_ActiveListingCount) but must be
+			// attributable.
+			name: "saturation decode failure warns",
+			rows: []demand.CharacterCache{
+				{
+					Character: "Pikachu",
+					Window:    "7d",
+					Demand: &demand.CharacterDemand{
+						CharacterName:  "Pikachu",
+						CardCount:      5,
+						AvgDemandScore: 0.8,
+					},
+					MalformedPayloads: []demand.MalformedPayload{
+						{Column: demand.MalformedColumnSaturation, Err: errors.New("unexpected end of JSON input")},
+					},
+				},
+			},
+			wantMessage: "saturation_json unmarshal failed",
+			wantChar:    "Pikachu",
 		},
 	}
 
-	logger := mocks.NewCapturingLogger()
-	svc := demand.NewService(newRepoWithRows(rows), uncoveredLookup()).WithLogger(logger)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := mocks.NewCapturingLogger()
+			svc := demand.NewService(newRepoWithRows(tc.rows), uncoveredLookup()).WithLogger(logger)
 
-	if _, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "7d"}); err != nil {
-		t.Fatalf("Leaderboard: unexpected error: %v", err)
-	}
+			if _, err := svc.Leaderboard(context.Background(), demand.LeaderboardOpts{Window: "7d"}); err != nil {
+				t.Fatalf("Leaderboard: unexpected error: %v", err)
+			}
 
-	var warns []mocks.LogEntry
-	for _, e := range logger.Entries() {
-		if e.Level == "warn" {
-			warns = append(warns, e)
-		}
-	}
-	if len(warns) != 1 {
-		t.Fatalf("got %d warn entries, want 1: %+v", len(warns), warns)
-	}
+			var warns []mocks.LogEntry
+			for _, e := range logger.Entries() {
+				if e.Level == "warn" {
+					warns = append(warns, e)
+				}
+			}
+			if len(warns) != 1 {
+				t.Fatalf("got %d warn entries, want 1: %+v", len(warns), warns)
+			}
 
-	entry := warns[0]
-	if entry.Message != "demand_json unmarshal failed" {
-		t.Errorf("Message = %q, want %q", entry.Message, "demand_json unmarshal failed")
-	}
-	character, ok := entry.FindField("character")
-	if !ok {
-		t.Fatal("warn entry has no \"character\" field")
-	}
-	if character != "Pikachu" {
-		t.Errorf("character field = %v, want %q", character, "Pikachu")
+			entry := warns[0]
+			if entry.Message != tc.wantMessage {
+				t.Errorf("Message = %q, want %q", entry.Message, tc.wantMessage)
+			}
+			character, ok := entry.FindField("character")
+			if !ok {
+				t.Fatal("warn entry has no \"character\" field")
+			}
+			if character != tc.wantChar {
+				t.Errorf("character field = %v, want %q", character, tc.wantChar)
+			}
+		})
 	}
 }
 
