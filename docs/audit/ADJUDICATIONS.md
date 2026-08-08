@@ -266,6 +266,123 @@ directions at once.
 
 ---
 
+## DCT-014 — same production-breaking premise as DEADGO-001. Constrain the fix.
+
+Raised by `verify-deadgo-001` out of its own lane, and it was right to. Caught
+during Task 14 and adjudicated by the controller against source.
+
+DCT-014 was **confirmed** by its verifier, and its central observation is
+correct and valuable: `Config.Cache.Path` is bound to the `-cache` flag,
+syntax-validated, and has its directory created at startup, yet its value never
+reaches any cache constructor. `cfg.Cache` is read only inside
+`internal/platform/config` itself (`loader.go:253`, `validation.go:41,92`).
+
+But its `proposed_fix` offers, as one of two options: *"remove the field, its
+CLI flag, and its validation/directory-creation code."* **That option breaks
+production**, for exactly the reason DEADGO-001 was refuted:
+`Dockerfile.harvest:39` passes `--cache` to the deployed entrypoint, and
+`flag.ContinueOnError` at `loader.go:239` turns an unknown flag into
+`log.Fatalf`. Its `searched_universe` names only config and cache Go files; its
+`exclusions` do not mention Dockerfiles.
+
+**The two records share one wrong premise. Do not let dedup merge them into a
+confident cluster** — that would launder the error rather than cancel it.
+
+**The Dockerfile comment vindicates DCT-014's diagnosis while forbidding its
+fix.** `Dockerfile.harvest:35-36`: *"The harvester never uses the on-disk cache,
+but config.Load() still runs EnsureDirectories() on the cache path — default
+'data/cache.json' would try to…"*. So the entire flag exists to steer a `mkdir`
+for a cache that is never constructed. That is a sharper finding than either
+record states on its own.
+
+**Ruling.** One fix unit, scoped as: *the cache-path plumbing exists solely to
+relocate a startup `mkdir` for a cache backend that is never built.* Its
+acceptance criteria MUST require that any removal edits `Dockerfile.harvest:39`
+in the same commit, and MUST state that removing the flag registration alone
+fails the deployed container at startup with
+`flag provided but not defined: -cache`. Carry both records' evidence.
+
+---
+
+## Controller sweep — how far the Dockerfile-blind defect spreads. Bounded.
+
+`verify-deadgo-001` recommended sweeping for other findings claiming a config
+field, CLI flag, or env var is dead while declaring a source-only search
+universe. The controller ran it. **Four findings have a config/env/flag
+subject; the defect reaches exactly two, both already adjudicated above.**
+
+| Finding | Universe | Result |
+|---|---|---|
+| `DEADGO-001` | `*.go` only | **Defective** — refuted, see above |
+| `DCT-014` | config + cache `*.go` | **Defective** — fix constrained, see above |
+| `DCT-013` | `*.go` only, blind spot *declared* in its own `exclusions` | **Clean — controller checked the wider universe** |
+| `NB-001` | domain `*.go` | Not a deadness claim; subject is `check-imports.sh` coverage. Unaffected |
+
+**DCT-013 verified against the universe it could not search.**
+`git grep -nE '\bBASE_URL\b|\bMEDIA_DIR\b'` over all tracked files excluding
+`*.go` and `.env.example` returns no consumer — the only hits are this audit's
+own JSON. Neither name appears in any Dockerfile, compose file, workflow,
+Makefile, or script. **The finding stands and its removal is safe.** Note that
+DCT-013 declared this exact blind spot in its `exclusions` rather than hiding
+it, which is why it took one command to close.
+
+**Concrete blast radius for the DCT-014 / DEADGO-001 fix unit.**
+`git grep -nE 'psa-harvest|--cache' -- '*.yml' '*.yaml' 'Dockerfile*' 'Makefile' 'scripts/*'`
+shows `Dockerfile.harvest:39` is the **only** `--cache` consumer in the
+repository. It is not dormant: `.github/workflows/psa-harvest-cron.yml` is an
+hourly watchdog against `FLY_APP: slabledger-psa-harvest` (line 41), a deployed
+Fly app running that image. The ticket must name both the file and the
+deployment, so the fixer understands that removing the flag registration alone
+breaks an hourly production job rather than a local convenience.
+
+`verify-dct-a` refuted DCT-005 for citing `CLAUDE.md:145` when the quoted text
+is at `:167`, and in the same batch confirmed two findings with citation
+defects: DCT-003 cites a wrong commit hash (`d555333b`; the tcgdex removal is
+`474072bd`), and DCT-011's grep-output sub-claim does not reproduce as written
+(it searches `marketmovers` as one word; the real comment in
+`cmd/slabledger/init_services.go` reads "Market Movers" as two). It flagged the
+asymmetry rather than hiding it, and asked for a ruling. This is the right call
+and the answer is that **the verifier drew the line correctly**:
+
+- DCT-005's bad citation is load-bearing — the cited line *is* the subject of
+  the finding, so a fixer following it lands on the wrong sentence and cannot
+  act.
+- DCT-003's and DCT-011's defects are in supporting color. The actionable claim
+  and the `acceptance_criteria` stand without them.
+
+**Task 14 must still correct both in the fix unit text** — a wrong commit hash
+in a ticket wastes a developer's time even when the ticket is right. And per the
+Phase 3 outcome section, DCT-005 gets re-filed with `CLAUDE.md:167`, not
+dropped.
+
+---
+
+## Late lens corrections received after Phase 2 was committed.
+
+Both arrived out of band and are accepted; the findings JSON may still show the
+superseded values.
+
+- **ARCH-003: `medium` → `low`.** The `dhprice` copy of the constant is used
+  only in a logging branch (`provider.go:159-180`); all three gating sites go
+  through `IsTombstoned`, which reads the postgres copy. Divergence makes a log
+  line lie; it does not split behavior.
+- **ARCH-004 vs SIZE-001 — the controller's cluster-don't-merge ruling now has
+  direct measurement behind it.** Of `inventory.Service`'s 54 methods and
+  `PurchaseRepository`'s 55, exactly **7 names appear on both**; the other 48
+  repository methods never surface as a Service method. The near-identical
+  counts are a coincidence — and precisely the coincidence that would tempt a
+  title-level merge. The two fix units also touch near-disjoint file sets.
+- **SIZE-001: `high` → `medium`** (verifier), and its "~25 methods" DH-group
+  figure is **19** by hand count. Conclusion unchanged.
+- **FE-008 is `suspected`-tier — `ticketable: false`.** Do not ticket it under
+  frontend-health; it is a pointer to naming-and-boundaries.
+- **FE-005 side observation, not part of its claim:** `UserPreferencesProvider`
+  is rendered in **both** `main.tsx` and `App.tsx` — a possible double-mount.
+  Unverified by any lens. Record it in the report as an open question; do not
+  ticket it on this evidence.
+
+---
+
 ## Phase 3 outcome — binding inputs to Task 14
 
 All 12 verdict files gated PASS. **63 verdicts for 63 findings** — full
