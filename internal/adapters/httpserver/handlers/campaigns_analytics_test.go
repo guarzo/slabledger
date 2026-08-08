@@ -138,13 +138,14 @@ func TestHandleFillRate_MissingID(t *testing.T) {
 	decodeErrorResponse(t, rec)
 }
 
-func TestHandleFillRate_EnrichesWithCap(t *testing.T) {
+func TestHandleFillRate_MapsCentsToUSD(t *testing.T) {
 	svc := &mocks.MockInventoryService{
+		// The service enriches; the handler only maps cents to USD. The test
+		// that proves enrichment happens is TestServiceGetDailySpend_Enriches.
 		GetDailySpendFn: func(_ context.Context, _ string, _ int) ([]inventory.DailySpend, error) {
-			return []inventory.DailySpend{{Date: "2025-01-01", SpendCents: 500}}, nil
-		},
-		GetCampaignFn: func(_ context.Context, _ string) (*inventory.Campaign, error) {
-			return &inventory.Campaign{ID: "c1", DailySpendCapCents: 1000}, nil
+			return []inventory.DailySpend{
+				{Date: "2025-01-01", SpendCents: 500, CapCents: 1000, FillRatePct: 0.5, PurchaseCount: 1},
+			}, nil
 		},
 	}
 	h := newTestHandler(svc)
