@@ -30,7 +30,7 @@
 |---|---|
 | `internal/domain/demand/payloads.go` | The five exported payload structs. The single definition of the DH-derived JSON shapes the domain persists. |
 | `internal/domain/demand/payloads_test.go` | Decode tests against real legacy blob shapes, so the structs keep reading rows already in the database. |
-| `internal/adapters/storage/postgres/dh_demand_repository_test.go` | DB-free unit test of `scanCharacterCacheRow`, including malformed-payload capture. |
+| `internal/adapters/storage/postgres/dh_demand_repository_test.go` | DB-free unit tests of both scan helpers: `scanCardCacheRow`'s narrowed seven-column shape (Task 3) and `scanCharacterCacheRow`'s typed decode including malformed-payload capture (Task 5). |
 | `internal/testutil/mocks/row_scanner.go` | `RowScanner` double satisfying the package-private `scanner` interface, so scan helpers are testable without a database. |
 
 **Modified**
@@ -482,10 +482,24 @@ grep for zero callers, not a new test asserting behavior.
   distribution ~266-273, demand ~314-319 — verified against the file as it reads before
   this task's edits; line numbers are unaffected by Task 2, which touches a different
   file)
+- Create: `internal/testutil/mocks/row_scanner.go`
+- Create: `internal/adapters/storage/postgres/dh_demand_repository_test.go`
+- Read only: `internal/adapters/storage/postgres/purchase_scan_helpers.go:69-71` (the
+  package-private `scanner` interface the new mock has to satisfy)
 
 **Interfaces:**
-- Consumes: none new.
-- Produces: none new — this narrows `CardCache` and its two call sites.
+- Consumes: `scanner` (package-private, `internal/adapters/storage/postgres/purchase_scan_helpers.go:69-71`) — `type scanner interface { Scan(dest ...any) error }`. Confirmed this is the exact declaration; no export shim exists or is needed, since `RowScanner` satisfies it structurally.
+- Produces: `mocks.RowScanner{Values []any; Err error}` with method `Scan(dest ...any) error`. **Task 5 consumes this and does not re-create it.**
+- Produces: `internal/adapters/storage/postgres/dh_demand_repository_test.go` (`package postgres`), which Task 5 appends a second test function to.
+
+**Why this task carries a test, when the surrounding tasks are pure deletion.** This
+task rewrites an INSERT's placeholder numbering (`$1..$12` → `$1..$7`), a SELECT's column
+list, and a scan-destination list — three edits where a mistake is a *runtime* error, not
+a compile error, so `go build` cannot catch it. And there is nothing else watching:
+`grep -rn 'CardCache' internal/adapters/storage/postgres/*_test.go` returns **nothing**
+today — the card-cache path has zero test coverage. `scanCardCacheRow` is also stable
+after this task (Task 4 touches only the *character* scanner), so the test written here
+does not need rewriting later.
 
 The five DB columns (`demand_json`, `velocity_json`, `trend_json`, `saturation_json`,
 `price_distribution_json` on `dh_card_cache`) are **intentionally left in place**. Per the
@@ -717,6 +731,180 @@ this release is confirmed stable.
   removes at line 314, so removing line 314's usage alone would not make the import
   unused.)
 
+- [ ] Write `internal/testutil/mocks/row_scanner.go`. This is a new file — confirmed:
+      `ls internal/testutil/mocks/` has no `row*` or `scan*` entry (the closest neighbor,
+      `psa_row_provider.go`, is a different kind of double). `internal/testutil/mocks`
+      does not import `internal/adapters/storage/postgres` anywhere today, and this file
+      imports only `fmt` and `reflect`, so it creates no import cycle.
+
+  ```go
+  package mocks
+
+  import (
+  	"fmt"
+  	"reflect"
+  )
+
+  // RowScanner is a test double for the postgres package's unexported
+  // `scanner` interface (`Scan(dest ...any) error`), which *sql.Row and
+  // *sql.Rows both satisfy structurally. It lets row-scanning functions be
+  // unit-tested without a database.
+  //
+  // Values holds the column values in the exact order the function under
+  // test scans them. Scan assigns Values[i] into dest[i] via reflection
+  // rather than a type switch: postgres row scanners scan into a long tail
+  // of concrete types (string, time.Time, sql.NullString, sql.NullTime,
+  // sql.NullFloat64, ...), and a type switch would need one case per type
+  // per test, duplicated across every scanner test in the package.
+  // Reflection handles all of them uniformly; the cost is that a
+  // Values[i] whose type doesn't match *dest[i] panics instead of failing
+  // gracefully, so fixtures must supply exactly the type the real driver
+  // would produce (e.g. sql.NullString{...}, not *string).
+  type RowScanner struct {
+  	// Values are the column values, in scan order.
+  	Values []any
+  	// Err, if set, is returned by Scan without assigning anything.
+  	Err error
+  }
+
+  // Scan assigns each Values[i] into dest[i]. It returns an error if the
+  // number of destinations does not match the number of supplied values.
+  func (r *RowScanner) Scan(dest ...any) error {
+  	if r.Err != nil {
+  		return r.Err
+  	}
+  	if len(dest) != len(r.Values) {
+  		return fmt.Errorf("mocks.RowScanner: got %d scan destinations, have %d values", len(dest), len(r.Values))
+  	}
+  	for i, d := range dest {
+  		reflect.ValueOf(d).Elem().Set(reflect.ValueOf(r.Values[i]))
+  	}
+  	return nil
+  }
+  ```
+
+  Verified gofmt-clean (written to a temp file, `gofmt -l` produced no output, `gofmt`
+  output byte-identical to the source above).
+
+- [ ] Write `internal/adapters/storage/postgres/dh_demand_repository_test.go`. This is a
+      new file — confirmed: `ls internal/adapters/storage/postgres/*_test.go` has no such
+      entry, and `grep -rn 'CardCache' internal/adapters/storage/postgres/*_test.go`
+      returns nothing. It is `package postgres` (not `postgres_test`), like every other
+      test file in the package (`retry_test.go:1`), because `scanCardCacheRow` is
+      unexported.
+
+      **Read the point of this test before writing it.** The `len(dest) != len(r.Values)`
+      guard inside `RowScanner.Scan` is what makes it a real check on this task's edit:
+      supplying exactly seven fixture values makes the test fail loudly if
+      `scanCardCacheRow` still passes twelve destinations — i.e. if any of the five blob
+      fields survived the deletion. The per-field assertions then pin the *order* of the
+      remaining seven against the post-edit SELECT list. What this cannot check is the
+      SQL text itself, since no database is involved; the `go build` + eyeball step below
+      still stands for the `UpsertCardCache` placeholder renumbering.
+
+  ```go
+  package postgres
+
+  import (
+  	"database/sql"
+  	"testing"
+  	"time"
+
+  	"github.com/guarzo/slabledger/internal/domain/demand"
+  	"github.com/guarzo/slabledger/internal/testutil/mocks"
+  )
+
+  func TestScanCardCacheRow(t *testing.T) {
+  	fetchedAt := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+  	demandComputedAt := time.Date(2026, 8, 1, 6, 0, 0, 0, time.UTC)
+  	analyticsComputedAt := time.Date(2026, 8, 1, 7, 0, 0, 0, time.UTC)
+
+  	tests := []struct {
+  		name   string
+  		values []any
+  		assert func(t *testing.T, row *demand.CardCache)
+  	}{
+  		{
+  			name: "all columns populated",
+  			values: []any{
+  				"sv1-25", "30d",
+  				sql.NullFloat64{Float64: 0.82, Valid: true},
+  				sql.NullString{String: "full", Valid: true},
+  				sql.NullTime{Time: analyticsComputedAt, Valid: true},
+  				sql.NullTime{Time: demandComputedAt, Valid: true},
+  				fetchedAt,
+  			},
+  			assert: func(t *testing.T, row *demand.CardCache) {
+  				if row.CardID != "sv1-25" {
+  					t.Errorf("CardID = %q, want %q", row.CardID, "sv1-25")
+  				}
+  				if row.Window != "30d" {
+  					t.Errorf("Window = %q, want %q", row.Window, "30d")
+  				}
+  				if row.DemandScore == nil || *row.DemandScore != 0.82 {
+  					t.Errorf("DemandScore = %v, want 0.82", row.DemandScore)
+  				}
+  				if row.DemandDataQuality == nil || *row.DemandDataQuality != "full" {
+  					t.Errorf("DemandDataQuality = %v, want \"full\"", row.DemandDataQuality)
+  				}
+  				if row.AnalyticsComputedAt == nil || !row.AnalyticsComputedAt.Equal(analyticsComputedAt) {
+  					t.Errorf("AnalyticsComputedAt = %v, want %v", row.AnalyticsComputedAt, analyticsComputedAt)
+  				}
+  				if row.DemandComputedAt == nil || !row.DemandComputedAt.Equal(demandComputedAt) {
+  					t.Errorf("DemandComputedAt = %v, want %v", row.DemandComputedAt, demandComputedAt)
+  				}
+  				if !row.FetchedAt.Equal(fetchedAt) {
+  					t.Errorf("FetchedAt = %v, want %v", row.FetchedAt, fetchedAt)
+  				}
+  			},
+  		},
+  		{
+  			name: "every nullable column NULL",
+  			values: []any{
+  				"sv1-26", "7d",
+  				sql.NullFloat64{},
+  				sql.NullString{},
+  				sql.NullTime{},
+  				sql.NullTime{},
+  				fetchedAt,
+  			},
+  			assert: func(t *testing.T, row *demand.CardCache) {
+  				if row.DemandScore != nil {
+  					t.Errorf("DemandScore = %v, want nil", row.DemandScore)
+  				}
+  				if row.DemandDataQuality != nil {
+  					t.Errorf("DemandDataQuality = %v, want nil", row.DemandDataQuality)
+  				}
+  				if row.AnalyticsComputedAt != nil {
+  					t.Errorf("AnalyticsComputedAt = %v, want nil", row.AnalyticsComputedAt)
+  				}
+  				if row.DemandComputedAt != nil {
+  					t.Errorf("DemandComputedAt = %v, want nil", row.DemandComputedAt)
+  				}
+  			},
+  		},
+  	}
+
+  	for _, tt := range tests {
+  		t.Run(tt.name, func(t *testing.T) {
+  			row, err := scanCardCacheRow(&mocks.RowScanner{Values: tt.values})
+  			if err != nil {
+  				t.Fatalf("scanCardCacheRow: %v", err)
+  			}
+  			tt.assert(t, row)
+  		})
+  	}
+  }
+  ```
+
+  Verified gofmt-clean (written to a temp file, `gofmt -l` produced no output).
+
+- [ ] Run `go test -race ./internal/adapters/storage/postgres/ -run TestScanCardCacheRow -v`
+      and confirm **both subtests pass**. If you see
+      `mocks.RowScanner: got 12 scan destinations, have 7 values`, the five blob fields
+      are still being scanned — go back and finish the `scanCardCacheRow` edit. If a
+      subtest fails on a *field* assertion, the seven remaining columns are scanned in
+      the wrong order relative to the SELECT list; fix the code, not the fixture.
 - [ ] Run `go build ./...` and confirm it compiles (this is the "test" for the SQL
       placeholder renumbering — a mismatched arg count/placeholder is a runtime error,
       not a compile error, so also eyeball the renumbered SQL against the `Exec`/`Scan`
@@ -733,7 +921,7 @@ this release is confirmed stable.
       `CardCache` fields, so a clean grep proves no remaining reader or writer.
 - [ ] Run `ls internal/adapters/storage/postgres/migrations/` and confirm no new
       migration file was added — the DB columns stay in place.
-- [ ] Commit: `refactor(demand): stop reading and writing the five CardCache blob columns (SLA-41)`
+- [ ] Commit (include the two new files): `refactor(demand): stop reading and writing the five CardCache blob columns (SLA-41)`
 ### Task 4: The typed `CharacterCache` seam
 
 This is the big, atomic task: the tree cannot compile between the moment
@@ -977,7 +1165,16 @@ updated to match. Everything below lands in one commit.
   }
   ```
 
-  Run: `go build ./internal/adapters/storage/postgres/`.
+  Run: `go build ./internal/adapters/storage/postgres/`. **Expect this to still
+  fail, and not because of anything in this file.** This package imports
+  `internal/domain/demand` (`dh_demand_repository.go:10`), and that package does
+  not compile yet — `service.go` and `campaign_signals.go` still reference the
+  `DemandJSON`/`VelocityJSON`/`SaturationJSON` fields Step 2 deleted, and they
+  are not retyped until Steps 4 and 5. The only thing to confirm here is that
+  **every reported error names `internal/domain/demand`**; any error naming
+  `internal/adapters/storage/postgres` itself is a real defect in the code you
+  just wrote and must be fixed before moving on. The postgres package is
+  verified green at Step 7, after the domain compiles.
 
 - [ ] **Step 4 — delete the four hand-mirrored blob structs and `parseCharacterDemand` from `service.go`; retype the readers.**
 
@@ -1401,81 +1598,22 @@ updated to match. Everything below lands in one commit.
 ### Task 5: DB-free unit test for `scanCharacterCacheRow`
 
 **Files:**
-- Create: `internal/testutil/mocks/row_scanner.go`
-- Create: `internal/adapters/storage/postgres/dh_demand_repository_test.go`
-- Read only: `internal/adapters/storage/postgres/purchase_scan_helpers.go:69-71` (the `scanner` interface), `internal/adapters/storage/postgres/dh_demand_repository.go:258-282` (`scanCharacterCacheRow`, post-Task-4 shape)
+- Modify: `internal/adapters/storage/postgres/dh_demand_repository_test.go` (created in Task 3; append one test function)
+- Read only: `internal/testutil/mocks/row_scanner.go` (created in Task 3), `internal/adapters/storage/postgres/purchase_scan_helpers.go:69-71` (the `scanner` interface), `internal/adapters/storage/postgres/dh_demand_repository.go:258-282` (`scanCharacterCacheRow`, post-Task-4 shape)
 
 **Interfaces:**
-- Consumes: `scanner` (package-private, `internal/adapters/storage/postgres/purchase_scan_helpers.go:69-71`) — `type scanner interface { Scan(dest ...any) error }`. Confirmed this is the exact declaration; no export shim exists or is needed since `RowScanner` satisfies it structurally.
-- Produces: `mocks.RowScanner{Values []any; Err error}` with method `Scan(dest ...any) error`.
-- Consumes: `scanCharacterCacheRow(s scanner) (*demand.CharacterCache, error)` (unexported, same package as the new test — `package postgres`).
+- Consumes: `mocks.RowScanner{Values []any; Err error}` with method `Scan(dest ...any) error` — **created in Task 3, not here.** If it is missing, Task 3 did not land; stop and say so rather than re-creating it.
+- Consumes: `scanCharacterCacheRow(s scanner) (*demand.CharacterCache, error)` (unexported, same package as the test — `package postgres`).
+- Produces: nothing new.
 
-There is no `internal/adapters/storage/postgres/dh_demand_repository_test.go` today (confirmed: `ls internal/adapters/storage/postgres/*_test.go` has no such file) and no `internal/testutil/mocks/row_scanner.go` (confirmed: `ls internal/testutil/mocks/` has no `row*` or `scan*` file — the closest neighbor is `psa_row_provider.go`, a different kind of double). Both are new files. `internal/testutil/mocks` does not import `internal/adapters/storage/postgres` anywhere today, and `RowScanner` imports only `fmt` and `reflect`, so adding it creates no import cycle.
+This task appends a second test function to the file Task 3 created. Both the
+`package postgres` clause and all four imports it needs (`database/sql`, `testing`,
+`time`, `.../domain/demand`, `.../testutil/mocks`) are already in that file from
+`TestScanCardCacheRow`, so paste only the function below — do not re-add the header.
 
-- [ ] Write `internal/testutil/mocks/row_scanner.go`:
-
-```go
-package mocks
-
-import (
-	"fmt"
-	"reflect"
-)
-
-// RowScanner is a test double for the postgres package's unexported
-// `scanner` interface (`Scan(dest ...any) error`), which *sql.Row and
-// *sql.Rows both satisfy structurally. It lets row-scanning functions be
-// unit-tested without a database.
-//
-// Values holds the column values in the exact order the function under
-// test scans them. Scan assigns Values[i] into dest[i] via reflection
-// rather than a type switch: postgres row scanners scan into a long tail
-// of concrete types (string, time.Time, sql.NullString, sql.NullTime,
-// sql.NullFloat64, ...), and a type switch would need one case per type
-// per test, duplicated across every scanner test in the package.
-// Reflection handles all of them uniformly; the cost is that a
-// Values[i] whose type doesn't match *dest[i] panics instead of failing
-// gracefully, so fixtures must supply exactly the type the real driver
-// would produce (e.g. sql.NullString{...}, not *string).
-type RowScanner struct {
-	// Values are the column values, in scan order.
-	Values []any
-	// Err, if set, is returned by Scan without assigning anything.
-	Err error
-}
-
-// Scan assigns each Values[i] into dest[i]. It returns an error if the
-// number of destinations does not match the number of supplied values.
-func (r *RowScanner) Scan(dest ...any) error {
-	if r.Err != nil {
-		return r.Err
-	}
-	if len(dest) != len(r.Values) {
-		return fmt.Errorf("mocks.RowScanner: got %d scan destinations, have %d values", len(dest), len(r.Values))
-	}
-	for i, d := range dest {
-		reflect.ValueOf(d).Elem().Set(reflect.ValueOf(r.Values[i]))
-	}
-	return nil
-}
-```
-
-Verified gofmt-clean (written to `/tmp/row_scanner.go`, `gofmt -l` produced no output, `gofmt` output byte-identical to the source above).
-
-- [ ] Write the failing test `internal/adapters/storage/postgres/dh_demand_repository_test.go`. Column order and `sql.Null*` types below were read directly from `scanCharacterCacheRow` (`dh_demand_repository.go:258-274` pre-Task-4; Task 4 keeps the same eight-column scan list and only changes what happens to the three payload columns after `Scan` returns): `character, window, demand_json, velocity_json, saturation_json, demand_computed_at, analytics_computed_at, fetched_at` scanned into `string, string, sql.NullString, sql.NullString, sql.NullString, sql.NullTime, sql.NullTime, time.Time`.
+- [ ] Append `TestScanCharacterCacheRow` to `internal/adapters/storage/postgres/dh_demand_repository_test.go`. Column order and `sql.Null*` types below were read directly from `scanCharacterCacheRow` (`dh_demand_repository.go:258-274` pre-Task-4; Task 4 keeps the same eight-column scan list and only changes what happens to the three payload columns after `Scan` returns): `character, window, demand_json, velocity_json, saturation_json, demand_computed_at, analytics_computed_at, fetched_at` scanned into `string, string, sql.NullString, sql.NullString, sql.NullString, sql.NullTime, sql.NullTime, time.Time`.
 
 ```go
-package postgres
-
-import (
-	"database/sql"
-	"testing"
-	"time"
-
-	"github.com/guarzo/slabledger/internal/domain/demand"
-	"github.com/guarzo/slabledger/internal/testutil/mocks"
-)
-
 func TestScanCharacterCacheRow(t *testing.T) {
 	fetchedAt := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	demandComputedAt := time.Date(2026, 8, 1, 6, 0, 0, 0, time.UTC)
@@ -1592,9 +1730,9 @@ func TestScanCharacterCacheRow(t *testing.T) {
 }
 ```
 
-Verified gofmt-clean (written to `/tmp/dh_demand_repository_test.go`, `gofmt -l` produced no output, byte-identical after `gofmt`).
+Verified gofmt-clean: the function above was checked in a temp file carrying the same `package postgres` clause and imports the target file already has, and `gofmt -l` produced no output (byte-identical after `gofmt`).
 
-- [ ] Run `go test ./internal/adapters/storage/postgres/ -run TestScanCharacterCacheRow -v` and confirm it fails to compile / fails: on the pre-Task-5 tree this package has no such test yet, so this step only makes sense after Task 4 has landed `scanCharacterCacheRow`'s typed-payload behavior. If Task 4 is already committed (it is, per this fragment's assumption), the test should compile and pass immediately — there is no red step here because Task 4 already implements the behavior under test. Run it anyway and confirm green; if it fails, that means Task 4's implementation does not match the spec's column order or malformed-payload contract, and this task stops to flag that mismatch rather than silently adjusting the test to match.
+- [ ] Run `go test -race ./internal/adapters/storage/postgres/ -run 'TestScanCardCacheRow|TestScanCharacterCacheRow' -v` and confirm **both** pass — Task 3's card test must still be green after this append, since both functions now live in the same file. On the character test specifically: there is no red step, because Task 4 already implements the behavior under test. If it fails, that means Task 4's implementation does not match the spec's column order or malformed-payload contract, and this task stops to flag that mismatch rather than silently adjusting the test to match.
 - [ ] Commit: `test(postgres): cover scanCharacterCacheRow's typed payload decode and malformed capture (SLA-41)`
 
 ---
@@ -1911,7 +2049,12 @@ Verified gofmt-clean (written to `/tmp/service_malformed_velocity_test.go` as a 
   - [ ] `grep -rn 'ListCardCacheByDemandScore' internal/ cmd/` — expect no output. Confirms Task 2 fully removed the dead method from the interface, the postgres implementation, and the mock.
   - [ ] `ls internal/adapters/storage/postgres/migrations/` — expect no file numbered `000032`. This change must ship no migration; the drop is the follow-up ticket filed above, not this PR.
 
-- [ ] Run `my:polish-core --fix`, inspect every edit it makes, and re-run `go test -race ./...` scoped to whatever packages it touched (or the full suite if the diff spans more than one package) to confirm the fixes didn't change behavior.
+- [ ] Run `my:polish-core --fix` and inspect every edit it makes. Then **re-run the full gate above, not just the tests** — `make check` covers `go vet`, `golangci-lint`, the hexagonal import check, the flat-sibling check, and the file-size check (`Makefile:139,146`), and a polish edit can break any of them without touching a single test. Specifically re-run, in this order:
+  - [ ] `go test -race ./...` — expect all packages pass.
+  - [ ] `go build ./...` — expect a clean build.
+  - [ ] `make check` — expect all five checks pass. This is the one that catches a polish edit pushing a file past the 500-line warn / 600-line fail threshold, or introducing an import the architecture check rejects.
+
+  If polish makes no edits at all, say so and skip the re-run rather than reporting a gate you did not need to run.
 
 - [ ] `docs/` sweep: `grep -rn 'demand_json\|velocity_json\|saturation_json\|trend_json\|price_distribution_json' docs/` and read every hit in `docs/SCHEMA.md` and `docs/ARCHITECTURE.md` for language that describes these columns as opaque blobs parsed ad hoc, versus describing them as backed by named domain structs. Update any line whose wording no longer matches the typed seam (e.g. "JSON blob" phrasing where the reader is now `CharacterDemand`/`CharacterVelocity`/`CharacterSaturation`). If the grep or the read finds nothing that describes parsing behavior at that level of detail (e.g. the docs only name the column and its purpose, not how it's decoded), say so explicitly in the PR description rather than editing speculatively — do not invent a doc change to have something to report.
 
