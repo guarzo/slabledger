@@ -144,6 +144,7 @@ lint:
 
 # Full quality check (lint + architecture + file size + harvester version coupling)
 check: lint
+	./scripts/check-imports-test.sh
 	./scripts/check-imports.sh
 	./scripts/check-file-size.sh
 	./scripts/check-playwright-version.sh
