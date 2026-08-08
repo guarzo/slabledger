@@ -16,6 +16,21 @@ primary_region = 'iad'
   min_machines_running = 0
   processes = ['app']
 
+  # Without a check, Fly has no signal for whether a deploy came up healthy, so a bad
+  # release stays live and nothing rolls back. /api/health pings Postgres and returns
+  # 503 when that ping fails, which is the right readiness signal for an app that is
+  # useless without its database.
+  #
+  # The grace period covers cold start: migrations run on startup, so the first probes
+  # would otherwise fire before the server is serving. A longer grace only delays
+  # detection of a genuinely broken boot.
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '5s'
+    grace_period = '30s'
+    method = 'GET'
+    path = '/api/health'
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
