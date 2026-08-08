@@ -1,29 +1,66 @@
 name: Frontend CI
 
+# Deliberately no workflow-level `paths:` filter. A filtered-out workflow posts no
+# check runs at all, so a required check from it would sit "Expected" forever and
+# block the PR. Path filtering moved to the `changes` job below: a skipped job still
+# posts a check run, and GitHub counts skipped as passing.
 on:
   push:
     branches: [main]
-    paths:
-      - 'web/**'
-      - '.github/workflows/frontend-ci.yml'
-      - '!web/**.md'
-      - '!web/README.md'
-      - '!web/CHANGELOG.md'
   pull_request:
     branches: [main]
-    paths:
-      - 'web/**'
-      - '.github/workflows/frontend-ci.yml'
-      - '!web/**.md'
-      - '!web/README.md'
-      - '!web/CHANGELOG.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    # Replaces the old workflow-level path filter. Runs on every PR so the gate below
+    # always reports, but keeps the expensive jobs off PRs that touch no frontend code.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      web: ${{ steps.result.outputs.web }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Detect frontend changes
+      # PR-only: this path uses the GitHub API and needs no git history. On pushes to
+      # main the action would fall back to a git diff against github.event.before,
+      # which is unreliable on a shallow checkout.
+      uses: dorny/paths-filter@v3
+      if: github.event_name == 'pull_request'
+      id: filter
+      with:
+        filters: |
+          web:
+            - 'web/**'
+            - '.github/workflows/frontend-ci.yml'
+            - '!web/*.md'
+            - '!web/**/*.md'
+
+    - name: Resolve result
+      # Pushes to main deploy to production, so main gets the full suite unfiltered.
+      id: result
+      env:
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+        PR_HAS_WEB: ${{ steps.filter.outputs.web }}
+      run: |
+        if [ "$IS_PR" = "true" ]; then
+          echo "web=$PR_HAS_WEB" >> "$GITHUB_OUTPUT"
+        else
+          echo "web=true" >> "$GITHUB_OUTPUT"
+        fi
+
   frontend:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -258,3 +295,32 @@ jobs:
         name: preview-server-logs
         path: web/preview-server.log
         retention-days: 7
+
+  frontend-checks:
+    # The single required status check for frontend CI in branch protection.
+    #
+    # `if: always()` makes it report on every PR, including ones where the jobs above
+    # skipped — that is the whole point, since a required check that never reports
+    # blocks the PR permanently. Requiring this one job instead of the three
+    # underlying ones also means adding or renaming a frontend job never desyncs the
+    # branch protection config.
+    needs: [changes, frontend, smoke-tests, playwright]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+    - name: Fail if any frontend job failed
+      # Skipped and successful both count as passing; only failure/cancellation gate.
+      if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: |
+        echo "changes:     ${{ needs.changes.result }}"
+        echo "frontend:    ${{ needs.frontend.result }}"
+        echo "smoke-tests: ${{ needs['smoke-tests'].result }}"
+        echo "playwright:  ${{ needs.playwright.result }}"
+        exit 1
+
+    - name: Report result
+      run: echo "Frontend checks passed or were skipped for this change."

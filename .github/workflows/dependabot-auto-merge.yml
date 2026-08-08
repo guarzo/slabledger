@@ -1,0 +1,32 @@
+name: Dependabot auto-merge
+
+# Turns on GitHub's native auto-merge for Dependabot PRs. This does NOT merge
+# anything directly — it only arms auto-merge, and branch protection still holds the
+# PR until every required check passes. A red build leaves the PR open for a human.
+#
+# `pull_request_target` is required: Dependabot PRs run with a read-only GITHUB_TOKEN
+# under `pull_request`, which cannot enable auto-merge. The usual pull_request_target
+# hazard is running untrusted PR code with write scope — this job never checks out the
+# PR, so there is nothing to exploit.
+
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+    - name: Enable auto-merge
+      # Squash matches the repo's only permitted merge method.
+      run: gh pr merge --auto --squash "$PR_URL"
+      env:
+        PR_URL: ${{ github.event.pull_request.html_url }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
