@@ -4,7 +4,7 @@
 
 **Goal:** Make `scripts/check-imports.sh` derive its flat-sibling package set from the repository layout, fail closed when it verifies nothing, and remove the one real violation it currently misses (`dhpricing → dhlisting`).
 
-**Architecture:** Two independent changes. First, move the shared `DHInventoryStatusUpdate` DTO from `internal/domain/dhlisting` into `internal/domain/inventory` (the hub every sibling already imports), which deletes the only sibling-to-sibling import edge in the tree. Second, replace the checker's hardcoded six-name list with a filesystem-derived set, guarded by a `pairs_checked > 0` assertion so a broken derivation fails loudly instead of printing a pass.
+**Architecture:** Two independent changes. First, move the shared `DHInventoryStatusUpdate` DTO from `internal/domain/dhlisting` into `internal/domain/inventory` (the hub every sibling already imports), which deletes the only sibling-to-sibling import edge in the tree. Second, replace the checker's hardcoded six-name list with a filesystem-derived set, guarded by a `pairs_checked == n*(n-1)` assertion so a broken or truncated derivation fails loudly instead of printing a pass.
 
 **Tech Stack:** Bash (`set -euo pipefail`, shellcheck-clean), Go 1.26, hexagonal architecture.
 
@@ -18,14 +18,16 @@
 - A *sibling* is any directory under `internal/domain/` holding a non-test `.go` file that imports `internal/domain/inventory`. Today that derives exactly 10: `arbitrage demand dhlisting dhpricing export finance portfolio pricing/lookup psacampaign tuning`.
 - `scripts/check-imports.sh` must stay shellcheck-clean (`shellcheck scripts/check-imports.sh` exits 0) and must not depend on `git` being present.
 - Keep Go source files under 500 lines (`CLAUDE.md:163`); `scripts/check-file-size.sh` hard-fails above 600. `internal/domain/inventory/types_core.go` is already 562 lines — **do not add to it**.
-- Every task ends on a green tree: `make check` and `go test -race ./...` both pass at each commit.
+- Every task ends on a green tree **at its commit boundary**, gated by what that task actually touches. Task 1 changes Go source: `go build ./...`, `go test -race ./...`, and `make check` must all pass before committing. Tasks 2 and 3 change only a shell script and markdown — no Go source — so `make check` is the gate there. Note `make check` runs lint + import check + file-size check and **does not** run Go tests (`Makefile:145-149`); it is not a substitute for `go test -race` on a task that touches Go.
 - No `web/` files are touched, so the frontend build/test run is not required.
 
 ---
 
 ### Task 1: Move `DHInventoryStatusUpdate` into the inventory hub
 
-Removes the only sibling-to-sibling import in the tree. The old checker still passes throughout this task, so the tree stays green.
+Removes the only sibling-to-sibling import in the tree.
+
+**Steps 2-7 are one atomic refactor and the tree does not compile in between.** Step 2 deletes the type from `dhlisting` while `dh_listing_service.go:281`, `dh_listing_service_test.go:85`, `dhpricing/types.go:57`, and `adapters/clients/dhlisting/adapter.go:175` still reference the old name; the build only comes back at Step 7. Do not run `go build` or `go test` mid-sequence and conclude something is wrong — the green-tree guarantee is at the commit boundary (Step 11), not between steps. The old checker passes throughout, so no import-check regression can hide here either.
 
 **Files:**
 - Create: `internal/domain/inventory/dh_status_update.go`
@@ -276,6 +278,19 @@ Replace everything from the `# Flat sibling rule:` comment (line 38) through the
 
 # Derive the sibling set from the filesystem so a new inventory-importing
 # package is covered without editing this script.
+#
+# find runs in a command substitution assigned to a plain variable, so a
+# traversal failure (unreadable directory, bad path) is the assignment's exit
+# status and set -e aborts here. Reading it through a process substitution
+# instead would discard that status and silently scan a truncated tree.
+domain_files=$(find internal/domain -type f -name "*.go" ! -name "*_test.go" | sort)
+
+if [ -z "$domain_files" ]; then
+  echo "ERROR: found no non-test .go files under internal/domain/." >&2
+  echo "The flat sibling check cannot verify this tree; refusing to pass." >&2
+  exit 1
+fi
+
 siblings=()
 while IFS= read -r file; do
   status=0
@@ -289,7 +304,7 @@ while IFS= read -r file; do
     dir=${file%/*}
     siblings+=("${dir#internal/domain/}")
   fi
-done < <(find internal/domain -type f -name "*.go" ! -name "*_test.go" | sort)
+done <<< "$domain_files"
 
 # De-duplicate (a package has many files).
 if [ ${#siblings[@]} -gt 0 ]; then
@@ -301,14 +316,17 @@ pairs_checked=0
 
 for pkg in ${siblings[@]+"${siblings[@]}"}; do
   # -maxdepth 1 keeps nested packages (e.g. pricing/lookup) from being
-  # attributed to their parent.
-  files=()
-  while IFS= read -r f; do
-    files+=("$f")
-  done < <(find "internal/domain/$pkg" -maxdepth 1 -type f -name "*.go" ! -name "*_test.go")
+  # attributed to their parent. Same command-substitution reasoning as above:
+  # a failed scan of one package must abort, not silently skip it.
+  pkg_files=$(find "internal/domain/$pkg" -maxdepth 1 -type f -name "*.go" ! -name "*_test.go")
 
-  # Guard the empty case so grep never falls through to reading stdin.
-  [ ${#files[@]} -eq 0 ] && continue
+  if [ -z "$pkg_files" ]; then
+    echo "ERROR: internal/domain/$pkg was derived as a sub-package but now has" >&2
+    echo "no non-test .go files. The tree changed under the scan." >&2
+    exit 1
+  fi
+
+  mapfile -t files <<< "$pkg_files"
 
   for other in ${siblings[@]+"${siblings[@]}"}; do
     [ "$pkg" = "$other" ] && continue
@@ -327,14 +345,23 @@ for pkg in ${siblings[@]+"${siblings[@]}"}; do
   done
 done
 
-# Fail closed: a check that compared nothing must not report success.
-if [ "$pairs_checked" -eq 0 ]; then
-  echo "ERROR: flat sibling check compared 0 package pairs — it verified nothing."
+# Fail closed: a check that compared nothing — or that compared fewer pairs than
+# its own derivation implies — must not report success. Every derived package
+# has a non-test .go file by construction, so the count is exactly n*(n-1).
+# Asserting equality (not just > 0) catches a scan that lost a package midway.
+expected_pairs=$(( ${#siblings[@]} * (${#siblings[@]} - 1) ))
+if [ "$pairs_checked" -eq 0 ] || [ "$pairs_checked" -ne "$expected_pairs" ]; then
+  if [ "$pairs_checked" -eq 0 ]; then
+    echo "ERROR: flat sibling check compared 0 package pairs — it verified nothing."
+  else
+    echo "ERROR: flat sibling check compared $pairs_checked package pairs, expected $expected_pairs."
+  fi
   echo ""
   echo "Derived ${#siblings[@]} sub-package(s) under internal/domain/ importing"
   echo "$MODULE/internal/domain/inventory. At least 2 are required for this"
-  echo "check to mean anything. The derivation is broken (moved tree, renamed"
-  echo "module path, or a bad pattern) — fix it rather than ignoring this."
+  echo "check to mean anything, and every derived package must be scanned."
+  echo "The derivation is broken (moved tree, renamed module path, a bad"
+  echo "pattern, or a truncated traversal) — fix it rather than ignoring this."
   exit 1
 fi
 
@@ -350,11 +377,12 @@ fi
 echo "Flat sibling rule check passed: ${#siblings[@]} sub-packages, $pairs_checked pairs checked, no cross-imports."
 ```
 
-Three details that are load-bearing, not style:
+Four details that are load-bearing, not style:
 
 - `grep -q ... || status=$?` then branching on `0` / `1` / `>1`. A blanket `|| true` (what the old script used at lines 44-45) swallows grep's exit 2, so an unreadable file reads as "no violations" and the scan silently loses coverage. Omitting it entirely kills the script under `set -e` on the *expected* no-match path.
 - `${siblings[@]+"${siblings[@]}"}` — expanding an empty array under `set -u` is an unbound-variable error on older bash. This is the safe-expansion idiom.
-- `pairs_checked`, not "is the list non-empty". A one-package derivation is non-empty, compares zero pairs, and would otherwise print success — the exact defect class this ticket exists to close.
+- Both `find` calls are **command substitutions assigned to a variable**, never process substitutions. `done < <(find ...)` runs `find` in a subshell whose exit status `set -euo pipefail` never observes: a traversal that dies partway prints fewer files, the derivation silently shrinks, and the scan proceeds over a coverage hole. `var=$(find ...)` makes that status the assignment's status, so `set -e` aborts.
+- `pairs_checked` compared for **equality against `n*(n-1)`**, not merely `> 0`. Two distinct failures hide behind a positive count: a one-package derivation is non-empty but compares zero pairs, and a nine-of-ten scan compares 81 pairs and passes. Both are the defect class this ticket exists to close. Every derived package has a non-test `.go` file by construction, so the expected count is exact and equality is safe to assert.
 
 - [ ] **Step 3: Verify it passes on the fixed tree**
 
@@ -430,14 +458,28 @@ bash /tmp/probe-b.sh; echo "EXIT=$?"
 rm -f /tmp/probe-b.sh
 ```
 
-Expected: `EXIT=1`, reporting `Derived 1 sub-package(s)`. One package is non-empty but yields zero pairs; it must still fail.
+Expected: `EXIT=1`, headline `compared 0 package pairs — it verified nothing`, body reporting `Derived 1 sub-package(s)`. One package is non-empty but yields zero pairs; it must still fail.
 
-- [ ] **Step 9: Full quality gate**
+- [ ] **Step 9: Fail-closed probe C — truncated traversal**
+
+This is the case the *previous* draft of this script would have passed: a `find` that dies partway leaves a smaller-but-plausible derivation. It is only caught because `find` runs in a command substitution whose status `set -e` sees.
+
+```bash
+cp scripts/check-imports.sh /tmp/probe-c.sh
+sed -i 's#^domain_files=.*#domain_files=$( { find internal/domain -type f -name "*.go" ! -name "*_test.go" | head -20; exit 1; } )#' /tmp/probe-c.sh
+grep -n '^domain_files=' /tmp/probe-c.sh
+bash /tmp/probe-c.sh; echo "EXIT=$?"
+rm -f /tmp/probe-c.sh
+```
+
+Expected: the `grep` echoes the rewritten line ending `head -20; exit 1; } )`, then the script prints only the architecture-check line and `EXIT=1` — **no** flat-sibling output at all, because `set -e` aborts at the assignment before any pair is compared. If instead you see a passing line with fewer than 10 sub-packages, the command substitution was rewritten back into a process substitution and the guard is gone.
+
+- [ ] **Step 10: Full quality gate**
 
 Run: `make check`
 Expected: lint, imports, file size, and playwright-version checks all pass.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add scripts/check-imports.sh
@@ -449,8 +491,10 @@ import inventory were never opened — including the one real violation.
 It printed a passing message while verifying nothing.
 
 Membership is now derived from the tree, grep exit 2 aborts instead of
-reading as 'no match', and a pairs_checked assertion makes a check that
-compared nothing fail rather than pass.
+reading as 'no match', find runs in a command substitution so a truncated
+traversal aborts rather than silently shrinking the scan, and the pair
+count is asserted equal to n*(n-1) so a check that compared less than its
+own derivation implies fails rather than passes.
 
 Closes SLA-12"
 ```
