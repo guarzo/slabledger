@@ -17,6 +17,10 @@ type mockAuthService struct {
 	cleanupCount int
 	cleanupErr   error
 	callCount    int32
+
+	stateCleanupCount int
+	stateCleanupErr   error
+	stateCallCount    int32
 }
 
 func (m *mockAuthService) CleanupExpiredSessions(ctx context.Context) (int, error) {
@@ -26,6 +30,10 @@ func (m *mockAuthService) CleanupExpiredSessions(ctx context.Context) (int, erro
 
 func (m *mockAuthService) CallCount() int32 {
 	return atomic.LoadInt32(&m.callCount)
+}
+
+func (m *mockAuthService) StateCallCount() int32 {
+	return atomic.LoadInt32(&m.stateCallCount)
 }
 
 // Implement other interface methods as no-ops
@@ -43,6 +51,10 @@ func (m *mockAuthService) StoreOAuthState(ctx context.Context, state string, exp
 }
 func (m *mockAuthService) ConsumeOAuthState(ctx context.Context, state string) (bool, error) {
 	return true, nil
+}
+func (m *mockAuthService) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
+	atomic.AddInt32(&m.stateCallCount, 1)
+	return m.stateCleanupCount, m.stateCleanupErr
 }
 func (m *mockAuthService) CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error) {
 	return nil, nil
@@ -179,6 +191,49 @@ func TestSessionCleanupScheduler_CleanupError(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return mock.CallCount() >= 1
 	}, 200*time.Millisecond, 10*time.Millisecond, "cleanup should be called at least once")
+}
+
+// The OAuth-state sweep is the only thing that removes rows left by abandoned
+// logins — ConsumeOAuthState only fires on a successful callback.
+func TestSessionCleanupScheduler_CleansExpiredOAuthStates(t *testing.T) {
+	mock := &mockAuthService{cleanupCount: 2, stateCleanupCount: 7}
+	scheduler := NewSessionCleanupScheduler(mock, mocks.NewMockLogger(), SessionCleanupConfig{
+		Enabled:  true,
+		Interval: 1 * time.Hour,
+	})
+
+	scheduler.cleanup(context.Background())
+
+	require.Equal(t, int32(1), mock.CallCount(), "session cleanup should run once")
+	require.Equal(t, int32(1), mock.StateCallCount(), "oauth state cleanup should run once")
+}
+
+// The two tables are independent, so a failing session sweep must not skip the
+// OAuth-state sweep.
+func TestSessionCleanupScheduler_OAuthStateCleanupRunsAfterSessionError(t *testing.T) {
+	mock := &mockAuthService{cleanupErr: errors.New("database error")}
+	scheduler := NewSessionCleanupScheduler(mock, mocks.NewMockLogger(), SessionCleanupConfig{
+		Enabled:  true,
+		Interval: 1 * time.Hour,
+	})
+
+	scheduler.cleanup(context.Background())
+
+	require.Equal(t, int32(1), mock.StateCallCount(),
+		"oauth state cleanup should run even when session cleanup fails")
+}
+
+func TestSessionCleanupScheduler_OAuthStateCleanupError(t *testing.T) {
+	mock := &mockAuthService{stateCleanupErr: errors.New("database error")}
+	scheduler := NewSessionCleanupScheduler(mock, mocks.NewMockLogger(), SessionCleanupConfig{
+		Enabled:  true,
+		Interval: 1 * time.Hour,
+	})
+
+	// Errors are logged, not propagated — the loop must survive them.
+	scheduler.cleanup(context.Background())
+
+	require.Equal(t, int32(1), mock.StateCallCount())
 }
 
 func TestSessionCleanupScheduler_DefaultInterval(t *testing.T) {

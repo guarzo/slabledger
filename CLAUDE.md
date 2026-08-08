@@ -115,7 +115,10 @@ inclusion/exclusion model with a multi-valued language axis (`target_languages` 
 empty = open net), subject-mode, subject-list, and denied-spec axes; its legacy subject
 backfill marks unreconciled rows with a negative sentinel id)
 and `psa_portal_catalog` (000025 — persisted PSA spec-list/subject reference data so the
-main server can resolve portal identifiers without a portal session).
+main server can resolve portal identifiers without a portal session), and
+`restore_oauth_states_expires_index` (000026 — re-creates the `oauth_states(expires_at)`
+index that 000003 dropped as unused, now that the session-cleanup scheduler sweeps
+expired OAuth states).
 
 Connection is configured via `DATABASE_URL`. The transaction pooler is used for the app
 runtime; DDL works the same because `db.go` uses `pgx.QueryExecModeExec` (simple protocol).

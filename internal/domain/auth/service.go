@@ -24,6 +24,9 @@ type Service interface {
 	GetUserInfo(ctx context.Context, accessToken string) (*UserInfo, error)
 	StoreOAuthState(ctx context.Context, state string, expiresAt time.Time) error
 	ConsumeOAuthState(ctx context.Context, state string) (bool, error)
+	// CleanupExpiredOAuthStates removes state tokens left behind by abandoned
+	// logins; ConsumeOAuthState only deletes states that complete the flow.
+	CleanupExpiredOAuthStates(ctx context.Context) (int, error)
 
 	// Session management
 	CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*Session, error)
