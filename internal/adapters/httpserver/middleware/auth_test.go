@@ -13,122 +13,29 @@ import (
 )
 
 // Mock auth service for testing
-type mockAuthService struct {
-	validateSessionFunc    func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error)
-	getOrCreateUserFunc    func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
-	isEmailAllowedFunc     func(ctx context.Context, email string) (bool, error)
-	listAllowedEmailsFunc  func(ctx context.Context) ([]auth.AllowedEmail, error)
-	addAllowedEmailFunc    func(ctx context.Context, email string, addedBy int64, notes string) error
-	removeAllowedEmailFunc func(ctx context.Context, email string) error
-	listUsersFunc          func(ctx context.Context) ([]auth.User, error)
-	setUserAdminFunc       func(ctx context.Context, userID int64, isAdmin bool) error
+// mockSessionValidator implements SessionValidator — the two-method seam this
+// middleware depends on — for testing.
+type mockSessionValidator struct {
+	validateSessionFunc func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error)
+	getOrCreateUserFunc func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
 }
 
-func (m *mockAuthService) GetLoginURL(state string) string {
-	return ""
-}
+var _ SessionValidator = (*mockSessionValidator)(nil)
 
-func (m *mockAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (*auth.UserTokens, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockAuthService) GetUserInfo(ctx context.Context, accessToken string) (*auth.UserInfo, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockAuthService) StoreOAuthState(ctx context.Context, state string, expiresAt time.Time) error {
-	return nil
-}
-
-func (m *mockAuthService) ConsumeOAuthState(ctx context.Context, state string) (bool, error) {
-	return true, nil
-}
-
-func (m *mockAuthService) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
-	return 0, nil
-}
-
-func (m *mockAuthService) CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockAuthService) ValidateSession(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
+func (m *mockSessionValidator) ValidateSession(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
 	if m.validateSessionFunc != nil {
 		return m.validateSessionFunc(ctx, sessionID)
 	}
-	return nil, nil, errors.New("not implemented")
+	return nil, nil, nil
 }
 
-func (m *mockAuthService) DeleteSession(ctx context.Context, sessionID string) error {
-	return nil
-}
-
-func (m *mockAuthService) CleanupExpiredSessions(ctx context.Context) (int, error) {
-	return 0, nil
-}
-
-func (m *mockAuthService) GetOrCreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
+func (m *mockSessionValidator) GetOrCreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
 	if m.getOrCreateUserFunc != nil {
 		return m.getOrCreateUserFunc(ctx, googleID, username, email, avatarURL)
 	}
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockAuthService) StoreTokens(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {
-	return nil
-}
-
-func (m *mockAuthService) GetUserByID(ctx context.Context, userID int64) (*auth.User, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockAuthService) UpdateLastLogin(ctx context.Context, userID int64) error {
-	return nil
-}
-
-func (m *mockAuthService) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
-	if m.isEmailAllowedFunc != nil {
-		return m.isEmailAllowedFunc(ctx, email)
-	}
-	return false, nil
-}
-
-func (m *mockAuthService) ListAllowedEmails(ctx context.Context) ([]auth.AllowedEmail, error) {
-	if m.listAllowedEmailsFunc != nil {
-		return m.listAllowedEmailsFunc(ctx)
-	}
 	return nil, nil
 }
 
-func (m *mockAuthService) AddAllowedEmail(ctx context.Context, email string, addedBy int64, notes string) error {
-	if m.addAllowedEmailFunc != nil {
-		return m.addAllowedEmailFunc(ctx, email, addedBy, notes)
-	}
-	return nil
-}
-
-func (m *mockAuthService) RemoveAllowedEmail(ctx context.Context, email string) error {
-	if m.removeAllowedEmailFunc != nil {
-		return m.removeAllowedEmailFunc(ctx, email)
-	}
-	return nil
-}
-
-func (m *mockAuthService) ListUsers(ctx context.Context) ([]auth.User, error) {
-	if m.listUsersFunc != nil {
-		return m.listUsersFunc(ctx)
-	}
-	return nil, nil
-}
-
-func (m *mockAuthService) SetUserAdmin(ctx context.Context, userID int64, isAdmin bool) error {
-	if m.setUserAdminFunc != nil {
-		return m.setUserAdminFunc(ctx, userID, isAdmin)
-	}
-	return nil
-}
-
-// Mock logger for auth testing
 type mockAuthLogger struct{}
 
 func (m *mockAuthLogger) Debug(ctx context.Context, msg string, fields ...observability.Field) {}
@@ -140,7 +47,7 @@ func (m *mockAuthLogger) With(ctx context.Context, fields ...observability.Field
 }
 
 func TestNewAuthMiddleware(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mockSessionValidator{}
 	logger := &mockAuthLogger{}
 
 	mw := NewAuthMiddleware(service, logger)
@@ -150,7 +57,7 @@ func TestNewAuthMiddleware(t *testing.T) {
 }
 
 func TestRequireAuth_NoSession(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mockSessionValidator{}
 	logger := &mockAuthLogger{}
 	mw := NewAuthMiddleware(service, logger)
 
@@ -170,7 +77,7 @@ func TestRequireAuth_NoSession(t *testing.T) {
 }
 
 func TestRequireAuth_InvalidSession(t *testing.T) {
-	service := &mockAuthService{
+	service := &mockSessionValidator{
 		validateSessionFunc: func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
 			return nil, nil, errors.New("invalid session")
 		},
@@ -205,7 +112,7 @@ func TestRequireAuth_ValidSession(t *testing.T) {
 		AvatarURL: "https://example.com/avatar.png",
 	}
 
-	service := &mockAuthService{
+	service := &mockSessionValidator{
 		validateSessionFunc: func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
 			if sessionID == "valid-session" {
 				return &auth.Session{
@@ -260,7 +167,7 @@ func TestRequireAuth_ValidSession(t *testing.T) {
 }
 
 func TestOptionalAuth_NoSession(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mockSessionValidator{}
 	logger := &mockAuthLogger{}
 	mw := NewAuthMiddleware(service, logger)
 
@@ -292,7 +199,7 @@ func TestOptionalAuth_ValidSession(t *testing.T) {
 		AvatarURL: "https://example.com/avatar.png",
 	}
 
-	service := &mockAuthService{
+	service := &mockSessionValidator{
 		validateSessionFunc: func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
 			if sessionID == "valid-session" {
 				return &auth.Session{
@@ -334,7 +241,7 @@ func TestOptionalAuth_ValidSession(t *testing.T) {
 }
 
 func TestOptionalAuth_InvalidSession(t *testing.T) {
-	service := &mockAuthService{
+	service := &mockSessionValidator{
 		validateSessionFunc: func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
 			return nil, nil, errors.New("invalid session")
 		},
@@ -427,7 +334,7 @@ func TestGetUserFromContext(t *testing.T) {
 }
 
 func TestLocalAPIToken_ValidToken(t *testing.T) {
-	service := &mockAuthService{
+	service := &mockSessionValidator{
 		getOrCreateUserFunc: func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
 			return &auth.User{
 				ID:       42,
@@ -521,7 +428,7 @@ func TestLocalAPIToken_DBFailurePropagatesError(t *testing.T) {
 	// When authService is non-nil but GetOrCreateUser fails, the request should
 	// be rejected (401) rather than falling back to a synthetic ID=0 user that
 	// would violate FK constraints on subsequent DB writes.
-	service := &mockAuthService{
+	service := &mockSessionValidator{
 		getOrCreateUserFunc: func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
 			return nil, errors.New("database locked")
 		},
@@ -546,7 +453,7 @@ func TestLocalAPIToken_DBFailurePropagatesError(t *testing.T) {
 }
 
 func TestLocalAPIToken_InvalidToken(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mockSessionValidator{}
 	logger := &mockAuthLogger{}
 	mw := NewAuthMiddleware(service, logger)
 	mw.WithLocalAPIToken("test-secret-token")
@@ -567,7 +474,7 @@ func TestLocalAPIToken_InvalidToken(t *testing.T) {
 }
 
 func TestLocalAPIToken_NotConfigured(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mockSessionValidator{}
 	logger := &mockAuthLogger{}
 	mw := NewAuthMiddleware(service, logger)
 	// No WithLocalAPIToken call — token not configured
@@ -593,7 +500,7 @@ func TestMiddlewareChain(t *testing.T) {
 		Username: "testuser",
 	}
 
-	service := &mockAuthService{
+	service := &mockSessionValidator{
 		validateSessionFunc: func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
 			return &auth.Session{ID: sessionID, UserID: 1}, testUser, nil
 		},

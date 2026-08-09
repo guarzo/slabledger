@@ -20,15 +20,26 @@ type contextKey string
 // UserContextKey is the context key for storing the authenticated user.
 var UserContextKey contextKey = "user"
 
+// SessionValidator is the slice of auth.Service this middleware actually uses:
+// resolving a session cookie to a user, and materializing the local-API user.
+// Declared here, on the consumer side, so the middleware does not depend on the
+// twenty-method auth.Service composite (SLA-95).
+type SessionValidator interface {
+	ValidateSession(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error)
+	GetOrCreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
+}
+
+var _ SessionValidator = auth.Service(nil)
+
 // AuthMiddleware handles authentication
 type AuthMiddleware struct {
-	authService   auth.Service
+	authService   SessionValidator
 	logger        observability.Logger
 	localAPIToken string // optional token for CLI/curl access without browser OAuth
 }
 
 // NewAuthMiddleware creates a new auth middleware
-func NewAuthMiddleware(authService auth.Service, logger observability.Logger) *AuthMiddleware {
+func NewAuthMiddleware(authService SessionValidator, logger observability.Logger) *AuthMiddleware {
 	return &AuthMiddleware{
 		authService: authService,
 		logger:      logger,

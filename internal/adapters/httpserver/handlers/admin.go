@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -8,14 +9,28 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// AdminDirectory is the slice of auth.Service the admin handlers actually use:
+// the email allowlist and the user roster. Declared here, on the consumer side,
+// so these handlers do not depend on the twenty-method auth.Service composite
+// (SLA-95). The OAuth handlers in this package keep the wide seam — they use
+// eleven of its methods.
+type AdminDirectory interface {
+	ListAllowedEmails(ctx context.Context) ([]auth.AllowedEmail, error)
+	AddAllowedEmail(ctx context.Context, email string, addedBy int64, notes string) error
+	RemoveAllowedEmail(ctx context.Context, email string) error
+	ListUsers(ctx context.Context) ([]auth.User, error)
+}
+
+var _ AdminDirectory = auth.Service(nil)
+
 // AdminHandlers handles admin-related HTTP requests
 type AdminHandlers struct {
-	authService auth.Service
+	authService AdminDirectory
 	logger      observability.Logger
 }
 
 // NewAdminHandlers creates a new admin handlers instance
-func NewAdminHandlers(authService auth.Service, logger observability.Logger) *AdminHandlers {
+func NewAdminHandlers(authService AdminDirectory, logger observability.Logger) *AdminHandlers {
 	return &AdminHandlers{
 		authService: authService,
 		logger:      logger,

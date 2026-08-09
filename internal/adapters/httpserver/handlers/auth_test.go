@@ -25,178 +25,8 @@ func requireCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cook
 	return nil // unreachable
 }
 
-// errNotImplemented returns a standardized internal error for mock methods
-// that are not implemented. This uses the project's internal error type
-// instead of the stdlib error.
-func errNotImplemented() error {
-	return appErrs.NewAppError(appErrs.ErrCodeInternal, "not implemented")
-}
-
-// Compile-time interface check
-var _ auth.Service = (*mockAuthService)(nil)
-
-// mockAuthService implements auth.Service for testing.
-type mockAuthService struct {
-	getLoginURLFunc            func(state string) string
-	exchangeCodeFunc           func(ctx context.Context, code string) (*auth.UserTokens, error)
-	getUserInfoFunc            func(ctx context.Context, accessToken string) (*auth.UserInfo, error)
-	storeOAuthStateFunc        func(ctx context.Context, state string, expiresAt time.Time) error
-	consumeOAuthStateFunc      func(ctx context.Context, state string) (bool, error)
-	createSessionFunc          func(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error)
-	validateSessionFunc        func(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error)
-	deleteSessionFunc          func(ctx context.Context, sessionID string) error
-	cleanupExpiredSessionsFunc func(ctx context.Context) (int, error)
-	getOrCreateUserFunc        func(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
-	getUserByIDFunc            func(ctx context.Context, userID int64) (*auth.User, error)
-	updateLastLoginFunc        func(ctx context.Context, userID int64) error
-	storeTokensFunc            func(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
-	isEmailAllowedFunc         func(ctx context.Context, email string) (bool, error)
-	listAllowedEmailsFunc      func(ctx context.Context) ([]auth.AllowedEmail, error)
-	addAllowedEmailFunc        func(ctx context.Context, email string, addedBy int64, notes string) error
-	removeAllowedEmailFunc     func(ctx context.Context, email string) error
-	listUsersFunc              func(ctx context.Context) ([]auth.User, error)
-	setUserAdminFunc           func(ctx context.Context, userID int64, isAdmin bool) error
-}
-
-func (m *mockAuthService) GetLoginURL(state string) string {
-	if m.getLoginURLFunc != nil {
-		return m.getLoginURLFunc(state)
-	}
-	return "https://accounts.google.com/o/oauth2/v2/auth?state=" + state
-}
-
-func (m *mockAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (*auth.UserTokens, error) {
-	if m.exchangeCodeFunc != nil {
-		return m.exchangeCodeFunc(ctx, code)
-	}
-	return nil, errNotImplemented()
-}
-
-func (m *mockAuthService) GetUserInfo(ctx context.Context, accessToken string) (*auth.UserInfo, error) {
-	if m.getUserInfoFunc != nil {
-		return m.getUserInfoFunc(ctx, accessToken)
-	}
-	return nil, errNotImplemented()
-}
-
-func (m *mockAuthService) StoreOAuthState(ctx context.Context, state string, expiresAt time.Time) error {
-	if m.storeOAuthStateFunc != nil {
-		return m.storeOAuthStateFunc(ctx, state, expiresAt)
-	}
-	return nil
-}
-
-func (m *mockAuthService) ConsumeOAuthState(ctx context.Context, state string) (bool, error) {
-	if m.consumeOAuthStateFunc != nil {
-		return m.consumeOAuthStateFunc(ctx, state)
-	}
-	return true, nil
-}
-
-func (m *mockAuthService) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
-	return 0, nil
-}
-
-func (m *mockAuthService) CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error) {
-	if m.createSessionFunc != nil {
-		return m.createSessionFunc(ctx, userID, userAgent, ipAddress)
-	}
-	return nil, errNotImplemented()
-}
-
-func (m *mockAuthService) ValidateSession(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
-	if m.validateSessionFunc != nil {
-		return m.validateSessionFunc(ctx, sessionID)
-	}
-	return nil, nil, errNotImplemented()
-}
-
-func (m *mockAuthService) DeleteSession(ctx context.Context, sessionID string) error {
-	if m.deleteSessionFunc != nil {
-		return m.deleteSessionFunc(ctx, sessionID)
-	}
-	return nil
-}
-
-func (m *mockAuthService) CleanupExpiredSessions(ctx context.Context) (int, error) {
-	if m.cleanupExpiredSessionsFunc != nil {
-		return m.cleanupExpiredSessionsFunc(ctx)
-	}
-	return 0, nil
-}
-
-func (m *mockAuthService) GetOrCreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
-	if m.getOrCreateUserFunc != nil {
-		return m.getOrCreateUserFunc(ctx, googleID, username, email, avatarURL)
-	}
-	return nil, errNotImplemented()
-}
-
-func (m *mockAuthService) GetUserByID(ctx context.Context, userID int64) (*auth.User, error) {
-	if m.getUserByIDFunc != nil {
-		return m.getUserByIDFunc(ctx, userID)
-	}
-	return nil, errNotImplemented()
-}
-
-func (m *mockAuthService) UpdateLastLogin(ctx context.Context, userID int64) error {
-	if m.updateLastLoginFunc != nil {
-		return m.updateLastLoginFunc(ctx, userID)
-	}
-	return nil
-}
-
-func (m *mockAuthService) StoreTokens(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {
-	if m.storeTokensFunc != nil {
-		return m.storeTokensFunc(ctx, userID, sessionID, tokens)
-	}
-	return nil
-}
-
-func (m *mockAuthService) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
-	if m.isEmailAllowedFunc != nil {
-		return m.isEmailAllowedFunc(ctx, email)
-	}
-	return false, nil
-}
-
-func (m *mockAuthService) ListAllowedEmails(ctx context.Context) ([]auth.AllowedEmail, error) {
-	if m.listAllowedEmailsFunc != nil {
-		return m.listAllowedEmailsFunc(ctx)
-	}
-	return nil, nil
-}
-
-func (m *mockAuthService) AddAllowedEmail(ctx context.Context, email string, addedBy int64, notes string) error {
-	if m.addAllowedEmailFunc != nil {
-		return m.addAllowedEmailFunc(ctx, email, addedBy, notes)
-	}
-	return nil
-}
-
-func (m *mockAuthService) RemoveAllowedEmail(ctx context.Context, email string) error {
-	if m.removeAllowedEmailFunc != nil {
-		return m.removeAllowedEmailFunc(ctx, email)
-	}
-	return nil
-}
-
-func (m *mockAuthService) ListUsers(ctx context.Context) ([]auth.User, error) {
-	if m.listUsersFunc != nil {
-		return m.listUsersFunc(ctx)
-	}
-	return nil, nil
-}
-
-func (m *mockAuthService) SetUserAdmin(ctx context.Context, userID int64, isAdmin bool) error {
-	if m.setUserAdminFunc != nil {
-		return m.setUserAdminFunc(ctx, userID, isAdmin)
-	}
-	return nil
-}
-
 func TestNewAuthHandlers(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mocks.AuthServiceMock{}
 	logger := mocks.NewMockLogger()
 
 	handlers := NewAuthHandlers(service, logger, false, nil)
@@ -207,11 +37,11 @@ func TestNewAuthHandlers(t *testing.T) {
 
 func TestHandleGoogleLogin(t *testing.T) {
 	storeStateCalled := false
-	service := &mockAuthService{
-		getLoginURLFunc: func(state string) string {
+	service := &mocks.AuthServiceMock{
+		GetLoginURLFn: func(state string) string {
 			return "https://accounts.google.com/test?state=" + state
 		},
-		storeOAuthStateFunc: func(ctx context.Context, state string, expiresAt time.Time) error {
+		StoreOAuthStateFn: func(ctx context.Context, state string, expiresAt time.Time) error {
 			storeStateCalled = true
 			if state == "" {
 				t.Error("StoreOAuthState called with empty state")
@@ -254,8 +84,8 @@ func TestHandleGoogleLogin(t *testing.T) {
 }
 
 func TestHandleGoogleLogin_StoreStateError(t *testing.T) {
-	service := &mockAuthService{
-		storeOAuthStateFunc: func(ctx context.Context, state string, expiresAt time.Time) error {
+	service := &mocks.AuthServiceMock{
+		StoreOAuthStateFn: func(ctx context.Context, state string, expiresAt time.Time) error {
 			return appErrs.NewAppError(appErrs.ErrCodeInternal, "db write failed")
 		},
 	}
@@ -273,7 +103,7 @@ func TestHandleGoogleLogin_StoreStateError(t *testing.T) {
 }
 
 func TestHandleGoogleCallback_MissingState(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mocks.AuthServiceMock{}
 	logger := mocks.NewMockLogger()
 	handlers := NewAuthHandlers(service, logger, false, nil)
 
@@ -288,7 +118,7 @@ func TestHandleGoogleCallback_MissingState(t *testing.T) {
 }
 
 func TestHandleGoogleCallback_StateMismatch(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mocks.AuthServiceMock{}
 	logger := mocks.NewMockLogger()
 	handlers := NewAuthHandlers(service, logger, false, nil)
 
@@ -307,8 +137,8 @@ func TestHandleGoogleCallback_StateMismatch(t *testing.T) {
 }
 
 func TestHandleGoogleCallback_ConsumeStateError(t *testing.T) {
-	service := &mockAuthService{
-		consumeOAuthStateFunc: func(ctx context.Context, state string) (bool, error) {
+	service := &mocks.AuthServiceMock{
+		ConsumeOAuthStateFn: func(ctx context.Context, state string) (bool, error) {
 			return false, appErrs.NewAppError(appErrs.ErrCodeInternal, "db error")
 		},
 	}
@@ -331,8 +161,8 @@ func TestHandleGoogleCallback_ConsumeStateError(t *testing.T) {
 
 func TestHandleGoogleCallback_ExpiredState(t *testing.T) {
 	consumeCalled := false
-	service := &mockAuthService{
-		consumeOAuthStateFunc: func(ctx context.Context, state string) (bool, error) {
+	service := &mocks.AuthServiceMock{
+		ConsumeOAuthStateFn: func(ctx context.Context, state string) (bool, error) {
 			consumeCalled = true
 			if state != "expired-state" {
 				t.Errorf("Expected state %q, got %q", "expired-state", state)
@@ -363,8 +193,8 @@ func TestHandleGoogleCallback_ExpiredState(t *testing.T) {
 
 func TestHandleLogout(t *testing.T) {
 	sessionDeleted := false
-	service := &mockAuthService{
-		deleteSessionFunc: func(ctx context.Context, sessionID string) error {
+	service := &mocks.AuthServiceMock{
+		DeleteSessionFn: func(ctx context.Context, sessionID string) error {
 			if sessionID == "test-session" {
 				sessionDeleted = true
 				return nil
@@ -429,7 +259,7 @@ func TestHandleLogout(t *testing.T) {
 }
 
 func TestHandleGetCurrentUser_Unauthorized(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mocks.AuthServiceMock{}
 	logger := mocks.NewMockLogger()
 	handlers := NewAuthHandlers(service, logger, false, nil)
 
@@ -444,7 +274,7 @@ func TestHandleGetCurrentUser_Unauthorized(t *testing.T) {
 }
 
 func TestHandleGetCurrentUser_Success(t *testing.T) {
-	service := &mockAuthService{}
+	service := &mocks.AuthServiceMock{}
 	logger := mocks.NewMockLogger()
 	handlers := NewAuthHandlers(service, logger, false, nil)
 
@@ -497,8 +327,8 @@ func TestGenerateState(t *testing.T) {
 }
 
 func TestSecureCookies(t *testing.T) {
-	service := &mockAuthService{
-		getLoginURLFunc: func(state string) string {
+	service := &mocks.AuthServiceMock{
+		GetLoginURLFn: func(state string) string {
 			return "https://accounts.google.com/test"
 		},
 	}

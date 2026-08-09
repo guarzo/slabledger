@@ -15,7 +15,7 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-func newAdminHandlers(svc *mockAuthService) *AdminHandlers {
+func newAdminHandlers(svc *mocks.AuthServiceMock) *AdminHandlers {
 	return NewAdminHandlers(svc, mocks.NewMockLogger())
 }
 
@@ -28,8 +28,8 @@ func withUser(r *http.Request) *http.Request {
 // --- HandleListAllowedEmails ---
 
 func TestHandleListAllowedEmails_Success(t *testing.T) {
-	svc := &mockAuthService{
-		listAllowedEmailsFunc: func(_ context.Context) ([]auth.AllowedEmail, error) {
+	svc := &mocks.AuthServiceMock{
+		ListAllowedEmailsFn: func(_ context.Context) ([]auth.AllowedEmail, error) {
 			return []auth.AllowedEmail{
 				{Email: "a@b.com", CreatedAt: time.Now()},
 			}, nil
@@ -54,8 +54,8 @@ func TestHandleListAllowedEmails_Success(t *testing.T) {
 }
 
 func TestHandleListAllowedEmails_NilList(t *testing.T) {
-	svc := &mockAuthService{
-		listAllowedEmailsFunc: func(_ context.Context) ([]auth.AllowedEmail, error) {
+	svc := &mocks.AuthServiceMock{
+		ListAllowedEmailsFn: func(_ context.Context) ([]auth.AllowedEmail, error) {
 			return nil, nil
 		},
 	}
@@ -76,8 +76,8 @@ func TestHandleListAllowedEmails_NilList(t *testing.T) {
 }
 
 func TestHandleListAllowedEmails_ServiceError(t *testing.T) {
-	svc := &mockAuthService{
-		listAllowedEmailsFunc: func(_ context.Context) ([]auth.AllowedEmail, error) {
+	svc := &mocks.AuthServiceMock{
+		ListAllowedEmailsFn: func(_ context.Context) ([]auth.AllowedEmail, error) {
 			return nil, errors.New("db error")
 		},
 	}
@@ -96,8 +96,8 @@ func TestHandleListAllowedEmails_ServiceError(t *testing.T) {
 
 func TestHandleAddAllowedEmail_Success(t *testing.T) {
 	var capturedEmail string
-	svc := &mockAuthService{
-		addAllowedEmailFunc: func(_ context.Context, email string, _ int64, _ string) error {
+	svc := &mocks.AuthServiceMock{
+		AddAllowedEmailFn: func(_ context.Context, email string, _ int64, _ string) error {
 			capturedEmail = email
 			return nil
 		},
@@ -119,7 +119,7 @@ func TestHandleAddAllowedEmail_Success(t *testing.T) {
 }
 
 func TestHandleAddAllowedEmail_NoUser(t *testing.T) {
-	h := newAdminHandlers(&mockAuthService{})
+	h := newAdminHandlers(&mocks.AuthServiceMock{})
 
 	body := `{"email":"test@example.com"}`
 	rec := httptest.NewRecorder()
@@ -133,7 +133,7 @@ func TestHandleAddAllowedEmail_NoUser(t *testing.T) {
 }
 
 func TestHandleAddAllowedEmail_BadJSON(t *testing.T) {
-	h := newAdminHandlers(&mockAuthService{})
+	h := newAdminHandlers(&mocks.AuthServiceMock{})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/allowlist", strings.NewReader("{invalid"))
@@ -146,7 +146,7 @@ func TestHandleAddAllowedEmail_BadJSON(t *testing.T) {
 }
 
 func TestHandleAddAllowedEmail_EmptyEmail(t *testing.T) {
-	h := newAdminHandlers(&mockAuthService{})
+	h := newAdminHandlers(&mocks.AuthServiceMock{})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/allowlist", strings.NewReader(`{"email":""}`))
@@ -159,7 +159,7 @@ func TestHandleAddAllowedEmail_EmptyEmail(t *testing.T) {
 }
 
 func TestHandleAddAllowedEmail_NoAtSign(t *testing.T) {
-	h := newAdminHandlers(&mockAuthService{})
+	h := newAdminHandlers(&mocks.AuthServiceMock{})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/allowlist", strings.NewReader(`{"email":"invalid"}`))
@@ -173,8 +173,8 @@ func TestHandleAddAllowedEmail_NoAtSign(t *testing.T) {
 
 func TestHandleAddAllowedEmail_NormalizesEmail(t *testing.T) {
 	var capturedEmail string
-	svc := &mockAuthService{
-		addAllowedEmailFunc: func(_ context.Context, email string, _ int64, _ string) error {
+	svc := &mocks.AuthServiceMock{
+		AddAllowedEmailFn: func(_ context.Context, email string, _ int64, _ string) error {
 			capturedEmail = email
 			return nil
 		},
@@ -195,8 +195,8 @@ func TestHandleAddAllowedEmail_NormalizesEmail(t *testing.T) {
 }
 
 func TestHandleAddAllowedEmail_ServiceError(t *testing.T) {
-	svc := &mockAuthService{
-		addAllowedEmailFunc: func(_ context.Context, _ string, _ int64, _ string) error {
+	svc := &mocks.AuthServiceMock{
+		AddAllowedEmailFn: func(_ context.Context, _ string, _ int64, _ string) error {
 			return errors.New("db error")
 		},
 	}
@@ -216,8 +216,8 @@ func TestHandleAddAllowedEmail_ServiceError(t *testing.T) {
 
 func TestHandleRemoveAllowedEmail_Success(t *testing.T) {
 	var capturedEmail string
-	svc := &mockAuthService{
-		removeAllowedEmailFunc: func(_ context.Context, email string) error {
+	svc := &mocks.AuthServiceMock{
+		RemoveAllowedEmailFn: func(_ context.Context, email string) error {
 			capturedEmail = email
 			return nil
 		},
@@ -237,7 +237,7 @@ func TestHandleRemoveAllowedEmail_Success(t *testing.T) {
 }
 
 func TestHandleRemoveAllowedEmail_EmptyEmail(t *testing.T) {
-	h := newAdminHandlers(&mockAuthService{})
+	h := newAdminHandlers(&mocks.AuthServiceMock{})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/admin/allowlist/", nil)
@@ -249,8 +249,8 @@ func TestHandleRemoveAllowedEmail_EmptyEmail(t *testing.T) {
 }
 
 func TestHandleRemoveAllowedEmail_ServiceError(t *testing.T) {
-	svc := &mockAuthService{
-		removeAllowedEmailFunc: func(_ context.Context, _ string) error {
+	svc := &mocks.AuthServiceMock{
+		RemoveAllowedEmailFn: func(_ context.Context, _ string) error {
 			return errors.New("db error")
 		},
 	}
@@ -269,8 +269,8 @@ func TestHandleRemoveAllowedEmail_ServiceError(t *testing.T) {
 
 func TestHandleListUsers_Success(t *testing.T) {
 	now := time.Now()
-	svc := &mockAuthService{
-		listUsersFunc: func(_ context.Context) ([]auth.User, error) {
+	svc := &mocks.AuthServiceMock{
+		ListUsersFn: func(_ context.Context) ([]auth.User, error) {
 			return []auth.User{
 				{ID: 1, Username: "alice", Email: "alice@test.com", IsAdmin: true, LastLoginAt: &now},
 				{ID: 2, Username: "bob", Email: "bob@test.com"},
@@ -304,8 +304,8 @@ func TestHandleListUsers_Success(t *testing.T) {
 }
 
 func TestHandleListUsers_NilList(t *testing.T) {
-	svc := &mockAuthService{
-		listUsersFunc: func(_ context.Context) ([]auth.User, error) {
+	svc := &mocks.AuthServiceMock{
+		ListUsersFn: func(_ context.Context) ([]auth.User, error) {
 			return nil, nil
 		},
 	}
@@ -326,8 +326,8 @@ func TestHandleListUsers_NilList(t *testing.T) {
 }
 
 func TestHandleListUsers_ServiceError(t *testing.T) {
-	svc := &mockAuthService{
-		listUsersFunc: func(_ context.Context) ([]auth.User, error) {
+	svc := &mocks.AuthServiceMock{
+		ListUsersFn: func(_ context.Context) ([]auth.User, error) {
 			return nil, errors.New("db error")
 		},
 	}

@@ -11,11 +11,21 @@ import (
 
 var _ Scheduler = (*SessionCleanupScheduler)(nil)
 
+// SessionJanitor is the slice of auth.Service this scheduler actually uses:
+// the two expiry sweeps. Declared here, on the consumer side, so the scheduler
+// does not depend on the twenty-method auth.Service composite (SLA-95).
+type SessionJanitor interface {
+	CleanupExpiredSessions(ctx context.Context) (int, error)
+	CleanupExpiredOAuthStates(ctx context.Context) (int, error)
+}
+
+var _ SessionJanitor = auth.Service(nil)
+
 // SessionCleanupScheduler handles periodic cleanup of expired sessions and
 // expired OAuth state tokens
 type SessionCleanupScheduler struct {
 	StopHandle
-	authService auth.Service
+	authService SessionJanitor
 	logger      observability.Logger
 	interval    time.Duration
 	enabled     bool
@@ -37,7 +47,7 @@ func DefaultSessionCleanupConfig() SessionCleanupConfig {
 
 // NewSessionCleanupScheduler creates a new session cleanup scheduler
 func NewSessionCleanupScheduler(
-	authService auth.Service,
+	authService SessionJanitor,
 	logger observability.Logger,
 	config SessionCleanupConfig,
 ) *SessionCleanupScheduler {
