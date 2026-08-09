@@ -6,22 +6,6 @@ import (
 	"fmt"
 )
 
-// IntegrationFailureSample is a single failed-mapping row returned by the
-// /failures admin endpoints. Shared by MM and CL.
-type IntegrationFailureSample struct {
-	PurchaseID string `json:"purchaseId"`
-	CertNumber string `json:"certNumber"`
-	CardName   string `json:"cardName"`
-	Reason     string `json:"reason"`
-	ErrorAt    string `json:"errorAt"`
-}
-
-// IntegrationFailuresReport groups per-purchase failure reasons for an integration.
-type IntegrationFailuresReport struct {
-	ByReason map[string]int             `json:"byReason"`
-	Samples  []IntegrationFailureSample `json:"samples"`
-}
-
 // ReasonUnprocessed is a synthetic reason tag used for purchases that have no
 // provider value and no recorded error. These rows slip through the scheduler's
 // tagging paths (cancelled ctx, clobbered value, never-enumerated) and are

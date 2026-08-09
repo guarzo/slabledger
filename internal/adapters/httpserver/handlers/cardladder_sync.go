@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	cardladderclient "github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
@@ -218,8 +218,8 @@ func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *htt
 
 // addCardToCollection resolves a cert number via Cloud Functions and writes the card
 // to the CardLadder Firestore collection.
-func (h *CardLadderHandler) addCardToCollection(ctx context.Context, client *cardladder.Client, uid, collectionID, purchaseID string, req addCardRequest) (*addCardResult, error) {
-	result, err := client.ResolveAndCreateCard(ctx, uid, collectionID, cardladder.CardPushParams{
+func (h *CardLadderHandler) addCardToCollection(ctx context.Context, client *cardladderclient.Client, uid, collectionID, purchaseID string, req addCardRequest) (*addCardResult, error) {
+	result, err := client.ResolveAndCreateCard(ctx, uid, collectionID, cardladderclient.CardPushParams{
 		CertNumber:    req.CertNumber,
 		Grader:        req.Grader,
 		InvestmentUSD: req.InvestmentUSD,

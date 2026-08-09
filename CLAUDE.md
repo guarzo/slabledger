@@ -53,6 +53,9 @@ Orientation for the packages whose purpose is not obvious from the name:
 - `domain/pricing` — `PriceProvider` interface, graded prices, market data.
   `domain/pricing/lookup` is the `PriceLookup` adapter over it.
 - `domain/intelligence` — market intelligence repository and types (DH Tier 3 data).
+- `domain/cardladder` — CardLadder config, cert→card mapping and admin-report types
+  only. Not a client: the API client is `adapters/clients/cardladder`, and files that
+  need both import the adapter as `cardladderclient`.
 - `domain/liquidation` — liquidation candidates and comp pricing.
 - `domain/dhevents` — DH event stream types.
 - `domain/{constants,errors,mathutil,observability,timeutil}` — leaf utilities.

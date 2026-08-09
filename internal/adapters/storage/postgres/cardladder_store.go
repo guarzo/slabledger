@@ -7,28 +7,36 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/domain/cardladder"
 	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
 // ErrConfigNotFound is returned when the singleton cardladder_config row doesn't exist.
 var ErrConfigNotFound = errors.New("cardladder_config row not found")
 
-// CardLadderConfig holds the stored CL connection configuration.
-type CardLadderConfig struct {
-	Email          string
-	RefreshToken   string // decrypted
-	CollectionID   string
-	FirebaseAPIKey string
-	FirebaseUID    string
-}
-
-// CLCardMapping maps a purchase cert to a CL collection card.
-type CLCardMapping struct {
-	SlabSerial         string
-	CLCollectionCardID string
-	CLGemRateID        string
-	CLCondition        string
-}
+// The CL data types are declared in internal/domain/cardladder so that
+// consumers of this store can name them without importing storage (SLA-92).
+// These aliases keep the historical postgres.* names working for the
+// scheduler, the wiring site, and existing tests.
+type (
+	// CardLadderConfig holds the stored CL connection configuration.
+	CardLadderConfig = cardladder.Config
+	// CLCardMapping maps a purchase cert to a CL collection card.
+	CLCardMapping = cardladder.CardMapping
+	// CLPriceStats summarizes CL value freshness across unsold inventory.
+	CLPriceStats = cardladder.PriceStats
+	// IntegrationFailureSample is a single failed-mapping row returned by the
+	// /failures admin endpoint.
+	IntegrationFailureSample = cardladder.IntegrationFailureSample
+	// IntegrationFailuresReport groups per-purchase failure reasons.
+	IntegrationFailuresReport = cardladder.IntegrationFailuresReport
+	// CLCoverageCohort is the per-cohort breakdown for one month.
+	CLCoverageCohort = cardladder.CoverageCohort
+	// CLCoverageMonth is one purchase month, split by intake cohort.
+	CLCoverageMonth = cardladder.CoverageMonth
+	// CLCoverageReport is the full coverage response.
+	CLCoverageReport = cardladder.CoverageReport
+)
 
 // CardLadderStore manages Card Ladder config and mapping persistence.
 type CardLadderStore struct {
@@ -211,17 +219,6 @@ func (s *CardLadderStore) ListMappings(ctx context.Context) ([]CLCardMapping, er
 		mappings = append(mappings, m)
 	}
 	return mappings, rows.Err()
-}
-
-// CLPriceStats summarizes CL value freshness across unsold inventory.
-// Mirrors MMPriceStats so the frontend can render a symmetric panel.
-type CLPriceStats struct {
-	UnsoldTotal  int    `json:"unsoldTotal"`  // Total unsold purchases
-	WithCLValue  int    `json:"withCLValue"`  // Unsold purchases CardLadder has priced (cl_value_updated_at set)
-	SyncedCount  int    `json:"syncedCount"`  // Unsold purchases pushed to the CL remote collection
-	OldestUpdate string `json:"oldestUpdate"` // Oldest cl_value_updated_at among priced cards
-	NewestUpdate string `json:"newestUpdate"` // Newest cl_value_updated_at
-	StaleCount   int    `json:"staleCount"`   // Priced cards whose value is older than 7 days
 }
 
 // GetCLFailures returns unsold purchases whose last CL refresh recorded a
