@@ -107,10 +107,11 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
             <div className="text-3xl font-semibold tabular-nums leading-tight text-[var(--text)]">
               {status?.mapped_count ?? 0}
             </div>
-            {(status?.unmatched_count ?? 0) > 0 && (
+            {((status?.unmatched_count ?? 0) > 0 || (status?.dismissed_count ?? 0) > 0) && (
               <p className="mt-1 text-xs text-[var(--warning)]">
-                {status?.unmatched_count} still unmatched
-                {(status?.dismissed_count ?? 0) > 0 ? ` (${status?.dismissed_count} dismissed)` : ''}
+                {(status?.unmatched_count ?? 0) > 0 && `${status?.unmatched_count} still unmatched`}
+                {(status?.unmatched_count ?? 0) > 0 && (status?.dismissed_count ?? 0) > 0 && ' · '}
+                {(status?.dismissed_count ?? 0) > 0 && `${status?.dismissed_count} dismissed`}
               </p>
             )}
           </div>

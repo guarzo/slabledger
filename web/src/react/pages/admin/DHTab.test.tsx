@@ -114,3 +114,27 @@ describe('DHTab pause control', () => {
     expect(field.closest('details')).toBeNull();
   });
 });
+
+describe('DHTab mapped-cards lead block', () => {
+  it('surfaces the dismissed count even when nothing is currently unmatched', async () => {
+    vi.mocked(api.getDHStatus).mockResolvedValue(
+      makeStatus({ unmatched_count: 0, dismissed_count: 7 }),
+    );
+    vi.mocked(api.getDHPushConfig).mockResolvedValue(makeConfig());
+    renderTab();
+
+    expect(await screen.findByText('7 dismissed', { exact: false })).toBeVisible();
+    expect(screen.queryByText(/still unmatched/)).toBeNull();
+  });
+
+  it('shows both counts together when both are nonzero', async () => {
+    vi.mocked(api.getDHStatus).mockResolvedValue(
+      makeStatus({ unmatched_count: 3, dismissed_count: 2 }),
+    );
+    vi.mocked(api.getDHPushConfig).mockResolvedValue(makeConfig());
+    renderTab();
+
+    expect(await screen.findByText('3 still unmatched', { exact: false })).toBeVisible();
+    expect(await screen.findByText('2 dismissed', { exact: false })).toBeVisible();
+  });
+});
