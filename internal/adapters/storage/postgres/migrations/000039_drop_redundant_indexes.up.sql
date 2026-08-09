@@ -28,9 +28,10 @@
 --
 -- Kept deliberately: idx_access_log_card (the DESC variant, because the access
 -- log is read newest-first), the dh_suggestions PRIMARY KEY, and
--- idx_purchases_campaign_date. Also kept is idx_dh_suggestions_card
--- (card_name, set_name), which shares a table with a dropped index but has no
--- overlapping prefix and is not redundant.
+-- idx_purchases_campaign_date. Also kept is idx_dh_suggestions_fetched_at,
+-- which shares a table with a dropped index but has no overlapping prefix and
+-- is not redundant. (000001's other dh_suggestions index, idx_dh_suggestions_card,
+-- is not in the picture either way: 000003 dropped it and never restored it.)
 --
 -- The narrower index in a redundant pair can still win on size alone -- a
 -- one-column index is cheaper to keep cached than a four-column one, so a very

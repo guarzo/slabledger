@@ -66,12 +66,16 @@ func TestMigration000039_RedundantIndexesDropped(t *testing.T) {
 			pair.covers, pair.dropped)
 	}
 
-	// idx_dh_suggestions_card shares a table with a dropped index but has no
-	// overlapping prefix with it, so it is not redundant and is not a target.
-	// Named explicitly because "drop the redundant indexes on dh_suggestions"
-	// is an easy over-reach.
-	assert.NotNil(t, indexColumns(ctx, t, db, "dh_suggestions", "idx_dh_suggestions_card"),
-		"idx_dh_suggestions_card is not redundant and must survive 000039")
+	// The over-reach guard for dh_suggestions: 000039 targets exactly one index
+	// on that table, so the table's other index has to still be there.
+	//
+	// That index is idx_dh_suggestions_fetched_at, created by
+	// 000003_supabase_security_and_perf_fixes.up.sql for the MAX(fetched_at)
+	// query. Not idx_dh_suggestions_card -- 000001 declared it, but the same
+	// 000003 dropped it and never recreated it on the up path, so it does not
+	// exist by the time 000039 runs and cannot witness anything about it.
+	assert.NotNil(t, indexColumns(ctx, t, db, "dh_suggestions", "idx_dh_suggestions_fetched_at"),
+		"idx_dh_suggestions_fetched_at is not redundant and must survive 000039")
 }
 
 // TestMigration000039_SurvivingIndexCoversDropped verifies the premise the
@@ -109,10 +113,9 @@ func TestMigration000039_SurvivingIndexCoversDropped(t *testing.T) {
 // generic up/down/up roundtrip proves the SQL parses; it does not prove the
 // indexes come back on the right columns.
 //
-// Rolls back to version 38 rather than one relative step. 000037 and 000038 are
-// in flight on sibling branches, so whichever merges last needs renumbering by
-// hand anyway -- and an absolute target that has to be edited in the same commit
-// as the renumber is safer here than a relative step that silently retargets.
+// Rolls back to version 38 rather than one relative step: an absolute target
+// says which schema state the assertions below are written against, where a
+// relative step silently retargets if this migration is ever renumbered.
 //
 // Not parallel: it steps schema_migrations backwards for the whole package.
 func TestMigration000039_DownRestoresIndexes(t *testing.T) {
