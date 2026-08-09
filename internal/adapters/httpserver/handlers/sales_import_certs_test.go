@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/csvimport"
+	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
@@ -80,6 +81,32 @@ func TestHandleImportCertSales(t *testing.T) {
 				}
 			},
 			wantCode: http.StatusInternalServerError,
+		},
+		{
+			// negotiatedPct is out of (0, 1] here (72 instead of 0.72) — a caller
+			// mistake the service already classifies as ErrCodeValidation
+			// (service_import_certs.go:19-21). It must surface as 400 with the
+			// service's own message, not the generic 500 the pre-fix code returned.
+			name: "whole-batch validation error maps to 400",
+			body: `{"saleDate":"2026-08-09","saleChannel":"local","negotiatedPct":72,"items":[{"certNumber":"12345678","theirCompCents":10000}]}`,
+			setupSvc: func() *mocks.MockImportService {
+				return &mocks.MockImportService{
+					ImportCertSalesFn: func(_ context.Context, _ csvimport.CertSaleImportRequest) (*csvimport.CertSaleImportResult, error) {
+						return nil, errors.NewAppError(errors.ErrCodeValidation, "negotiatedPct must be in (0, 1], got 72")
+					},
+				}
+			},
+			wantCode: http.StatusBadRequest,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var body map[string]string
+				if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if body["error"] != "negotiatedPct must be in (0, 1], got 72" {
+					t.Errorf("error = %q, want service's validation message", body["error"])
+				}
+			},
 		},
 	}
 
@@ -176,6 +203,32 @@ func TestHandleConfirmCertSales(t *testing.T) {
 				}
 			},
 			wantCode: http.StatusInternalServerError,
+		},
+		{
+			// Same mapping applied here as HandleImportCertSales, for consistency
+			// even though ConfirmOrdersSales does not currently return
+			// ErrCodeValidation for a whole batch — a future validation added
+			// there should not silently regress to a 500.
+			name: "whole-batch validation error maps to 400",
+			body: `[{"purchaseId":"p1","saleChannel":"local","saleDate":"2026-08-09","salePriceCents":8500}]`,
+			setupSvc: func() *mocks.MockImportService {
+				return &mocks.MockImportService{
+					ConfirmOrdersSalesFn: func(_ context.Context, _ []csvimport.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {
+						return nil, errors.NewAppError(errors.ErrCodeValidation, "saleChannel is invalid")
+					},
+				}
+			},
+			wantCode: http.StatusBadRequest,
+			check: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var body map[string]string
+				if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if body["error"] != "saleChannel is invalid" {
+					t.Errorf("error = %q, want service's validation message", body["error"])
+				}
+			},
 		},
 	}
 

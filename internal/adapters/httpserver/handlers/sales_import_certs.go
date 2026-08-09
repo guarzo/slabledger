@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	stderrors "errors"
 	"net/http"
 
 	"github.com/guarzo/slabledger/internal/domain/csvimport"
+	"github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 // HandleImportCertSales handles POST /api/sales/import-certs.
@@ -31,7 +35,7 @@ func (h *CampaignsHandler) HandleImportCertSales(w http.ResponseWriter, r *http.
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "cert sale import failed", func() (*csvimport.CertSaleImportResult, error) {
+	result, ok := serviceCallCertSale(w, r.Context(), h.logger, "cert sale import failed", func() (*csvimport.CertSaleImportResult, error) {
 		return h.importSvc.ImportCertSales(r.Context(), req)
 	})
 	if !ok {
@@ -66,7 +70,7 @@ func (h *CampaignsHandler) HandleConfirmCertSales(w http.ResponseWriter, r *http
 		return
 	}
 
-	result, ok := serviceCall(w, r.Context(), h.logger, "confirm cert sales failed", func() (*inventory.BulkSaleResult, error) {
+	result, ok := serviceCallCertSale(w, r.Context(), h.logger, "confirm cert sales failed", func() (*inventory.BulkSaleResult, error) {
 		return h.importSvc.ConfirmOrdersSales(r.Context(), items)
 	})
 	if !ok {
@@ -74,4 +78,37 @@ func (h *CampaignsHandler) HandleConfirmCertSales(w http.ResponseWriter, r *http
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// serviceCallCertSale invokes fn and maps the result to an HTTP response.
+// It is a cert-sale-local variant of serviceCall: whole-batch validation
+// failures from the csvimport service (errors.ErrCodeValidation, e.g. an
+// out-of-range negotiatedPct or a missing saleDate) are reported as 400 with
+// the service's own message, since they are caller mistakes, not server
+// failures. Everything else — genuine internal errors and a client
+// disconnecting mid-request (ctx.Err() != nil) — is handled exactly as
+// serviceCall handles it; those two branches are duplicated here rather than
+// calling serviceCall, because fn must only be invoked once (ConfirmOrdersSales
+// is not idempotent — it creates sale records). This helper stays local to
+// this file rather than moving to helpers.go, since AppError-to-status
+// mapping has no other consumer today and every other handler's 500-only
+// behavior is deliberately unchanged.
+func serviceCallCertSale[T any](w http.ResponseWriter, ctx context.Context, logger observability.Logger, msg string, fn func() (T, error)) (T, bool) {
+	result, err := fn()
+	if err != nil {
+		var appErr *errors.AppError
+		if stderrors.As(err, &appErr) && appErr.Code == errors.ErrCodeValidation {
+			writeError(w, http.StatusBadRequest, appErr.Message)
+			return result, false
+		}
+		if ctx.Err() != nil {
+			// Client disconnected or request timed out — not a server error.
+			writeError(w, 499, "Client closed request")
+			return result, false
+		}
+		logger.Error(ctx, msg, observability.Err(err))
+		writeError(w, http.StatusInternalServerError, "Internal server error")
+		return result, false
+	}
+	return result, true
 }
