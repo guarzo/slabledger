@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """Emit docs/audit/REPORT.md from the findings, verdicts, and the controller's
-cluster map. Deterministic: rerunning reproduces the file byte for byte.
+cluster map. Deterministic *for a given generator version*: rerunning this script
+over the same inputs reproduces the same file byte for byte.
+
+That guarantee does NOT hold across generator versions, and both filed runs are
+already on the far side of one. Commit 4c5d1b42 repaired four rendering defects
+this script had at the time the 2026-08-07 and 2026-08-08 artifacts were written,
+so regenerating either run's committed REPORT.md/TICKETS.md today produces a
+different — better — rendering than the file on disk. That is expected, not a
+regression. The committed artifacts are the record of what was reported and filed
+to Linear, so they are deliberately left as-is; the repairs take effect on the
+next run. See runs/2026-08-08/CONTROLLER-NOTES.md ("Deferred / not done") for the
+quantified diff and the reasoning.
 
 The cluster map below is the controller's judgment. Everything else — evidence,
 acceptance criteria, blast radius, severity — is copied verbatim from the lens
@@ -15,7 +26,9 @@ AUDIT_HOME = os.path.dirname(os.path.abspath(__file__)) + "/.."
 # Run-scoped root: findings/, verdicts/ and the generated REPORT.md belong to one
 # baseline and must never be mixed across runs. AUDIT_HOME stays shared (schema/,
 # scripts/). Defaulting AUDIT to AUDIT_HOME keeps the flat 2026-08-07 layout,
-# where the run's artifacts sit directly under docs/audit/, regenerating as-is.
+# where the run's artifacts sit directly under docs/audit/, so that run's inputs
+# resolve without any environment. It does not mean the committed 2026-08-07
+# REPORT.md round-trips byte-identically — see the module docstring.
 AUDIT = os.environ.get("AUDIT_RUN", AUDIT_HOME)
 # Repo-relative form of AUDIT, for prose that names an artifact's path. Cross-
 # references rendered into REPORT.md and into filed ticket bodies must point at
@@ -257,7 +270,9 @@ UNITS = [
 ]
 
 # The cluster map above is the 2026-08-07 controller's judgment, and stays the
-# default so that run regenerates unchanged. A later run supplies its own as
+# default so that run's findings still roll up the way that run reported them.
+# (The rollup is stable; the rendering around it is not — see the docstring.)
+# A later run supplies its own as
 # $AUDIT_RUN/units.json — same shape, as JSON. The map is per-run judgment, not
 # shared infrastructure: it names one baseline's finding ids, and pointing a new
 # run at the old map would roll up findings that no longer exist.
