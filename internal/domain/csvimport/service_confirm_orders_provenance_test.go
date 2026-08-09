@@ -73,6 +73,24 @@ func TestConfirmOrdersSales_PriceSourceDefault(t *testing.T) {
 		t.Fatalf("setup purchase: %v", err)
 	}
 
+	p2 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Gyarados", CertNumber: "PROV07",
+		GradeValue: 8, BuyCostCents: 40000, PurchaseDate: "2026-06-01",
+		CLValueCents: 9000,
+	}
+	if err := inv.CreatePurchase(ctx, p2); err != nil {
+		t.Fatalf("setup purchase 2: %v", err)
+	}
+
+	p3 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Vaporeon", CertNumber: "PROV08",
+		GradeValue: 8, BuyCostCents: 35000, PurchaseDate: "2026-06-01",
+		CLValueCents: 8500,
+	}
+	if err := inv.CreatePurchase(ctx, p3); err != nil {
+		t.Fatalf("setup purchase 3: %v", err)
+	}
+
 	result, err := imp.ConfirmOrdersSales(ctx, []csvimport.OrdersConfirmItem{
 		{
 			PurchaseID:     p.ID,
@@ -81,12 +99,29 @@ func TestConfirmOrdersSales_PriceSourceDefault(t *testing.T) {
 			SalePriceCents: 20000,
 			TheirCompCents: 19500,
 		},
+		{
+			PurchaseID:     p2.ID,
+			SaleChannel:    inventory.SaleChannelEbay,
+			SaleDate:       "2026-06-20",
+			SalePriceCents: 18000,
+			PriceSource:    inventory.PriceSourceEstimated,
+		},
+		{
+			PurchaseID:     p3.ID,
+			SaleChannel:    inventory.SaleChannelEbay,
+			SaleDate:       "2026-06-20",
+			SalePriceCents: 17000,
+			PriceSource:    "bogus",
+		},
 	})
 	if err != nil {
 		t.Fatalf("ConfirmOrdersSales: %v", err)
 	}
-	if result.Created != 1 {
-		t.Fatalf("created = %d, want 1 (errors: %v)", result.Created, result.Errors)
+	if result.Created != 2 {
+		t.Fatalf("created = %d, want 2 (errors: %v)", result.Created, result.Errors)
+	}
+	if result.Failed != 1 {
+		t.Fatalf("failed = %d, want 1", result.Failed)
 	}
 
 	sale := findSaleByPurchaseID(t, repo, c.ID, p.ID)
@@ -95,6 +130,22 @@ func TestConfirmOrdersSales_PriceSourceDefault(t *testing.T) {
 	}
 	if sale.TheirCompCents != 19500 {
 		t.Errorf("TheirCompCents = %d, want 19500", sale.TheirCompCents)
+	}
+
+	explicit := findSaleByPurchaseID(t, repo, c.ID, p2.ID)
+	if explicit.PriceSource != inventory.PriceSourceEstimated {
+		t.Errorf("PriceSource = %q, want %q (explicit priceSource must survive the itemized default)", explicit.PriceSource, inventory.PriceSourceEstimated)
+	}
+
+	// ConfirmOrdersSales stringifies the per-item error into BulkSaleError.Error
+	// rather than returning it, so errors.Is cannot be applied to the result
+	// directly; compare against the sentinel's own .Error() text instead, which
+	// is exactly what FreezeSaleProvenance's error becomes on this path.
+	if len(result.Errors) != 1 || result.Errors[0].PurchaseID != p3.ID {
+		t.Fatalf("errors = %+v, want single error for purchase 3", result.Errors)
+	}
+	if result.Errors[0].Error != inventory.ErrInvalidPriceSource.Error() {
+		t.Errorf("Errors[0].Error = %q, want %q", result.Errors[0].Error, inventory.ErrInvalidPriceSource.Error())
 	}
 }
 

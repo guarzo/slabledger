@@ -358,15 +358,28 @@ func TestCreateBulkSales_PriceSourceDefaults(t *testing.T) {
 		t.Fatalf("setup purchase 2: %v", err)
 	}
 
+	p3 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Venusaur", CertNumber: "PROV06",
+		GradeValue: 9, BuyCostCents: 25000, PurchaseDate: "2026-06-01",
+		CLValueCents: 7000,
+	}
+	if err := svc.CreatePurchase(ctx, p3); err != nil {
+		t.Fatalf("setup purchase 3: %v", err)
+	}
+
 	result, err := svc.CreateBulkSales(ctx, c.ID, inventory.SaleChannelEbay, "2026-06-20", []inventory.BulkSaleInput{
 		{PurchaseID: p.ID, SalePriceCents: 20000},
 		{PurchaseID: p2.ID, SalePriceCents: 15000, PriceSource: inventory.PriceSourceItemized},
+		{PurchaseID: p3.ID, SalePriceCents: 10000, PriceSource: "bogus"},
 	})
 	if err != nil {
 		t.Fatalf("CreateBulkSales: %v", err)
 	}
 	if result.Created != 2 {
 		t.Fatalf("created = %d, want 2 (errors: %v)", result.Created, result.Errors)
+	}
+	if result.Failed != 1 {
+		t.Fatalf("failed = %d, want 1", result.Failed)
 	}
 
 	defaulted := findSaleByPurchaseID(t, repo, c.ID, p.ID)
@@ -377,5 +390,16 @@ func TestCreateBulkSales_PriceSourceDefaults(t *testing.T) {
 	explicit := findSaleByPurchaseID(t, repo, c.ID, p2.ID)
 	if explicit.PriceSource != inventory.PriceSourceItemized {
 		t.Errorf("PriceSource = %q, want %q", explicit.PriceSource, inventory.PriceSourceItemized)
+	}
+
+	// CreateBulkSales stringifies the per-item error into BulkSaleError.Error
+	// rather than returning it, so errors.Is cannot be applied to the result
+	// directly; compare against the sentinel's own .Error() text instead, which
+	// is exactly what FreezeSaleProvenance's error becomes on this path.
+	if len(result.Errors) != 1 || result.Errors[0].PurchaseID != p3.ID {
+		t.Fatalf("errors = %+v, want single error for purchase 3", result.Errors)
+	}
+	if result.Errors[0].Error != inventory.ErrInvalidPriceSource.Error() {
+		t.Errorf("Errors[0].Error = %q, want %q", result.Errors[0].Error, inventory.ErrInvalidPriceSource.Error())
 	}
 }
