@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// DefaultSessionExpiry is how long a newly-created session stays valid. It is
+// declared here, next to the Service contract, so every implementation of
+// CreateSession shares one source: the window is security-relevant, and a
+// per-implementation copy would let a one-sided edit widen it silently
+// (SLA-88).
+const DefaultSessionExpiry = 30 * 24 * time.Hour // 30 days
+
 // GenerateState generates a random state string for OAuth CSRF protection
 func GenerateState() (string, error) {
 	b := make([]byte, 32)

@@ -230,6 +230,72 @@ func TestValidateSession(t *testing.T) {
 	}
 }
 
+// TestValidateSession_AccessWriteThrottle pins the write-reduction rule in
+// ValidateSession: the UpdateSessionAccess round-trip happens only when the
+// session has not been touched for more than a minute. Deleting the throttle
+// makes the "recently accessed" case fail.
+func TestValidateSession_AccessWriteThrottle(t *testing.T) {
+	tests := []struct {
+		name           string
+		lastAccessedAt time.Duration // relative to now; negative is in the past
+		wantUpdate     bool
+	}{
+		{
+			name:           "stale session writes the new access time",
+			lastAccessedAt: -5 * time.Minute,
+			wantUpdate:     true,
+		},
+		{
+			name:           "recently accessed session skips the write",
+			lastAccessedAt: -1 * time.Second,
+			wantUpdate:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newMockRepository()
+			logger := mocks.NewMockLogger()
+			service := NewOAuthService(
+				repo,
+				logger,
+				"test-client-id",
+				"test-client-secret",
+				"http://localhost/callback",
+				[]string{"openid", "email", "profile"},
+			)
+
+			repo.Users["test-google-user"] = &auth.User{
+				ID:       1,
+				GoogleID: "test-google-user",
+				Username: "testuser",
+				Email:    "test@example.com",
+			}
+			repo.Sessions["session-id"] = &auth.Session{
+				ID:             "session-id",
+				UserID:         1,
+				ExpiresAt:      time.Now().Add(24 * time.Hour),
+				CreatedAt:      time.Now().Add(-1 * time.Hour),
+				LastAccessedAt: time.Now().Add(tt.lastAccessedAt),
+			}
+
+			var updated bool
+			repo.UpdateSessionAccessFn = func(_ context.Context, _ string) error {
+				updated = true
+				return nil
+			}
+
+			if _, _, err := service.ValidateSession(context.Background(), "session-id"); err != nil {
+				t.Fatalf("ValidateSession: %v", err)
+			}
+
+			if updated != tt.wantUpdate {
+				t.Errorf("UpdateSessionAccess called = %v, want %v", updated, tt.wantUpdate)
+			}
+		})
+	}
+}
+
 func TestDeleteSession(t *testing.T) {
 	repo := newMockRepository()
 	logger := mocks.NewMockLogger()
