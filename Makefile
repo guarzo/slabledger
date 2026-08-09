@@ -147,6 +147,7 @@ check: lint
 	./scripts/check-imports-test.sh
 	./scripts/check-imports.sh
 	./scripts/check-file-size.sh
+	./scripts/check-doc-paths.sh
 	./scripts/check-playwright-version.sh
 
 fmt:
