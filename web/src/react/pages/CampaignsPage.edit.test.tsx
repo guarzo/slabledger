@@ -28,6 +28,7 @@ const campaign: Campaign = {
   psaCampaignRequestId: 'req-1',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-02-02T00:00:00Z',
+  kind: 'standard',
 } as Campaign;
 
 const updateMutateAsync = vi.fn().mockResolvedValue(campaign);

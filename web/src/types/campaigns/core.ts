@@ -30,6 +30,9 @@ export interface Campaign {
   psaCampaignRequestId?: string;
   createdAt: string;
   updatedAt: string;
+  /** Derived at the HTTP layer from the campaign id, never persisted.
+      Mirrors Go's inventory.Campaign.Kind / SetKind (json: kind). */
+  kind: 'external' | 'standard';
 }
 
 export interface Purchase {

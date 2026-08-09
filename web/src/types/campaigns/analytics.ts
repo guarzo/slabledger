@@ -113,6 +113,10 @@ export interface GradePerformance {
   netProfitCents: number;
   roi: number;
   avgBuyPctOfCL: number;
+  /** Population stddev of per-sale ROIs; 0 when fewer than 2 sales. */
+  roiStddev: number;
+  /** Coefficient of variation = roiStddev / |roi|; 0 when roi is 0. */
+  cv: number;
 }
 
 export interface PriceTierPerformance {
@@ -129,6 +133,10 @@ export interface PriceTierPerformance {
   netProfitCents: number;
   roi: number;
   avgBuyPctOfCL: number;
+  /** Population stddev of per-sale ROIs; 0 when fewer than 2 sales. */
+  roiStddev: number;
+  /** Coefficient of variation = roiStddev / |roi|; 0 when roi is 0. */
+  cv: number;
 }
 
 export interface CardPerformance {

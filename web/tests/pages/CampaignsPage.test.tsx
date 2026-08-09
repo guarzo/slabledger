@@ -104,6 +104,7 @@ const mockCampaigns = [
     expectedFillRate: 80,
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-15T00:00:00Z',
+    kind: 'standard' as const,
   },
   {
     id: 'c2',
@@ -125,6 +126,7 @@ const mockCampaigns = [
     expectedFillRate: 70,
     createdAt: '2025-02-01T00:00:00Z',
     updatedAt: '2025-02-10T00:00:00Z',
+    kind: 'standard' as const,
   },
 ];
 

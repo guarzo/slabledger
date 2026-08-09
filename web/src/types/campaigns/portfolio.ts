@@ -131,6 +131,10 @@ export interface WeeklyReviewSummary {
   profitLastWeekCents: number;
   byChannel: ChannelPNL[];
   weeksToCover: number;
+  /** Day index within the current week: 0=Sunday, 1=Monday … 6=Saturday.
+      Lets a consumer tell a partial week from a finished one before comparing
+      this-week to last-week totals. */
+  daysIntoWeek: number;
   topPerformers: WeeklyPerformer[];
   bottomPerformers: WeeklyPerformer[];
 }
