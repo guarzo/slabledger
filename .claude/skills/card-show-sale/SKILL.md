@@ -64,11 +64,14 @@ as `0` — that's the field's default, not a clean reconciliation. Report it as
 ### 1. Extract
 
 Read each photo with the Read tool — it reads images natively, so there is no
-vision API to call, no dependency to add, and no blob to store. Extract two
+vision API to call, no dependency to add, and no blob to store. Extract three
 things per photo:
 
 - the PSA **cert number** from the label
 - the **sticker price** in dollars
+- the **card identity** off the label — player/set/year/grade, whatever it
+  plainly shows. This is what fills the `card` column below, and it's the
+  value step 3 compares the server's returned `cardName` against.
 
 Build the list in memory. Nothing is uploaded.
 
@@ -213,11 +216,12 @@ entirely:
 ```
 
 One `cert,price` pair per line, price in dollars. Everything from step 2 onward
-is identical, with one difference: there's no photo to read a card name from,
-so the review table's `card` column is blank in this mode. That makes the
-step-3 `cardName` comparison *more* important here, not less — it's the only
-check that a cert didn't silently match the wrong owned card, since there's no
-pre-committed expected name to fall back on. A batch is always recordable even
+is identical, with one difference: there's no photo to read a card identity
+from, so the review table's `card` column is blank in this mode. That makes
+the step-3 `cardName` comparison *more* important here, not less — but the
+referent shifts: with no photo captured, compare the server's returned
+`cardName` against the physical card in the user's hand, reading the slab
+directly rather than against a table entry. A batch is always recordable even
 when OCR is useless.
 
 ## Capture requirements
