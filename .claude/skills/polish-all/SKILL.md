@@ -42,7 +42,7 @@ Use these **hardcoded** segment definitions:
 |---|------|-------|
 | 1 | `domain/inventory` | `internal/domain/inventory/` |
 | 2 | `domain/demand+dhpricing+psacampaign+liquidation` | `internal/domain/demand/`, `internal/domain/dhpricing/`, `internal/domain/psacampaign/`, `internal/domain/liquidation/`, `internal/domain/dhevents/` |
-| 3 | `domain/favorites+picks+cards+auth+small` | `internal/domain/favorites/`, `internal/domain/picks/`, `internal/domain/cards/`, `internal/domain/auth/`, `internal/domain/errors/`, `internal/domain/constants/`, `internal/domain/observability/`, `internal/domain/storage/`, `internal/domain/intelligence/`, `internal/domain/timeutil/`, `internal/domain/mathutil/`, `internal/domain/pricing/` |
+| 3 | `domain/favorites+picks+cards+auth+small` | `internal/domain/favorites/`, `internal/domain/picks/`, `internal/domain/cards/`, `internal/domain/auth/`, `internal/domain/errors/`, `internal/domain/constants/`, `internal/domain/observability/`, `internal/domain/intelligence/`, `internal/domain/timeutil/`, `internal/domain/mathutil/`, `internal/domain/pricing/` |
 | 4 | `domain/decomposed-siblings` | `internal/domain/arbitrage/`, `internal/domain/portfolio/`, `internal/domain/tuning/`, `internal/domain/finance/`, `internal/domain/export/`, `internal/domain/dhlisting/`, `internal/domain/csvimport/`, `internal/domain/mmutil/` |
 | 5 | `adapters/httpserver` | `internal/adapters/httpserver/` |
 | 6 | `adapters/storage/sqlite` | `internal/adapters/storage/sqlite/` |
