@@ -19,7 +19,7 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
       toast.success('PSA sync complete');
     } catch (err) {
       if (isAPIError(err) && err.status === 409) {
-        toast.error('Sync already in progress — try again in a moment');
+        toast.error('Sync already in progress. Try again in a moment.');
       } else {
         toast.error('PSA sync failed');
       }
@@ -50,9 +50,13 @@ export function PSASyncTab({ enabled = true }: { enabled?: boolean }) {
         <span className="text-sm font-semibold text-[var(--text)]">Configured</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 mb-3">
         <Stat label="Interval" value={data.interval || '—'} />
-        <Stat label="Pending review" value={data.pendingCount ?? 0} tone={(data.pendingCount ?? 0) > 0 ? 'warning' : 'default'} />
+        <Stat
+          label="Pending review"
+          value={data.pendingCount ?? 0}
+          tone={(data.pendingCount ?? 0) > 0 ? 'warning' : 'default'}
+        />
       </div>
 
       <div className="flex items-center gap-2 pt-3 border-t border-[var(--surface-2)]">

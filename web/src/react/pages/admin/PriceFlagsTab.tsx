@@ -163,7 +163,7 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
     <div className="space-y-4">
       {error && data && (
         <div className="p-3 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning)] text-sm">
-          Failed to refresh — showing cached data
+          Failed to refresh; showing cached data.
         </div>
       )}
 
@@ -189,11 +189,11 @@ export function PriceFlagsTab({ enabled = true }: { enabled?: boolean }) {
         filter === 'open' ? (
           <div className="text-center py-8 text-[var(--success)]">
             <div className="text-2xl mb-2">✓</div>
-            <p className="text-sm font-medium">All clear — no open price flags.</p>
+            <p className="text-sm font-medium">All clear: no open price flags.</p>
           </div>
         ) : (
           <div className="text-center py-8 text-[var(--text-muted)]">
-            <p className="text-sm">No {filter} flags — none recorded.</p>
+            <p className="text-sm">No {filter} flags recorded.</p>
           </div>
         )
       ) : (

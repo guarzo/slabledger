@@ -54,7 +54,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
       toast.success('Card Ladder connected');
       setPassword('');
     } catch {
-      toast.error('Failed to connect Card Ladder — check credentials');
+      toast.error('Failed to connect Card Ladder. Check your credentials.');
     }
   };
 
@@ -142,7 +142,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
           className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
         />
         <p className="text-xs text-[var(--text-muted)] mt-1">
-          Your Card Ladder project key — available in the Card Ladder Firebase console settings.
+          Your Card Ladder project key (available in the Card Ladder Firebase console settings).
         </p>
       </div>
       <Button type="submit" variant="primary" size="sm" loading={saveMutation.isPending}>
@@ -154,7 +154,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <p className="text-[var(--text-muted)] text-sm mb-4">No credentials saved — enter your Card Ladder email and password to connect.</p>
+        <p className="text-[var(--text-muted)] text-sm mb-4">No credentials saved. Enter your Card Ladder email and password to connect.</p>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-2 h-2 rounded-full bg-gray-500" />
           <span className="text-sm text-[var(--text-muted)]">Not connected</span>
@@ -195,7 +195,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
         <span className="text-xs text-[var(--text-muted)]">{status.email}</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 mb-3">
         <Stat label="Mapped" value={status.cardsMapped ?? 0} />
         <Stat label="Collection" value={status.collectionId ?? '—'} />
       </div>

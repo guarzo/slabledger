@@ -88,10 +88,10 @@ function AccessTableRow({
       <td className="glass-table-td text-[var(--text-muted)] hidden md:table-cell">
         {isActive ? formatLastLogin(row.lastLoginAt) : '—'}
       </td>
-      {/* Notes and Invited are the two columns the old AllowlistTab showed
-          (AllowlistTab.tsx:96-120). The Add form still writes `notes`, so
-          dropping the column would make the field write-only: an operator
-          could record why someone was invited and then never read it back. */}
+      {/* Notes and Invited are the two allowlist-only columns. The Add form
+          still writes `notes`, so dropping the column would make the field
+          write-only: an operator could record why someone was invited and
+          then never read it back. */}
       <td className="glass-table-td text-[var(--text-muted)] hidden lg:table-cell">
         {row.notes.trim() || '—'}
       </td>

@@ -31,8 +31,8 @@ export function DHOperationsPanel({ enabled = true }: { enabled?: boolean }) {
       // Errors first: a partial success with failures shouldn't masquerade as a clean run.
       if (errorCount > 0) {
         // Surface the actual first error rather than referring the operator to logs
-        // they have no way to open from here. The old DHStatsPanel said "check logs",
-        // which is the dead-end referral this rework exists to remove.
+        // they have no way to open from here. A dead-end "check logs" referral is
+        // the failure mode this rework exists to remove.
         const first = result.errors?.[0] ?? 'unknown error';
         toast.warning(
           errorCount === 1

@@ -35,7 +35,7 @@ export default function AdminPage() {
       ]} />
       <div className="mb-6">
         <h1 className="page-title">Admin</h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
+        <p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">
           {TAB_SUBTITLES[activeTab] ?? ''}
         </p>
       </div>

@@ -6,8 +6,7 @@ import { IntegrationHealthStrip } from './IntegrationHealthStrip';
 import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import SalesImportSection from '../tools/SalesImportSection';
 import { StatusPill } from '../../ui';
-
-const SECTION_HEADER = 'text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3';
+import { SECTION_HEADER } from './shared';
 
 /** Relative time pulse — "X ago" with second/minute/hour/day buckets.
     Returns null when the timestamp is missing or in the future, so call
@@ -82,7 +81,7 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
     ))?.t;
 
   return (
-    <div className="space-y-8 mt-4">
+    <div className="space-y-10 mt-4">
       {dhBanner && (
         <div
           role="alert"
@@ -97,8 +96,8 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <IntegrationHealthStrip enabled={enabled} />
 
       <section>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>DoubleHolo</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[var(--text)]">DoubleHolo</h3>
           <div className="flex items-center gap-3">
             <PulseLine at={dhLastCall} />
             {dhHealthy ? (
@@ -108,52 +107,48 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
             )}
           </div>
         </div>
-        <div className="mb-3" />
         <DHTab enabled={enabled} />
         <DHOperationsPanel enabled={enabled} />
       </section>
 
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>Card Ladder</h3>
-          <div className="flex items-center gap-3">
-            <PulseLine at={clStatus?.lastRun?.lastRunAt} />
-            {clConnected ? (
-              <StatusPill tone="success">Connected</StatusPill>
-            ) : (
-              <StatusPill tone="danger">Not connected</StatusPill>
-            )}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-6">
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={SECTION_HEADER + ' !mb-0'}>Card Ladder</h3>
+            <div className="flex items-center gap-3">
+              <PulseLine at={clStatus?.lastRun?.lastRunAt} />
+              {clConnected ? (
+                <StatusPill tone="success">Connected</StatusPill>
+              ) : (
+                <StatusPill tone="danger">Not connected</StatusPill>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="mb-3" />
-        <CardLadderTab enabled={enabled} />
-      </section>
+          <CardLadderTab enabled={enabled} />
+        </section>
 
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>PSA Portal Sync</h3>
-          <div className="flex items-center gap-3">
-            <PulseLine at={psaStatus?.lastRun?.lastRunAt} />
-            {psaConfigured ? (
-              <StatusPill tone="success">Configured</StatusPill>
-            ) : (
-              <StatusPill tone="danger">Not configured</StatusPill>
-            )}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={SECTION_HEADER + ' !mb-0'}>PSA Portal Sync</h3>
+            <div className="flex items-center gap-3">
+              <PulseLine at={psaStatus?.lastRun?.lastRunAt} />
+              {psaConfigured ? (
+                <StatusPill tone="success">Configured</StatusPill>
+              ) : (
+                <StatusPill tone="danger">Not configured</StatusPill>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="mb-3" />
-        <PSASyncTab enabled={enabled} />
-      </section>
+          <PSASyncTab enabled={enabled} />
+        </section>
+      </div>
 
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
+      <section className="mt-6">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-subtle)] mb-1">
+          Tools
+        </p>
         <div className="mb-3">
-          <h3 className={SECTION_HEADER}>Import Sales</h3>
+          <h3 className={SECTION_HEADER + ' !mb-0'}>Import Sales</h3>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Import sales from order CSVs.</p>
         </div>
         <SalesImportSection />

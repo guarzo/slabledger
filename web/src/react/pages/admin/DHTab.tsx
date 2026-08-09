@@ -72,7 +72,7 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   const handleBulkMatch = async () => {
     try {
       await bulkMatchMutation.mutateAsync();
-      toast.success('Bulk match started — progress will update automatically.');
+      toast.success('Bulk match started. Progress will update automatically.');
     } catch {
       toast.error('Failed to start bulk match');
     }
@@ -99,16 +99,35 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-          <Stat label="Mapped" value={status?.mapped_count ?? 0} />
-          <Stat
-            label="Unmatched"
-            value={status?.unmatched_count ?? 0}
-            tone={(status?.unmatched_count ?? 0) > 0 ? 'warning' : 'default'}
-            sub={(status?.dismissed_count ?? 0) > 0 ? `${status!.dismissed_count} dismissed` : undefined}
-          />
-          <Stat label="Pending push" value={status?.pending_count ?? 0} tone={(status?.pending_count ?? 0) > 0 ? 'warning' : 'default'} />
-          <Stat label="DH listings" value={status?.dh_listings_count ?? 0} />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-10 mb-3">
+          <div className="sm:w-44 sm:shrink-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Mapped cards
+            </div>
+            <div className="text-3xl font-semibold tabular-nums leading-tight text-[var(--text)]">
+              {status?.mapped_count ?? 0}
+            </div>
+            {(status?.unmatched_count ?? 0) > 0 && (
+              <p className="mt-1 text-xs text-[var(--warning)]">
+                {status?.unmatched_count} still unmatched
+                {(status?.dismissed_count ?? 0) > 0 ? ` (${status?.dismissed_count} dismissed)` : ''}
+              </p>
+            )}
+          </div>
+
+          <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+            <Stat
+              label="Unmatched"
+              value={status?.unmatched_count ?? 0}
+              tone={(status?.unmatched_count ?? 0) > 0 ? 'warning' : 'default'}
+            />
+            <Stat
+              label="Pending push"
+              value={status?.pending_count ?? 0}
+              tone={(status?.pending_count ?? 0) > 0 ? 'warning' : 'default'}
+            />
+            <Stat label="DH listings" value={status?.dh_listings_count ?? 0} />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 pt-3 border-t border-[var(--surface-2)]">
@@ -122,7 +141,7 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
             {isRunning ? 'Bulk match running…' : 'Run bulk match'}
           </Button>
           {isRunning && (
-            <span className="text-xs text-[var(--text-muted)]">Matching in progress — counts update automatically.</span>
+            <span className="text-xs text-[var(--text-muted)]">Matching in progress; counts update automatically.</span>
           )}
         </div>
 

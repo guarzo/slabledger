@@ -1,7 +1,6 @@
 import type { FailureSummary } from '../../../types/apiStatus';
 import PokeballLoader from '../../PokeballLoader';
 import { usePricingDiagnostics } from '../../queries/useAdminQueries';
-import { SummaryCard } from './shared';
 import { formatAdminDate } from './adminUtils';
 
 export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
@@ -36,40 +35,48 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
     <div className="space-y-6">
       {error && diag && (
         <div className="p-3 rounded-lg bg-[var(--warning-bg)] border border-[var(--warning-border)] text-[var(--warning)] text-sm">
-          Failed to refresh pricing diagnostics — showing cached data
+          Failed to refresh pricing diagnostics; showing cached data.
         </div>
       )}
 
-      {/* Summary cards — grouped by intake state vs price source */}
-      <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)]/40 p-3">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-x-6 gap-y-3">
-          {/* Intake state */}
-          <div>
-            <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
-              Intake state
+      {/* Coverage lead: listing progress dominates, intake states are context */}
+      <div className="rounded-xl border border-[var(--surface-2)] bg-[var(--surface-1)]/40 p-5">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
+          <div className="lg:w-64 lg:shrink-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Listed
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-              <SummaryCard label="Inventory Cards" value={totalUnsold} />
-              <SummaryCard label="Listed" value={`${listedCards} / ${listableCards}`} color={listedColor} />
-              <SummaryCard label="Ready to List" value={readyToListCards} color={readyToListCards > 0 ? 'var(--warning)' : undefined} />
-              <SummaryCard label="Unmatched" value={unmatchedCards} color={unmatchedCards > 0 ? 'var(--danger)' : undefined} />
-              <SummaryCard label="Matching" value={matchingCards} color={matchingCards > 0 ? 'var(--text-muted)' : undefined} />
-              <SummaryCard label="Awaiting Receipt" value={awaitingReceiptCards} color="var(--text-muted)" />
+            <div
+              className="text-4xl font-semibold tabular-nums leading-tight"
+              style={listedColor ? { color: listedColor } : undefined}
+            >
+              {listedCards}
+              <span className="text-xl text-[var(--text-muted)]"> / {listableCards}</span>
             </div>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              {listedRatio !== null
+                ? `${(listedRatio * 100).toFixed(0)}% of listable cards are live`
+                : 'Nothing listable yet'}
+            </p>
+            <p className="mt-3 text-xs text-[var(--text-subtle)]">
+              {totalUnsold} cards in inventory · {clPricedCards} priced by Card Ladder
+            </p>
           </div>
 
-          {/* Vertical divider — hidden on small screens */}
-          <div aria-hidden="true" className="hidden lg:block w-px bg-[var(--surface-3)] self-stretch" />
-
-          {/* Price source */}
-          <div>
-            <div className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
-              Price source
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <SummaryCard label="CL Priced" value={`${clPricedCards} / ${totalUnsold}`} color="var(--text-muted)" />
-            </div>
-          </div>
+          <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+            <Fact
+              label="Ready to list"
+              value={readyToListCards}
+              tone={readyToListCards > 0 ? 'var(--warning)' : undefined}
+            />
+            <Fact
+              label="Unmatched"
+              value={unmatchedCards}
+              tone={unmatchedCards > 0 ? 'var(--danger)' : undefined}
+            />
+            <Fact label="Matching" value={matchingCards} />
+            <Fact label="Awaiting receipt" value={awaitingReceiptCards} />
+          </dl>
         </div>
       </div>
 
@@ -111,6 +118,20 @@ export function PricingCoverageTab({ enabled = true }: { enabled?: boolean }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Fact({ label, value, tone }: { label: string; value: number | string; tone?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">{label}</dt>
+      <dd
+        className="text-lg font-semibold tabular-nums text-[var(--text)]"
+        style={tone ? { color: tone } : undefined}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
