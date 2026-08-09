@@ -228,14 +228,15 @@ Code: `internal/adapters/clients/pricelookup/adapter.go`
 ## Monitoring
 
 ```bash
-# Health check
+# Health check (unauthenticated)
 curl http://localhost:8081/api/health
 
-# Cache statistics
-./slabledger admin cache-stats
+# API usage status (per-provider call counts, success rates, latency).
+# Admin-gated: send an authenticated admin session cookie.
+curl --cookie "$SESSION_COOKIE" http://localhost:8081/api/admin/api-usage
 
-# API usage status (per-provider call counts, success rates, latency)
-curl http://localhost:8081/api/status/api-usage
+# Request timing metrics (admin-gated)
+curl --cookie "$SESSION_COOKIE" http://localhost:8081/api/admin/metrics
 ```
 
 ---
