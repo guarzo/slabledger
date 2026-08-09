@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -14,9 +15,29 @@ const (
 	stateCookieName = "oauth_state"
 )
 
+// LoginFlow is the slice of auth.Service the login/logout endpoints need. It is
+// the widest of the consumer seams because the OAuth callback genuinely spans
+// state, token exchange, user creation, session issue and admin promotion — but
+// it still omits the session sweeps, ValidateSession, GetUserByID,
+// UpdateLastLogin and the allowlist mutators. auth.Service satisfies it
+// implicitly.
+type LoginFlow interface {
+	GetLoginURL(state string) string
+	StoreOAuthState(ctx context.Context, state string, expiresAt time.Time) error
+	ConsumeOAuthState(ctx context.Context, state string) (bool, error)
+	ExchangeCodeForTokens(ctx context.Context, code string) (*auth.UserTokens, error)
+	GetUserInfo(ctx context.Context, accessToken string) (*auth.UserInfo, error)
+	IsEmailAllowed(ctx context.Context, email string) (bool, error)
+	GetOrCreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error)
+	SetUserAdmin(ctx context.Context, userID int64, isAdmin bool) error
+	CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error)
+	StoreTokens(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error
+	DeleteSession(ctx context.Context, sessionID string) error
+}
+
 // AuthHandlers handles authentication-related HTTP requests
 type AuthHandlers struct {
-	authService   auth.Service
+	authService   LoginFlow
 	logger        observability.Logger
 	secureCookies bool     // Use secure cookies in production
 	adminEmails   []string // Emails that are always allowed and always admin
@@ -24,7 +45,7 @@ type AuthHandlers struct {
 
 // NewAuthHandlers creates a new auth handlers instance
 func NewAuthHandlers(
-	authService auth.Service,
+	authService LoginFlow,
 	logger observability.Logger,
 	secureCookies bool,
 	adminEmails []string,
