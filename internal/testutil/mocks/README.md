@@ -154,6 +154,7 @@ store.Purchases["p1"] = &inventory.Purchase{ID: "p1", CampaignID: "c1"}
 | `InMemoryAuthRepository` | `auth.Repository` (stateful; `NewInMemoryAuthRepository()`) |
 | `InMemoryAuthService` | `auth.Service` (stateful, repository-backed; `NewInMemoryAuthService(repo)`) |
 | `MockCertLookup` | cert lookup interface |
+| `CardLadderStoreMock` | `handlers.CardLadderStore` (CardLadder config, mappings and admin reports) |
 | `RowScanner` | postgres package's unexported `scanner` interface (`Scan(dest ...any) error`) |
 | `CapturingLogger` | `observability.Logger` (records calls instead of discarding them) |
 

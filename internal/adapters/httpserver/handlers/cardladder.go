@@ -6,11 +6,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
+	cardladderclient "github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
-	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
+	"github.com/guarzo/slabledger/internal/domain/cardladder"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
+
+// CardLadderStore is the persistence seam the Card Ladder admin handler depends
+// on: the seven methods it actually calls, no more.
+// Defined at the consumer level per idiomatic Go.
+// Satisfied by *postgres.CardLadderStore (and test mocks).
+type CardLadderStore interface {
+	GetConfig(ctx context.Context) (*cardladder.Config, error)
+	SaveConfig(ctx context.Context, email, refreshToken, collectionID, firebaseAPIKey, firebaseUID string) error
+	ListMappings(ctx context.Context) ([]cardladder.CardMapping, error)
+	SaveMapping(ctx context.Context, slabSerial, clCardID, gemRateID, condition string) error
+	GetCLPriceStats(ctx context.Context) (*cardladder.PriceStats, error)
+	GetCLFailures(ctx context.Context, sampleLimit int) (*cardladder.IntegrationFailuresReport, error)
+	GetCLCoverageByMonth(ctx context.Context) (*cardladder.CoverageReport, error)
+}
 
 // CLRefresher runs a Card Ladder value refresh cycle on demand.
 type CLRefresher interface {
@@ -22,14 +36,14 @@ type CLRefresher interface {
 	GetLastRunStats(ctx context.Context) *scheduler.CLRunStats
 	// SetClient replaces the API client used by the scheduler (e.g. after
 	// credentials are saved at runtime).
-	SetClient(client *cardladder.Client)
+	SetClient(client *cardladderclient.Client)
 }
 
 // CardLadderHandler manages Card Ladder admin endpoints.
 type CardLadderHandler struct {
 	mu             sync.Mutex
-	store          *postgres.CardLadderStore
-	client         *cardladder.Client
+	store          CardLadderStore
+	client         *cardladderclient.Client
 	refresher      CLRefresher
 	purchaseLister CLPurchaseLister
 	syncUpdater    CLSyncUpdater
@@ -44,7 +58,7 @@ func (h *CardLadderHandler) SetRefresher(r CLRefresher) {
 }
 
 // NewCardLadderHandler creates a new Card Ladder admin handler.
-func NewCardLadderHandler(store *postgres.CardLadderStore, client *cardladder.Client, logger observability.Logger) *CardLadderHandler {
+func NewCardLadderHandler(store CardLadderStore, client *cardladderclient.Client, logger observability.Logger) *CardLadderHandler {
 	return &CardLadderHandler{store: store, client: client, logger: logger}
 }
 
@@ -67,7 +81,7 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Create a temporary auth client with the provided API key
-	tempAuth := cardladder.NewFirebaseAuth(req.FirebaseAPIKey)
+	tempAuth := cardladderclient.NewFirebaseAuth(req.FirebaseAPIKey)
 	authResp, err := tempAuth.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		h.logger.Error(r.Context(), "Card Ladder Firebase login failed", observability.Err(err))
@@ -85,13 +99,13 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 	h.mu.Lock()
 	if h.client != nil {
 		h.client.UpdateCredentials(
-			cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
+			cardladderclient.NewFirebaseAuth(req.FirebaseAPIKey),
 			authResp.RefreshToken,
 		)
 	} else {
-		h.client = cardladder.NewClient(
-			cardladder.WithTokenManager(
-				cardladder.NewFirebaseAuth(req.FirebaseAPIKey),
+		h.client = cardladderclient.NewClient(
+			cardladderclient.WithTokenManager(
+				cardladderclient.NewFirebaseAuth(req.FirebaseAPIKey),
 				authResp.RefreshToken,
 				time.Time{},
 			),

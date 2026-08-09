@@ -63,41 +63,6 @@ type clCoverageRow struct {
 	Reassigned int
 }
 
-// CLCoverageCohort is the per-cohort breakdown for one month.
-//
-// Rows is the full total and deliberately does NOT equal the Pct denominator:
-// Rows = Resolved + Unresolved + Pending + Stranded + PreCL. It is reported so
-// the excluded counts can be reconciled by a reader.
-type CLCoverageCohort struct {
-	Rows       int      `json:"rows"`
-	Resolved   int      `json:"resolved"`
-	Unresolved int      `json:"unresolved"`
-	Pending    int      `json:"pending"`
-	Stranded   int      `json:"stranded"`
-	PreCL      int      `json:"preCL"`
-	Pct        *float64 `json:"pct"`
-}
-
-// CLCoverageMonth is one purchase month, split by intake cohort.
-//
-// Reassigned counts rows whose purchase_source is set but whose campaign_id is
-// 'external' -- i.e. the two possible cohort definitions disagree. It is
-// reported so that drift between them is visible rather than silent.
-type CLCoverageMonth struct {
-	Month              string           `json:"month"`
-	Reassigned         int              `json:"reassigned"`
-	Campaign           CLCoverageCohort `json:"campaign"`
-	External           CLCoverageCohort `json:"external"`
-	UnresolvedByReason map[string]int   `json:"unresolvedByReason"`
-}
-
-// CLCoverageReport is the full response. EraStart echoes the pinned constant so
-// a reader can see what PreCL was measured against.
-type CLCoverageReport struct {
-	EraStart string            `json:"eraStart"`
-	Months   []CLCoverageMonth `json:"months"`
-}
-
 // clCoveragePct is Resolved / (Resolved + Unresolved), as a percentage rounded
 // to one decimal place.
 //
