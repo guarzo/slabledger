@@ -62,7 +62,8 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
-	was_cracked, order_id, forced_liquidation, sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale`
+	was_cracked, order_id, forced_liquidation, sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale,
+	their_comp_cents, price_source`
 
 // saleColumnsAliased is saleColumns with the "s." table alias, for LEFT JOIN
 // queries. Derived rather than hand-maintained: the two lists had drifted by six
@@ -121,6 +122,8 @@ type saleNulls struct {
 	saleReason             sql.NullString
 	clValueAtSaleCents     sql.NullInt64
 	channelFeePctAtSale    sql.NullFloat64
+	theirCompCents         sql.NullInt64
+	priceSource            sql.NullString
 }
 
 // saleScanDests returns the ordered scan destinations for a Sale.
@@ -134,6 +137,7 @@ func saleScanDests(n *saleNulls) []any {
 		&n.originalListPriceCents, &n.priceReductions, &n.daysListed, &n.soldAtAskingPrice,
 		&n.wasCracked, &n.orderID, &n.forcedLiquidation,
 		&n.saleReason, &n.clValueAtSaleCents, &n.channelFeePctAtSale,
+		&n.theirCompCents, &n.priceSource,
 	}
 }
 
@@ -161,6 +165,8 @@ func (n *saleNulls) sale() inventory.Sale {
 		ForcedLiquidation:      n.forcedLiquidation.Bool,
 		SaleReason:             n.saleReason.String,
 		CLValueAtSaleCents:     int(n.clValueAtSaleCents.Int64),
+		TheirCompCents:         int(n.theirCompCents.Int64),
+		PriceSource:            n.priceSource.String,
 	}
 	s.LastSoldCents = int(n.lastSoldCents.Int64)
 	s.LowestListCents = int(n.lowestListCents.Int64)
