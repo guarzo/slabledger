@@ -4,11 +4,17 @@
 -- ================================================================
 
 -- ================================================================
--- Undo Fix 6: Drop the 7 index advisor indexes
+-- Undo Fix 6: Drop the index advisor indexes
+--
+-- idx_campaign_purchases_dh_push_status is deliberately absent from this list.
+-- 000003's up migration never created it -- 000001 does, as a partial index, and
+-- the CREATE INDEX IF NOT EXISTS that used to sit here matched the existing name
+-- and did nothing. Dropping it on rollback therefore destroyed an index this
+-- migration does not own, and re-applying 000003 did not bring it back. See
+-- SLA-84.
 -- ================================================================
 
 DROP INDEX IF EXISTS public.idx_card_id_mappings_card_name;
-DROP INDEX IF EXISTS public.idx_campaign_purchases_dh_push_status;
 DROP INDEX IF EXISTS public.idx_dh_suggestions_fetched_at;
 DROP INDEX IF EXISTS public.idx_campaign_purchases_cert_number;
 DROP INDEX IF EXISTS public.idx_market_intelligence_velocity_last_fetch;

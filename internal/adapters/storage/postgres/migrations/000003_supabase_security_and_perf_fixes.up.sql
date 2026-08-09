@@ -279,9 +279,22 @@ DROP INDEX IF EXISTS public.idx_card_price_trajectory_card;
 CREATE INDEX IF NOT EXISTS idx_card_id_mappings_card_name
     ON public.card_id_mappings USING btree (card_name);
 
--- campaign_purchases: filter by dh_push_status (~27% of total DB query time)
-CREATE INDEX IF NOT EXISTS idx_campaign_purchases_dh_push_status
-    ON public.campaign_purchases USING btree (dh_push_status);
+-- campaign_purchases: filter by dh_push_status (~27% of total DB query time).
+--
+-- The statement that stood here never created anything. 000001 already declares
+-- idx_campaign_purchases_dh_push_status as a PARTIAL index (WHERE
+-- dh_push_status != ''), and CREATE INDEX IF NOT EXISTS matches on relation name
+-- alone -- it does not compare definitions. So this ran as a silent no-op on
+-- every database, while its matching DROP in the down migration destroyed an
+-- index 000001 owns.
+--
+-- Removed rather than corrected, because the partial definition is the one this
+-- schema wants: dh_push_status is NOT NULL DEFAULT '', and the only queries that
+-- filter on it sargably do so with an equality against a non-empty status
+-- (purchase_dh_query_store.go:21, :126), which the partial index serves. The
+-- rows it excludes are only reached through a COALESCE wrapper (:325) or a CASE
+-- inside an aggregate (:99-102), neither of which any index on this column can
+-- serve. See SLA-84.
 
 -- dh_suggestions: MAX(fetched_at) query (~13% of total DB query time)
 CREATE INDEX IF NOT EXISTS idx_dh_suggestions_fetched_at
