@@ -1055,18 +1055,24 @@ Dropped with `price_history`. The refresh scheduler now queries `campaign_purcha
 
 ### `api_usage_summary`
 Aggregated API call statistics (total, errors, 429s, latency, call counts) per provider for the last 24 hours.
+The only view with a consumer: `DBTracker.GetAPIUsage` selects from it.
 
-### `api_hourly_distribution`
-Hourly call counts and rate-limit hits per provider for the last 7 days. Useful for spotting traffic spikes.
+### ~~`api_hourly_distribution`~~ — DROPPED (migration 000038)
+Dropped in migration 000038 as consumerless. Hourly call counts and rate-limit hits per provider for the last 7 days.
 
-### `api_daily_summary`
-Daily success rate, error count, and average latency per provider for the last 7 days.
+### ~~`api_daily_summary`~~ — DROPPED (migration 000038)
+Dropped in migration 000038 as consumerless. Daily success rate, error count, and average latency per provider for the last 7 days.
 
-### `active_sessions`
-Sessions where `expires_at > now()`, joined to `users` for username/google_id, with hours-until-expiry.
+### ~~`active_sessions`~~ — DROPPED (migration 000038)
+Dropped in migration 000038 as consumerless. Sessions where `expires_at > now()`, joined to `users` for username/google_id, with hours-until-expiry.
 
-### `expired_sessions`
-Session IDs where `expires_at <= now()`, used by the session-cleanup scheduler.
+### ~~`expired_sessions`~~ — DROPPED (migration 000038)
+Dropped in migration 000038 as consumerless. Session IDs where `expires_at <= now()`.
+
+This entry previously claimed the view was "used by the session-cleanup scheduler". It was not:
+`DeleteExpiredSessions` issues `DELETE FROM user_sessions WHERE expires_at <= $1` against the table
+directly and never named the view. The four views above were created by 000001, recreated by 000003
+`WITH (security_invoker = true)`, and read by nothing in the repository.
 
 ### ~~`ai_usage_summary`~~ — DROPPED (migration 000035)
 Dropped in migration 000035 with `ai_calls`. Aggregated AI call statistics for the last 7 days: total calls, success/error/rate-limited counts, token totals, and estimated cost.
