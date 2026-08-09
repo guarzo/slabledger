@@ -11,8 +11,8 @@ import (
 // This allows for dependency injection and testing with mock implementations.
 //
 // Production code uses httpx.Client which implements this interface.
-// Test code can use MockHTTPClient which provides immediate responses
-// without retry logic or circuit breakers.
+// Test code can substitute a local fake that responds immediately, without
+// retry logic or circuit breakers.
 type HTTPClient interface {
 	// GetJSON performs a GET request and decodes the response as JSON.
 	//

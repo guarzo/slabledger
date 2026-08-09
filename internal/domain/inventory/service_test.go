@@ -226,7 +226,6 @@ func (m *mockCertLookup) LookupImages(ctx context.Context, certNumber string) (s
 }
 
 // mockPriceLookup is a local test double for PriceLookup using the Fn-field pattern.
-// The shared version lives in testutil/mocks.MockPriceLookup for use by other packages.
 type mockPriceLookup struct {
 	GetLastSoldCentsFn  func(ctx context.Context, card inventory.CardIdentity, grade float64) (int, error)
 	GetMarketSnapshotFn func(ctx context.Context, card inventory.CardIdentity, grade float64) (*inventory.MarketSnapshot, error)

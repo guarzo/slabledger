@@ -26,14 +26,8 @@ mock := &mocks.CampaignRepositoryMock{
 
 No constructors needed for these mocks — just instantiate the struct and set the fields you care about.
 
-A few older mocks predate this pattern and are configured through a constructor and functional
-options instead — `MockPriceProvider` is the one you are most likely to meet:
-
-```go
-provider := mocks.NewMockPriceProvider(mocks.WithError(errors.New("boom")))
-provider.SetMockMatch("Base Set", "Charizard", "4", &pricing.Price{Amount: 50000, Currency: "USD"})
-```
-
+A few mocks are built by a constructor instead (`NewInMemoryCampaignStore`,
+`NewCapturingLogger`, `NewMockSimplePriceProvider`) because they carry initialized state.
 Use the Fn-field pattern for all new mocks; see "Usage Notes" below.
 
 ## Repository Mocks
@@ -59,19 +53,14 @@ Default when `Fn` is nil:
 - `GetPurchase` → `inventory.ErrPurchaseNotFound`
 - list methods → empty slice
 
-### inventory.SaleRepository → `SaleRepositoryMock`
-
-Default when `Fn` is nil:
-- `GetSaleByPurchaseID` → `inventory.ErrSaleNotFound`
-- list methods → empty slice
-
-### inventory.AnalyticsRepository → `AnalyticsRepositoryMock`
 ### inventory.FinanceRepository → `FinanceRepositoryMock`
-### inventory.PricingRepository → `PricingRepositoryMock`
-### inventory.DHRepository → `DHRepositoryMock`
 ### inventory.PendingItemRepository → `MockPendingItemRepository`
 
-All follow the same Fn-field pattern. Unset methods return zero values or empty slices.
+Both follow the same Fn-field pattern. Unset methods return zero values or empty slices.
+
+The remaining inventory repository interfaces (`SaleRepository`, `AnalyticsRepository`,
+`PricingRepository`, `DHRepository`) have no standalone mock — tests use
+`InMemoryCampaignStore`, which implements all of them.
 
 ## Service Mocks
 
@@ -160,8 +149,7 @@ store.Purchases["p1"] = &inventory.Purchase{ID: "p1", CampaignID: "c1"}
 
 | Type | Interface |
 |------|-----------|
-| `MockPriceProvider` | `pricing.PriceProvider` |
-| `MockHTTPClient` | `httpx.Client` |
+| `MockSimplePriceProvider` | `pricing.PriceProvider` (with call tracking) |
 | `MockAuthRepository` | `auth.Repository` |
 | `MockCertLookup` | cert lookup interface |
 | `RowScanner` | postgres package's unexported `scanner` interface (`Scan(dest ...any) error`) |
@@ -191,5 +179,3 @@ Key sentinel errors:
 - Mocks live in `package mocks` (not `package mocks_test`) so they export for all test packages.
 - White-box tests that live in the package under test cannot import `testutil/mocks` without an
   import cycle; inline mocks are intentional there.
-- `MockBehavior` / `MockOption` helpers in `common.go` are used only by the legacy
-  constructor-configured mocks (see "Pattern" above); prefer the Fn-field pattern for all new mocks.
