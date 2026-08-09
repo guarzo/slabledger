@@ -16,7 +16,7 @@ import (
 // Example:
 //
 //	repo := mocks.NewInMemoryAuthRepository()
-//	svc := auth.New(repo, func(state string) string { return "https://example.com/auth?state=" + state })
+//	svc, err := mocks.NewInMemoryAuthService(repo)
 type InMemoryAuthRepository struct {
 	mu sync.Mutex
 

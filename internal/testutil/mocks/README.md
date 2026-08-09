@@ -151,6 +151,8 @@ store.Purchases["p1"] = &inventory.Purchase{ID: "p1", CampaignID: "c1"}
 |------|-----------|
 | `MockSimplePriceProvider` | `pricing.PriceProvider` (with call tracking) |
 | `MockAuthRepository` | `auth.Repository` |
+| `InMemoryAuthRepository` | `auth.Repository` (stateful; `NewInMemoryAuthRepository()`) |
+| `InMemoryAuthService` | `auth.Service` (stateful, repository-backed; `NewInMemoryAuthService(repo)`) |
 | `MockCertLookup` | cert lookup interface |
 | `RowScanner` | postgres package's unexported `scanner` interface (`Scan(dest ...any) error`) |
 | `CapturingLogger` | `observability.Logger` (records calls instead of discarding them) |

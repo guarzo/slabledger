@@ -41,9 +41,6 @@ const (
 	googleAuthURL  = "https://accounts.google.com/o/oauth2/v2/auth"
 	googleTokenURL = "https://oauth2.googleapis.com/token"
 	googleUserURL  = "https://www.googleapis.com/oauth2/v2/userinfo"
-
-	// Session expiry duration
-	sessionExpiry = 30 * 24 * time.Hour // 30 days
 )
 
 // OAuthService implements auth.Service using Google OAuth
@@ -204,7 +201,7 @@ func (s *OAuthService) CreateSession(ctx context.Context, userID int64, userAgen
 	session := &auth.Session{
 		ID:             uuid.New().String(),
 		UserID:         userID,
-		ExpiresAt:      time.Now().Add(sessionExpiry),
+		ExpiresAt:      time.Now().Add(auth.DefaultSessionExpiry),
 		CreatedAt:      time.Now(),
 		LastAccessedAt: time.Now(),
 		UserAgent:      userAgent,
