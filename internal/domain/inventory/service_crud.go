@@ -174,10 +174,12 @@ func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req Q
 	return p, nil
 }
 
-// FreezeSaleProvenance validates and defaults SaleReason, then overwrites the
-// derived, server-authoritative provenance fields (CLValueAtSaleCents,
-// ChannelFeePctAtSale, ForcedLiquidation) at sale-creation time. SaleReason
-// itself is legitimate client input and is preserved when valid.
+// FreezeSaleProvenance validates and defaults SaleReason, validates PriceSource
+// (defaulting is left to each call site, since the correct default differs by
+// intake path), then overwrites the derived, server-authoritative provenance
+// fields (CLValueAtSaleCents, ChannelFeePctAtSale, ForcedLiquidation) at
+// sale-creation time. SaleReason and PriceSource are legitimate client input
+// and are preserved when valid.
 func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
 	if sa.SaleReason != "" && !ValidSaleReason(sa.SaleReason) {
 		return ErrInvalidSaleReason
@@ -188,6 +190,9 @@ func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forc
 		} else {
 			sa.SaleReason = SaleReasonDiscretionary
 		}
+	}
+	if sa.PriceSource != "" && !ValidPriceSource(sa.PriceSource) {
+		return ErrInvalidPriceSource
 	}
 	// Server-authoritative: overwrite any client-supplied values.
 	sa.CLValueAtSaleCents = purchase.CLValueCents
@@ -227,6 +232,9 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	invoices, invErr := s.finance.ListInvoices(ctx)
 	if invErr != nil {
 		invoices = nil // heuristic degrades to false; never block a sale on invoice lookup
+	}
+	if sa.PriceSource == "" {
+		sa.PriceSource = PriceSourceManual
 	}
 	if err := FreezeSaleProvenance(sa, purchase, campaign, IsForcedLiquidation(sa.SaleChannel, sa.SaleDate, invoices)); err != nil {
 		return err

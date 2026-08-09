@@ -66,6 +66,7 @@ type BulkSaleInput struct {
 	PriceReductions        int    `json:"priceReductions,omitempty"`
 	DaysListed             int    `json:"daysListed,omitempty"`
 	SaleReason             string `json:"saleReason,omitempty"`
+	PriceSource            string `json:"priceSource,omitempty"`
 }
 
 // BulkSaleResult summarizes the outcome of a bulk sale operation.

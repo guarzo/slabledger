@@ -124,21 +124,26 @@ func findSaleByPurchaseID(t *testing.T, repo *mocks.InMemoryCampaignStore, campa
 
 func TestCreateSale_Provenance(t *testing.T) {
 	tests := []struct {
-		name          string
-		inputReason   string
-		forgedCLValue int
-		forgedFeePct  *float64
-		wantReason    string
-		wantErr       error
+		name             string
+		inputReason      string
+		inputPriceSource string
+		forgedCLValue    int
+		forgedFeePct     *float64
+		wantReason       string
+		wantPriceSource  string
+		wantErr          error
 	}{
 		{
-			name:       "freezes derived provenance",
-			wantReason: inventory.SaleReasonDiscretionary,
+			name:            "freezes derived provenance, defaults price source to manual",
+			wantReason:      inventory.SaleReasonDiscretionary,
+			wantPriceSource: inventory.PriceSourceManual,
 		},
 		{
-			name:        "preserves explicit reason",
-			inputReason: inventory.SaleReasonAgingPolicy,
-			wantReason:  inventory.SaleReasonAgingPolicy,
+			name:             "preserves explicit reason and price source",
+			inputReason:      inventory.SaleReasonAgingPolicy,
+			inputPriceSource: inventory.PriceSourceEstimated,
+			wantReason:       inventory.SaleReasonAgingPolicy,
+			wantPriceSource:  inventory.PriceSourceEstimated,
 		},
 		{
 			name:        "rejects invalid reason",
@@ -146,10 +151,16 @@ func TestCreateSale_Provenance(t *testing.T) {
 			wantErr:     inventory.ErrInvalidSaleReason,
 		},
 		{
-			name:          "ignores client-forged provenance",
-			forgedCLValue: 99999999,
-			forgedFeePct:  func() *float64 { v := 0.99; return &v }(),
-			wantReason:    inventory.SaleReasonDiscretionary,
+			name:             "rejects invalid price source",
+			inputPriceSource: "bogus",
+			wantErr:          inventory.ErrInvalidPriceSource,
+		},
+		{
+			name:            "ignores client-forged provenance",
+			forgedCLValue:   99999999,
+			forgedFeePct:    func() *float64 { v := 0.99; return &v }(),
+			wantReason:      inventory.SaleReasonDiscretionary,
+			wantPriceSource: inventory.PriceSourceManual,
 		},
 	}
 	for _, tt := range tests {
@@ -166,6 +177,7 @@ func TestCreateSale_Provenance(t *testing.T) {
 				SalePriceCents:      20000,
 				SaleDate:            "2026-06-20",
 				SaleReason:          tt.inputReason,
+				PriceSource:         tt.inputPriceSource,
 				CLValueAtSaleCents:  tt.forgedCLValue,
 				ChannelFeePctAtSale: tt.forgedFeePct,
 			}
@@ -183,6 +195,9 @@ func TestCreateSale_Provenance(t *testing.T) {
 
 			if s.SaleReason != tt.wantReason {
 				t.Errorf("SaleReason = %q, want %q", s.SaleReason, tt.wantReason)
+			}
+			if s.PriceSource != tt.wantPriceSource {
+				t.Errorf("PriceSource = %q, want %q", s.PriceSource, tt.wantPriceSource)
 			}
 			// CLValueAtSaleCents and ChannelFeePctAtSale must always reflect the
 			// purchase/campaign's real values, never client input (forged or not).
