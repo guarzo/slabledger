@@ -32,13 +32,32 @@ Ask for anything not supplied:
 | Photo folder (or a typed list — see below) | yes | `~/shows/2026-08-08-nats/` |
 | Sale date | yes | `2026-08-08` |
 | Negotiated percentage | yes | Ask the user in percent (`72`), send as the fraction `negotiatedPct: 0.72`. The API rejects anything outside `(0, 1]`. |
-| Sale channel | no, defaults to `local` | `local` |
+| Sale channel | yes — always send it explicitly | `local` |
 | Total actually received | no, but ask | `4310.00` |
 
+Sale channel has no server-side default: an omitted `saleChannel` previews fine
+but fails every item when you confirm (see Troubleshooting). Always send one.
+
 The total received is what makes the preview worth running: the endpoint
-reconciles `sum(theirCompCents × pct)` against it and reports the delta. A delta
-of a few dollars is rounding. A delta the size of one card means a card is
-missing from the batch or a sticker was misread.
+reconciles `computedTotalCents` (the sum of `theirCompCents × pct` across
+matched cards) against it and reports `reconcileDeltaCents = computedTotalCents
+− totalReceivedCents` — positive means the computed total is *higher* than what
+you were told was received.
+
+Rounding happens once per card, so it cannot explain much: the server does
+`round(theirCompCents × pct)` per item, which drifts at most half a cent per
+card — about 10 cents on a 20-card batch, at most $1 on a 200-card batch. A
+delta bigger than that is a real discrepancy (a mis-stickered card, a mistyped
+comp, a cash adjustment nobody mentioned), not rounding.
+
+If one or more certs landed in `notFound` or `alreadySold`, their value is
+excluded from `computedTotalCents` entirely — a single unmatched cert alone
+produces a delta about the size of that one card. Resolve those certs first;
+only recount the physical stack if the delta persists afterward.
+
+If you never got a total from the user, `reconcileDeltaCents` still comes back
+as `0` — that's the field's default, not a clean reconciliation. Report it as
+"no total supplied, reconciliation not performed," never as "delta 0."
 
 ## Procedure
 
@@ -71,6 +90,11 @@ right.
 
 ### 3. Preview
 
+**Convert dollars to cents before sending: multiply every dollar figure by
+100.** `$45` → `4500`. The API takes cents only — it has no dollar mode and
+will silently accept `45` as 45 cents, so a missed conversion produces a valid
+200 response with every price 100x too low and nothing flags it.
+
 ```bash
 curl -sX POST http://localhost:8081/api/sales/import-certs \
   -H "Authorization: Bearer $LOCAL_API_TOKEN" \
@@ -90,12 +114,21 @@ curl -sX POST http://localhost:8081/api/sales/import-certs \
 
 Report to the user:
 
-- `matched` count, and the per-card sale price the server computed
-  (`salePriceCents` on each match)
-- `notFound` certs — these are the safe failure; a misread digit usually lands here
-- `alreadySold` certs — a card recorded as sold twice is a real data problem
-- the reconcile delta (`reconcileDeltaCents`, computed against your
-  `totalReceivedCents`)
+- `matched` count, and for each match its `cardName` and `salePriceCents`.
+  **Compare each returned `cardName` against what you recorded for that cert in
+  the step-2 table.** A mismatch means the cert was misread and matched a
+  *different* card you own — this is the primary defense against that failure
+  mode (see "Cert numbers are the risk" below). Do not confirm until it's
+  resolved.
+- `notFound` certs, with their `reason`: `not_found` (cert isn't in inventory —
+  usually a misread digit), `invalid_comp` (the sticker was read as `$0` or
+  blank — not necessarily a misread; confirm whether the card was genuinely
+  thrown in free), or `lookup_error` (a sale lookup failed server-side)
+- `alreadySold` certs — a card recorded as sold twice is a real data problem.
+  There is no override endpoint for this; check and correct the existing sale
+  in the app itself rather than re-running the batch.
+- `computedTotalCents` next to the user's stated total, and
+  `reconcileDeltaCents` — see the rounding/omission caveats under Inputs above
 - **every cert in `nearDuplicateCerts`** — see the warning below
 
 ### 4. Confirm — only on explicit approval
@@ -119,6 +152,16 @@ curl -sX POST http://localhost:8081/api/sales/import-certs/confirm \
 not recompute the price locally. `priceSource` is always `"itemized"` on this
 path; that is the whole reason the path exists.
 
+**Read the response before telling the user the sale is recorded.** It's
+`{"created": N, "failed": N, "errors": [{"purchaseId": ..., "error": "..."}]}`.
+Confirm is **partial-success**: it can write some sales and reject others while
+still returning HTTP 200 — a batch with 2 failures out of 20 looks identical to
+a clean run unless you read `failed` and `errors`. Always report `created` and
+`failed` to the user. If `failed > 0`, print every `errors[]` entry with its
+`purchaseId` and message, and say plainly: those cards were **not** recorded
+and remain unsold in inventory. See Troubleshooting for the common error
+strings and what each one means.
+
 ## Cert numbers are the risk, not prices
 
 A sticker price is 2-4 digits and lives next to a card the user is looking at. A
@@ -130,12 +173,28 @@ does one of two things:
 
 - **fails to match** → lands in `notFound`. This is fine. It is self-flagging.
 - **matches a different card you own** → records a sale against the wrong slab,
-  marks it sold, and leaves the real card in inventory. Nothing flags it.
+  marks it sold, and leaves the real card in inventory. The `cardName` check in
+  step 3 is the defense against this — the preview returns the *matched* card's
+  name, so a misread cert shows up as the wrong card name if you compare it.
 
-That second case is why `nearDuplicateCerts` exists in the response. Any cert
-listed there is within one digit of another owned cert. **Re-open that card's
-photo and re-read the label digit by digit before confirming.** Do not reason
-about which is "more likely" — look at the picture.
+`nearDuplicateCerts` in the response helps too, but read its guarantee
+precisely: it only compares the certs **you submitted in this batch** against
+each other — it never checks against the rest of your inventory. Any cert
+listed there is within one digit of *another cert in the same batch*. An empty
+`nearDuplicateCerts` does **not** mean no cert here is close to something you
+own — it means no two certs *you submitted* are close to each other. A single
+misread cert that collides with a card sitting at home, not in this stack, is
+not flagged by `nearDuplicateCerts` at all; the `cardName` comparison above is
+what catches that case. When a cert *is* listed in `nearDuplicateCerts`,
+**re-open that card's photo and re-read the label digit by digit before
+confirming.** Do not reason about which is "more likely" — look at the
+picture.
+
+(Exact duplicate certs — the same card photographed twice — are deliberately
+not flagged by `nearDuplicateCerts`; that's not a misread. The preview returns
+two matched rows for the same purchase, and the server catches the actual
+duplicate write at confirm time as a `failed` entry, not a double sale — one
+more reason to read the confirm response.)
 
 The same reasoning is why one card per photo is non-negotiable (below): a frame
 with two slabs is the one failure mode that produces a plausible, unflagged,
@@ -154,7 +213,12 @@ entirely:
 ```
 
 One `cert,price` pair per line, price in dollars. Everything from step 2 onward
-is identical. A batch is always recordable even when OCR is useless.
+is identical, with one difference: there's no photo to read a card name from,
+so the review table's `card` column is blank in this mode. That makes the
+step-3 `cardName` comparison *more* important here, not less — it's the only
+check that a cert didn't silently match the wrong owned card, since there's no
+pre-committed expected name to fall back on. A batch is always recordable even
+when OCR is useless.
 
 ## Capture requirements
 
@@ -175,9 +239,16 @@ which step 1 works:
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Cert in `notFound` | misread digit, or the card was never in inventory | re-read the photo; if the cert is right, the card needs importing first (`csv-import` skill) |
-| Cert in `alreadySold` | double-recorded, or a genuine re-sale after a return | check the existing sale before overriding |
-| Cert in `nearDuplicateCerts` | within one digit of another owned cert | re-read that card's photo digit by digit; do not confirm the batch until resolved |
-| Reconcile delta ≈ one card's value | a card is missing from the batch, or one sticker was misread | recount the physical stack against the review table |
-| Reconcile delta of a few dollars | per-card rounding | expected; proceed |
+| Cert in `notFound`, reason `not_found` | misread digit, or the card was never in inventory | re-read the photo; if the cert is right, the card needs importing first (`csv-import` skill) |
+| Cert in `notFound`, reason `invalid_comp` | sticker read as `$0` or blank — not necessarily a misread | confirm whether the card was genuinely thrown in for free; there's nothing to re-read if so |
+| Cert in `alreadySold` | double-recorded, or a genuine re-sale after a return | there is no override — check and correct the existing sale in the app itself |
+| Cert in `nearDuplicateCerts` | within one digit of another cert *in this same batch* (not checked against the rest of inventory) | re-read both photos digit by digit; do not confirm the batch until resolved |
+| One or more certs in `notFound`/`alreadySold`, and the reconcile delta is about one card's size | their value is excluded from `computedTotalCents`, so a single unmatched cert alone produces a delta this size | resolve those certs first; recount the physical stack only if the delta persists afterward |
+| Reconcile delta of roughly a dollar or more | rounding alone cannot exceed ~half a cent per card, so this is a real discrepancy: a mis-stickered card, a mistyped comp, or an unrecorded cash adjustment | recount the physical stack against the review table |
+| Reconcile delta of a few cents on a normal-size batch | per-card rounding | expected; proceed |
+| Reconcile delta is exactly `0` and no `totalReceivedCents` was sent | the field defaults to `0` when no total was supplied — not a real reconciliation | report it as "no total supplied," not as clean |
+| Confirm response has `failed > 0` | one or more items were rejected at write time even though the batch returned HTTP 200 | read every `errors[]` entry; those cards are **not** recorded and remain unsold in inventory |
+| `errors[]` message `"sale date cannot be before purchase date"` | the typed show date doesn't parse as on/after that card's purchase date | correct the sale date, not the price |
+| `errors[]` message `"already sold"` at confirm, despite a clean preview | inventory state changed between preview and confirm, or the same cert appeared twice in the batch | check the existing sale before re-running |
+| Omitted `saleChannel` | previews fine (no validation there) but fails every item at confirm | always send an explicit `saleChannel` |
 | `401 Unauthorized` | `LOCAL_API_TOKEN` unset or stale | `echo $LOCAL_API_TOKEN`; it must match the running server's config |
