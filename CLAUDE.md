@@ -56,7 +56,7 @@ Orientation for the packages whose purpose is not obvious from the name:
 - `domain/liquidation` — liquidation candidates and comp pricing.
 - `domain/dhevents` — DH event stream types.
 - `domain/storage` — cache and storage interfaces.
-- `domain/{constants,errors,llmutil,mathutil,observability,timeutil}` — leaf utilities.
+- `domain/{constants,errors,mathutil,observability,timeutil}` — leaf utilities.
 - `adapters/clients/dh` — the DH API client; `adapters/clients/dhprice` wraps it as a
   `PriceProvider`; `adapters/clients/dhlisting` handles listing pushes.
 - `adapters/clients/cardladder` — CardLadder valuations (separate from `PriceProvider`).
