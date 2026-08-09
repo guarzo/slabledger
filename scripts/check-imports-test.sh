@@ -37,6 +37,34 @@ mkpkg() {
   } > "$root/internal/domain/$pkg/$leaf.go"
 }
 
+# mkplatpkg <root> <pkg> <file> [domain import...]
+# Writes internal/platform/<pkg>/<file> importing each internal/domain/<import>.
+# <file> is named explicitly so a case can build a _test.go file and prove the
+# platform pass ignores it.
+mkplatpkg() {
+  local root=$1 pkg=$2 file=$3
+  shift 3
+  mkdir -p "$root/internal/platform/$pkg"
+  {
+    printf 'package %s\n\nimport (\n' "$pkg"
+    local imp
+    for imp in "$@"; do
+      printf '\t"%s/internal/domain/%s"\n' "$MODULE" "$imp"
+    done
+    printf ')\n'
+  } > "$root/internal/platform/$pkg/$file"
+}
+
+# The platform pass runs after the flat sibling pass, so any fixture exercising
+# it needs a tree that clears the sibling rule first (>=2 siblings, no
+# cross-imports).
+mkclean_domain() {
+  local root=$1
+  mkpkg "$root" inventory
+  mkpkg "$root" alpha inventory
+  mkpkg "$root" beta inventory
+}
+
 # run_case <name> <zero|nonzero> <expected substring, "" to skip> <builder fn>
 run_case() {
   local name=$1 expect=$2 needle=$3 builder=$4
@@ -120,6 +148,49 @@ fixture_nested_violation() {
   mkpkg "$root" nest/deep inventory beta
 }
 
+# Case 6 — platform importing a domain package outside the sanctioned leaf set.
+fixture_platform_unsanctioned() {
+  local root=$1
+  mkclean_domain "$root"
+  mkplatpkg "$root" cardutil normalize.go constants
+  mkplatpkg "$root" rogue rogue.go inventory
+}
+
+# Case 7 — platform importing only sanctioned leaves passes.
+fixture_platform_sanctioned() {
+  local root=$1
+  mkclean_domain "$root"
+  mkplatpkg "$root" cardutil normalize.go constants
+  mkplatpkg "$root" resilience retry.go errors observability
+}
+
+# Case 8 — the platform pass is scoped to non-test files, matching the flat
+# sibling pass. Pins the real tree's cardutil_test → inventory edge as allowed.
+fixture_platform_test_file_ignored() {
+  local root=$1
+  mkclean_domain "$root"
+  mkplatpkg "$root" cardutil normalize.go constants
+  mkplatpkg "$root" cardutil chain_test.go inventory
+}
+
+# Case 9 — a sanctioned leaf that reaches the hub turns the allowlist into a
+# hole, so the checker refuses rather than trusting the set.
+fixture_leaf_not_leaf() {
+  local root=$1
+  mkclean_domain "$root"
+  mkpkg "$root" constants inventory
+  mkplatpkg "$root" cardutil normalize.go constants
+}
+
+# Case 10 — leaf-to-leaf edges inside the sanctioned set stay legal.
+fixture_leaf_to_leaf() {
+  local root=$1
+  mkclean_domain "$root"
+  mkpkg "$root" constants errors
+  mkpkg "$root" errors
+  mkplatpkg "$root" cardutil normalize.go constants
+}
+
 run_case "escape hatch: non-hub importer of a governed sibling is flagged" \
   nonzero "internal/domain/rogue imports sibling internal/domain/beta" \
   fixture_escape_hatch
@@ -139,6 +210,26 @@ run_case "fail-closed: fewer than two siblings is an error" \
 run_case "nested sibling importing a flat sibling names the full package path" \
   nonzero "internal/domain/nest/deep imports sibling internal/domain/beta" \
   fixture_nested_violation
+
+run_case "platform importing an unsanctioned domain package is flagged" \
+  nonzero "internal/platform/rogue imports internal/domain/inventory" \
+  fixture_platform_unsanctioned
+
+run_case "platform importing only sanctioned leaves passes" \
+  zero "Platform boundary check passed" \
+  fixture_platform_sanctioned
+
+run_case "platform pass ignores _test.go files" \
+  zero "Platform boundary check passed" \
+  fixture_platform_test_file_ignored
+
+run_case "a sanctioned leaf reaching the hub is flagged" \
+  nonzero "sanctioned leaf internal/domain/constants/constants.go imports internal/domain/inventory" \
+  fixture_leaf_not_leaf
+
+run_case "leaf-to-leaf edges inside the sanctioned set are allowed" \
+  zero "Platform boundary check passed" \
+  fixture_leaf_to_leaf
 
 echo ""
 if [ "$failures" -ne 0 ]; then

@@ -188,3 +188,106 @@ if [ -n "$sibling_violations" ]; then
 fi
 
 echo "Flat sibling rule check passed: $n_siblings sub-packages, $checks_performed checks, no cross-imports."
+
+# --- Platform -> domain boundary (SLA-91) ------------------------------------
+
+# internal/README.md draws dependencies as flowing inward only, which would make
+# every platform -> domain edge illegal. The tree has always had a few, and they
+# all target the same dependency-free bottom layer. Rather than pretend the
+# arrow is true, the rule sanctions that layer by name and enforces the
+# boundary, so a platform package reaching for something heavier than a leaf
+# fails here instead of depending on reviewer memory.
+SANCTIONED_DOMAIN_LEAVES=(constants errors observability)
+
+is_sanctioned() {
+  local needle=$1 s
+  for s in "${SANCTIONED_DOMAIN_LEAVES[@]}"; do
+    [ "$s" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+# Scoped to non-test files, matching the flat sibling pass above. An external
+# _test package (internal/platform/cardutil's cardutil_test) pins normalization
+# behavior end to end against the hub; that edge is test-only and absent from
+# the shipped import graph, so it is out of scope rather than sanctioned.
+if [ -d internal/platform ]; then
+  platform_files=$(find internal/platform -type f -name "*.go" ! -name "*_test.go" | sort)
+
+  if [ -z "$platform_files" ]; then
+    echo "ERROR: internal/platform/ exists but holds no non-test .go files." >&2
+    echo "The platform boundary check cannot verify this tree; refusing to pass." >&2
+    exit 1
+  fi
+
+  # Keep the allowlist honest. A sanctioned package that itself reached the hub
+  # would turn this rule into a hole, so assert each one still depends on
+  # nothing outside the sanctioned set. Leaf-to-leaf edges stay legal.
+  #
+  # Greps per file rather than recursively: the extraction below strips to the
+  # first "internal/domain/" in the line, so a recursive grep's path prefix
+  # would be parsed as the import target.
+  leaf_files=$(find "${SANCTIONED_DOMAIN_LEAVES[@]/#/internal/domain/}" \
+    -type f -name "*.go" ! -name "*_test.go" 2>/dev/null | sort || true)
+
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    status=0
+    found=$(grep -n -- "\"$MODULE/internal/domain/" "$file") || status=$?
+    if [ "$status" -gt 1 ]; then
+      echo "ERROR: grep failed with status $status scanning $file" >&2
+      echo "The platform boundary check cannot verify this tree; refusing to pass." >&2
+      exit 1
+    fi
+    [ "$status" -eq 0 ] || continue
+
+    while IFS= read -r line; do
+      target=${line#*internal/domain/}
+      target=${target%%\"*}
+      if ! is_sanctioned "$target"; then
+        echo "ERROR: sanctioned leaf $file imports internal/domain/$target."
+        echo ""
+        echo "The platform -> domain allowlist assumes these packages are a"
+        echo "dependency-free bottom layer. This edge breaks that assumption and"
+        echo "would silently widen the boundary — fix it or revisit the rule."
+        exit 1
+      fi
+    done <<< "$found"
+  done <<< "$leaf_files"
+
+  platform_violations=""
+  while IFS= read -r file; do
+    status=0
+    found=$(grep -n -- "\"$MODULE/internal/domain/" "$file") || status=$?
+    if [ "$status" -gt 1 ]; then
+      echo "ERROR: grep failed with status $status scanning $file" >&2
+      echo "The platform boundary check cannot verify this tree; refusing to pass." >&2
+      exit 1
+    fi
+    [ "$status" -eq 0 ] || continue
+
+    dir=${file%/*}
+    owner=${dir#internal/platform/}
+
+    while IFS= read -r line; do
+      target=${line#*internal/domain/}
+      target=${target%%\"*}
+      if ! is_sanctioned "$target"; then
+        platform_violations="${platform_violations}ERROR: internal/platform/$owner imports internal/domain/$target\n${file}:${line%%:*}\n"
+      fi
+    done <<< "$found"
+  done <<< "$platform_files"
+
+  if [ -n "$platform_violations" ]; then
+    echo "ERROR: Packages under internal/platform/ may import only the sanctioned domain leaves."
+    echo ""
+    printf "%b" "$platform_violations"
+    echo ""
+    echo "Sanctioned set: ${SANCTIONED_DOMAIN_LEAVES[*]}"
+    echo "See internal/README.md (Dependency Rule). Platform is the bottom layer;"
+    echo "anything richer belongs behind an interface the domain owns."
+    exit 1
+  fi
+
+  echo "Platform boundary check passed: only ${SANCTIONED_DOMAIN_LEAVES[*]} imported from internal/domain/."
+fi

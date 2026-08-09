@@ -63,6 +63,24 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 - ✅ `domain` → `platform` (uses infrastructure)
 - ❌ `domain` → `adapters` (NEVER - violates dependency inversion)
 
+**The one sanctioned upward edge**: `platform` → `domain/{constants, errors, observability}`.
+These three are a dependency-free bottom layer — they import nothing under
+`internal/` at all — shared by both layers rather than owned by the domain.
+Platform code may import them and nothing else from `internal/domain/`:
+
+- ✅ `platform` → `domain/constants`, `domain/errors`, `domain/observability`
+- ❌ `platform` → any other `domain` package (including the `inventory` hub)
+
+The allowlist is exact and enforced by `scripts/check-imports.sh`, which also
+asserts the three stay dependency-free so the exception cannot quietly widen.
+Enforcement covers non-test files, matching the flat sibling rule; the
+`cardutil_test` external test package pins normalization end to end against the
+hub, an edge that is absent from the shipped import graph.
+
+Prefer a domain-owned interface over adding to the allowlist. Growing it means
+editing both this block and `SANCTIONED_DOMAIN_LEAVES` in the checker, and that
+friction is deliberate.
+
 ---
 
 ## Core Hexagonal Packages
