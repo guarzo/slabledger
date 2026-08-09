@@ -231,4 +231,36 @@ func TestImportCertSales_NearDuplicateCerts(t *testing.T) {
 	}
 }
 
+func TestImportCertSales_NoFalsePositiveNearDuplicates(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	seedCertSalePurchases(repo)
+	svc := newOrdersImportService(repo, func() string { return "gen-id" })
+	defer svc.Close()
+
+	// Every pair here is genuinely distinct: no two certs are within edit
+	// distance 1 of each other (verified by hand below). A stub that flags
+	// every submitted cert unconditionally must fail this test.
+	//
+	//   05442200 vs 17979513: same length, 8 substitutions apart
+	//   05442200 vs 00000000: same length, 5 substitutions apart
+	//   17979513 vs 00000000: same length, 8 substitutions apart
+	//   6098919001 vs the 8-digit certs: length differs by 2, never within 1
+	req := csvimport.CertSaleImportRequest{
+		SaleDate: "2026-03-10", NegotiatedPct: 0.72,
+		Items: []csvimport.CertSaleItem{
+			{CertNumber: "05442200", TheirCompCents: 10000},
+			{CertNumber: "17979513", TheirCompCents: 5000},
+			{CertNumber: "00000000", TheirCompCents: 3000},
+			{CertNumber: "6098919001", TheirCompCents: 4000},
+		},
+	}
+	result, err := svc.ImportCertSales(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.NearDuplicateCerts) != 0 {
+		t.Fatalf("nearDuplicateCerts: got %v, want none — all submitted certs are genuinely distinct", result.NearDuplicateCerts)
+	}
+}
+
 var _ = math.Round // silence unused import if edits above ever drop the direct use
