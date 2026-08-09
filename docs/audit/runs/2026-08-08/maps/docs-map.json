@@ -1,0 +1,889 @@
+{
+  "scout": "docs-map",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "status": "complete",
+  "declared_totals": {},
+  "records_count": 109,
+  "gaps": [
+    "Runtime-behavior claims were not executed (read-only): make screenshots output paths, make check passing, the default VALUES in docs/SCHEDULERS.md config tables (names checked, defaults not), and docs/DEVELOPMENT.md Recommended TTLs.",
+    "docs/plans/ (20 files), docs/specs/ (9), docs/superpowers/ (21) and the 44 skill .md files were outside the assigned universe and are unaudited.",
+    "AGENTS.md, DESIGN.md, PRODUCT.md, web/docs/ACCESSIBILITY_CHECKLIST.md, web/docs/DESIGN_TOKEN_USAGE_EXAMPLES.md, web/docs/TYPE_DEFINITIONS_GUIDE.md, web/tests/README.md, web/tests/e2e/README.md and .devcontainer/README.md are living documents of the same kind as those audited but fell outside the stated universe.",
+    "Whether every env var the config loader reads is present in .env.example was left to config-map; only the .env.example-to-code direction was checked here.",
+    "docs/API.md request/response BODY shapes were not diffed against Go struct JSON tags - only its 115 endpoint paths were verified. A field-level check is go-reference-map or frontend-reference-map territory.",
+    "Prose paths appearing inside ASCII-art trees or table cells without an internal/ prefix escape the systematic regex sweep and were only caught by per-document manual reading; coverage there is best-effort, not exhaustive."
+  ],
+  "records": [
+    {
+      "identity": "docs/API.md:endpoint-roster-complete",
+      "kind": "claim",
+      "defined_at": "docs/API.md:1",
+      "verdict": "confirmed",
+      "command": "comm -23 <(git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:docs/API.md | grep -oE '`(GET|POST|PUT|PATCH|DELETE) /api[^`]*`' | sed -E 's/`//g;s/^[A-Z]+ //' | sort -u) <(git grep -ohE '\"(GET |POST |PUT |PATCH |DELETE )?/(api|auth)[^\"]*\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/httpserver/router.go internal/adapters/httpserver/routes.go | tr -d '\"' | sed -E 's/^[A-Z]+ //' | sort -u)",
+      "note": "docs/API.md documents 115 distinct /api paths. Set-differencing them against every path registered in router.go and routes.go leaves exactly one on each side: API.md writes /api/admin/allowlist/{email} where the mux registers the prefix pattern /api/admin/allowlist/ (the same route, rendered with its path variable), and the reverse direction leaves only /auth/google/login and /auth/google/callback, which API.md does document, at :24 and :34, under /auth rather than /api. No documented endpoint is unregistered and no registered endpoint is undocumented. This is the sharpest contrast in the corpus: README.md's abbreviated table of the same API has six phantom routes."
+    },
+    {
+      "identity": "CLAUDE.md:api-responses-in-usd",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:194",
+      "verdict": "refuted",
+      "command": "git grep -nE 'json:\"[a-zA-Z_]*[Cc]ents\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/httpserver/handlers",
+      "note": "CLAUDE.md:194 states the convention as 'Backend uses cents internally, API responses use USD (dollars)', repeating CLAUDE.md:123's 'All monetary values in cents'. At least seven response fields serialize cents straight to the wire: buyCostCents and priceCents (campaigns_analytics.go:186,:277), capitalBudgetCents and cashBufferCents (campaigns_finance.go:54-55), priceCents and buyCostCents (campaigns_purchases.go:364,:466), cl_value_cents (dh_export_handler.go:26). docs/API.md:2393 documents this as a deliberate exception ('Monetary values keep the explicit _cents suffix rather than converting to USD'), so the code and the API reference agree with each other and CLAUDE.md's unqualified rule is the outlier."
+    },
+    {
+      "identity": "docs/API.md:base-url",
+      "kind": "claim",
+      "defined_at": "docs/API.md:3",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/vite.config.js | grep -nE '8081'",
+      "note": "Base URL http://localhost:8081 matches the Vite proxy target (vite.config.js:56,:61) and README.md:22."
+    },
+    {
+      "identity": "docs/ARCHITECTURE.md:inventory-types-go",
+      "kind": "claim",
+      "defined_at": "docs/ARCHITECTURE.md:50",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory | grep -E '/types.go$'",
+      "note": "The package tree names `inventory/types.go` as the home of Campaign, Purchase, Sale, Phase, SaleChannel. The command returns nothing - there is no types.go. The real file is core_types.go (Phase:11, SaleChannel:80, Campaign:191, Purchase:274, Sale:465). Three documents now give this one file three different names: CLAUDE.md:76 has core_types.go (correct), internal/README.md:627 has types_core.go, and this line has types.go."
+    },
+    {
+      "identity": "docs/ARCHITECTURE.md:service-interfaces-holds-8-repos",
+      "kind": "claim",
+      "defined_at": "docs/ARCHITECTURE.md:51",
+      "verdict": "refuted",
+      "command": "git grep -n 'Repository interface' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory/service_interfaces.go",
+      "note": "Both the package tree (:51, 'service_interfaces.go # 8 focused repository interfaces') and five rows of the Key Interfaces table (:240-244, which cite service_interfaces.go as the Defined In location for CampaignRepository, PurchaseRepository, SaleRepository, AnalyticsRepository and FinanceRepository) point at the wrong file. The grep returns empty: service_interfaces.go declares no repository interface at all. It holds six service-facing interfaces (AnalyticsService:14, CertService:33, PricingService:42, DHService:59, CertLookupService:66, SnapshotService:72). The eight repositories live in repository_campaign.go, repository_purchase.go, repository_sale.go, repository_analytics.go, repository_finance.go, repository_pricing.go, repository_dh.go and pending_items.go."
+    },
+    {
+      "identity": "docs/ARCHITECTURE.md:platform-tree",
+      "kind": "claim",
+      "defined_at": "docs/ARCHITECTURE.md:85",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform | xargs -n1 dirname | sort -u",
+      "note": "Third independent copy of the same stale platform tree. It lists cache/ and errors/, neither of which exists; it does list cardutil/ (which internal/README.md:240 omits) but not canonjson/. So all three of CLAUDE.md:38, internal/README.md:240 and this line assert a nonexistent internal/platform/cache, and two of the three assert a nonexistent internal/platform/errors."
+    },
+    {
+      "identity": "docs/ARCHITECTURE.md:inventory-file-roster",
+      "kind": "claim",
+      "defined_at": "docs/ARCHITECTURE.md:52",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory | grep -E 'channel_fees|errors.go|service.go'",
+      "note": "Aside from types.go and the service_interfaces.go mislabel above, the remaining named files resolve: service.go (which does declare PriceLookup at :26 as the tree says), channel_fees.go, errors.go."
+    },
+    {
+      "identity": "docs/ARCHITECTURE.md:adapters-tree",
+      "kind": "claim",
+      "defined_at": "docs/ARCHITECTURE.md:68",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters | xargs -n1 dirname | sort -u",
+      "note": "Every adapter path listed exists: httpserver/{handlers,middleware}, httpserver/router.go, clients/{dh,dhprice,dhlisting,cardladder,psa,psaportal,google,httpx}, storage/postgres, scheduler. This is the most complete and accurate adapters tree in the corpus - more so than internal/README.md:179, which omits four clients."
+    },
+    {
+      "identity": "docs/ARCHITECTURE.md:domain-tree-paths",
+      "kind": "claim",
+      "defined_at": "docs/ARCHITECTURE.md:48",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^internal/domain/' | xargs -n1 dirname | sort -u",
+      "note": "All eleven domain packages drawn in the tree exist (auth, inventory, arbitrage, portfolio, tuning, finance, export, dhlisting, observability, pricing, mathutil). Like the other trees it is a subset - csvimport, demand, dhevents, dhpricing, intelligence, liquidation, psacampaign and the leaf utilities are unlisted - but nothing drawn is false."
+    },
+    {
+      "identity": "docs/ARCHITECTURE.md:pricing-interface-locations",
+      "kind": "claim",
+      "defined_at": "docs/ARCHITECTURE.md:246",
+      "verdict": "confirmed",
+      "command": "git grep -nE 'type (PriceProvider|APITracker|AccessTracker|HealthChecker) interface' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/pricing",
+      "note": "PriceProvider in provider.go and APITracker/AccessTracker/HealthChecker in repository.go, as the Key Interfaces table states. The pricing rows are correct even though the inventory rows immediately above them are not."
+    },
+    {
+      "identity": "CLAUDE.md:sibling-roster-2026-08-08",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:116",
+      "verdict": "incomplete",
+      "command": "git grep -l 'internal/domain/inventory' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/*.go' 'internal/domain/**/*.go' | sed 's#^[0-9a-f]*:##' | grep -v _test.go | xargs -n1 dirname | sort -u",
+      "note": "The prose names 10 siblings (arbitrage, demand, dhlisting, dhpricing, export, finance, portfolio, pricing/lookup, psacampaign, tuning). The document's own deriving command returns 11: it also yields internal/domain/csvimport, which is absent from the sentence. csvimport imports the hub from 9 non-test files (e.g. internal/domain/csvimport/service.go:16). The date stamp is the baseline's own date (2026-08-08), so the roster was stale on the day it was written."
+    },
+    {
+      "identity": "CLAUDE.md:csv-parsing-in-inventory",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:84",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory | grep parse",
+      "note": "Claim: 'CSV parsing lives directly in the `inventory` package (`ls internal/domain/inventory/parse_*.go` for the current set - eBay, Shopify, orders)'. The command returns only confidence_parse.go and confidence_parse_test.go; there is no parse_*.go file. CSV parsing was carved out into internal/domain/csvimport (see internal/domain/csvimport/service.go:4, 'It was carved out of internal/domain/inventory (SLA-35)'), which holds parse_orders.go, service_import_ebay.go, service_import_orders.go, service_import_psa.go and others."
+    },
+    {
+      "identity": "CLAUDE.md:adding-components-domain-interface-recipe",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:216",
+      "verdict": "incomplete",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/README.md | grep -niE 'domain interface'",
+      "note": "CLAUDE.md:212-218 says internal/README.md has step-by-step examples for six things. Five have sections ('Example: Adding a New Data Source' :312, 'HTTP Handler' :353, 'Scheduler' :398, 'Domain Error' :459, 'Migration' :482). 'Adding a new domain interface' (CLAUDE.md:216) has no corresponding section: the grep returns only five incidental prose mentions at lines 64, 78, 170, 194, 263, none of which is a heading."
+    },
+    {
+      "identity": "CLAUDE.md:inventory-8-repository-interfaces",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:77",
+      "verdict": "confirmed",
+      "command": "git grep -n 'Repository interface' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/inventory/*.go'",
+      "note": "All eight named interfaces are declared: CampaignRepository (repository_campaign.go:9), PurchaseRepository (repository_purchase.go:94), SaleRepository (repository_sale.go:6), AnalyticsRepository (repository_analytics.go:6), FinanceRepository (repository_finance.go:9), PricingRepository (repository_pricing.go:6), DHRepository (repository_dh.go:6), PendingItemRepository (pending_items.go:44). The grep finds 14 declarations total, the extra six being the Purchase* decomposition (PurchaseCore/Field/Pricing/EbayExport/Snapshot/DH) that PurchaseRepository composes; the claim names the eight top-level seams, not the total declaration count."
+    },
+    {
+      "identity": "CLAUDE.md:core-types-file",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:76",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/core_types.go | grep -nE 'type (Campaign|Purchase|Sale|Phase|SaleChannel) '",
+      "note": "Phase:11, SaleChannel:80 (alias to constants.SaleChannel), Campaign:191, Purchase:274, Sale:465 - all five in core_types.go."
+    },
+    {
+      "identity": "CLAUDE.md:go-version-1.26",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:3",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:go.mod | grep -nE '^go '",
+      "note": "go.mod:3 is 'go 1.26'."
+    },
+    {
+      "identity": "CLAUDE.md:make-check-composition",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:204",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:Makefile | sed -n '139,155p'",
+      "note": "Makefile 'check: lint' runs check-imports-test.sh, check-imports.sh, check-file-size.sh, check-playwright-version.sh, in that order. This also confirms CLAUDE.md:206's 'run first by `make check`' for the self-test."
+    },
+    {
+      "identity": "CLAUDE.md:make-test-target",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:15",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:Makefile | grep -nE '^[a-zA-Z][a-zA-Z0-9_-]*:'",
+      "note": "Targets test:81, check:146, lint:139, build:38, screenshots:132 all exist, so the Quick Commands block's make invocations are all defined."
+    },
+    {
+      "identity": "CLAUDE.md:check-imports-test-five-cases",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:206",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-imports-test.sh | grep -nE '^run_case|fixture_'",
+      "note": "Exactly five run_case invocations at lines 123, 127, 131, 135, 139, backed by five fixture_ functions."
+    },
+    {
+      "identity": "CLAUDE.md:check-file-size-limits",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:207",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-file-size.sh | grep -nE '500|600|exclude|mocks|_test'",
+      "note": "WARN_LIMIT=500 (line 6), FAIL_LIMIT=600 (line 7). The find at line 20 excludes '*_test.go' and '*/testutil/*' (which is where mocks live) - and also cmd/slabledger/main.go, an exclusion CLAUDE.md does not mention."
+    },
+    {
+      "identity": "CLAUDE.md:quality-scripts-exist",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:205",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^scripts/'",
+      "note": "check-imports.sh, check-imports-test.sh, check-file-size.sh, check-playwright-version.sh are all tracked."
+    },
+    {
+      "identity": "CLAUDE.md:migrations-run-on-startup",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:124",
+      "verdict": "confirmed",
+      "command": "git grep -n 'RunMigrations' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- cmd",
+      "note": "cmd/slabledger/main.go:209 calls postgres.RunMigrations(db, migrationsPath) on the startup path; internal/adapters/storage/postgres/migrations.go:82 issues m.Up()."
+    },
+    {
+      "identity": "CLAUDE.md:migration-and-driver-deps",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:122",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:go.mod | grep -nE 'golang-migrate|jackc/pgx'",
+      "note": "go.mod:6 github.com/golang-migrate/migrate/v4 v4.19.1; go.mod:8 github.com/jackc/pgx/v5 v5.10.0."
+    },
+    {
+      "identity": "CLAUDE.md:migrations-directory",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:128",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations | grep -c up.sql",
+      "note": "35 up-migrations present, matching the run's baseline migrations=35. 000001_initial_schema.up.sql exists as claimed."
+    },
+    {
+      "identity": "CLAUDE.md:migration-000024-targeting-axes",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:131",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations | sed 's#.*/##' | grep 000024",
+      "note": "000024_campaign_targeting_axes.up.sql exists at the number and name the prose gives."
+    },
+    {
+      "identity": "CLAUDE.md:migration-rls-027-029",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:136",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations | sed 's#.*/##' | grep -E '00002[789]'",
+      "note": "000027_rls_remaining_tables, 000028_tighten_000003_rls_policies, 000029_psa_push_queue_rls all exist, and 000003_supabase_security_and_perf_fixes is the migration they are described as retrofitting."
+    },
+    {
+      "identity": "CLAUDE.md:dbtracker-in-prices-go",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:172",
+      "verdict": "confirmed",
+      "command": "git grep -n 'DBTracker' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/adapters/storage/postgres/prices.go'",
+      "note": "prices.go:13 declares type DBTracker; :19 asserts pricing.APITracker, and its doc comment at :10 names APITracker, AccessTracker as claimed."
+    },
+    {
+      "identity": "CLAUDE.md:no-price-history-table",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:169",
+      "verdict": "confirmed",
+      "command": "git grep -n 'price_history' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd web/src",
+      "note": "The only two hits are comments recording that it was dropped (internal/adapters/storage/postgres/prices.go:12, internal/domain/pricing/repository.go:90). No DDL, no query references the table."
+    },
+    {
+      "identity": "CLAUDE.md:dh-sole-priceprovider",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:162",
+      "verdict": "confirmed",
+      "command": "git grep -n 'pricing.PriceProvider = ' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd; git grep -n 'PriceProvider' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- cmd/slabledger",
+      "note": "The only compile-time assertion outside documentation examples is internal/adapters/clients/dhprice/provider_test.go:976. Wiring agrees: cmd/slabledger/init_services.go:22 initializePriceProviders is the single producer of a pricing.PriceProvider, called once at main.go:272. Caveat: this is an assertion-and-wiring search, not a full structural-satisfaction analysis, so an unasserted unwired implementation would not be caught."
+    },
+    {
+      "identity": "CLAUDE.md:initialize-cardladder-wiring",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:165",
+      "verdict": "confirmed",
+      "command": "git grep -n 'initializeCardLadder' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'cmd/slabledger/*.go'",
+      "note": "Defined at cmd/slabledger/init_services.go:44 as the prose says, called from main.go:308."
+    },
+    {
+      "identity": "CLAUDE.md:vite-proxy-playwright-disable",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:225",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/vite.config.js | grep -nE 'PLAYWRIGHT_TEST|proxy|8081'",
+      "note": "vite.config.js:53 'proxy: process.env.PLAYWRIGHT_TEST ? {} : {' with /api (:55) and /auth (:60) both targeting http://localhost:8081."
+    },
+    {
+      "identity": "CLAUDE.md:api-client-timeouts",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:228",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/src/js/api/client.ts | grep -nE 'TIMEOUT_MS|retry'",
+      "note": "client.ts:35 DEFAULT_TIMEOUT_MS = 30000, :38 UPLOAD_TIMEOUT_MS = 300_000 (5 min), retry logic documented at :3 and implemented from :101."
+    },
+    {
+      "identity": "CLAUDE.md:config-load-order",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:233",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/platform/config/loader.go | grep -nE 'func Load|Default\\(|FromEnv|FromFlags|Validate'",
+      "note": "loader.go:13 Load() calls Default() (:15), FromEnv (:18), FromFlags (:22), cfg.Validate() (:28), in the documented order. Default() itself is declared in defaults.go, not loader.go, which the prose does not distinguish."
+    },
+    {
+      "identity": "CLAUDE.md:config-validation-file",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:234",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform/config",
+      "note": "internal/platform/config/validation.go is tracked."
+    },
+    {
+      "identity": "CLAUDE.md:middleware-stack-order",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:241",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/httpserver/routes.go | sed -n '315,330p'",
+      "note": "ApplyMiddleware wraps CORS, Gzip, Logging, Timing, SecurityHeaders, Recovery, rateLimiter.Middleware in exactly that order (routes.go:319-327)."
+    },
+    {
+      "identity": "CLAUDE.md:documentation-links",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:245",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^(docs/|internal/README|internal/testutil/mocks/README)'",
+      "note": "All nine linked docs (API, ARCHITECTURE, DEVELOPMENT, SCHEMA, USER_GUIDE, SCHEDULERS, OPERATIONS, LOOP, DH_INVENTORY), plus docs/runbooks/, internal/README.md and internal/testutil/mocks/README.md, are tracked at the baseline."
+    },
+    {
+      "identity": "CLAUDE.md:internal-readme-leaf-anchor",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:107",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/README.md | grep -nE '^#+ '",
+      "note": "'#### Leaf and non-leaf packages' is at internal/README.md:104, so the #leaf-and-non-leaf-packages anchor resolves."
+    },
+    {
+      "identity": "CLAUDE.md:env-var-key-groups",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:155",
+      "verdict": "confirmed",
+      "command": "git grep -nE 'DH_API_BASE_URL|DH_ENTERPRISE_API_KEY|GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET|ENCRYPTION_KEY|CARDLADDER_REFRESH_ENABLED|CARDLADDER_REFRESH_HOUR|PRICE_REFRESH_ENABLED' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform/config",
+      "note": "All eight named variables are read by the loader: DH_API_BASE_URL/DH_ENTERPRISE_API_KEY (loader.go:180,:179), GOOGLE_CLIENT_ID/SECRET (google_oauth.go:16-17), ENCRYPTION_KEY (loader.go:134), CARDLADDER_REFRESH_ENABLED/HOUR (:171,:172), PRICE_REFRESH_ENABLED (:150)."
+    },
+    {
+      "identity": "CLAUDE.md:env-example-is-complete-list",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:152",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:.env.example | grep -cE '^[A-Z_]+='",
+      "note": ".env.example is tracked and declares 75 assignments, matching the run's baseline env_vars=75. Whether every loader-read variable appears there is config-map's lane, not this scout's."
+    },
+    {
+      "identity": "CLAUDE.md:mocks-package-path",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:179",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil/mocks | head",
+      "note": "internal/testutil/mocks/ exists and contains README.md, matching CLAUDE.md:184 and :261."
+    },
+    {
+      "identity": "CLAUDE.md:dhprice-reference-client-path",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:220",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/clients/dhprice",
+      "note": "Path exists (batch_adapter.go, provider.go plus tests). Only the path claim is checkable; 'simplest' is a judgment this scout does not rate."
+    },
+    {
+      "identity": "CLAUDE.md:make-screenshots-target",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:23",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:Makefile | sed -n '132,137p'",
+      "note": "'screenshots: db-pull build web-build' at Makefile:132, plus a screenshots-quick variant at :135. The documented output paths under web/screenshots/ are produced at runtime and were not executed, per the read-only constraint."
+    },
+    {
+      "identity": "CLAUDE.md:package-orientation-paths",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:55",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^internal/(domain|adapters)/' | xargs -n1 dirname | sort -u",
+      "note": "Every orientation path named at CLAUDE.md:55-68 exists: domain/{inventory,pricing,pricing/lookup,intelligence,liquidation,dhevents,storage,constants,errors,llmutil,mathutil,observability,timeutil} and adapters/{clients/dh,clients/dhprice,clients/dhlisting,clients/cardladder,clients/psa,clients/psaportal,clients/httpx,storage/postgres,scheduler}."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:cache-package-and-api",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:134",
+      "verdict": "refuted",
+      "command": "git grep -rn 'package cache' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal",
+      "note": "The 30-line Cache System section documents cache types, recommended TTLs and a 'Type-Safe Cache API' with a worked example calling cache.NewCardSliceCache(baseCache).GetOrLoad(...). The grep returns empty output: no package named cache exists anywhere under internal/. A second command, `git ls-tree -r --name-only <rev> | grep -iE '/cache/'`, also returns nothing, and `git grep -rn 'NewCardSliceCache' <rev>` finds exactly one hit in the whole repository - this documentation line itself. The subsystem is gone; the section, and the phantom internal/platform/cache entries in CLAUDE.md:38, internal/README.md:240 and docs/ARCHITECTURE.md:85, are its only remaining trace. The troubleshooting table at :247 advises tuning a CACHE_MAX_ENTRIES variable that likewise appears nowhere else in the repo."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:tcgdex-client",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:204",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -iE 'tcgdex'",
+      "note": "The API Integrations section documents a TCGdex.dev integration and cites 'Code: internal/adapters/clients/tcgdex/'. The command returns no output - the string tcgdex does not appear in any tracked path. The clients directory holds cardladder, dh, dhlisting, dhprice, google, httpx, psa, psaportal and nothing else."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:fly-deploy-workflow",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:285",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^\\.github/workflows/'",
+      "note": "'Deploy: .github/workflows/fly-deploy.yml runs flyctl deploy --remote-only on push to main. Requires FLY_API_TOKEN in GitHub secrets.' No such workflow file exists. The tracked workflows are browser-matrix.yml, dependabot-auto-merge.yml, docker-build.yml, frontend-ci.yml, psa-harvest-cron.yml and test.yml. fly.toml is tracked, so deployment is real, but the documented mechanism for triggering it is not in this repository - an operator following this section would look for a pipeline that does not exist."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:pricelookup-adapter-path",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:40",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -iE 'pricelookup'",
+      "note": "The Key Files table cites 'internal/adapters/clients/pricelookup/adapter.go' for the PriceLookup adapter. No path containing 'pricelookup' is tracked. The adapter is internal/domain/pricing/lookup/adapter.go - a domain package, not an adapter package, which CLAUDE.md:57 states correctly."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:inventory-types-and-interfaces",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:34",
+      "verdict": "refuted",
+      "command": "git grep -n 'Repository interface' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory/service_interfaces.go",
+      "note": "Two rows of the Key Files table repeat docs/ARCHITECTURE.md's errors verbatim: 'internal/domain/inventory/types.go' (no such file; it is core_types.go) and 'internal/domain/inventory/service_interfaces.go | 8 focused repository interfaces' (the grep is empty - that file declares six *Service* interfaces and no repository). This is the fourth distinct name given to core_types.go across the corpus, after core_types.go (CLAUDE.md:76), types_core.go (internal/README.md:627) and types.go (ARCHITECTURE.md:50, and here)."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:key-files-that-resolve",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:35",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E 'campaign_store.go|handlers/campaigns.go|inventory/(service|channel_fees).go'",
+      "note": "Four of the seven Key Files rows resolve: inventory/service.go, inventory/channel_fees.go, adapters/storage/postgres/campaign_store.go, adapters/httpserver/handlers/campaigns.go."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:postgres-test-url-gate",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:69",
+      "verdict": "confirmed",
+      "command": "git grep -n 'POSTGRES_TEST_URL' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal .github",
+      "note": "Postgres adapter tests read POSTGRES_TEST_URL and skip when it is unset (testhelper_test.go:44,:70), there is no default, make test-postgres exists (Makefile:103), and .github/workflows/test.yml:59 supplies the value in CI - every element of the paragraph holds."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:integration-build-tag",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:79",
+      "verdict": "confirmed",
+      "command": "git grep -n 'go:build integration' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/integration",
+      "note": "internal/integration/ exists and its test files carry //go:build integration (e.g. cardladder_test.go:4), so the -tags integration section describes a real build configuration. The named credential files internal/integration/cardladder_test.go and internal/adapters/clients/psaportal/live_test.go both exist, as do the env-var table's referents."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:migration-reset-history",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:64",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations | sed 's#.*/##' | head -4",
+      "note": "000001_initial_schema exists as the reset point with additive migrations from 000002 onward, agreeing with docs/SCHEMA.md:11 and CLAUDE.md:129."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:db-pull-push-targets",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:294",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:Makefile | grep -nE '^db-(pull|push):'",
+      "note": "db-pull (Makefile:179) and db-push (:197) both exist as documented."
+    },
+    {
+      "identity": "internal/README.md:large-file-table-filename",
+      "kind": "claim",
+      "defined_at": "internal/README.md:627",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory | grep -E 'types'",
+      "note": "The table's first row names `domain/inventory/types_core.go`. No such file exists; the inventory type files are analytics_types.go, capital_types.go, cert_import_types.go, core_types.go, dh_types.go, health_types.go, portfolio_types.go, repository_analytics_types.go. The intended file is core_types.go (562 lines, matching the quoted LOC), which is also the name CLAUDE.md:76 uses - so the two documents disagree on the filename."
+    },
+    {
+      "identity": "internal/README.md:large-file-table-roster",
+      "kind": "claim",
+      "defined_at": "internal/README.md:623",
+      "verdict": "incomplete",
+      "command": "for f in $(git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd | grep '\\.go$' | grep -v _test.go | grep -v /testutil/ | grep -v cmd/slabledger/main.go); do n=$(git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:$f | wc -l); [ $n -gt 500 ] && echo \"$n $f\"; done | sort -rn",
+      "note": "'As of 2026-08-08' the table lists four files over 500 lines. The document's own regeneration command yields six: it omits internal/adapters/scheduler/dh_analytics_refresh_steps.go (542) and internal/adapters/httpserver/handlers/campaigns_psa.go (518). The three correctly-named rows match exactly (portfolio/service.go 540, scheduler/cardladder_refresh.go 525, handlers/campaigns_purchases.go 520). Like CLAUDE.md's sibling roster, the stamp is the baseline's own date, so the snapshot was already stale when dated."
+    },
+    {
+      "identity": "internal/README.md:platform-structure-tree",
+      "kind": "claim",
+      "defined_at": "internal/README.md:240",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform | xargs -n1 dirname | sort -u",
+      "note": "The tree lists seven directories under internal/platform: cache/, config/, crypto/, errors/, resilience/, storage/, telemetry/. Two of them do not exist at the baseline - there is no internal/platform/cache and no internal/platform/errors. The actual set is canonjson, cardutil, config, crypto, resilience, storage, telemetry; canonjson/ and cardutil/ appear in no documentation. The tree is not marked partial, unlike the domain package table at :81. The same phantom cache/ entry also appears in the architecture-overview diagram at internal/README.md:52."
+    },
+    {
+      "identity": "CLAUDE.md:platform-cache-package",
+      "kind": "claim",
+      "defined_at": "CLAUDE.md:38",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform | xargs -n1 dirname | sort -u",
+      "note": "Cross-document consistency: CLAUDE.md's architecture block describes platform/ as 'Cross-cutting concerns (cache, config, crypto, resilience, telemetry)' and internal/README.md:240 likewise lists a cache/ directory. Neither is true - internal/platform/cache does not exist at the baseline. Both documents carry the same stale entry, so cross-checking them against each other would not have caught it."
+    },
+    {
+      "identity": "internal/README.md:mock-example-shape",
+      "kind": "claim",
+      "defined_at": "internal/README.md:271",
+      "verdict": "refuted",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/testutil/mocks/price_provider.go | sed -n '10,20p'",
+      "note": "The illustrative example gives MockPriceProvider a public `GetPriceFunc func(...)` field. The real type (internal/testutil/mocks/price_provider.go:11) has two unexported fields, `behavior MockBehavior` and `matches map[string]*pricing.Price`, and is configured through NewMockPriceProvider(opts ...MockOption). The example also contradicts CLAUDE.md:180, which describes the house style as the 'Fn-field pattern' (`GetPriceFn`, not `GetPriceFunc`)."
+    },
+    {
+      "identity": "internal/README.md:inventory-owns-csv-import",
+      "kind": "claim",
+      "defined_at": "internal/README.md:86",
+      "verdict": "refuted",
+      "command": "git grep -n 'internal/domain/inventory' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/csvimport/*.go'",
+      "note": "The domain package table attributes 'CSV import' to inventory/. CSV import was carved out into internal/domain/csvimport (its service.go:4 says so explicitly, citing SLA-35), which is absent from the table. The table is marked partial as to membership, but the per-package purpose column is a positive assertion. Same underlying staleness as CLAUDE.md:84."
+    },
+    {
+      "identity": "internal/README.md:domain-package-table-paths",
+      "kind": "claim",
+      "defined_at": "internal/README.md:83",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^internal/domain/' | xargs -n1 dirname | sort -u",
+      "note": "All eleven listed packages exist: auth, inventory, arbitrage, constants, export, finance, intelligence, mathutil, observability, pricing, storage. The table is explicitly labelled partial, so its omissions (csvimport, demand, dhevents, dhlisting, dhpricing, errors, liquidation, llmutil, portfolio, psacampaign, timeutil, tuning) are not a roster failure - only the CSV-import attribution above is."
+    },
+    {
+      "identity": "internal/README.md:adapters-structure-tree",
+      "kind": "claim",
+      "defined_at": "internal/README.md:179",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters | xargs -n1 dirname | sort -u",
+      "note": "Every path in the tree exists: httpserver/{handlers,middleware}, httpserver/router.go, clients/{dhprice,google,httpx,psa}, scheduler/, storage/postgres/. It shows a subset - clients/{dh,dhlisting,cardladder,psaportal} are real and unlisted - but asserts nothing false."
+    },
+    {
+      "identity": "internal/README.md:scheduler-recipe-symbols",
+      "kind": "claim",
+      "defined_at": "internal/README.md:430",
+      "verdict": "confirmed",
+      "command": "git grep -n 'func BuildGroup' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/scheduler",
+      "note": "internal/adapters/scheduler/builder_schedulers.go and builder.go both exist, and BuildGroup is declared at builder.go:128 as the recipe states."
+    },
+    {
+      "identity": "internal/README.md:handler-recipe-router",
+      "kind": "claim",
+      "defined_at": "internal/README.md:381",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/httpserver | grep -E 'rout'",
+      "note": "Both router.go and routes.go exist under internal/adapters/httpserver, so the 'register the route in router.go' instruction points at a real file. Note the route tables and ApplyMiddleware live in routes.go (:318), which the recipe does not mention."
+    },
+    {
+      "identity": "internal/README.md:migration-recipe-verify-command",
+      "kind": "claim",
+      "defined_at": "internal/README.md:503",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:Makefile | grep -nE '^[a-zA-Z][a-zA-Z0-9_-]*:'",
+      "note": "'make test-postgres' is a real target (Makefile:103). The referenced TestMain helper at internal/adapters/storage/postgres/testhelper_test.go (README :514) is also tracked."
+    },
+    {
+      "identity": "internal/README.md:leaf-taxonomy-definition",
+      "kind": "claim",
+      "defined_at": "internal/README.md:108",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-imports.sh | grep -nE 'domain/inventory|sibling|governed'",
+      "note": "The section's factual assertions hold in form: scripts/check-imports.sh exists, derives its governed set from direct hub importers, and scans on the target side, matching CLAUDE.md:96-100. The corollary about transitive closure being a no-op is a proof sketch, not a command-settleable claim, and is not rated here."
+    },
+    {
+      "identity": "internal/README.md:file-size-thresholds",
+      "kind": "claim",
+      "defined_at": "internal/README.md:612",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-file-size.sh | grep -nE 'WARN_LIMIT|FAIL_LIMIT'",
+      "note": "WARN_LIMIT=500 (:6), FAIL_LIMIT=600 (:7), agreeing with CLAUDE.md:207."
+    },
+    {
+      "identity": "internal/README.md:references-links",
+      "kind": "claim",
+      "defined_at": "internal/README.md:636",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- docs | grep -E 'USER_GUIDE|ARCHITECTURE|DEVELOPMENT'",
+      "note": "../docs/USER_GUIDE.md, ../docs/ARCHITECTURE.md and ../docs/DEVELOPMENT.md all resolve from internal/."
+    },
+    {
+      "identity": "mocks/README.md:picks-favorites-packages",
+      "kind": "claim",
+      "defined_at": "internal/testutil/mocks/README.md:182",
+      "verdict": "refuted",
+      "command": "git grep -rn 'package picks\\|package favorites' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+      "note": "The Usage Notes carve out an exception for `picks/service_test.go` and `favorites/service_test.go` as white-box tests that 'cannot import testutil/mocks'. Neither package exists anywhere at the baseline: the only hit for 'package picks' or 'package favorites' in the entire tree is this README line itself. The exception documents a rule against files that are gone."
+    },
+    {
+      "identity": "mocks/README.md:err-duplicate-cert-sentinel",
+      "kind": "claim",
+      "defined_at": "internal/testutil/mocks/README.md:176",
+      "verdict": "incomplete",
+      "command": "git grep -n 'ErrDuplicateCert' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd",
+      "note": "Four of the five 'key sentinel errors' resolve (ErrCampaignNotFound, ErrPurchaseNotFound, ErrSaleNotFound, ErrInvoiceNotFound - internal/domain/inventory/errors.go:29,31,32,35). The fifth, `inventory.ErrDuplicateCert`, does not exist; the real symbol is ErrDuplicateCertNumber (errors.go:33). Copying the documented name into a test yields a compile error. Outside this README, every reference in the tree uses the correct name."
+    },
+    {
+      "identity": "mocks/README.md:all-mocks-fn-field",
+      "kind": "claim",
+      "defined_at": "internal/testutil/mocks/README.md:15",
+      "verdict": "incomplete",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/testutil/mocks/price_provider.go | sed -n '10,20p'",
+      "note": "'All mocks use the Fn-field pattern: every interface method has a corresponding Fn field.' MockPriceProvider (price_provider.go:11) has no Fn fields at all - it carries unexported `behavior`/`matches` and is configured via NewMockPriceProvider(opts ...MockOption). The same README concedes this at :184 ('MockBehavior / MockOption helpers in common.go are used only by card/HTTP mocks (legacy)'), so the absolute at :15 is contradicted 169 lines later in its own document."
+    },
+    {
+      "identity": "mocks/README.md:repository-mock-roster",
+      "kind": "claim",
+      "defined_at": "internal/testutil/mocks/README.md:31",
+      "verdict": "confirmed",
+      "command": "git grep -nE 'type (CampaignRepositoryMock|PurchaseRepositoryMock|SaleRepositoryMock|AnalyticsRepositoryMock|FinanceRepositoryMock|PricingRepositoryMock|DHRepositoryMock|MockPendingItemRepository) ' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil/mocks",
+      "note": "All eight repository mocks named at :31-62 are declared, one per inventory repository interface. Note PendingItemRepository's mock is MockPendingItemRepository while the other seven are <X>RepositoryMock - the README reproduces that inconsistency accurately."
+    },
+    {
+      "identity": "mocks/README.md:service-mock-roster",
+      "kind": "claim",
+      "defined_at": "internal/testutil/mocks/README.md:85",
+      "verdict": "confirmed",
+      "command": "git grep -nE 'type (MockInventoryService|MockArbitrageService|MockPortfolioService|MockTuningService|MockFinanceService|MockExportService|MockDHListingService) ' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil/mocks",
+      "note": "All six sub-domain service mocks in the table plus MockInventoryService (:68) are declared. The table is a subset - mocks/ also holds csvimport_service.go, demand_service.go, dhpricing_service.go - but every listed entry resolves."
+    },
+    {
+      "identity": "mocks/README.md:other-mocks-roster",
+      "kind": "claim",
+      "defined_at": "internal/testutil/mocks/README.md:153",
+      "verdict": "confirmed",
+      "command": "git grep -nE 'type (MockPriceProvider|MockHTTPClient|MockAuthRepository|MockCertLookup|RowScanner|CapturingLogger) ' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil/mocks",
+      "note": "All six exist: price_provider.go:11, http_client.go:35, auth_repository.go:20, cert_lookup.go:19, row_scanner.go:23, logger.go:51."
+    },
+    {
+      "identity": "mocks/README.md:inmemory-campaign-store",
+      "kind": "claim",
+      "defined_at": "internal/testutil/mocks/README.md:105",
+      "verdict": "confirmed",
+      "command": "git grep -n 'func NewInMemoryCampaignStore' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil/mocks",
+      "note": "InMemoryCampaignStore (inmemory_campaign_store.go:16) and its constructor (:109) exist, matching CLAUDE.md:183. common.go, referenced at README:184, is also tracked."
+    },
+    {
+      "identity": "README.md:endpoint-table-unregistered-routes",
+      "kind": "claim",
+      "defined_at": "README.md:88",
+      "verdict": "refuted",
+      "command": "git grep -ohE '\"(GET |POST |PUT |PATCH |DELETE )?/(api|auth)[^\"]*\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/httpserver/router.go internal/adapters/httpserver/routes.go | tr -d '\"' | sed -E 's/^(GET|POST|PUT|PATCH|DELETE) //' | sort -u",
+      "note": "Six of the nineteen endpoints in README's two tables are registered nowhere in router.go or routes.go: POST /api/campaigns/{id}/archive (:95), POST /api/campaigns/{id}/purchases/import (:97 - the real import routes are /api/purchases/import-certs|-external|-orders|-psa), GET /api/campaigns/cash-flow (:104), GET /api/sets (:109), GET /api/cards/search (:110 - the catalog route is /api/cards/catalog), GET/POST/DELETE /api/favorites (:112), GET /api/status/api-usage (:113 - the real one is /api/admin/api-usage). A second command confirms absence tree-wide: `git grep -nE '/api/(sets|cards/search|favorites|status/api-usage|campaigns/cash-flow)' <rev> -- internal cmd web/src` returns only stale doc-comments and a test fixture, no registration. The remaining thirteen rows do resolve."
+    },
+    {
+      "identity": "README.md:api-md-cross-reference",
+      "kind": "claim",
+      "defined_at": "README.md:86",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- docs/API.md",
+      "note": "docs/API.md is tracked, so the 'complete reference' link resolves. Whether it is itself accurate is checked separately under docs/API.md."
+    },
+    {
+      "identity": "README.md:go-version-floor",
+      "kind": "claim",
+      "defined_at": "README.md:69",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:go.mod | grep -nE '^go '",
+      "note": "'Go 1.26+' agrees with go.mod:3 ('go 1.26') and with CLAUDE.md:3."
+    },
+    {
+      "identity": "README.md:make-hooks-and-backup-script",
+      "kind": "claim",
+      "defined_at": "README.md:34",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^\\.githooks/|^scripts/backup-private'",
+      "note": "scripts/backup-private.sh and .githooks/post-commit are both tracked, and Makefile:218 defines the hooks target."
+    },
+    {
+      "identity": "README.md:ci-badge-workflows",
+      "kind": "claim",
+      "defined_at": "README.md:3",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^\\.github/workflows/'",
+      "note": "All three badged workflows exist: test.yml, frontend-ci.yml, docker-build.yml. Three further workflows (browser-matrix, dependabot-auto-merge, psa-harvest-cron) are unbadged, which the README does not claim otherwise."
+    },
+    {
+      "identity": "README.md:frontend-dev-commands",
+      "kind": "claim",
+      "defined_at": "README.md:127",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/vite.config.js | grep -nE 'proxy|8081'",
+      "note": "The :5173 dev-server port is Vite's default and the proxy targets :8081, matching the documented backend port at README:22 and CLAUDE.md:225. The npm scripts themselves are verified under web/README.md."
+    },
+    {
+      "identity": "pointer:stale-endpoint-doc-comments-in-go",
+      "kind": "coverage-gap",
+      "defined_at": "internal/adapters/httpserver/handlers/api_status_handler.go:30",
+      "verdict": "refuted",
+      "command": "git grep -nE '/api/(sets|status/api-usage)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal",
+      "note": "Pointer for go-reference-map, not a docs finding: the same two phantom endpoints are asserted inside Go source, not just Markdown. api_status_handler.go:30 documents the handler as 'GET /api/status/api-usage' and spa_handler.go:133 renders a user-facing link to /api/sets. Neither path is registered. Out of this scout's lane because it concerns Go reachability rather than a documentation file."
+    },
+    {
+      "identity": "docs/SCHEDULERS.md:cache-warmup-scheduler",
+      "kind": "claim",
+      "defined_at": "docs/SCHEDULERS.md:106",
+      "verdict": "refuted",
+      "command": "git grep -n 'CACHE_WARMUP' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd .env.example",
+      "note": "The document devotes a full section to a 'Cache Warmup' scheduler with file cache_warmup.go and three env gates (CACHE_WARMUP_ENABLED, CACHE_WARMUP_INTERVAL, CACHE_WARMUP_RATE_LIMIT_DELAY). The grep returns empty output across internal/, cmd/ and .env.example - the string CACHE_WARMUP does not appear anywhere in the codebase. `git ls-tree -r --name-only <rev> -- internal/adapters/scheduler` likewise shows no cache_warmup.go. The scheduler was removed and its documentation was not. The same phantom file is repeated in the File Layout block at :205."
+    },
+    {
+      "identity": "docs/SCHEDULERS.md:every-background-job",
+      "kind": "claim",
+      "defined_at": "docs/SCHEDULERS.md:70",
+      "verdict": "incomplete",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/scheduler | sed 's#.*/##' | grep -v _test.go",
+      "note": "CLAUDE.md:251 advertises this document as covering 'Every background job, its cadence and its env gate'. Its Schedulers section has seven entries (Price Refresh, Inventory Refresh, Cache Warmup, Access Log Cleanup, DH Event Cleanup, Session Cleanup, DH Inventory Reconciliation), one of which does not exist. The package holds 30-odd non-test scheduler files, and at least these jobs have no section at all: dh_push, dh_orders_poll, dh_inventory_poll, dh_price_sync, dh_analytics_refresh, dh_intelligence_refresh, dh_suggestions, dh_sold_reconciler, dh_psa_import, psa_sync, cert_enrich, pricing_enrich, snapshot_enrich, card_trajectory_refresh, and the five cardladder_* jobs. Six documented jobs out of roughly twenty."
+    },
+    {
+      "identity": "docs/SCHEDULERS.md:file-layout-block",
+      "kind": "claim",
+      "defined_at": "docs/SCHEDULERS.md:198",
+      "verdict": "incomplete",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/scheduler",
+      "note": "Twelve of the thirteen listed files exist (stop_handle.go, loop.go, loop_test.go, group.go, builder.go, config.go, price_refresh.go, inventory_refresh.go, access_log_cleanup.go, dh_event_cleanup.go, session_cleanup.go, plus the directory itself). cache_warmup.go does not. The block also omits builder_schedulers.go, shared_types.go, timeutil.go and every DH/CardLadder/PSA job file; it is drawn as a complete tree with box-drawing characters and carries no 'partial' qualifier, unlike internal/README.md:81."
+    },
+    {
+      "identity": "docs/SCHEDULERS.md:scheduler-env-vars",
+      "kind": "claim",
+      "defined_at": "docs/SCHEDULERS.md:81",
+      "verdict": "incomplete",
+      "command": "comm -23 <(git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:docs/SCHEDULERS.md | grep -oE '`[A-Z][A-Z0-9_]{3,}`' | tr -d '`' | sort -u) <(git grep -ohE '\"[A-Z][A-Z0-9_]{3,}\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform/config | tr -d '\"' | sort -u)",
+      "note": "22 of the 25 uppercase identifiers the document presents as env vars are read by internal/platform/config. The three that are not are exactly the CACHE_WARMUP_* trio above. Every other documented gate - PRICE_REFRESH_*, INVENTORY_REFRESH_*, ACCESS_LOG_*, DH_EVENT_*, SESSION_CLEANUP_*, DH_RECONCILE_* - resolves to a real loader read."
+    },
+    {
+      "identity": "docs/SCHEDULERS.md:core-abstraction-symbols",
+      "kind": "claim",
+      "defined_at": "docs/SCHEDULERS.md:54",
+      "verdict": "confirmed",
+      "command": "git grep -n 'func BuildGroup' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/scheduler",
+      "note": "StopHandle/stop_handle.go, RunLoop+LoopConfig/loop.go, Group/group.go and BuildGroup/builder.go (declared at builder.go:128) all exist as described, and the description of BuildGroup as the single construction point matches internal/README.md:430."
+    },
+    {
+      "identity": "docs/SCHEMA.md:table-roster",
+      "kind": "claim",
+      "defined_at": "docs/SCHEMA.md:31",
+      "verdict": "confirmed",
+      "command": "comm -3 <(git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:docs/SCHEMA.md | grep -oE '^### `?[a-z_]+`?' | sed -E 's/^### //; s/`//g' | sort -u) <(cat all-up-migrations | grep -oiE 'CREATE TABLE (IF NOT EXISTS )?(public\\.)?[a-z_]+' | awk '{print tolower($NF)}' | sed 's/public\\.//' | sort -u | comm -23 - dropped-tables)",
+      "note": "Concatenating all 35 up-migrations and differencing CREATE TABLE minus DROP TABLE yields 36 live tables. Every one of them has a section in docs/SCHEMA.md, and every non-struck-through table section corresponds to a live table - the set difference is empty in both directions. The five residual names in the first difference (active_sessions, api_daily_summary, api_hourly_distribution, api_usage_summary, expired_sessions) are views, documented as such under the separate Views heading at :1042. This is the most accurate roster in the corpus."
+    },
+    {
+      "identity": "docs/SCHEMA.md:drop-migration-attributions",
+      "kind": "claim",
+      "defined_at": "docs/SCHEMA.md:112",
+      "verdict": "confirmed",
+      "command": "git grep -inE 'DROP TABLE.*(ai_calls|advisor_cache|sell_sheet_items|marketmovers_config|mm_card_mappings|scoring_data_gaps)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations",
+      "note": "Every struck-through table cites the migration that dropped it, and each citation lands in the named file: ai_calls and scoring_data_gaps in 000035_drop_ai_advisor_tables.up.sql (:31,:34), advisor_cache in 000013 (:11), sell_sheet_items in 000007 (:5), mm_card_mappings in 000021 (:9), marketmovers_config in 000030 (:20). The four 'dropped pre-cutover' stubs (price_history, price_refresh_queue, discovery_failures, stale_prices) correctly appear in no Postgres migration, matching the convention the document states at :24."
+    },
+    {
+      "identity": "docs/SCHEMA.md:monetary-values-in-cents",
+      "kind": "claim",
+      "defined_at": "docs/SCHEMA.md:5",
+      "verdict": "confirmed",
+      "command": "grep -inE '^\\s+[a-z_]*(price|cost|value|amount|fee|budget|revenue|profit)[a-z_]* +(numeric|decimal|real|double|money)' all-up-migrations",
+      "note": "Across all 35 up-migrations only two matches come back, and neither is money: ebay_fee_pct DOUBLE PRECISION (a rate) and grade_value DOUBLE PRECISION (a PSA grade). No monetary column is declared numeric, decimal, real or money. Consistent with CLAUDE.md:123."
+    },
+    {
+      "identity": "docs/SCHEMA.md:migration-numbering-convention",
+      "kind": "claim",
+      "defined_at": "docs/SCHEMA.md:7",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations | sed 's#.*/##' | grep up.sql",
+      "note": "The stated convention holds: 000001_initial_schema.up.sql exists and is the post-cutover final-state schema, the numbering runs contiguously 000001-000035 with no gaps, and the document's own confirmation recipe (ls migrations/ | grep '^NNNNN') resolves for every cited number."
+    },
+    {
+      "identity": "docs/SCHEMA.md:migrations-embedded-and-automatic",
+      "kind": "claim",
+      "defined_at": "docs/SCHEMA.md:3",
+      "verdict": "confirmed",
+      "command": "git grep -n 'RunMigrations\\|go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- cmd internal/adapters/storage/postgres",
+      "note": "Agrees with CLAUDE.md:124: embedded via embed.FS and applied from cmd/slabledger/main.go:209 on startup."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:monitoring-commands",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:235",
+      "verdict": "refuted",
+      "command": "git grep -nE 'case \"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- cmd/slabledger/admin.go",
+      "note": "The Monitoring section gives two commands. `./slabledger admin cache-stats` is not a subcommand: admin.go dispatches only version (:16), print-config (:19) and help (:21), and `git grep -n 'cache-stats' <rev> -- cmd internal` returns empty output. The second command, `curl http://localhost:8081/api/status/api-usage` (:238), targets an unregistered route - the real one is /api/admin/api-usage. Both lines of the section fail; only the /api/health check above them works."
+    },
+    {
+      "identity": "docs/DEVELOPMENT.md:price-units-key-files",
+      "kind": "claim",
+      "defined_at": "docs/DEVELOPMENT.md:23",
+      "verdict": "refuted",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E 'formatter.go|CampaignDetailPage.tsx'",
+      "note": "The 'Price Units (Critical)' section's two Key Files both fail: there is no internal/adapters/httpserver/handlers/formatter.go and no web/src/react/pages/CampaignDetailPage.tsx (the command returns nothing). The section also says 'Pricing endpoints (/api/cards/search) return dollars' at :20, naming a route that is registered nowhere. Given this is the section the document itself marks Critical, and given CLAUDE.md:194's cents/USD rule is separately refuted, the cents-vs-dollars convention has no accurate documentation anywhere in the corpus."
+    },
+    {
+      "identity": "docs/DH_INVENTORY.md:dh-helpers-path",
+      "kind": "claim",
+      "defined_at": "docs/DH_INVENTORY.md:198",
+      "verdict": "refuted",
+      "command": "git grep -rn 'func CleanCardNameForDH' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal",
+      "note": "The 'Where things live' table maps 'Card name cleaning' to internal/domain/inventory/dh_helpers.go. That file does not exist; the function moved to internal/domain/dhlisting/dh_helpers.go:11 (CleanCardNameForDH). Every other row in the table resolves - dh_push.go, clients/dh/, types_v2.go, purchase_dh_push_store.go, purchase_dh_query_store.go, card_id_mapping_repository.go, handlers/dh_*.go, scheduler/builder.go."
+    },
+    {
+      "identity": "docs:path-citations-systematic-sweep",
+      "kind": "claim",
+      "defined_at": "docs/LOOP.md:1",
+      "verdict": "confirmed",
+      "command": "for d in $(git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^(CLAUDE|README|internal/README|internal/testutil/mocks/README|web/README)\\.md$|^docs/[A-Za-z_]+\\.md$|^docs/runbooks/.+\\.md$'); do git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:$d | grep -noE '`(internal|cmd|web|scripts|docs)/[A-Za-z0-9_./{}*-]+`' | tr -d '`' | while IFS=: read -r ln p; do base=${p%%\\**}; base=${base%%\\{*}; grep -q \"^$base\" tracked-files || echo \"MISSING $d:$ln $p\"; done; done | sort -u",
+      "note": "Systematic sweep of every backticked repo-relative path across the whole prose corpus (5 READMEs + all docs/*.md + docs/runbooks/). Seven misses, all already recorded individually: six in docs/DEVELOPMENT.md (tcgdex/, pricelookup/adapter.go twice, formatter.go, CampaignDetailPage.tsx, inventory/types.go) and one in docs/DH_INVENTORY.md (dh_helpers.go). The two remaining hits are `docs/private/` in README.md:27,34, which is untracked by design - README.md:34 describes it as a separately-pushed private directory - and is not a broken citation. docs/LOOP.md, docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md and docs/runbooks/cl-profileid-backfill.md cite no path that does not exist. Paths inside ASCII art trees and table cells that omit the internal/ prefix are outside this regex and were checked by hand per document."
+    },
+    {
+      "identity": "docs:env-var-citations-systematic-sweep",
+      "kind": "claim",
+      "defined_at": "docs/SCHEDULERS.md:79",
+      "verdict": "confirmed",
+      "command": "for d in $(git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- docs | grep -E '^docs/[A-Za-z_]+\\.md$'); do git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:$d | grep -noE '`[A-Z][A-Z0-9_]{4,}`' | tr -d '`' | while IFS=: read -r ln v; do grep -qx \"$v\" code-string-literals || echo \"ORPHAN $d:$ln $v\"; done; done | sort -u",
+      "note": "Every uppercase identifier presented as an env var across all docs/*.md, differenced against string literals in internal/ and cmd/. Exactly five orphans, all already recorded: CACHE_WARMUP_ENABLED/INTERVAL/RATE_LIMIT_DELAY (SCHEDULERS.md:115-117), CACHE_MAX_ENTRIES (DEVELOPMENT.md:247), and FLY_API_TOKEN (DEVELOPMENT.md:285, a GitHub Actions secret for the workflow that does not exist rather than an application variable). No other documented env var is orphaned."
+    },
+    {
+      "identity": ".env.example:declared-vars-all-read",
+      "kind": "claim",
+      "defined_at": ".env.example:1",
+      "verdict": "confirmed",
+      "command": "comm -23 <(git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:.env.example | grep -oE '^[A-Z][A-Z0-9_]*=' | tr -d '=' | sort -u) <(git grep -ohE '\"[A-Z][A-Z0-9_]{2,}\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd | tr -d '\"' | sort -u)",
+      "note": "All 75 variables declared in .env.example have a matching string literal in internal/ or cmd/ - the difference is empty. The file's section comments also name no removed subsystem (no azure, advisor, marketmovers, tcgdex, pricecharting, cardhedger, justtcg or cache section survives), which makes it the only inventory-style artifact in the corpus with no stale entry. Values were not read or reproduced. The converse direction - variables the loader reads that .env.example omits - is config-map's contract, not this scout's."
+    },
+    {
+      "identity": "docs:route-citations-systematic-sweep",
+      "kind": "claim",
+      "defined_at": "docs/DH_INVENTORY.md:57",
+      "verdict": "confirmed",
+      "command": "for d in $(git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- docs | grep -E '^docs/([A-Za-z_]+\\.md|runbooks/.+\\.md)$' | grep -v '^docs/API.md'); do git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:$d | grep -noE '`?/api/[A-Za-z0-9_/{}-]+' | tr -d '`' | while IFS=: read -r ln p; do grep -qx \"$p\" registered-routes || echo \"UNREG $d:$ln $p\"; done; done | sort -u",
+      "note": "Every /api path cited outside docs/API.md, differenced against the registered route set. Six hits, none new: /api/cards/search and /api/status/api-usage in DEVELOPMENT.md (already recorded, same phantoms as README.md), a bare /api/campaigns/ prefix in a prose sentence at DEVELOPMENT.md:18 which is not a route citation, and three /api/v1/enterprise/* paths in DH_INVENTORY.md:57,84,108 which are DoubleHolo's upstream API, not SlabLedger's, and correctly should not appear in this repo's router."
+    },
+    {
+      "identity": "coverage-gap:runtime-behavior-claims-not-executed",
+      "kind": "coverage-gap",
+      "defined_at": "CLAUDE.md:24",
+      "verdict": "confirmed",
+      "command": "n/a - the read-only constraint forbids executing build, test or screenshot commands",
+      "note": "Claims whose truth depends on running something were checked only as far as 'the target/script is defined', per the task's instruction not to execute build or test commands. This covers: make screenshots writing web/screenshots/*.png and mobile/*.png (CLAUDE.md:24), make check passing at baseline, the documented default values in docs/SCHEDULERS.md's config tables (verified as env-var names, not as defaults), scripts/check-imports.sh actually failing on a violating tree, and the Recommended TTLs in docs/DEVELOPMENT.md:144. Each of these remains unsettled; none is asserted either way above."
+    },
+    {
+      "identity": "coverage-gap:generated-and-plan-docs-out-of-universe",
+      "kind": "coverage-gap",
+      "defined_at": "docs/plans/2026-08-08-flat-sibling-checker.md:1",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '\\.md$' | grep -v '^docs/audit/' | wc -l",
+      "note": "The tree carries 138 tracked Markdown files outside docs/audit/. The task's universe covers 5 READMEs, docs/*.md and docs/runbooks/*.md - 20 files, all covered here. Deliberately not audited: docs/plans/ (20 files), docs/specs/ (9), docs/superpowers/ (21), .claude/skills/ and .agents/skills/ (44), plus AGENTS.md, DESIGN.md, PRODUCT.md, web/docs/*, web/tests/*/README.md, .devcontainer/README.md and .superpowers/. Plans and specs are point-in-time records that are expected to drift, but AGENTS.md, DESIGN.md, PRODUCT.md and web/docs/TYPE_DEFINITIONS_GUIDE.md are living documents of the same kind as those audited and would repay the same treatment in a later pass."
+    },
+    {
+      "identity": "web/README.md:api-client-example-methods",
+      "kind": "claim",
+      "defined_at": "web/README.md:183",
+      "verdict": "refuted",
+      "command": "git grep -n 'EBAY_APP_ID\\|getCollectionItems\\|getOpportunities' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src internal cmd .env.example",
+      "note": "The API Client section's worked example calls api.getOpportunities() and api.getCollectionItems(), the latter annotated 'requires EBAY_APP_ID'. The grep returns empty output: neither method exists on the client, and EBAY_APP_ID is not read anywhere in web/src, internal/, cmd/ or .env.example. The import path itself (`import { api } from './js/api'`) does resolve - web/src/js/api/index.ts is a barrel whose header comment explicitly preserves it - so only the method surface is stale, from an eBay integration that is gone."
+    },
+    {
+      "identity": "web/README.md:api-ts-module-name",
+      "kind": "claim",
+      "defined_at": "web/README.md:181",
+      "verdict": "incomplete",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src/js | head",
+      "note": "'The api.ts module provides typed API methods.' There is no web/src/js/api.ts; it was split into a directory (client.ts, index.ts, campaigns.ts, admin.ts, psaCampaigns.ts and others). index.ts:27 refers to 'the old api.ts', confirming the rename. The documented import path still works, so this is a stale name rather than a broken instruction."
+    },
+    {
+      "identity": "web/README.md:npm-scripts",
+      "kind": "claim",
+      "defined_at": "web/README.md:32",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/package.json | grep -nA20 '\"scripts\"'",
+      "note": "All eight documented scripts are defined in web/package.json: dev, build, preview, test, test:watch, test:coverage, typecheck, format. The table omits build:analyze, lint*, test:ui, test:e2e, test:a11y and test:perf but asserts nothing false."
+    },
+    {
+      "identity": "web/README.md:build-output-dir",
+      "kind": "claim",
+      "defined_at": "web/README.md:33",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/vite.config.js | grep -nE 'outDir'",
+      "note": "'outputs to ../dist/' matches vite.config.js:23 (outDir: '../dist')."
+    },
+    {
+      "identity": "web/README.md:component-directory",
+      "kind": "claim",
+      "defined_at": "web/README.md:116",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src/react | xargs -n1 dirname | sort -u",
+      "note": "src/react/components/ exists, so the 'Adding a New Component' recipe points at the right place. The Storybook line at :122 is hedged ('if using Storybook') and no Storybook config or .stories.tsx file exists anywhere in web/, so it is not rated as a failed assertion."
+    },
+    {
+      "identity": "docs/OPERATIONS.md:deploy-mechanism-vs-development-md",
+      "kind": "claim",
+      "defined_at": "docs/OPERATIONS.md:63",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E '^\\.github/workflows/|^fly.toml'",
+      "note": "Cross-document consistency check, and OPERATIONS.md is the document that is right. It says 'Fly's auto-deploy will redeploy the reverted commit' - i.e. deployment is driven by Fly itself, and no in-repo workflow is named. docs/DEVELOPMENT.md:285 instead attributes deploys to .github/workflows/fly-deploy.yml, which does not exist. fly.toml is tracked; no fly workflow is."
+    },
+    {
+      "identity": "docs/OPERATIONS.md:fly-app-identity",
+      "kind": "claim",
+      "defined_at": "docs/OPERATIONS.md:126",
+      "verdict": "confirmed",
+      "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:fly.toml | grep -nE \"^app|primary_region\"",
+      "note": "'Fly app: slabledger in iad' matches fly.toml:6 (app = 'slabledger') and :7 (primary_region = 'iad'). The health-check URL /api/health at :48 is a registered route."
+    },
+    {
+      "identity": "docs/OPERATIONS.md:migration-000022-rollback-safe",
+      "kind": "claim",
+      "defined_at": "docs/OPERATIONS.md:105",
+      "verdict": "confirmed",
+      "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations | grep 000022",
+      "note": "000022_add_decision_provenance.up.sql and .down.sql both exist, so the runbook's 'Migration 000022 (decision provenance)' citation resolves and its down-migration is present as the rollback-safety argument requires."
+    },
+    {
+      "identity": "docs/runbooks/cl-profileid-backfill.md:admin-endpoint",
+      "kind": "claim",
+      "defined_at": "docs/runbooks/cl-profileid-backfill.md:22",
+      "verdict": "confirmed",
+      "command": "git grep -ohE '\"(GET |POST )?/api/admin/cardladder[^\"]*\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/httpserver/routes.go | sort -u",
+      "note": "The runbook's only checkable operational reference, /api/admin/cardladder/status, is a registered route. scripts/cl-coverage.sql, referenced elsewhere in the CardLadder tooling, is also tracked."
+    }
+  ]
+}

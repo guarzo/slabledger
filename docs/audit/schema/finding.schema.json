@@ -28,7 +28,8 @@
     },
     "revision": {
       "type": "string",
-      "const": "740976ecf80a4f2ccdaa611d7790ccaa95b48773"
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Full baseline SHA this finding was derived at. The schema is shared across runs, so it can only check the shape; exact equality against the run's pinned revision is enforced by validate.sh, which reads it from AUDIT_BASELINE_FACTS."
     },
     "subject": {
       "type": "object",

@@ -1,0 +1,18 @@
+{
+  "run": "2026-08-08",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "go_files": 682,
+  "packages": 48,
+  "migrations": 35,
+  "frontend_files": 208,
+  "env_vars": 75,
+  "layout": "docs/audit/runs/2026-08-08/ — maps/, findings/, verdicts/, ADJUDICATIONS.md, REPORT.md, TICKETS.md, linear-ids.json. The process documents (METHODOLOGY.md, PREAMBLE.md, LENS-BRIEF.md, VERIFIER-BRIEF.md, schema/, scripts/) are shared and live at docs/audit/.",
+  "definitions": "Identical to docs/audit/baseline.json — see the `definitions` block there. Each count was produced by the command recorded against its key, evaluated at `revision` via git ls-tree, never against the working tree.",
+  "delta_from_740976e": {
+    "go_files": "676 -> 682 (+6)",
+    "packages": "53 -> 48 (-5); the Azure AI / advisor feature was removed wholesale in e46370e5",
+    "migrations": "25 -> 35 (+10)",
+    "frontend_files": "218 -> 208 (-10)",
+    "env_vars": "71 -> 75 (+4)"
+  }
+}
