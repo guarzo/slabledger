@@ -41,8 +41,7 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │    ├── intelligence/   (DH market data)         │
  │    ├── mathutil/       (math utilities)         │
  │    ├── observability/  (logger interfaces)      │
- │    ├── pricing/        (price interfaces/models)│
- │    └── storage/        (storage interfaces)     │
+ │    └── pricing/        (price interfaces/models)│
 └───────────────────┬─────────────────────────────┘
                     │ (uses)
                     ▼
@@ -92,7 +91,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | `mathutil/` | Math utility functions |
 | `observability/` | Logger, MetricsRecorder interfaces |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
-| `storage/` | Storage interfaces |
 
 **Rules**:
 - ✅ Define interfaces for external dependencies
@@ -274,7 +272,7 @@ mock := &mocks.CampaignRepositoryMock{
 ```
 
 See [testutil/mocks/README.md](testutil/mocks/README.md) for the full guide, including the
-older mocks that are configured through a constructor and functional options instead.
+mocks that are built by a constructor because they carry initialized state.
 
 ---
 
@@ -578,14 +576,11 @@ type Service struct {
 ```go
 // internal/domain/inventory/service_test.go
 func TestService_GetCampaignPNL(t *testing.T) {
-    // ✅ Use mock providers (no real API calls)
-    mockAnalytics := &mocks.AnalyticsRepositoryMock{
-        GetCampaignPNLFn: func(ctx context.Context, id string) (*inventory.CampaignPNL, error) {
-            return &inventory.CampaignPNL{}, nil
-        },
-    }
+    // ✅ Use the in-memory store (no real database)
+    store := mocks.NewInMemoryCampaignStore()
+    store.Campaigns[campaignID] = &inventory.Campaign{ID: campaignID}
 
-    svc := inventory.NewService(mockCampaigns, mockPurchases, mockSales, mockAnalytics, ...)
+    svc := inventory.NewService(store, store, store, store, ...)
     pnl, err := svc.GetCampaignPNL(context.Background(), campaignID)
     assert.NoError(t, err)
 }
@@ -594,13 +589,22 @@ func TestService_GetCampaignPNL(t *testing.T) {
 ### Adapter Layer Testing
 ```go
 // internal/adapters/clients/dhprice/provider_test.go
-func TestProvider_GetPrice(t *testing.T) {
-    // ✅ Use mock HTTP client (no real network calls)
-    mockHTTP := mocks.NewMockHTTPClientWithResponse(`{"price": 100}`)
+func TestGetPrice(t *testing.T) {
+    // ✅ Inject mock collaborators (no real network calls)
+    client := &mocks.MockDHMarketDataClient{
+        CardLookupFn: func(ctx context.Context, cardID int) (*dh.CardLookupResponse, error) {
+            return &dh.CardLookupResponse{}, nil
+        },
+    }
+    lookup := &mocks.MockDHCardIDLookup{
+        GetExternalIDFn: func(context.Context, string, string, string, string) (string, error) {
+            return "12345", nil
+        },
+    }
 
-    provider := dhprice.NewProviderWithHTTP(mockHTTP, "test-key")
+    p := dhprice.New(client, lookup)
 
-    price, err := provider.GetPrice(context.Background(), testCard)
+    price, err := p.GetPrice(context.Background(), testCard)
     assert.NoError(t, err)
 }
 ```

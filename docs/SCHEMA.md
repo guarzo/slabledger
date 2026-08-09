@@ -76,12 +76,16 @@ Per-provider rate limit state and 429-block tracking.
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | `provider` | TEXT | PK | |
-| `calls_last_minute` | INTEGER | DEFAULT 0 | |
-| `calls_last_hour` | INTEGER | DEFAULT 0 | |
-| `calls_last_day` | INTEGER | DEFAULT 0 | |
 | `last_429_at` | TIMESTAMP | | When the last 429 was received |
 | `blocked_until` | TIMESTAMP | | Request gate: block until this time |
 | `updated_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | |
+
+**Dropped columns:** `calls_last_minute`, `calls_last_hour` and `calls_last_day`
+(all `BIGINT DEFAULT 0`, from 000001) were dropped in migration 000037. Nothing
+ever wrote them, so they read as live rate-limit telemetry while sitting at zero
+forever. Per-window call counts come from the `api_usage_summary` view over
+`api_calls` — which computes its own `calls_last_hour`, a different object that
+happens to share the name, and is what `DBTracker.GetAPIUsage` actually reads.
 
 **Indexes:** none (PK lookup only)
 
@@ -1055,6 +1059,7 @@ Dropped with `price_history`. The refresh scheduler now queries `campaign_purcha
 
 ### `api_usage_summary`
 Aggregated API call statistics (total, errors, 429s, latency, call counts) per provider for the last 24 hours.
+
 The only view with a consumer: `DBTracker.GetAPIUsage` selects from it.
 
 ### ~~`api_hourly_distribution`~~ — DROPPED (migration 000038)

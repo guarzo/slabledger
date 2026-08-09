@@ -322,9 +322,29 @@ describe('ErrorBoundary', () => {
   });
 
   describe('development mode', () => {
-    // Note: import.meta.env.DEV is a build-time constant in Vite
-    // It cannot be changed at test runtime, so we skip testing this behavior
-    it.skip('should show error details in development mode', () => {
+    // The gate is a runtime hostname check, not a build-time constant, so both
+    // branches are reachable from a test. Set the hostname explicitly rather
+    // than leaning on jsdom's default: an earlier test in this file replaces
+    // window.location wholesale and does not restore it.
+    const originalLocation = Object.getOwnPropertyDescriptor(window, 'location');
+
+    function setHostname(hostname) {
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        configurable: true,
+        value: { ...window.location, hostname },
+      });
+    }
+
+    afterEach(() => {
+      if (originalLocation) {
+        Object.defineProperty(window, 'location', originalLocation);
+      }
+    });
+
+    it('should show error details on localhost', () => {
+      setHostname('localhost');
+
       render(
         <ErrorBoundary>
           <BrokenComponent />
@@ -332,9 +352,12 @@ describe('ErrorBoundary', () => {
       );
 
       expect(screen.getByText('Error Details')).toBeInTheDocument();
+      expect(screen.getByText(/Test error message/)).toBeInTheDocument();
     });
 
-    it.skip('should not show error details in production mode', () => {
+    it('should not show error details off localhost', () => {
+      setHostname('slabledger.dpao.la');
+
       render(
         <ErrorBoundary>
           <BrokenComponent />
@@ -342,6 +365,7 @@ describe('ErrorBoundary', () => {
       );
 
       expect(screen.queryByText('Error Details')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Test error message/)).not.toBeInTheDocument();
     });
   });
 

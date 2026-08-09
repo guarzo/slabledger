@@ -11,9 +11,7 @@ import (
 )
 
 // stubResolver is a minimal local Resolver for the tests in this file that
-// need one; internal/testutil/mocks.ResolverMock is used by other packages
-// (e.g. the httpserver handlers in Task 9) that cannot import psacampaign's
-// unexported test helpers. Both implement the same psacampaign.Resolver.
+// need one.
 type stubResolver struct {
 	specLists map[string][]string
 	subjects  map[string]int
