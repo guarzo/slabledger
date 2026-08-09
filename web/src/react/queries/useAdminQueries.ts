@@ -199,8 +199,10 @@ export function useSaveDHPushConfig() {
     // a threshold save issued while the pause mutation is still in flight would
     // carry the pre-toggle `listingsPaused` and quietly un-pause the marketplace.
     //
-    // Merging here, against a freshly fetched server copy, means no caller ever
-    // transmits a field it did not set. Callers pass only their own keys.
+    // Merging here, against a freshly fetched server copy, means a field a caller
+    // did not set is freshly read rather than stale — narrowing, not closing, the
+    // race window to the in-flight duration of a concurrent write. Callers pass
+    // only their own keys.
     mutationFn: async (patch: Partial<DHPushConfig>) => {
       const current = await qc.fetchQuery({
         queryKey: queryKeys.admin.dhPushConfig,

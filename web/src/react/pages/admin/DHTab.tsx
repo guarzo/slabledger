@@ -161,13 +161,12 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   );
 }
 
-function Stat({ label, value, sub, tone = 'default' }: { label: string; value: number | string; sub?: string; tone?: 'default' | 'warning' }) {
+function Stat({ label, value, tone = 'default' }: { label: string; value: number | string; tone?: 'default' | 'warning' }) {
   const valueColor = tone === 'warning' ? 'text-[var(--warning)]' : 'text-[var(--text)]';
   return (
     <div className="min-w-0">
       <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
       <div className={`text-sm font-semibold tabular-nums ${valueColor}`}>{value}</div>
-      {sub && <div className="text-[10px] text-[var(--text-muted)] truncate">{sub}</div>}
     </div>
   );
 }

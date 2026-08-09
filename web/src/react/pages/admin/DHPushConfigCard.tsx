@@ -59,10 +59,17 @@ export function DHPushConfigCard() {
   const saveMutation = useSaveDHPushConfig();
 
   const [form, setForm] = useState<DHPushConfig | null>(null);
+  // Guards against DHListingsPauseControl's writes: its save seeds this same
+  // query cache (useAdminQueries.ts:214-216), which produces a new `config`
+  // identity and would otherwise re-fire this effect mid-edit, silently
+  // discarding an operator's unsaved threshold changes. Once the form has any
+  // local edit, stop re-seeding from the query until this card's own save
+  // completes.
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    if (config) setForm(config);
-  }, [config]);
+    if (config && !dirty) setForm(config);
+  }, [config, dirty]);
 
   // The card owns exactly these five fields. `listingsPaused` is deliberately
   // absent: Task 4 moves that control into DHListingsPauseControl, and because
@@ -77,9 +84,19 @@ export function DHPushConfigCard() {
     unreviewedChangeMinCents: cfg.unreviewedChangeMinCents,
   });
 
+  // Every field edit routes through here so a single flag tracks "has unsaved
+  // local state" without repeating setDirty(true) at each ConfigField callsite.
+  const updateField = (patch: Partial<DHPushConfig>) => {
+    setForm((prev) => (prev ? { ...prev, ...patch } : prev));
+    setDirty(true);
+  };
+
   const save = (patch: Partial<DHPushConfig>) => {
     saveMutation.mutate(patch, {
-      onSuccess: () => toast.success('DH push config saved'),
+      onSuccess: () => {
+        setDirty(false);
+        toast.success('DH push config saved');
+      },
       onError: () => toast.error('Failed to save config'),
     });
   };
@@ -113,14 +130,14 @@ export function DHPushConfigCard() {
           id="swing-pct"
           label="Price Swing %"
           value={form.swingPctThreshold}
-          onChange={(v) => setForm({ ...form, swingPctThreshold: v })}
+          onChange={(v) => updateField({ swingPctThreshold: v })}
           suffix="%"
         />
         <ConfigField
           id="swing-min"
           label="Price Swing Min"
           value={form.swingMinCents}
-          onChange={(v) => setForm({ ...form, swingMinCents: v })}
+          onChange={(v) => updateField({ swingMinCents: v })}
           suffix={`(${formatCents(form.swingMinCents)})`}
         />
         <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide col-span-full">Source &amp; CL Rules</p>
@@ -128,21 +145,21 @@ export function DHPushConfigCard() {
           id="disagreement-pct"
           label="Source Disagreement %"
           value={form.disagreementPctThreshold}
-          onChange={(v) => setForm({ ...form, disagreementPctThreshold: v })}
+          onChange={(v) => updateField({ disagreementPctThreshold: v })}
           suffix="%"
         />
         <ConfigField
           id="unreviewed-pct"
           label="Unreviewed CL Change %"
           value={form.unreviewedChangePctThreshold}
-          onChange={(v) => setForm({ ...form, unreviewedChangePctThreshold: v })}
+          onChange={(v) => updateField({ unreviewedChangePctThreshold: v })}
           suffix="%"
         />
         <ConfigField
           id="unreviewed-min"
           label="Unreviewed CL Change Min"
           value={form.unreviewedChangeMinCents}
-          onChange={(v) => setForm({ ...form, unreviewedChangeMinCents: v })}
+          onChange={(v) => updateField({ unreviewedChangeMinCents: v })}
           suffix={`(${formatCents(form.unreviewedChangeMinCents)})`}
         />
       </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DHTab } from './DHTab';
 import { ToastProvider } from '../../contexts/ToastContext';
@@ -112,6 +112,36 @@ describe('DHTab pause control', () => {
     const field = await screen.findByLabelText('Price Swing %');
     expect(field).toBeVisible();
     expect(field.closest('details')).toBeNull();
+  });
+});
+
+describe('DHTab pause toggle vs config card seam', () => {
+  it('preserves an unsaved threshold edit when the pause switch is flipped', async () => {
+    // getDHPushConfig always resolves the unedited server config (threshold 25).
+    // saveDHPushConfig simulates the pause mutation's round trip: the server
+    // persists only `listingsPaused` and echoes back the thresholds the card
+    // has not saved yet, which is exactly what seeds the shared cache and
+    // would clobber an in-progress edit if the card's effect re-seeds on every
+    // config change instead of only when it has no unsaved edit.
+    vi.mocked(api.getDHStatus).mockResolvedValue(makeStatus());
+    vi.mocked(api.getDHPushConfig).mockResolvedValue(makeConfig());
+    vi.mocked(api.saveDHPushConfig).mockResolvedValue(makeConfig({ listingsPaused: true }));
+    renderTab();
+
+    const field = await screen.findByLabelText('Price Swing %');
+    fireEvent.change(field, { target: { value: '40' } });
+    expect(field).toHaveValue(40);
+
+    const sw = await screen.findByRole('switch', { name: 'Pause DH listings' });
+    sw.click();
+
+    // Settle the toggle FIRST. A `waitFor` on the field alone would pass
+    // before the pause mutation's cache seed has a chance to propagate,
+    // producing a false pass against the unfixed component.
+    await screen.findByText(/Listings are currently paused/i);
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true'));
+
+    expect(field).toHaveValue(40);
   });
 });
 
