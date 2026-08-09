@@ -44,7 +44,6 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
   const { data: clStatus } = useCardLadderStatus({ enabled });
   const { data: psaStatus } = usePSASyncStatus({ enabled });
 
-  const dhHealthy = dhStatus?.api_health ? dhStatus.api_health.success_rate >= 0.95 : false;
   const clConnected = clStatus?.configured ?? false;
   const psaConfigured = psaStatus?.configured ?? false;
 
@@ -98,14 +97,14 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
       <section>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-[var(--text)]">DoubleHolo</h3>
-          <div className="flex items-center gap-3">
-            <PulseLine at={dhLastCall} />
-            {dhHealthy ? (
-              <StatusPill tone="success">Healthy</StatusPill>
-            ) : (
-              <StatusPill tone="neutral">Unknown</StatusPill>
-            )}
-          </div>
+          {/* No health pill here. The strip directly above states DH health in
+              its full form (healthy / degraded / down / paused / unconfigured);
+              a second, two-state verdict in this header could only ever agree
+              with it by accident, and at a 90% success rate it disagreed —
+              reading "Unknown" for a rate that had in fact been measured.
+              Card Ladder and PSA keep their pills: those state whether the
+              integration is configured, which is a different question. */}
+          <PulseLine at={dhLastCall} />
         </div>
         <DHTab enabled={enabled} />
         <DHOperationsPanel enabled={enabled} />

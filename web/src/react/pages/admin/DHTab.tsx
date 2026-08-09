@@ -65,9 +65,6 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   }
 
   const isRunning = status?.bulk_match_running ?? false;
-  const apiHealth = status?.api_health;
-  const successRate = apiHealth ? `${(apiHealth.success_rate * 100).toFixed(0)}%` : '—';
-  const healthy = !!apiHealth && apiHealth.success_rate >= 0.95;
 
   const handleBulkMatch = async () => {
     try {
@@ -81,12 +78,10 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="space-y-3">
       <CardShell padding="lg">
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${healthy ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'}`} />
-            <span className="text-sm font-semibold text-[var(--text)]">{healthy ? 'Healthy' : 'Degraded'}</span>
-            <span className="text-xs text-[var(--text-muted)]">· API success: {successRate}</span>
-          </div>
+        {/* The integration health strip above this card owns the DH health
+            verdict and the success-rate figure. This row carries only the
+            control that is unique to it. */}
+        <div className="flex items-center justify-end gap-4 mb-3">
           <DHListingsPauseControl enabled={enabled} />
         </div>
 
