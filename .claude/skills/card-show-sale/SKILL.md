@@ -70,8 +70,16 @@ things per photo:
 - the PSA **cert number** from the label
 - the **sticker price** in dollars
 - the **card identity** off the label — player/set/year/grade, whatever it
-  plainly shows. This is what fills the `card` column below, and it's the
-  value step 3 compares the server's returned `cardName` against.
+  plainly shows. This is the display string that fills the `card` column
+  below, for the human review in step 2.
+
+Separately, note the **subject/player name alone** (e.g. `Ronald Acuna Jr.`,
+not `2021 Topps Chrome Acuna PSA 10`). That name — not the full display
+string — is the **comparison key** step 3 checks the server's returned
+`cardName` against. The two are different jobs: the display string is for a
+human skimming the table; the subject name is the one thing that's actually
+comparable to what the API returns (see step 3 for why they don't look
+alike).
 
 Build the list in memory. Nothing is uploaded.
 
@@ -80,13 +88,20 @@ Build the list in memory. Nothing is uploaded.
 Print the full table and stop. The user reads it against the physical stack.
 
 ```
- #  cert         card                              sticker
- 1  05442200     2021 Topps Chrome Acuna PSA 10    $ 45
- 2  17979513     2020 Prizm Herbert PSA 9          $120
- 3  6098919001   2018 Optic Doncic PSA 10          $380
+ #  cert         card                              key             sticker
+ 1  05442200     2021 Topps Chrome Acuna PSA 10    Ronald Acuna Jr. $ 45
+ 2  17979513     2020 Prizm Herbert PSA 9          Justin Herbert   $120
+ 3  6098919001   2018 Optic Doncic PSA 10          Luka Doncic      $380
  ---
  3 cards, sticker total $545, at 72% = $392.40
 ```
+
+`card` is the display string for the human to skim. `key` is the subject/player
+name alone — the value step 3 actually compares against the server's response.
+They're shown side by side deliberately: the server returns names shaped like
+`RONALD ACUNA JR.`, not `2021 Topps Chrome Acuna PSA 10`, and a table that only
+showed the display string would hide that mismatch until it was too late to
+notice.
 
 Ask for corrections. Apply them. Do not proceed until the user says the table is
 right.
@@ -118,11 +133,17 @@ curl -sX POST http://localhost:8081/api/sales/import-certs \
 Report to the user:
 
 - `matched` count, and for each match its `cardName` and `salePriceCents`.
-  **Compare each returned `cardName` against what you recorded for that cert in
-  the step-2 table.** A mismatch means the cert was misread and matched a
-  *different* card you own — this is the primary defense against that failure
-  mode (see "Cert numbers are the risk" below). Do not confirm until it's
-  resolved.
+  **Compare each returned `cardName` against the comparison key you recorded
+  for that cert in step 1** (the subject/player name, not the full display
+  string) — the server returns uppercase, PSA-shaped names, sometimes with a
+  variety suffix (`RONALD ACUNA JR.`, `CHARIZARD-HOLO 1ST EDITION`), and
+  occasionally a category name when the subject was blank. Casing,
+  punctuation, accents, a missing year/set/number, and a trailing variety
+  suffix are **not** mismatches — `RONALD ACUNA JR.` vs `Ronald Acuña Jr.` is
+  the same card. A **different player or different card entirely** is a
+  mismatch, and means the cert was misread and matched a *different* card you
+  own — this is the primary defense against that failure mode (see "Cert
+  numbers are the risk" below). Do not confirm until it's resolved.
 - `notFound` certs, with their `reason`: `not_found` (cert isn't in inventory —
   usually a misread digit), `invalid_comp` (the sticker was read as `$0` or
   blank — not necessarily a misread; confirm whether the card was genuinely
@@ -216,13 +237,17 @@ entirely:
 ```
 
 One `cert,price` pair per line, price in dollars. Everything from step 2 onward
-is identical, with one difference: there's no photo to read a card identity
-from, so the review table's `card` column is blank in this mode. That makes
-the step-3 `cardName` comparison *more* important here, not less — but the
-referent shifts: with no photo captured, compare the server's returned
-`cardName` against the physical card in the user's hand, reading the slab
-directly rather than against a table entry. A batch is always recordable even
-when OCR is useless.
+is identical, with one difference: there's no photo to read a card identity or
+comparison key from, so the review table's `card` and `key` columns are blank
+in this mode — you (the agent) have no referent to compare the server's
+`cardName` against. That makes the step-3 check *more* important here, not
+less, but it can't run in your hands the way it does with photos: **print the
+returned `cardName` for every matched cert and ask the user to confirm each
+one against the physical card in front of them before you proceed to step 4.**
+Do not silently skip this because the table has nothing in the `key` column —
+an unanswered prompt means the batch does not get confirmed. A batch is always
+recordable even when OCR is useless; it is just the human, not you, who does
+the comparison in this mode.
 
 ## Capture requirements
 
