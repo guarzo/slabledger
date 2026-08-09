@@ -48,6 +48,13 @@ function health(id: string, name: string): CampaignHealth {
     capitalAtRiskCents: 0,
     healthStatus: 'healthy',
     healthReason: '',
+    liquidationLossCents: 0,
+    liquidationSaleCount: 0,
+    ebayChannelMarginPct: 0,
+    inHandUnsoldCount: 0,
+    inHandCapitalCents: 0,
+    inTransitUnsoldCount: 0,
+    inTransitCapitalCents: 0,
   };
 }
 

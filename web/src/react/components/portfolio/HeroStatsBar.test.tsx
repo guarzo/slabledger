@@ -53,59 +53,6 @@ function renderBar(
 }
 
 describe('HeroStatsBar', () => {
-  describe('delta chips', () => {
-    it('renders positive ROI delta with ▲', () => {
-      const health = baseHealth({
-        realizedROIDelta: { value: 2.4, label: 'vs last wk' },
-      });
-      renderBar(health);
-      const chip = screen.getByText(/▲/);
-      expect(chip).toBeInTheDocument();
-      expect(chip.textContent).toContain('2.4%');
-      expect(chip.textContent).toContain('vs last wk');
-    });
-
-    it('renders negative ROI delta with ▼', () => {
-      const health = baseHealth({
-        realizedROIDelta: { value: -1.8, label: '30d' },
-      });
-      renderBar(health);
-      const chip = screen.getByText(/▼/);
-      expect(chip).toBeInTheDocument();
-      expect(chip.textContent).toContain('1.8%');
-      expect(chip.textContent).toContain('30d');
-    });
-
-    it('formats cents delta through formatCents', () => {
-      const health = baseHealth({
-        totalRecoveredDelta: { value: 824_000, unit: 'cents', label: 'vs last wk' },
-      });
-      renderBar(health);
-      const chip = screen.getByText(/▲/);
-      expect(chip.textContent).toContain('$8,240.00');
-      expect(chip.textContent).not.toContain('%');
-    });
-
-    it('renders zero delta without arrow', () => {
-      const health = baseHealth({
-        realizedROIDelta: { value: 0 },
-      });
-      renderBar(health);
-      const chip = screen.getByText(/0\.0%/);
-      expect(chip.textContent).not.toContain('▲');
-      expect(chip.textContent).not.toContain('▼');
-    });
-
-    it('renders negative cents delta with ▼', () => {
-      const health = baseHealth({
-        totalRecoveredDelta: { value: -500_00, unit: 'cents' },
-      });
-      renderBar(health);
-      const chip = screen.getByText(/▼/);
-      expect(chip.textContent).toContain('$500.00');
-    });
-  });
-
   describe('ROI magnitude tier', () => {
     it('sets data-mag="normal" for small ROI', () => {
       renderBar(baseHealth({ realizedROI: 0.05 }));
@@ -132,15 +79,13 @@ describe('HeroStatsBar', () => {
     });
   });
 
-  describe('backwards compatibility', () => {
-    it('renders without any deltas provided', () => {
+  describe('base rendering', () => {
+    it('renders the ROI headline with health alone', () => {
       renderBar(baseHealth());
       expect(screen.getByText(/12\.0%/)).toBeInTheDocument();
-      expect(screen.queryByText(/▲/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/▼/)).not.toBeInTheDocument();
     });
 
-    it('renders with capital but no deltas', () => {
+    it('renders the capital cluster when capital is supplied', () => {
       renderBar(baseHealth(), baseCapital());
       expect(screen.getByText(/12\.0%/)).toBeInTheDocument();
       expect(screen.getByText('Wks to Cover')).toBeInTheDocument();

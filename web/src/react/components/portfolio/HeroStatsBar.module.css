@@ -77,10 +77,10 @@
   text-shadow: 0 0 36px rgba(248, 113, 113, 0.30);
 }
 
-/* "as of HH:MM · since last login +X" — a quiet freshness line under the
-   headline. Establishes that the snapshot is current without asking the
-   operator to look anywhere else. Mono so the timestamp + delta align
-   tightly under the big serif number. */
+/* "as of HH:MM" — a quiet freshness line under the headline. Establishes
+   that the snapshot is current without asking the operator to look
+   anywhere else. Mono so the timestamp sits tightly under the big serif
+   number. */
 .freshness {
   font-family: var(--font-numeric);
   font-size: 11px;
@@ -88,11 +88,6 @@
   color: var(--text-subtle);
   letter-spacing: 0.01em;
   margin-top: 2px;
-}
-.freshness .freshDelta {
-  margin-left: 6px;
-  padding-left: 6px;
-  border-left: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 /* ── Stat strip ──────────────────────────────────────────────────── */
@@ -173,41 +168,6 @@
   border-radius: 999px;
 }
 
-/* ── Delta chips (next to ROI + secondary stats) ─────────────────── */
-.delta {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-numeric);
-  /* Lift the delta visually beside the giant ROI — center vertically
-     against the cap-height of the serif numerals. */
-  transform: translateY(-0.4em);
-}
-.dSmall {
-  font-size: 10px;
-  padding: 1px 5px;
-  transform: none;
-}
-.dPos {
-  background: rgba(16, 185, 129, 0.14);
-  color: var(--success);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-}
-.dNeg {
-  background: rgba(239, 68, 68, 0.14);
-  color: var(--danger);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-}
-.dMeta {
-  font-weight: 500;
-  opacity: 0.8;
-}
-
 /* ── Tablet ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .subCluster + .subCluster {
@@ -240,16 +200,6 @@
   }
   .hero[data-mag="big"]  .roiValue { font-size: clamp(54px, 16vw, 72px); }
   .hero[data-mag="huge"] .roiValue { font-size: clamp(60px, 18vw, 80px); }
-  .delta {
-    transform: translateY(-0.3em);
-  }
-  /* Keep secondary-stat chips aligned with their baseline; only the
-     headline chip floats. Without this override the mobile .delta rule
-     above re-introduces the lift that the desktop .dSmall reset
-     suppressed. */
-  .delta.dSmall {
-    transform: none;
-  }
   .clusterGroup {
     width: 100%;
     flex-direction: column;
