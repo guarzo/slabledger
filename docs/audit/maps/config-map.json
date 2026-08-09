@@ -801,7 +801,9 @@
       "command": "git grep -nE '\\.Mode\\.WebMode\\b' -- '*.go' | grep -v _test.go",
       "external_refs": 1,
       "ref_sites": [
-        "internal/platform/config/loader.go:243 (CLI flag -web, no .env.example entry)"
+        "internal/platform/config/loader.go:243 (CLI flag -web, no .env.example entry)",
+        "Dockerfile:98 (CMD [\"--web\", ...] — setter, not visible to a Go-source grep)",
+        "Makefile:48,51 (run target passes --web — setter, not visible to a Go-source grep)"
       ]
     },
     {

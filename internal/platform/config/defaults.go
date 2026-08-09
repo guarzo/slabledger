@@ -11,7 +11,11 @@ func Default() Config {
 			TrustProxy:        false,
 		},
 		Server: ServerConfig{
-			ListenAddr:               "127.0.0.1:8080",
+			// Empty means "derive from Mode.WebPort" — Load resolves it after
+			// env and flags are applied. Leaving it empty is what makes the
+			// bare `slabledger` invocation land on the documented port instead
+			// of a second, hard-coded one that only --web could override.
+			ListenAddr:               "",
 			ReadTimeout:              15 * time.Second,
 			WriteTimeout:             90 * time.Second, // Sized for pricing endpoint (~30s upstream calls)
 			IdleTimeout:              60 * time.Second,

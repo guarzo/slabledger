@@ -91,6 +91,69 @@ func TestFromFlags_WebMode(t *testing.T) {
 	}
 }
 
+// TestLoad_ListenAddr pins the address every documented invocation binds. The
+// bare and --port-without--web cases are the regression guard for SLA-67: both
+// used to fall through to a hard-coded 127.0.0.1:8080 that no document
+// mentioned and that --port could not change.
+func TestLoad_ListenAddr(t *testing.T) {
+	tests := []struct {
+		name           string
+		listenAddrEnv  string
+		args           []string
+		wantListenAddr string
+	}{
+		{
+			name:           "bare invocation binds the documented port",
+			args:           []string{},
+			wantListenAddr: "0.0.0.0:8081",
+		},
+		{
+			name:           "port flag applies without web mode",
+			args:           []string{"--port", "9090"},
+			wantListenAddr: "0.0.0.0:9090",
+		},
+		{
+			name:           "web mode with port flag",
+			args:           []string{"--web", "--port", "3000"},
+			wantListenAddr: "0.0.0.0:3000",
+		},
+		{
+			name:           "HTTP_LISTEN_ADDR wins over the derived default",
+			listenAddrEnv:  "127.0.0.1:7000",
+			args:           []string{},
+			wantListenAddr: "127.0.0.1:7000",
+		},
+		{
+			name:           "HTTP_LISTEN_ADDR wins over web mode",
+			listenAddrEnv:  "127.0.0.1:7000",
+			args:           []string{"--web", "--port", "3000"},
+			wantListenAddr: "127.0.0.1:7000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Isolate from the ambient environment: an empty value reads as
+			// unset everywhere config consults these.
+			t.Setenv("HTTP_LISTEN_ADDR", tt.listenAddrEnv)
+			t.Setenv("DATABASE_URL", "postgresql://u:p@localhost:5432/db?sslmode=disable")
+			t.Setenv("ENCRYPTION_KEY", "")
+			t.Setenv("PSA_PORTAL_EMAIL", "")
+			t.Setenv("PSA_PORTAL_PASSWORD", "")
+			t.Setenv("PSA_PUSH_SIGNING_KEY", "")
+
+			cfg, err := Load(tt.args)
+			if err != nil {
+				t.Fatalf("Load failed: %v", err)
+			}
+
+			if cfg.Server.ListenAddr != tt.wantListenAddr {
+				t.Errorf("expected listen addr %q, got %q", tt.wantListenAddr, cfg.Server.ListenAddr)
+			}
+		})
+	}
+}
+
 func TestValidate_InvalidPort(t *testing.T) {
 	cfg := Default()
 	cfg.Mode.WebPort = 99999

@@ -141,6 +141,9 @@ SERVER MODE:
     slabledger server             # Explicit server mode
     slabledger server --port 9090 # Custom port
 
+    Binds 0.0.0.0:<port>. Set HTTP_LISTEN_ADDR to override the full
+    host:port, e.g. HTTP_LISTEN_ADDR=127.0.0.1:8081 for loopback only.
+
 EXAMPLES:
 
 Documentation: docs/USER_GUIDE.md
