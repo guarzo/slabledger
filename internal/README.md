@@ -265,16 +265,16 @@ internal/testutil/
 
 **Example**:
 ```go
-package mocks
-
-type MockPriceProvider struct {
-    GetPriceFunc func(ctx context.Context, card pricing.Card) (*pricing.Price, error)
-}
-
-func (m *MockPriceProvider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Price, error) {
-    return m.GetPriceFunc(ctx, card)
+// Most mocks use the Fn-field pattern: set the field for the method you care about.
+mock := &mocks.CampaignRepositoryMock{
+    GetCampaignFn: func(ctx context.Context, id string) (*inventory.Campaign, error) {
+        return &inventory.Campaign{ID: id, Name: "Test Campaign"}, nil
+    },
 }
 ```
+
+See [testutil/mocks/README.md](testutil/mocks/README.md) for the full guide, including the
+older mocks that are configured through a constructor and functional options instead.
 
 ---
 
