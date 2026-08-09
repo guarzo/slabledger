@@ -575,7 +575,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 		wantNewTerms   float64
 		wantConfidence string
 		wantDataPoints int
-		wantMarginPct  float64 // expected ExpectedMarginPct == h.EbayChannelMarginPct
+		wantMarginPct  float64 // expected ExpectedMarginPct == h.MarketplaceChannelMarginPct
 	}{
 		{
 			name: "below loss threshold",
@@ -599,7 +599,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// Marketplace margin positive so the gate allows the rule.
 			campaigns: []inventory.Campaign{{ID: "c3", Name: "Mid-Era", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.80}},
 			health: map[string]inventory.CampaignHealth{
-				"c3": {CampaignID: "c3", LiquidationLossCents: -55000, LiquidationSaleCount: 22, EbayChannelMarginPct: 0.18},
+				"c3": {CampaignID: "c3", LiquidationLossCents: -55000, LiquidationSaleCount: 22, MarketplaceChannelMarginPct: 0.18},
 			},
 			wantCampaign:   "Mid-Era",
 			wantNewTerms:   0.77,
@@ -612,7 +612,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// $40/sale avg × 13 sales = $520. Bucket is 5%. 13 sales → high confidence.
 			campaigns: []inventory.Campaign{{ID: "c4", Name: "Vintage Core", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.80}},
 			health: map[string]inventory.CampaignHealth{
-				"c4": {CampaignID: "c4", LiquidationLossCents: -52000, LiquidationSaleCount: 13, EbayChannelMarginPct: 0.20},
+				"c4": {CampaignID: "c4", LiquidationLossCents: -52000, LiquidationSaleCount: 13, MarketplaceChannelMarginPct: 0.20},
 			},
 			wantCampaign:   "Vintage Core",
 			wantNewTerms:   0.75,
@@ -625,7 +625,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// $80/sale avg × 8 sales = $640. Bucket is 8%. 8 sales → medium confidence (below 10).
 			campaigns: []inventory.Campaign{{ID: "c5", Name: "Vintage Low Grade", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.82}},
 			health: map[string]inventory.CampaignHealth{
-				"c5": {CampaignID: "c5", LiquidationLossCents: -64000, LiquidationSaleCount: 8, EbayChannelMarginPct: 0.22},
+				"c5": {CampaignID: "c5", LiquidationLossCents: -64000, LiquidationSaleCount: 8, MarketplaceChannelMarginPct: 0.22},
 			},
 			wantCampaign:   "Vintage Low Grade",
 			wantNewTerms:   0.74,
@@ -638,7 +638,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// Campaign at 74% with 8% bucket ($80/sale × 10) → 74-8=66, clamped to 70.
 			campaigns: []inventory.Campaign{{ID: "c6", Name: "NearFloor", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.74}},
 			health: map[string]inventory.CampaignHealth{
-				"c6": {CampaignID: "c6", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
+				"c6": {CampaignID: "c6", LiquidationLossCents: -80000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "NearFloor",
 			wantNewTerms:   0.70,
@@ -651,7 +651,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// 70% + 8% bucket = would be 62, clamped to 70, which equals current → skip.
 			campaigns: []inventory.Campaign{{ID: "c7", Name: "AtFloor", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.70}},
 			health: map[string]inventory.CampaignHealth{
-				"c7": {CampaignID: "c7", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
+				"c7": {CampaignID: "c7", LiquidationLossCents: -80000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: 0.15},
 			},
 		},
 		{
@@ -659,7 +659,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// 0.68 < 0.70 floor → clamped to 0.70 which is > current → skip (rule never raises terms).
 			campaigns: []inventory.Campaign{{ID: "c8", Name: "BelowFloor", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.68}},
 			health: map[string]inventory.CampaignHealth{
-				"c8": {CampaignID: "c8", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
+				"c8": {CampaignID: "c8", LiquidationLossCents: -80000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: 0.15},
 			},
 		},
 		{
@@ -667,7 +667,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// avg $60/sale × 10 = $600, bucket 8%. Tier boundary: 10 sales → high.
 			campaigns: []inventory.Campaign{{ID: "c9", Name: "Boundary10", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]inventory.CampaignHealth{
-				"c9": {CampaignID: "c9", LiquidationLossCents: -60000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
+				"c9": {CampaignID: "c9", LiquidationLossCents: -60000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "Boundary10",
 			wantNewTerms:   0.77,
@@ -680,7 +680,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// avg ~$67/sale × 9 = $600, bucket 8%. 9 sales → medium.
 			campaigns: []inventory.Campaign{{ID: "c10", Name: "Boundary9", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]inventory.CampaignHealth{
-				"c10": {CampaignID: "c10", LiquidationLossCents: -60000, LiquidationSaleCount: 9, EbayChannelMarginPct: 0.15},
+				"c10": {CampaignID: "c10", LiquidationLossCents: -60000, LiquidationSaleCount: 9, MarketplaceChannelMarginPct: 0.15},
 			},
 			wantCampaign:   "Boundary9",
 			wantNewTerms:   0.77,
@@ -694,14 +694,14 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 				{ID: "c11", Name: "Archived", Phase: inventory.PhaseClosed, BuyTermsCLPct: 0.85},
 			},
 			health: map[string]inventory.CampaignHealth{
-				"c11": {CampaignID: "c11", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
+				"c11": {CampaignID: "c11", LiquidationLossCents: -80000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: 0.15},
 			},
 		},
 		{
 			name:      "missing health row — no panic, no suggestion",
 			campaigns: []inventory.Campaign{{ID: "c12", Name: "NoHealth", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]inventory.CampaignHealth{
-				"other": {CampaignID: "other", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.15},
+				"other": {CampaignID: "other", LiquidationLossCents: -80000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: 0.15},
 			},
 		},
 		{
@@ -716,7 +716,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// don't have a trustworthy margin baseline to recommend from.
 			campaigns: []inventory.Campaign{{ID: "c14", Name: "NoMarketplaceSales", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]inventory.CampaignHealth{
-				"c14": {CampaignID: "c14", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: 0.0},
+				"c14": {CampaignID: "c14", LiquidationLossCents: -80000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: 0.0},
 			},
 		},
 		{
@@ -725,7 +725,7 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			// channel is already underwater. Fix the channel first.
 			campaigns: []inventory.Campaign{{ID: "c15", Name: "BrokenMarketplace", Phase: inventory.PhaseActive, BuyTermsCLPct: 0.85}},
 			health: map[string]inventory.CampaignHealth{
-				"c15": {CampaignID: "c15", LiquidationLossCents: -80000, LiquidationSaleCount: 10, EbayChannelMarginPct: -0.05},
+				"c15": {CampaignID: "c15", LiquidationLossCents: -80000, LiquidationSaleCount: 10, MarketplaceChannelMarginPct: -0.05},
 			},
 		},
 	}
@@ -773,11 +773,11 @@ func TestGenerateSuggestions_BuyTermsFromLiquidation(t *testing.T) {
 			if match.DataPoints != tc.wantDataPoints {
 				t.Errorf("expected DataPoints %d, got %d", tc.wantDataPoints, match.DataPoints)
 			}
-			// ExpectedMarginPct == h.EbayChannelMarginPct.
+			// ExpectedMarginPct == h.MarketplaceChannelMarginPct.
 			// ExpectedROI is derived as margin/newTerms so both fields describe
 			// the projected post-adjustment state consistently.
 			if math.Abs(match.ExpectedMetrics.ExpectedMarginPct-tc.wantMarginPct) > 1e-9 {
-				t.Errorf("expected ExpectedMarginPct %.4f (EbayChannelMarginPct), got %.4f",
+				t.Errorf("expected ExpectedMarginPct %.4f (MarketplaceChannelMarginPct), got %.4f",
 					tc.wantMarginPct, match.ExpectedMetrics.ExpectedMarginPct)
 			}
 			wantROI := tc.wantMarginPct / tc.wantNewTerms

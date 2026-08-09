@@ -270,16 +270,16 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 	}
 
 	cases := []struct {
-		name                 string
-		sales                []saleFixture
-		wantLossCents        int
-		wantLossCount        int
-		wantEbayMarginPct    float64
-		ebayMarginPctEpsilon float64
+		name                        string
+		sales                       []saleFixture
+		wantLossCents               int
+		wantLossCount               int
+		wantMarketplaceMarginPct    float64
+		marketplaceMarginPctEpsilon float64
 	}{
 		{
 			name: "no sales", sales: nil, wantLossCents: 0, wantLossCount: 0,
-			wantEbayMarginPct: 0, ebayMarginPctEpsilon: 0.00001,
+			wantMarketplaceMarginPct: 0, marketplaceMarginPctEpsilon: 0.00001,
 		},
 		{
 			name: "only eBay sales all profitable",
@@ -288,7 +288,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelEbay, salePrice: 15000, netProfit: 4000},
 			},
 			wantLossCents: 0, wantLossCount: 0,
-			wantEbayMarginPct: float64(6000) / float64(25000), ebayMarginPctEpsilon: 0.0001,
+			wantMarketplaceMarginPct: float64(6000) / float64(25000), marketplaceMarginPctEpsilon: 0.0001,
 		},
 		{
 			name: "only eBay sales some losses — loss stays 0, margin still computed",
@@ -297,7 +297,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelEbay, salePrice: 8000, netProfit: -1500},
 			},
 			wantLossCents: 0, wantLossCount: 0,
-			wantEbayMarginPct: float64(500) / float64(18000), ebayMarginPctEpsilon: 0.0001,
+			wantMarketplaceMarginPct: float64(500) / float64(18000), marketplaceMarginPctEpsilon: 0.0001,
 		},
 		{
 			name: "only inperson sales all profitable — loss stays 0",
@@ -305,7 +305,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelInPerson, salePrice: 5000, netProfit: 1000},
 				{channel: inventory.SaleChannelInPerson, salePrice: 7000, netProfit: 500},
 			},
-			wantLossCents: 0, wantLossCount: 0, wantEbayMarginPct: 0, ebayMarginPctEpsilon: 0.00001,
+			wantLossCents: 0, wantLossCount: 0, wantMarketplaceMarginPct: 0, marketplaceMarginPctEpsilon: 0.00001,
 		},
 		{
 			name: "only inperson sales all losses",
@@ -313,7 +313,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelInPerson, salePrice: 4000, netProfit: -800},
 				{channel: inventory.SaleChannelInPerson, salePrice: 3000, netProfit: -1200},
 			},
-			wantLossCents: -2000, wantLossCount: 2, wantEbayMarginPct: 0, ebayMarginPctEpsilon: 0.00001,
+			wantLossCents: -2000, wantLossCount: 2, wantMarketplaceMarginPct: 0, marketplaceMarginPctEpsilon: 0.00001,
 		},
 		{
 			name: "mixed channels — eBay profitable, inperson losses",
@@ -324,7 +324,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelInPerson, salePrice: 4000, netProfit: -2000},
 			},
 			wantLossCents: -3500, wantLossCount: 2,
-			wantEbayMarginPct: float64(8000) / float64(30000), ebayMarginPctEpsilon: 0.0001,
+			wantMarketplaceMarginPct: float64(8000) / float64(30000), marketplaceMarginPctEpsilon: 0.0001,
 		},
 		{
 			name: "cardshow losses counted alongside inperson",
@@ -332,7 +332,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelCardShow, salePrice: 5000, netProfit: -1000},
 				{channel: inventory.SaleChannelInPerson, salePrice: 4500, netProfit: -750},
 			},
-			wantLossCents: -1750, wantLossCount: 2, wantEbayMarginPct: 0, ebayMarginPctEpsilon: 0.00001,
+			wantLossCents: -1750, wantLossCount: 2, wantMarketplaceMarginPct: 0, marketplaceMarginPctEpsilon: 0.00001,
 		},
 		{
 			name: "profitable cardshow sale does not reduce liquidation loss",
@@ -341,7 +341,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelCardShow, salePrice: 4000, netProfit: -900},
 				{channel: inventory.SaleChannelInPerson, salePrice: 3000, netProfit: -600},
 			},
-			wantLossCents: -1500, wantLossCount: 2, wantEbayMarginPct: 0, ebayMarginPctEpsilon: 0.00001,
+			wantLossCents: -1500, wantLossCount: 2, wantMarketplaceMarginPct: 0, marketplaceMarginPctEpsilon: 0.00001,
 		},
 		{
 			name: "website and other channels are neither liquidation nor marketplace",
@@ -351,7 +351,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelEbay, salePrice: 20000, netProfit: 4000},
 			},
 			wantLossCents: 0, wantLossCount: 0,
-			wantEbayMarginPct: float64(4000) / float64(20000), ebayMarginPctEpsilon: 0.0001,
+			wantMarketplaceMarginPct: float64(4000) / float64(20000), marketplaceMarginPctEpsilon: 0.0001,
 		},
 		{
 			name: "tcgplayer sales are counted with eBay for marketplace margin",
@@ -360,7 +360,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelTCGPlayer, salePrice: 5000, netProfit: 1000},
 			},
 			wantLossCents: 0, wantLossCount: 0,
-			wantEbayMarginPct: float64(3000) / float64(15000), ebayMarginPctEpsilon: 0.0001,
+			wantMarketplaceMarginPct: float64(3000) / float64(15000), marketplaceMarginPctEpsilon: 0.0001,
 		},
 		{
 			name: "tcgplayer-only sales still populate marketplace margin",
@@ -368,7 +368,7 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 				{channel: inventory.SaleChannelTCGPlayer, salePrice: 8000, netProfit: 1200},
 			},
 			wantLossCents: 0, wantLossCount: 0,
-			wantEbayMarginPct: float64(1200) / float64(8000), ebayMarginPctEpsilon: 0.0001,
+			wantMarketplaceMarginPct: float64(1200) / float64(8000), marketplaceMarginPctEpsilon: 0.0001,
 		},
 	}
 
@@ -420,8 +420,8 @@ func TestService_GetPortfolioHealth_LiquidationSignals(t *testing.T) {
 			if got.LiquidationSaleCount != tc.wantLossCount {
 				t.Errorf("LiquidationSaleCount = %d, want %d", got.LiquidationSaleCount, tc.wantLossCount)
 			}
-			if diff := got.EbayChannelMarginPct - tc.wantEbayMarginPct; diff > tc.ebayMarginPctEpsilon || diff < -tc.ebayMarginPctEpsilon {
-				t.Errorf("EbayChannelMarginPct = %f, want ~%f", got.EbayChannelMarginPct, tc.wantEbayMarginPct)
+			if diff := got.MarketplaceChannelMarginPct - tc.wantMarketplaceMarginPct; diff > tc.marketplaceMarginPctEpsilon || diff < -tc.marketplaceMarginPctEpsilon {
+				t.Errorf("MarketplaceChannelMarginPct = %f, want ~%f", got.MarketplaceChannelMarginPct, tc.wantMarketplaceMarginPct)
 			}
 		})
 	}
