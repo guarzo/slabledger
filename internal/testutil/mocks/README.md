@@ -12,7 +12,7 @@ grep -rho '^type [A-Za-z]*Mock[A-Za-z]*' internal/testutil/mocks | awk '{print $
 
 ## Pattern
 
-All mocks use the **Fn-field pattern**: every interface method has a corresponding `Fn` field.
+Nearly all mocks use the **Fn-field pattern**: every interface method has a corresponding `Fn` field.
 When the field is `nil`, the method returns a sensible zero-value default.
 Override any method per test by assigning a function.
 
@@ -25,6 +25,16 @@ mock := &mocks.CampaignRepositoryMock{
 ```
 
 No constructors needed for these mocks — just instantiate the struct and set the fields you care about.
+
+A few older mocks predate this pattern and are configured through a constructor and functional
+options instead — `MockPriceProvider` is the one you are most likely to meet:
+
+```go
+provider := mocks.NewMockPriceProvider(mocks.WithError(errors.New("boom")))
+provider.SetMockMatch("Base Set", "Charizard", "4", &pricing.Price{Amount: 50000, Currency: "USD"})
+```
+
+Use the Fn-field pattern for all new mocks; see "Usage Notes" below.
 
 ## Repository Mocks
 
@@ -162,7 +172,7 @@ store.Purchases["p1"] = &inventory.Purchase{ID: "p1", CampaignID: "c1"}
 Use sentinel errors with `errors.Is`:
 
 ```go
-err := svc.GetCampaign(ctx, "nonexistent")
+_, err := svc.GetCampaign(ctx, "nonexistent")
 if !errors.Is(err, inventory.ErrCampaignNotFound) {
     t.Errorf("expected ErrCampaignNotFound, got %v", err)
 }
@@ -173,13 +183,13 @@ Key sentinel errors:
 - `inventory.ErrPurchaseNotFound`
 - `inventory.ErrSaleNotFound`
 - `inventory.ErrInvoiceNotFound`
-- `inventory.ErrDuplicateCert`
+- `inventory.ErrDuplicateCertNumber`
 
 ## Usage Notes
 
 - **Never create inline mocks** in test files. Add to this package instead.
 - Mocks live in `package mocks` (not `package mocks_test`) so they export for all test packages.
-- `picks/service_test.go` and `favorites/service_test.go` use `package picks`/`package favorites`
-  (white-box tests) and therefore cannot import `testutil/mocks` — their inline mocks are intentional.
-- `MockBehavior` / `MockOption` helpers in `common.go` are used only by card/HTTP mocks (legacy);
-  prefer the Fn-field pattern for all new mocks.
+- White-box tests that live in the package under test cannot import `testutil/mocks` without an
+  import cycle; inline mocks are intentional there.
+- `MockBehavior` / `MockOption` helpers in `common.go` are used only by the legacy
+  constructor-configured mocks (see "Pattern" above); prefer the Fn-field pattern for all new mocks.

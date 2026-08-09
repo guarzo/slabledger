@@ -1,0 +1,56 @@
+[
+  {
+    "id": "DCG-001",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-derived independently at 06d9f8ce. `git ls-tree -r --name-only 06d9f8ce -- internal/domain/llmutil` yields exactly strip_fences.go and strip_fences_test.go. `git grep -nE '\\bStripMarkdownFences\\b' 06d9f8ce -- '*.go' ':!internal/domain/llmutil'` exits 1 with empty output — the absence citation the preamble requires. An unrestricted repo-wide `git grep -nE '\\bStripMarkdownFences\\b' 06d9f8ce` (no pathspec at all) returns only strip_fences.go:6/9, strip_fences_test.go:49/51, and a line in the checked-in docs/audit/maps/go-reference-map.json — no consumer in any language. Nine mechanisms answered by my own reading of `git show 06d9f8ce:internal/domain/llmutil/strip_fences.go`: it is a single pure `func StripMarkdownFences(string) string` over `strings` — no interface method set to satisfy (nothing names the package, so nothing can assign from it), no options, no embedding, no struct and therefore no serialization tags, no //go:embed, no build tag on either file, no DI/registration site (cmd/slabledger never imports it), no init(), no reflection or string-keyed dispatch. The package name `llmutil` also appears in .md/.superpowers prose only, which is documentation, not a consumer.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCG-002",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Re-derived by a different route than the finding's. Rather than trusting the `testutil.` selector search, I searched for the import path itself: `git grep -n 'slabledger/internal/testutil\"' 06d9f8ce` returns no Go file — its only hit is a comment line inside the checked-in go-reference-map.json. So no package in the tree imports the root testutil package, which forecloses every reachability mechanism at once (an unimported package cannot satisfy an interface, be embedded, be wired, or run an init()). I then confirmed the collision the finding claims by reading the import block of the one `testutil.` selector site: `git show 06d9f8ce:internal/adapters/storage/postgres/metrics_test.go` imports \"github.com/prometheus/client_golang/prometheus/testutil\" and nothing from this repo — trap 2, exactly as filed. `git show 06d9f8ce:internal/testutil/config.go` contains one declaration, GetTestToken, a plain os.Getenv wrapper with no build tag, no struct, no init(). git grep reads files irrespective of build tags, so the integration-tagged tree is covered by the same empty result.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCG-003",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "I ran the eight-name word-boundary search at the baseline over all Go files with no pathspec exclusion at all — a strictly wider universe than the finding used — and every single hit lands in internal/platform/cardutil/trace.go or trace_test.go. Nothing in the rest of cardutil, and nothing anywhere else, names any of the eight. I then read `git show 06d9f8ce:internal/platform/cardutil/trace.go` in full to establish the operative claim by my own route: Steps is appended to only inside `(*NormalizationTrace).AddStep`, AddStep is called only from trace_test.go, and LogNormalizationTrace early-returns when `len(trace.Steps) == 0`. So even a caller that did ContextWithTrace + LogNormalizationTrace would log nothing — the facility is not merely unwired, it is inert by construction. Nine mechanisms: no interface satisfaction (no `var _` assertion, and no external package names the type, so no implicit satisfaction is reachable); no functional options; no embedding; the two structs carry bare fields with no JSON/DB tags (verified in the file body), so nothing is marshalled; no //go:embed; neither trace.go nor trace_test.go carries a build tag; no registration site (cmd/slabledger and internal/adapters never mention it); no init(); the context key is a private zero-size `traceKeyType`, reachable only by the two functions in this file — not a string key, so no string-based lookup path exists.",
+    "what_the_finding_got_wrong": "",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCG-004",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "The finding's pathspec-excluded search reproduces exactly: one hit, internal/adapters/clients/httpx/interface.go:14, and reading that line confirms it is prose (`// Test code can use MockHTTPClient which provides immediate responses`) inside a comment block, not a reference. I did not stop at the name list the finding chose, because a deletion-set claim stands or falls on closure, so I enumerated the top-level declarations of all three non-test files myself (`git show 06d9f8ce:internal/testutil/mocks/{http_client,http_client_helpers,price_provider}.go | grep -nE '^(func|type|var|const)'`) and found four exported/unexported symbols the finding's grep never covered: NewMockHTTPClientWithError, NewMockHTTPClientWithStatusCode, (*MockPriceProvider).SetMockMatch, and generateMockPrice. Searching all four across '*.go' with no exclusion places every hit inside the five files the finding proposes to delete. Running the reverse direction — every common.go symbol including the unexported checkBehavior and simpleHash, searched across `internal/testutil/mocks` — shows their only consumers are http_client.go, http_client_helpers.go, http_client_test.go, and price_provider.go. The proposed deletion set is therefore closed: no file outside it depends on any symbol inside it, and the acceptance criteria are provable as written. Nine mechanisms: interface satisfaction is real but self-contained — `var _ httpx.HTTPClient = (*MockHTTPClient)(nil)` at http_client.go:450 sits inside a file being removed, and MockPriceProvider's implicit satisfaction of pricing.PriceProvider is unreachable because no package outside mocks names the type; the functional options are the dead framework's own; no embedding; no serialization tags; no //go:embed; no build tag on any of the five; no DI wiring (these are test doubles, absent from init_services.go); no init(); no reflection or string-keyed dispatch. The stdlib-collision caveat is handled correctly — the map's external_refs 41 for mocks.WithTimeout is entirely context.WithTimeout, which I verified is what the excluded-pathspec search shows.",
+    "what_the_finding_got_wrong": "Nothing that affects the verdict. One completeness gap in the acceptance criteria: internal/testutil/mocks/README.md:184 documents `MockBehavior` / `MockOption` as living in common.go, and no acceptance criterion restricts its grep to anything but '*.go', so a fixer who satisfies the criteria literally will leave that README line describing deleted code.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCG-005",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Both searches reproduce byte-for-byte. The external search returns exactly two lines, and I read both in context: internal/domain/inventory/service_test.go:229 and internal/domain/psacampaign/mapper_test.go:14 are `//` comment lines, so they are trap-3 stale prose, not references — and both do assert the opposite of the truth. I did not accept the finding's characterization of the in-package hits; I re-ran the fourteen-name search restricted to 'internal/testutil/mocks/*.go' and inspected the full output line by line. Every hit is one of three shapes — `type X struct {`, `func (m *X) Method(...)`, `var _ pkg.Iface = (*X)(nil)` — plus doc comments. Critically, no line declares a struct field whose type is one of the fourteen, which is the exact hazard that required the DHPushStatusCall exclusion, so no live mock loses a field type when these are removed. On that exclusion: I verified it independently rather than folding it back in. `git show 06d9f8ce:internal/testutil/mocks/dhlisting_service.go` lines 87-99 show `type DHPushStatusCall struct` and, twelve lines later, `Calls []DHPushStatusCall` inside MockDHPushStatusUpdater, whose external reachability I confirmed at internal/domain/dhlisting/inline_match_push_test.go:53 and :64. The exclusion is drawn in the right place — DHPushStatusCall is live by field type and correctly outside the finding's scope. Nine mechanisms: interface satisfaction is present as `var _` assertions inside the very files being removed and so does not survive them; no functional options; no embedding of any of the fourteen into a surviving type (established by the field-declaration check above); no serialization — these are Fn-field test doubles with no tags, and nothing in web/src/types/ mirrors them; no //go:embed; no build tag, and since git grep is tag-agnostic the integration-tagged tree is covered by the same empty external result; no DI wiring; no init(); no reflection or string-keyed lookup.",
+    "what_the_finding_got_wrong": "Nothing that affects the verdict. Same completeness gap as DCG-004: internal/testutil/mocks/README.md documents four of the fourteen (SaleRepositoryMock:52, AnalyticsRepositoryMock:58, PricingRepositoryMock:60, DHRepositoryMock:61) and every acceptance criterion is scoped to '*.go', so satisfying them literally leaves the README describing removed mocks. The two inaccurate comments are handled — acceptance criterion 4's grep is over '*.go' and would catch both.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "DCG-006",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Both evidence commands reproduce exactly, including the single-hit output. I established the substantive claim by my own route in two halves. First, the file is misnamed: `git show 06d9f8ce:internal/testutil/mocks/dh_fusion.go` contains only MockDHMarketDataClient and MockDHCardIDLookup, test doubles for dhprice.MarketDataClient and dhprice.CardIDLookup, with no fusion concept anywhere in the body. Second — and this is the half that matters for a pointer, since a rename recommendation would be wrong if the contents were themselves dead — I confirmed the contents are live: `git grep -nE '\\b(MockDHMarketDataClient|MockDHCardIDLookup)\\b' 06d9f8ce -- '*.go' ':!internal/testutil/mocks'` returns 27 real construction sites across internal/adapters/clients/dhprice/provider_test.go. The finding correctly files this as a naming pointer at `suspected`, not as dead code in its own lane.",
+    "what_the_finding_got_wrong": "The acceptance criteria bundle two separate objects: the rename of dh_fusion.go, and correcting an unrelated stale comment in a different file (internal/adapters/scheduler/inventory_refresh_test.go:342, which is the only 'fusion' hit in Go source). A fixer can satisfy both, but they are not one change.",
+    "corrected_severity": "",
+    "ticketable": false
+  }
+]

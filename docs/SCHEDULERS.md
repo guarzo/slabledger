@@ -1,6 +1,6 @@
 # Scheduler Architecture
 
-Background schedulers run periodic jobs (price refresh, cache warmup, cleanup, etc.). All schedulers live in `internal/adapters/scheduler/` and share a common infrastructure.
+Background schedulers run periodic jobs (price refresh, inventory refresh, cleanup, etc.). All schedulers live in `internal/adapters/scheduler/` and share a common infrastructure.
 
 ## Core Abstractions
 
@@ -103,19 +103,6 @@ Lists unsold purchases, filters to those with stale or missing snapshots, sorts 
 | `BatchSize` | `INVENTORY_REFRESH_BATCH_SIZE` | `20` | Max purchases per cycle |
 | `BatchDelay` | `INVENTORY_REFRESH_BATCH_DELAY` | `2s` | Delay between API calls |
 
-### Cache Warmup
-
-**File:** `cache_warmup.go`
-**Purpose:** Populates the persistent card cache by fetching all sets and their cards from TCGdex.
-
-Skips sets already finalized on disk (via `NewSetIDsProvider`), aborts after 5 consecutive API errors, and rate-limits between set fetches.
-
-| Config | Env Var | Default | Description |
-|--------|---------|---------|-------------|
-| `Enabled` | `CACHE_WARMUP_ENABLED` | `true` | Enable/disable |
-| `Interval` | `CACHE_WARMUP_INTERVAL` | `24h` | How often to run |
-| `RateLimitDelay` | `CACHE_WARMUP_RATE_LIMIT_DELAY` | `2s` | Delay between GetCards calls |
-
 ### Access Log Cleanup
 
 **File:** `access_log_cleanup.go`
@@ -181,7 +168,7 @@ Schedulers coordinate their startup to avoid conflicts:
 
 ```
 T=0s     All schedulers start
-T=0s     Price refresh, inventory refresh, cache warmup,
+T=0s     Price refresh, inventory refresh,
          access log cleanup, session cleanup run immediately
 ```
 
@@ -194,6 +181,9 @@ T=0s     Price refresh, inventory refresh, cache warmup,
 
 ## File Layout
 
+Partial — the shared infrastructure and the schedulers documented above. Run
+`ls internal/adapters/scheduler/` for the current set.
+
 ```
 internal/adapters/scheduler/
 ├── stop_handle.go           # StopHandle (embedded stop/wait infrastructure)
@@ -204,7 +194,6 @@ internal/adapters/scheduler/
 ├── config.go                # PriceRefresh-specific Config struct
 ├── price_refresh.go         # Price refresh scheduler
 ├── inventory_refresh.go     # Inventory snapshot refresh scheduler
-├── cache_warmup.go          # Card cache warmup scheduler
 ├── access_log_cleanup.go    # Access log cleanup scheduler
 ├── dh_event_cleanup.go      # dh_state_events retention scheduler
 └── session_cleanup.go       # Session cleanup scheduler

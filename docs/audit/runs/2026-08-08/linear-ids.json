@@ -1,0 +1,442 @@
+{
+  "baseline": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "baseline_date": "2026-08-08",
+  "team": "SlabLedger",
+  "team_id": "4201a070-d313-4326-acc3-2433e8f695a1",
+  "filed": 32,
+  "findings_covered": [
+    "ARCH-001",
+    "ARCH-002",
+    "ARCH-003",
+    "DB-002",
+    "DB-003",
+    "DB-004",
+    "DB-005",
+    "DCG-001",
+    "DCG-002",
+    "DCG-003",
+    "DCG-004",
+    "DCG-005",
+    "DCT-001",
+    "DCT-002",
+    "DCT-003",
+    "DCT-005",
+    "DCT-006",
+    "DCT-008",
+    "DCT-009",
+    "DCT-010",
+    "DCT-011",
+    "DCT-013",
+    "DUP-001",
+    "DUP-002",
+    "DUP-003",
+    "DUP-004",
+    "FE-001",
+    "FE-002",
+    "FE-003",
+    "FE-004",
+    "FE-005",
+    "NAM-001",
+    "NAM-002",
+    "NAM-003",
+    "SIZE-001",
+    "SIZE-002",
+    "SIZE-003",
+    "SIZE-004"
+  ],
+  "not_filed": {
+    "DB-001": "correct at baseline but remediated post-baseline by SLA-65 / PR #625 (migration 000036_drop_card_cache_blobs); see CONTROLLER-NOTES.md"
+  },
+  "tickets": [
+    {
+      "fu": "FU-01",
+      "linear_id": "SLA-66",
+      "url": "https://linear.app/slabledger/issue/SLA-66/correct-the-end-user-guide-against-the-shipped-ui",
+      "title": "Correct the end-user guide against the shipped UI",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Documentation drift",
+      "findings": [
+        "DCT-001"
+      ]
+    },
+    {
+      "fu": "FU-02",
+      "linear_id": "SLA-67",
+      "url": "https://linear.app/slabledger/issue/SLA-67/fix-the-run-instructions-the-bare-binary-binds-8080-and-port-is-a-no",
+      "title": "Fix the run instructions: the bare binary binds :8080, and --port is a no-op without --web",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Documentation drift",
+      "findings": [
+        "DCT-002",
+        "DCT-003"
+      ]
+    },
+    {
+      "fu": "FU-03",
+      "linear_id": "SLA-68",
+      "url": "https://linear.app/slabledger/issue/SLA-68/sweep-the-developer-docs-against-the-tree-five-removed-subsystems-and",
+      "title": "Sweep the developer docs against the tree — five removed subsystems and four wrong filenames",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Documentation drift",
+      "findings": [
+        "DCT-008",
+        "DCT-009"
+      ]
+    },
+    {
+      "fu": "FU-04",
+      "linear_id": "SLA-69",
+      "url": "https://linear.app/slabledger/issue/SLA-69/remove-or-register-the-six-api-endpoints-readme-advertises-and-fix",
+      "title": "Remove or register the six API endpoints README advertises, and fix DEVELOPMENT.md's two broken monitoring commands",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Documentation drift",
+      "findings": [
+        "DCT-010"
+      ]
+    },
+    {
+      "fu": "FU-05",
+      "linear_id": "SLA-70",
+      "url": "https://linear.app/slabledger/issue/SLA-70/make-the-mock-guides-worked-example-compile",
+      "title": "Make the mock guide's worked example compile",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Documentation drift",
+      "findings": [
+        "DCT-011"
+      ]
+    },
+    {
+      "fu": "FU-06",
+      "linear_id": "SLA-71",
+      "url": "https://linear.app/slabledger/issue/SLA-71/fix-the-leaf-rule-worked-example-and-claudemds-sibling-roster",
+      "title": "Fix the leaf-rule worked example and CLAUDE.md's sibling roster",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Documentation drift",
+      "findings": [
+        "DCT-013"
+      ]
+    },
+    {
+      "fu": "FU-07",
+      "linear_id": "SLA-72",
+      "url": "https://linear.app/slabledger/issue/SLA-72/give-the-seven-assertion-free-integration-tests-a-failure-mode",
+      "title": "Give the seven assertion-free integration tests a failure mode",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Test coverage",
+      "findings": [
+        "DCT-005"
+      ]
+    },
+    {
+      "fu": "FU-08",
+      "linear_id": "SLA-73",
+      "url": "https://linear.app/slabledger/issue/SLA-73/unskip-the-two-errorboundary-tests",
+      "title": "Unskip the two ErrorBoundary tests",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Test coverage",
+      "findings": [
+        "DCT-006"
+      ]
+    },
+    {
+      "fu": "FU-09",
+      "linear_id": "SLA-74",
+      "url": "https://linear.app/slabledger/issue/SLA-74/remove-the-orphaned-llmutil-package",
+      "title": "Remove the orphaned llmutil package",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "DCG-001"
+      ]
+    },
+    {
+      "fu": "FU-10",
+      "linear_id": "SLA-75",
+      "url": "https://linear.app/slabledger/issue/SLA-75/remove-the-orphaned-root-testutil-package",
+      "title": "Remove the orphaned root testutil package",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "DCG-002"
+      ]
+    },
+    {
+      "fu": "FU-11",
+      "linear_id": "SLA-76",
+      "url": "https://linear.app/slabledger/issue/SLA-76/remove-or-wire-the-cardutil-normalization-trace-facility",
+      "title": "Remove or wire the cardutil normalization-trace facility",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "DCG-003"
+      ]
+    },
+    {
+      "fu": "FU-12",
+      "linear_id": "SLA-77",
+      "url": "https://linear.app/slabledger/issue/SLA-77/remove-the-orphaned-mock-surface-in-internaltestutilmocks",
+      "title": "Remove the orphaned mock surface in internal/testutil/mocks",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "DCG-004",
+        "DCG-005"
+      ]
+    },
+    {
+      "fu": "FU-13",
+      "linear_id": "SLA-78",
+      "url": "https://linear.app/slabledger/issue/SLA-78/remove-the-advisor-ui-cluster-and-its-two-runtime-dependencies",
+      "title": "Remove the advisor UI cluster and its two runtime dependencies",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "FE-001"
+      ]
+    },
+    {
+      "fu": "FU-14",
+      "linear_id": "SLA-79",
+      "url": "https://linear.app/slabledger/issue/SLA-79/delete-the-two-orphaned-frontend-artifacts",
+      "title": "Delete the two orphaned frontend artifacts",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "FE-002",
+        "FE-005"
+      ]
+    },
+    {
+      "fu": "FU-15",
+      "linear_id": "SLA-80",
+      "url": "https://linear.app/slabledger/issue/SLA-80/remove-the-domainstorage-package-which-is-now-only-a-docgo-for-a",
+      "title": "Remove the domain/storage package, which is now only a doc.go for a deleted interface",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "NAM-003"
+      ]
+    },
+    {
+      "fu": "FU-16",
+      "linear_id": "SLA-81",
+      "url": "https://linear.app/slabledger/issue/SLA-81/drop-the-three-api-rate-limits-call-counter-columns-that-read-as-live",
+      "title": "Drop the three api_rate_limits call-counter columns that read as live telemetry",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "DB-002"
+      ]
+    },
+    {
+      "fu": "FU-17",
+      "linear_id": "SLA-82",
+      "url": "https://linear.app/slabledger/issue/SLA-82/drop-the-four-views-with-no-consumer",
+      "title": "Drop the four views with no consumer",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "DB-003"
+      ]
+    },
+    {
+      "fu": "FU-18",
+      "linear_id": "SLA-83",
+      "url": "https://linear.app/slabledger/issue/SLA-83/drop-the-three-indexes-fully-subsumed-by-another-index-or-by-the",
+      "title": "Drop the three indexes fully subsumed by another index or by the primary key",
+      "label": "Improvement",
+      "priority": 3,
+      "tier": "Dead code",
+      "findings": [
+        "DB-005"
+      ]
+    },
+    {
+      "fu": "FU-19",
+      "linear_id": "SLA-84",
+      "url": "https://linear.app/slabledger/issue/SLA-84/fix-the-dh-push-status-index-that-000003-never-actually-created",
+      "title": "Fix the dh_push_status index that 000003 never actually created",
+      "label": "Bug",
+      "priority": 2,
+      "tier": "Correctness",
+      "findings": [
+        "DB-004"
+      ]
+    },
+    {
+      "fu": "FU-20",
+      "linear_id": "SLA-85",
+      "url": "https://linear.app/slabledger/issue/SLA-85/collapse-the-two-hand-maintained-campaign-sales-column-lists-that-have",
+      "title": "Collapse the two hand-maintained campaign_sales column lists that have drifted by six columns",
+      "label": "Bug",
+      "priority": 2,
+      "tier": "Correctness",
+      "findings": [
+        "DUP-002"
+      ]
+    },
+    {
+      "fu": "FU-21",
+      "linear_id": "SLA-86",
+      "url": "https://linear.app/slabledger/issue/SLA-86/reconcile-the-gots-drift-on-portfoliohealth-and-campaignhealth",
+      "title": "Reconcile the Go↔TS drift on PortfolioHealth and CampaignHealth",
+      "label": "Bug",
+      "priority": 2,
+      "tier": "Correctness",
+      "findings": [
+        "FE-003",
+        "FE-004"
+      ]
+    },
+    {
+      "fu": "FU-22",
+      "linear_id": "SLA-87",
+      "url": "https://linear.app/slabledger/issue/SLA-87/share-one-row-action-handler-map-between-the-desktop-and-mobile",
+      "title": "Share one row-action handler map between the desktop and mobile inventory rows",
+      "label": "Bug",
+      "priority": 2,
+      "tier": "Correctness",
+      "findings": [
+        "DUP-004"
+      ]
+    },
+    {
+      "fu": "FU-23",
+      "linear_id": "SLA-88",
+      "url": "https://linear.app/slabledger/issue/SLA-88/give-the-auth-session-expiry-constant-one-source-and-move-the-test",
+      "title": "Give the auth session-expiry constant one source, and move the test double out of the production package",
+      "label": "Bug",
+      "priority": 2,
+      "tier": "Correctness",
+      "findings": [
+        "DUP-003"
+      ]
+    },
+    {
+      "fu": "FU-24",
+      "linear_id": "SLA-89",
+      "url": "https://linear.app/slabledger/issue/SLA-89/route-both-dh-listing-price-resolvers-through-one-shared",
+      "title": "Route both DH listing-price resolvers through one shared implementation",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Architecture",
+      "findings": [
+        "DUP-001"
+      ]
+    },
+    {
+      "fu": "FU-25",
+      "linear_id": "SLA-90",
+      "url": "https://linear.app/slabledger/issue/SLA-90/close-the-fail-open-holes-in-check-importssh-and-cover-both-checks-in",
+      "title": "Close the fail-open holes in check-imports.sh and cover both checks in its self-test",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Architecture",
+      "findings": [
+        "ARCH-001"
+      ]
+    },
+    {
+      "fu": "FU-26",
+      "linear_id": "SLA-91",
+      "url": "https://linear.app/slabledger/issue/SLA-91/sanction-the-platformdomain-leaf-allowlist-in-the-dependency-rule-and",
+      "title": "Sanction the platform→domain leaf allowlist in the dependency rule and enforce it",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Architecture",
+      "findings": [
+        "ARCH-002"
+      ]
+    },
+    {
+      "fu": "FU-27",
+      "linear_id": "SLA-92",
+      "url": "https://linear.app/slabledger/issue/SLA-92/give-the-cardladder-handler-a-consumer-defined-interface-instead-of",
+      "title": "Give the CardLadder handler a consumer-defined interface instead of the concrete adapter",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Architecture",
+      "findings": [
+        "ARCH-003"
+      ]
+    },
+    {
+      "fu": "FU-28",
+      "linear_id": "SLA-93",
+      "url": "https://linear.app/slabledger/issue/SLA-93/put-the-unit-on-the-five-unsuffixed-sell-sheet-money-fields",
+      "title": "Put the unit on the five unsuffixed sell-sheet money fields",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Naming & structure",
+      "findings": [
+        "NAM-001"
+      ]
+    },
+    {
+      "fu": "FU-29",
+      "linear_id": "SLA-94",
+      "url": "https://linear.app/slabledger/issue/SLA-94/rename-ebaychannelmarginpct-to-match-the-combined-marketplace-margin",
+      "title": "Rename EbayChannelMarginPct to match the combined marketplace margin it holds",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Naming & structure",
+      "findings": [
+        "NAM-002"
+      ]
+    },
+    {
+      "fu": "FU-30",
+      "linear_id": "SLA-95",
+      "url": "https://linear.app/slabledger/issue/SLA-95/split-the-20-method-authservice-interface",
+      "title": "Split the 20-method auth.Service interface",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Interface segregation & size",
+      "findings": [
+        "SIZE-001"
+      ]
+    },
+    {
+      "fu": "FU-31",
+      "linear_id": "SLA-96",
+      "url": "https://linear.app/slabledger/issue/SLA-96/bring-core-typesgo-back-under-the-size-budget-before-it-hard-fails-ci",
+      "title": "Bring core_types.go back under the size budget before it hard-fails CI",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Interface segregation & size",
+      "findings": [
+        "SIZE-003"
+      ]
+    },
+    {
+      "fu": "FU-32",
+      "linear_id": "SLA-97",
+      "url": "https://linear.app/slabledger/issue/SLA-97/close-the-two-blind-spots-in-the-file-size-check",
+      "title": "Close the two blind spots in the file-size check",
+      "label": "Improvement",
+      "priority": 4,
+      "tier": "Interface segregation & size",
+      "findings": [
+        "SIZE-002",
+        "SIZE-004"
+      ]
+    }
+  ]
+}

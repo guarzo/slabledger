@@ -1,0 +1,244 @@
+[
+  {
+    "id": "SIZE-001",
+    "lens": "size-and-complexity",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "type",
+      "identity": "internal/domain/auth.Service"
+    },
+    "category": "size",
+    "title": "auth.Service is 20 methods across six unrelated concerns, and every consumer that needs two of them hand-rolls a 20-method fake",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "auth.Service declares 20 methods, grouped by its own comments into six concerns: OAuth flow, session management, user management, token storage, email allowlist, admin.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/auth/service.go | awk '/^type Service interface \\{/,/^\\}/' | grep -cE '^\\t[A-Z][A-Za-z0-9]*\\('",
+        "output": "20",
+        "file_line": "internal/domain/auth/service.go:20"
+      },
+      {
+        "claim": "Three separate test packages each declare their own inline mockAuthService implementing all 20 methods. This also breaches CLAUDE.md's stated rule 'Mocks: Import from internal/testutil/mocks/ - never create inline mocks'; internal/testutil/mocks/ has no auth.Service mock (only auth_repository.go and auth_inmemory.go, which mock auth.Repository).",
+        "command": "git grep -c 'func (m \\*mockAuthService)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*_test.go'",
+        "output": "06d9f8ce...:internal/adapters/httpserver/handlers/auth_test.go:20\n06d9f8ce...:internal/adapters/httpserver/middleware/auth_test.go:20\n06d9f8ce...:internal/adapters/scheduler/session_cleanup_test.go:22"
+      },
+      {
+        "claim": "The scheduler consumer calls exactly 2 of the 20 methods, yet its test must stub all 20. This is the concrete cost: 18 no-op stub methods written three times over to exercise 2, 2 and 4 real methods respectively.",
+        "command": "git grep -oE 's\\.authService\\.[A-Za-z]+' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/scheduler/session_cleanup.go | sort -u",
+        "output": "06d9f8ce...:internal/adapters/scheduler/session_cleanup.go:s.authService.CleanupExpiredOAuthStates\n06d9f8ce...:internal/adapters/scheduler/session_cleanup.go:s.authService.CleanupExpiredSessions",
+        "file_line": "internal/adapters/scheduler/session_cleanup.go:18"
+      },
+      {
+        "claim": "The middleware consumer calls 2 of 20 (GetOrCreateUser, ValidateSession) and the admin handler calls 4 of 20 (AddAllowedEmail, ListAllowedEmails, ListUsers, RemoveAllowedEmail) — no consumer in the repo uses the interface as a whole.",
+        "command": "git grep -ohE '(m|h)\\.authService\\.[A-Za-z]+' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/httpserver/middleware/auth.go internal/adapters/httpserver/handlers/admin.go | sort -u",
+        "output": "h.authService.AddAllowedEmail\nh.authService.ListAllowedEmails\nh.authService.ListUsers\nh.authService.RemoveAllowedEmail\nm.authService.GetOrCreateUser\nm.authService.ValidateSession"
+      },
+      {
+        "claim": "Two production types must implement all 20 methods, so adding a seventh concern to the interface costs 2 production implementations plus 3 test fakes.",
+        "command": "git grep -nE 'func \\([a-z]+ \\*[A-Za-z]+\\) GetLoginURL' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/**/*.go'",
+        "output": "06d9f8ce...:internal/adapters/clients/google/oauth.go:86:func (s *OAuthService) GetLoginURL(state string) string {\n06d9f8ce...:internal/adapters/httpserver/handlers/auth_test.go:61:func (m *mockAuthService) GetLoginURL(state string) string {\n06d9f8ce...:internal/adapters/httpserver/middleware/auth_test.go:27:func (m *mockAuthService) GetLoginURL(state string) string {\n06d9f8ce...:internal/adapters/scheduler/session_cleanup_test.go:40:func (m *mockAuthService) GetLoginURL(state string) string {\n06d9f8ce...:internal/domain/auth/service_impl.go:62:func (s *authService) GetLoginURL(state string) string {"
+      }
+    ],
+    "searched_universe": "All Go interface declarations in non-test, non-testutil files under internal/ and cmd/ at the pinned revision, enumerated via `git ls-tree -r --name-only <rev>` filtered to '*.go', with per-interface method counts computed by an awk scan of top-level `type X interface {` blocks. auth.Service (20) and inventory.PurchaseDHRepository (20) were the two widest; the latter is explicitly excluded per CLAUDE.md's statement that the inventory repository split is by concern and intentional, and it carries no equivalent inline-mock cost (internal/testutil/mocks/ provides shared mocks for it).",
+    "exclusions": [
+      "*_test.go files excluded from the interface-width scan itself (test-local interfaces are not a production seam), though test files were searched for implementations",
+      "internal/testutil/** excluded from the width scan for the same reason",
+      "web/ excluded — not Go",
+      "inventory repository interfaces deliberately not filed: CLAUDE.md states the split is by concern and that PurchaseRepository's size is intentional, and no concrete cost was found"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "proposed_fix": "Leave auth.Service as the composite the composition root wires, but declare narrow consumer-side interfaces at each point of use, as the repo already does elsewhere (e.g. dhpricing.NewService takes PurchaseLookup / DHPriceUpdater / DHPriceWriter seams rather than one wide store). Concretely: a 2-method SessionJanitor for scheduler/session_cleanup.go, a 2-method SessionValidator for middleware/auth.go, and a 4-method AdminDirectory for handlers/admin.go. Each test then fakes 2-4 methods instead of 20, and the three inline mockAuthService declarations collapse. Alternatively, if a shared fake is preferred, add one auth.Service mock to internal/testutil/mocks/ per the stated convention — that removes the duplication but not the width.",
+    "blast_radius": [
+      "internal/domain/auth/service.go",
+      "internal/adapters/scheduler/session_cleanup.go",
+      "internal/adapters/scheduler/session_cleanup_test.go",
+      "internal/adapters/httpserver/middleware/auth.go",
+      "internal/adapters/httpserver/middleware/auth_test.go",
+      "internal/adapters/httpserver/handlers/admin.go",
+      "internal/adapters/httpserver/handlers/admin_test.go",
+      "internal/adapters/httpserver/handlers/auth_test.go",
+      "internal/adapters/clients/google/oauth.go",
+      "internal/domain/auth/service_impl.go"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass after the change.",
+      "`git grep -c 'func (m \\*mockAuthService)' -- '*_test.go'` returns either no matches or counts of 4 or fewer per file, proving no test still stubs 20 methods to exercise 2.",
+      "`var _ auth.Service = (*google.OAuthService)(nil)` still compiles, proving the composite interface was not silently narrowed out from under its production implementations.",
+      "`make check` passes (lint + import check + file size + Playwright version)."
+    ]
+  },
+  {
+    "id": "SIZE-002",
+    "lens": "size-and-complexity",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "cmd/slabledger/main.go (unconditional exemption in scripts/check-file-size.sh)"
+    },
+    "category": "size",
+    "title": "The size check exempts cmd/slabledger/main.go by name with no ceiling and no stated reason, and that file holds the largest function in the repository",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "scripts/check-file-size.sh excludes cmd/slabledger/main.go by exact path. The script comments the *_test.go exclusion ('table-driven tests grow naturally') but gives no reason for the main.go or testutil exclusions.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-file-size.sh | grep -n 'main.go'",
+        "output": "20:done < <(find internal/ cmd/ -name '*.go' ! -name '*_test.go' ! -path '*/testutil/*' ! -path 'cmd/slabledger/main.go' -type f 2>/dev/null)",
+        "file_line": "scripts/check-file-size.sh:20"
+      },
+      {
+        "claim": "The exemption is effective: main.go is absent from the set the check iterates, so no line count of any size would ever produce a WARN or FAIL for it.",
+        "command": "mkdir -p /tmp/sizecheck && git archive 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | tar -x -C /tmp/sizecheck && cd /tmp/sizecheck && find internal/ cmd/ -name '*.go' ! -name '*_test.go' ! -path '*/testutil/*' ! -path 'cmd/slabledger/main.go' -type f | grep -c '^cmd/slabledger/main.go$'",
+        "output": "0"
+      },
+      {
+        "claim": "runServer occupies lines 150-418 of main.go — 269 lines, the single largest function in all non-test, non-testutil Go under internal/ and cmd/, and 64% of the exempted file.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:cmd/slabledger/main.go | awk 'NR>=150 && /^}$/{print \"runServer: lines 150-\" NR \" = \" NR-150+1 \" lines\"; exit}'",
+        "output": "runServer: lines 150-418 = 269 lines",
+        "file_line": "cmd/slabledger/main.go:150"
+      },
+      {
+        "claim": "The exemption is a single-file special case, not a directory policy: main.go's siblings in the same package (handlers.go, init_schedulers.go, init_inventory_services.go, server.go) are all inside the checked set and subject to the 500/600 budget.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- cmd/slabledger | grep -v _test.go",
+        "output": "cmd/slabledger/adapters.go\ncmd/slabledger/admin.go\ncmd/slabledger/dh_card_id_resolver.go\ncmd/slabledger/handlers.go\ncmd/slabledger/init_inventory_services.go\ncmd/slabledger/init_schedulers.go\ncmd/slabledger/init_services.go\ncmd/slabledger/main.go\ncmd/slabledger/server.go\ncmd/slabledger/shutdown.go — of these ten, only main.go is exempted"
+      }
+    ],
+    "searched_universe": "scripts/check-file-size.sh at the pinned revision, plus every non-test, non-testutil '*.go' file under internal/ and cmd/ enumerated from `git ls-tree -r --name-only <rev>`, with line counts from `git show <rev>:<path> | wc -l` and top-level function extents from an awk scan for `^func ` .. `^}`.",
+    "exclusions": [
+      "web/ — the size check does not cover it at all; that gap belongs to the frontend-health lens, noted here only as scope, not claimed as this finding",
+      "*_test.go and internal/testutil/** — checked and found to contain no non-mock production logic, so those two exclusions are behaving as intended (internal/testutil holds only config.go plus mocks/)"
+    ],
+    "proposed_fix": "Replace the unconditional `! -path 'cmd/slabledger/main.go'` exemption with either (a) no exemption — main.go is 418 lines at this baseline and passes the 500 guideline today, so removing the special case costs nothing and restores the ceiling; or (b) if the exemption is deliberate, a comment stating why, matching the style of the *_test.go comment two lines above. Separately, extracting runServer's distinct phases (metrics server setup, auth wiring, DH wiring, scheduler deps assembly) into named helpers alongside the existing initializeCampaignsService / initializeSchedulers / createHandlers would bring the largest function in the repo in line with the composition-root helpers it already calls.",
+    "blast_radius": [
+      "scripts/check-file-size.sh",
+      "cmd/slabledger/main.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`bash scripts/check-file-size.sh` exits 0 with the exemption removed, proving main.go is under the 600 hard limit without the special case.",
+      "`make check` passes.",
+      "If runServer is also split: `go build ./cmd/slabledger` succeeds and `./slabledger --help` still prints usage, proving startup wiring was not reordered."
+    ]
+  },
+  {
+    "id": "SIZE-003",
+    "lens": "size-and-complexity",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory/core_types.go"
+    },
+    "category": "size",
+    "title": "core_types.go emerged from the SLA-32 file split already at 562 lines — 38 from the CI hard fail — on the one file every inventory feature must touch",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "core_types.go is 562 lines, the largest non-excluded source file in the repo and the closest to the 600-line hard fail. It is one of six files in the WARN band; there are zero FAILs at baseline.",
+        "command": "mkdir -p /tmp/sizecheck && git archive 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | tar -x -C /tmp/sizecheck && cd /tmp/sizecheck && bash scripts/check-file-size.sh",
+        "output": "WARN: internal/domain/portfolio/service.go (540 lines, guideline 500)\nWARN: internal/domain/inventory/core_types.go (562 lines, guideline 500)\nWARN: internal/adapters/httpserver/handlers/campaigns_psa.go (518 lines, guideline 500)\nWARN: internal/adapters/httpserver/handlers/campaigns_purchases.go (520 lines, guideline 500)\nWARN: internal/adapters/scheduler/dh_analytics_refresh_steps.go (542 lines, guideline 500)\nWARN: internal/adapters/scheduler/cardladder_refresh.go (525 lines, guideline 500)\n\nFile size check passed with warnings."
+      },
+      {
+        "claim": "The file was created two days before this baseline by commit c624b9a7, a refactor whose stated purpose was to split inventory files by contents (SLA-32) — and it landed at 562 lines, already in the WARN band. The split axis that produced it is therefore already spent: this file is the residue after the obvious extractions were made.",
+        "command": "git log -1 --format='%h %ad %s' --date=short c624b9a7 && git show c624b9a7:internal/domain/inventory/core_types.go | wc -l",
+        "output": "c624b9a7 2026-08-08 refactor(inventory): rename mis-named files and split by actual contents (SLA-32) (#586)\n562"
+      },
+      {
+        "claim": "The file holds the hub's shared persisted types — Campaign, Purchase, Sale, and 18 more type declarations — so almost any inventory feature that persists a new field must edit it. Purchase alone spans 100 lines (274-373).",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/core_types.go | grep -cE '^type '",
+        "output": "21",
+        "file_line": "internal/domain/inventory/core_types.go:274"
+      },
+      {
+        "claim": "The maintenance cost is a CI failure landing on an unrelated author: 38 lines of headroom is roughly one feature that adds a handful of fields to Campaign plus Purchase plus Sale. Whoever's PR crosses 600 must split the hub's core type file as an unplanned prerequisite, and the check hard-fails rather than warning.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-file-size.sh | grep -nE 'FAIL_LIMIT=|exit 1'",
+        "output": "7:FAIL_LIMIT=600\n25:  exit 1",
+        "file_line": "scripts/check-file-size.sh:7"
+      }
+    ],
+    "searched_universe": "Every non-test, non-testutil '*.go' file under internal/ and cmd/ at the pinned revision, enumerated from `git ls-tree -r --name-only <rev>` and line-counted with `git show <rev>:<path> | wc -l`, cross-checked by running the project's own scripts/check-file-size.sh against a `git archive` extraction of the pinned tree.",
+    "exclusions": [
+      "*_test.go, internal/testutil/**, and cmd/slabledger/main.go — the size check's own exclusion set; the main.go exemption is filed separately as SIZE-002",
+      "web/ — not covered by the Go size check"
+    ],
+    "proposed_fix": "Split core_types.go along the aggregate boundary the file already exhibits: move Sale, BulkSaleInput, BulkSaleResult and BulkSaleError (lines 465-536) into a sale_types.go, and the activation/revocation group (ActivationCheck, ActivationChecklist, RevocationFlag, lines 537-562) into campaign_activation_types.go. Both are pure type moves within the same package, so no import changes anywhere. That leaves core_types.go around 460 lines, back under the 500 guideline with real headroom, without disturbing Campaign/Purchase — the two types with the most call sites.",
+    "blast_radius": [
+      "internal/domain/inventory/core_types.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`bash scripts/check-file-size.sh` no longer lists internal/domain/inventory/core_types.go in its WARN output.",
+      "`go build ./...` and `go test -race ./internal/domain/inventory/...` pass — a pure intra-package type move must not change any import or any behavior.",
+      "`git diff --stat` shows only additions and deletions of type declarations, with no edits to any type body, confirming the change is a move rather than a rewrite.",
+      "`make check` passes."
+    ]
+  },
+  {
+    "id": "SIZE-004",
+    "lens": "size-and-complexity",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory.(*service).ImportCerts"
+    },
+    "category": "size",
+    "title": "The two largest domain functions each sit in a file just under the 500-line warn line, so the enforced size budget reports nothing about them",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "ImportCerts spans lines 63-296 of service_cert_entry.go — 234 lines, 48% of a 491-line file. The file is 9 lines below the 500-line WARN threshold, so `make check` is silent about it.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/service_cert_entry.go | wc -l && git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/service_cert_entry.go | awk 'NR>=63 && /^}$/{print \"ImportCerts: 63-\" NR \" = \" NR-63+1 \" lines\"; exit}'",
+        "output": "491\nImportCerts: 63-296 = 234 lines",
+        "file_line": "internal/domain/inventory/service_cert_entry.go:63"
+      },
+      {
+        "claim": "The same shape repeats one package over: ImportPSAExportGlobal is 239 lines inside a 498-line file — two lines under the warn line. The two largest domain functions in the repo are both hidden by a metric measured per file rather than per function.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/csvimport/service_import_psa.go | wc -l && git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/csvimport/service_import_psa.go | awk 'NR>=26 && /^}$/{print \"ImportPSAExportGlobal: 26-\" NR \" = \" NR-26+1 \" lines\"; exit}'",
+        "output": "498\nImportPSAExportGlobal: 26-264 = 239 lines",
+        "file_line": "internal/domain/csvimport/service_import_psa.go:26"
+      },
+      {
+        "claim": "ImportCerts is not merely long: it carries 29 control-flow branches, 14 early exits from a single loop body, and 6 levels of indentation, all mutating one shared `result` accumulator. Its responsibilities are input dedup, campaign bootstrap, two batch lookups, sold-item detection, export-flag and received-at writes, DH push enrollment, circuit-breaker latching, PSA category/name normalization, purchase construction, duplicate-cert recovery, two enrichment queues, and a background goroutine — thirteen concerns in one function body.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/service_cert_entry.go | awk 'NR>=63 && NR<=296' | grep -cE '^\\t+(if|for|switch|case) '",
+        "output": "29"
+      },
+      {
+        "claim": "The maintenance cost is measurable in the test suite: exercising this one function requires service_cert_entry_test.go, the largest test file in the repository at 1288 lines, which names ImportCerts 38 times. Every new branch inside the function multiplies against the setup those tests already carry.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/service_cert_entry_test.go | wc -l && git grep -c 'ImportCerts' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory/service_cert_entry_test.go",
+        "output": "1288\n06d9f8ce...:internal/domain/inventory/service_cert_entry_test.go:38"
+      },
+      {
+        "claim": "1288 lines is the maximum across every *_test.go in the repo, so this is the worst case rather than a typical one.",
+        "command": "git grep -c '' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*_test.go' | awk -F: '{print $3, $2}' | sort -rn | head -3",
+        "output": "1288 internal/domain/inventory/service_cert_entry_test.go\n1238 internal/adapters/httpserver/handlers/campaigns_purchases_test.go\n1192 internal/domain/dhlisting/dh_listing_service_test.go"
+      }
+    ],
+    "searched_universe": "Top-level function extents across every non-test, non-testutil '*.go' file under internal/ and cmd/ at the pinned revision, computed by an awk scan for `^func ` through the next `^}` over a `git archive` extraction of the pinned tree, sorted by length. The five longest are runServer (269, filed as SIZE-002), createHandlers (264), ImportPSAExportGlobal (239), ImportCerts (234) and CardLadderRefreshScheduler.runOnce (225).",
+    "exclusions": [
+      "*_test.go and internal/testutil/** excluded from the function-length scan (table-driven test bodies are long by design); test files were still searched for the cost evidence above",
+      "createHandlers (264 lines, cmd/slabledger/handlers.go) deliberately not filed — it is straight-line dependency wiring in the composition root with no branching, which is a different and much lower hazard than a branching import loop",
+      "web/ — not Go",
+      "The awk extent scan assumes gofmt output (top-level closing brace at column 0); the repo is gofmt-clean under `make check`, but a hand-formatted function would be missed"
+    ],
+    "proposed_fix": "Extract the two arms of ImportCerts' loop body into named methods on the service: `handleExistingCert(ctx, existing, certNum, now, salesMap, result)` for the already-in-inventory branch (lines 108-157) and `importNewCert(ctx, certNum, now, result) (imported bool)` for the lookup-and-create branch (lines 159-281), leaving ImportCerts as dedup, batch lookups, loop, and the background resolver kick-off — roughly 60 lines. This is the same decomposition csvimport already applies elsewhere (handleExistingPSAPurchase is a named method extracted from the import path). Apply the equivalent split to ImportPSAExportGlobal. Separately, consider whether the size budget should measure functions as well as files — the current per-file metric is what allowed both of these to grow unremarked.",
+    "blast_radius": [
+      "internal/domain/inventory/service_cert_entry.go",
+      "internal/domain/inventory/service_cert_entry_test.go",
+      "internal/domain/csvimport/service_import_psa.go",
+      "internal/domain/csvimport/service_import_psa_global_test.go"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "`go test -race ./internal/domain/inventory/... ./internal/domain/csvimport/...` passes with no changes to the existing test assertions — the extraction must be behavior-preserving, and the 1288-line test file is the proof harness.",
+      "An awk scan for top-level function extents over the changed files shows no function above 120 lines.",
+      "The circuit-breaker latch is still batch-wide after the split: a test where the first cert lookup returns ErrCodeProviderCircuitOpen must still mark every remaining cert Retryable without issuing further lookups (the psaUnavailable flag must be threaded, not duplicated per-call).",
+      "`make check` passes."
+    ]
+  }
+]

@@ -1,0 +1,262 @@
+[
+  {
+    "id": "ARCH-001",
+    "lens": "architecture",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "package",
+      "identity": "scripts/check-imports.sh (hexagonal-invariant passes 1 and 2)"
+    },
+    "category": "architecture",
+    "title": "The two hexagonal-invariant checks in check-imports.sh fail open, and the self-test has zero coverage for either of them",
+    "severity": "high",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The domain -> adapters check and the storage -> clients check are each a single grep whose non-zero exit is swallowed by `2>/dev/null || true`. Neither has a fail-closed guard, in contrast to the flat-sibling section below them, which fails closed three separate times (empty file list, grep status > 1, fewer than two derived siblings, and a check-count mismatch).",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-imports.sh | grep -n 'grep -rn'",
+        "output": "30:violations_domain=$(grep -rn '\"github.com/guarzo/slabledger/internal/adapters' internal/domain/ 2>/dev/null || true)\n42:violations_storage=$(grep -rn '\"github.com/guarzo/slabledger/internal/adapters/clients' internal/adapters/storage/ 2>/dev/null || true)",
+        "file_line": "scripts/check-imports.sh:30,42"
+      },
+      {
+        "claim": "A grep over a path that does not exist produces empty output and, with `|| true`, a zero status — indistinguishable at the call site from a clean scan. Any tree reorganisation, directory rename, or Go module-path rename therefore turns both checks into vacuous passes that still print 'Architecture check passed'.",
+        "command": "grep -rn '\"github.com/guarzo/slabledger/internal/adapters' internal/domain-renamed/ 2>/dev/null || true",
+        "output": "(no output; grep's exit status 2 is discarded by `|| true`, so the assigned variable is empty and the script reports a pass)"
+      },
+      {
+        "claim": "scripts/check-imports-test.sh creates exactly one kind of directory in its fixtures — internal/domain/<pkg>. No fixture ever creates internal/adapters/ or internal/adapters/storage/, so in all five cases both hexagonal greps run against absent paths.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-imports-test.sh | grep -n 'mkdir -p\\|internal/adapters'",
+        "output": "4:# The checker uses relative paths (internal/domain, internal/adapters) and greps\n29:  mkdir -p \"$root/internal/domain/$pkg\"\n\n(line 4 is a comment; line 29 is the only mkdir in the file)",
+        "file_line": "scripts/check-imports-test.sh:29"
+      },
+      {
+        "claim": "Running the self-test confirms the consequence: all five cases pass, and the case explicitly named 'clean tree passes' is green precisely while both hexagonal checks are evaluating nothing. The suite that exists to prove the checker works exercises only the flat-sibling section.",
+        "command": "bash scripts/check-imports-test.sh",
+        "output": "PASS: escape hatch: non-hub importer of a governed sibling is flagged\nPASS: classic: sibling importing a sibling is flagged\nPASS: clean tree passes\nPASS: fail-closed: fewer than two siblings is an error\nPASS: nested sibling importing a flat sibling names the full package path\n\ncheck-imports self-test: all cases passed."
+      },
+      {
+        "claim": "This is the sole mechanical enforcement of the invariant CLAUDE.md calls the Key Principle. `make check` runs the self-test and then the checker; there is no second gate.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:Makefile | grep -n -A5 '^check:'",
+        "output": "146:check: lint\n147-\t./scripts/check-imports-test.sh\n148-\t./scripts/check-imports.sh\n149-\t./scripts/check-file-size.sh\n150-\t./scripts/check-playwright-version.sh",
+        "file_line": "Makefile:146"
+      },
+      {
+        "claim": "The invariant itself is satisfied at this baseline — the finding is about the enforcement, not a live breach. No file under internal/domain/ imports internal/adapters/ at the pinned revision, and no file under internal/platform/ does either.",
+        "command": "git grep -nE '\"github\\.com/guarzo/slabledger/internal/adapters' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/*' 'internal/platform/*'",
+        "output": "(no output)"
+      }
+    ],
+    "searched_universe": "Git-tracked files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, enumerated via `git ls-tree -r --name-only <rev> -- internal/domain internal/platform` and `git grep <pattern> <rev> -- <pathspec>`. Scripts read via `git show <rev>:scripts/...`. The self-test was executed once, read-only: it writes only into `mktemp -d` roots that it removes itself, and `git diff --stat <rev> -- scripts/check-imports.sh scripts/check-imports-test.sh` was empty, confirming the working-tree copies executed are byte-identical to the baseline.",
+    "exclusions": [
+      "No modification of any script, per the audit's read-only constraint; the fail-open path is demonstrated by an equivalent standalone grep rather than by mutating the checker or the repo layout.",
+      "Whether golangci-lint's depguard or a similar linter provides redundant coverage was not investigated; the finding claims only that check-imports.sh is the check named by CLAUDE.md and Makefile."
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Give passes 1 and 2 the same fail-closed discipline the flat-sibling section already has: assert that `internal/domain/` and `internal/adapters/storage/` exist and contain at least one non-test .go file before greping them, and treat a grep exit status greater than 1 as a hard error rather than absorbing it with `|| true`. Then add two fixture cases to check-imports-test.sh — a domain package importing an adapter, and a storage package importing a client — each asserting a non-zero exit and the specific error message, plus a case with a renamed domain directory asserting the new fail-closed error. Deriving the module path from `go.mod` instead of hardcoding it would close the rename variant at its source.",
+    "blast_radius": [
+      "scripts/check-imports.sh",
+      "scripts/check-imports-test.sh",
+      "make check / CI"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`bash scripts/check-imports-test.sh` passes and its output names at least two new cases covering the domain -> adapters and storage -> clients checks.",
+      "A fixture in which internal/domain/ has been renamed causes `scripts/check-imports.sh` to exit non-zero with an explicit error naming the missing path, instead of printing 'Architecture check passed'.",
+      "A fixture containing a domain package that imports an adapter package causes `scripts/check-imports.sh` to exit non-zero and name the offending file.",
+      "`make check` still passes on the unmodified repository tree."
+    ]
+  },
+  {
+    "id": "ARCH-002",
+    "lens": "architecture",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/platform <-> internal/domain (layer boundary)"
+    },
+    "category": "architecture",
+    "title": "internal/platform and internal/domain depend on each other, contradicting the documented inward-only dependency rule, and nothing enforces the boundary",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "internal/README.md places PLATFORM strictly below DOMAIN and states the dependency rule as flowing inward only, listing `domain -> platform` as the permitted edge and naming no reverse edge as legal.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/README.md | grep -n -A4 'Dependency Rule'",
+        "output": "**Dependency Rule**: Dependencies flow **inward only**:\n- adapters -> domain (implements domain interfaces)\n- domain -> platform (uses infrastructure)\n- domain -> adapters (NEVER - violates dependency inversion)",
+        "file_line": "internal/README.md (Dependency Rule block)"
+      },
+      {
+        "claim": "Seven non-test files under internal/platform/ import internal/domain/ packages, which is the upward edge the rule does not allow.",
+        "command": "git grep -n --fixed-strings '\"github.com/guarzo/slabledger/internal/domain/' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/platform/*' | grep -v _test.go",
+        "output": "internal/platform/cardutil/normalize.go:19:\t\"…/internal/domain/constants\"\ninternal/platform/cardutil/normalize_cards.go:6:\t\"…/internal/domain/constants\"\ninternal/platform/cardutil/trace.go:6:\t\"…/internal/domain/observability\"\ninternal/platform/config/validation.go:9:\tapperrors \"…/internal/domain/errors\"\ninternal/platform/resilience/retry.go:12:\tapperrors \"…/internal/domain/errors\"\ninternal/platform/resilience/retry.go:14:\t\"…/internal/domain/observability\"\ninternal/platform/telemetry/slog_logger.go:8:\t\"…/internal/domain/observability\"",
+        "file_line": "internal/platform/cardutil/normalize.go:19"
+      },
+      {
+        "claim": "The downward edge exists simultaneously, so the two layer groups are mutually dependent. internal/platform/cardutil is on both sides of the boundary at once: it imports internal/domain/constants and is imported by internal/domain/inventory.",
+        "command": "git grep -n --fixed-strings '\"github.com/guarzo/slabledger/internal/platform/' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/*'",
+        "output": "internal/domain/csvimport/import_grade_regex_test.go:8, internal/domain/csvimport/import_types.go:11, internal/domain/inventory/import_parsing.go:9, internal/domain/inventory/matching.go:8, internal/domain/inventory/service_cert_entry.go:13, internal/domain/liquidation/service.go:8 — all `…/internal/platform/cardutil`; internal/domain/psacampaign/approval.go:9 — `…/internal/platform/canonjson`",
+        "file_line": "internal/domain/inventory/matching.go:8"
+      },
+      {
+        "claim": "No check guards this boundary in either direction. scripts/check-imports.sh mentions internal/platform only in prose — a comment and an error-message string — and never scans it.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-imports.sh | grep -n 'internal/platform'",
+        "output": "6:#      normalization, encoding, etc.) belong in internal/platform/.\n51:  echo \"(string normalization, encoding, etc.) belong in internal/platform/.\"",
+        "file_line": "scripts/check-imports.sh:6,51"
+      },
+      {
+        "claim": "The documented taxonomy is itself unsettled on where these packages belong, which is why the drift went unnoticed: internal/README.md's platform structure block lists `errors/` under internal/platform, but the errors package lives at internal/domain/errors at this baseline, and internal/platform has no errors directory.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform | xargs -n1 dirname | sort -u",
+        "output": "internal/platform/canonjson\ninternal/platform/cardutil\ninternal/platform/config\ninternal/platform/crypto\ninternal/platform/resilience\ninternal/platform/storage\ninternal/platform/telemetry"
+      }
+    ],
+    "searched_universe": "All git-tracked .go files under internal/domain/ and internal/platform/ at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, enumerated with `git ls-tree -r --name-only <rev> -- internal/domain internal/platform` and searched with `git grep -n <rev> -- <pathspec>` on the fully-quoted module import path. Prose rules read from internal/README.md and CLAUDE.md at the same revision.",
+    "exclusions": [
+      "_test.go files are included in the reported counts only where noted (one of the seven domain -> platform hits is a test file); the platform -> domain list is filtered to non-test files.",
+      "Vendored code and cmd/ are out of scope for this boundary.",
+      "No judgment is offered on whether constants/errors/observability *should* move; the finding records that the code and the stated rule disagree and that nothing detects it."
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Decide the taxonomy explicitly and then make it checkable. Either (a) accept that internal/domain/{constants,errors,observability} are a shared bottom layer that platform may depend on, and say so in internal/README.md's Dependency Rule with that exact three-package allowlist; or (b) relocate them under internal/platform/ so the drawn arrow is true. Either way, add a pass to scripts/check-imports.sh that scans internal/platform/ for imports of internal/domain/ and fails on anything outside the sanctioned set, so the boundary stops depending on reviewer memory.",
+    "blast_radius": [
+      "internal/platform/cardutil",
+      "internal/platform/config",
+      "internal/platform/resilience",
+      "internal/platform/telemetry",
+      "internal/README.md",
+      "scripts/check-imports.sh"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "internal/README.md's Dependency Rule block states the platform -> domain policy explicitly, and the packages it names match `git grep -n --fixed-strings '\"github.com/guarzo/slabledger/internal/domain/' -- 'internal/platform/*'` exactly.",
+      "`scripts/check-imports.sh` exits non-zero on a fixture where a package under internal/platform/ imports a domain package outside the sanctioned set, and the new case is covered in `scripts/check-imports-test.sh`.",
+      "`go build ./... && go test ./...` pass, and `make check` passes, after whichever of (a) or (b) is chosen."
+    ]
+  },
+  {
+    "id": "ARCH-003",
+    "lens": "architecture",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "handlers.CardLadderHandler.store (*postgres.CardLadderStore)"
+    },
+    "category": "architecture",
+    "title": "The CardLadder HTTP handler depends on the concrete persistence adapter, breaking the consumer-defined-interface pattern every other handler in the package follows",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "CardLadderHandler holds a concrete *postgres.CardLadderStore and its constructor takes one, so an inbound adapter is compile-time coupled to a specific outbound adapter rather than to a seam it owns.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/httpserver/handlers/cardladder.go | sed -n '28,48p'",
+        "output": "type CardLadderHandler struct {\n\tmu             sync.Mutex\n\tstore          *postgres.CardLadderStore\n\tclient         *cardladder.Client\n\trefresher      CLRefresher\n\tpurchaseLister CLPurchaseLister\n\tsyncUpdater    CLSyncUpdater\n\tlogger         observability.Logger\n}\n…\nfunc NewCardLadderHandler(store *postgres.CardLadderStore, client *cardladder.Client, logger observability.Logger) *CardLadderHandler {",
+        "file_line": "internal/adapters/httpserver/handlers/cardladder.go:31,47"
+      },
+      {
+        "claim": "The inconsistency is internal to the same struct: three of its six dependencies (refresher, purchaseLister, syncUpdater) are locally-defined interfaces, and only the store and client are concrete. The deviation is not a house style, it is an outlier.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/httpserver/handlers/cardladder.go | sed -n '15,26p'",
+        "output": "// CLRefresher runs a Card Ladder value refresh cycle on demand.\ntype CLRefresher interface {\n\tRunOnce(ctx context.Context) error\n\tGetLastRunStats(ctx context.Context) *scheduler.CLRunStats\n\tSetClient(client *cardladder.Client)\n}",
+        "file_line": "internal/adapters/httpserver/handlers/cardladder.go:16"
+      },
+      {
+        "claim": "The package's established pattern is the opposite and is documented in place: pricing_api.go declares the seam it needs, names the concrete implementor in a comment, and does not import postgres at all.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/httpserver/handlers/pricing_api.go | sed -n '14,19p'",
+        "output": "// CertPriceLookup is the interface the pricing API handler depends on.\n// Defined at the consumer level per idiomatic Go.\n// Satisfied by *postgres.PurchaseStore (and test mocks).\ntype CertPriceLookup interface {\n\tGetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)\n}",
+        "file_line": "internal/adapters/httpserver/handlers/pricing_api.go:14"
+      },
+      {
+        "claim": "cardladder.go is the only file in the entire httpserver tree that imports the persistence adapter. Every other handler that needs storage reaches it through a locally-declared interface (dh_handler.go:136,141,148 carry the same 'Satisfied by *postgres.X' comments with no postgres import).",
+        "command": "git grep -nE '\"github\\.com/guarzo/slabledger/internal/adapters/storage' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/adapters/httpserver/*'",
+        "output": "internal/adapters/httpserver/handlers/cardladder.go:11:\t\"github.com/guarzo/slabledger/internal/adapters/storage/postgres\"",
+        "file_line": "internal/adapters/httpserver/handlers/cardladder.go:11"
+      },
+      {
+        "claim": "The seam is small and well-bounded — the handler calls seven methods on the store — so the coupling buys nothing that an interface would not.",
+        "command": "git grep -ohE 'h\\.store\\.[A-Za-z0-9_]+' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/adapters/httpserver/handlers/cardladder*.go' | sort -u",
+        "output": "h.store.GetCLCoverageByMonth\nh.store.GetCLFailures\nh.store.GetCLPriceStats\nh.store.GetConfig\nh.store.ListMappings\nh.store.SaveConfig\nh.store.SaveMapping"
+      },
+      {
+        "claim": "Nothing detects this. scripts/check-imports.sh forbids exactly one adapter-to-adapter edge — storage importing clients — and says nothing about an inbound adapter importing storage, so the rule's own stated rationale ('adapters should communicate through domain interfaces') is enforced in one direction only.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:scripts/check-imports.sh | sed -n '42,53p'",
+        "output": "violations_storage=$(grep -rn '\"github.com/guarzo/slabledger/internal/adapters/clients' internal/adapters/storage/ 2>/dev/null || true)\n…\n  echo \"ERROR: Storage adapters must not import client adapters.\"\n…\n  echo \"Adapters should communicate through domain interfaces. Pure utilities\"",
+        "file_line": "scripts/check-imports.sh:42"
+      }
+    ],
+    "searched_universe": "All git-tracked files under internal/adapters/httpserver/, internal/adapters/scheduler/, internal/adapters/clients/, and internal/adapters/storage/ at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, enumerated with `git ls-tree -r --name-only <rev>` and searched with `git grep -nE <rev> -- <pathspec>` for fully-qualified module import paths and for `*postgres.`, `*cardladder.`, `*dh.`, `*httpx.` type references.",
+    "exclusions": [
+      "internal/adapters/scheduler/ also imports both storage/postgres and clients/ (ten and sixteen non-test files respectively); that is excluded here because the scheduler package doubles as a composition root and the coupling is arguably intentional. Only the inbound HTTP adapter is claimed.",
+      "Handler imports of client packages solely for request/response DTO types (dh.CertResolveRequest, cardladder.SearchResponse) are excluded — those cross the wire-format boundary, not the dependency-inversion one.",
+      "_test.go files excluded from the import counts."
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Declare a CardLadderStore interface in the handlers package covering the seven methods the handler actually calls, following the pricing_api.go pattern including the 'Satisfied by *postgres.CardLadderStore' comment, and change the field and NewCardLadderHandler parameter to that interface. The concrete type continues to be supplied at the wiring site in cmd/slabledger. This also drops the last httpserver -> storage import, which makes an httpserver-scoped rule enforceable in a follow-up.",
+    "blast_radius": [
+      "internal/adapters/httpserver/handlers/cardladder.go",
+      "internal/adapters/httpserver/handlers/cardladder_sync.go",
+      "cmd/slabledger (wiring site)",
+      "internal/adapters/httpserver/handlers tests"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "`git grep -nE '\"github\\.com/guarzo/slabledger/internal/adapters/storage' -- 'internal/adapters/httpserver/*'` returns no output.",
+      "`go build ./... && go test -race ./...` pass with the handler depending on the interface rather than *postgres.CardLadderStore.",
+      "The handler's tests construct it with a mock satisfying the new interface, with no postgres import in the test file.",
+      "`make check` passes."
+    ]
+  },
+  {
+    "id": "ARCH-004",
+    "lens": "architecture",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "internal/README.md — architecture diagrams, package tables, and leaf-taxonomy examples"
+    },
+    "category": "docs",
+    "title": "POINTER (docs lens): internal/README.md's architecture sections name packages that no longer exist at this baseline",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "The PLATFORM block of the layer diagram and the platform structure listing both name `cache/` and `errors/` under internal/platform, and neither directory exists at this baseline.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/platform | xargs -n1 dirname | sort -u",
+        "output": "internal/platform/canonjson\ninternal/platform/cardutil\ninternal/platform/config\ninternal/platform/crypto\ninternal/platform/resilience\ninternal/platform/storage\ninternal/platform/telemetry",
+        "file_line": "internal/README.md (PLATFORM diagram block and /internal/platform structure block)"
+      },
+      {
+        "claim": "The leaf-and-non-leaf section's worked examples of legal edges cite `advisor -> ai` and `advisor -> scoring`; none of internal/domain/{advisor,ai,scoring} exists after commit e46370e5 removed the advisor feature.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/advisor internal/domain/ai internal/domain/scoring",
+        "output": "(no output)"
+      },
+      {
+        "claim": "CLAUDE.md's sentence naming the current sibling set omits internal/domain/csvimport, which does import the hub and therefore is governed. The derived set has eleven members, not the ten listed.",
+        "command": "git grep -l --fixed-strings '\"github.com/guarzo/slabledger/internal/domain/inventory\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/*' | grep -v _test.go | sed 's|.*:internal/domain/||' | xargs -n1 dirname | sort -u",
+        "output": "arbitrage\ncsvimport\ndemand\ndhlisting\ndhpricing\nexport\nfinance\nportfolio\npricing/lookup\npsacampaign\ntuning"
+      }
+    ],
+    "searched_universe": "internal/README.md and CLAUDE.md at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, cross-checked against the package tree enumerated with `git ls-tree -r --name-only <rev> -- internal/domain internal/platform`. This is a pointer, not a competing finding: the docs lens owns documentation claims. Recorded here only because these particular claims are the ones an architecture reader relies on to know what the rules are, and two of them are load-bearing for the leaf taxonomy.",
+    "exclusions": [
+      "No attempt was made to audit the remainder of internal/README.md or any other document; the docs lens and docs-map own that surface.",
+      "The README explicitly labels its domain package table 'partial' and its large-file table 'a snapshot, not the source of truth', so those two are not counted as staleness."
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Hand to the docs lens. If actioned: drop `cache/` and `errors/` from the platform diagram and structure block (or move errors, per ARCH-002), replace the advisor/ai/scoring example edges with edges that exist at HEAD, and either refresh or delete CLAUDE.md's enumerated sibling sentence — it already tells the reader to derive the set rather than trust it.",
+    "blast_radius": [
+      "internal/README.md",
+      "CLAUDE.md"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every directory named in internal/README.md's platform diagram and structure block resolves under `git ls-tree -r --name-only HEAD -- internal/platform`.",
+      "Every package named in the leaf-taxonomy example edges resolves under `git ls-tree -r --name-only HEAD -- internal/domain`.",
+      "CLAUDE.md's sibling sentence either matches the derived set exactly or no longer enumerates it."
+    ]
+  }
+]

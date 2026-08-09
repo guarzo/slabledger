@@ -7,14 +7,20 @@ You are one agent in a read-only tech-debt audit of the SlabLedger codebase.
 1. **READ-ONLY.** You must not edit, create, or delete any file under
    `internal/`, `cmd/`, or `web/src/`. You write exactly one output file, at
    the path your task names. Nothing else.
-2. **Baseline revision is `740976ecf80a4f2ccdaa611d7790ccaa95b48773`.**
-   Record it on every record you emit.
-3. **Git-tracked files only.** Enumerate with `git ls-files`. Do NOT use `ls`
+2. **Work at the baseline revision named in the Run Card that follows this
+   preamble.** Read that revision, not the working tree: `git show <rev>:<path>`
+   and `git grep <rev>` — never a bare `git grep`, which reads whatever is
+   checked out. Record the revision on every record you emit.
+3. **Git-tracked files only.** Enumerate with `git ls-tree -r --name-only <rev>`
+   (or `git ls-files` when you are pinned to that revision). Do NOT use `ls`
    or `find` as evidence. They surface untracked scratch files, build
-   artifacts, and ignored directories that are not part of the codebase.
+   artifacts, and ignored directories — including this repo's live worktrees
+   under `.worktrees/` and `.claude/worktrees/` — that are not part of the
+   codebase.
 4. **Never assert reachability from your own search.** Reachability comes from
-   the Phase 1 maps in `docs/audit/maps/`. If you need it and it is not there,
-   report that as a gap — do not compute it yourself.
+   the Phase 1 maps in the `maps/` directory of the run directory named in your
+   Run Card. If you need it and it is not there, report that as a gap — do not
+   compute it yourself.
 5. **Absence is never proven by a `file:line` citation.** A citation proves
    presence. To claim something is unused, cite the *command you ran and its
    empty output*.
@@ -36,7 +42,9 @@ fails.
 ## Go defeats naive reference counting — check all nine
 
 This repository actively uses every mechanism below. Before claiming anything
-is unused, answer each explicitly:
+is unused, answer each explicitly. The citations illustrate the *mechanism* and
+were captured at the 2026-08-07 baseline; a later baseline may have moved them,
+and that is not itself a finding:
 
 | # | Check | Example in this repo |
 |---|---|---|
@@ -52,10 +60,12 @@ is unused, answer each explicitly:
 
 ## Search discipline
 
-- Word-boundary anchored: `git grep -nE '\bSymbolName\b'`, never a bare substring.
+- Word-boundary anchored, and pinned to the baseline:
+  `git grep -nE '\bSymbolName\b' <rev>`, never a bare substring and never
+  against the working tree.
 - Search both tag sets: default, and `integration`.
 - Include `_test.go` files — test-only usage is still usage, and is itself a finding of a different kind.
-- State your searched universe (the `git ls-files` globs) and every exclusion.
+- State your searched universe (the exact enumeration globs) and every exclusion.
 
 ## Confidence tiers
 

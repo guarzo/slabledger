@@ -1,0 +1,382 @@
+[
+  {
+    "id": "DCG-001",
+    "lens": "dead-code-go",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/domain/llmutil"
+    },
+    "category": "dead-code",
+    "title": "internal/domain/llmutil is a whole orphaned package: its only exported function StripMarkdownFences has no consumer outside its own test",
+    "severity": "low",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "The package contains exactly one non-test file declaring exactly one exported symbol, StripMarkdownFences.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/llmutil",
+        "output": "internal/domain/llmutil/strip_fences.go\ninternal/domain/llmutil/strip_fences_test.go",
+        "file_line": "internal/domain/llmutil/strip_fences.go:7"
+      },
+      {
+        "claim": "The only import of the package anywhere in the Go tree is its own in-package external test file; there is no other importer.",
+        "command": "git grep -nE '\\bllmutil\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/llmutil/strip_fences.go:1:// Package llmutil provides pure utility functions for processing LLM responses.\n06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/llmutil/strip_fences.go:2:package llmutil\n06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/llmutil/strip_fences_test.go:6:\t\"github.com/guarzo/slabledger/internal/domain/llmutil\"\n06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/llmutil/strip_fences_test.go:49:\t\t\tgot := llmutil.StripMarkdownFences(tc.input)"
+      },
+      {
+        "claim": "The symbol name itself, searched repo-wide with the defining package excluded, has zero hits — so it is not reached by a dot-import, an alias, or a same-name declaration elsewhere.",
+        "command": "git grep -nE '\\bStripMarkdownFences\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go' ':!internal/domain/llmutil'",
+        "output": "(no output)"
+      },
+      {
+        "claim": "There is no LLM consumer left in the Go tree for an LLM-response helper to serve: the sole case-insensitive advisor/azure hit at the baseline is a prose comment about a database index advisor.",
+        "command": "git grep -nEi '\\b(advisor|azure)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migration_000031_test.go:18:// so the intent is visible in \\d and an index advisor cannot recommend it away"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go files at 06d9f8ce, enumerated via `git ls-tree -r --name-only` and searched via `git grep <rev> -- '*.go'`. Reachability candidates were drawn from docs/audit/runs/2026-08-08/maps/go-reference-map.json (jq aggregation over directories where every record has external_refs==0); git grep was used only to verify this specific candidate.",
+    "exclusions": [
+      "internal/domain/llmutil/strip_fences_test.go — the package's own external test file; in-package test usage is not external reachability (LENS-BRIEF trap 1)"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "Not applicable — the package declares no types and no methods, only a free function `func StripMarkdownFences(string) string`. A free function cannot satisfy an interface.",
+      "functional_options": "Not applicable — the function takes one string parameter and no variadic option slice; the package declares no With* constructors.",
+      "embedding": "Not applicable — no types are declared, so nothing can be embedded and no method can be promoted.",
+      "serialization": "Not applicable — no struct types and therefore no json/db tags in the package.",
+      "go_embed": "No //go:embed directive in the package, and no embed import: `git grep -n 'go:embed' <rev> -- internal/domain/llmutil` returns nothing.",
+      "build_tags": "Neither file carries a //go:build line; searched under both the default and the `integration` tag sets and the reference set is identical.",
+      "registration": "No blank/underscore import of the package exists — the only import site in the whole tree is the package's own test (see evidence 2), so it is not wired into cmd/slabledger/init_services.go, routes.go, or any scheduler builder.",
+      "init_side_effects": "The package declares no init() function and no package-level variables, so importing it for effect would accomplish nothing.",
+      "reflection_or_string": "The identifier does not appear as a string literal anywhere: the repo-wide word-boundary search excluding the defining package (evidence 3) covers quoted occurrences as well and is empty."
+    },
+    "proposed_fix": "Delete internal/domain/llmutil/ entirely (strip_fences.go and strip_fences_test.go). It is a helper for parsing LLM responses in a tree that no longer has an LLM caller.",
+    "blast_radius": [
+      "internal/domain/llmutil/strip_fences.go",
+      "internal/domain/llmutil/strip_fences_test.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` succeeds with internal/domain/llmutil/ removed.",
+      "`go test -race ./...` passes with the directory removed.",
+      "`go vet ./...` reports no unresolved import of github.com/guarzo/slabledger/internal/domain/llmutil.",
+      "`make check` passes (the package count in the architecture check drops by one; no import-rule violation is introduced since nothing imported it)."
+    ]
+  },
+  {
+    "id": "DCG-002",
+    "lens": "dead-code-go",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/testutil (root package; sole symbol GetTestToken)"
+    },
+    "category": "dead-code",
+    "title": "The root internal/testutil package is orphaned — GetTestToken has no caller, and the one testutil.* selector in the tree resolves to prometheus/testutil, not this package",
+    "severity": "low",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "The root package consists of a single file declaring a single exported function, GetTestToken. (internal/testutil/mocks/ is a separate package and is not part of this subject.)",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil | grep -v '^internal/testutil/mocks/'",
+        "output": "internal/testutil/config.go",
+        "file_line": "internal/testutil/config.go:26"
+      },
+      {
+        "claim": "GetTestToken has no call site anywhere in the tree — the only three hits are its own doc comment, its own doc-comment example, and its own declaration.",
+        "command": "git grep -nE '\\bGetTestToken\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/testutil/config.go:12:// GetTestToken returns a test token from environment variable or default value.\n06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/testutil/config.go:24://\ttoken := GetTestToken(\"MY_TEST_TOKEN\", \"default-value\")\n06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/testutil/config.go:26:func GetTestToken(envVar, defaultValue string) string {"
+      },
+      {
+        "claim": "Same-name collision check (LENS-BRIEF trap 2): the single `testutil.` selector in the repo is prometheus's testutil.GatherAndCount, not this package. That file imports github.com/prometheus/client_golang/prometheus/testutil.",
+        "command": "git grep -nE '\\btestutil\\.' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/metrics_test.go:30:\tcount, err := testutil.GatherAndCount(reg,",
+        "file_line": "internal/adapters/storage/postgres/metrics_test.go:30"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go files at 06d9f8ce, enumerated via `git ls-tree -r --name-only` and searched via `git grep <rev> -- '*.go'`. The candidate came from docs/audit/runs/2026-08-08/maps/go-reference-map.json — internal/testutil is one of only two directories in which every record has external_refs==0.",
+    "exclusions": [
+      "internal/testutil/mocks/ — a distinct package with many live consumers; not part of this subject",
+      "internal/adapters/storage/postgres/metrics_test.go:30 — `testutil.GatherAndCount` is prometheus/client_golang/prometheus/testutil, a same-name collision, not a consumer of this package"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "Not applicable — the package declares no types and no methods, only the free function GetTestToken.",
+      "functional_options": "Not applicable — GetTestToken takes two plain string parameters and no variadic options; the package declares no option type.",
+      "embedding": "Not applicable — no types are declared, so nothing can be embedded and no method promoted.",
+      "serialization": "Not applicable — no struct types, therefore no json/db tags.",
+      "go_embed": "No //go:embed directive: the file's only import is `os` (internal/testutil/config.go), and `git grep -n 'go:embed' <rev> -- internal/testutil/config.go` returns nothing.",
+      "build_tags": "config.go carries no //go:build line; the integration tag set produces the same (empty) consumer set — the integration suite under internal/integration/ contains no import of this package, which is covered by the repo-wide selector search in evidence 3.",
+      "registration": "The package has no importer at all, blank or otherwise: evidence 3 is a repo-wide search for the `testutil.` selector and returns exactly one line, which is prometheus. So it cannot be DI-wired.",
+      "init_side_effects": "No init() and no package-level variables are declared in config.go, so a blank import would have no effect to be imported for.",
+      "reflection_or_string": "Not string-reachable: GetTestToken appears nowhere outside its own file (evidence 2), including as a quoted literal, and the package path appears in no import block."
+    },
+    "proposed_fix": "Delete internal/testutil/config.go, removing the root testutil package. Tests needing an env-var-with-default should use os.Getenv directly at the call site, as the rest of the suite already does.",
+    "blast_radius": [
+      "internal/testutil/config.go",
+      "internal/testutil/mocks/ remains untouched — it is a separate package with live consumers"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` succeeds with internal/testutil/config.go removed.",
+      "`go test -race ./...` passes with the file removed.",
+      "`go test -tags integration ./internal/integration/...` still compiles with the file removed.",
+      "`make check` passes."
+    ]
+  },
+  {
+    "id": "DCG-003",
+    "lens": "dead-code-go",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/platform/cardutil/trace.go — NormalizationTrace, NormalizationStep, AddStep, ContextWithTrace, TraceFromContext, LogNormalizationTrace, traceKey, traceKeyType"
+    },
+    "category": "dead-code",
+    "title": "The cardutil normalization-trace facility is never wired: no production code calls ContextWithTrace or AddStep, so the trace can never be non-empty even if it were plumbed",
+    "severity": "low",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "All seven trace identifiers are referenced only inside trace.go (their own declarations and internal use) and trace_test.go. No cardutil normalization function calls AddStep, so a trace obtained via ContextWithTrace would always have zero Steps.",
+        "command": "git grep -nE '\\b(NormalizationTrace|NormalizationStep|ContextWithTrace|TraceFromContext|LogNormalizationTrace|AddStep|traceKey)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "Every one of the 25 hits is in internal/platform/cardutil/trace.go (lines 11,13,15,16,19,20,26,27,31,34,35,36,39,40,41,48,50,51) or internal/platform/cardutil/trace_test.go (lines 10,11,14,15,19,20,22,28,29,30,47). No other file appears.",
+        "file_line": "internal/platform/cardutil/trace.go:11"
+      },
+      {
+        "claim": "The Go reference map holds seven matching records — the six exported trace symbols plus the package's own TestNormalizationTrace — and every one reports external_refs 0 with name_ambiguous false, so the zero is a measurement rather than an upper bound in this case.",
+        "command": "jq -r '.records[] | select(.identity|test(\"NormalizationTrace|NormalizationStep|ContextWithTrace|TraceFromContext|LogNormalizationTrace\")) | [.identity,.external_refs,.name_ambiguous]|@tsv' docs/audit/runs/2026-08-08/maps/go-reference-map.json",
+        "output": "internal/platform/cardutil.(*NormalizationTrace).AddStep\t0\tfalse\ninternal/platform/cardutil.ContextWithTrace\t0\tfalse\ninternal/platform/cardutil.LogNormalizationTrace\t0\tfalse\ninternal/platform/cardutil.NormalizationStep\t0\tfalse\ninternal/platform/cardutil.NormalizationTrace\t0\tfalse\ninternal/platform/cardutil.TestNormalizationTrace\t0\tfalse\ninternal/platform/cardutil.TraceFromContext\t0\tfalse"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go files at 06d9f8ce, searched via `git grep <rev> -- '*.go'`. Reachability came from docs/audit/runs/2026-08-08/maps/go-reference-map.json; git grep verified this specific candidate and established that the in-package callers are confined to trace.go itself (LENS-BRIEF trap 1: an in-package caller of an in-package helper proves nothing about external reachability).",
+    "exclusions": [
+      "internal/platform/cardutil/trace_test.go — the facility's own test; test-only usage is not production reachability",
+      "The rest of internal/platform/cardutil/ (the normalization functions themselves) is live and out of scope for this finding — only trace.go is claimed dead"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "NormalizationTrace's only method is AddStep(fn, input, output string). No interface in the repo declares an AddStep method — the repo-wide search in evidence 1 includes AddStep and returns hits only in trace.go and trace_test.go, so no interface declaration or implementation elsewhere names it.",
+      "functional_options": "ContextWithTrace/TraceFromContext are plain context helpers, not option constructors; neither takes a variadic option parameter and neither is passed to any With*-style constructor.",
+      "embedding": "NormalizationTrace and NormalizationStep are not embedded in any struct: the repo-wide word-boundary search for both type names (evidence 1) returns hits only in trace.go and trace_test.go, so no other struct declares them as an embedded field.",
+      "serialization": "NormalizationTrace and NormalizationStep carry no struct tags — the fields are `Steps []NormalizationStep` and `Function/Input/Output string`, bare. They are never marshalled: no reference exists outside the package to marshal.",
+      "go_embed": "No //go:embed in trace.go; its imports are context and internal/domain/observability.",
+      "build_tags": "trace.go and trace_test.go carry no //go:build line. Under the `integration` tag set the reference set is unchanged — the repo-wide grep in evidence 1 already spans internal/integration/, which contributes no hit.",
+      "registration": "Not DI-wired: cmd/slabledger/init_services.go, routes.go, and the scheduler builders contain no reference to any of the seven identifiers — evidence 1 is repo-wide across all *.go and lists no file under cmd/ or internal/adapters/.",
+      "init_side_effects": "trace.go declares `var traceKey traceKeyType` and no init(). The package-level var is used only by ContextWithTrace/TraceFromContext within the same file, and cardutil is imported for its normalization functions, not for effect.",
+      "reflection_or_string": "None of the identifiers appears as a string literal: the word-boundary repo-wide search in evidence 1 matches inside quotes as well and produces no hit outside the two files. The context key is a private zero-size type (traceKeyType), so the value cannot be reached by a string key from another package."
+    },
+    "proposed_fix": "Delete internal/platform/cardutil/trace.go and internal/platform/cardutil/trace_test.go. If normalization tracing is wanted later, it should be reintroduced together with AddStep calls in the normalization functions — without those, the facility is inert by construction.",
+    "blast_radius": [
+      "internal/platform/cardutil/trace.go",
+      "internal/platform/cardutil/trace_test.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` succeeds with both files removed.",
+      "`go test -race ./...` passes with both files removed.",
+      "`go test -race ./internal/platform/cardutil/...` passes — the remaining normalization tests are unaffected.",
+      "`make check` passes."
+    ]
+  },
+  {
+    "id": "DCG-004",
+    "lens": "dead-code-go",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/testutil/mocks — MockBehavior/MockOption and the eight With* option constructors (common.go), the MockHTTPClient framework (http_client.go, http_client_helpers.go, http_client_test.go), and MockPriceProvider (price_provider.go)"
+    },
+    "category": "dead-code",
+    "title": "A legacy option/HTTP-client/price-provider mock framework in internal/testutil/mocks has no consumer outside its own test file — the purest form of the in-package-caller trap",
+    "severity": "low",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "None of the framework's exported symbols is named anywhere outside the mocks package. The single hit is a prose comment in httpx that mentions MockHTTPClient without using it.",
+        "command": "git grep -nE '\\b(MockBehavior|MockOption|WithFailAfterN|WithEmptyData|WithDataVariant|WithReturnAllCards|MockHTTPClient|NewMockHTTPClient|MockHTTPCall|MockHTTPResponse|MockHTTPStats|MockPriceProvider|NewMockPriceProvider)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go' ':!internal/testutil/mocks'",
+        "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/clients/httpx/interface.go:14:// Test code can use MockHTTPClient which provides immediate responses",
+        "file_line": "internal/adapters/clients/httpx/interface.go:14"
+      },
+      {
+        "claim": "The only consumer of the MockHTTPClient framework is its own in-package test file, internal/testutil/mocks/http_client_test.go, whose TestMockHTTPClient_* functions exercise the mock rather than any production code. The framework is internally busy and externally dead.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil/mocks | grep http_client",
+        "output": "internal/testutil/mocks/http_client.go\ninternal/testutil/mocks/http_client_helpers.go\ninternal/testutil/mocks/http_client_test.go"
+      },
+      {
+        "claim": "Same-name collision (LENS-BRIEF trap 2) on the shared option name WithTimeout: the Go map scores mocks.WithTimeout at external_refs 41 with name_ambiguous false, but every one of those 41 hits is context.WithTimeout from the standard library. The map's ambiguity flag only sees duplicate declarations inside the repo, so a stdlib collision is invisible to it.",
+        "command": "git grep -nE '\\bWithTimeout\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go' ':!internal/testutil/mocks'",
+        "output": "Every line returned is of the form `context.WithTimeout(...)`; none is a bare or mocks-qualified WithTimeout."
+      }
+    ],
+    "searched_universe": "All git-tracked *.go files at 06d9f8ce, searched via `git grep <rev> -- '*.go'` with pathspec `':!internal/testutil/mocks'` to force external-only matching. Candidates came from docs/audit/runs/2026-08-08/maps/go-reference-map.json (records in internal/testutil/mocks with external_refs==0), then each shared option name was hand-checked for stdlib collision.",
+    "exclusions": [
+      "internal/testutil/mocks/http_client_test.go — the framework's own in-package test; it is the only consumer and would be deleted with the framework, not preserved as evidence of use",
+      "mocks.WithTimeout — excluded from the count-based signal because all 41 recorded external refs are context.WithTimeout (stdlib collision); it is included in the finding on the strength of the pathspec-excluded search instead",
+      "internal/adapters/clients/httpx/interface.go:14 — a prose comment naming MockHTTPClient, not a reference (LENS-BRIEF trap 3: a stale comment does not make the object live, nor does mentioning it make it used)",
+      "MockSimplePriceProvider — a distinct, live type; its constructor NewMockSimplePriceProvider has 15 external refs and it is NOT part of this finding",
+      "CapturingLogger (internal/testutil/mocks/logger.go) — live via NewCapturingLogger (2 external refs); not part of this finding"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "MockHTTPClient is declared to satisfy httpx's client interface, but no production or test code outside the mocks package ever assigns it to that interface — evidence 1 shows the type name appears outside the package only in a comment. Satisfying an interface is not being used as one; the interface has other, live implementations.",
+      "functional_options": "This is precisely the mechanism at issue and it is answered rather than assumed: MockOption/MockBehavior and the eight With* constructors ARE a functional-options set, but the constructors they configure (NewMockHTTPClient, NewMockPriceProvider) have no external caller, so no option is ever passed. Deleting an option here cannot silently degrade behavior because nothing constructs the mocks.",
+      "embedding": "None of MockHTTPClient, MockPriceProvider, MockBehavior, MockHTTPCall, MockHTTPResponse, or MockHTTPStats is embedded in another struct: the repo-wide word-boundary search in evidence 1 excludes only the defining package, and within the package the struct declarations show no embedded field of these types.",
+      "serialization": "The mock types carry no json/db struct tags and are never marshalled. They are test doubles constructed in Go, not wire types; nothing in web/src/types/ corresponds to them.",
+      "go_embed": "No //go:embed directive in common.go, http_client.go, http_client_helpers.go, or price_provider.go.",
+      "build_tags": "None of the four files carries a //go:build line, so they compile under the default tag set. The integration tag set adds internal/integration/, which contributes no hit to evidence 1 — the search was repo-wide over all *.go regardless of tags.",
+      "registration": "Not DI-wired: these are test doubles in internal/testutil/mocks and are absent from cmd/slabledger/init_services.go, routes.go, and every scheduler builder — evidence 1 spans all of cmd/ and internal/adapters/ and returns only the httpx comment.",
+      "init_side_effects": "None of the four files declares an init(), and the mocks package is never blank-imported; every import of it is a named use for a live mock elsewhere in the package."
+      ,
+      "reflection_or_string": "No reflection or string-keyed lookup reaches these symbols: the word-boundary search in evidence 1 matches quoted occurrences too and yields only a comment. There is no registry keyed by mock name in the repo."
+    },
+    "proposed_fix": "Delete internal/testutil/mocks/common.go, http_client.go, http_client_helpers.go, http_client_test.go, and price_provider.go. Update internal/testutil/mocks/README.md and the stale comment at internal/adapters/clients/httpx/interface.go:14 so neither advertises a mock that no longer exists.",
+    "blast_radius": [
+      "internal/testutil/mocks/common.go",
+      "internal/testutil/mocks/http_client.go",
+      "internal/testutil/mocks/http_client_helpers.go",
+      "internal/testutil/mocks/http_client_test.go",
+      "internal/testutil/mocks/price_provider.go",
+      "internal/testutil/mocks/README.md (documentation update)",
+      "internal/adapters/clients/httpx/interface.go (comment update only, no code change)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` succeeds with the five files removed.",
+      "`go test -race ./...` passes with the five files removed — in particular no package outside internal/testutil/mocks fails to compile.",
+      "`go test -tags integration ./internal/integration/...` still compiles.",
+      "`git grep -nE '\\b(MockOption|MockHTTPClient|MockPriceProvider)\\b' -- '*.go'` returns no hits after the change.",
+      "`make check` passes."
+    ]
+  },
+  {
+    "id": "DCG-005",
+    "lens": "dead-code-go",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/testutil/mocks — AnalyticsRepositoryMock, DHCardTombstoneRepoMock, DHRepositoryMock, MockAPITracker, MockAnalyticsService, MockBatchPricer, MockCompReader, MockPriceLookup, MockPriceWriter, MockPurchaseLister, MockTrajectoryRepository, PricingRepositoryMock, ResolverMock, SaleRepositoryMock"
+    },
+    "category": "dead-code",
+    "title": "Fourteen per-interface mocks in internal/testutil/mocks have no consumer in any package, and two comments elsewhere falsely claim they are used by other packages",
+    "severity": "low",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "None of the fourteen mock type names is used outside the mocks package. The only two hits are comment lines, and both assert the opposite of the truth — they tell a reader that the shared mock exists 'for use by other packages' / 'is used by other packages' when no such package exists.",
+        "command": "git grep -nE '\\b(AnalyticsRepositoryMock|DHCardTombstoneRepoMock|DHRepositoryMock|MockAPITracker|MockAnalyticsService|MockBatchPricer|MockCompReader|MockPriceLookup|MockPriceWriter|MockPurchaseLister|MockTrajectoryRepository|PricingRepositoryMock|ResolverMock|SaleRepositoryMock)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go' ':!internal/testutil/mocks'",
+        "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/service_test.go:229:// The shared version lives in testutil/mocks.MockPriceLookup for use by other packages.\n06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/psacampaign/mapper_test.go:14:// need one; internal/testutil/mocks.ResolverMock is used by other packages",
+        "file_line": "internal/domain/inventory/service_test.go:229"
+      },
+      {
+        "claim": "Within the mocks package itself, every reference to the fourteen names is its own declaration, its own method receiver, or its own `var _ Iface = (*T)(nil)` assertion. None is used as a field type of another mock, so no live type depends on them for compilation.",
+        "command": "git grep -nE '\\b(AnalyticsRepositoryMock|DHCardTombstoneRepoMock|DHRepositoryMock|MockAPITracker|MockAnalyticsService|MockBatchPricer|MockCompReader|MockPriceLookup|MockPriceWriter|MockPurchaseLister|MockTrajectoryRepository|PricingRepositoryMock|ResolverMock|SaleRepositoryMock)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/testutil/mocks/*.go'",
+        "output": "All hits are of three shapes only: `type X struct {`, `func (m *X) Method(...)`, and `var _ pkg.Iface = (*X)(nil)` (plus doc comments). No line declares a field whose type is one of the fourteen."
+      },
+      {
+        "claim": "The one member of the set with a constructor, MockTrajectoryRepository, is not reachable through it either — NewMockTrajectoryRepository has no external caller. The other thirteen are struct-literal-constructed, so a caller would have to name the type, and evidence 1 shows none does.",
+        "command": "git grep -nE '\\bNewMockTrajectoryRepository\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go' ':!internal/testutil/mocks'",
+        "output": "(no output)"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go files at 06d9f8ce, searched via `git grep <rev> -- '*.go'` with pathspec `':!internal/testutil/mocks'` for external reachability and a second pass restricted to `'internal/testutil/mocks/*.go'` for field-type dependence. Candidates came from docs/audit/runs/2026-08-08/maps/go-reference-map.json (mocks-package records with external_refs==0); each was then hand-checked for constructor reachability and for being a field type of a live mock.",
+    "exclusions": [
+      "DHPushStatusCall (internal/testutil/mocks/dhlisting_service.go:89) — zero external refs, but it is the element type of `Calls []DHPushStatusCall` at line 99 inside MockDHPushStatusUpdater, which has 2 external refs. It is live by field type and is deliberately NOT in this finding. The Go map does not model field-type reachability, so this exclusion had to be established by reading the struct.",
+      "CapturingLogger — live via NewCapturingLogger (2 external refs)",
+      "MockSimplePriceProvider — live via NewMockSimplePriceProvider (15 external refs)",
+      "internal/domain/inventory/service_test.go:229 and internal/domain/psacampaign/mapper_test.go:14 — comment lines, not references (LENS-BRIEF trap 3). Both are additionally inaccurate and should be corrected or deleted alongside the mocks.",
+      "The MockHTTPClient/MockOption framework and MockPriceProvider — covered separately by DCG-004, not double-counted here"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "Each of the fourteen carries an explicit `var _ pkg.Iface = (*T)(nil)` assertion (evidence 2), which is exactly what makes the map's textual count uninformative here. But satisfying an interface is not being passed as one: no package outside mocks names any of the fourteen (evidence 1), so none is ever assigned to an interface parameter. The interfaces themselves have live production implementations under internal/adapters/ that are unaffected.",
+      "functional_options": "Thirteen of the fourteen are constructed by struct literal and take no options. The one with a constructor, NewMockTrajectoryRepository, takes no variadic option parameter and has no external caller (evidence 3). None is itself an option function.",
+      "embedding": "None of the fourteen is embedded in another type: the in-package pass in evidence 2 shows every hit is a declaration, a method receiver, or an interface assertion — no embedded-field line exists — and the external pass in evidence 1 shows no struct elsewhere embeds them.",
+      "serialization": "These are test doubles; their fields are Fn-pattern func values and captured call slices, carrying no json/db tags, and they are never marshalled. Nothing in web/src/types/ corresponds to any of them.",
+      "go_embed": "No //go:embed directive appears in any of the declaring files under internal/testutil/mocks/.",
+      "build_tags": "None of the declaring files carries a //go:build line. The searches in evidence 1 and 2 are tag-independent (git grep reads text, not build constraints) and therefore already cover the integration tag set, including internal/integration/.",
+      "registration": "Not DI-wired: mocks are never referenced from cmd/slabledger/init_services.go, routes.go, or any scheduler builder. Evidence 1 is repo-wide across cmd/ and internal/adapters/ and returns only the two comment lines, both in _test.go files under internal/domain/.",
+      "init_side_effects": "None of the declaring files contains an init(), and the mocks package is never blank-imported — every import site names a specific live mock.",
+      "reflection_or_string": "No string-keyed or reflective access: the word-boundary searches match quoted occurrences too and return only comments. There is no mock registry or name-to-constructor table in the repo."
+    },
+    "proposed_fix": "Delete the fourteen orphaned mocks and their declaring files where a file contains nothing else (api_tracker.go, batch_pricer.go, campaign_service_analytics.go, dh_card_tombstone_repo.go, inventory_analytics_repo.go, inventory_dh_repo.go, inventory_pricing_repo.go, inventory_sale_repo.go, price_lookup.go, psa_resolver.go, trajectory_repository.go), trimming liquidation_service.go to the mocks that remain live. Then correct the two comments that claim the deleted mocks are used by other packages, and update internal/testutil/mocks/README.md. Keep DHPushStatusCall, CapturingLogger, and MockSimplePriceProvider.",
+    "blast_radius": [
+      "internal/testutil/mocks/api_tracker.go",
+      "internal/testutil/mocks/batch_pricer.go",
+      "internal/testutil/mocks/campaign_service_analytics.go",
+      "internal/testutil/mocks/dh_card_tombstone_repo.go",
+      "internal/testutil/mocks/inventory_analytics_repo.go",
+      "internal/testutil/mocks/inventory_dh_repo.go",
+      "internal/testutil/mocks/inventory_pricing_repo.go",
+      "internal/testutil/mocks/inventory_sale_repo.go",
+      "internal/testutil/mocks/price_lookup.go",
+      "internal/testutil/mocks/psa_resolver.go",
+      "internal/testutil/mocks/trajectory_repository.go",
+      "internal/testutil/mocks/liquidation_service.go (partial — MockPurchaseLister, MockCompReader, MockPriceWriter only)",
+      "internal/testutil/mocks/README.md (documentation update)",
+      "internal/domain/inventory/service_test.go:229 (comment correction)",
+      "internal/domain/psacampaign/mapper_test.go:14 (comment correction)"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "`go build ./...` succeeds after the removals.",
+      "`go test -race ./...` passes after the removals, with no package failing to compile for a missing mock.",
+      "`go test -tags integration ./internal/integration/...` still compiles.",
+      "`git grep -nE '\\b(AnalyticsRepositoryMock|DHCardTombstoneRepoMock|DHRepositoryMock|MockAPITracker|MockAnalyticsService|MockBatchPricer|MockCompReader|MockPriceLookup|MockPriceWriter|MockPurchaseLister|MockTrajectoryRepository|PricingRepositoryMock|ResolverMock|SaleRepositoryMock)\\b' -- '*.go'` returns no hits after the change.",
+      "`git grep -n 'DHPushStatusCall' -- internal/testutil/mocks` still returns its declaration and its use as a field type — the exclusion was honoured.",
+      "`make check` passes."
+    ]
+  },
+  {
+    "id": "DCG-006",
+    "lens": "dead-code-go",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/testutil/mocks/dh_fusion.go (filename)"
+    },
+    "category": "naming",
+    "title": "Pointer to naming-and-boundaries: dh_fusion.go is named after the removed price-fusion engine but contains live, unrelated DH mocks",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "The file survives at the baseline under a name referencing the fusion engine, while the word 'fusion' appears in Go code only in one unrelated stale comment — i.e. the feature it is named for is gone, but the file's contents (MockDHMarketDataClient, MockDHCardIDLookup) are live and have nothing to do with fusion.",
+        "command": "git grep -nE '\\b(fusion|Fusion)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/scheduler/inventory_refresh_test.go:342:\t// Duplicate price lookups are coalesced at the fusion provider layer.",
+        "file_line": "internal/testutil/mocks/dh_fusion.go"
+      },
+      {
+        "claim": "The file is git-tracked at the baseline.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/testutil/mocks/dh_fusion.go",
+        "output": "internal/testutil/mocks/dh_fusion.go"
+      }
+    ],
+    "searched_universe": "All git-tracked *.go files at 06d9f8ce, searched via `git grep <rev> -- '*.go'`. This is a pointer record for the naming-and-boundaries lens, not a dead-code finding: the file's contents are live and must not be deleted.",
+    "proposed_fix": "Owned by the naming lens. Rename internal/testutil/mocks/dh_fusion.go to match what it actually holds (e.g. dh_market_data.go) and correct the stale fusion comment at internal/adapters/scheduler/inventory_refresh_test.go:342. No code change.",
+    "blast_radius": [
+      "internal/testutil/mocks/dh_fusion.go (rename only)",
+      "internal/adapters/scheduler/inventory_refresh_test.go:342 (comment only)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass after the rename — a file rename within a package changes no import path.",
+      "`git grep -niE '\\bfusion\\b' -- '*.go'` returns no hits after the comment is corrected."
+    ]
+  }
+]
