@@ -1,5 +1,8 @@
 package csvimport
 
+// Extracted from ImportPSAExportGlobal (SLA-97) to keep that function under
+// the funlen budget; the decomposition is behavior-preserving.
+
 import (
 	"context"
 	"time"

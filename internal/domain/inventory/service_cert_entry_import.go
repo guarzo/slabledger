@@ -1,5 +1,10 @@
 package inventory
 
+// Extracted from ImportCerts (SLA-97) to keep that function under the funlen
+// budget; the decomposition is behavior-preserving. The three `continue`
+// statements in the original per-cert loop became `return` since each case
+// now runs in its own call frame.
+
 import (
 	"context"
 	"fmt"
@@ -9,10 +14,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// importExistingCert handles a cert number that already has a purchase row.
-// Extracted from ImportCerts (SLA-97) — behavior is unchanged, only the
-// three `continue` statements became `return` since this now runs in its own
-// call frame.
+// importExistingCert handles a cert number that already has a purchase row:
+// it records a sold-existing hit, or flags the cert for eBay export and
+// enrolls it in the DH push pipeline when there is no sale.
 func (s *service) importExistingCert(ctx context.Context, existing *Purchase, certNum string, now time.Time, hasSale bool, result *CertImportResult) {
 	if hasSale {
 		result.SoldExisting++
@@ -64,10 +68,10 @@ func (s *service) importExistingCert(ctx context.Context, existing *Purchase, ce
 
 // importNewCert handles a cert number with no existing purchase row: it
 // performs the PSA lookup, builds and persists the new Purchase, and enqueues
-// downstream enrichment. Extracted from ImportCerts (SLA-97) — behavior is
-// unchanged. Returns imported=true iff a new row was created; psaDown=true
-// iff the lookup failure indicates PSA is unavailable batch-wide, so the
-// caller can latch psaUnavailable for the remaining certs in the loop.
+// downstream enrichment. Returns imported=true iff a new row was created;
+// psaDown=true iff the lookup failure indicates PSA is unavailable
+// batch-wide, so the caller can latch psaUnavailable for the remaining certs
+// in the loop.
 func (s *service) importNewCert(ctx context.Context, certNum string, now time.Time, result *CertImportResult) (imported bool, psaDown bool) {
 	info, certErr := s.certLookup.LookupCert(ctx, certNum)
 	if certErr != nil {
