@@ -42,7 +42,7 @@ func signRow(t *testing.T, row psacampaign.PushRow, signer psacampaign.ApprovalS
 }
 
 func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestTransientPushError(t *testing.T) {
 }
 
 func TestDrainPushQueue_UpdateTransient403RequeuesApproved(t *testing.T) {
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}

@@ -62,7 +62,7 @@ The system compares real-time sold data against DoubleHolo market data to reveal
 
 ## Stack
 
-Go backend with SQLite, React + Radix UI + TanStack Query + Vite + Tailwind frontend.
+Go backend with Postgres, React + Radix UI + TanStack Query + Vite + Tailwind frontend.
 
 ## Requirements
 
