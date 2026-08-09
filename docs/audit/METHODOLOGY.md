@@ -188,6 +188,15 @@ A finding is ticketable when:
 - the verdict's `ticketable` field is `true`, **and**
 - `ADJUDICATIONS.md` does not rule otherwise.
 
+`refuted` and `unresolvable` are therefore never ticketable, and the schema
+plus `scripts/validate.sh verdicts` reject a verdict that claims otherwise
+rather than leaving the rule to the controller's diligence. The two are not
+interchangeable: `refuted` asserts the finding is wrong and counts against the
+audit's own error rate, while `unresolvable` asserts only that the method could
+not reach the claim. Collapsing them would put "How it was refuted" in
+`REPORT.md` above a claim nobody refuted, and inflate the error rate with
+findings that may well be true.
+
 Selecting only `verdict == "confirmed"` — which the plan text originally did —
 silently drops every downgraded-but-real finding. On the real run that was 11
 of 54. For `confirmed_lower_severity` always use the verdict's

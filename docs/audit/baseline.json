@@ -1,0 +1,18 @@
+{
+  "run": "2026-08-07",
+  "revision": "740976ecf80a4f2ccdaa611d7790ccaa95b48773",
+  "go_files": 676,
+  "packages": 53,
+  "migrations": 25,
+  "frontend_files": 218,
+  "env_vars": 71,
+  "layout": "flat — this run's maps/, findings/, verdicts/, REPORT.md, TICKETS.md and linear-ids.json sit directly under docs/audit/. Later runs live under docs/audit/runs/<baseline-date>/.",
+  "definitions": {
+    "note": "These five counts were originally recorded without their derivations, and the 2026-08-08 run had to reverse-engineer them by finding the commands that reproduce 676/53/25/218/71 at this revision. They are written down here so no future run has to do that again. Each is evaluated against git-tracked files at `revision`, never the working tree.",
+    "go_files": "git ls-tree -r --name-only <rev> | grep -c '\\.go$'  — every tracked .go file, tests included",
+    "packages": "git ls-tree -r --name-only <rev> | grep '\\.go$' | grep -v '_test\\.go$' | xargs -n1 dirname | sort -u | wc -l  — directories holding at least one NON-test .go file; a test-only directory is not a package for this count",
+    "migrations": "(count of postgres/migrations/*.sql) / 2  — migration PAIRS, not files; every migration is up+down, which is checked separately",
+    "frontend_files": "git ls-tree -r --name-only <rev> | grep -cE '^web/src/.*\\.(ts|tsx)$'  — .ts and .tsx only; the .css, .png and .html under web/src/ are excluded",
+    "env_vars": "git show <rev>:.env.example | grep -cE '^[A-Z_][A-Z0-9_]*='  — assignment lines in .env.example; commented and blank lines excluded. NAMES only are ever recorded, never values, and no real .env is read"
+  }
+}

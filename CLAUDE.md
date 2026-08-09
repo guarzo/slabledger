@@ -35,7 +35,7 @@ make check                                 # Full quality check (see "Quality Ch
 internal/
   domain/     # Pure business logic (NO external deps) — defines the interfaces
   adapters/   # Interface implementations (HTTP, clients, storage, schedulers)
-  platform/   # Cross-cutting concerns (cache, config, crypto, resilience, telemetry)
+  platform/   # Cross-cutting concerns (config, crypto, resilience, storage, telemetry)
 ```
 
 **Package rosters are derived, not listed here.** Any snapshot of the package tree
@@ -81,8 +81,8 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
   purchase-shaped method belongs elsewhere just to keep it small.
 - **Service**: CRUD + imports + analytics; delegates computation to sibling sub-packages
 - **PriceLookup**: Optional interface for market signal computation (injected via `WithPriceLookup` functional option)
-- **Import**: CSV parsing lives directly in the `inventory` package
-  (`ls internal/domain/inventory/parse_*.go` for the current set — eBay, Shopify, orders)
+- **Import**: CSV parsing lives in the sibling `internal/domain/csvimport` package
+  (`ls internal/domain/csvimport/parse_*.go` for the current set — eBay, Shopify, orders)
 - **Channel fees**: eBay/TCGPlayer use campaign's `ebayFeePct`; local/other = 0%
 
 ### Sibling sub-packages (flat siblings under `internal/domain/`, no cross-imports between them)
@@ -191,7 +191,8 @@ engine) were removed on 2026-04-06.
 ## Code Style
 
 - Use structured logging: `logger.Info("msg", observability.String("key", val))`
-- Backend uses cents internally, API responses use USD (dollars)
+- Backend uses cents internally; campaign API responses stay in cents and the frontend
+  formats them for display (`web/src/react/utils/formatters.ts`)
 - Context propagation: always pass `ctx` as first parameter
 - Avoid over-engineering: only make changes directly requested
 - Cost/prior calculations use simple functions, not manager structs
@@ -205,6 +206,7 @@ engine) were removed on 2026-04-06.
 - `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces the flat sibling rule, deriving membership from the tree and enforcing on the target side, and fails closed if fewer than two siblings are derived or if the scan performs an unexpected number of checks
 - `scripts/check-imports-test.sh` — self-test for the above; five fixture cases, run first by `make check`
 - `scripts/check-file-size.sh` — warns at 500 lines, fails at 600 lines (excludes test files and mocks)
+- `scripts/check-doc-paths.sh` — fails if a durable doc cites a source path that is not a tracked file. Scoped to docs that describe the tree as it is now; `docs/specs/`, `docs/plans/`, `docs/superpowers/` and `docs/audit/` are excluded because they are point-in-time records. Paths inside fenced code blocks are skipped, so recipe placeholders (`scheduler/myworker.go`) do not trip it
 - `scripts/check-playwright-version.sh` — keeps the Playwright package and browser image in step
 
 ## Adding New Components

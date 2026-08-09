@@ -1,0 +1,83 @@
+[
+  {
+    "id": "NAM-001",
+    "verdict": "confirmed_lower_severity",
+    "evidence_reproduces": true,
+    "basis": "All four evidence commands re-run at 06d9f8ce and produced the quoted output byte-for-byte. I established the claim by an independent route: I read internal/domain/inventory/analytics_types.go:105-144 in full and confirmed every other money field in SellSheetItem carries the Cents suffix in both name and tag (BuyCostCents, CostBasisCents, CLValueCents, OverridePriceCents, ComputedPriceCents, AISuggestedPriceCents), so the five are the sole exceptions inside their own structs. I then widened the sweep repo-wide with `git grep -nE '^\\s+[A-Za-z0-9]+\\s+(int|int64)\\s+`json:\"[a-z][a-zA-Z0-9]*(Price|Cost|Value|Profit|Revenue|Basis|Total)[a-zA-Z0-9]*\"' 06d9f8ce -- 'internal/*.go' 'internal/**/*.go' | grep -v _test.go | grep -viE 'Cents\"|Usd\"|USD\"|Pct\"|Count\"'` — ten hits, of which five are these fields and the other five (noValue, unsoldTotal, withCLValue, compsAboveCost, clPricedCards) are counts, not money. So across every int money JSON tag in internal/, these five are the complete exception set to a repo-wide unit-suffix convention. Denomination confirmed as cents independently: service_sell_sheet.go:48 assigns snapshot.ConservativeCents, :55 assigns purchase.CLValueCents, :82 copies TargetSellPrice into ComputedPriceCents, :176 accumulates item.CostBasisCents. Zero-consumer claim confirmed: web/ grep returns only the five type declarations, and web/src/react/utils/sellSheetHelpers.tsx (the one helper naming SellSheetItem) reads none of them.",
+    "what_the_finding_got_wrong": "Evidence claim 4 overstates the convention. The finding argues an unsuffixed JSON field 'actively asserts the wrong unit' because CLAUDE.md:194 says API responses use USD. That does not hold at this baseline: the repo emits cents over the wire pervasively with a Cents tag suffix, and the handful of genuinely-USD API fields carry their own explicit suffix (campaigns_analytics.go:68-69 spendUSD/capUSD from `float64(d.SpendCents) / 100.0`; analytics_types.go:202-203 overrideTotalUsd/suggestionTotalUsd). The real convention is 'the suffix carries the unit', so these five fields record no unit anywhere rather than asserting dollars. Severity lowered to low on that basis plus the finding's own concession that no consumer reads the fields, so there is no live defect — this is a latent hazard for the next consumer, not a bug. The defect itself, and the exhaustiveness of the exception set, are confirmed.",
+    "corrected_severity": "low",
+    "ticketable": true
+  },
+  {
+    "id": "NAM-002",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "All three evidence commands reproduce. I re-derived the producer independently by reading internal/domain/portfolio/service.go:225-262 rather than the finding's quoted window: the switch at :242 buckets both inventory.SaleChannelEbay and inventory.SaleChannelTCGPlayer into bucket.marketplaceRevenue / bucket.marketplaceNetProfit, and the ratio computed from those two locals is assigned to CampaignHealth.EbayChannelMarginPct at :257. The name is therefore factually wrong about which channels it covers, not merely inelegant. The section comment above the declaration (health_types.go:36-37) independently confirms the intended concept is 'marketplace margin', not eBay. Propagation confirmed at eight non-test sites; the misnomer additionally reaches a user-visible string — service.go:128-131 and snapshot.go:138-141 format the value into a health reason, and those two sites already say 'marketplace channels profitable', so the prose and the identifier disagree at the same call site.",
+    "what_the_finding_got_wrong": "The finding accepted the declaration comment's premise that the JSON name is 'retained for frontend compatibility' and preserved the tag on that basis. That premise is unverified and appears false at this baseline: `git grep -nE 'EbayChannelMarginPct|ebayChannelMarginPct' 06d9f8ce` over all tracked files returns hits only in internal/domain/{inventory,portfolio} Go files — no web/ consumer of the JSON field exists. Keeping the tag is still the conservative fix and costs nothing, but the fixer should know the compatibility constraint is not evidenced, and the comment asserting it is itself stale. Does not change severity.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "NAM-003",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "All six evidence commands reproduce, including the two absence commands (both exit 1 with empty output, which is the correct form of absence evidence). Re-derived independently: `git ls-tree -r --name-only 06d9f8ce -- internal/domain/storage` returns the single path internal/domain/storage/doc.go; I read that file in full and it contains only a package doc comment and `package storage` — no declaration of any kind. `git grep -nE 'type Cache\\b|Cache interface' 06d9f8ce -- '*.go'` exits 1, so no Cache interface exists anywhere in Go at this revision. I checked the obvious relocation target and it is gone too: `git ls-tree -r --name-only 06d9f8ce -- internal/platform` shows no internal/platform/cache package at all (only canonjson, cardutil, config, crypto, resilience, storage, telemetry). So the doc comment documents an interface, a usage example, and a TTL policy table for a type that exists nowhere. CLAUDE.md:58 repeats the claim, confirmed. Same-name collision checked: internal/platform/storage does exist (file_store.go), but the finding's importer grep was on the fully-qualified quoted import path, so it is not confounded.",
+    "what_the_finding_got_wrong": "Acceptance criterion 3 is not satisfiable as written. It requires `git grep -n 'domain/storage'` to return nothing outside migration comments and audit run directories, but the string also appears at .claude/skills/polish-all/SKILL.md:45, docs/polish-progress.json:7, and docs/specs/2026-08-07-codebase-tech-debt-audit-design.md:118 — none of which are audit run directories. The controller should widen that criterion to the CLAUDE.md line plus the package path itself, or a fixer will read the ticket as unfinishable. The substantive claim is unaffected.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "NAM-004",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "The single evidence command re-runs at 06d9f8ce and returns exactly the twelve quoted lines, no more and no fewer. I checked the adjacency claims by reading the declarations: health_types.go:31 CapitalAtRisk sits between HealthReason and the correctly-suffixed LiquidationLossCents / InHandCapitalCents / InTransitCapitalCents block, and arbitrage/expected_value.go:17-19 sit immediately above CarryingCostCents at :20. Both hold.",
+    "what_the_finding_got_wrong": "Nothing factually. I am marking it not ticketable rather than disputing it: the lens filed it at `suspected`, which LENS-BRIEF §5 defines as recorded-not-ticketed, and I agree with that self-assessment on the merits. Unlike NAM-001, the unit is recorded at the declaration line by the adjacent JSON tag, and unlike NAM-002 the Go name is incomplete rather than false — it omits a unit, it does not assert a wrong one. There is no consequence a developer could name beyond consistency, so this is the 'inelegant name is not debt' case my brief warns about. It is worth carrying in the report as a cleanup-of-opportunity for whoever next edits those four files, not as a branch of its own.",
+    "corrected_severity": "",
+    "ticketable": false
+  },
+  {
+    "id": "NAM-005",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "Both evidence commands reproduce exactly. Independently: `git grep -nl 'llmutil' 06d9f8ce` over all tracked files returns two Go files (internal/domain/llmutil/strip_fences.go and its own external test package strip_fences_test.go) plus only documentation and audit artifacts; `git grep -nE 'StripMarkdownFences' 06d9f8ce` returns hits only inside that package and the Phase 1 Go map. So the lead is sound as a lead. The lens correctly declined to assert reachability and correctly routed it as a pointer under LENS-BRIEF §6.",
+    "what_the_finding_got_wrong": "It is a duplicate. I verified the overlap the dispatch flagged rather than assuming it: docs/audit/runs/2026-08-08/findings/dead-code-go.json DCG-001 has subject.identity `internal/domain/llmutil` and the title 'internal/domain/llmutil is a whole orphaned package: its only exported function StripMarkdownFences has no consumer outside its own test', filed at `mechanical` — the tier NAM-005 explicitly could not reach. The owning lens has therefore already done the reachability work this pointer asked for, and NAM-005 adds nothing to it. Controller: collapse NAM-005 into DCG-001 and ticket only DCG-001. One detail DCG-001 may not carry: CLAUDE.md lists llmutil in its leaf-utilities line, so a deletion needs that line updated; NAM-005's blast_radius omits it too.",
+    "corrected_severity": "",
+    "ticketable": false
+  },
+  {
+    "id": "SIZE-001",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "All five evidence commands reproduce with the quoted output. I re-derived the width by reading the full `type Service interface` block in internal/domain/auth/service.go: 20 methods under six section comments (OAuth flow 6, session management 4, user management 3, token storage 1, email allowlist 4, admin 2). The concrete cost is real and I confirmed each leg by my own route. Two production implementations: internal/domain/auth/service_impl.go (*authService) and internal/adapters/clients/google/oauth.go (*OAuthService), the latter carrying an explicit `var _ auth.Service = (*OAuthService)(nil)` at oauth.go:83 and defining all 20 methods (counted 20 `^func (s *OAuthService)` in that file) — so SIZE-001's acceptance criterion 3 names a compile-time assertion that genuinely exists today and will genuinely detect the failure mode it targets. Three inline mockAuthService declarations at 20/20/22 methods, and `git ls-tree -r --name-only 06d9f8ce -- internal/testutil/mocks | grep -i auth` returns only auth_inmemory.go and auth_repository.go, confirming no shared auth.Service mock exists and that the inline mocks breach the CLAUDE.md rule the finding cites. Narrow-consumer claim holds: scheduler 2/20, middleware 2/20, admin handler 4/20.",
+    "what_the_finding_got_wrong": "One overstatement in evidence claim 3's parenthetical. It characterizes the three inline mocks as stubbing 20 methods 'to exercise 2, 2 and 4 real methods respectively' and generalizes to '18 no-op stub methods written three times over'. That is right for middleware/auth_test.go and scheduler/session_cleanup_test.go, but handlers/auth_test.go covers handlers/auth.go, which calls 11 of the 20 (`git grep -ohE 'h\\.authService\\.[A-Za-z]+' 06d9f8ce -- internal/adapters/httpserver/handlers/auth.go | sort -u`: ConsumeOAuthState, CreateSession, DeleteSession, ExchangeCodeForTokens, GetLoginURL, GetOrCreateUser, GetUserInfo, IsEmailAllowed, SetUserAdmin, StoreOAuthState, StoreTokens). So that file carries 9 no-op stubs, not 18. The headline claim — no consumer in the repo uses the interface as a whole, maximum is 11 of 20 — survives, and the proposed narrow seams for the scheduler, middleware and admin handler are unaffected. The fixer should expect the auth handler to keep a wide seam.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "SIZE-002",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "I read scripts/check-file-size.sh in full at 06d9f8ce rather than grepping it. Line 20's find carries `! -path 'cmd/slabledger/main.go'`, and because the find roots are `internal/ cmd/` the printed paths are exactly of that form, so the exemption does bind. The script comments the *_test.go exclusion on line 3 and gives no reason for the main.go or testutil ones. I confirmed the exemption is effective by extracting the pinned tree with `git archive` and running the script's own find expression: main.go is absent from the set. main.go is 418 lines at this baseline, so removing the exemption costs nothing today — exactly as the finding states. runServer independently confirmed as the longest top-level function in all non-test, non-testutil Go under internal/ and cmd/: my own awk extent scan over the extracted tree returns runServer 269, createHandlers 264, ImportPSAExportGlobal 239, ImportCerts 234, runOnce 225 — the same five in the same order the lens reported. Sibling claim confirmed: the other nine files in cmd/slabledger are inside the checked set.",
+    "what_the_finding_got_wrong": "Trivial off-by-one: runServer's signature is at main.go:149, not :150, so the extent is 149-418 = 270 lines rather than 269. The lens's awk started at NR>=150 and so measured from the body's first line. Nothing turns on it — the ordering and the 'largest function in the repo' claim are unaffected.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "SIZE-003",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "I extracted the pinned tree with `git archive` and ran the repo's own scripts/check-file-size.sh against it: six WARNs, zero FAILs, and internal/domain/inventory/core_types.go at 562 lines is the largest, 38 below the FAIL_LIMIT=600 I read directly at script line 7. `git show c624b9a7:internal/domain/inventory/core_types.go | wc -l` returns 562, confirming the file entered the tree from the SLA-32 split already in the WARN band. 21 top-level type declarations confirmed. I checked the proposed split boundaries independently by listing type start lines: Sale at 465, BulkSaleInput 514, BulkSaleResult 524, BulkSaleError 531, ActivationCheck 537, ActivationChecklist 544, RevocationFlag 553, file ends 562 — so the two proposed extractions remove roughly 98 lines and leave ~464, matching the finding's 'around 460' and restoring real headroom under the 500 guideline. Both are pure intra-package type moves, so the acceptance criteria are provable exactly as written.",
+    "what_the_finding_got_wrong": "Two immaterial date/extent slips. Evidence claim 2 says the file 'was created two days before this baseline'; `git log -1 --date=short c624b9a7` and the Run Card both give 2026-08-08, the same day as the baseline commit. Evidence claim 3 gives Purchase as lines 274-373 (100 lines); the closing brace is at 371, so it is 98 lines. Neither affects the conclusion or the fix.",
+    "corrected_severity": "",
+    "ticketable": true
+  },
+  {
+    "id": "SIZE-004",
+    "verdict": "confirmed",
+    "evidence_reproduces": true,
+    "basis": "This finding's central claim is falsifiable and I computed it myself. `git show 06d9f8ce:internal/domain/inventory/service_cert_entry.go | wc -l` = 491 (9 below WARN_LIMIT=500) and `...csvimport/service_import_psa.go | wc -l` = 498 (2 below). Running the project's own scripts/check-file-size.sh against a git archive extraction of the pinned tree, neither file appears in the six-line WARN output — so the enforced budget is genuinely silent about both, which is the finding's thesis. Function extents confirmed: ImportCerts 63-296 = 234 lines, ImportPSAExportGlobal 26-264 = 239 lines. I ran my own independent top-level-function extent scan over the whole extracted tree (awk `^func` .. `^}`, sorted by length) and it reproduces the lens's stated five longest in the same order and at the same lengths, so these two really are the two longest functions in internal/domain. Complexity claims verified: 29 branch keywords in the ImportCerts body, and maximum indentation of 6 tabs (measured with an awk RLENGTH scan). Test-cost claims verified: service_cert_entry_test.go is 1288 lines, the largest *_test.go in the repo, naming ImportCerts 38 times.",
+    "what_the_finding_got_wrong": "Two of evidence claim 3's sub-counts are prose with no command behind them and are slightly off when checked. Early exits: `grep -cE '^\\t{2,}(continue|return|break)'` over the ImportCerts body returns 13, not the stated 14. The 'thirteen concerns in one function body' enumeration has no reproducible command at all and is the lens's reading of the code — defensible from the 29 branches and 6 indentation levels I did verify, but it is judgment, not measurement. Neither weakens the finding; the falsifiable core (two longest domain functions, both in files just under the warn line, invisible to the enforced check) is fully confirmed.",
+    "corrected_severity": "",
+    "ticketable": true
+  }
+]

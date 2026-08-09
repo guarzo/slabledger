@@ -11,12 +11,29 @@ import glob
 import os
 import sys
 
-AUDIT = os.path.dirname(os.path.abspath(__file__)) + "/.."
-# Single source of truth: the revision every finding is pinned to lives in the
-# schema, which validate.sh enforces on each findings file. Duplicating the
-# literal here would let REPORT.md advertise a baseline the gate never checked.
-BASELINE = json.load(open(f"{AUDIT}/schema/finding.schema.json")
-                     )["properties"]["revision"]["const"]
+AUDIT_HOME = os.path.dirname(os.path.abspath(__file__)) + "/.."
+# Run-scoped root: findings/, verdicts/ and the generated REPORT.md belong to one
+# baseline and must never be mixed across runs. AUDIT_HOME stays shared (schema/,
+# scripts/). Defaulting AUDIT to AUDIT_HOME keeps the flat 2026-08-07 layout,
+# where the run's artifacts sit directly under docs/audit/, regenerating as-is.
+AUDIT = os.environ.get("AUDIT_RUN", AUDIT_HOME)
+# Repo-relative form of AUDIT, for prose that names an artifact's path. Cross-
+# references rendered into REPORT.md and into filed ticket bodies must point at
+# THIS run's directory; a hardcoded `docs/audit/...` sends a fixer reading a
+# 2026-08-08 ticket to the 2026-08-07 report.
+AUDIT_DISPLAY = os.path.relpath(
+    os.path.abspath(AUDIT), os.path.abspath(AUDIT_HOME + "/../.."))
+# A run directory outside the repo yields a relpath that climbs out with `../`,
+# which is meaningless to a reader of a ticket. Fall back to the absolute path.
+if AUDIT_DISPLAY.startswith(".."):
+    AUDIT_DISPLAY = os.path.abspath(AUDIT)
+# Single source of truth: the revision every finding is pinned to. The schema is
+# shared across runs and can only check the SHA's shape, so the run's own
+# baseline.json is authoritative here and validate.sh gates each findings file
+# against that same file. Duplicating the literal here would let REPORT.md
+# advertise a baseline the gate never checked.
+BASELINE = json.load(open(os.environ.get(
+    "AUDIT_BASELINE_FACTS", f"{AUDIT}/baseline.json")))["revision"]
 
 # ---------------------------------------------------------------------------
 # Controller cluster map. Each fix unit is ONE independently mergeable PR.
@@ -239,6 +256,22 @@ UNITS = [
            "not let the ticket imply a live bug."),
 ]
 
+# The cluster map above is the 2026-08-07 controller's judgment, and stays the
+# default so that run regenerates unchanged. A later run supplies its own as
+# $AUDIT_RUN/units.json — same shape, as JSON. The map is per-run judgment, not
+# shared infrastructure: it names one baseline's finding ids, and pointing a new
+# run at the old map would roll up findings that no longer exist.
+#
+# This block sits inside the slice build-tickets.py execs, and reads only the
+# environment — no __file__, no AUDIT — so both generators resolve the same map
+# without either importing the other.
+import json as _json
+import os as _os
+
+_run = _os.environ.get("AUDIT_RUN")
+if _run and _os.path.exists(f"{_run}/units.json"):
+    UNITS = _json.load(open(f"{_run}/units.json"))
+
 
 def load():
     findings, verdicts = {}, {}
@@ -264,6 +297,21 @@ def load():
 
 
 SEVERITIES = ("high", "medium", "low")
+
+
+def subject(s):
+    """Render a finding's {kind, identity} pair for a human.
+
+    Was `f['subject']` interpolated straight into a code span, which printed the
+    raw Python dict repr — `{'kind': 'table', 'identity': 'marketmovers_config'}`
+    — into REPORT.md and, via build-tickets.py, into every filed ticket of the
+    2026-08-07 and 2026-08-08 batches. Kept in sync with the copy in
+    build-tickets.py by build-tickets-test.py.
+    """
+    if isinstance(s, dict) and s.get("identity"):
+        kind = s.get("kind", "")
+        return f"`{s['identity']}`" + (f" ({kind})" if kind else "")
+    return f"`{s}`"
 
 
 def sev_of(f, v):
@@ -315,13 +363,28 @@ def main():
     w(f"| Confirmed | {counts.get('confirmed', 0)} |")
     w(f"| Confirmed, severity lowered | {counts.get('confirmed_lower_severity', 0)} |")
     w(f"| Refuted | {counts.get('refuted', 0)} |")
+    # Unresolvable is a verdict, not an absence of one: the claim may well be
+    # true, but static analysis at a pinned revision cannot settle it. It is
+    # listed unconditionally so a run with none says so, rather than leaving the
+    # reader to wonder whether the row was suppressed or the case never arose.
+    unres = counts.get("unresolvable", 0)
+    w(f"| Unresolvable by static analysis | {unres} |")
     w(f"| **Confirmation rate** | **{conf}/{total} = {100*conf//total}%** |")
     w(f"| Ticketable | {len(all_ticketable)} |")
     w(f"| Fix units (tickets) | {len(UNITS)} |")
     w("")
     w("Every finding received exactly one verdict from a verifier whose explicit brief was "
-      "to **refute** it, defaulting to refuted under uncertainty. The refuted section below "
-      "is the audit's own error rate and stays in the record.\n")
+      "to **refute** it, defaulting to refuted under uncertainty about the claim itself. "
+      "The refuted section below is the audit's own error rate and stays in the record.\n")
+    # The rate is deliberately kept over all findings rather than over the
+    # decided ones — quietly shrinking the denominator is how a confirmation
+    # rate gets flattered. When some findings are undecidable, say so instead.
+    if unres:
+        w(f"The confirmation-rate denominator is every finding filed, including the "
+          f"{unres} the method could not settle. Those are neither confirmations nor "
+          f"errors: uncertainty about the *claim* defaults to refuted, but uncertainty "
+          f"about whether static analysis can reach the claim at all is recorded as "
+          f"unresolvable and never ticketed. They appear in the investigation tier.\n")
 
     w("### Findings by category\n")
     bycat = {}
@@ -373,7 +436,7 @@ def main():
             w(f"#### {i} — {f['title']}\n")
             w(f"*Lens:* `{f['lens']}` · *Confidence:* `{f['confidence']}` · "
               f"*Verdict:* `{v['verdict']}` · *Severity:* {sev_of(f, v)}\n")
-            w(f"**Subject:** `{f['subject']}`\n")
+            w(f"**Subject:** {subject(f['subject'])}\n")
             if v.get("what_the_finding_got_wrong"):
                 w(f"**Verifier correction:** {v['what_the_finding_got_wrong']}\n")
             w("**Evidence:**\n")
@@ -414,20 +477,26 @@ def main():
     # ---- refuted ----
     refuted = [i for i in sorted(F) if V[i]["verdict"] == "refuted"]
     refuted_mech = [i for i in refuted if F[i]["confidence"] == "mechanical"]
-    WORDS = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six",
-             7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten"}
+    WORDS = {0: "None", 1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five",
+             6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten"}
     n_ref = WORDS.get(len(refuted), str(len(refuted)))
     n_mech = WORDS.get(len(refuted_mech), str(len(refuted_mech)))
     # Singular vs plural matters here: this paragraph used to hardcode "Two were
     # mechanical-tier" when only DEADGO-001 ever was, and nothing recomputed it.
-    if len(refuted_mech) == 1:
+    # It also used to assert, unconditionally, that a refuted mechanical finding
+    # "would have driven a developer to break an hourly production job" — true of
+    # DEADGO-001 in the 2026-08-07 run and of nothing else. A generator may state
+    # the count, which it can compute; the consequence belongs to the verifier's
+    # own words, which are already rendered per-finding below.
+    if len(refuted_mech) == 0:
+        mech_clause = ("None were **mechanical-tier**, the audit's highest "
+                       "confidence band.")
+    elif len(refuted_mech) == 1:
         mech_clause = (f"{n_mech} was **mechanical-tier** — the audit's highest "
-                       "confidence band — and it would have driven a developer to "
-                       "break an hourly production job.")
+                       "confidence band.")
     else:
         mech_clause = (f"{n_mech} were **mechanical-tier** — the audit's highest "
-                       "confidence band — and one of those would have driven a "
-                       "developer to break an hourly production job.")
+                       "confidence band.")
     w("\n---\n")
     w("## Refuted findings — the audit's own error rate\n")
     w(f"{n_ref} of {len(F)} findings did not survive adversarial verification. "
@@ -439,9 +508,15 @@ def main():
         w(f"**How it was refuted:** {v.get('basis', '')}\n")
         if v.get("what_the_finding_got_wrong"):
             w(f"**What it got wrong:** {v['what_the_finding_got_wrong']}\n")
-    w("See `docs/audit/ADJUDICATIONS.md` for the controller's full reasoning on "
-      "DEADGO-001 and NB-010, including the production-breaking fix that DEADGO-001 "
-      "would have shipped.\n")
+    # Cross-reference derived, not hardcoded. This line used to name DEADGO-001
+    # and NB-010 — the 2026-08-07 run's refutations — so any later run's REPORT.md
+    # would cite two findings it does not contain, at a path it does not own.
+    if refuted:
+        w(f"See `{AUDIT_DISPLAY}/ADJUDICATIONS.md` for the controller's full "
+          f"reasoning on {', '.join(refuted)}.\n")
+    else:
+        w(f"See `{AUDIT_DISPLAY}/ADJUDICATIONS.md` for the controller's "
+          "adjudication record.\n")
 
     open(f"{AUDIT}/REPORT.md", "w").write("\n".join(out) + "\n")
 

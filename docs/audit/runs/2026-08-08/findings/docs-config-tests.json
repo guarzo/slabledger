@@ -1,0 +1,926 @@
+[
+  {
+    "id": "DCT-001",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "docs/USER_GUIDE.md — four load-bearing claims contradicted by the code"
+    },
+    "category": "docs",
+    "title": "The end-user guide misdescribes CSV import, the campaign form, the sale-channel roster, and Card Ladder integration",
+    "severity": "high",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "USER_GUIDE.md:102 tells the user to 'Upload a CSV with three columns: Card Title, Price, Date'. The PSA CSV parser looks for a header row containing 'cert number', 'listing title' and 'grade', and returns a fatal error when it cannot find one. A user who follows the documented format gets an import that fails outright, not a partial import.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/csvimport/parse_helpers.go | sed -n '86,100p'",
+        "output": "// ParsePSAExportRows parses CSV records from a PSA communication spreadsheet.\n// Dynamically finds the header row by scanning for known PSA column names.\n...\nfunc ParsePSAExportRows(records [][]string) ([]PSAExportRow, []ParseError, error) {\n\theaderIdx := FindPSAHeaderRow(records)\n\tif headerIdx < 0 {\n\t\treturn nil, nil, fmt.Errorf(\n\t\t\t\"could not find PSA header row (expected columns: cert number, listing title, grade)\")\n\t}",
+        "file_line": "docs/USER_GUIDE.md:102"
+      },
+      {
+        "claim": "USER_GUIDE.md:107 says the import 'Defaults to grade 9 if no grade is found in the title'. No such default exists anywhere in the CSV import or inventory packages.",
+        "command": "git grep -nE 'Defaults? to grade 9|defaultGrade' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/csvimport internal/domain/inventory",
+        "output": "(empty — exit 1)",
+        "file_line": "docs/USER_GUIDE.md:107"
+      },
+      {
+        "claim": "USER_GUIDE.md:50-64 documents (Sport at :57, Inclusion List at :64) the campaign-creation form as having a 'Sport' field and an 'Inclusion List' field. The form has neither. `inclusion_list` survives only as a write-only legacy mirror column derived by deriveLegacyMirror() for rollback compatibility; migration 000024 replaced the inclusion/exclusion model with a language axis and a subject-filter mode, and both of those new controls are undocumented.",
+        "command": "git grep -niE '\"Sport\"|label=\"Sport' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src ; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/src/react/ui/CampaignFormFields.tsx | grep -nE 'label=\"|ariaLabel='",
+        "output": "first command: (empty — exit 1). second command: label=\"Buy Terms (%)\" :110, label=\"Daily Spend Cap ($)\" :114, label=\"Expected Fill Rate (%)\" :120, label=\"eBay Fee %\" :124, label=\"PSA Sourcing Fee ($)\" :128, label=\"CL Confidence\" :135, label=\"Name\" :246, label=\"Phase\" :251, label=\"Year Range\" :255, label=\"Grade Range\" :274, label=\"Price Range\" :277, ariaLabel=\"Subject filter mode\" :286, label={... 'Excluded Subjects' : 'Targeted Subjects'} :294 — no Sport, no Inclusion List.",
+        "file_line": "docs/USER_GUIDE.md:57"
+      },
+      {
+        "claim": "USER_GUIDE.md:137-145 documents exactly four sale channels — eBay, TCGPlayer, Local, Other. Three of those four are marked in the source as legacy values kept only for backward-compatible DB reads, and the two current channels (Website, InPerson) are absent from the guide.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/core_types.go | sed -n '82,96p'",
+        "output": "const (\n\tSaleChannelEbay     = constants.SaleChannelEbay\n\tSaleChannelWebsite  = constants.SaleChannelWebsite\n\tSaleChannelInPerson = constants.SaleChannelInPerson\n)\n\n// Legacy channel values — kept for backward-compatible DB reads.\nconst (\n\tSaleChannelTCGPlayer  = constants.SaleChannelTCGPlayer\n\tSaleChannelLocal      = constants.SaleChannelLocal\n\tSaleChannelOther      = constants.SaleChannelOther\n\tSaleChannelGameStop   = constants.SaleChannelGameStop\n\tSaleChannelCardShow   = constants.SaleChannelCardShow\n\tSaleChannelDoubleHolo = constants.SaleChannelDoubleHolo\n)",
+        "file_line": "docs/USER_GUIDE.md:137"
+      },
+      {
+        "claim": "USER_GUIDE.md:266 states 'Card Ladder does not offer an API, so CL values are manually entered per purchase.' There is an eight-file Card Ladder HTTP client, a 525-line refresh scheduler that writes CL values back onto purchases, and seven admin routes driving it.",
+        "command": "git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/adapters/clients/cardladder/ ; git grep -n 'admin/cardladder' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/httpserver/routes.go ; git grep -n 'UpdatePurchaseCLValue' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/scheduler/cardladder_refresh.go",
+        "output": "clients/cardladder: auth.go auth_test.go client.go client_test.go firestore.go functions.go functions_test.go types.go\nroutes.go:62-68 — POST /api/admin/cardladder/config, GET .../status, GET .../failures, POST .../refresh, POST .../add-card, POST .../sync-to-cl, GET .../coverage\ncardladder_refresh.go:25: UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error",
+        "file_line": "docs/USER_GUIDE.md:266"
+      },
+      {
+        "claim": "The document is stamped 'Last updated: March 2026', predating migration 000024's targeting-axes rewrite, the csvimport carve-out (SLA-35) and the Card Ladder client. This is the only end-user-facing document in the repository, and it produced zero docs-map records, so nothing else in this audit covers it.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:docs/USER_GUIDE.md | tail -3",
+        "output": "*Last updated: March 2026*",
+        "file_line": "docs/USER_GUIDE.md:308"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — subject is a Markdown assertion, not a Go symbol. No interface can satisfy or hide a prose claim.",
+      "functional_options": "N/A — no Go symbol is proposed for removal, so no option-shaped silent degradation is possible.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked: `git grep -n 'go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'` shows the only embeds are the SQL migrations and the web dist; no Markdown file under docs/ is embedded into the binary, so editing these documents cannot change runtime behavior.",
+      "build_tags": "Both tag sets searched: default and `integration`. Documentation is not compiled, so no tag can hide a consumer.",
+      "registration": "Checked on the code side of each claim: the campaign form's live field set was read from web/src/react/ui/CampaignFormFields.tsx; the Card Ladder admin routes were read from the mux registrations in internal/adapters/httpserver/routes.go:62-68; the CSV header contract was read from FindPSAHeaderRow/ParsePSAExportRows. None of the documented-but-absent items has a registration site.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "Directly relevant and checked: the CSV importer resolves columns by string-keyed header lookup (BuildHeaderMap/colIdx in parse_helpers.go), which is exactly why the documented column names are load-bearing — a wrong header string is an import failure, not a compile error."
+    },
+    "proposed_fix": "Rewrite the four stale sections of docs/USER_GUIDE.md against the current code: the CSV Import section against ParsePSAExportRows' required headers (cert number / listing title / grade / price paid) and the actual upload routes (/api/purchases/import-certs|-external|-orders|-psa); the campaign-creation table against CampaignFormFields.tsx, dropping Sport and Inclusion List and adding the target-language axis and subject-filter mode; the Sale Channels table against the current constants (Ebay, Website, InPerson), noting the legacy values as historical; and the Card Ladder FAQ entry to describe the client, the refresh scheduler and the admin surface. Re-stamp the 'Last updated' line.",
+    "blast_radius": [
+      "docs/USER_GUIDE.md"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "Every column name in the CSV Import section appears in the `psaHeaderAliases`/`FindPSAHeaderRow` inputs in internal/domain/csvimport/parse_helpers.go.",
+      "Every field name in the campaign-creation table appears as a `label=` or `ariaLabel=` in web/src/react/ui/CampaignFormFields.tsx, and every such label appears in the table.",
+      "Every channel named in the Sale Channels table appears in the non-legacy const block of internal/domain/inventory/core_types.go, or is explicitly labelled legacy.",
+      "`git grep -n 'does not offer an API' docs/USER_GUIDE.md` returns empty.",
+      "`git grep -nE 'Sport|Inclusion List' docs/USER_GUIDE.md` returns empty."
+    ]
+  },
+  {
+    "id": "DCT-002",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "config",
+      "identity": "Server.ListenAddr default vs the documented :8081 / --port contract"
+    },
+    "category": "docs",
+    "title": "Every document tells you to run `./slabledger` and reach :8081; the bare binary binds 127.0.0.1:8080, and `server --port N` is a no-op without --web",
+    "severity": "high",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "The listen address defaults to 127.0.0.1:8080 and is only re-derived from Mode.WebPort inside FromFlags, and only when Mode.WebMode is true. WebMode has no default and no env binding — it is set exclusively by the -web/--web flag.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/platform/config/defaults.go | sed -n '7,16p' ; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/platform/config/loader.go | sed -n '231,259p'",
+        "output": "defaults.go: Mode: ModeConfig{WebPort: 8081, RateLimitRequests: 300, TrustProxy: false}, Server: ServerConfig{ListenAddr: \"127.0.0.1:8080\", ...} — note WebMode is absent, so it defaults to false.\nloader.go:233: fs.BoolVar(&cfg.Mode.WebMode, \"web\", cfg.Mode.WebMode, \"Start web server mode instead of CLI\")\nloader.go:252: if cfg.Mode.WebMode {\nloader.go:253:   if envAddr := os.Getenv(\"HTTP_LISTEN_ADDR\"); envAddr != \"\" { cfg.Server.ListenAddr = envAddr } else {\nloader.go:256:     cfg.Server.ListenAddr = fmt.Sprintf(\"0.0.0.0:%d\", cfg.Mode.WebPort) } }",
+        "file_line": "internal/platform/config/loader.go:252"
+      },
+      {
+        "claim": "cmd/slabledger/server.go only falls back to WebPort when ListenAddr is the empty string. It is never empty — the default is a non-empty literal — so Mode.WebPort never reaches the listener except through the WebMode branch above.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:cmd/slabledger/server.go | sed -n '216,220p'",
+        "output": "\taddr := cfg.Server.ListenAddr\n\tif addr == \"\" {\n\t\taddr = fmt.Sprintf(\"0.0.0.0:%d\", cfg.Mode.WebPort)\n\t}",
+        "file_line": "cmd/slabledger/server.go:217"
+      },
+      {
+        "claim": "HTTP_LISTEN_ADDR cannot rescue the bare invocation: .env.example ships it empty, and envString skips empty values.",
+        "command": "git grep -n 'HTTP_LISTEN_ADDR' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- .env.example internal/platform/config/loader.go",
+        "output": ".env.example:55:HTTP_LISTEN_ADDR=\"\"\nloader.go:106:\tenvString(\"HTTP_LISTEN_ADDR\", &cfg.Server.ListenAddr)\nloader.go:253:\t\tif envAddr := os.Getenv(\"HTTP_LISTEN_ADDR\"); envAddr != \"\" {",
+        "file_line": ".env.example:55"
+      },
+      {
+        "claim": "Four places document the bare invocation and promise :8081 — including the binary's own help text, which additionally advertises `slabledger server --port 9090` as the way to change the port. Without --web that flag parses and is then discarded.",
+        "command": "git grep -n './slabledger$\\|Start web server on :8081\\|localhost:8081\\|go run ./cmd/slabledger' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- CLAUDE.md README.md docs/DEVELOPMENT.md ; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:cmd/slabledger/main.go | grep -n 'default port 8081\\|--port 9090'",
+        "output": "CLAUDE.md:10:./slabledger                              # Start web server on :8081\nREADME.md:20-22: ./slabledger  /  # Open http://localhost:8081\ndocs/DEVELOPMENT.md:256:| Frontend proxy 502 | Backend not running on :8081. Start backend: `go run ./cmd/slabledger` |\nmain.go showHelp(): \"slabledger                    # Start web server (default port 8081)\" and \"slabledger server --port 9090 # Custom port\"",
+        "file_line": "CLAUDE.md:10"
+      },
+      {
+        "claim": "Every invocation that actually works passes --web explicitly, which is why the drift has stayed invisible: the Makefile run target and the Docker CMD both do. Nothing in the repo runs the binary the way the documentation says to.",
+        "command": "git grep -n 'cmd/slabledger --web\\|CMD \\[' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- Makefile Dockerfile",
+        "output": "Makefile:48: go run ./cmd/slabledger --web --port $${PORT:-8081}\nMakefile:51: go run ./cmd/slabledger --web --port 8081\nDockerfile:98: CMD [\"--web\", \"--port\", \"8081\"]",
+        "file_line": "Dockerfile:98"
+      },
+      {
+        "claim": "The consequence is not cosmetic. The Vite dev proxy hard-codes localhost:8081, and the devcontainer publishes 8081, so a developer following README.md gets a server on a port nothing proxies to — bound to 127.0.0.1, which is additionally unreachable through the devcontainer's published port.",
+        "command": "git grep -n '8081' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/vite.config.js .devcontainer/docker-compose.yml",
+        "output": "web/vite.config.js:56: target: 'http://localhost:8081',\nweb/vite.config.js:61: target: 'http://localhost:8081',\n.devcontainer/docker-compose.yml:61: - \"8081:8081\"      # Application",
+        "file_line": "web/vite.config.js:56"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — subject is a Markdown assertion, not a Go symbol. No interface can satisfy or hide a prose claim.",
+      "functional_options": "Checked and relevant in spirit: the WebMode gate is exactly the silent-degradation shape the preamble warns about — removing or failing to set it still compiles and still starts a server, just on the wrong address. That is why the drift never produced a build failure.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — ListenAddr carries no struct tag and crosses no wire boundary; it is read once at startup.",
+      "go_embed": "Checked: `git grep -n 'go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'` shows the only embeds are the SQL migrations and the web dist; no Markdown file under docs/ is embedded into the binary, so editing these documents cannot change runtime behavior.",
+      "build_tags": "Both tag sets searched: default and `integration`. Documentation is not compiled, so no tag can hide a consumer.",
+      "registration": "Checked: the only registration sites for the -web flag are Dockerfile:98 CMD and Makefile:48,51. Both set it; the four documented invocations do not.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "Checked: ListenAddr is consumed as a plain string by http.Server{Addr: addr} in cmd/slabledger/server.go:221; there is no string-keyed indirection that could supply a different value."
+    },
+    "proposed_fix": "Pick one of two directions and make the documentation match. Either (a) change the default so the bare binary does what four documents say — set Server.ListenAddr's default empty (letting cmd/slabledger/server.go:218's existing WebPort fallback fire) or default WebMode to true, since the binary has no non-web mode left; or (b) keep the flag requirement and correct README.md:20, CLAUDE.md:10, docs/DEVELOPMENT.md:256 and showHelp() to say `./slabledger --web --port 8081`. Option (a) is smaller and removes the trap; option (b) preserves current behavior. Either way, showHelp()'s `slabledger server --port 9090` line must stop advertising a flag that is discarded.",
+    "blast_radius": [
+      "internal/platform/config/defaults.go",
+      "internal/platform/config/loader.go",
+      "internal/platform/config/config_test.go",
+      "cmd/slabledger/main.go",
+      "README.md",
+      "CLAUDE.md",
+      "docs/DEVELOPMENT.md"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Building the binary and running it exactly as the chosen document says produces a server reachable at the address that document names — demonstrated by the startup log line and a successful `curl /api/health`.",
+      "`go test ./internal/platform/config/...` passes; TestFromFlags_WebMode's assertion that --web --port 3000 yields 0.0.0.0:3000 still holds.",
+      "A test exists that pins the bare-invocation listen address, so the default and the documentation cannot drift apart again silently.",
+      "`docker build` + `docker run` still serves on 8081 (the Dockerfile CMD path is unchanged or updated in step)."
+    ]
+  },
+  {
+    "id": "DCT-003",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "config",
+      "identity": "ModeConfig.WebMode (internal/platform/config/types.go:7)"
+    },
+    "category": "dead-code",
+    "title": "Verdict on the Phase 1 lead: WebMode is live, not dead — the config map's single dead field is a false positive",
+    "severity": "low",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "The config map scored ModeConfig.WebMode as the run's only dead config field on the grounds that no reference to it exists outside internal/platform/config. That count is correct and the conclusion does not follow: the field's consumer is a CLI flag binding whose only setters are outside Go source entirely.",
+        "command": "git grep -nE '\\bWebMode\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "internal/platform/config/config.go:24, :25 (PrintConfig)\ninternal/platform/config/config_test.go:83, :171\ninternal/platform/config/loader.go:233 (flag binding), :252 (behavioral gate)\ninternal/platform/config/types.go:7 (declaration)",
+        "file_line": "internal/platform/config/types.go:7"
+      },
+      {
+        "claim": "The field is bound to the -web flag and gates a real behavioral branch — it decides whether Server.ListenAddr is re-derived from Mode.WebPort. Deleting it would silently change the address the server binds under every shipping invocation.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/platform/config/loader.go | sed -n '233p;250,258p'",
+        "output": "233:\tfs.BoolVar(&cfg.Mode.WebMode, \"web\", cfg.Mode.WebMode, \"Start web server mode instead of CLI\")\n250:\t// Update server listen address from port if in web mode\n251:\t// Only override if not explicitly set via HTTP_LISTEN_ADDR env var\n252:\tif cfg.Mode.WebMode {\n253:\t\tif envAddr := os.Getenv(\"HTTP_LISTEN_ADDR\"); envAddr != \"\" {\n254:\t\t\tcfg.Server.ListenAddr = envAddr\n255:\t\t} else {\n256:\t\t\tcfg.Server.ListenAddr = fmt.Sprintf(\"0.0.0.0:%d\", cfg.Mode.WebPort)\n257:\t\t}\n258:\t}",
+        "file_line": "internal/platform/config/loader.go:252"
+      },
+      {
+        "claim": "Two live setters exist, both outside Go: the Docker CMD that every deployed container runs, and the Makefile run target. This is preamble mechanism 7 (registration / wiring) in a form no Go-source grep can see.",
+        "command": "git grep -n 'CMD \\[\\|cmd/slabledger --web' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- Dockerfile Makefile",
+        "output": "Dockerfile:98:CMD [\"--web\", \"--port\", \"8081\"]\nMakefile:48:\t\tbash -c 'set -a && source .env && set +a && go run ./cmd/slabledger --web --port $${PORT:-8081}' ...\nMakefile:51:\t\tgo run ./cmd/slabledger --web --port 8081 ...",
+        "file_line": "Dockerfile:98"
+      },
+      {
+        "claim": "main.go treats --web as a first-class dispatch token, further confirming it is part of the supported CLI surface rather than a vestige.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:cmd/slabledger/main.go | grep -n -A2 'case \"--web\"'",
+        "output": "\t\tcase \"--web\":\n\t\t\tmode = \"server\"\n\t\t\targs = os.Args[1:]",
+        "file_line": "cmd/slabledger/main.go"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "No — WebMode is a bool struct field, not a method; it cannot participate in an interface method set.",
+      "functional_options": "No functional option sets it; the setter is flag.FlagSet.BoolVar at loader.go:233. But the option-shaped risk is present: removal compiles and degrades silently, which is why it is not dead.",
+      "embedding": "ModeConfig is a named field on Config (`Mode ModeConfig`), not embedded; there are no promoted accessors. Verified by reading internal/platform/config/types.go.",
+      "serialization": "No struct tag on the field and no JSON/YAML marshalling of Config anywhere; PrintConfig writes it with fmt.Printf, not a marshaller.",
+      "go_embed": "Not embedded. The only //go:embed directives at this revision are the SQL migrations and the web dist; neither carries config values.",
+      "build_tags": "Searched under both default and `integration` tags. No additional reference appears under the integration tag.",
+      "registration": "YES — this is the decisive check. The flag binding at loader.go:233 plus the Dockerfile CMD at :98 and Makefile:48,51 are live registration sites outside Go source, invisible to the map's Go-only scan.",
+      "init_side_effects": "No init() in internal/platform/config sets or reads it; verified by reading the package's files.",
+      "reflection_or_string": "The flag name \"web\" is a string literal at loader.go:233 and is matched against os.Args at runtime — a string-keyed reachability path, and precisely the one the map could not follow."
+    },
+    "proposed_fix": "No removal. Amend the config map's classification, and add a short comment at internal/platform/config/types.go:7 recording that WebMode's only setters are the -web flag (Dockerfile CMD, Makefile run target) so the next reference scan does not re-file it as dead. The genuine debt in this area is DCT-002, not this field.",
+    "blast_radius": [
+      "internal/platform/config/types.go",
+      "docs/audit/runs/2026-08-08/maps/config-map.json"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "No code is removed; `go build ./... && go test ./internal/platform/config/...` still pass unchanged.",
+      "A reviewer reading internal/platform/config/types.go:7 can name WebMode's setters without leaving the file."
+    ]
+  },
+  {
+    "id": "DCT-004",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "test",
+      "identity": "web/tests/e2e/visual-regression.spec.ts (240 lines) + its 10 committed baseline snapshots"
+    },
+    "category": "docs",
+    "title": "The visual-regression suite is permanently skipped — its gate env var is set nowhere in the repository, yet CI runs the spec on every PR and on the browser matrix",
+    "severity": "medium",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "Every one of the six describe blocks in the spec is gated on RUN_VISUAL_REGRESSION.",
+        "command": "git grep -n 'RUN_VISUAL_REGRESSION' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+        "output": "web/tests/e2e/visual-regression.spec.ts:50, :126, :137, :173, :199 — five test.skip(!process.env.RUN_VISUAL_REGRESSION, ...) guards, and nothing else in the entire tree at this revision. The variable is set by no workflow, no Makefile target, no package.json script, no .env.example entry, and no document.",
+        "file_line": "web/tests/e2e/visual-regression.spec.ts:50"
+      },
+      {
+        "claim": "The spec is nevertheless collected and executed by CI — frontend-ci.yml runs the full Playwright suite and browser-matrix.yml runs it per browser and per device — so the cost is paid on every run and the signal is always green.",
+        "command": "git grep -n 'playwright test' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- .github/workflows",
+        "output": ".github/workflows/browser-matrix.yml:82: npx playwright test --project=${{ matrix.browser }} --shard=...\n.github/workflows/browser-matrix.yml:84: npx playwright test --project=${{ matrix.browser }}\n.github/workflows/browser-matrix.yml:174: npx playwright test --project=\"${{ matrix.device }}\"\n.github/workflows/frontend-ci.yml:181: npx playwright test --grep @smoke\n.github/workflows/frontend-ci.yml:259: npx playwright test",
+        "file_line": ".github/workflows/frontend-ci.yml:259"
+      },
+      {
+        "claim": "Ten baseline PNG snapshots are committed for two of the eight screenshot assertions. They can never be compared against anything, and they can never be regenerated by anyone who does not first read the spec source to discover the undocumented gate.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/tests/e2e",
+        "output": "web/tests/e2e/README.md\nweb/tests/e2e/accessibility.spec.ts\nweb/tests/e2e/visual-regression.spec.ts\nweb/tests/e2e/visual-regression.spec.ts-snapshots/header-navigation-{Mobile-Chrome,Mobile-Safari,chromium,firefox,webkit}-linux.png\nweb/tests/e2e/visual-regression.spec.ts-snapshots/search-form-{Mobile-Chrome,Mobile-Safari,chromium,firefox,webkit}-linux.png",
+        "file_line": "web/tests/e2e/visual-regression.spec.ts-snapshots/"
+      },
+      {
+        "claim": "The spec declares eight toHaveScreenshot assertions across pages, components, responsive, dark mode and hover states — a substantial suite, none of which has ever run in CI at this revision.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/tests/e2e/visual-regression.spec.ts | grep -cE 'toHaveScreenshot'",
+        "output": "8",
+        "file_line": "web/tests/e2e/visual-regression.spec.ts"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — subject is a Markdown assertion, not a Go symbol. No interface can satisfy or hide a prose claim.",
+      "functional_options": "N/A — no Go symbol is proposed for removal, so no option-shaped silent degradation is possible.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked: `git grep -n 'go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'` shows the only embeds are the SQL migrations and the web dist; no Markdown file under docs/ is embedded into the binary, so editing these documents cannot change runtime behavior.",
+      "build_tags": "Go build tags are not applicable to a Playwright spec. The analogous gating mechanism — Playwright project selection and --grep tag filters — was checked: web/package.json defines test:e2e (no filter), test:a11y (--grep @a11y) and test:perf (--grep @perf). The spec's describes are tagged @visual, and no script or workflow greps for @visual, so the only thing that would run it is the unfiltered `playwright test` invocations, which do collect it and then skip it.",
+      "registration": "Checked: the spec IS registered (collected by the unfiltered `playwright test` runs in frontend-ci.yml:259 and browser-matrix.yml:82,84,174). The gap is the env var, not the wiring.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "RUN_VISUAL_REGRESSION is a string-keyed process.env lookup; the search above covers every tracked file, so its absence is established by the empty result outside the spec itself, not by a citation."
+    },
+    "proposed_fix": "Decide whether visual regression is a capability this project keeps. If yes, set RUN_VISUAL_REGRESSION=1 in the workflow step that runs the full suite (browser-matrix.yml is the natural home, since the baselines are per-browser), regenerate the missing six baselines with `playwright test --update-snapshots`, and document the variable in .env.example and web/tests/e2e/README.md. If no, delete web/tests/e2e/visual-regression.spec.ts and its -snapshots directory. Leaving it as-is is the one option that costs CI time and returns nothing.",
+    "blast_radius": [
+      "web/tests/e2e/visual-regression.spec.ts",
+      "web/tests/e2e/visual-regression.spec.ts-snapshots/",
+      ".github/workflows/browser-matrix.yml",
+      ".github/workflows/frontend-ci.yml",
+      "web/tests/e2e/README.md",
+      ".env.example"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "If kept: a CI run shows the @visual tests executing (non-skipped) with a pass/fail result for all eight screenshot assertions, and a deliberately introduced visual change makes the job red.",
+      "If removed: `git grep -n RUN_VISUAL_REGRESSION` returns empty and `npx playwright test` reports no skipped @visual tests.",
+      "Either way, `git grep -rn 'RUN_VISUAL_REGRESSION'` has no hit that is only a guard with no setter anywhere."
+    ]
+  },
+  {
+    "id": "DCT-005",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "test",
+      "identity": "internal/integration/dh_search_diag_test.go and internal/integration/dh_match_search_test.go — 7 assertion-free test functions"
+    },
+    "category": "docs",
+    "title": "Seven integration tests contain no failure assertion and swallow API errors — they burn real DH Enterprise quota in scheduled CI and cannot go red",
+    "severity": "medium",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "Across the 243 tracked *_test.go files and 1376 top-level Test functions, 19 have no t.Error/t.Fatal/t.Fail/t.Skip and no require./assert. Twelve of those are legitimate (compile-time interface checks, must-not-panic checks, Stop-idempotency, PrintConfig smoke). The remaining seven are all in two integration files and are diagnostics, not tests.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep '_test\\.go$' | while read f; do git show \"06d9f8ce172dada98f307f860e2e2985c9fb5ca6:$f\" | awk -v F=\"$f\" '/^func Test.*\\(t \\*testing\\.T\\)/{if(n&&!a)print F\":\"s\":\"n; n=$2; s=NR; a=0} /t\\.(Error|Fatal|Fail|Skip)|require\\.|assert\\./{a=1} END{if(n&&!a)print F\":\"s\":\"n}'; done",
+        "output": "19 functions total; the seven diagnostic ones are:\ninternal/integration/dh_match_search_test.go:66 TestDHMatchSearch_MatchEndpoint\ninternal/integration/dh_match_search_test.go:111 TestDHMatchSearch_MatchTitle\ninternal/integration/dh_match_search_test.go:158 TestDHMatchSearch_SearchEndpoint\ninternal/integration/dh_match_search_test.go:296 TestDHMatchSearch_CompareResolveVsMatch\ninternal/integration/dh_search_diag_test.go:17 TestDHSearchDiag_BasicQueries\ninternal/integration/dh_search_diag_test.go:83 TestDHSearchDiag_MatchWithDHNames\ninternal/integration/dh_search_diag_test.go:132 TestDHSearchDiag_CardLookup",
+        "file_line": "internal/integration/dh_search_diag_test.go:17"
+      },
+      {
+        "claim": "The files say so themselves in their header comments, and the bodies confirm it: an API error is logged and returned from, not failed on.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/integration/dh_search_diag_test.go | sed -n '1,2p;62,70p'",
+        "output": "// DH Search diagnostic tests — probing what search actually returns.\n// Run with: go test ./internal/integration/ -tags integration -v -run TestDHSearchDiag -timeout 5m\n...\n\t\t\tif err != nil {\n\t\t\t\tt.Logf(\"ERROR: %v\", err)\n\t\t\t\treturn\n\t\t\t}\n\n\t\t\tt.Logf(\"hits=%d filtered=%d pages=%d\", resp.Meta.TotalHits, resp.Meta.FilteredHits, resp.Meta.TotalPages)",
+        "file_line": "internal/integration/dh_search_diag_test.go:66"
+      },
+      {
+        "claim": "These are not developer-only scratch files. The scheduled integration job runs the whole ./internal/integration/... package with real credentials, and commit 176871e5 deliberately made that job fail loudly rather than skip — so these seven now consume paid DH Enterprise calls on a schedule while being structurally incapable of reporting a regression.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:.github/workflows/test.yml | sed -n '87,150p'",
+        "output": "  integration:\n    environment: integration-tests\n    ...\n    - name: Verify integration credentials are present\n      ... echo \"::error::Missing integration credentials:$missing — set them in the integration-tests environment\"\n      ... echo \"All 5 integration credentials are present.\"\n    - name: Run integration tests\n      run: go test -race -v -timeout 20m -tags integration ./internal/integration/... 2>&1 | tee test-output.txt",
+        "file_line": ".github/workflows/test.yml:148"
+      },
+      {
+        "claim": "TestDHSearchDiag_BasicQueries alone fans out to 15 sub-cases, each a live SearchCards call; the four dh_match_search functions add more. The wall-clock and quota cost is real and recurring.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/integration/dh_search_diag_test.go | sed -n '20,50p'",
+        "output": "queries := []struct{ name, query, set, num, lang string }{ ... 15 entries: \"just Pikachu\", \"just Charizard\", \"Pikachu + en\", \"Charizard ex\", \"Pikachu in 151\", \"Charizard in SV 151\", \"Mew ex in SV 151\", \"Mew ex #205\", \"SV 151 #173\", \"SV 151 #183\", \"query: Pikachu 151\", \"query: Charizard ex 151\", \"query: Gengar Breakthrough\", \"query: Rayquaza XY Promo\", \"query: Gengar Japanese\" }",
+        "file_line": "internal/integration/dh_search_diag_test.go:20"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — the subjects are func(t *testing.T) test functions; testing.T is passed in, no interface is satisfied by them.",
+      "functional_options": "N/A — no Go symbol is proposed for removal, so no option-shaped silent degradation is possible.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked: `git grep -n 'go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'` shows the only embeds are the SQL migrations and the web dist; no Markdown file under docs/ is embedded into the binary, so editing these documents cannot change runtime behavior.",
+      "build_tags": "Both files carry //go:build integration and were found only because the scan was run over all tracked *_test.go regardless of tag. Under the default tag set they are invisible; under `integration` they compile and run. This is preamble mechanism 6 and it is the reason a default-tag audit would have missed them entirely.",
+      "registration": "Checked: registration is via the Go test runner's reflective discovery of Test* names, driven by `go test -tags integration ./internal/integration/...` in .github/workflows/test.yml:148. They are wired and they do run.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "The Go test runtime discovers these by name reflection — the same mechanism the LENS-BRIEF warns makes TestXxx look zero-referenced. That is why the finding is about their content, not their reachability."
+    },
+    "proposed_fix": "Either promote them to real tests or take them out of the scheduled run. Promotion means giving each sub-case a concrete expectation (e.g. 'searching \"Charizard\" in Pokemon Scarlet & Violet 151 returns at least one result whose Number is 199') and turning the `t.Logf(\"ERROR: %v\"); return` swallows into t.Fatalf. Removal means deleting the two files, or moving them behind a separate build tag (e.g. //go:build dhdiag) so `-tags integration` no longer collects them and a developer opts in explicitly. The header comments already document a -run invocation, which is the shape of an opt-in tool rather than a suite member.",
+    "blast_radius": [
+      "internal/integration/dh_search_diag_test.go",
+      "internal/integration/dh_match_search_test.go",
+      ".github/workflows/test.yml",
+      "CLAUDE.md (Testing section, integration-tests description)"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "If promoted: injecting a wrong expectation into any one of the seven makes `go test -tags integration -run <Name> ./internal/integration/` fail. Today it passes regardless.",
+      "If separated: `go test -tags integration ./internal/integration/... -v` no longer lists any TestDHSearchDiag_* or TestDHMatchSearch_* case, and the scheduled workflow's runtime drops accordingly.",
+      "No remaining function under internal/integration/ both makes a live API call and has no assertion — verifiable by re-running the scan command in this finding's first evidence entry."
+    ]
+  },
+  {
+    "id": "DCT-006",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "test",
+      "identity": "web/tests/components/ErrorBoundary.test.jsx:327 and :337"
+    },
+    "category": "docs",
+    "title": "Two ErrorBoundary tests are unconditionally it.skip'd, leaving the dev-vs-prod error-detail branch untested",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Both tests are disabled with a bare it.skip — no env gate, no condition. They are the only unconditional skips in the frontend suite; every other skip in web/tests is an env-gated Playwright guard.",
+        "command": "git grep -nE '\\b(it|test|describe)\\.(skip|todo)\\b|\\bxit\\(' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src web/tests",
+        "output": "web/tests/components/ErrorBoundary.test.jsx:327: it.skip('should show error details in development mode', ...)\nweb/tests/components/ErrorBoundary.test.jsx:337: it.skip('should not show error details in production mode', ...)\nweb/tests/e2e/visual-regression.spec.ts:50,126,137,173,199 (env-gated — see DCT-004)\nweb/tests/screenshot-all-pages.spec.ts:167 (env-gated on SCREENSHOT_BACKEND, set by `make screenshots`)",
+        "file_line": "web/tests/components/ErrorBoundary.test.jsx:327"
+      },
+      {
+        "claim": "The reason given is a real constraint, but a solvable one: Vitest supports vi.stubEnv for import.meta.env, so the stated blocker no longer holds as written.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/tests/components/ErrorBoundary.test.jsx | sed -n '324,346p'",
+        "output": "  describe('development mode', () => {\n    // Note: import.meta.env.DEV is a build-time constant in Vite\n    // It cannot be changed at test runtime, so we skip testing this behavior\n    it.skip('should show error details in development mode', () => { ... expect(screen.getByText('Error Details')).toBeInTheDocument(); });\n\n    it.skip('should not show error details in production mode', () => { ... expect(screen.queryByText('Error Details')).not.toBeInTheDocument(); });\n  });",
+        "file_line": "web/tests/components/ErrorBoundary.test.jsx:325"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only",
+      "I did not verify against the installed Vitest version that vi.stubEnv covers import.meta.env.DEV for this project's config — that is the one check left open, and it is why this is `strong` rather than `mechanical`."
+    ],
+    "build_tags": [
+      "(default)"
+    ],
+    "proposed_fix": "Re-enable both tests using vi.stubEnv('DEV', true/false) (or split the branch into a prop/injected flag the test can set), or delete them along with the describe block. A skipped test with a stale rationale is worse than no test: it reads as coverage in the file and provides none.",
+    "blast_radius": [
+      "web/tests/components/ErrorBoundary.test.jsx",
+      "web/src/react/components/ErrorBoundary (the component under test)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`npm test` in web/ reports zero skipped tests in ErrorBoundary.test.jsx.",
+      "If re-enabled: inverting the ErrorBoundary's dev-mode condition makes at least one of the two tests fail.",
+      "If deleted: `git grep -n 'it.skip' web/tests/components/` returns empty."
+    ]
+  },
+  {
+    "id": "DCT-007",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "docs/polish-report.md"
+    },
+    "category": "docs",
+    "title": "docs/polish-report.md is a two-line orphaned checkpoint stub from a tool run in April 2026",
+    "severity": "low",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "The entire tracked file is a header and a checkpoint line. It contains no findings, no report body, and pins a base commit four months before the baseline. It is a tool's progress file that was committed and never cleaned up.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:docs/polish-report.md",
+        "output": "# Polish-All Report\nBase commit: ec4d261ba803c31e8e739815f5133953f115b67d | Started: 2026-04-20",
+        "file_line": "docs/polish-report.md:1"
+      },
+      {
+        "claim": "It is 96 bytes and nothing links to it.",
+        "command": "git ls-tree -r -l 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- docs/polish-report.md ; git grep -n 'polish-report' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- ':!docs/audit'",
+        "output": "100644 blob bb6253093c69b53e3be0aa1a41783414d30e2e30\t96\tdocs/polish-report.md\n(second command: empty — no inbound reference anywhere outside this audit's own artifacts)",
+        "file_line": "docs/polish-report.md"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — subject is a Markdown assertion, not a Go symbol. No interface can satisfy or hide a prose claim.",
+      "functional_options": "N/A — no Go symbol is proposed for removal, so no option-shaped silent degradation is possible.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked: `git grep -n 'go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'` shows the only embeds are the SQL migrations and the web dist; no Markdown file under docs/ is embedded into the binary, so editing these documents cannot change runtime behavior.",
+      "build_tags": "Both tag sets searched: default and `integration`. Documentation is not compiled, so no tag can hide a consumer.",
+      "registration": "N/A for the document itself. Where a documented mechanism has a registration site (routes.go, scheduler builder, Dockerfile CMD), that site was inspected directly and is cited in the evidence.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "N/A for the document. String-literal reachability was checked on the code side of each claim where relevant and is cited in the evidence."
+    },
+    "proposed_fix": "Delete docs/polish-report.md, and add the polish-all checkpoint filename to .gitignore so the next run's progress file does not get committed again.",
+    "blast_radius": [
+      "docs/polish-report.md",
+      ".gitignore"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`git ls-tree -r --name-only HEAD -- docs/polish-report.md` returns empty.",
+      "No document links to it — `git grep -n 'polish-report'` returns empty outside .gitignore."
+    ]
+  },
+  {
+    "id": "DCT-008",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "Five removed subsystems still documented as present: internal/platform/cache, internal/platform/errors, the TCGdex client, the Cache Warmup scheduler, and .github/workflows/fly-deploy.yml"
+    },
+    "category": "docs",
+    "title": "The developer docs describe five subsystems that no longer exist, three of them in more than one document",
+    "severity": "high",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "internal/platform/cache and internal/platform/errors are asserted by three documents between them. Neither directory exists; canonjson/ and cardutil/ exist and appear in no document.",
+        "command": "git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/platform/",
+        "output": "internal/platform/canonjson\ninternal/platform/cardutil\ninternal/platform/config\ninternal/platform/crypto\ninternal/platform/resilience\ninternal/platform/storage\ninternal/platform/telemetry",
+        "file_line": "CLAUDE.md:38"
+      },
+      {
+        "claim": "docs/DEVELOPMENT.md:134 carries a 30-line 'Cache System' section documenting a type-safe cache API with a worked example. The only occurrence of the API in the whole repository is that documentation line.",
+        "command": "git grep -rn 'NewCardSliceCache' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+        "output": "docs/DEVELOPMENT.md:134 region only — the documentation line itself, and no Go source.",
+        "file_line": "docs/DEVELOPMENT.md:134"
+      },
+      {
+        "claim": "docs/DEVELOPMENT.md:204 documents a TCGdex.dev integration and cites internal/adapters/clients/tcgdex/. No such client exists; the only surviving trace of TCGdex is example URLs inside mock doc-comments.",
+        "command": "git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/adapters/clients/ ; git grep -in 'tcgdex' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd web",
+        "output": "clients/: cardladder dh dhlisting dhprice google httpx psa psaportal — no tcgdex.\ntcgdex hits: internal/testutil/mocks/http_client.go:30,119,120,125 (doc-comment example URLs) and internal/testutil/mocks/http_client_test.go:162. No client package, no config, no scheduler.",
+        "file_line": "docs/DEVELOPMENT.md:204"
+      },
+      {
+        "claim": "docs/SCHEDULERS.md:106 devotes a full section to a Cache Warmup scheduler with a file (cache_warmup.go) and three env gates. The env gates do not exist anywhere, and the file does not exist. The same phantom file is repeated in the File Layout block at :205, and the three phantom vars are three of the 25 identifiers the document presents as env gates at :81.",
+        "command": "git grep -n 'CACHE_WARMUP' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd .env.example ; git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/adapters/scheduler/ | grep cache",
+        "output": "(both commands empty — exit 1). CACHE_WARMUP_ENABLED, CACHE_WARMUP_INTERVAL and CACHE_WARMUP_RATE_LIMIT_DELAY appear in no Go file, no .env.example line, and no config loader read; cache_warmup.go is not a tracked path.",
+        "file_line": "docs/SCHEDULERS.md:106"
+      },
+      {
+        "claim": "docs/DEVELOPMENT.md:285 tells an operator that deployment runs through .github/workflows/fly-deploy.yml with a FLY_API_TOKEN secret. That workflow does not exist. fly.toml is tracked, so deployment is real — but an operator debugging a stuck release would go looking for a pipeline that is not in this repository.",
+        "command": "git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 .github/workflows/",
+        "output": "browser-matrix.yml\ndependabot-auto-merge.yml\ndocker-build.yml\nfrontend-ci.yml\npsa-harvest-cron.yml\ntest.yml",
+        "file_line": "docs/DEVELOPMENT.md:285"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — subject is a Markdown assertion, not a Go symbol. No interface can satisfy or hide a prose claim.",
+      "functional_options": "N/A — no Go symbol is proposed for removal, so no option-shaped silent degradation is possible.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked and decisive for the Cache Warmup claim: a scheduler cannot be reached by //go:embed, and no cache_warmup.go exists to embed. For the workflow claim, absence from .github/workflows/ is dispositive — GitHub Actions discovers workflows by directory, not by reference.",
+      "build_tags": "Both tag sets searched: default and `integration`. Documentation is not compiled, so no tag can hide a consumer.",
+      "registration": "Checked for each: no scheduler builder registers a cache-warmup job (the file does not exist); no client is constructed for TCGdex in cmd/slabledger/init_services.go; no config loader read exists for any CACHE_WARMUP_* name. Absence is established by the empty command outputs above, not by citation.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "Checked: the CACHE_WARMUP_* names are exactly the kind of string-keyed config lookup that would hide from a symbol scan, so they were searched as raw strings across internal, cmd and .env.example. Empty."
+    },
+    "proposed_fix": "Delete the five dead sections rather than trying to salvage them: the Cache System section of docs/DEVELOPMENT.md, its TCGdex entry in API Integrations, its fly-deploy paragraph (replace with how deployment is actually triggered — auto-deploy is configured in Fly, not in this repo), the Cache Warmup section and File Layout entry in docs/SCHEDULERS.md and its three env rows, and the cache/ and errors/ entries in the platform trees at CLAUDE.md:38, internal/README.md:52 and :240 and docs/ARCHITECTURE.md:85. While editing the platform trees, add the two real directories they omit (canonjson, cardutil).",
+    "blast_radius": [
+      "docs/DEVELOPMENT.md",
+      "docs/SCHEDULERS.md",
+      "docs/ARCHITECTURE.md",
+      "internal/README.md",
+      "CLAUDE.md"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "`git grep -rn 'platform/cache\\|platform/errors\\|tcgdex\\|CACHE_WARMUP\\|cache_warmup\\|fly-deploy\\|NewCardSliceCache' -- '*.md' :!docs/audit` returns empty.",
+      "Every directory named in each document's internal/platform tree is present in `git ls-tree --name-only HEAD internal/platform/`, and every directory in that listing appears in the tree or is explicitly marked as an omission.",
+      "Every env var presented as a gate in docs/SCHEDULERS.md resolves to a read in internal/platform/config."
+    ]
+  },
+  {
+    "id": "DCT-009",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "File-path claims for live code that resolve to nothing, across CLAUDE.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, internal/README.md and docs/DH_INVENTORY.md"
+    },
+    "category": "docs",
+    "title": "The same live file is given four different wrong names across four documents, and service_interfaces.go is described as holding interfaces it does not contain",
+    "severity": "medium",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "internal/domain/inventory/core_types.go is named types.go by docs/ARCHITECTURE.md:50 and docs/DEVELOPMENT.md:34, types_core.go by internal/README.md:627, and correctly only by CLAUDE.md:76. None of the three wrong names is a tracked path.",
+        "command": "git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/domain/inventory/ | grep -i type",
+        "output": "internal/domain/inventory/analytics_types.go\ninternal/domain/inventory/capital_types.go\ninternal/domain/inventory/cert_import_types.go\ninternal/domain/inventory/core_types.go\ninternal/domain/inventory/core_types_test.go\ninternal/domain/inventory/dh_types.go\ninternal/domain/inventory/health_types.go\ninternal/domain/inventory/portfolio_types.go\ninternal/domain/inventory/repository_analytics_types.go\n— no types.go, no types_core.go",
+        "file_line": "docs/ARCHITECTURE.md:50"
+      },
+      {
+        "claim": "docs/ARCHITECTURE.md:51 and five rows of its Key Interfaces table at :240-244, plus docs/DEVELOPMENT.md:34, all point CampaignRepository / PurchaseRepository / SaleRepository / AnalyticsRepository / FinanceRepository at service_interfaces.go. That file declares no repository interface at all — it holds six service-facing interfaces. A reader following the citation finds the wrong contract.",
+        "command": "git grep -nE 'type [A-Za-z]+Repository interface' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory/service_interfaces.go",
+        "output": "(empty — exit 1)",
+        "file_line": "docs/ARCHITECTURE.md:51"
+      },
+      {
+        "claim": "docs/DEVELOPMENT.md:40 cites internal/adapters/clients/pricelookup/adapter.go for the PriceLookup adapter. No tracked path contains 'pricelookup'. The adapter is a domain package, internal/domain/pricing/lookup/adapter.go — and the mislocation matters here specifically, because it inverts the hexagonal placement the rest of the docs are teaching.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -i pricelookup",
+        "output": "(empty — exit 1)",
+        "file_line": "docs/DEVELOPMENT.md:40"
+      },
+      {
+        "claim": "docs/DH_INVENTORY.md:198 maps card-name cleaning to internal/domain/inventory/dh_helpers.go. The file lives in a different package now.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep dh_helpers",
+        "output": "internal/domain/dhlisting/dh_helpers.go\ninternal/domain/dhlisting/dh_helpers_test.go",
+        "file_line": "docs/DH_INVENTORY.md:198"
+      },
+      {
+        "claim": "docs/DEVELOPMENT.md:23's 'Price Units (Critical)' section cites two Key Files, neither of which exists. This is the section the document itself marks Critical, and the cents-vs-dollars convention it exists to explain is separately contradicted at CLAUDE.md:194.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E 'handlers/formatter\\.go|pages/CampaignDetailPage\\.tsx'",
+        "output": "(empty — exit 1)",
+        "file_line": "docs/DEVELOPMENT.md:23"
+      },
+      {
+        "claim": "CLAUDE.md:84 tells the reader to run `ls internal/domain/inventory/parse_*.go` for the CSV parser set. That glob matches nothing; CSV parsing moved to internal/domain/csvimport under SLA-35, a package internal/README.md:86's domain table also omits while still attributing 'CSV import' to inventory/.",
+        "command": "git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/domain/inventory/ | grep '^internal/domain/inventory/parse_' ; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/csvimport/service.go | sed -n '1,6p'",
+        "output": "first command: (empty — exit 1)\nsecond command: package csvimport — header comment states 'It was carved out of internal/domain/inventory (SLA-35)'",
+        "file_line": "CLAUDE.md:84"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — subject is a Markdown assertion, not a Go symbol. No interface can satisfy or hide a prose claim.",
+      "functional_options": "N/A — no Go symbol is proposed for removal, so no option-shaped silent degradation is possible.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked: none of the cited-but-absent paths could be reachable via //go:embed — the embeds at this revision are SQL migrations and the web dist. A path that is not in `git ls-tree` is not in the build at all.",
+      "build_tags": "Both tag sets searched: default and `integration`. Documentation is not compiled, so no tag can hide a consumer.",
+      "registration": "N/A in the reachability sense; the subject is the citation, and a wrong path in Markdown has no registration site. The correct paths were located directly and are named in the proposed fix.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "N/A for the document. String-literal reachability was checked on the code side of each claim where relevant and is cited in the evidence."
+    },
+    "proposed_fix": "Correct each citation to the path that exists: core_types.go (ARCHITECTURE.md:50, DEVELOPMENT.md:34, internal/README.md:627); repository_*.go rather than service_interfaces.go for the eight repository interfaces (ARCHITECTURE.md:51 and the five Key Interfaces rows at :240-244, DEVELOPMENT.md:34); internal/domain/pricing/lookup/adapter.go (DEVELOPMENT.md:40); internal/domain/dhlisting/dh_helpers.go (DH_INVENTORY.md:198); internal/domain/csvimport/ (CLAUDE.md:84 and internal/README.md:86). Delete or re-source the two Price Units key-file rows at DEVELOPMENT.md:23. The cluster is large enough that a `make check` step verifying every `internal/`-prefixed path in tracked Markdown resolves would be cheaper than the next repeat.",
+    "blast_radius": [
+      "docs/ARCHITECTURE.md",
+      "docs/DEVELOPMENT.md",
+      "docs/DH_INVENTORY.md",
+      "internal/README.md",
+      "CLAUDE.md",
+      "scripts/ (optional new path-check)"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "Every path matching `(internal|cmd|web/src|scripts)/[A-Za-z0-9_./-]+\\.(go|ts|tsx|sh)` in tracked Markdown outside docs/audit/ and docs/plans/ appears in `git ls-tree -r --name-only HEAD`.",
+      "`git grep -nE 'service_interfaces\\.go' -- '*.md'` no longer associates that file with any *Repository interface.",
+      "If a checker is added: it is wired into `make check` and fails on a deliberately introduced bad path."
+    ]
+  },
+  {
+    "id": "DCT-010",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "README.md:88-113 endpoint tables and docs/DEVELOPMENT.md:235-238 monitoring commands"
+    },
+    "category": "docs",
+    "title": "README advertises six unregistered API endpoints, and both of DEVELOPMENT.md's monitoring commands fail",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Six of the nineteen endpoints in README.md's two tables are registered nowhere in router.go or routes.go, per the docs-map's set-difference against every registered path. The contrast with docs/API.md is stark: API.md's 115 documented paths reconcile exactly, so the abbreviated README table is the outlier, not the API surface.",
+        "command": "jq -r '.records[] | select(.identity==\"README.md:endpoint-table-unregistered-routes\") | .command, .note' docs/audit/runs/2026-08-08/maps/docs-map.json",
+        "output": "Six unregistered: POST /api/campaigns/{id}/archive (README:95), POST /api/campaigns/{id}/purchases/import (:97 — the real routes are /api/purchases/import-certs|-external|-orders|-psa), GET /api/campaigns/cash-flow (:104), GET /api/sets (:109), GET /api/cards/search (:110 — the catalog route is /api/cards/catalog), GET/POST/DELETE /api/favorites (:112), GET /api/status/api-usage (:113 — the real one is /api/admin/api-usage).",
+        "file_line": "README.md:88"
+      },
+      {
+        "claim": "docs/DEVELOPMENT.md's Monitoring section gives two commands; both fail. `./slabledger admin cache-stats` is not a subcommand — admin.go dispatches only version, print-config and help — and the curl targets an unregistered path.",
+        "command": "git grep -n 'cache-stats' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- cmd internal",
+        "output": "(empty — exit 1)",
+        "file_line": "docs/DEVELOPMENT.md:235"
+      },
+      {
+        "claim": "The /api/sets and /api/status/api-usage phantoms are not confined to Markdown — they are also asserted inside Go source, which is why documentation-only fixes will leave the contradiction half-standing. That half belongs to another lens; see the pointer record DCT-012.",
+        "command": "jq -r '.records[] | select(.identity==\"pointer:stale-endpoint-doc-comments-in-go\") | .defined_at, .note' docs/audit/runs/2026-08-08/maps/docs-map.json",
+        "output": "internal/adapters/httpserver/handlers/api_status_handler.go:30 — handler doc-comment says 'GET /api/status/api-usage'; internal/adapters/httpserver/handlers/spa_handler.go:133 renders a user-facing link to /api/sets. Neither path is registered.",
+        "file_line": "internal/adapters/httpserver/handlers/api_status_handler.go:30"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*. For the six README routes specifically I relied on the docs-map's recorded set-difference rather than re-deriving the full route registry myself; I re-verified only the cache-stats claim directly.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only",
+      "Unresolved check: I did not independently re-run the README-vs-router set difference. That is the sole reason this is `strong` and not `mechanical`; a verifier re-running the docs-map's recorded command would settle it."
+    ],
+    "build_tags": [
+      "(default)"
+    ],
+    "proposed_fix": "Replace README.md's two hand-maintained endpoint tables with a pointer to docs/API.md, which is accurate and complete — duplicating a 115-endpoint surface in an abbreviated table is what produced six phantoms. In docs/DEVELOPMENT.md, delete the `admin cache-stats` line and correct the curl to /api/admin/api-usage.",
+    "blast_radius": [
+      "README.md",
+      "docs/DEVELOPMENT.md"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every path named in README.md appears in the set registered by internal/adapters/httpserver/router.go and routes.go, or README no longer enumerates endpoints at all.",
+      "Both commands in docs/DEVELOPMENT.md's Monitoring section execute successfully against a running local server."
+    ]
+  },
+  {
+    "id": "DCT-011",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "internal/testutil/mocks/README.md — the mock-authoring guide CLAUDE.md points contributors at"
+    },
+    "category": "docs",
+    "title": "The mock guide's worked example, its sentinel-error list, and its exceptions all fail to compile or resolve",
+    "severity": "medium",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "The README names inventory.ErrDuplicateCert as one of five key sentinel errors. That symbol does not exist — the real one is ErrDuplicateCertNumber. Copying the documented name into a test is a compile error, and this README is the file CLAUDE.md:184 designates as the full mock guide.",
+        "command": "git grep -nE 'ErrDuplicateCert\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "(empty — exit 1). The declared symbol is ErrDuplicateCertNumber at internal/domain/inventory/errors.go:33.",
+        "file_line": "internal/testutil/mocks/README.md:176"
+      },
+      {
+        "claim": "The mock guide's companion example (internal/README.md:271, the copy CLAUDE.md sends contributors to alongside the mocks README) gives MockPriceProvider a public GetPriceFunc field. The real type has two unexported fields and is configured through functional options. The documented field name appears nowhere in Go source — only in internal/README.md's copy of the same wrong example.",
+        "command": "git grep -n 'GetPriceFunc' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 ; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/testutil/mocks/price_provider.go | sed -n '10,14p'",
+        "output": "GetPriceFunc hits: internal/README.md:271 and :275 only — no Go source.\nprice_provider.go:\ntype MockPriceProvider struct {\n\tbehavior MockBehavior\n\tmatches  map[string]*pricing.Price // Cache of mock matches\n}",
+        "file_line": "internal/README.md:271"
+      },
+      {
+        "claim": "The README opens by asserting 'All mocks use the Fn-field pattern: every interface method has a corresponding Fn field.' MockPriceProvider has no Fn field at all, and the same README concedes the exception 176 lines later — so the headline rule and the caveat contradict each other inside one file.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/testutil/mocks/README.md | sed -n '15p;184p'",
+        "output": ":15 — 'All mocks use the Fn-field pattern: every interface method has a corresponding Fn field.'\n:184 — 'MockBehavior / MockOption helpers in common.go are used only by card/HTTP mocks (legacy)'",
+        "file_line": "internal/testutil/mocks/README.md:15"
+      },
+      {
+        "claim": "The Usage Notes carve out an exception for two packages that do not exist. The only occurrence of either package name in the entire tree is the README line asserting the exception.",
+        "command": "git grep -n 'package picks\\|package favorites' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+        "output": "internal/testutil/mocks/README.md:182 — the exception line itself, and nothing else in the tree.",
+        "file_line": "internal/testutil/mocks/README.md:182"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only"
+    ],
+    "build_tags": [
+      "(default)",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "Checked and relevant: MockPriceProvider satisfies pricing.PriceProvider through methods on the concrete type, not through an Fn field — which is exactly why the README's blanket Fn-field rule is wrong about it. Verified by reading internal/testutil/mocks/price_provider.go.",
+      "functional_options": "Checked and decisive: MockPriceProvider is configured via NewMockPriceProvider(opts ...MockOption), the functional-options pattern CLAUDE.md documents as house style. The README describes a struct-field API that does not exist.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked: `git grep -n 'go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'` shows the only embeds are the SQL migrations and the web dist; no Markdown file under docs/ is embedded into the binary, so editing these documents cannot change runtime behavior.",
+      "build_tags": "Both tag sets searched: default and `integration`. Documentation is not compiled, so no tag can hide a consumer.",
+      "registration": "N/A — mocks are constructed directly in test bodies; there is no registry that could make the documented field name work.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "Checked: no reflection or string-keyed lookup supplies a GetPriceFunc; the empty grep above covers all tracked files."
+    },
+    "proposed_fix": "Correct four things in internal/testutil/mocks/README.md: rename ErrDuplicateCert to ErrDuplicateCertNumber; replace the MockPriceProvider example with the real NewMockPriceProvider(opts ...MockOption) shape (or pick a mock that genuinely uses Fn fields for the illustration); soften the ':15' claim to match the ':184' caveat rather than contradicting it; and delete the picks/favorites exception. Fix the duplicated wrong example at internal/README.md:271-275 in the same pass, since it is a copy.",
+    "blast_radius": [
+      "internal/testutil/mocks/README.md",
+      "internal/README.md"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every Go identifier named in internal/testutil/mocks/README.md resolves — `git grep -nE '\\b<Name>\\b' -- '*.go'` is non-empty for each.",
+      "The example code block compiles when pasted into a scratch test in internal/testutil/mocks/.",
+      "`git grep -n 'package picks\\|package favorites'` returns empty."
+    ]
+  },
+  {
+    "id": "DCT-012",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/adapters/httpserver/handlers/api_status_handler.go:30 and spa_handler.go:133 — unregistered endpoint paths asserted in Go source"
+    },
+    "category": "dead-code",
+    "title": "POINTER (dead-code-go / frontend-health): two unregistered API paths are asserted inside Go source, one of them rendered to users",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "Pointer, not a competing finding. The same two phantom endpoints that make README.md wrong (DCT-010) also appear in Go: api_status_handler.go:30 documents its handler as 'GET /api/status/api-usage', and spa_handler.go:133 renders a user-facing link to /api/sets. Whether the handler behind the first is reachable at all, and whether the rendered link is dead in the browser, are reachability questions owned by dead-code-go and frontend-health respectively.",
+        "command": "jq -r '.records[] | select(.identity==\"pointer:stale-endpoint-doc-comments-in-go\") | .defined_at, .note' docs/audit/runs/2026-08-08/maps/docs-map.json",
+        "output": "internal/adapters/httpserver/handlers/api_status_handler.go:30 — doc-comment 'GET /api/status/api-usage'; internal/adapters/httpserver/handlers/spa_handler.go:133 — renders a link to /api/sets. Neither path is registered in router.go or routes.go.",
+        "file_line": "internal/adapters/httpserver/handlers/api_status_handler.go:30"
+      }
+    ],
+    "searched_universe": "Handed over from the docs-map's own pointer record; I did not extend it. Reachability of the handler and of the rendered link was deliberately not computed here — preamble rule 4.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only",
+      "No reachability analysis was performed on either symbol; that is the receiving lens's work."
+    ],
+    "build_tags": [
+      "(default)"
+    ],
+    "proposed_fix": "Route to dead-code-go (is the api_status handler reachable?) and frontend-health (is the /api/sets link dead in the rendered SPA?). No documentation change resolves either.",
+    "blast_radius": [
+      "internal/adapters/httpserver/handlers/api_status_handler.go",
+      "internal/adapters/httpserver/handlers/spa_handler.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "The owning lens records a reachability verdict for each of the two symbols; this pointer is then closed as a duplicate rather than ticketed on its own."
+    ]
+  },
+  {
+    "id": "DCT-013",
+    "lens": "docs-config-tests",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "claim",
+      "identity": "internal/README.md:138"
+    },
+    "category": "docs",
+    "title": "The leaf-rule worked example in internal/README.md names three packages deleted in the baseline's parent commit, and CLAUDE.md's dated sibling roster is missing csvimport",
+    "severity": "medium",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "internal/README.md:137-138 illustrates the leaf rule with six edges. Three of them name packages that do not exist at this baseline: internal/domain/advisor, internal/domain/ai and internal/domain/scoring. The paragraph is the section's entire worked example, and a reader who tries to resolve `advisor -> ai` or `advisor -> scoring` against the tree finds nothing. This matters more than an ordinary stale example because CLAUDE.md defers to this section for the leaf/non-leaf definition that scripts/check-imports.sh enforces in `make check`.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/README.md | sed -n '137,139p' ; git ls-tree -d --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/domain/advisor internal/domain/ai internal/domain/scoring",
+        "output": "first command prints: 'Edges that look like exceptions but are not - each target is a leaf, so all are legal:' / '`advisor -> ai`, `advisor -> scoring`, `dhlisting -> dhevents`, `pricing/lookup -> pricing`,' / '`inventory -> dhevents`, `inventory -> intelligence`.'\nsecond command: (empty - none of the three paths is a tracked tree)",
+        "file_line": "internal/README.md:138"
+      },
+      {
+        "claim": "The three packages were deleted in e46370e5, the baseline's immediate parent, and that commit DID sweep internal/README.md - it removed two other `scoring/` mentions - but left the leaf-rule example untouched. The staleness is one commit old and was introduced by a sweep that already had this file open.",
+        "command": "git log --oneline -1 --all -- internal/domain/advisor internal/domain/ai internal/domain/scoring ; git show e46370e5 -- internal/README.md | grep -E '^[-+]' | grep -v '^[-+][-+][-+]'",
+        "output": "e46370e5 refactor: fully remove the Azure AI / advisor feature (#623)\n-  scoring/        (price scoring factors)\n-| `scoring/` | Price scoring factors and profiles |\n(no hunk touches line 138)",
+        "file_line": "internal/README.md:138"
+      },
+      {
+        "claim": "The same class of defect appears in CLAUDE.md:116-118, which states the governed-sibling set 'As of 2026-08-08' - the baseline's own commit date - and lists ten packages. The derivation command the document itself supplies at CLAUDE.md:112-113, run at the baseline, yields eleven: csvimport is missing from the prose. csvimport is governed by scripts/check-imports.sh regardless, because the checker derives membership from the tree, so this is a documentation defect and not an enforcement gap.",
+        "command": "git grep -l 'internal/domain/inventory' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/*/*.go' 'internal/domain/*/*/*.go' | grep -v _test.go | sed 's/^[^:]*://' | xargs -n1 dirname | sort -u",
+        "output": "internal/domain/arbitrage\ninternal/domain/csvimport\ninternal/domain/demand\ninternal/domain/dhlisting\ninternal/domain/dhpricing\ninternal/domain/export\ninternal/domain/finance\ninternal/domain/portfolio\ninternal/domain/pricing/lookup\ninternal/domain/psacampaign\ninternal/domain/tuning\n(11 packages; CLAUDE.md:116-118 lists 10, omitting csvimport)",
+        "file_line": "CLAUDE.md:116"
+      },
+      {
+        "claim": "Both instances share a root cause with the CSV-parser locator already recorded as the sixth evidence entry of DCT-009 (CLAUDE.md:84's `ls internal/domain/inventory/parse_*.go`, which matches nothing since SLA-35 moved parsing to internal/domain/csvimport). DCT-009 covers the locator; this finding covers the leaf/sibling rule's own illustration and roster. They are filed separately because the fixes are independent - one edits a file-path citation, the other edits the architecture rule's worked example after a package deletion.",
+        "command": "git ls-tree --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 internal/domain/inventory/ | grep '^internal/domain/inventory/parse_'",
+        "output": "(empty - exit 1; no parse_*.go under internal/domain/inventory at this revision)",
+        "file_line": "CLAUDE.md:84"
+      }
+    ],
+    "searched_universe": "Git-tracked files at revision 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 only, enumerated with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6` (1374 paths) and searched with `git grep <pat> 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- <pathspec>`. Documentation universe I read directly: docs/USER_GUIDE.md, docs/psa-harvester.md, docs/CAMPAIGN_ANALYSIS_API_GAPS.md, docs/inventory-friction-analysis.md, docs/polish-report.md (the five the controller flagged as producing zero docs-map records), plus targeted re-verification of CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DEVELOPMENT.md, docs/SCHEDULERS.md, docs/DH_INVENTORY.md, internal/README.md, web/README.md and internal/testutil/mocks/README.md. Config universe: .env.example (names only), internal/platform/config/**, cmd/slabledger/**, Dockerfile, fly.toml, Makefile, .devcontainer/**, .github/workflows/**. Test universe: the 243 tracked *_test.go files and web/tests/** plus web/src/**/*.test.*. For this record specifically I additionally enumerated every domain package with `git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/ | xargs -n1 dirname | sort -u` (24 packages) and re-derived the governed-sibling set with the command CLAUDE.md:112-113 supplies, expressed as a git grep at the pinned revision.",
+    "exclusions": [
+      "docs/audit/** — this audit's own artifacts, and prior-run REPORT.md/TICKETS.md/findings, which the Run Card forbids reading",
+      "Untracked files, .worktrees/ and .claude/worktrees/ — never enumerated with ls or find",
+      "Real .env / .env.local / .env.production — never opened; only .env.example, and only the NAME left of each '='",
+      "No database connection was made; migration files were read as text only",
+      "No build, test, lint or make target was executed — this lens is read-only",
+      "docs/specs/2026-08-08-domain-leaf-taxonomy-design.md was not audited for the same staleness - it is a dated design document, where naming packages that existed when it was written is expected, unlike a reference README",
+      "No `go list ./internal/domain/...` was run; the README's own derivation snippet uses it, but this lens executes nothing, so the sibling set was derived textually from the pinned tree instead"
+    ],
+    "build_tags": [
+      "(default)"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — subject is a Markdown assertion, not a Go symbol. No interface can satisfy or hide a prose claim.",
+      "functional_options": "N/A — no Go symbol is proposed for removal, so no option-shaped silent degradation is possible.",
+      "embedding": "N/A — no Go type is involved; no promoted method can supply a hidden reference to a document.",
+      "serialization": "N/A — no struct tag or wire contract is implicated; the drift is between prose and code, not between Go and JSON.",
+      "go_embed": "Checked: `git grep -n 'go:embed' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'` shows the only embeds are the SQL migrations and the web dist; no Markdown file under docs/ is embedded into the binary, so editing these documents cannot change runtime behavior.",
+      "build_tags": "Both tag sets searched: default and `integration`. Documentation is not compiled, so no tag can hide a consumer.",
+      "registration": "N/A for the document itself. Where a documented mechanism has a registration site (routes.go, scheduler builder, Dockerfile CMD), that site was inspected directly and is cited in the evidence.",
+      "init_side_effects": "N/A — no package is imported for effect here; a Markdown file has no init().",
+      "reflection_or_string": "N/A for the document. String-literal reachability was checked on the code side of each claim where relevant and is cited in the evidence."
+    },
+    "proposed_fix": "In internal/README.md:137-138, replace the three edges naming deleted packages with edges that resolve at HEAD (for example `csvimport -> constants`, `tuning -> mathutil`, `finance -> timeutil`), keeping the three that already resolve. In CLAUDE.md:116-118, either add csvimport to the roster or delete the dated sentence outright and leave only the derivation command above it, which cannot go stale.",
+    "blast_radius": [
+      "internal/README.md",
+      "CLAUDE.md"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Every package named in internal/README.md's leaf-rule example resolves: for each `X -> Y` edge in that paragraph, `go list ./internal/domain/X` and `go list ./internal/domain/Y` both succeed.",
+      "Each example edge is still a legal one under the rule: for every edge `X -> Y`, `go list -deps ./internal/domain/Y | grep -q '/internal/domain/inventory$'` returns non-zero (Y is a leaf).",
+      "If CLAUDE.md retains a prose roster, it matches the derivation exactly: the output of `grep -rl --include='*.go' 'internal/domain/inventory' internal/domain | grep -v _test.go | xargs -n1 dirname | sort -u` equals the listed set, csvimport included.",
+      "`make check` still passes, confirming no enforcement behavior was changed by the documentation edit."
+    ]
+  }
+]

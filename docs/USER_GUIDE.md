@@ -5,30 +5,32 @@ A guide to managing PSA Direct Buy campaigns, tracking purchases and sales acros
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Campaigns](#campaigns)
+2. [Getting Around](#getting-around)
+3. [Campaigns](#campaigns)
    - [Creating a Campaign](#creating-a-campaign)
    - [Campaign Settings](#campaign-settings)
    - [Archiving Campaigns](#archiving-campaigns)
-3. [Purchases](#purchases)
-   - [Adding Purchases](#adding-purchases)
+4. [Adding Cards](#adding-cards)
+   - [Cert Intake](#cert-intake)
+   - [PSA Sync](#psa-sync)
    - [CSV Import](#csv-import)
-4. [Sales](#sales)
+5. [Sales](#sales)
    - [Recording Sales](#recording-sales)
    - [Sale Channels](#sale-channels)
    - [Fee Calculation](#fee-calculation)
-5. [Analytics](#analytics)
+6. [Analytics](#analytics)
    - [P&L Summary](#pl-summary)
    - [Channel Breakdown](#channel-breakdown)
    - [Fill Rate](#fill-rate)
    - [Days to Sell](#days-to-sell)
    - [Cash Flow](#cash-flow)
-6. [Inventory & Market Signals](#inventory--market-signals)
+7. [Inventory & Market Signals](#inventory--market-signals)
    - [Inventory Aging](#inventory-aging)
    - [Market Direction](#market-direction)
    - [Sell Channel Recommendations](#sell-channel-recommendations)
-7. [Card Pricing](#card-pricing)
-8. [API Status](#api-status)
-9. [FAQ](#faq)
+8. [Card Pricing](#card-pricing)
+9. [API Status](#api-status)
+10. [FAQ](#faq)
 
 ---
 
@@ -37,11 +39,27 @@ A guide to managing PSA Direct Buy campaigns, tracking purchases and sales acros
 This application tracks PSA Direct Buy campaigns where PSA sources already-graded cards for resale through multiple channels. The core workflow is:
 
 1. **Create a campaign** with buy parameters (CL%, grade range, daily spend cap)
-2. **Record purchases** as cards are acquired (manually or via CSV import)
-3. **Record sales** through eBay, TCGPlayer, local (GameStop/card shows), or other channels
+2. **Add cards** as they are acquired — by cert number, via PSA sync, or by CSV import
+3. **Record sales** through eBay, the website, or in person
 4. **Analyze profitability** with P&L dashboards, channel comparisons, and market signals
 
-The system also provides card pricing lookup.
+---
+
+## Getting Around
+
+The header navigation has five destinations:
+
+| Page | Path | What it is for |
+|------|------|----------------|
+| **Dashboard** | `/` | Portfolio-wide stats, top performers, weekly review |
+| **Campaigns** | `/campaigns` | Create, edit and archive campaigns; per-campaign P&L; invoices |
+| **Inventory** | `/inventory` | Every unsold card, with pricing, market signals and row actions |
+| **Scan** | `/scan` | Cert lookup and card intake |
+| **Invoices** | `/invoices` | Capital position and due dates |
+
+Admins also see **Admin** (`/admin`), which holds integrations, API health and user
+management. There is no per-campaign detail page — campaign rows expand in place on
+the Campaigns page, and all card-level work happens on **Inventory**.
 
 ---
 
@@ -49,29 +67,45 @@ The system also provides card pricing lookup.
 
 ### Creating a Campaign
 
-Click **+ New Campaign** on the Campaigns page. Fill in:
+Click **+ New Campaign** on the Campaigns page. The form is grouped into three
+sections.
+
+**Identity**
 
 | Field | Description | Example |
 |-------|-------------|---------|
 | **Name** | Campaign identifier (required) | "Vintage Core PSA 8-9" |
-| **Sport** | Card sport/category | "Pokemon" |
+| **Phase** | Lifecycle phase | Draft |
 | **Year Range** | Target years | "1999-2003" |
-| **Grade Range** | Target PSA grades | "8-9" |
+
+**Targeting**
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| **Grade Range** | Target PSA grades (slider) | 8–9 |
 | **Price Range** | Target price range | "250-1500" |
-| **Buy Terms (CL %)** | Buy at this percentage of Card Ladder value | 0.78 (78%) |
-| **Daily Spend Cap** | Maximum daily spend | $500.00 |
-| **CL Confidence** | Minimum confidence threshold | 3.5 |
-| **Inclusion List** | Target card names/sets | "charizard pikachu" |
+| **Languages** | Multi-select language axis. **Leaving it empty casts an open net** — it does not exclude everything | English, Japanese |
+| **Subject Mode** | Whether the subject list targets or excludes | Target / Exclude |
+| **Targeted Subjects** / **Excluded Subjects** | Subject list; the label follows Subject Mode | "charizard", "pikachu" |
+| **Denied Specs** | Read-only. Portal-managed — add or remove these in the PSA portal. Only shown when the campaign has some | — |
+
+**Economics**
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| **Buy Terms (%)** | Buy at this percentage of Card Ladder value | 78 |
+| **Daily Spend Cap ($)** | Maximum daily spend | 500 |
+| **Expected Fill Rate (%)** | Share of eligible offers you expect to win | 80 |
+| **eBay Fee %** | Marketplace fee applied to eBay sales | 12.35 |
+| **PSA Sourcing Fee ($)** | Per-card sourcing fee | 3.00 |
+| **CL Confidence** | Minimum confidence, rated 1–5 | 3 |
 
 The campaign starts in **Draft** phase. Change to **Active** when you start buying.
 
 ### Campaign Settings
 
-On the campaign detail page, click the **Settings** tab to:
-
-- Edit campaign parameters (name, phase, buy terms, caps, fees)
-- View current fee configuration (eBay fee %, sourcing fee)
-- Archive the campaign
+Edit a campaign in place from its row on the Campaigns page. The edit form exposes the
+same Identity, Targeting and Economics fields as creation.
 
 ### Archiving Campaigns
 
@@ -79,42 +113,66 @@ Archiving soft-deletes a campaign. It remains in the database but is hidden from
 
 ---
 
-## Purchases
+## Adding Cards
 
-### Adding Purchases
+Cards enter inventory by certificate number, not by typing card details. There are
+three routes in.
 
-On the campaign detail page, go to the **Purchases** tab and click **+ Add Purchase**:
+### Cert Intake
 
-| Field | Description |
-|-------|-------------|
-| **Card Name** | Full card name |
-| **Cert #** | PSA certificate number (unique across all campaigns) |
-| **PSA Grade** | Grade 1-10 |
-| **Buy Cost** | Amount paid for the card |
-| **CL Value** | Card Ladder valuation at time of purchase |
-| **Purchase Date** | Date acquired |
+The main path. Go to **Scan**, then scan or type cert numbers into the intake field
+("Scan or type cert number…"). Submitting the batch sends the certs to the server,
+which looks each one up with PSA and creates the purchase from the returned card
+data — card name, number, year, grade and population all come from PSA rather than
+from you. The set name is only adopted when PSA returns a real set; generic values
+like "TCG Cards" are left blank for later enrichment.
+
+Two things cert intake deliberately does *not* do:
+
+- **It does not capture cost.** Buy cost, CL value and sourcing fee are all created
+  at zero. Fill them in afterwards from **Inventory** if you need accurate P&L.
+- **It does not pick a campaign.** Scanned cards land in a fixed no-campaign bucket
+  rather than being attributed to a campaign nobody chose.
+
+Certs already in the system are reported as already-existing rather than duplicated,
+and any that have already sold are called out separately in the result.
+
+### PSA Sync
+
+Admins can pull PSA orders directly. Under **Admin → Integrations**, the PSA sync
+surfaces incoming items as **pending items**, which you then assign to a campaign or
+dismiss. Unassigned items stay pending rather than landing in a campaign silently.
 
 ### CSV Import
 
-For bulk imports from PSA export files:
+Two CSV formats are accepted, and they are not interchangeable.
 
-1. Go to the **Purchases** tab
-2. Click **Choose CSV File**
-3. Upload a CSV with three columns: `Card Title`, `Price`, `Date`
+**Orders CSV (sales) — available in the UI.** Under **Admin → Integrations → Import
+Sales**, click **Upload Orders CSV**. This matches sales against existing inventory by
+PSA cert number; it does not create purchases. The parser requires all six of these
+columns, matched case-insensitively by header name:
 
-The import automatically:
-- Extracts PSA grades from card titles (e.g., "Charizard PSA 9" → grade 9)
-- Defaults to grade 9 if no grade is found in the title
-- Skips duplicate certificate numbers
-- Uses the campaign's sourcing fee for all imports
-- Reports import results (imported, skipped, errors)
+`date`, `sales channel`, `product title`, `grading company`, `cert number`, `unit price`
 
-**CSV format example:**
-```csv
-Card Title,Price,Date
-2021 Celebrations Charizard PSA 9,500.00,2026-01-15
-Pikachu VMAX PSA 10,200.00,2026-01-16
-```
+An optional `order` column is used for the order number and an optional `grade` column
+for the grade. After upload you get a **Review Import** table and confirm the matches
+before any sale is written.
+
+**PSA export CSV (purchases) — API only.** `POST /api/purchases/import-psa` accepts a
+PSA communication spreadsheet. There is currently no button for this in the shipped UI.
+The parser scans the first six rows for a header row and needs at least three of these
+four columns to recognize it:
+
+`cert number`, `listing title`, `grade`, `price paid`
+
+If no such header row is found the import fails outright with
+`could not find PSA header row` — nothing is imported. Rows missing a price or a grade
+are **skipped**, not defaulted: when the `grade` column is empty the grade is recovered
+from the listing title (e.g. "Charizard PSA 9" → 9), and a row that still has no grade
+is reported as `skipped: missing price or grade`.
+
+The import also skips duplicate certificate numbers, applies the campaign's sourcing
+fee, and reports per-row results.
 
 ---
 
@@ -122,38 +180,53 @@ Pikachu VMAX PSA 10,200.00,2026-01-16
 
 ### Recording Sales
 
-On the **Sales** tab, click **+ Record Sale**:
+On the **Inventory** page, open a card's **Actions** menu and choose **Sell**. Select
+multiple cards first to record a batch sale in one pass.
 
-1. Select the unsold card from the dropdown
-2. Choose the sale channel
-3. Enter the sale price
-4. Enter the sale date
+1. Choose the sale channel
+2. Enter the sale price
+3. Enter the sale date
 
 The system automatically computes:
 - **Sale fee** based on channel and campaign fee settings
 - **Days to sell** (sale date minus purchase date)
 - **Net profit** (sale price - buy cost - sourcing fee - sale fee)
 
+Sales can also arrive in bulk through the orders CSV import — see
+[CSV Import](#csv-import).
+
 ### Sale Channels
+
+There are three active channels:
 
 | Channel | Description | Fees |
 |---------|-------------|------|
 | **eBay** | eBay marketplace | Campaign's eBay fee % (default 12.35%) |
-| **TCGPlayer** | TCGPlayer marketplace | Same as eBay fee % |
-| **Local** | Card shows, GameStop, in-person | No marketplace fees |
-| **Other** | Website, direct sales | No marketplace fees |
+| **Website** | Online store / direct sales | 3% card processing |
+| **In Person** | Card shows, in-person sales | No fees |
+
+Older records may carry **legacy** channel values — `tcgplayer`, `local`, `other`,
+`gamestop`, `cardshow`, `doubleholo`. These are still readable and are normalized for
+display, analytics and fees: `tcgplayer` folds into **eBay**, and every other legacy
+value folds into **In Person**.
 
 ### Fee Calculation
 
-- **eBay/TCGPlayer**: `salePriceCents * campaign.ebayFeePct` (rounded up)
-- **Local/Other**: $0 (the discount is already baked into the sale price)
+- **eBay**: `salePriceCents * campaign.ebayFeePct`, rounded to the nearest cent. A
+  campaign fee of 0, negative, or ≥ 100% is treated as unset and falls back to 12.35%.
+- **Website**: `salePriceCents * 3%`, rounded to the nearest cent.
+- **In Person**: $0 (the discount is already baked into the sale price)
 - **Net Profit**: `salePrice - buyCost - sourcingFee - saleFee`
 
 ---
 
 ## Analytics
 
-Access analytics from the **Analytics** tab on the campaign detail page.
+Portfolio-level analytics live on the **Dashboard**, which shows a hero stats bar, top
+performers and a weekly review. Per-campaign figures appear as columns on each campaign
+row on the **Campaigns** page: **P&L**, **ROI**, **Sell-through**, and **Cap · Buy%**
+(the daily spend cap and the percent of CL value paid on incoming buys, suppressed for
+closed campaigns).
 
 ### P&L Summary
 
@@ -199,13 +272,12 @@ Overall position across all campaigns:
 
 ### Inventory Aging
 
-The **Inventory** tab shows all unsold cards with:
-- Card name, cert number, grade
-- Cost basis (buy cost + sourcing fee)
-- CL value at time of purchase
-- Days held since purchase
+The **Inventory** page shows all unsold cards. Columns are **Card**, **Gr** (grade),
+**Cost**, **List / Rec** (listed price and recommendation), **P/L**, **Status** and
+**Actions**; every column except Actions sorts. Expanding a row reveals the cert
+number, the Card Ladder value recorded at purchase, and days held.
 
-Cards held longer than 30 days are highlighted.
+Cards held longer than 30 days are treated as deeply stale in the sell signals.
 
 ### Market Direction
 
@@ -213,9 +285,11 @@ For each unsold card, the system compares the most recent sold price against the
 
 | Direction | Meaning | Delta |
 |-----------|---------|-------|
-| **Rising** | Market price above CL valuation | > +5% |
-| **Falling** | Market price below CL valuation | < -5% |
-| **Stable** | Market price near CL valuation | within +/-5% |
+| **Rising** | Market price above CL valuation | ≥ +5% |
+| **Falling** | Market price below CL valuation | ≤ -5% |
+| **Stable** | Market price near CL valuation | strictly inside ±5% |
+
+A drift of exactly ±5% counts as rising or falling, not stable.
 
 ### Sell Channel Recommendations
 
@@ -223,9 +297,9 @@ Based on market direction:
 
 | Signal | Recommendation |
 |--------|----------------|
-| **Rising** | Consider eBay/TCGPlayer — market is ahead of trailing valuations |
-| **Falling** | Consider local (GameStop at 90% CL) — lock in before valuations drop |
-| **Stable** | Either channel — local for speed, eBay for margin |
+| **Rising** | Consider eBay — market is ahead of trailing valuations |
+| **Falling** | Consider in-person — lock in before valuations drop |
+| **Stable** | Either channel — in-person for speed, eBay for margin |
 
 **Key insight**: Card Ladder valuations are a trailing indicator. When real-time sold prices diverge from CL, it reveals market direction before CL updates.
 
@@ -233,10 +307,13 @@ Based on market direction:
 
 ## Card Pricing
 
-The **Pricing** page lets you look up current card prices across all grades and sources. Useful for:
-- Checking current market value before buying or selling
-- Comparing prices across grades and sources
-- Viewing price trends and sales history
+There is no standalone Pricing page — `/pricing` redirects to the Dashboard. Pricing
+now lives where you act on it, on the **Inventory** page:
+
+- The **List / Rec** column shows the current listed price and the recommended price
+- **Set Price** on a row's Actions menu overrides the price
+- **Fix Pricing** resolves a card whose pricing could not be determined
+- **Scan** (`/scan`) looks up a single cert without adding it to inventory
 
 ---
 
@@ -263,7 +340,14 @@ Access the status page by clicking the status indicator dot in the header.
 
 ### What is Card Ladder (CL)?
 
-Card Ladder is a valuation service that provides market values for graded cards. Their values drive both the PSA buy price (campaign CL%) and the GameStop sell price (90% CL). Card Ladder does not offer an API, so CL values are manually entered per purchase.
+Card Ladder is a valuation service that provides market values for graded cards. Their
+values drive both the PSA buy price (campaign CL%) and the in-person sell price.
+
+CL values are fetched automatically. The application has a Card Ladder client and a
+refresh scheduler that writes updated valuations back onto purchases, so you do not
+enter them by hand. Admins can drive it from **Admin → Integrations**: save credentials,
+check status and coverage, review failures, trigger a refresh, add a card, or sync back
+to Card Ladder.
 
 ### Why track CL values?
 
@@ -305,4 +389,4 @@ The frontend converts cents to dollars for display using `(cents / 100).toFixed(
 
 ---
 
-*Last updated: March 2026*
+*Last updated: August 2026*

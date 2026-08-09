@@ -1,0 +1,377 @@
+[
+ {
+  "id": "FE-001",
+  "lens": "frontend-health",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "subject": {
+   "kind": "component",
+   "identity": "web/src/react/components/advisor/ (SectionedReport.tsx, SectionedReport.test.tsx, splitByH2.ts)"
+  },
+  "category": "dead-code",
+  "title": "Advisor UI cluster survives the Azure AI removal; its only consumers are its own two test files, and it is the sole importer of the react-markdown and remark-gfm runtime dependencies",
+  "severity": "medium",
+  "confidence": "mechanical",
+  "evidence": [
+   {
+    "claim": "The advisor directory holds exactly three tracked files at the baseline.",
+    "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src/react/components/advisor",
+    "output": "web/src/react/components/advisor/SectionedReport.test.tsx\nweb/src/react/components/advisor/SectionedReport.tsx\nweb/src/react/components/advisor/splitByH2.ts",
+    "file_line": "web/src/react/components/advisor/SectionedReport.tsx:58"
+   },
+   {
+    "claim": "Nothing outside the advisor directory references SectionedReport, splitByH2, or the directory path, except one test file that lives outside web/src and is therefore invisible to the frontend map.",
+    "command": "git grep -nE 'SectionedReport|splitByH2|components/advisor' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- . ':!docs/audit' | grep -v 'web/src/react/components/advisor/'",
+    "output": "06d9f8ce...:web/tests/components/SectionedReport.test.jsx:2: * Tests for SectionedReport's collapse state, which is persisted through the\n06d9f8ce...:web/tests/components/SectionedReport.test.jsx:10:import SectionedReport from '../../src/react/components/advisor/SectionedReport';\n06d9f8ce...:web/tests/components/SectionedReport.test.jsx:32:  return render(<SectionedReport markdown={MARKDOWN} schema={SCHEMA} cacheKey={CACHE_KEY} />);\n06d9f8ce...:web/tests/components/SectionedReport.test.jsx:35:describe('SectionedReport collapse persistence', () => {",
+    "file_line": "web/tests/components/SectionedReport.test.jsx:10"
+   },
+   {
+    "claim": "No non-TS entry point (index.html, package.json scripts, vite config, playwright config) reaches the cluster; the single hit under web/tests is the .jsx test named above.",
+    "command": "git grep -cnE 'SectionedReport|splitByH2|advisor' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/index.html web/package.json web/vite.config.js web/playwright.config.ts web/tests",
+    "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/tests/components/SectionedReport.test.jsx:5"
+   },
+   {
+    "claim": "The frontend reference map independently scores SectionedReport test_only with all four external refs inside its own sibling test, and scores splitByH2 as referenced only by that test plus SectionedReport.tsx itself.",
+    "command": "jq -r '.records[] | select(.defined_at|test(\"advisor|splitByH2\")) | \"\\(.identity) refs=\\(.external_refs) test_only=\\(.test_only // false) sites=\\(.ref_sites|join(\\\",\\\"))\"' docs/audit/runs/2026-08-08/maps/frontend-reference-map.json",
+    "output": "remarkPlugins refs=0 test_only=false sites=\nmarkdownComponents refs=0 test_only=false sites=\nBODY_PROSE refs=0 test_only=false sites=\nnormalize refs=0 test_only=false sites=\nSectionSchema refs=0 test_only=false sites=\nSectionedReportProps refs=0 test_only=false sites=\nSectionedReport refs=4 test_only=true sites=web/src/react/components/advisor/SectionedReport.test.tsx:33,...:41,...:51,...:58\nSectionCard refs=0 test_only=false sites=\nParsedSection refs=0 test_only=false sites=\nsplitByH2 refs=6 test_only=false sites=web/src/react/components/advisor/SectionedReport.test.tsx:6,:9,:18,:25,:29,web/src/react/components/advisor/SectionedReport.tsx:59"
+   },
+   {
+    "claim": "SectionedReport.tsx is the only importer in the repository of the react-markdown and remark-gfm production dependencies declared in web/package.json.",
+    "command": "git grep -nE \"react-markdown|remark-gfm\" 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/package.json web/src web/tests",
+    "output": "06d9f8ce...:web/package.json:79:    \"react-markdown\": \"^10.1.0\",\n06d9f8ce...:web/package.json:82:    \"remark-gfm\": \"^4.0.1\"\n06d9f8ce...:web/src/react/components/advisor/SectionedReport.tsx:2:import Markdown from 'react-markdown';\n06d9f8ce...:web/src/react/components/advisor/SectionedReport.tsx:3:import remarkGfm from 'remark-gfm';",
+    "file_line": "web/package.json:79"
+   },
+   {
+    "claim": "The feature this component rendered was removed on both the Go and database sides: commit e46370e5 removed the Azure AI / advisor feature and two migrations dropped its tables. No Go package named advisor, ai, or scoring exists at the baseline.",
+    "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E 'internal/domain/(advisor|ai|scoring)'",
+    "output": "(no output — no such paths are tracked at the baseline)"
+   }
+  ],
+  "searched_universe": "All git-tracked files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, enumerated via `git ls-tree -r --name-only` and searched via `git grep <pattern> 06d9f8ce...`. Reachability within web/src TS/TSX comes from docs/audit/runs/2026-08-08/maps/frontend-reference-map.json; the non-TS and outside-web/src consumers the map excludes were hand-checked with the greps above, which is how web/tests/components/SectionedReport.test.jsx was found.",
+  "exclusions": [
+   "docs/audit/** excluded from the reference greps (this audit's own working files would self-match)",
+   "web/package-lock.json excluded from the dependency grep (transitive lockfile entries are not importers)"
+  ],
+  "build_tags": [
+   "not applicable: the subject is TypeScript/TSX and participates in no Go build; Vite has no build-tag mechanism and neither web/vite.config.js nor web/package.json references the path"
+  ],
+  "runtime_checks": {
+   "interface_satisfaction": "Not applicable — TypeScript, no Go interfaces. The TS analogue (a component supplied where a prop type is expected) is ruled out: SectionedReport appears in no JSX outside its own two tests.",
+   "functional_options": "Not applicable — no Go functional options. The TS analogue (a component passed as an option/prop value to a configured factory) is ruled out by the whole-tree grep returning no non-test call sites.",
+   "embedding": "Not applicable — no Go struct embedding. No re-export barrel wraps this directory: web/src/react/components has no index.ts entry for advisor, and the map's registration_sites is empty for every advisor record.",
+   "serialization": "Not applicable — this is presentation code holding no JSON contract. splitByH2 parses markdown text, not a wire format.",
+   "go_embed": "Not applicable — no //go:embed directive references web/src; the Go binary embeds only internal/adapters/storage/postgres/migrations.",
+   "build_tags": "Not applicable — TypeScript. No conditional-compilation mechanism excludes or includes this path.",
+   "registration": "Checked and negative. The lazy() route registration list in web/src/react/App.tsx:22-28 names seven page modules, none under components/advisor; no dynamic import(), route element, or component registry references the path.",
+   "init_side_effects": "Checked and negative. The TS analogue is a side-effect import (`import './x'`); no such import of the advisor directory exists anywhere in the tree.",
+   "reflection_or_string": "Checked and negative. The whole-tree grep for the substring 'advisor' surfaces no string literal, dynamic import specifier, or path built at runtime that resolves to this directory; the remaining 'advisor' hits are migrations, docs, skill files, and one unrelated Go comment (\"pre-activation advisory\")."
+  },
+  "proposed_fix": "Delete web/src/react/components/advisor/ (all three files) and web/tests/components/SectionedReport.test.jsx, then drop react-markdown and remark-gfm from web/package.json dependencies and refresh web/package-lock.json.",
+  "blast_radius": [
+   "web/src/react/components/advisor/SectionedReport.tsx",
+   "web/src/react/components/advisor/SectionedReport.test.tsx",
+   "web/src/react/components/advisor/splitByH2.ts",
+   "web/tests/components/SectionedReport.test.jsx",
+   "web/package.json",
+   "web/package-lock.json"
+  ],
+  "effort": "S",
+  "acceptance_criteria": [
+   "`cd web && npm run build` succeeds with the advisor directory and both test files removed.",
+   "`cd web && npm test` passes with no remaining reference to SectionedReport or splitByH2.",
+   "`git grep -nE 'SectionedReport|splitByH2|components/advisor' -- web` returns no output.",
+   "`git grep -nE 'react-markdown|remark-gfm' -- web/package.json web/src web/tests` returns no output.",
+   "`make screenshots` renders every page unchanged (no page rendered advisor output before the change)."
+  ]
+ },
+ {
+  "id": "FE-002",
+  "lens": "frontend-health",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "subject": {
+   "kind": "type",
+   "identity": "web/src/types/scoring.ts (Verdict, Factor, DataGap, ScoreCard, FACTOR_DISPLAY_NAMES)"
+  },
+  "category": "dead-code",
+  "title": "web/src/types/scoring.ts is the only fully orphaned module under web/src: no importer anywhere in the repository, and no Go scoring type it could be mirroring",
+  "severity": "medium",
+  "confidence": "mechanical",
+  "evidence": [
+   {
+    "claim": "Grouping every non-test frontend-map record by its defining file, scoring.ts is the only module whose every declaration has zero external references and zero registration sites. (main.tsx also appears, and is the excluded case: it is the Vite entry point reached from web/index.html, a non-TS consumer the map cannot see.)",
+    "command": "jq -r '[.records[] | select((.defined_at|test(\"\\\\.test\\\\.\"))|not)] | group_by(.defined_at|sub(\":[0-9]+$\";\"\")) | map(select(all(.[]; .external_refs==0 and ((.registration_sites|length)==0)))) | map({file:(.[0].defined_at|sub(\":[0-9]+$\";\"\")), syms:[.[]|.identity]}) | .[] | \"\\(.file)\\t\\(.syms|join(\",\"))\"' docs/audit/runs/2026-08-08/maps/frontend-reference-map.json",
+    "output": "web/src/main.tsx\trootElement\nweb/src/types/scoring.ts\tVerdict,Factor,DataGap,ScoreCard,FACTOR_DISPLAY_NAMES",
+    "file_line": "web/src/types/scoring.ts:1"
+   },
+   {
+    "claim": "The word 'scoring' appears nowhere in web/ outside the lockfile and the checked-in coverage artifact, so no import specifier resolves to this module.",
+    "command": "git grep -nE \"scoring\" 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web ':!web/coverage' ':!web/package-lock.json'",
+    "output": "(no output)"
+   },
+   {
+    "claim": "The declared symbols are referenced only from within scoring.ts itself, across web, internal, and cmd.",
+    "command": "git grep -nE '\\b(ScoreCard|FACTOR_DISPLAY_NAMES|DataGap|types/scoring)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web internal cmd",
+    "output": "06d9f8ce...:web/src/types/scoring.ts:13:export interface DataGap {\n06d9f8ce...:web/src/types/scoring.ts:18:export interface ScoreCard {\n06d9f8ce...:web/src/types/scoring.ts:25:  data_gaps: DataGap[];\n06d9f8ce...:web/src/types/scoring.ts:30:export const FACTOR_DISPLAY_NAMES: Record<string, string> = {"
+   },
+   {
+    "claim": "There is no Go counterpart for this contract: no internal/domain/scoring package exists, and the file's snake_case field names (entity_id, engine_verdict, data_gaps, scored_at) match no Go JSON tag in the tree. It is a mirror of a removed backend, consistent with the same Azure AI / scoring removal that stranded FE-001.",
+    "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E 'internal/domain/(advisor|ai|scoring)'",
+    "output": "(no output — no such paths are tracked at the baseline)"
+   }
+  ],
+  "searched_universe": "All git-tracked files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6. Zero-reference status within web/src TS/TSX is taken from docs/audit/runs/2026-08-08/maps/frontend-reference-map.json (894 records, 208-file universe); the non-TS consumers that map excludes were covered by the repository-wide `git grep` for 'scoring' shown above, which searched web/ including index.html, package.json, vite.config.js and web/tests.",
+  "exclusions": [
+   "web/coverage/** excluded — a stale checked-in build artifact, itself reported as FE-005, not a consumer",
+   "web/package-lock.json excluded — transitive dependency names, not import sites"
+  ],
+  "build_tags": [
+   "not applicable: TypeScript type declarations, erased at compile time and participating in no Go build"
+  ],
+  "runtime_checks": {
+   "interface_satisfaction": "Not applicable — TypeScript. The declarations are structural types with no implementor: no value in the tree is annotated with ScoreCard, Factor, DataGap, or Verdict.",
+   "functional_options": "Not applicable — no Go functional options, and no TS factory takes these types as an option parameter (no annotation sites exist at all).",
+   "embedding": "Not applicable — no Go embedding. The TS analogue, `interface X extends ScoreCard`, does not occur: the grep above found no occurrence of these names outside the defining file.",
+   "serialization": "Checked and negative in the sense that matters. These types ARE a serialization contract by intent (snake_case wire names), but no Go struct emits those keys and no fetch call deserializes into them, so the contract has no counterparty.",
+   "go_embed": "Not applicable — no //go:embed directive references web/src.",
+   "build_tags": "Not applicable — TypeScript; no conditional-compilation mechanism gates this file.",
+   "registration": "Checked and negative. The file is not re-exported by web/src/types/campaigns/index.ts or any other barrel (its map records show empty registration_sites), and it is not in App.tsx's lazy() list.",
+   "init_side_effects": "Checked and negative. No side-effect import (`import './types/scoring'`) exists; the module has one runtime value (FACTOR_DISPLAY_NAMES) and no top-level effects.",
+   "reflection_or_string": "Checked and negative. FACTOR_DISPLAY_NAMES is a string-keyed lookup table, which is exactly the mechanism to suspect — but nothing indexes it, and none of its 13 keys (market_trend, liquidity, roi_potential, scarcity, market_alignment, portfolio_fit, grade_fit, capital_pressure, carrying_cost, crack_advantage, sell_through, spend_efficiency, coverage_impact) is produced by any Go JSON tag at the baseline."
+  },
+  "proposed_fix": "Delete web/src/types/scoring.ts.",
+  "blast_radius": [
+   "web/src/types/scoring.ts"
+  ],
+  "effort": "S",
+  "acceptance_criteria": [
+   "`cd web && npm run build` succeeds with the file removed.",
+   "`cd web && npx tsc --noEmit` reports no new errors.",
+   "`cd web && npm test` passes.",
+   "`git grep -n 'scoring' -- web/src` returns no output."
+  ]
+ },
+ {
+  "id": "FE-003",
+  "lens": "frontend-health",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "subject": {
+   "kind": "type",
+   "identity": "PortfolioHealth.realizedROIDelta / PortfolioHealth.totalRecoveredDelta (web/src/types/campaigns/analytics.ts:251-252) and the PortfolioDelta / DeltaChip / FreshnessLine code they gate"
+  },
+  "category": "frontend",
+  "title": "Type drift: the dashboard hero renders delta chips and a freshness line off two PortfolioHealth fields no Go struct ever emits, so those UI branches are unreachable in production and exercised only by hand-built test fixtures",
+  "severity": "medium",
+  "confidence": "mechanical",
+  "evidence": [
+   {
+    "claim": "TS PortfolioHealth declares two optional fields absent from the Go struct it mirrors.",
+    "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/src/types/campaigns/analytics.ts | sed -n '244,253p'",
+    "output": "export interface PortfolioHealth {\n  campaigns: CampaignHealth[];\n  totalDeployedCents: number;\n  totalRecoveredCents: number;\n  totalAtRiskCents: number;\n  overallROI: number;\n  realizedROI: number;\n  realizedROIDelta?: PortfolioDelta;\n  totalRecoveredDelta?: PortfolioDelta;\n}",
+    "file_line": "web/src/types/campaigns/analytics.ts:251"
+   },
+   {
+    "claim": "The Go PortfolioHealth struct has six fields and no delta field. This is embedding-proof: the struct literal is flat.",
+    "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/health_types.go | sed -n '11,19p'",
+    "output": "// PortfolioHealth represents cross-campaign health assessment.\ntype PortfolioHealth struct {\n\tCampaigns      []CampaignHealth `json:\"campaigns\"`\n\tTotalDeployed  int              `json:\"totalDeployedCents\"`\n\tTotalRecovered int              `json:\"totalRecoveredCents\"`\n\tTotalAtRisk    int              `json:\"totalAtRiskCents\"`\n\tOverallROI     float64          `json:\"overallROI\"`\n\tRealizedROI    float64          `json:\"realizedROI\"`\n}",
+    "file_line": "internal/domain/inventory/health_types.go:12"
+   },
+   {
+    "claim": "No Go source anywhere emits these keys, under any casing, by any mechanism including embedded structs, map literals, and string-built JSON. This is the decisive check, and it is case-insensitive so it also rules out a differently-cased tag.",
+    "command": "git grep -niE 'roidelta|recovereddelta|PortfolioDelta' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal cmd",
+    "output": "(no output)"
+   },
+   {
+    "claim": "Both fields are read and rendered by HeroStatsBar, so the drift is not merely cosmetic: three render paths are permanently dead.",
+    "command": "git grep -nE 'delta=' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src",
+    "output": "06d9f8ce...:web/src/react/components/portfolio/HeroStatsBar.tsx:89:            {health.realizedROIDelta && <DeltaChip delta={health.realizedROIDelta} />}\n06d9f8ce...:web/src/react/components/portfolio/HeroStatsBar.tsx:91:          <FreshnessLine asOfMs={asOfMs} delta={health.realizedROIDelta} />\n06d9f8ce...:web/src/react/components/portfolio/HeroStatsBar.tsx:145:            delta={health.totalRecoveredDelta}\n06d9f8ce...:web/src/react/components/portfolio/HeroStatsBar.tsx:277:        {delta && <DeltaChip delta={delta} small />}",
+    "file_line": "web/src/react/components/portfolio/HeroStatsBar.tsx:89"
+   },
+   {
+    "claim": "PortfolioDelta exists solely to type these two fields and the components that consume them; it has no other declaration site or consumer. Every non-HeroStatsBar reference is the declaration itself.",
+    "command": "git grep -nE '\\b(PortfolioDelta|DeltaChip|FreshnessLine)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src",
+    "output": "06d9f8ce...:HeroStatsBar.tsx:4:import type { PortfolioHealth, PortfolioDelta, CapitalSummary } from '../../../types/campaigns';\n06d9f8ce...:HeroStatsBar.tsx:89, :91  (the two read sites above)\n06d9f8ce...:HeroStatsBar.tsx:211:function FreshnessLine({ asOfMs, delta }: { asOfMs?: number; delta?: PortfolioDelta }) {\n06d9f8ce...:HeroStatsBar.tsx:227:function DeltaChip({ delta, small }: { delta: PortfolioDelta; small?: boolean }) {\n06d9f8ce...:HeroStatsBar.tsx:259:  delta?: PortfolioDelta;\n06d9f8ce...:HeroStatsBar.tsx:277:        {delta && <DeltaChip delta={delta} small />}\n06d9f8ce...:web/src/types/campaigns/analytics.ts:219:export interface PortfolioDelta {\n06d9f8ce...:web/src/types/campaigns/analytics.ts:251, :252  (the two declarations above)",
+    "file_line": "web/src/types/campaigns/analytics.ts:219"
+   },
+   {
+    "claim": "The only places these fields ever hold a value are the component's own test fixtures, which construct them by hand — which is why the dead branches have never been noticed.",
+    "command": "git grep -nE '\\b(realizedROIDelta|totalRecoveredDelta)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web internal cmd",
+    "output": "06d9f8ce...:web/src/react/components/portfolio/HeroStatsBar.test.tsx:59, :70, :81, :91, :101  (five hand-built fixture objects)\n06d9f8ce...:web/src/react/components/portfolio/HeroStatsBar.tsx:89, :91, :145  (the three read sites)\n06d9f8ce...:web/src/types/campaigns/analytics.ts:251, :252  (the two declarations)",
+    "file_line": "web/src/react/components/portfolio/HeroStatsBar.test.tsx:59"
+   }
+  ],
+  "searched_universe": "All git-tracked files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6. The candidate was produced by a mechanical field-level comparison of every `export interface` in web/src/types/**.ts (123 interfaces, 81 name-matched to a Go struct) against every `json:\"...\"` tag on every `type X struct` in internal/ and cmd/ non-test Go files, then hand-verified with the case-insensitive whole-Go-tree grep above. That grep is what makes the finding embedding-proof: the comparison tool itself does not follow Go struct embedding, and three other candidates it produced (Purchase, Sale, ReviewStats) were rejected on exactly that ground.",
+  "exclusions": [
+   "Go _test.go files excluded from the JSON-tag extraction (test fixtures are not the wire contract)",
+   "docs/audit/** excluded from reference greps"
+  ],
+  "build_tags": [
+   "not applicable: no Go build tag gates internal/domain/inventory/health_types.go, and the grep for the field names covered internal/ and cmd/ in full including all build-tagged files"
+  ],
+  "runtime_checks": {
+   "interface_satisfaction": "Checked and negative. No Go interface method returns a type carrying these keys; the grep covering internal/ and cmd/ found no declaration of any kind matching 'roidelta' or 'recovereddelta'.",
+   "functional_options": "Checked and negative. No functional option enriches the PortfolioHealth response — the struct is returned as declared and no With* option in internal/domain/inventory adds fields to it.",
+   "embedding": "Checked and negative, and this is the check that mattered most. A Go embedded struct could contribute the keys without them appearing in health_types.go — the case-insensitive grep over all of internal/ and cmd/ rules that out, because an embedded contributor would still have to declare the tag somewhere.",
+   "serialization": "Checked and negative. This is squarely a serialization question and the answer is that no serializer produces the keys: no json tag, no map[string]any literal, and no custom MarshalJSON in internal/ or cmd/ mentions them.",
+   "go_embed": "Not applicable — no //go:embed asset supplies API response bodies; the only embedded FS is the migrations directory.",
+   "build_tags": "Not applicable in the exclusionary sense — the grep was unconditional over internal/ and cmd/, so a build-tagged file adding the fields would still have matched. None did.",
+   "registration": "Checked and negative. No handler registration or middleware decorates the portfolio-health response body; the handler encodes inventory.PortfolioHealth directly.",
+   "init_side_effects": "Checked and negative. No init() in internal/ or cmd/ registers a response transformer, and none could add a key without the key appearing as a literal, which the grep would have caught.",
+   "reflection_or_string": "Checked and negative. The grep was substring-based and case-insensitive precisely to catch a key assembled as a string literal or produced reflectively; it returned empty across internal/ and cmd/."
+  },
+  "proposed_fix": "Decide the direction and close the gap. Either (a) drop realizedROIDelta, totalRecoveredDelta, and the PortfolioDelta interface from web/src/types/campaigns/analytics.ts and delete the DeltaChip/FreshnessLine delta rendering from HeroStatsBar.tsx plus its five test fixtures; or (b) if week-over-week deltas are wanted, add the fields to inventory.PortfolioHealth in internal/domain/inventory/health_types.go and populate them, at which point the existing UI lights up. Do not leave the two sides diverged.",
+  "blast_radius": [
+   "web/src/types/campaigns/analytics.ts",
+   "web/src/react/components/portfolio/HeroStatsBar.tsx",
+   "web/src/react/components/portfolio/HeroStatsBar.test.tsx",
+   "internal/domain/inventory/health_types.go (only if direction (b) is chosen)"
+  ],
+  "effort": "S",
+  "acceptance_criteria": [
+   "Under direction (a): `git grep -nE 'PortfolioDelta|realizedROIDelta|totalRecoveredDelta' -- web/src` returns no output, and `cd web && npm run build && npm test` both pass.",
+   "Under direction (b): `git grep -niE 'roidelta|recovereddelta' -- internal cmd` returns the new json tags, `go build ./... && go test -race ./...` pass, and a dashboard screenshot from `make screenshots` shows a rendered delta chip.",
+   "Either way, re-running the TS-vs-Go field comparison reports no divergence for PortfolioHealth."
+  ]
+ },
+ {
+  "id": "FE-004",
+  "lens": "frontend-health",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "subject": {
+   "kind": "type",
+   "identity": "CampaignHealth (web/src/types/campaigns/analytics.ts:230) vs inventory.CampaignHealth (internal/domain/inventory/health_types.go:22)"
+  },
+  "category": "frontend",
+  "title": "Type drift: the TS CampaignHealth mirror omits seven fields the Go struct emits, including liquidation-awareness and in-hand/in-transit breakdown — one of which carries a Go comment claiming it was named 'for frontend compatibility' with a frontend that never modelled it",
+  "severity": "low",
+  "confidence": "strong",
+  "evidence": [
+   {
+    "claim": "The Go struct declares eleven fields the TS mirror has, plus seven it does not.",
+    "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/health_types.go | sed -n '35,46p'",
+    "output": "\t// Liquidation awareness — distinguishes \"marketplace margin broken\" from\n\t// \"we forced cards into low-margin inperson/cardshow sales to cover an invoice\".\n\tLiquidationLossCents int     `json:\"liquidationLossCents\"`\n\tLiquidationSaleCount int     `json:\"liquidationSaleCount\"`\n\tEbayChannelMarginPct float64 `json:\"ebayChannelMarginPct\"` // ... JSON field name retained for frontend compatibility.\n\n\t// In-hand vs in-transit breakdown (received_at IS NOT NULL = in hand)\n\tInHandUnsoldCount     int `json:\"inHandUnsoldCount\"`\n\tInHandCapitalCents    int `json:\"inHandCapitalCents\"`\n\tInTransitUnsoldCount  int `json:\"inTransitUnsoldCount\"`\n\tInTransitCapitalCents int `json:\"inTransitCapitalCents\"`",
+    "file_line": "internal/domain/inventory/health_types.go:37"
+   },
+   {
+    "claim": "The TS interface is flat (no `extends`) and stops at healthReason, so the seven fields are genuinely unmodelled rather than inherited.",
+    "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/src/types/campaigns/analytics.ts | sed -n '230,242p'",
+    "output": "export interface CampaignHealth {\n  campaignId: string;\n  campaignName: string;\n  phase: Phase;\n  roi: number;\n  sellThroughPct: number;\n  avgDaysToSell: number;\n  totalPurchases: number;\n  totalUnsold: number;\n  capitalAtRiskCents: number;\n  healthStatus: 'healthy' | 'warning' | 'critical';\n  healthReason: string;\n}",
+    "file_line": "web/src/types/campaigns/analytics.ts:230"
+   },
+   {
+    "claim": "No frontend code and no API documentation references any of the seven field names, so the data is shipped over the wire on every portfolio-health response and discarded unread.",
+    "command": "git grep -nE 'inHandCapitalCents|liquidationLossCents|ebayChannelMarginPct|inTransitUnsoldCount' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src docs/API.md",
+    "output": "(no output)"
+   }
+  ],
+  "searched_universe": "All git-tracked files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6. Produced by the same mechanical TS-interface-vs-Go-json-tag comparison described in FE-003, restricted to web/src/types/**.ts against non-test Go under internal/ and cmd/, then hand-verified against the two source files.",
+  "exclusions": [
+   "Go _test.go files excluded from JSON-tag extraction",
+   "docs/audit/** excluded from reference greps"
+  ],
+  "build_tags": [],
+  "proposed_fix": "Add the seven missing fields to the TS CampaignHealth interface so the mirror is faithful, and either surface them in the portfolio UI (the liquidation-awareness trio in particular exists to distinguish a broken channel from a forced liquidation, which the current UI cannot show) or, if they are genuinely unwanted client-side, drop them from the Go response struct instead. Also correct or remove the 'JSON field name retained for frontend compatibility' comment on EbayChannelMarginPct, which is not true at this baseline.",
+  "blast_radius": [
+   "web/src/types/campaigns/analytics.ts",
+   "internal/domain/inventory/health_types.go",
+   "web/src/react/components/portfolio/ (if the fields are surfaced)"
+  ],
+  "effort": "S",
+  "acceptance_criteria": [
+   "`cd web && npx tsc --noEmit` passes with the TS interface extended.",
+   "A field-by-field comparison of TS CampaignHealth against inventory.CampaignHealth shows no name present on one side and absent on the other.",
+   "`go build ./... && go test -race ./...` pass if the Go side is changed instead.",
+   "The stale 'for frontend compatibility' comment either names a real frontend consumer or is gone."
+  ]
+ },
+ {
+  "id": "FE-005",
+  "lens": "frontend-health",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "subject": {
+   "kind": "component",
+   "identity": "web/coverage/ (51 git-tracked files)"
+  },
+  "category": "frontend",
+  "title": "A 51-file Vitest coverage report is checked into git, never regenerated since the initial commit, not gitignored, and reports on 31 frontend files that no longer exist",
+  "severity": "low",
+  "confidence": "strong",
+  "evidence": [
+   {
+    "claim": "51 files under web/coverage/ are tracked in git at the baseline.",
+    "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/coverage | wc -l",
+    "output": "51",
+    "file_line": "web/coverage/index.html"
+   },
+   {
+    "claim": "The directory was committed once, in the repository's initial commit on 2026-03-25, and has never been touched since — so it reflects a codebase state over four months stale at this baseline.",
+    "command": "git log -1 --format='%h %ad %s' --date=short 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/coverage",
+    "output": "84288a18 2026-03-25 Initial Commit"
+   },
+   {
+    "claim": "31 of the 38 source files the report covers no longer exist anywhere under web/src, including whole removed pages (CollectionPage, OpportunitiesPage, PricingPage) and removed contexts (AppStateContext, ThemeContext, UserPreferencesContext).",
+    "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/coverage | sed 's|.*/||; s|\\.html$||' | grep -E '\\.(tsx|ts|jsx|js)$' | sort > /tmp/cov.txt; git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src | sed 's|.*/||' | sort -u > /tmp/src.txt; comm -23 /tmp/cov.txt /tmp/src.txt",
+    "output": "AdvancedFiltersModal.tsx\nAppStateContext.tsx\nBadge.tsx\nBaseModal.tsx\nCard.tsx\nCollectionCard.tsx\nCollectionGrid.tsx\nCollectionPage.tsx\nCollectionStats.tsx\nCompetitiveModal.tsx\nCriteriaChips.tsx\nEbayModal.tsx\nModalContext.tsx\nOpportunitiesPage.tsx\nOpportunityCard.tsx\nOpportunityGrid.tsx\nPriceCheckForm.tsx\nPriceHistoryModal.tsx\nPriceRecommendation.tsx\nPriceResults.tsx\nPricingPage.tsx\nQuickFilters.tsx\nRecommendationModal.tsx\nROIBar.tsx\nSearchBox.tsx\nStatsBar.tsx\nThemeContext.tsx\nUserPreferencesContext.tsx\n(plus the report's own block-navigation.js, prettify.js, sorter.js)"
+   },
+   {
+    "claim": "Neither the root .gitignore nor a web/.gitignore excludes the JS coverage directory; the only 'coverage' mention in .gitignore is a comment about the Go coverage tool, so `npm run test -- --coverage` will keep re-dirtying the working tree with a 51-file diff.",
+    "command": "git grep -n 'coverage' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- .gitignore web/.gitignore",
+    "output": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6:.gitignore:11:# Output of the go coverage tool, specifically when used with LiteIDE",
+    "file_line": ".gitignore:11"
+   }
+  ],
+  "searched_universe": "All git-tracked files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, enumerated with `git ls-tree -r --name-only`. Discovered incidentally while enumerating CSS files under web/ for a dead-stylesheet check; web/coverage/ is outside the frontend map's 208-file web/src universe and so appears in no map record.",
+  "exclusions": [
+   "web/src/** — the coverage directory sits outside it, which is why no Phase 1 map covers this"
+  ],
+  "build_tags": [],
+  "proposed_fix": "Delete web/coverage/ from git and add `coverage/` (or `web/coverage/`) to .gitignore.",
+  "blast_radius": [
+   "web/coverage/ (51 files)",
+   ".gitignore"
+  ],
+  "effort": "S",
+  "acceptance_criteria": [
+   "`git ls-files web/coverage | wc -l` returns 0.",
+   "`cd web && npm test -- --coverage` regenerates the directory and `git status --porcelain` stays clean.",
+   "`cd web && npm run build` and `npm test` both pass (nothing imports from web/coverage)."
+  ]
+ },
+ {
+  "id": "FE-006",
+  "lens": "frontend-health",
+  "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+  "subject": {
+   "kind": "claim",
+   "identity": "internal/README.md:138 — \"Edges that look like exceptions but are not: `advisor → ai`, `advisor → scoring`\""
+  },
+  "category": "docs",
+  "title": "Pointer to docs-config-tests: internal/README.md illustrates the flat-sibling leaf rule with three domain packages that do not exist at this baseline",
+  "severity": "low",
+  "confidence": "suspected",
+  "evidence": [
+   {
+    "claim": "internal/README.md presents advisor → ai and advisor → scoring as current legal edges.",
+    "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/README.md | sed -n '137,140p'",
+    "output": "Edges that look like exceptions but are not — each target is a leaf, so all are legal:\n`advisor → ai`, `advisor → scoring`, `dhlisting → dhevents`, `pricing/lookup → pricing`,\n`inventory → dhevents`, `inventory → intelligence`.",
+    "file_line": "internal/README.md:138"
+   },
+   {
+    "claim": "None of internal/domain/advisor, internal/domain/ai, or internal/domain/scoring is tracked at the baseline.",
+    "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 | grep -E 'internal/domain/(advisor|ai|scoring)'",
+    "output": "(no output)"
+   }
+  ],
+  "searched_universe": "All git-tracked files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6. Encountered while tracing the advisor remnant of FE-001; the Go/docs side is not this lens's subject kind, so this is filed as a pointer rather than a finding.",
+  "exclusions": [
+   "No independent assessment of the remaining four edges in that sentence was made — they are outside this lens's scope"
+  ],
+  "build_tags": [],
+  "proposed_fix": "Owned by the docs-config-tests lens. Replace the two stale example edges with edges that exist at the current baseline, or drop them.",
+  "blast_radius": [
+   "internal/README.md"
+  ],
+  "effort": "S",
+  "acceptance_criteria": [
+   "Every package named in internal/README.md's example-edge sentence resolves to a directory returned by `go list ./internal/domain/...`."
+  ]
+ }
+]
