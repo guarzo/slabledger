@@ -418,7 +418,7 @@ pkill slabledger
 ### local-seed.sh (local, gitignored — runs every start)
 Owns all AI tooling and personal config. Enabled by copying
 `docker-compose.override.yml.example` and adapting it (see the seed-copy design
-doc under `docs/superpowers/specs/`).
+doc under `docs/specs/`).
 
 - Repairs container-local volume ownership
 - Adds the Vekil proxy hook and `~/.local/bin` to `~/.zshrc`

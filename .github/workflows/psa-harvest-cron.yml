@@ -1,5 +1,5 @@
-# Hourly watchdog for the PSA harvester (see docs/psa-harvester.md and
-# docs/superpowers/specs/2026-07-19-psa-harvest-cron-design.md).
+# Hourly watchdog for the PSA harvester (see docs/psa-harvester.md; the
+# 2026-07-19 harvest-cron design doc it also cited was never committed).
 #
 # Fly's on-machine schedule has twice stopped firing silently after a deploy
 # recreated the machine. This workflow is the primary cadence: `fly machine
