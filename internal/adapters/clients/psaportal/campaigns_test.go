@@ -11,11 +11,11 @@ import (
 )
 
 func TestFetchCampaigns_ParsesListAndEdit(t *testing.T) {
-	list, err := os.ReadFile("../../../../docs/psa-campaigns-raw.json")
+	list, err := os.ReadFile("testdata/psa-campaigns-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}

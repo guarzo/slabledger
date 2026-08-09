@@ -30,7 +30,8 @@ Key file:
 | `internal/domain/inventory/core_types.go` | Campaign, Purchase, Sale structs |
 | `internal/domain/inventory/service.go` | Business logic, PriceLookup interface |
 | `internal/domain/inventory/channel_fees.go` | CalculateSaleFee, CalculateNetProfit |
-| `internal/domain/inventory/repository_campaign.go` | Repository interfaces (one `repository_*.go` per concern) |
+| `internal/domain/inventory/repository_campaign.go` | Repository interfaces (one `repository_*.go` per concern, plus `pending_items.go`) |
+| `internal/domain/inventory/service_interfaces.go` | Service-side interfaces (Analytics, Cert, Pricing, DH, Snapshot) |
 | `internal/adapters/storage/postgres/campaign_store.go` | Postgres implementation |
 | `internal/adapters/httpserver/handlers/campaigns.go` | HTTP handlers |
 | `internal/domain/pricing/lookup/adapter.go` | PriceLookup adapter |

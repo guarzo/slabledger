@@ -15,7 +15,7 @@ import (
 )
 
 func TestPushCampaign_MutatesAndPosts(t *testing.T) {
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 }
 
 func TestPushCampaign_ListValuedFieldUsesValueOverNew(t *testing.T) {
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestPushCampaign_ListValuedFieldUsesValueOverNew(t *testing.T) {
 }
 
 func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestPushCampaign_ErrorEnvelopeSurfacesBody(t *testing.T) {
 			wantIn:   "…(truncated)",
 		},
 	}
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestPushCampaign_RefusesStaleChange(t *testing.T) {
 			wantErr: psacampaign.ErrNoRenderer,
 		},
 	}
-	edit, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	edit, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("fixture missing: %v", err)
 	}
@@ -285,11 +285,11 @@ func TestPushCampaign_RefusesStaleChange(t *testing.T) {
 func TestPortalListAndEditFormRenderIdentically(t *testing.T) {
 	const campaignID = "660a980d-bf1c-4988-9958-1eb2d1853c66"
 
-	listRaw, err := os.ReadFile("../../../../docs/psa-campaigns-raw.json")
+	listRaw, err := os.ReadFile("testdata/psa-campaigns-raw.json")
 	if err != nil {
 		t.Fatalf("list fixture missing: %v", err)
 	}
-	editRaw, err := os.ReadFile("../../../../docs/psa-campaign-edit-raw.json")
+	editRaw, err := os.ReadFile("testdata/psa-campaign-edit-raw.json")
 	if err != nil {
 		t.Fatalf("edit fixture missing: %v", err)
 	}

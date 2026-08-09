@@ -338,9 +338,11 @@ Lists all registered users.
 
 Auth: RequireAdmin
 
-Streams a consistent SQLite backup as a downloadable file (`VACUUM INTO`).
+Retained for compatibility; no longer produces a backup. Backups are managed by Supabase
+(daily snapshots, PITR on Pro) — download a dump from the Supabase dashboard under
+Database → Backups.
 
-**Response:** `200 OK` with `Content-Type: application/octet-stream`, `Content-Disposition: attachment; filename="slabledger-backup-YYYY-MM-DD.db"`
+**Response:** `410 Gone` with a JSON error pointing at the Supabase dashboard.
 
 ---
 

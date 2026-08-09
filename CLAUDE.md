@@ -73,11 +73,15 @@ The inventory domain (`internal/domain/inventory/`) is the core campaigns and in
 
 ### Core inventory package
 - **Types**: Campaign, Purchase, Sale, Phase, SaleChannel (`core_types.go`)
-- **8 repository interfaces**: CampaignRepository, PurchaseRepository, SaleRepository,
-  AnalyticsRepository, FinanceRepository, PricingRepository, DHRepository,
-  PendingItemRepository. They are split by concern, not by size — PurchaseRepository
-  alone carries more methods than the other seven combined, so do not assume a new
-  purchase-shaped method belongs elsewhere just to keep it small.
+- **14 repository interfaces**, in `repository_*.go` plus `pending_items.go` — derive the
+  current set with
+  `grep -hn '^type .*Repository interface' internal/domain/inventory/repository_*.go internal/domain/inventory/pending_items.go`.
+  They are split by concern, not by size. `PurchaseRepository` is the 55-method composite
+  (SLA-37) over six focused ports — `PurchaseCore`, `PurchaseField`, `PurchasePricing`,
+  `PurchaseEbayExport`, `PurchaseSnapshot`, `PurchaseDH`. Depend on the narrowest port that
+  covers your use; do not assume a new purchase-shaped method belongs on some other
+  interface just to keep the composite small.
+  `service_interfaces.go` holds *service* interfaces, not repositories.
 - **Service**: CRUD + imports + analytics; delegates computation to sibling sub-packages
 - **PriceLookup**: Optional interface for market signal computation (injected via `WithPriceLookup` functional option)
 - **Import**: CSV parsing lives in the sibling `internal/domain/csvimport` package
@@ -258,6 +262,8 @@ See [docs/API.md](docs/API.md) for all endpoints with request/response shapes.
 - [Operations](docs/OPERATIONS.md) - Deploy, monitoring, incident handling; see also `docs/runbooks/`
 - [Loop](docs/LOOP.md) - The acquisition/liquidation loop this system exists to run
 - [DH Inventory](docs/DH_INVENTORY.md) - DH listing and inventory sync behavior
+- [PSA Harvester](docs/psa-harvester.md) - The out-of-process `cmd/psa-harvest` job: portal
+  session, token handoff, campaign sync, and its Fly/GitHub Actions scheduling
 
 `ls docs/` for the rest — the list above is the durable set, not an inventory.
 
