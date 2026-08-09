@@ -23,11 +23,74 @@
 #      flags. On any passing tree the two sets coincide, so the scan below IS
 #      the leaf rule. Corollary: making membership transitive would be a
 #      no-op — closure can only add a package that is already in violation.
+#
+# All three passes fail CLOSED: the module path is derived from go.mod, the
+# scanned directories are asserted to exist and hold non-test .go files, and a
+# grep status above 1 is a hard error. A rename must break the run loudly
+# rather than turn a check into a silent no-op (SLA-90).
 set -euo pipefail
 
-MODULE="github.com/guarzo/slabledger"
+# Derive the module path from go.mod rather than hardcoding it. A `go mod edit
+# -module` rename would otherwise leave every import pattern below matching
+# nothing, which reads identically to a clean scan.
+if [ ! -f go.mod ]; then
+  echo "ERROR: go.mod not found in $PWD." >&2
+  echo "The architecture checks cannot verify this tree; refusing to pass." >&2
+  exit 1
+fi
 
-violations_domain=$(grep -rn '"github.com/guarzo/slabledger/internal/adapters' internal/domain/ 2>/dev/null || true)
+MODULE=$(awk '$1 == "module" { print $2; exit }' go.mod)
+
+if [ -z "$MODULE" ]; then
+  echo "ERROR: no module path found in go.mod." >&2
+  echo "The architecture checks cannot verify this tree; refusing to pass." >&2
+  exit 1
+fi
+
+# require_go_dir <dir> <check name>
+# A grep over an absent or empty path yields no output and, with `|| true`, a
+# zero status — indistinguishable at the call site from a clean scan. Assert the
+# path exists and holds something to scan before believing a silent pass.
+require_go_dir() {
+  local dir=$1 name=$2
+
+  if [ ! -d "$dir" ]; then
+    echo "ERROR: $dir/ does not exist." >&2
+    echo "The $name check cannot verify this tree; refusing to pass." >&2
+    exit 1
+  fi
+
+  if [ -z "$(find "$dir" -type f -name "*.go" ! -name "*_test.go")" ]; then
+    echo "ERROR: found no non-test .go files under $dir/." >&2
+    echo "The $name check cannot verify this tree; refusing to pass." >&2
+    exit 1
+  fi
+}
+
+# scan_imports <dir> <import prefix> <check name>
+# Sets SCAN_RESULT to the matching lines. A grep status above 1 is a real error
+# (unreadable file, bad pattern), not "no matches" — fail closed instead of
+# absorbing it.
+#
+# Result comes back through a global rather than stdout so the caller need not
+# wrap the call in $(...). Inside a command substitution the `exit 1` below
+# would terminate only the subshell, leaving the parent to carry on with an
+# empty result — the exact fail-open shape this function exists to remove.
+SCAN_RESULT=""
+scan_imports() {
+  local dir=$1 prefix=$2 name=$3 status=0
+
+  SCAN_RESULT=$(grep -rn -- "\"$prefix" "$dir") || status=$?
+  if [ "$status" -gt 1 ]; then
+    echo "ERROR: grep failed with status $status scanning $dir/" >&2
+    echo "The $name check cannot verify this tree; refusing to pass." >&2
+    exit 1
+  fi
+}
+
+require_go_dir internal/domain "domain → adapters"
+scan_imports internal/domain "$MODULE/internal/adapters" "domain → adapters"
+violations_domain=$SCAN_RESULT
 
 if [ -n "$violations_domain" ]; then
   echo "ERROR: Domain packages must not import adapter packages."
@@ -39,7 +102,9 @@ if [ -n "$violations_domain" ]; then
   exit 1
 fi
 
-violations_storage=$(grep -rn '"github.com/guarzo/slabledger/internal/adapters/clients' internal/adapters/storage/ 2>/dev/null || true)
+require_go_dir internal/adapters/storage "storage → clients"
+scan_imports internal/adapters/storage "$MODULE/internal/adapters/clients" "storage → clients"
+violations_storage=$SCAN_RESULT
 
 if [ -n "$violations_storage" ]; then
   echo "ERROR: Storage adapters must not import client adapters."
@@ -211,83 +276,89 @@ is_sanctioned() {
 # _test package (internal/platform/cardutil's cardutil_test) pins normalization
 # behavior end to end against the hub; that edge is test-only and absent from
 # the shipped import graph, so it is out of scope rather than sanctioned.
-if [ -d internal/platform ]; then
-  platform_files=$(find internal/platform -type f -name "*.go" ! -name "*_test.go" | sort)
+#
+# Required, not conditional: a `[ -d internal/platform ]` guard would let a
+# rename of the directory skip the whole pass silently, which is the same
+# fail-open shape SLA-90 removed from the two passes above.
+require_go_dir internal/platform "platform → domain boundary"
 
-  if [ -z "$platform_files" ]; then
-    echo "ERROR: internal/platform/ exists but holds no non-test .go files." >&2
+platform_files=$(find internal/platform -type f -name "*.go" ! -name "*_test.go" | sort)
+
+# Keep the allowlist honest. A sanctioned package that itself reached the hub
+# would turn this rule into a hole, so assert each one still depends on
+# nothing outside the sanctioned set. Leaf-to-leaf edges stay legal.
+#
+# Each sanctioned name is required to exist: an allowlist entry pointing at a
+# package that is no longer there is a stale allowlist, not a clean tree, and
+# swallowing the missing path would check nothing while still reporting a pass.
+#
+# Greps per file rather than recursively: the extraction below strips to the
+# first "internal/domain/" in the line, so a recursive grep's path prefix
+# would be parsed as the import target.
+for leaf in "${SANCTIONED_DOMAIN_LEAVES[@]}"; do
+  require_go_dir "internal/domain/$leaf" "platform → domain allowlist"
+done
+
+leaf_files=$(find "${SANCTIONED_DOMAIN_LEAVES[@]/#/internal/domain/}" \
+  -type f -name "*.go" ! -name "*_test.go" | sort)
+
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  status=0
+  found=$(grep -n -- "\"$MODULE/internal/domain/" "$file") || status=$?
+  if [ "$status" -gt 1 ]; then
+    echo "ERROR: grep failed with status $status scanning $file" >&2
     echo "The platform boundary check cannot verify this tree; refusing to pass." >&2
     exit 1
   fi
+  [ "$status" -eq 0 ] || continue
 
-  # Keep the allowlist honest. A sanctioned package that itself reached the hub
-  # would turn this rule into a hole, so assert each one still depends on
-  # nothing outside the sanctioned set. Leaf-to-leaf edges stay legal.
-  #
-  # Greps per file rather than recursively: the extraction below strips to the
-  # first "internal/domain/" in the line, so a recursive grep's path prefix
-  # would be parsed as the import target.
-  leaf_files=$(find "${SANCTIONED_DOMAIN_LEAVES[@]/#/internal/domain/}" \
-    -type f -name "*.go" ! -name "*_test.go" 2>/dev/null | sort || true)
-
-  while IFS= read -r file; do
-    [ -n "$file" ] || continue
-    status=0
-    found=$(grep -n -- "\"$MODULE/internal/domain/" "$file") || status=$?
-    if [ "$status" -gt 1 ]; then
-      echo "ERROR: grep failed with status $status scanning $file" >&2
-      echo "The platform boundary check cannot verify this tree; refusing to pass." >&2
+  while IFS= read -r line; do
+    target=${line#*internal/domain/}
+    target=${target%%\"*}
+    if ! is_sanctioned "$target"; then
+      echo "ERROR: sanctioned leaf $file imports internal/domain/$target."
+      echo ""
+      echo "The platform -> domain allowlist assumes these packages are a"
+      echo "dependency-free bottom layer. This edge breaks that assumption and"
+      echo "would silently widen the boundary — fix it or revisit the rule."
       exit 1
     fi
-    [ "$status" -eq 0 ] || continue
+  done <<< "$found"
+done <<< "$leaf_files"
 
-    while IFS= read -r line; do
-      target=${line#*internal/domain/}
-      target=${target%%\"*}
-      if ! is_sanctioned "$target"; then
-        echo "ERROR: sanctioned leaf $file imports internal/domain/$target."
-        echo ""
-        echo "The platform -> domain allowlist assumes these packages are a"
-        echo "dependency-free bottom layer. This edge breaks that assumption and"
-        echo "would silently widen the boundary — fix it or revisit the rule."
-        exit 1
-      fi
-    done <<< "$found"
-  done <<< "$leaf_files"
-
-  platform_violations=""
-  while IFS= read -r file; do
-    status=0
-    found=$(grep -n -- "\"$MODULE/internal/domain/" "$file") || status=$?
-    if [ "$status" -gt 1 ]; then
-      echo "ERROR: grep failed with status $status scanning $file" >&2
-      echo "The platform boundary check cannot verify this tree; refusing to pass." >&2
-      exit 1
-    fi
-    [ "$status" -eq 0 ] || continue
-
-    dir=${file%/*}
-    owner=${dir#internal/platform/}
-
-    while IFS= read -r line; do
-      target=${line#*internal/domain/}
-      target=${target%%\"*}
-      if ! is_sanctioned "$target"; then
-        platform_violations="${platform_violations}ERROR: internal/platform/$owner imports internal/domain/$target\n${file}:${line%%:*}\n"
-      fi
-    done <<< "$found"
-  done <<< "$platform_files"
-
-  if [ -n "$platform_violations" ]; then
-    echo "ERROR: Packages under internal/platform/ may import only the sanctioned domain leaves."
-    echo ""
-    printf "%b" "$platform_violations"
-    echo ""
-    echo "Sanctioned set: ${SANCTIONED_DOMAIN_LEAVES[*]}"
-    echo "See internal/README.md (Dependency Rule). Platform is the bottom layer;"
-    echo "anything richer belongs behind an interface the domain owns."
+platform_violations=""
+while IFS= read -r file; do
+  status=0
+  found=$(grep -n -- "\"$MODULE/internal/domain/" "$file") || status=$?
+  if [ "$status" -gt 1 ]; then
+    echo "ERROR: grep failed with status $status scanning $file" >&2
+    echo "The platform boundary check cannot verify this tree; refusing to pass." >&2
     exit 1
   fi
+  [ "$status" -eq 0 ] || continue
 
-  echo "Platform boundary check passed: only ${SANCTIONED_DOMAIN_LEAVES[*]} imported from internal/domain/."
+  dir=${file%/*}
+  owner=${dir#internal/platform/}
+
+  while IFS= read -r line; do
+    target=${line#*internal/domain/}
+    target=${target%%\"*}
+    if ! is_sanctioned "$target"; then
+      platform_violations="${platform_violations}ERROR: internal/platform/$owner imports internal/domain/$target\n${file}:${line%%:*}\n"
+    fi
+  done <<< "$found"
+done <<< "$platform_files"
+
+if [ -n "$platform_violations" ]; then
+  echo "ERROR: Packages under internal/platform/ may import only the sanctioned domain leaves."
+  echo ""
+  printf "%b" "$platform_violations"
+  echo ""
+  echo "Sanctioned set: ${SANCTIONED_DOMAIN_LEAVES[*]}"
+  echo "See internal/README.md (Dependency Rule). Platform is the bottom layer;"
+  echo "anything richer belongs behind an interface the domain owns."
+  exit 1
 fi
+
+echo "Platform boundary check passed: only ${SANCTIONED_DOMAIN_LEAVES[*]} imported from internal/domain/."
