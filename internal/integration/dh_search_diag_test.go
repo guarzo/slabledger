@@ -1,7 +1,13 @@
 // DH Search diagnostic tests — probing what search actually returns.
-// Run with: go test ./internal/integration/ -tags integration -v -run TestDHSearchDiag -timeout 5m
 //
-//go:build integration
+// These are opt-in investigation tools, not regression tests: they report what the
+// live API says rather than asserting what it should say, so they are excluded from
+// the scheduled integration run by the dhdiag tag.
+//
+// Run with:
+//   go test ./internal/integration/ -tags 'integration dhdiag' -v -run TestDHSearchDiag -timeout 5m
+//
+//go:build integration && dhdiag
 
 package integration
 

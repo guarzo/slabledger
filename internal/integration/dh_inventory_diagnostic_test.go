@@ -1,10 +1,14 @@
 // DH Inventory diagnostic — lists what the enterprise API actually reports as inventory
 // and cross-checks against known DH statuses.
 //
-// Run with:
-//   go test ./internal/integration/ -tags integration -v -run TestDH_InventoryDiagnostic -timeout 5m
+// This is an opt-in investigation tool, not a regression test: it fails only when the
+// API call itself errors, and reports its actual findings via t.Logf, so it is excluded
+// from the scheduled integration run by the dhdiag tag.
 //
-//go:build integration
+// Run with:
+//   go test ./internal/integration/ -tags 'integration dhdiag' -v -run TestDH_InventoryDiagnostic -timeout 5m
+//
+//go:build integration && dhdiag
 
 package integration
 
