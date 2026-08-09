@@ -27,6 +27,7 @@ type MockImportService struct {
 	ImportOrdersSalesFn       func(ctx context.Context, rows []csvimport.OrdersExportRow) (*csvimport.OrdersImportResult, error)
 	ImportEbayOrdersSalesFn   func(ctx context.Context, rows []csvimport.EbayOrderRow) (*csvimport.OrdersImportResult, error)
 	ConfirmOrdersSalesFn      func(ctx context.Context, items []csvimport.OrdersConfirmItem) (*inventory.BulkSaleResult, error)
+	ImportCertSalesFn         func(ctx context.Context, req csvimport.CertSaleImportRequest) (*csvimport.CertSaleImportResult, error)
 	CloseFn                   func()
 }
 
@@ -72,6 +73,13 @@ func (m *MockImportService) ConfirmOrdersSales(ctx context.Context, items []csvi
 		return m.ConfirmOrdersSalesFn(ctx, items)
 	}
 	return &inventory.BulkSaleResult{}, nil
+}
+
+func (m *MockImportService) ImportCertSales(ctx context.Context, req csvimport.CertSaleImportRequest) (*csvimport.CertSaleImportResult, error) {
+	if m.ImportCertSalesFn != nil {
+		return m.ImportCertSalesFn(ctx, req)
+	}
+	return &csvimport.CertSaleImportResult{}, nil
 }
 
 func (m *MockImportService) Close() {
