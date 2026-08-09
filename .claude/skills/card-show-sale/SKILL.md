@@ -32,7 +32,7 @@ Ask for anything not supplied:
 | Photo folder (or a typed list — see below) | yes | `~/shows/2026-08-08-nats/` |
 | Sale date | yes | `2026-08-08` |
 | Negotiated percentage | yes | Ask the user in percent (`72`), send as the fraction `negotiatedPct: 0.72`. The API rejects anything outside `(0, 1]`. |
-| Sale channel | yes — always send it explicitly | `local` |
+| Sale channel | yes — always send it explicitly | `inperson` (the liquidation analytics bucket on this value; `local` is a legacy channel that silently drops out of them) |
 | Total actually received | no, but ask | `4310.00` |
 
 Sale channel has no server-side default: an omitted `saleChannel` previews fine
@@ -128,7 +128,7 @@ curl -sX POST http://localhost:8081/api/sales/import-certs \
   -H "Content-Type: application/json" \
   -d '{
     "saleDate": "2026-08-08",
-    "saleChannel": "local",
+    "saleChannel": "inperson",
     "negotiatedPct": 0.72,
     "totalReceivedCents": 39240,
     "items": [
@@ -179,9 +179,9 @@ curl -sX POST http://localhost:8081/api/sales/import-certs/confirm \
   -H "Authorization: Bearer $LOCAL_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '[
-    {"purchaseId": "8321", "saleChannel": "local", "saleDate": "2026-08-08",
+    {"purchaseId": "8321", "saleChannel": "inperson", "saleDate": "2026-08-08",
      "salePriceCents": 3240, "theirCompCents": 4500, "priceSource": "itemized"},
-    {"purchaseId": "8347", "saleChannel": "local", "saleDate": "2026-08-08",
+    {"purchaseId": "8347", "saleChannel": "inperson", "saleDate": "2026-08-08",
      "salePriceCents": 8640, "theirCompCents": 12000, "priceSource": "itemized"}
   ]'
 ```
@@ -302,7 +302,7 @@ which step 1 works:
 | Reconcile delta of a few cents on a normal-size batch | per-card rounding | expected; proceed |
 | Reconcile delta is exactly `0` and no `totalReceivedCents` was sent | the field defaults to `0` when no total was supplied — not a real reconciliation | report it as "no total supplied," not as clean |
 | Confirm response has `failed > 0` | one or more items were rejected at write time even though the batch returned HTTP 200 | read every `errors[]` entry; those cards are **not** recorded and remain unsold in inventory |
-| `errors[]` message `"sale date cannot be before purchase date"` | the typed show date doesn't parse as on/after that card's purchase date | correct the sale date, not the price |
+| `errors[]` message `"[ERR_CAMPAIGN_VALIDATION] sale date cannot be before purchase date"` | the typed show date doesn't parse as on/after that card's purchase date | correct the sale date, not the price; match on the `ERR_CAMPAIGN_VALIDATION` code prefix, not the full string, since the message text can change |
 | `errors[]` message `"already sold"` at confirm, despite a clean preview | inventory state changed between preview and confirm, or the same cert appeared twice in the batch | check the existing sale before re-running |
 | Omitted `saleChannel` | previews fine (no validation there) but fails every item at confirm | always send an explicit `saleChannel` |
 | `401 Unauthorized` | `LOCAL_API_TOKEN` unset or stale | `echo $LOCAL_API_TOKEN`; it must match the running server's config |

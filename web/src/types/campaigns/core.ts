@@ -147,6 +147,10 @@ export interface Sale {
   saleReason?: string;
   clValueAtSaleCents?: number;
   channelFeePctAtSale?: number;
+  // Itemized card-show sale provenance (see migration 000040)
+  theirCompCents?: number;
+  /** One of 'itemized' | 'estimated' | 'manual' | 'unknown'; mirrors Go's inventory.PriceSource. */
+  priceSource?: string;
 }
 
 export interface CreateCampaignInput {

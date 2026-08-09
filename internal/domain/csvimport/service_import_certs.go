@@ -114,12 +114,13 @@ func (s *service) ImportCertSales(ctx context.Context, req CertSaleImportRequest
 	return result, nil
 }
 
-// nearDuplicateCerts returns every cert in certs that is within edit distance
-// 1 of another cert in the same batch: OCR misreading one digit either fails
-// to match anything (self-flagging, harmless) or silently matches a
-// DIFFERENT owned card (silent corruption — the real risk this guards
-// against). O(n^2) over the batch; a card-show batch is ~200 items, so this
-// does not need a trie.
+// nearDuplicateCerts flags every cert in certs that is within edit distance 1
+// of another cert in the same submitted batch — a prompt to re-read those
+// labels before confirming. It only compares certs against each other within
+// this batch, never against the rest of inventory, so it is a partial
+// defense: it cannot detect a misread cert that happens to match some other
+// card in inventory outside the batch. O(n^2) over the batch; a card-show
+// batch is ~200 items, so this does not need a trie.
 func nearDuplicateCerts(certs []string) []string {
 	flagged := make(map[string]bool)
 	for i := 0; i < len(certs); i++ {
