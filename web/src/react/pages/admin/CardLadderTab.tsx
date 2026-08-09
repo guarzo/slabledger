@@ -1,9 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { useCardLadderStatus, useSaveCardLadderConfig, useTriggerCardLadderRefresh, useSyncCardLadderCollection } from '../../queries/useAdminQueries';
+import {
+  useCardLadderStatus,
+  useSaveCardLadderConfig,
+  useTriggerCardLadderRefresh,
+  useSyncCardLadderCollection,
+  useCardLadderFailures,
+} from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 import { formatAdminDate } from './adminUtils';
+import { FailureBreakdownModal } from './FailureBreakdownModal';
 
 export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useCardLadderStatus({ enabled });
@@ -11,6 +18,13 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const refreshMutation = useTriggerCardLadderRefresh();
   const syncMutation = useSyncCardLadderCollection();
   const toast = useToast();
+  const [showFailures, setShowFailures] = useState(false);
+  // Fetch failures eagerly (not just on modal open) so the diagnostics row
+  // can surface the "unprocessed" bucket — rows with no CL value and no
+  // error tag. Without this, silent misses stay invisible until the user
+  // clicks through to the modal. `useCardLadderFailures` defaults to
+  // enabled:false, so this call site must pass `enabled` explicitly.
+  const { data: failures } = useCardLadderFailures({ enabled });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +54,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
       toast.success('Card Ladder connected');
       setPassword('');
     } catch {
-      toast.error('Failed to connect Card Ladder — check credentials');
+      toast.error('Failed to connect Card Ladder. Check your credentials.');
     }
   };
 
@@ -128,7 +142,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
           className="w-full rounded-md bg-[var(--surface-2)] border border-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-500)]"
         />
         <p className="text-xs text-[var(--text-muted)] mt-1">
-          Your Card Ladder project key — available in the Card Ladder Firebase console settings.
+          Your Card Ladder project key (available in the Card Ladder Firebase console settings).
         </p>
       </div>
       <Button type="submit" variant="primary" size="sm" loading={saveMutation.isPending}>
@@ -140,7 +154,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   if (error && !status) {
     return (
       <CardShell padding="lg">
-        <p className="text-[var(--text-muted)] text-sm mb-4">No credentials saved — enter your Card Ladder email and password to connect.</p>
+        <p className="text-[var(--text-muted)] text-sm mb-4">No credentials saved. Enter your Card Ladder email and password to connect.</p>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-2 h-2 rounded-full bg-gray-500" />
           <span className="text-sm text-[var(--text-muted)]">Not connected</span>
@@ -163,6 +177,13 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   }
 
   const lastRun = status.lastRun;
+  const unprocessed = failures?.byReason?.unprocessed ?? 0;
+  // "Unprocessed" is current state (inventory with no value and no error
+  // tag); the other three reflect what the last run tagged. Shown together
+  // so silent misses are visible alongside recorded failures.
+  const diagnosticsShown =
+    (!!lastRun && (lastRun.certResolveFailed > 0 || lastRun.noValue > 0 || lastRun.noCert > 0)) ||
+    unprocessed > 0;
 
   return (
     <CardShell padding="lg">
@@ -174,7 +195,7 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
         <span className="text-xs text-[var(--text-muted)]">{status.email}</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2 mb-3">
         <Stat label="Mapped" value={status.cardsMapped ?? 0} />
         <Stat label="Collection" value={status.collectionId ?? '—'} />
       </div>
@@ -216,6 +237,55 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
             </p>
           )}
         </div>
+      )}
+
+      {diagnosticsShown && (
+        <div className="mt-4 pt-3 border-t border-[var(--surface-2)] space-y-2">
+          <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+            Value Gaps
+          </p>
+          <ul className="space-y-1">
+            {unprocessed > 0 && (
+              <li className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="text-[var(--text-muted)]">Unprocessed (no value, no error tag)</span>
+                <span className="font-semibold tabular-nums text-[var(--warning)]">{unprocessed}</span>
+              </li>
+            )}
+            {lastRun && lastRun.certResolveFailed > 0 && (
+              <li className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="text-[var(--text-muted)]">Cert resolve failed (CL didn&rsquo;t recognize cert)</span>
+                <span className="font-semibold tabular-nums text-[var(--warning)]">{lastRun.certResolveFailed}</span>
+              </li>
+            )}
+            {lastRun && lastRun.noCert > 0 && (
+              <li className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="text-[var(--text-muted)]">No cert on purchase (nothing to look up)</span>
+                <span className="font-semibold tabular-nums text-[var(--text-secondary)]">{lastRun.noCert}</span>
+              </li>
+            )}
+            {lastRun && lastRun.noValue > 0 && (
+              <li className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="text-[var(--text-muted)]">Resolved, no value (catalog returned $0)</span>
+                <span className="font-semibold tabular-nums text-[var(--text-secondary)]">{lastRun.noValue}</span>
+              </li>
+            )}
+          </ul>
+          <button
+            type="button"
+            onClick={() => setShowFailures(true)}
+            className="text-xs text-[var(--accent)] hover:underline"
+          >
+            View failure breakdown
+          </button>
+        </div>
+      )}
+
+      {showFailures && (
+        <FailureBreakdownModal
+          title="Card Ladder — Failure Breakdown"
+          report={failures ?? null}
+          onClose={() => setShowFailures(false)}
+        />
       )}
     </CardShell>
   );

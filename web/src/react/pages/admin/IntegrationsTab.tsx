@@ -1,11 +1,12 @@
 import { CardLadderTab } from './CardLadderTab';
 import { DHTab } from './DHTab';
 import { PSASyncTab } from './PSASyncTab';
+import { DHOperationsPanel } from './DHOperationsPanel';
+import { IntegrationHealthStrip } from './IntegrationHealthStrip';
 import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import SalesImportSection from '../tools/SalesImportSection';
 import { StatusPill } from '../../ui';
-
-const SECTION_HEADER = 'text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3';
+import { SECTION_HEADER } from './shared';
 
 /** Relative time pulse — "X ago" with second/minute/hour/day buckets.
     Returns null when the timestamp is missing or in the future, so call
@@ -43,7 +44,6 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
   const { data: clStatus } = useCardLadderStatus({ enabled });
   const { data: psaStatus } = usePSASyncStatus({ enabled });
 
-  const dhHealthy = dhStatus?.api_health ? dhStatus.api_health.success_rate >= 0.95 : false;
   const clConnected = clStatus?.configured ?? false;
   const psaConfigured = psaStatus?.configured ?? false;
 
@@ -80,7 +80,7 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
     ))?.t;
 
   return (
-    <div className="space-y-8 mt-4">
+    <div className="space-y-10 mt-4">
       {dhBanner && (
         <div
           role="alert"
@@ -92,63 +92,62 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
         </div>
       )}
 
+      <IntegrationHealthStrip enabled={enabled} />
+
       <section>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>DoubleHolo</h3>
-          <div className="flex items-center gap-3">
-            <PulseLine at={dhLastCall} />
-            {dhHealthy ? (
-              <StatusPill tone="success">Healthy</StatusPill>
-            ) : (
-              <StatusPill tone="neutral">Unknown</StatusPill>
-            )}
-          </div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-[var(--text)]">DoubleHolo</h3>
+          {/* No health pill here. The strip directly above states DH health in
+              its full form (healthy / degraded / down / paused / unconfigured);
+              a second, two-state verdict in this header could only ever agree
+              with it by accident, and at a 90% success rate it disagreed —
+              reading "Unknown" for a rate that had in fact been measured.
+              Card Ladder and PSA keep their pills: those state whether the
+              integration is configured, which is a different question. */}
+          <PulseLine at={dhLastCall} />
         </div>
-        <div className="mb-3" />
         <DHTab enabled={enabled} />
+        <DHOperationsPanel enabled={enabled} />
       </section>
 
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>Card Ladder</h3>
-          <div className="flex items-center gap-3">
-            <PulseLine at={clStatus?.lastRun?.lastRunAt} />
-            {clConnected ? (
-              <StatusPill tone="success">Connected</StatusPill>
-            ) : (
-              <StatusPill tone="danger">Not connected</StatusPill>
-            )}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-6">
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={SECTION_HEADER + ' !mb-0'}>Card Ladder</h3>
+            <div className="flex items-center gap-3">
+              <PulseLine at={clStatus?.lastRun?.lastRunAt} />
+              {clConnected ? (
+                <StatusPill tone="success">Connected</StatusPill>
+              ) : (
+                <StatusPill tone="danger">Not connected</StatusPill>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="mb-3" />
-        <CardLadderTab enabled={enabled} />
-      </section>
+          <CardLadderTab enabled={enabled} />
+        </section>
 
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
-        <div className="flex items-center justify-between mb-1">
-          <h3 className={SECTION_HEADER + ' !mb-0'}>PSA Portal Sync</h3>
-          <div className="flex items-center gap-3">
-            <PulseLine at={psaStatus?.lastRun?.lastRunAt} />
-            {psaConfigured ? (
-              <StatusPill tone="success">Configured</StatusPill>
-            ) : (
-              <StatusPill tone="danger">Not configured</StatusPill>
-            )}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={SECTION_HEADER + ' !mb-0'}>PSA Portal Sync</h3>
+            <div className="flex items-center gap-3">
+              <PulseLine at={psaStatus?.lastRun?.lastRunAt} />
+              {psaConfigured ? (
+                <StatusPill tone="success">Configured</StatusPill>
+              ) : (
+                <StatusPill tone="danger">Not configured</StatusPill>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="mb-3" />
-        <PSASyncTab enabled={enabled} />
-      </section>
+          <PSASyncTab enabled={enabled} />
+        </section>
+      </div>
 
-      <hr className="border-[var(--surface-2)]" />
-
-      <section>
+      <section className="mt-6">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-subtle)] mb-1">
+          Tools
+        </p>
         <div className="mb-3">
-          <h3 className={SECTION_HEADER}>Import Sales</h3>
+          <h3 className={SECTION_HEADER + ' !mb-0'}>Import Sales</h3>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Import sales from order CSVs.</p>
         </div>
         <SalesImportSection />

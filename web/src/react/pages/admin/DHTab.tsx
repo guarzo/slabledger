@@ -1,12 +1,14 @@
-import { useDHStatus, useTriggerDHBulkMatch } from '../../queries/useAdminQueries';
+import { useDHStatus, useTriggerDHBulkMatch, useDHPushConfig } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 import { DHPushConfigCard } from './DHPushConfigCard';
+import { DHListingsPauseControl } from './DHListingsPauseControl';
 
 export function DHTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useDHStatus({ enabled });
   const bulkMatchMutation = useTriggerDHBulkMatch();
+  const { data: pushConfig } = useDHPushConfig({ enabled });
   const toast = useToast();
 
   if (!enabled) {
@@ -63,14 +65,11 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   }
 
   const isRunning = status?.bulk_match_running ?? false;
-  const apiHealth = status?.api_health;
-  const successRate = apiHealth ? `${(apiHealth.success_rate * 100).toFixed(0)}%` : '—';
-  const healthy = !!apiHealth && apiHealth.success_rate >= 0.95;
 
   const handleBulkMatch = async () => {
     try {
       await bulkMatchMutation.mutateAsync();
-      toast.success('Bulk match started — progress will update automatically.');
+      toast.success('Bulk match started. Progress will update automatically.');
     } catch {
       toast.error('Failed to start bulk match');
     }
@@ -79,24 +78,52 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="space-y-3">
       <CardShell padding="lg">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${healthy ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'}`} />
-            <span className="text-sm font-semibold text-[var(--text)]">{healthy ? 'Healthy' : 'Degraded'}</span>
-          </div>
-          <span className="text-xs text-[var(--text-muted)]">API success: {successRate}</span>
+        {/* The integration health strip above this card owns the DH health
+            verdict and the success-rate figure. This row carries only the
+            control that is unique to it. */}
+        <div className="flex items-center justify-end gap-4 mb-3">
+          <DHListingsPauseControl enabled={enabled} />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-          <Stat label="Mapped" value={status?.mapped_count ?? 0} />
-          <Stat
-            label="Unmatched"
-            value={status?.unmatched_count ?? 0}
-            tone={(status?.unmatched_count ?? 0) > 0 ? 'warning' : 'default'}
-            sub={(status?.dismissed_count ?? 0) > 0 ? `${status!.dismissed_count} dismissed` : undefined}
-          />
-          <Stat label="Pending push" value={status?.pending_count ?? 0} tone={(status?.pending_count ?? 0) > 0 ? 'warning' : 'default'} />
-          <Stat label="DH listings" value={status?.dh_listings_count ?? 0} />
+        {pushConfig?.listingsPaused && (
+          <div
+            role="status"
+            className="mb-3 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3 py-2 text-xs font-medium text-[var(--warning)]"
+          >
+            Listings are currently paused. New and pending purchases stay in inventory and accumulate as pending until this is turned off.
+          </div>
+        )}
+
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-10 mb-3">
+          <div className="sm:w-44 sm:shrink-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Mapped cards
+            </div>
+            <div className="text-3xl font-semibold tabular-nums leading-tight text-[var(--text)]">
+              {status?.mapped_count ?? 0}
+            </div>
+            {((status?.unmatched_count ?? 0) > 0 || (status?.dismissed_count ?? 0) > 0) && (
+              <p className="mt-1 text-xs text-[var(--warning)]">
+                {(status?.unmatched_count ?? 0) > 0 && `${status?.unmatched_count} still unmatched`}
+                {(status?.unmatched_count ?? 0) > 0 && (status?.dismissed_count ?? 0) > 0 && ' · '}
+                {(status?.dismissed_count ?? 0) > 0 && `${status?.dismissed_count} dismissed`}
+              </p>
+            )}
+          </div>
+
+          <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+            <Stat
+              label="Unmatched"
+              value={status?.unmatched_count ?? 0}
+              tone={(status?.unmatched_count ?? 0) > 0 ? 'warning' : 'default'}
+            />
+            <Stat
+              label="Pending push"
+              value={status?.pending_count ?? 0}
+              tone={(status?.pending_count ?? 0) > 0 ? 'warning' : 'default'}
+            />
+            <Stat label="DH listings" value={status?.dh_listings_count ?? 0} />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 pt-3 border-t border-[var(--surface-2)]">
@@ -110,16 +137,13 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
             {isRunning ? 'Bulk match running…' : 'Run bulk match'}
           </Button>
           {isRunning && (
-            <span className="text-xs text-[var(--text-muted)]">Matching in progress — counts update automatically.</span>
+            <span className="text-xs text-[var(--text-muted)]">Matching in progress; counts update automatically.</span>
           )}
         </div>
 
-        <details className="mt-3">
-          <summary className="text-xs text-[var(--brand-400)] cursor-pointer select-none">Listing push safety rules</summary>
-          <div className="mt-3">
-            <DHPushConfigCard />
-          </div>
-        </details>
+        <div className="mt-4 pt-3 border-t border-[var(--surface-2)]">
+          <DHPushConfigCard />
+        </div>
       </CardShell>
 
       {status?.bulk_match_error && (
@@ -132,13 +156,12 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   );
 }
 
-function Stat({ label, value, sub, tone = 'default' }: { label: string; value: number | string; sub?: string; tone?: 'default' | 'warning' }) {
+function Stat({ label, value, tone = 'default' }: { label: string; value: number | string; tone?: 'default' | 'warning' }) {
   const valueColor = tone === 'warning' ? 'text-[var(--warning)]' : 'text-[var(--text)]';
   return (
     <div className="min-w-0">
       <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
       <div className={`text-sm font-semibold tabular-nums ${valueColor}`}>{value}</div>
-      {sub && <div className="text-[10px] text-[var(--text-muted)] truncate">{sub}</div>}
     </div>
   );
 }

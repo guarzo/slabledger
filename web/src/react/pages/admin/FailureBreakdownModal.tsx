@@ -16,13 +16,13 @@ const REASON_DESCRIPTIONS: Record<string, string> = {
   // Shared — the modal is used across integrations so this description must
   // be provider-neutral.
   api_error: 'External API returned an error',
-  unprocessed: 'No value and no error tag — scheduler never tagged the row',
+  unprocessed: 'No value and no error tag; the scheduler never tagged the row',
   // Card Ladder
   no_image_match: 'No CL card matched the purchase by image URL or cert',
   no_cert_match: 'Purchase has no cert number to fallback-match',
   no_value: 'CL collection and cards catalog both reported $0',
-  catalog_fallback: 'CL collection reported $0 — priced from the CL cards catalog instead',
-  quota_exhausted: 'CL daily request quota was hit — card was skipped, not attempted',
+  catalog_fallback: 'CL collection reported $0, so it was priced from the CL cards catalog instead',
+  quota_exhausted: 'CL daily request quota was hit, so the card was skipped rather than attempted',
 };
 
 export function FailureBreakdownModal({ title, report, onClose }: Props) {

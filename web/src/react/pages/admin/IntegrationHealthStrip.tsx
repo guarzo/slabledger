@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
-import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
+import { useCardLadderStatus, useDHPushConfig, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 
-type TileStatus = 'healthy' | 'warning' | 'down' | 'unconfigured' | 'unknown';
+type TileStatus = 'healthy' | 'paused' | 'warning' | 'down' | 'unconfigured' | 'unknown';
 
 interface TileProps {
   label: string;
@@ -12,6 +12,7 @@ interface TileProps {
 
 const STATUS_LABEL: Record<TileStatus, string> = {
   healthy: 'Healthy',
+  paused: 'Listings paused',
   warning: 'Degraded',
   down: 'Down',
   unconfigured: 'Not configured (optional)',
@@ -21,6 +22,9 @@ const STATUS_LABEL: Record<TileStatus, string> = {
 function StatusDot({ status, label }: { status: TileStatus; label: string }) {
   const color =
     status === 'healthy' ? 'var(--success)' :
+    // Brand amber, not warning yellow: paused is an operator decision, not a
+    // fault, and must not read as "Degraded" at a glance.
+    status === 'paused' ? 'var(--brand-400)' :
     status === 'warning' ? 'var(--warning)' :
     status === 'down' ? 'var(--danger)' :
     /* unconfigured + unknown */ 'var(--text-muted)';
@@ -49,22 +53,43 @@ function Tile({ label, status, metric, detail }: TileProps) {
 }
 
 export function IntegrationHealthStrip({ enabled = true }: { enabled?: boolean }) {
-  const { data: dh } = useDHStatus({ enabled });
+  const { data: dh, isPending: dhPending } = useDHStatus({ enabled });
+  const { data: pushConfig, isPending: pushConfigPending } = useDHPushConfig({ enabled });
   const { data: cl } = useCardLadderStatus({ enabled });
   const { data: psa } = usePSASyncStatus({ enabled });
 
   const dhHealth = dh?.api_health;
-  const dhStatus: TileStatus = !dh
+  // DH health and DH pause state are two independent queries. Painting a
+  // verdict from whichever settles first makes a paused marketplace flash
+  // "Healthy" for as long as the second request takes, which is exactly the
+  // moment an operator is most likely to glance at this strip. Hold at
+  // 'unknown' until both have resolved.
+  const dhSettled = !dhPending && !pushConfigPending;
+  const listingsPaused = pushConfig?.listingsPaused ?? false;
+  const dhStatus: TileStatus = !dhSettled || !dh
     ? 'unknown'
     : !dhHealth
       ? 'unconfigured'
       : dhHealth.success_rate < 0.5
         ? 'down'
-        : dhHealth.success_rate < 0.95
-          ? 'warning'
-          : 'healthy';
-  const dhMetric = !dh ? 'Unknown' : (dhHealth ? `${(dhHealth.success_rate * 100).toFixed(1)}% API` : 'Not configured');
-  const dhDetail = dhHealth ? `${dhHealth.total_calls.toLocaleString()} calls · ${dhHealth.failures} failures` : undefined;
+        // Paused outranks healthy and degraded, but not an outright outage —
+        // a down integration is the more urgent thing to see.
+        : listingsPaused
+          ? 'paused'
+          : dhHealth.success_rate < 0.95
+            ? 'warning'
+            : 'healthy';
+  const dhSuccessPct = dhHealth ? `${(dhHealth.success_rate * 100).toFixed(1)}% API` : null;
+  const dhMetric = !dhSettled || !dh
+    ? 'Unknown'
+    : dhStatus === 'paused'
+      ? 'Listings paused'
+      : (dhSuccessPct ?? 'Not configured');
+  const dhDetail = !dhSettled || !dhHealth
+    ? undefined
+    : dhStatus === 'paused'
+      ? `${dhSuccessPct} · pushes held`
+      : `${dhHealth.total_calls.toLocaleString()} calls · ${dhHealth.failures} failures`;
 
   const clStatus: TileStatus = !cl ? 'unknown' : (cl.configured ? 'healthy' : 'unconfigured');
   const clMapped = cl?.cardsMapped ?? 0;

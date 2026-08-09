@@ -20,7 +20,6 @@ declare module './client' {
     getAdminApiUsage(): Promise<APIUsageResponse>;
     getPricingDiagnostics(): Promise<PricingDiagnosticsResponse>;
     getPriceOverrideStats(): Promise<PriceOverrideStats>;
-    getBackup(): Promise<Blob>;
     getCardLadderStatus(): Promise<CLStatusResponse>;
     getCardLadderFailures(limit?: number): Promise<IntegrationFailuresReport>;
     saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
@@ -80,11 +79,6 @@ proto.getPricingDiagnostics = async function (this: APIClient): Promise<PricingD
 
 proto.getPriceOverrideStats = async function (this: APIClient): Promise<PriceOverrideStats> {
   return this.get<PriceOverrideStats>('/admin/price-override-stats');
-};
-
-proto.getBackup = async function (this: APIClient): Promise<Blob> {
-  const response = await this.fetchWithRetry(`${this.baseURL}/admin/backup`, {});
-  return response.blob();
 };
 
 proto.getCardLadderStatus = async function (this: APIClient) {

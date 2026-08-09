@@ -55,12 +55,12 @@ const PAGES = [
   { name: 'inventory', path: '/inventory' },
   { name: 'inventory-expanded', path: '/inventory', expandRow: true, desktopOnly: true },
   { name: 'scan', path: '/scan' },
-  // Explicit Users tab — without this the page captured the default Stats tab,
-  // making admin-users.png byte-identical to admin-stats.png on mobile.
-  { name: 'admin-users', path: '/admin', tabLabel: 'Users' },
-  { name: 'admin-pricing', path: '/admin', tabLabel: 'Pricing' },
-  { name: 'admin-stats', path: '/admin', tabLabel: 'Stats' },
+  // Every admin entry clicks its tab explicitly. The page defaults to
+  // Integrations, so an entry without a tabLabel would capture Integrations
+  // again and produce a byte-identical duplicate of admin-integrations.png.
   { name: 'admin-integrations', path: '/admin', tabLabel: 'Integrations' },
+  { name: 'admin-pricing', path: '/admin', tabLabel: 'Pricing' },
+  { name: 'admin-users', path: '/admin', tabLabel: 'Users' },
 ];
 
 const VIEWPORTS = [
