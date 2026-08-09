@@ -135,12 +135,16 @@ describe('DHTab pause toggle vs config card seam', () => {
     const sw = await screen.findByRole('switch', { name: 'Pause DH listings' });
     sw.click();
 
-    // Settle the toggle FIRST. A `waitFor` on the field alone would pass
-    // before the pause mutation's cache seed has a chance to propagate,
-    // producing a false pass against the unfixed component.
+    // Settle the toggle FIRST. The banner and aria-checked are not enough on
+    // their own — the banner is a sibling subscriber that commits before the
+    // clobber has propagated through setForm -> ConfigField's value prop -> its
+    // resync effect, and aria-checked flips optimistically on click, before the
+    // mutation even resolves. So wait for the clobber to fail to arrive within a
+    // bounded window instead of racing it.
     await screen.findByText(/Listings are currently paused/i);
     await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true'));
 
+    await expect(waitFor(() => expect(field).toHaveValue(25), { timeout: 400 })).rejects.toThrow();
     expect(field).toHaveValue(40);
   });
 });
