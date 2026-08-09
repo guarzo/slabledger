@@ -4,6 +4,11 @@ Task 16 specifies. Reuses the cluster map in build-report.py as the single
 source of truth so REPORT.md and TICKETS.md can never drift apart.
 
 Each body is what gets posted to Linear verbatim.
+
+Determinism is per generator version, not across them: commit 4c5d1b42 repaired
+rendering defects postdating both filed runs, so this script no longer reproduces
+the committed TICKETS.md of either. See build-report.py's docstring and
+runs/2026-08-08/CONTROLLER-NOTES.md.
 """
 import json
 import glob
@@ -14,7 +19,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUDIT_HOME = HERE + "/.."
 # Run-scoped root; see build-report.py. Defaults to AUDIT_HOME so the flat
-# 2026-08-07 layout still regenerates in place.
+# 2026-08-07 layout resolves its inputs without any environment (which is not
+# the same as reproducing that run's committed TICKETS.md — see the docstring).
 AUDIT = os.environ.get("AUDIT_RUN", AUDIT_HOME)
 # Repo-relative form of AUDIT. This one is load-bearing in a way build-report's
 # is not: it is rendered into every ticket body POSTed to Linear, where a stale

@@ -180,6 +180,11 @@ fix units: 35 / ticketable: 54 rolled up: 55 / missing: none
 adjudicated-in: ['DEADGO-004'] / in >1 unit (expected: DEADGO-004 only): ['DEADGO-004']
 ```
 
+"Deterministic" here means same generator + same inputs → same bytes. It does
+not mean an already-filed run round-trips: the generators have been repaired
+since both filed runs were produced, so regenerating one of those in place would
+rewrite the record. See "Regenerating" in `README.md`.
+
 ## Ticketability rule
 
 A finding is ticketable when:
