@@ -356,6 +356,58 @@ func TestImportCerts_BatchLatchOnPSAUnavailable(t *testing.T) {
 	}
 }
 
+// TestImportCerts_QueuedCertsCarryLatchMessage guards the exact error message
+// on certs that are skipped after the batch-wide PSA-unavailable latch trips.
+// TestImportCerts_BatchLatchOnPSAUnavailable already proves the latch stops
+// further lookups and marks the queued certs Retryable; this test adds the one
+// thing that split into a separate extracted function, importNewCert, is
+// what silently changes.
+func TestImportCerts_QueuedCertsCarryLatchMessage(t *testing.T) {
+	repo := newMockRepo()
+	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID, Name: ExternalCampaignName}
+
+	certs := []string{"1", "2", "3"}
+	var calls int
+	certLookup := &mockCertLookup{
+		lookupFn: func(_ context.Context, _ string) (*CertInfo, error) {
+			calls++
+			// Only the first cert is ever looked up: it trips the latch.
+			return nil, apperrors.ProviderCircuitOpen("PSA")
+		},
+	}
+	svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, certLookup: certLookup, idGen: func() string { return "test-id" }}
+
+	result, err := svc.ImportCerts(context.Background(), certs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("LookupCert called %d times, want 1 (latch must stop further lookups)", calls)
+	}
+	if len(result.Errors) != len(certs) {
+		t.Fatalf("Errors length = %d, want %d", len(result.Errors), len(certs))
+	}
+
+	// cert "1" was actually looked up: its message is the wrapped provider error.
+	if !result.Errors[0].Retryable {
+		t.Errorf("Errors[0] (cert %q) Retryable = false, want true", result.Errors[0].CertNumber)
+	}
+	if result.Errors[0].Error == "PSA temporarily unavailable — queued for retry" {
+		t.Errorf("Errors[0] (cert %q) should carry the actual lookup error, not the queued-retry message", result.Errors[0].CertNumber)
+	}
+
+	// certs "2" and "3" never reached LookupCert: they must carry the exact
+	// queued-for-retry message, not a paraphrase and not the raw lookup error.
+	for _, e := range result.Errors[1:] {
+		if !e.Retryable {
+			t.Errorf("cert %q: Retryable = false, want true", e.CertNumber)
+		}
+		if e.Error != "PSA temporarily unavailable — queued for retry" {
+			t.Errorf("cert %q: Error = %q, want %q", e.CertNumber, e.Error, "PSA temporarily unavailable — queued for retry")
+		}
+	}
+}
+
 func TestImportCerts_Deduplication(t *testing.T) {
 	repo := newMockRepo()
 	repo.campaigns[ExternalCampaignID] = &Campaign{ID: ExternalCampaignID}
