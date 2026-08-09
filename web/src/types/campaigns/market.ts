@@ -98,8 +98,8 @@ export interface SellSheetItem {
   clValueCents: number;
   currentMarket?: MarketSnapshot;
   recommendation: string;
-  targetSellPrice: number;
-  minimumAcceptPrice: number;
+  targetSellPriceCents: number;
+  minimumAcceptPriceCents: number;
   priceLookupError?: string;
   recommendedChannel?: SaleChannel;
   channelLabel?: string;
@@ -117,9 +117,9 @@ export interface SellSheet {
   campaignName: string;
   items: SellSheetItem[];
   totals: {
-    totalCostBasis: number;
-    totalExpectedRevenue: number;
-    totalProjectedProfit: number;
+    totalCostBasisCents: number;
+    totalExpectedRevenueCents: number;
+    totalProjectedProfitCents: number;
     itemCount: number;
     skippedItems: number;
   };

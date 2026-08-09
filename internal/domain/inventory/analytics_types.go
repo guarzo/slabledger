@@ -105,43 +105,43 @@ type SellSheet struct {
 
 // SellSheetItem contains sell sheet data for a single card.
 type SellSheetItem struct {
-	PurchaseID            string            `json:"purchaseId,omitempty"`
-	CampaignName          string            `json:"campaignName,omitempty"`
-	CertNumber            string            `json:"certNumber"`
-	CardName              string            `json:"cardName"`
-	SetName               string            `json:"setName,omitempty"`
-	CardNumber            string            `json:"cardNumber,omitempty"`
-	Grade                 float64           `json:"grade"`
-	Grader                string            `json:"grader,omitempty"`
-	CardYear              string            `json:"cardYear,omitempty"`
-	Population            int               `json:"population,omitempty"`
-	BuyCostCents          int               `json:"buyCostCents"`
-	CostBasisCents        int               `json:"costBasisCents"`
-	CLValueCents          int               `json:"clValueCents"`
-	CurrentMarket         *MarketSnapshot   `json:"currentMarket,omitempty"`
-	Recommendation        string            `json:"recommendation"`
-	TargetSellPrice       int               `json:"targetSellPrice"`
-	MinimumAcceptPrice    int               `json:"minimumAcceptPrice"`
-	PriceLookupError      string            `json:"priceLookupError,omitempty"`
-	RecommendedChannel    SaleChannel       `json:"recommendedChannel,omitempty"`
-	ChannelLabel          string            `json:"channelLabel,omitempty"`
-	OverridePriceCents    int               `json:"overridePriceCents,omitempty"`
-	OverrideSource        OverrideSource    `json:"overrideSource,omitempty"`
-	IsOverridden          bool              `json:"isOverridden,omitempty"`
-	ComputedPriceCents    int               `json:"computedPriceCents,omitempty"`
-	AISuggestedPriceCents int               `json:"aiSuggestedPriceCents,omitempty"`
-	AISuggestedAt         string            `json:"aiSuggestedAt,omitempty"`
-	Signals               *InventorySignals `json:"signals,omitempty"`
-	PSAShipDate           string            `json:"psaShipDate,omitempty"`
+	PurchaseID              string            `json:"purchaseId,omitempty"`
+	CampaignName            string            `json:"campaignName,omitempty"`
+	CertNumber              string            `json:"certNumber"`
+	CardName                string            `json:"cardName"`
+	SetName                 string            `json:"setName,omitempty"`
+	CardNumber              string            `json:"cardNumber,omitempty"`
+	Grade                   float64           `json:"grade"`
+	Grader                  string            `json:"grader,omitempty"`
+	CardYear                string            `json:"cardYear,omitempty"`
+	Population              int               `json:"population,omitempty"`
+	BuyCostCents            int               `json:"buyCostCents"`
+	CostBasisCents          int               `json:"costBasisCents"`
+	CLValueCents            int               `json:"clValueCents"`
+	CurrentMarket           *MarketSnapshot   `json:"currentMarket,omitempty"`
+	Recommendation          string            `json:"recommendation"`
+	TargetSellPriceCents    int               `json:"targetSellPriceCents"`
+	MinimumAcceptPriceCents int               `json:"minimumAcceptPriceCents"`
+	PriceLookupError        string            `json:"priceLookupError,omitempty"`
+	RecommendedChannel      SaleChannel       `json:"recommendedChannel,omitempty"`
+	ChannelLabel            string            `json:"channelLabel,omitempty"`
+	OverridePriceCents      int               `json:"overridePriceCents,omitempty"`
+	OverrideSource          OverrideSource    `json:"overrideSource,omitempty"`
+	IsOverridden            bool              `json:"isOverridden,omitempty"`
+	ComputedPriceCents      int               `json:"computedPriceCents,omitempty"`
+	AISuggestedPriceCents   int               `json:"aiSuggestedPriceCents,omitempty"`
+	AISuggestedAt           string            `json:"aiSuggestedAt,omitempty"`
+	Signals                 *InventorySignals `json:"signals,omitempty"`
+	PSAShipDate             string            `json:"psaShipDate,omitempty"`
 }
 
 // SellSheetTotals contains aggregate sell sheet metrics.
 type SellSheetTotals struct {
-	TotalCostBasis       int `json:"totalCostBasis"`
-	TotalExpectedRevenue int `json:"totalExpectedRevenue"`
-	TotalProjectedProfit int `json:"totalProjectedProfit"`
-	ItemCount            int `json:"itemCount"`
-	SkippedItems         int `json:"skippedItems"`
+	TotalCostBasisCents       int `json:"totalCostBasisCents"`
+	TotalExpectedRevenueCents int `json:"totalExpectedRevenueCents"`
+	TotalProjectedProfitCents int `json:"totalProjectedProfitCents"`
+	ItemCount                 int `json:"itemCount"`
+	SkippedItems              int `json:"skippedItems"`
 }
 
 // DailyCapitalPoint represents a single day in the capital deployment timeline.
