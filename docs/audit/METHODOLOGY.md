@@ -11,6 +11,17 @@ argues *why* the topology is shaped this way; the plan
 (`docs/plans/2026-08-08-codebase-tech-debt-audit.md`) is the task-by-task
 script. This file is what you read first if you are re-running it.
 
+## Starting a run
+
+Do not compose a kickoff instruction from scratch. The most recent run's
+`PROMPT.md` — currently `docs/audit/runs/2026-08-08/PROMPT.md` — is the verbatim
+text that started that run, kept precisely so the next run can be a variation on
+it. It carries the parameters this file does not: baseline pinning, run-scoped
+output paths, the prior-findings rule, and the Linear preconditions. Copy it,
+change the parameters, and record the result as the new run's `PROMPT.md`.
+
+Everything below is standing process and applies unchanged to every run.
+
 ## Standing constraints
 
 These bind every agent in every phase. They are the contents of

@@ -36,6 +36,13 @@ type Sale struct {
 	// via heuristic when empty. Frozen at sale-creation time.
 	SaleReason string `json:"saleReason,omitempty"`
 
+	// TheirCompCents is the counterparty's own per-card comp (e.g. a dealer's
+	// sticker/offer price), captured independently of any CL/DH market signal.
+	// PriceSource records how the sale price was arrived at: '' (unknown),
+	// 'itemized', 'estimated', or 'manual'. See migration 000040.
+	TheirCompCents int    `json:"theirCompCents,omitempty"`
+	PriceSource    string `json:"priceSource,omitempty"`
+
 	// CLValueAtSaleCents and ChannelFeePctAtSale freeze the purchase's CL value and
 	// the channel fee rate in effect at sale time.
 	//
@@ -59,6 +66,7 @@ type BulkSaleInput struct {
 	PriceReductions        int    `json:"priceReductions,omitempty"`
 	DaysListed             int    `json:"daysListed,omitempty"`
 	SaleReason             string `json:"saleReason,omitempty"`
+	PriceSource            string `json:"priceSource,omitempty"`
 }
 
 // BulkSaleResult summarizes the outcome of a bulk sale operation.

@@ -6,6 +6,10 @@
 
 Read-only audit. No code was changed by this process; tickets are the output.
 
+**Starting a new run?** Read `METHODOLOGY.md` first, then copy the most recent
+run's `PROMPT.md` (`runs/2026-08-08/PROMPT.md`) and change its parameters — it is
+the kickoff instruction, kept verbatim for exactly that purpose.
+
 | Directory | Contents |
 |---|---|
 | `METHODOLOGY.md` | **How to run this audit again** — topology, gates, failure modes |
@@ -25,6 +29,26 @@ Read-only audit. No code was changed by this process; tickets are the output.
 | `REPORT.md` | Consolidated ranked findings |
 | `TICKETS.md` | Ticket bodies as filed |
 | `linear-ids.json` | Fix unit → filed Linear issue |
+| `runs/<date>/` | Later runs' artifacts — see *Run layout* below |
+
+## Run layout
+
+The first run (2026-08-07, baseline `740976ec`, tickets SLA-9 … SLA-43) wrote its
+artifacts flat into this directory; the top-level `REPORT.md`, `TICKETS.md`,
+`findings/`, `verdicts/`, `ADJUDICATIONS.md` and `linear-ids.json` are its output.
+Every run since is scoped to `runs/<baseline-date>/`, which holds that same set
+plus four files the first run has no equivalent of:
+
+| File | Contents |
+|---|---|
+| `PROMPT.md` | The kickoff instruction, verbatim as sent — **start here to re-run** |
+| `RUN-CARD.md` | Every run-specific fact (baseline SHA, paths, map counts, caveats), so the shared briefs stay run-independent |
+| `CONTROLLER-NOTES.md` | The controller's log across the run — lens outcomes, dedup leads, Phase 3 verification priorities, rejected candidates, and what was deferred |
+| `units.json` | The fix units the generators consume — finding ids clustered into ticketable work, with tier, effort and rationale |
+
+The process documents — `METHODOLOGY.md`, `PREAMBLE.md`, the two briefs,
+`schema/` and `scripts/` — are shared and baseline-independent. A run never
+writes to them.
 
 ## The Phase 1 maps
 

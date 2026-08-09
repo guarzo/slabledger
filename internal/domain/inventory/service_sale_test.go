@@ -124,21 +124,26 @@ func findSaleByPurchaseID(t *testing.T, repo *mocks.InMemoryCampaignStore, campa
 
 func TestCreateSale_Provenance(t *testing.T) {
 	tests := []struct {
-		name          string
-		inputReason   string
-		forgedCLValue int
-		forgedFeePct  *float64
-		wantReason    string
-		wantErr       error
+		name             string
+		inputReason      string
+		inputPriceSource string
+		forgedCLValue    int
+		forgedFeePct     *float64
+		wantReason       string
+		wantPriceSource  string
+		wantErr          error
 	}{
 		{
-			name:       "freezes derived provenance",
-			wantReason: inventory.SaleReasonDiscretionary,
+			name:            "freezes derived provenance, defaults price source to manual",
+			wantReason:      inventory.SaleReasonDiscretionary,
+			wantPriceSource: inventory.PriceSourceManual,
 		},
 		{
-			name:        "preserves explicit reason",
-			inputReason: inventory.SaleReasonAgingPolicy,
-			wantReason:  inventory.SaleReasonAgingPolicy,
+			name:             "preserves explicit reason and price source",
+			inputReason:      inventory.SaleReasonAgingPolicy,
+			inputPriceSource: inventory.PriceSourceEstimated,
+			wantReason:       inventory.SaleReasonAgingPolicy,
+			wantPriceSource:  inventory.PriceSourceEstimated,
 		},
 		{
 			name:        "rejects invalid reason",
@@ -146,10 +151,16 @@ func TestCreateSale_Provenance(t *testing.T) {
 			wantErr:     inventory.ErrInvalidSaleReason,
 		},
 		{
-			name:          "ignores client-forged provenance",
-			forgedCLValue: 99999999,
-			forgedFeePct:  func() *float64 { v := 0.99; return &v }(),
-			wantReason:    inventory.SaleReasonDiscretionary,
+			name:             "rejects invalid price source",
+			inputPriceSource: "bogus",
+			wantErr:          inventory.ErrInvalidPriceSource,
+		},
+		{
+			name:            "ignores client-forged provenance",
+			forgedCLValue:   99999999,
+			forgedFeePct:    func() *float64 { v := 0.99; return &v }(),
+			wantReason:      inventory.SaleReasonDiscretionary,
+			wantPriceSource: inventory.PriceSourceManual,
 		},
 	}
 	for _, tt := range tests {
@@ -166,6 +177,7 @@ func TestCreateSale_Provenance(t *testing.T) {
 				SalePriceCents:      20000,
 				SaleDate:            "2026-06-20",
 				SaleReason:          tt.inputReason,
+				PriceSource:         tt.inputPriceSource,
 				CLValueAtSaleCents:  tt.forgedCLValue,
 				ChannelFeePctAtSale: tt.forgedFeePct,
 			}
@@ -183,6 +195,9 @@ func TestCreateSale_Provenance(t *testing.T) {
 
 			if s.SaleReason != tt.wantReason {
 				t.Errorf("SaleReason = %q, want %q", s.SaleReason, tt.wantReason)
+			}
+			if s.PriceSource != tt.wantPriceSource {
+				t.Errorf("PriceSource = %q, want %q", s.PriceSource, tt.wantPriceSource)
 			}
 			// CLValueAtSaleCents and ChannelFeePctAtSale must always reflect the
 			// purchase/campaign's real values, never client input (forged or not).
@@ -324,5 +339,67 @@ func TestCreateBulkSales_CopiesPerItemFields(t *testing.T) {
 		if salesList[i].PurchaseID == p2.ID {
 			t.Fatal("expected no sale to be created for purchase 2 (invalid reason)")
 		}
+	}
+}
+
+func TestCreateBulkSales_PriceSourceDefaults(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c, p := setupSaleFixture(t, repo, svc)
+
+	p2 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Pikachu", CertNumber: "PROV04",
+		GradeValue: 10, BuyCostCents: 30000, PurchaseDate: "2026-06-01",
+		CLValueCents: 8000,
+	}
+	if err := svc.CreatePurchase(ctx, p2); err != nil {
+		t.Fatalf("setup purchase 2: %v", err)
+	}
+
+	p3 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Venusaur", CertNumber: "PROV06",
+		GradeValue: 9, BuyCostCents: 25000, PurchaseDate: "2026-06-01",
+		CLValueCents: 7000,
+	}
+	if err := svc.CreatePurchase(ctx, p3); err != nil {
+		t.Fatalf("setup purchase 3: %v", err)
+	}
+
+	result, err := svc.CreateBulkSales(ctx, c.ID, inventory.SaleChannelEbay, "2026-06-20", []inventory.BulkSaleInput{
+		{PurchaseID: p.ID, SalePriceCents: 20000},
+		{PurchaseID: p2.ID, SalePriceCents: 15000, PriceSource: inventory.PriceSourceItemized},
+		{PurchaseID: p3.ID, SalePriceCents: 10000, PriceSource: "bogus"},
+	})
+	if err != nil {
+		t.Fatalf("CreateBulkSales: %v", err)
+	}
+	if result.Created != 2 {
+		t.Fatalf("created = %d, want 2 (errors: %v)", result.Created, result.Errors)
+	}
+	if result.Failed != 1 {
+		t.Fatalf("failed = %d, want 1", result.Failed)
+	}
+
+	defaulted := findSaleByPurchaseID(t, repo, c.ID, p.ID)
+	if defaulted.PriceSource != inventory.PriceSourceEstimated {
+		t.Errorf("PriceSource = %q, want %q", defaulted.PriceSource, inventory.PriceSourceEstimated)
+	}
+
+	explicit := findSaleByPurchaseID(t, repo, c.ID, p2.ID)
+	if explicit.PriceSource != inventory.PriceSourceItemized {
+		t.Errorf("PriceSource = %q, want %q", explicit.PriceSource, inventory.PriceSourceItemized)
+	}
+
+	// CreateBulkSales stringifies the per-item error into BulkSaleError.Error
+	// rather than returning it, so errors.Is cannot be applied to the result
+	// directly; compare against the sentinel's own .Error() text instead, which
+	// is exactly what FreezeSaleProvenance's error becomes on this path.
+	if len(result.Errors) != 1 || result.Errors[0].PurchaseID != p3.ID {
+		t.Fatalf("errors = %+v, want single error for purchase 3", result.Errors)
+	}
+	if result.Errors[0].Error != inventory.ErrInvalidPriceSource.Error() {
+		t.Errorf("Errors[0].Error = %q, want %q", result.Errors[0].Error, inventory.ErrInvalidPriceSource.Error())
 	}
 }

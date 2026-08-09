@@ -1,5 +1,5 @@
-import { useId } from 'react';
 import type { IntegrationFailuresReport } from '../../../types/admin';
+import { Modal } from '../../ui';
 import { formatAdminDate } from './adminUtils';
 
 interface Props {
@@ -26,105 +26,81 @@ const REASON_DESCRIPTIONS: Record<string, string> = {
 };
 
 export function FailureBreakdownModal({ title, report, onClose }: Props) {
-  const titleId = useId();
   const byReason = report?.byReason ?? {};
   const reasons = Object.entries(byReason).sort((a, b) => b[1] - a[1]);
   const samples = report?.samples ?? [];
   const totalFailures = reasons.reduce((sum, [, count]) => sum + count, 0);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--surface-overlay)] p-4"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-    >
-      <div
-        className="bg-[var(--surface-0)] border border-[var(--surface-2)] rounded-xl shadow-xl max-w-3xl w-full max-h-[80vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-4 border-b border-[var(--surface-2)] sticky top-0 bg-[var(--surface-0)]">
-          <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-[var(--text)]"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
+    <Modal title={title} onClose={onClose} size="lg" scrollable showClose>
+      <div className="space-y-4">
+        {!report && (
+          <p className="text-sm text-[var(--text-muted)]">Loading failure data...</p>
+        )}
 
-        <div className="p-4 space-y-4">
-          {!report && (
-            <p className="text-sm text-[var(--text-muted)]">Loading failure data...</p>
-          )}
+        {report && totalFailures === 0 && (
+          <p className="text-sm text-[var(--text-muted)]">
+            No failures recorded. Either nothing has failed since the last run, or the
+            refresh scheduler has not yet written failure reasons for this integration.
+          </p>
+        )}
 
-          {report && totalFailures === 0 && (
-            <p className="text-sm text-[var(--text-muted)]">
-              No failures recorded. Either nothing has failed since the last run, or the
-              refresh scheduler has not yet written failure reasons for this integration.
-            </p>
-          )}
-
-          {totalFailures > 0 && (
-            <>
-              <div>
-                <h3 className="text-sm font-semibold mb-2">Failures by reason</h3>
-                <ul className="space-y-1">
-                  {reasons.map(([reason, count]) => (
-                    <li
-                      key={reason}
-                      className="flex items-start justify-between gap-4 rounded bg-[var(--surface-1)] border border-[var(--surface-2)] p-2"
-                    >
-                      <div>
-                        <div className="text-sm font-mono">{reason}</div>
-                        <div className="text-xs text-[var(--text-muted)]">
-                          {REASON_DESCRIPTIONS[reason] ?? 'Unknown reason tag'}
-                        </div>
+        {totalFailures > 0 && (
+          <>
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Failures by reason</h3>
+              <ul className="space-y-1">
+                {reasons.map(([reason, count]) => (
+                  <li
+                    key={reason}
+                    className="flex items-start justify-between gap-4 rounded bg-[var(--surface-1)] border border-[var(--surface-2)] p-2"
+                  >
+                    <div>
+                      <div className="text-sm font-mono">{reason}</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {REASON_DESCRIPTIONS[reason] ?? 'Unknown reason tag'}
                       </div>
-                      <div className="text-sm font-semibold">{count}</div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                    </div>
+                    <div className="text-sm font-semibold">{count}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-              {samples.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">
-                    Recent samples ({samples.length})
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="text-left text-[var(--text-muted)] border-b border-[var(--surface-2)]">
-                          <th className="py-1 pr-2">Cert</th>
-                          <th className="py-1 pr-2">Card</th>
-                          <th className="py-1 pr-2">Reason</th>
-                          <th className="py-1">Logged</th>
+            {samples.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold mb-2">
+                  Recent samples ({samples.length})
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="text-left text-[var(--text-muted)] border-b border-[var(--surface-2)]">
+                        <th className="py-1 pr-2">Cert</th>
+                        <th className="py-1 pr-2">Card</th>
+                        <th className="py-1 pr-2">Reason</th>
+                        <th className="py-1">Logged</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {samples.map((s, i) => (
+                        <tr key={`${s.purchaseId}-${i}`} className="border-b border-[var(--surface-2)]">
+                          <td className="py-1 pr-2 font-mono">{s.certNumber || '—'}</td>
+                          <td className="py-1 pr-2">{s.cardName || '—'}</td>
+                          <td className="py-1 pr-2 font-mono">{s.reason}</td>
+                          <td className="py-1 text-[var(--text-muted)]">
+                            {s.errorAt ? formatAdminDate(s.errorAt) : '—'}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {samples.map((s, i) => (
-                          <tr key={`${s.purchaseId}-${i}`} className="border-b border-[var(--surface-2)]">
-                            <td className="py-1 pr-2 font-mono">{s.certNumber || '—'}</td>
-                            <td className="py-1 pr-2">{s.cardName || '—'}</td>
-                            <td className="py-1 pr-2 font-mono">{s.reason}</td>
-                            <td className="py-1 text-[var(--text-muted)]">
-                              {s.errorAt ? formatAdminDate(s.errorAt) : '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </>
-          )}
-        </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -210,6 +210,7 @@ engine) were removed on 2026-04-06.
 - Use builtin min/max (Go 1.21+), not custom implementations
 - Functional options pattern for optional dependencies (e.g. `WithPriceLookup`)
 - Keep source files under 500 lines. If a file grows beyond this, look for natural split points (separate strategies, separate concerns, utilities)
+- Functions are budgeted at 262 lines, enforced by `funlen` via golangci-lint (and therefore `make check`); a ratchet on the current worst function, not a target. `_test.go` files and `testutil/mocks/` are exempt.
 
 ## Quality Checks
 
@@ -217,6 +218,7 @@ engine) were removed on 2026-04-06.
 - `scripts/check-imports.sh` — fails if domain packages import adapter packages (hexagonal invariant); also enforces the flat sibling rule, deriving membership from the tree and enforcing on the target side, and fails closed if fewer than two siblings are derived or if the scan performs an unexpected number of checks
 - `scripts/check-imports-test.sh` — self-test for the above; five fixture cases, run first by `make check`
 - `scripts/check-file-size.sh` — warns at 500 lines, fails at 600 lines (excludes test files and mocks)
+- `funlen` (in `.golangci.yml`) — per-function line budget of 262 (excludes test files and `testutil/mocks/`)
 - `scripts/check-doc-paths.sh` — fails if a durable doc cites a source path that is not a tracked file. Scoped to docs that describe the tree as it is now; `docs/specs/`, `docs/plans/`, `docs/superpowers/` and `docs/audit/` are excluded because they are point-in-time records. Paths inside fenced code blocks are skipped, so recipe placeholders (`scheduler/myworker.go`) do not trip it
 - `scripts/check-playwright-version.sh` — keeps the Playwright package and browser image in step
 

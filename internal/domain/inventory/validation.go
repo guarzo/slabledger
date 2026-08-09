@@ -29,6 +29,7 @@ var (
 	ErrPurchaseIDRequired       = errors.NewAppError(ErrCodeCampaignValidation, "purchase ID is required")
 	ErrSaleDateBeforePurchase   = errors.NewAppError(ErrCodeCampaignValidation, "sale date cannot be before purchase date")
 	ErrInvalidSaleReason        = errors.NewAppError(ErrCodeCampaignValidation, "invalid sale reason")
+	ErrInvalidPriceSource       = errors.NewAppError(ErrCodeCampaignValidation, "invalid price source")
 	ErrInvalidDailySpend        = errors.NewAppError(ErrCodeCampaignValidation, "daily spend cap must be non-negative")
 	ErrInvalidYearRange         = errors.NewAppError(ErrCodeCampaignValidation, "yearRange must be empty or in format 'startYear-endYear' (e.g. 1999-2003)")
 	ErrInvalidPriceRange        = errors.NewAppError(ErrCodeCampaignValidation, "priceRange must be empty or in format 'min-max' (e.g. 50-500)")

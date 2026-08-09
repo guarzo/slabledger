@@ -1,5 +1,6 @@
 // Package csvimport turns exported CSV files — PSA order exports, eBay and
-// Shopify order reports — into campaign purchases and sales.
+// Shopify order reports — and cert/price batches posted directly (e.g. from a
+// card-show extraction workflow) into campaign purchases and sales.
 //
 // It was carved out of internal/domain/inventory (SLA-35). The parsers carry a
 // large vocabulary of row and result types that only file intake cares about,
@@ -27,6 +28,7 @@ type Service interface {
 	ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow) (*OrdersImportResult, error)
 	ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmItem) (*inventory.BulkSaleResult, error)
 	ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)
+	ImportCertSales(ctx context.Context, req CertSaleImportRequest) (*CertSaleImportResult, error)
 
 	// Close waits for background work started by an import (card ID backfill)
 	// to finish. Callers that wire this service own calling it at shutdown.
