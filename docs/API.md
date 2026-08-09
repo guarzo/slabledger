@@ -1724,15 +1724,15 @@ Generates a global sell sheet across all active campaigns.
       "costBasisCents": 84300,
       "clValueCents": 120000,
       "recommendation": "List on eBay",
-      "targetSellPrice": 130000,
-      "minimumAcceptPrice": 90000,
+      "targetSellPriceCents": 130000,
+      "minimumAcceptPriceCents": 90000,
       "recommendedChannel": "ebay"
     }
   ],
   "totals": {
-    "totalCostBasis": 84300,
-    "totalExpectedRevenue": 130000,
-    "totalProjectedProfit": 29645,
+    "totalCostBasisCents": 84300,
+    "totalExpectedRevenueCents": 130000,
+    "totalProjectedProfitCents": 29645,
     "itemCount": 1,
     "skippedItems": 0
   }

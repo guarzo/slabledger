@@ -44,18 +44,18 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 	default:
 		item.CurrentMarket = snapshot
 		item.Recommendation = computeRecommendation(snapshot, purchase.CLValueCents)
-		item.TargetSellPrice = computeTargetPrice(snapshot, item.Recommendation)
-		item.MinimumAcceptPrice = snapshot.ConservativeCents
+		item.TargetSellPriceCents = computeTargetPrice(snapshot, item.Recommendation)
+		item.MinimumAcceptPriceCents = snapshot.ConservativeCents
 		hasMarket = true
 	}
 
 	// CL value is the price floor — never list below it
 	if purchase.CLValueCents > 0 {
-		if purchase.CLValueCents > item.TargetSellPrice {
-			item.TargetSellPrice = purchase.CLValueCents
+		if purchase.CLValueCents > item.TargetSellPriceCents {
+			item.TargetSellPriceCents = purchase.CLValueCents
 		}
-		if purchase.CLValueCents > item.MinimumAcceptPrice {
-			item.MinimumAcceptPrice = purchase.CLValueCents
+		if purchase.CLValueCents > item.MinimumAcceptPriceCents {
+			item.MinimumAcceptPriceCents = purchase.CLValueCents
 		}
 	}
 
@@ -74,16 +74,16 @@ func (s *service) enrichSellSheetItem(_ context.Context, purchase *inventory.Pur
 	item.RecommendedChannel, item.ChannelLabel = recommendChannel(purchase.GradeValue, item.CurrentMarket, item.Signals)
 
 	// Deduct marketplace fees for eBay/TCGPlayer channels to project net revenue.
-	if item.TargetSellPrice > 0 && inventory.NormalizeChannel(item.RecommendedChannel) == inventory.SaleChannelEbay {
-		item.TargetSellPrice -= int(math.Round(float64(item.TargetSellPrice) * ebayFeePct))
+	if item.TargetSellPriceCents > 0 && inventory.NormalizeChannel(item.RecommendedChannel) == inventory.SaleChannelEbay {
+		item.TargetSellPriceCents -= int(math.Round(float64(item.TargetSellPriceCents) * ebayFeePct))
 	}
 
 	// Preserve the algorithmically computed price before override
-	item.ComputedPriceCents = item.TargetSellPrice
+	item.ComputedPriceCents = item.TargetSellPriceCents
 
 	// Override replaces the target price entirely — no CL floor or fee deduction applied
 	if purchase.OverridePriceCents > 0 {
-		item.TargetSellPrice = purchase.OverridePriceCents
+		item.TargetSellPriceCents = purchase.OverridePriceCents
 		item.OverridePriceCents = purchase.OverridePriceCents
 		item.OverrideSource = purchase.OverrideSource
 		item.IsOverridden = true
@@ -171,13 +171,13 @@ func (s *service) buildCrossCampaignSellSheet(ctx context.Context, purchases []*
 		// snapshot. The vendor at a card show still needs to see the card;
 		// a missing price just means an empty CL column with PriceLookupError
 		// preserved for diagnostics. Skipping silently dropped real inventory.
-		sheet.Totals.TotalExpectedRevenue += item.TargetSellPrice
+		sheet.Totals.TotalExpectedRevenueCents += item.TargetSellPriceCents
 		sheet.Items = append(sheet.Items, item)
-		sheet.Totals.TotalCostBasis += item.CostBasisCents
+		sheet.Totals.TotalCostBasisCents += item.CostBasisCents
 		sheet.Totals.ItemCount++
 	}
 
-	sheet.Totals.TotalProjectedProfit = sheet.Totals.TotalExpectedRevenue - sheet.Totals.TotalCostBasis
+	sheet.Totals.TotalProjectedProfitCents = sheet.Totals.TotalExpectedRevenueCents - sheet.Totals.TotalCostBasisCents
 	return sheet, nil
 }
 
