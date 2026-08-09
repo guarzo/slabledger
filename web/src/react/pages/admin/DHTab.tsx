@@ -1,12 +1,14 @@
-import { useDHStatus, useTriggerDHBulkMatch } from '../../queries/useAdminQueries';
+import { useDHStatus, useTriggerDHBulkMatch, useDHPushConfig } from '../../queries/useAdminQueries';
 import { useToast } from '../../contexts/ToastContext';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 import { DHPushConfigCard } from './DHPushConfigCard';
+import { DHListingsPauseControl } from './DHListingsPauseControl';
 
 export function DHTab({ enabled = true }: { enabled?: boolean }) {
   const { data: status, isLoading, error } = useDHStatus({ enabled });
   const bulkMatchMutation = useTriggerDHBulkMatch();
+  const { data: pushConfig } = useDHPushConfig({ enabled });
   const toast = useToast();
 
   if (!enabled) {
@@ -79,13 +81,23 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
   return (
     <div className="space-y-3">
       <CardShell padding="lg">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between gap-4 mb-3">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full shrink-0 ${healthy ? 'bg-[var(--success)]' : 'bg-[var(--warning)]'}`} />
             <span className="text-sm font-semibold text-[var(--text)]">{healthy ? 'Healthy' : 'Degraded'}</span>
+            <span className="text-xs text-[var(--text-muted)]">· API success: {successRate}</span>
           </div>
-          <span className="text-xs text-[var(--text-muted)]">API success: {successRate}</span>
+          <DHListingsPauseControl enabled={enabled} />
         </div>
+
+        {pushConfig?.listingsPaused && (
+          <div
+            role="status"
+            className="mb-3 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-bg)] px-3 py-2 text-xs font-medium text-[var(--warning)]"
+          >
+            Listings are currently paused. New and pending purchases stay in inventory and accumulate as pending until this is turned off.
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
           <Stat label="Mapped" value={status?.mapped_count ?? 0} />
@@ -114,12 +126,9 @@ export function DHTab({ enabled = true }: { enabled?: boolean }) {
           )}
         </div>
 
-        <details className="mt-3">
-          <summary className="text-xs text-[var(--brand-400)] cursor-pointer select-none">Listing push safety rules</summary>
-          <div className="mt-3">
-            <DHPushConfigCard />
-          </div>
-        </details>
+        <div className="mt-4 pt-3 border-t border-[var(--surface-2)]">
+          <DHPushConfigCard />
+        </div>
       </CardShell>
 
       {status?.bulk_match_error && (

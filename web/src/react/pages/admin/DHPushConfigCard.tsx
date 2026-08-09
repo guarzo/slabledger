@@ -77,13 +77,10 @@ export function DHPushConfigCard() {
     unreviewedChangeMinCents: cfg.unreviewedChangeMinCents,
   });
 
-  const save = (patch: Partial<DHPushConfig>, onFailure?: () => void) => {
+  const save = (patch: Partial<DHPushConfig>) => {
     saveMutation.mutate(patch, {
       onSuccess: () => toast.success('DH push config saved'),
-      onError: () => {
-        toast.error('Failed to save config');
-        onFailure?.();
-      },
+      onError: () => toast.error('Failed to save config'),
     });
   };
 
@@ -106,46 +103,6 @@ export function DHPushConfigCard() {
 
   return (
     <CardShell padding="lg">
-      <div className="mb-6 p-4 rounded-lg border border-[var(--surface-2)] bg-[var(--surface-1)]">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h4 className="text-sm font-semibold text-[var(--text)] mb-1">Pause DH Listings</h4>
-            <p className="text-xs text-[var(--text-muted)]">
-              When enabled, new and pending purchases are kept in inventory but are not listed on DoubleHolo.
-              Use this before a card show so on-hand stock won&apos;t also be live on DH.
-            </p>
-            {form.listingsPaused && (
-              <p className="mt-2 text-xs font-medium text-amber-500">
-                Listings are currently paused. Items will accumulate as pending until this is turned off.
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={form.listingsPaused}
-            aria-label="Pause DH listings"
-            aria-busy={saveMutation.isPending}
-            disabled={saveMutation.isPending}
-            onClick={() => {
-              if (saveMutation.isPending) return;
-              const prev = form;
-              const next = { ...form, listingsPaused: !form.listingsPaused };
-              setForm(next);
-              save({ listingsPaused: next.listingsPaused }, () => setForm(prev));
-            }}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
-              form.listingsPaused ? 'bg-amber-500' : 'bg-[var(--surface-3,#3a3a3a)]'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                form.listingsPaused ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
       <h4 className="text-sm font-semibold text-[var(--text)] mb-1">Listing Push Safety Rules</h4>
       <p className="text-xs text-[var(--text-muted)] mb-5">
         Price updates that exceed these thresholds are held for manual review before being pushed to your DoubleHolo listings.
@@ -166,7 +123,6 @@ export function DHPushConfigCard() {
           onChange={(v) => setForm({ ...form, swingMinCents: v })}
           suffix={`(${formatCents(form.swingMinCents)})`}
         />
-        <hr className="border-[var(--surface-2)] col-span-full" />
         <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide col-span-full">Source &amp; CL Rules</p>
         <ConfigField
           id="disagreement-pct"
