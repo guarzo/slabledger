@@ -189,6 +189,10 @@ export interface BulkSaleItemInput {
   priceReductions?: number;
   daysListed?: number;
   saleReason?: string;
+  /** Provenance of salePriceCents. Mirrors Go's inventory.BulkSaleInput.PriceSource
+      (json: priceSource, omitempty): 'itemized' | 'estimated' | 'manual'. Omitted
+      means the server records 'unknown'. */
+  priceSource?: string;
 }
 
 export interface CreateSaleInput {
