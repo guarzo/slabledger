@@ -81,6 +81,11 @@ web/node_modules
 # Frontend build output
 web/dist/
 
+# Vitest coverage output (vitest.config.js sets no reportsDirectory, so it
+# defaults to web/coverage). The generated report was tracked in git until
+# SLA-79; without this rule `npm run test:coverage` re-dirties the tree.
+web/coverage/
+
 # Docker bind mount directories
 /cache/
 .superpowers/
