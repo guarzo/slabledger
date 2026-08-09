@@ -317,6 +317,10 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			PriceReductions:        item.PriceReductions,
 			DaysListed:             item.DaysListed,
 			SaleReason:             item.SaleReason,
+			PriceSource:            item.PriceSource,
+		}
+		if sa.PriceSource == "" {
+			sa.PriceSource = PriceSourceEstimated
 		}
 
 		// Inline sale creation without captureMarketSnapshot to avoid hitting

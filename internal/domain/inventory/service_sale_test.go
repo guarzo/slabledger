@@ -341,3 +341,41 @@ func TestCreateBulkSales_CopiesPerItemFields(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateBulkSales_PriceSourceDefaults(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c, p := setupSaleFixture(t, repo, svc)
+
+	p2 := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Pikachu", CertNumber: "PROV04",
+		GradeValue: 10, BuyCostCents: 30000, PurchaseDate: "2026-06-01",
+		CLValueCents: 8000,
+	}
+	if err := svc.CreatePurchase(ctx, p2); err != nil {
+		t.Fatalf("setup purchase 2: %v", err)
+	}
+
+	result, err := svc.CreateBulkSales(ctx, c.ID, inventory.SaleChannelEbay, "2026-06-20", []inventory.BulkSaleInput{
+		{PurchaseID: p.ID, SalePriceCents: 20000},
+		{PurchaseID: p2.ID, SalePriceCents: 15000, PriceSource: inventory.PriceSourceItemized},
+	})
+	if err != nil {
+		t.Fatalf("CreateBulkSales: %v", err)
+	}
+	if result.Created != 2 {
+		t.Fatalf("created = %d, want 2 (errors: %v)", result.Created, result.Errors)
+	}
+
+	defaulted := findSaleByPurchaseID(t, repo, c.ID, p.ID)
+	if defaulted.PriceSource != inventory.PriceSourceEstimated {
+		t.Errorf("PriceSource = %q, want %q", defaulted.PriceSource, inventory.PriceSourceEstimated)
+	}
+
+	explicit := findSaleByPurchaseID(t, repo, c.ID, p2.ID)
+	if explicit.PriceSource != inventory.PriceSourceItemized {
+		t.Errorf("PriceSource = %q, want %q", explicit.PriceSource, inventory.PriceSourceItemized)
+	}
+}
