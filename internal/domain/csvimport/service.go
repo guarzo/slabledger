@@ -1,5 +1,6 @@
 // Package csvimport turns exported CSV files — PSA order exports, eBay and
-// Shopify order reports — into campaign purchases and sales.
+// Shopify order reports — and cert/price batches posted directly (e.g. from a
+// card-show extraction workflow) into campaign purchases and sales.
 //
 // It was carved out of internal/domain/inventory (SLA-35). The parsers carry a
 // large vocabulary of row and result types that only file intake cares about,
