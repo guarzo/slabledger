@@ -159,6 +159,11 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 			SalePriceCents: item.SalePriceCents,
 			SaleDate:       item.SaleDate,
 			OrderID:        item.OrderID,
+			TheirCompCents: item.TheirCompCents,
+			PriceSource:    item.PriceSource,
+		}
+		if sa.PriceSource == "" {
+			sa.PriceSource = inventory.PriceSourceItemized
 		}
 
 		if err := inventory.ValidateSale(sa); err != nil {

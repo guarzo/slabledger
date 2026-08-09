@@ -1105,6 +1105,87 @@ Imports purchases by cert number list (fetches card metadata via PSA API).
 
 ---
 
+### `POST /api/sales/import-certs`
+
+Auth: RequireAuth
+
+Accepts a batch of `(certNumber, theirCompCents)` pairs captured at a card show (see the itemized-sales skill), applies the batch's negotiated percentage, matches each cert against unsold inventory, and returns categorized results for review before confirmation. Preview only — no sale records are created. Unlike `POST /api/purchases/import-certs` above, this endpoint does not create purchases; it previews **sales** against purchases that already exist.
+
+**Body:**
+```json
+{
+  "saleDate": "2026-08-09",
+  "saleChannel": "local",
+  "negotiatedPct": 0.85,
+  "totalReceivedCents": 850000,
+  "items": [
+    { "certNumber": "12345678", "theirCompCents": 100000 }
+  ]
+}
+```
+
+**Response:** `200 OK` — `CertSaleImportResult`
+```json
+{
+  "matched": [
+    {
+      "certNumber": "12345678",
+      "purchaseId": "uuid",
+      "campaignId": "uuid",
+      "cardName": "Charizard",
+      "theirCompCents": 100000,
+      "salePriceCents": 85000,
+      "saleFeeCents": 0,
+      "clValueCents": 90000,
+      "buyCostCents": 60000,
+      "netProfitCents": 25000
+    }
+  ],
+  "alreadySold": [],
+  "notFound": [],
+  "computedTotalCents": 85000,
+  "reconcileDeltaCents": 0,
+  "nearDuplicateCerts": []
+}
+```
+
+**Errors:** `400` no items provided or invalid JSON; `503` import service not configured
+
+---
+
+### `POST /api/sales/import-certs/confirm`
+
+Auth: RequireAuth
+
+Accepts confirmed matches from the itemized cert-sale preview and creates sale records via the same `ConfirmOrdersSales` path used by `POST /api/purchases/import-orders/confirm`. Kept as a separate route because this batch never touched a CSV, so "import-orders" is the wrong noun for it.
+
+**Body:** Array of `OrdersConfirmItem`
+```json
+[
+  {
+    "purchaseId": "uuid",
+    "saleChannel": "local",
+    "saleDate": "2026-08-09",
+    "salePriceCents": 85000,
+    "theirCompCents": 100000,
+    "priceSource": "itemized"
+  }
+]
+```
+
+**Response:** `200 OK` — `BulkSaleResult`
+```json
+{
+  "created": 1,
+  "failed": 0,
+  "errors": []
+}
+```
+
+**Errors:** `400` no items provided or invalid JSON; `503` import service not configured
+
+---
+
 ### `PATCH /api/purchases/{purchaseId}/campaign`
 
 Auth: RequireAuth

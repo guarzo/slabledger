@@ -147,6 +147,10 @@ export interface Sale {
   saleReason?: string;
   clValueAtSaleCents?: number;
   channelFeePctAtSale?: number;
+  // Itemized card-show sale provenance (see migration 000040)
+  theirCompCents?: number;
+  /** One of 'itemized' | 'estimated' | 'manual' | 'unknown'; mirrors Go's inventory.PriceSource. */
+  priceSource?: string;
 }
 
 export interface CreateCampaignInput {
@@ -189,6 +193,11 @@ export interface BulkSaleItemInput {
   priceReductions?: number;
   daysListed?: number;
   saleReason?: string;
+  /** Provenance of salePriceCents. Mirrors Go's inventory.BulkSaleInput.PriceSource
+      (json: priceSource, omitempty): 'itemized' | 'estimated' | 'manual'. Omitted
+      leaves the server's unknown sentinel, which is the empty string (Go's
+      PriceSourceUnknown = ""), not the literal string 'unknown'. */
+  priceSource?: string;
 }
 
 export interface CreateSaleInput {

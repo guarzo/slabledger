@@ -82,6 +82,8 @@ func TestSaleLoadsIdenticallyThroughBothPaths(t *testing.T) {
 	sale.SaleReason = "invoice_pressure"
 	sale.CLValueAtSaleCents = 6100
 	sale.ChannelFeePctAtSale = &feePct
+	sale.TheirCompCents = 5800
+	sale.PriceSource = "itemized"
 	sale.CreatedAt = time.Now().UTC().Truncate(time.Microsecond)
 	sale.UpdatedAt = sale.CreatedAt
 	require.NoError(t, ss.CreateSale(ctx, sale), "create sale")

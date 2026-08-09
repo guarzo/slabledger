@@ -85,15 +85,15 @@ describe('BulkRecordSaleModal', () => {
       expect.any(String),
       expect.any(String),
       expect.arrayContaining([
-        { purchaseId: '1', salePriceCents: 3500 },
-        { purchaseId: '2', salePriceCents: 4200 },
+        { purchaseId: '1', salePriceCents: 3500, priceSource: 'estimated' },
+        { purchaseId: '2', salePriceCents: 4200, priceSource: 'estimated' },
       ]),
     );
     expect(vi.mocked(api.createBulkSales)).toHaveBeenCalledWith(
       'c2',
       expect.any(String),
       expect.any(String),
-      [{ purchaseId: '3', salePriceCents: 4900 }],
+      [{ purchaseId: '3', salePriceCents: 4900, priceSource: 'estimated' }],
     );
   });
 
@@ -160,8 +160,8 @@ describe('BulkRecordSaleModal', () => {
         expect.any(String),
         expect.any(String),
         expect.arrayContaining([
-          { purchaseId: '1', salePriceCents: 2500 },
-          { purchaseId: '2', salePriceCents: 4800 },
+          { purchaseId: '1', salePriceCents: 2500, priceSource: 'estimated' },
+          { purchaseId: '2', salePriceCents: 4800, priceSource: 'estimated' },
         ]),
       );
     });
@@ -275,5 +275,41 @@ describe('BulkRecordSaleModal', () => {
     expect(screen.getByLabelText(/Days listed for Card 2/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Sale reason for Card 1/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Sale reason for Card 2/i)).toBeInTheDocument();
+  });
+
+  it('tags pctOfCL rows as estimated and flat-price rows as manual', async () => {
+    vi.mocked(api.createBulkSales).mockResolvedValue({ created: 1, failed: 0 });
+    const items = [makeItem('1', 'c1', 5000)];
+    const { unmount } = renderModal(items);
+
+    fireEvent.change(screen.getByLabelText(/% of CL/i), { target: { value: '70' } });
+    fireEvent.click(screen.getByRole('button', { name: /Record 1 Sales/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(api.createBulkSales)).toHaveBeenCalledWith(
+        'c1',
+        expect.any(String),
+        expect.any(String),
+        [expect.objectContaining({ purchaseId: '1', priceSource: 'estimated' })],
+      );
+    });
+
+    unmount();
+    vi.mocked(api.createBulkSales).mockReset();
+    vi.mocked(api.createBulkSales).mockResolvedValue({ created: 1, failed: 0 });
+    renderModal(items);
+
+    fireEvent.click(screen.getByLabelText(/Fixed price/i));
+    fireEvent.change(screen.getByLabelText(/Flat \$/i), { target: { value: '42' } });
+    fireEvent.click(screen.getByRole('button', { name: /Record 1 Sales/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(api.createBulkSales)).toHaveBeenCalledWith(
+        'c1',
+        expect.any(String),
+        expect.any(String),
+        [expect.objectContaining({ purchaseId: '1', salePriceCents: 4200, priceSource: 'manual' })],
+      );
+    });
   });
 });

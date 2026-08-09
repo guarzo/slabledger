@@ -213,6 +213,56 @@ type OrdersConfirmItem struct {
 	SaleDate       string                `json:"saleDate"`
 	SalePriceCents int                   `json:"salePriceCents"`
 	OrderID        string                `json:"orderId,omitempty"`
+	TheirCompCents int                   `json:"theirCompCents,omitempty"`
+	PriceSource    string                `json:"priceSource,omitempty"`
+}
+
+// CertSaleItem is one card in a cert-keyed sale batch: the dealer's own comp
+// for that card, as photographed off the slab sticker at a show. The server
+// applies the negotiated percentage — the caller never computes a price.
+type CertSaleItem struct {
+	CertNumber     string `json:"certNumber"`
+	TheirCompCents int    `json:"theirCompCents"`
+}
+
+// CertSaleImportRequest is a batch of observed comps plus the single
+// percentage negotiated across the whole deal. TotalReceivedCents is an
+// optional integrity check against the extraction (e.g. a wire total the
+// dealer confirmed verbally) — it is never persisted.
+type CertSaleImportRequest struct {
+	SaleDate           string                `json:"saleDate"`
+	SaleChannel        inventory.SaleChannel `json:"saleChannel"`
+	NegotiatedPct      float64               `json:"negotiatedPct"`
+	TotalReceivedCents int                   `json:"totalReceivedCents,omitempty"`
+	Items              []CertSaleItem        `json:"items"`
+}
+
+// CertSaleMatch is one cert-batch item matched to an unsold purchase, with
+// SalePriceCents already computed as TheirCompCents * NegotiatedPct.
+type CertSaleMatch struct {
+	CertNumber     string `json:"certNumber"`
+	PurchaseID     string `json:"purchaseId"`
+	CampaignID     string `json:"campaignId"`
+	CardName       string `json:"cardName"`
+	TheirCompCents int    `json:"theirCompCents"`
+	SalePriceCents int    `json:"salePriceCents"`
+	SaleFeeCents   int    `json:"saleFeeCents"`
+	CLValueCents   int    `json:"clValueCents"`
+	BuyCostCents   int    `json:"buyCostCents"`
+	NetProfitCents int    `json:"netProfitCents"`
+}
+
+// CertSaleImportResult categorizes a cert-batch preview by match status.
+// NearDuplicateCerts flags submitted certs that are one OCR misread apart from
+// another cert in the same batch, so the caller can force explicit
+// confirmation before a misread silently matches the wrong owned card.
+type CertSaleImportResult struct {
+	Matched             []CertSaleMatch    `json:"matched"`
+	AlreadySold         []OrdersImportSkip `json:"alreadySold"`
+	NotFound            []OrdersImportSkip `json:"notFound"`
+	ComputedTotalCents  int                `json:"computedTotalCents"`
+	ReconcileDeltaCents int                `json:"reconcileDeltaCents"`
+	NearDuplicateCerts  []string           `json:"nearDuplicateCerts,omitempty"`
 }
 
 // cardNumberPattern matches expected card number formats (digits, alphanumeric, with optional slash separator).

@@ -107,6 +107,12 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
 
     setSubmitting(true);
     try {
+      // 'pctOfCL' derives the price from our own CL valuation, so it is a guess:
+      // 'estimated'. 'flat' is a number a human typed after seeing the actual
+      // deal: 'manual'. Neither is 'itemized' — that is reserved for a captured
+      // per-card sticker comp (see the card-show-sale flow).
+      const priceSource = pricingMode === 'pctOfCL' ? 'estimated' : 'manual';
+
       const groups = new Map<string, BulkSaleItemInput[]>();
       for (const item of pendingItems) {
         const cid = item.purchase.campaignId;
@@ -115,6 +121,7 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
         groups.get(cid)!.push({
           purchaseId: item.purchase.id,
           salePriceCents: effectivePrices[item.purchase.id] ?? 0,
+          priceSource,
           ...(detail.originalListPrice ? { originalListPriceCents: dollarsToCents(detail.originalListPrice) } : {}),
           ...(detail.priceReductions ? { priceReductions: parseInt(detail.priceReductions, 10) || 0 } : {}),
           ...(detail.daysListed ? { daysListed: parseInt(detail.daysListed, 10) || 0 } : {}),
