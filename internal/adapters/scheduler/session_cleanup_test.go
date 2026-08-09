@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/require"
 )
 
-// mockAuthService implements auth.Service for testing
-type mockAuthService struct {
+// mockSessionJanitor implements SessionJanitor for testing
+type mockSessionJanitor struct {
 	cleanupCount int
 	cleanupErr   error
 	callCount    int32
@@ -23,87 +22,26 @@ type mockAuthService struct {
 	stateCallCount    int32
 }
 
-func (m *mockAuthService) CleanupExpiredSessions(ctx context.Context) (int, error) {
+func (m *mockSessionJanitor) CleanupExpiredSessions(ctx context.Context) (int, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	return m.cleanupCount, m.cleanupErr
 }
 
-func (m *mockAuthService) CallCount() int32 {
-	return atomic.LoadInt32(&m.callCount)
-}
-
-func (m *mockAuthService) StateCallCount() int32 {
-	return atomic.LoadInt32(&m.stateCallCount)
-}
-
-// Implement other interface methods as no-ops
-func (m *mockAuthService) GetLoginURL(state string) string {
-	return ""
-}
-func (m *mockAuthService) ExchangeCodeForTokens(ctx context.Context, code string) (*auth.UserTokens, error) {
-	return nil, nil
-}
-func (m *mockAuthService) GetUserInfo(ctx context.Context, accessToken string) (*auth.UserInfo, error) {
-	return nil, nil
-}
-func (m *mockAuthService) StoreOAuthState(ctx context.Context, state string, expiresAt time.Time) error {
-	return nil
-}
-func (m *mockAuthService) ConsumeOAuthState(ctx context.Context, state string) (bool, error) {
-	return true, nil
-}
-func (m *mockAuthService) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
+func (m *mockSessionJanitor) CleanupExpiredOAuthStates(ctx context.Context) (int, error) {
 	atomic.AddInt32(&m.stateCallCount, 1)
 	return m.stateCleanupCount, m.stateCleanupErr
 }
-func (m *mockAuthService) CreateSession(ctx context.Context, userID int64, userAgent, ipAddress string) (*auth.Session, error) {
-	return nil, nil
-}
-func (m *mockAuthService) ValidateSession(ctx context.Context, sessionID string) (*auth.Session, *auth.User, error) {
-	return nil, nil, nil
-}
-func (m *mockAuthService) DeleteSession(ctx context.Context, sessionID string) error {
-	return nil
-}
-func (m *mockAuthService) GetOrCreateUser(ctx context.Context, googleID, username, email, avatarURL string) (*auth.User, error) {
-	return nil, nil
-}
-func (m *mockAuthService) GetUserByID(ctx context.Context, userID int64) (*auth.User, error) {
-	return nil, nil
-}
-func (m *mockAuthService) UpdateLastLogin(ctx context.Context, userID int64) error {
-	return nil
-}
-func (m *mockAuthService) StoreTokens(ctx context.Context, userID int64, sessionID string, tokens *auth.UserTokens) error {
-	return nil
+
+func (m *mockSessionJanitor) CallCount() int32 {
+	return atomic.LoadInt32(&m.callCount)
 }
 
-func (m *mockAuthService) IsEmailAllowed(ctx context.Context, email string) (bool, error) {
-	return false, nil
-}
-
-func (m *mockAuthService) ListAllowedEmails(ctx context.Context) ([]auth.AllowedEmail, error) {
-	return nil, nil
-}
-
-func (m *mockAuthService) AddAllowedEmail(ctx context.Context, email string, addedBy int64, notes string) error {
-	return nil
-}
-
-func (m *mockAuthService) RemoveAllowedEmail(ctx context.Context, email string) error {
-	return nil
-}
-
-func (m *mockAuthService) ListUsers(ctx context.Context) ([]auth.User, error) {
-	return nil, nil
-}
-
-func (m *mockAuthService) SetUserAdmin(ctx context.Context, userID int64, isAdmin bool) error {
-	return nil
+func (m *mockSessionJanitor) StateCallCount() int32 {
+	return atomic.LoadInt32(&m.stateCallCount)
 }
 
 func TestSessionCleanupScheduler_Cleanup(t *testing.T) {
-	mock := &mockAuthService{cleanupCount: 5}
+	mock := &mockSessionJanitor{cleanupCount: 5}
 	logger := mocks.NewMockLogger()
 
 	config := SessionCleanupConfig{
@@ -128,7 +66,7 @@ func TestSessionCleanupScheduler_Cleanup(t *testing.T) {
 }
 
 func TestSessionCleanupScheduler_Stop(t *testing.T) {
-	mock := &mockAuthService{}
+	mock := &mockSessionJanitor{}
 	logger := mocks.NewMockLogger()
 
 	config := SessionCleanupConfig{
@@ -167,7 +105,7 @@ func TestSessionCleanupScheduler_Stop(t *testing.T) {
 }
 
 func TestSessionCleanupScheduler_CleanupError(t *testing.T) {
-	mock := &mockAuthService{
+	mock := &mockSessionJanitor{
 		cleanupErr: errors.New("database error"),
 	}
 	logger := mocks.NewMockLogger()
@@ -196,7 +134,7 @@ func TestSessionCleanupScheduler_CleanupError(t *testing.T) {
 // The OAuth-state sweep is the only thing that removes rows left by abandoned
 // logins — ConsumeOAuthState only fires on a successful callback.
 func TestSessionCleanupScheduler_CleansExpiredOAuthStates(t *testing.T) {
-	mock := &mockAuthService{cleanupCount: 2, stateCleanupCount: 7}
+	mock := &mockSessionJanitor{cleanupCount: 2, stateCleanupCount: 7}
 	scheduler := NewSessionCleanupScheduler(mock, mocks.NewMockLogger(), SessionCleanupConfig{
 		Enabled:  true,
 		Interval: 1 * time.Hour,
@@ -211,7 +149,7 @@ func TestSessionCleanupScheduler_CleansExpiredOAuthStates(t *testing.T) {
 // The two tables are independent, so a failing session sweep must not skip the
 // OAuth-state sweep.
 func TestSessionCleanupScheduler_OAuthStateCleanupRunsAfterSessionError(t *testing.T) {
-	mock := &mockAuthService{cleanupErr: errors.New("database error")}
+	mock := &mockSessionJanitor{cleanupErr: errors.New("database error")}
 	scheduler := NewSessionCleanupScheduler(mock, mocks.NewMockLogger(), SessionCleanupConfig{
 		Enabled:  true,
 		Interval: 1 * time.Hour,
@@ -224,7 +162,7 @@ func TestSessionCleanupScheduler_OAuthStateCleanupRunsAfterSessionError(t *testi
 }
 
 func TestSessionCleanupScheduler_OAuthStateCleanupError(t *testing.T) {
-	mock := &mockAuthService{stateCleanupErr: errors.New("database error")}
+	mock := &mockSessionJanitor{stateCleanupErr: errors.New("database error")}
 	scheduler := NewSessionCleanupScheduler(mock, mocks.NewMockLogger(), SessionCleanupConfig{
 		Enabled:  true,
 		Interval: 1 * time.Hour,
@@ -237,7 +175,7 @@ func TestSessionCleanupScheduler_OAuthStateCleanupError(t *testing.T) {
 }
 
 func TestSessionCleanupScheduler_DefaultInterval(t *testing.T) {
-	mock := &mockAuthService{}
+	mock := &mockSessionJanitor{}
 	logger := mocks.NewMockLogger()
 
 	// Config with zero interval should use default
@@ -253,7 +191,7 @@ func TestSessionCleanupScheduler_DefaultInterval(t *testing.T) {
 }
 
 func TestSessionCleanupScheduler_ContextCancellation(t *testing.T) {
-	mock := &mockAuthService{cleanupCount: 1}
+	mock := &mockSessionJanitor{cleanupCount: 1}
 	logger := mocks.NewMockLogger()
 
 	config := SessionCleanupConfig{
@@ -301,7 +239,7 @@ func TestSessionCleanupScheduler_ConcurrentCalls(t *testing.T) {
 	var maxConcurrent int32
 	var totalCalls int32
 
-	mock := &mockAuthService{}
+	mock := &mockSessionJanitor{}
 	logger := mocks.NewMockLogger()
 
 	config := SessionCleanupConfig{
@@ -346,7 +284,7 @@ func TestSessionCleanupScheduler_ConcurrentCalls(t *testing.T) {
 
 // concurrentTrackingMock tracks concurrent calls to CleanupExpiredSessions
 type concurrentTrackingMock struct {
-	mockAuthService
+	mockSessionJanitor
 	concurrentCalls *int32
 	maxConcurrent   *int32
 	totalCalls      *int32

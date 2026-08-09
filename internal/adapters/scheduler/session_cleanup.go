@@ -5,17 +5,23 @@ import (
 
 	"time"
 
-	"github.com/guarzo/slabledger/internal/domain/auth"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
 var _ Scheduler = (*SessionCleanupScheduler)(nil)
 
+// SessionJanitor is the slice of auth.Service this scheduler needs: the two
+// sweeps over expired rows. auth.Service satisfies it implicitly.
+type SessionJanitor interface {
+	CleanupExpiredSessions(ctx context.Context) (int, error)
+	CleanupExpiredOAuthStates(ctx context.Context) (int, error)
+}
+
 // SessionCleanupScheduler handles periodic cleanup of expired sessions and
 // expired OAuth state tokens
 type SessionCleanupScheduler struct {
 	StopHandle
-	authService auth.Service
+	authService SessionJanitor
 	logger      observability.Logger
 	interval    time.Duration
 	enabled     bool
@@ -37,7 +43,7 @@ func DefaultSessionCleanupConfig() SessionCleanupConfig {
 
 // NewSessionCleanupScheduler creates a new session cleanup scheduler
 func NewSessionCleanupScheduler(
-	authService auth.Service,
+	authService SessionJanitor,
 	logger observability.Logger,
 	config SessionCleanupConfig,
 ) *SessionCleanupScheduler {
