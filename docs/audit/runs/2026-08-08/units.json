@@ -1,0 +1,226 @@
+[
+  {
+    "n": "Correct the end-user guide against the shipped UI",
+    "tier": "Documentation drift",
+    "ids": ["DCT-001"],
+    "effort": "M",
+    "note": "CSV import, the campaign form, the sale-channel roster, and Card Ladder integration are all described as they are not. Highest-severity docs finding in the run and the only one facing end users rather than developers."
+  },
+  {
+    "n": "Fix the run instructions: the bare binary binds :8080, and --port is a no-op without --web",
+    "tier": "Documentation drift",
+    "ids": ["DCT-002", "DCT-003"],
+    "effort": "S",
+    "note": "ADJUDICATED — clustered on the -web flag, which is the single subject both findings turn on. DCT-002 is the debt: every document says run ./slabledger and reach :8081, but the bare binary binds 127.0.0.1:8080 and `server --port N` silently does nothing without --web. DCT-003 is NOT a defect report — it is the verdict on a Phase 1 lead, concluding that ModeConfig.WebMode is LIVE and the config map's single dead field is a false positive. Its whole fix is a comment at internal/platform/config/types.go:7 naming WebMode's setters so a later scan does not re-file it. No code is removed. The finding says so itself: 'The genuine debt in this area is DCT-002, not this field.'"
+  },
+  {
+    "n": "Sweep the developer docs against the tree — five removed subsystems and four wrong filenames",
+    "tier": "Documentation drift",
+    "ids": ["DCT-008", "DCT-009"],
+    "effort": "L",
+    "note": "DCT-008: five subsystems that no longer exist are documented, three of them in more than one document. DCT-009: one live file is given four different wrong names across four documents, and service_interfaces.go is described as holding interfaces it does not contain. Same sweep, same evidence method. Related to SLA-46 (#560, 'docs: correct CLAUDE.md against the tree'), which is CLOSED and landed BEFORE this baseline — so this is ground that sweep did not reach, not a re-file of it."
+  },
+  {
+    "n": "Remove or register the six API endpoints README advertises, and fix DEVELOPMENT.md's two broken monitoring commands",
+    "tier": "Documentation drift",
+    "ids": ["DCT-010"],
+    "effort": "M",
+    "note": "Both of DEVELOPMENT.md's monitoring commands fail as written. The verifier was instructed not to execute anything that would touch a live service; the endpoint half is established statically against the route table."
+  },
+  {
+    "n": "Make the mock guide's worked example compile",
+    "tier": "Documentation drift",
+    "ids": ["DCT-011"],
+    "effort": "M",
+    "note": "internal/testutil/mocks/README.md is the file CLAUDE.md points every contributor at for the mock pattern. Its worked example, its sentinel-error list, and its exceptions all fail to compile or resolve."
+  },
+  {
+    "n": "Fix the leaf-rule worked example and CLAUDE.md's sibling roster",
+    "tier": "Documentation drift",
+    "ids": ["DCT-013"],
+    "effort": "S",
+    "note": "ADJUDICATED — absorbs pointers FE-006 and ARCH-004, both verified `ticketable: false` precisely because they restate this same internal/README.md material from another lens. Do not file them separately. internal/README.md's leaf-rule example names three packages deleted in the baseline's PARENT commit, and CLAUDE.md's dated sibling roster is missing csvimport. Note this is a regression against SLA-48 (#610, leaf/non-leaf taxonomy) and SLA-46 (#560, CLAUDE.md swept against the tree) — both CLOSED and both landed before this baseline. CLAUDE.md hedges the roster with 'derive it rather than trusting this sentence', which mitigates but does not repair it."
+  },
+  {
+    "n": "Give the seven assertion-free integration tests a failure mode",
+    "tier": "Test coverage",
+    "ids": ["DCT-005"],
+    "effort": "M",
+    "note": "They swallow API errors, cannot go red, and burn real DH Enterprise quota on a schedule in CI. The quota claim is not statically provable and the verifier was explicitly barred from running the suite to check it — the ticket should carry that as a stated assumption, not as a measured fact."
+  },
+  {
+    "n": "Unskip the two ErrorBoundary tests",
+    "tier": "Test coverage",
+    "ids": ["DCT-006"],
+    "effort": "S",
+    "note": "Unconditionally it.skip'd, leaving the dev-vs-prod error-detail branch untested."
+  },
+  {
+    "n": "Remove the orphaned llmutil package",
+    "tier": "Dead code",
+    "ids": ["DCG-001"],
+    "effort": "S",
+    "note": "ADJUDICATED — NAM-005 is the same subject reported by the naming lens as a pointer and was verified a duplicate (`ticketable: false`). File once, here. StripMarkdownFences has no consumer outside its own test; the package survives the Azure AI / advisor removal."
+  },
+  {
+    "n": "Remove the orphaned root testutil package",
+    "tier": "Dead code",
+    "ids": ["DCG-002"],
+    "effort": "S",
+    "note": "Kept separate from the mocks cleanup below: different package, and it carries a same-name-collision caveat worth preserving in the ticket — the one testutil.* selector in the tree resolves to prometheus/testutil, not this package, which is exactly LENS-BRIEF trap 2 running in the direction that makes dead code look live."
+  },
+  {
+    "n": "Remove or wire the cardutil normalization-trace facility",
+    "tier": "Dead code",
+    "ids": ["DCG-003"],
+    "effort": "S",
+    "note": "No production code calls ContextWithTrace or AddStep, so the trace can never be non-empty even if something read it."
+  },
+  {
+    "n": "Remove the orphaned mock surface in internal/testutil/mocks",
+    "tier": "Dead code",
+    "ids": ["DCG-004", "DCG-005"],
+    "effort": "M",
+    "note": "Two mechanical removals in one tree, reviewable as one PR. DCG-004 is a legacy option/HTTP-client/price-provider framework whose only consumer is its own test file. DCG-005 is fourteen per-interface mocks with no consumer in any package, plus two comments elsewhere that falsely claim other packages use them. DCG-005 carries a deliberate exclusion for DHPushStatusCall, which has zero external refs but is the element type of a field in a live type and is therefore required to compile — the exclusion is correct and must not be folded back in."
+  },
+  {
+    "n": "Remove the advisor UI cluster and its two runtime dependencies",
+    "tier": "Dead code",
+    "ids": ["FE-001"],
+    "effort": "M",
+    "note": "Kept separate from the other frontend deletions because it also drops react-markdown and remark-gfm from the dependency set, which is a different review risk. Its only consumers are its own two test files. Survives commit e46370e5 ('fully remove the Azure AI / advisor feature'); corroborated independently by the frontend map and the db map in Phase 1."
+  },
+  {
+    "n": "Delete the two orphaned frontend artifacts",
+    "tier": "Dead code",
+    "ids": ["FE-002", "FE-005"],
+    "effort": "S",
+    "note": "Both are plain deletions under web/. FE-002: scoring.ts is the only fully orphaned module under web/src — no importer anywhere, and no Go scoring type it could mirror. Verifier lowered it to low because four of its five declarations are TypeScript types erased at compile time and the fifth is unreachable from the entry graph, so there is no bundle or runtime cost — the ticket must not imply one. FE-005: a 51-file Vitest coverage report checked into git, never regenerated since the initial commit, not gitignored, reporting on 31 files that no longer exist."
+  },
+  {
+    "n": "Remove the domain/storage package, which is now only a doc.go for a deleted interface",
+    "tier": "Dead code",
+    "ids": ["NAM-003"],
+    "effort": "S",
+    "note": "The package consists solely of a doc.go documenting a Cache interface, with usage examples, that no longer exists anywhere in the repo."
+  },
+  {
+    "n": "Drop the three api_rate_limits call-counter columns that read as live telemetry",
+    "tier": "Dead code",
+    "ids": ["DB-002"],
+    "effort": "S",
+    "note": "Never written, never read; they sit at DEFAULT 0 forever while presenting as rate-limit telemetry. Distinct from the api_usage_summary view's same-named computed column, which aggregates a different table — LENS-BRIEF trap 2, checked and cleared by the verifier."
+  },
+  {
+    "n": "Drop the four views with no consumer",
+    "tier": "Dead code",
+    "ids": ["DB-003"],
+    "effort": "S",
+    "note": "Four of the five surviving views have no consumer anywhere, yet migration 000028 still carries them as REVOKE targets — the exact condition 000035 cited when it removed the ai_usage_* views, so there is precedent in-tree for the fix."
+  },
+  {
+    "n": "Drop the three indexes fully subsumed by another index or by the primary key",
+    "tier": "Dead code",
+    "ids": ["DB-005"],
+    "effort": "S",
+    "note": "They survived 000003's unused-index purge because that purge went by usage telemetry rather than by containment. Containment is provable from the migration files; this audit had NO database access, so the ticket must not claim anything about live usage."
+  },
+  {
+    "n": "Fix the dh_push_status index that 000003 never actually created",
+    "tier": "Correctness",
+    "ids": ["DB-004"],
+    "effort": "S",
+    "note": "CREATE INDEX IF NOT EXISTS collides with 000001's partial index of the same name, so the fix was a silent no-op, and 000003's down-migration then drops an index it never created. Verifier lowered high→low and gutted the impact story: dh_push_status is NOT NULL DEFAULT '' (000001:205), so the IS NULL branch is dead, no query filters the excluded '' rows sargably, and the intended non-partial index would have delivered no measurable benefit at this baseline. The '~27% of query time' framing is inherited from 000003's own comment and does NOT attach to this gap — do not repeat it in the ticket. Acceptance criterion 4 is unprovable as written (CountUnsoldByDHPushStatus contains no dh_push_status filter) and needs rewriting before filing."
+  },
+  {
+    "n": "Collapse the two hand-maintained campaign_sales column lists that have drifted by six columns",
+    "tier": "Correctness",
+    "ids": ["DUP-002"],
+    "effort": "M",
+    "note": "The strongest live defect in the run: a JOIN-loaded Sale silently returns zeroed sale-outcome fields. Found by reading, not by the duplication scan — body-similarity detection is blind to duplication expressed as parallel SQL column lists, which is recorded as a scope gap for the next run."
+  },
+  {
+    "n": "Reconcile the Go↔TS drift on PortfolioHealth and CampaignHealth",
+    "tier": "Correctness",
+    "ids": ["FE-003", "FE-004"],
+    "effort": "M",
+    "note": "Two directions of the same seam, fixed together. FE-003: the dashboard hero renders delta chips and a freshness line off two PortfolioHealth fields no Go struct emits, so those branches are unreachable in production and green only against hand-built fixtures. FE-004: the TS CampaignHealth mirror omits seven fields Go does emit, one of which carries a Go comment claiming it was named 'for frontend compatibility' with a frontend that never modelled it. Note the audit's Go↔TS tag check was spot-checked, not systematic — one struct pair was verified and held; a systematic diff was never run, so this pair is not necessarily the whole of it."
+  },
+  {
+    "n": "Share one row-action handler map between the desktop and mobile inventory rows",
+    "tier": "Correctness",
+    "ids": ["DUP-004"],
+    "effort": "S",
+    "note": "Each view hand-assembles the same ten-key map and every key but one is optional, so adding an action to one view silently omits it from the other — the type system cannot catch it."
+  },
+  {
+    "n": "Give the auth session-expiry constant one source, and move the test double out of the production package",
+    "tier": "Correctness",
+    "ids": ["DUP-003"],
+    "effort": "M",
+    "note": "Verifier lowered medium→low and re-grounded it: authService is NOT a second production implementation. Its own doc comment (service_impl.go:15-22) declares it a deliberate lightweight repository-backed double 'intentionally free of external dependencies', and two of its 21 methods return ERR_NOT_IMPLEMENTED by design pointing at OAuthService as the production path. So the ValidateSession difference is a documented non-goal, not drift between implementations meant to agree — the ticket must NOT say they 'have already drifted'. What survives: a security-relevant expiry constant duplicated with no shared source and no test that would catch a one-sided edit, and a test-shaped implementation living in a production package when the repo's convention puts doubles in internal/testutil/mocks/. Related to SIZE-001, same type, different defect."
+  },
+  {
+    "n": "Route both DH listing-price resolvers through one shared implementation",
+    "tier": "Architecture",
+    "ids": ["DUP-001"],
+    "effort": "M",
+    "note": "Verifier lowered high→medium and killed the leg carrying the severity. Evidence item 4 ('no test in dhpricing exercises the reviewed/override precedence') is FALSE: dhpricing/service_test.go:225 TestSyncPurchasePrice_ResolvesNewestCommit covers it, including the cross-offset instant-vs-lexicographic case both source comments name as the subtle failure mode — the lens missed it because it grepped for the resolver name and the test reaches it through the exported SyncPurchasePrice. So a one-sided edit breaking parsed comparison WOULD fail dhpricing's suite; do not claim otherwise. What remains: dhpricing has no cases for the zero-value guards or the empty-timestamp lexicographic fallback that dhlisting's nine-case table covers, and nothing asserts the two agree. The duplication is also a RECORDED decision, scoped out at docs/specs/2026-08-08-flat-sibling-checker-design.md:189 and docs/plans/2026-08-08-flat-sibling-checker.md:589 — read those before re-litigating. The hub is a legal shared home per CLAUDE.md:126."
+  },
+  {
+    "n": "Close the fail-open holes in check-imports.sh and cover both checks in its self-test",
+    "tier": "Architecture",
+    "ids": ["ARCH-001"],
+    "effort": "M",
+    "note": "Verifier lowered high→medium after building fixtures. The finding claims any rename turns both checks into vacuous passes that still exit 0; in fact fixture B (internal/domain renamed) and fixture E (module path rewritten) both print the false pass line and then exit 1 via downstream guards, so `make check` still fails. Only the storage-to-clients check is fail-open all the way to exit 0. Combined with the invariant holding at this baseline, the real consequence is one vacuous check plus a self-test that would not notice either breaking. The renamed-directory acceptance criterion should target internal/adapters/storage, where exit 0 was actually demonstrated, not internal/domain. Adjacent to SLA-45 (#574, target-side flat-sibling enforcement), CLOSED and landed pre-baseline — same script, different hole."
+  },
+  {
+    "n": "Sanction the platform→domain leaf allowlist in the dependency rule and enforce it",
+    "tier": "Architecture",
+    "ids": ["ARCH-002"],
+    "effort": "S",
+    "note": "Verifier lowered medium→low. The title's 'depend on each other' reads as structural coupling that does not exist: all seven upward edges target domain/constants, domain/errors, or domain/observability — three dependency-free leaf packages in the precise sense internal/README.md defines. No import cycle exists and Go would reject one. The actual defect is that the documented inward-only arrow does not describe the code, and nothing would notice if a platform package started importing something heavier than a leaf. Adjacent to SLA-48 (#610), CLOSED and pre-baseline, which defined the leaf taxonomy this finding leans on."
+  },
+  {
+    "n": "Give the CardLadder handler a consumer-defined interface instead of the concrete adapter",
+    "tier": "Architecture",
+    "ids": ["ARCH-003"],
+    "effort": "S",
+    "note": "It depends on the concrete persistence adapter, breaking the consumer-defined-interface pattern every other handler in the package follows — so the fix has an in-package reference implementation to copy."
+  },
+  {
+    "n": "Put the unit on the five unsuffixed sell-sheet money fields",
+    "tier": "Naming & structure",
+    "ids": ["NAM-001"],
+    "effort": "S",
+    "note": "ADJUDICATED — first filing, NOT a duplicate and NOT a regression. The 2026-08-07 run recorded the frontend half as pointer FE-008 and deliberately never ticketed it (suspected-tier, `ticketable: false`, ADJUDICATIONS.md:377); it has no entry in linear-ids.json, so there is no open ticket to duplicate and no closed one to regress against. This run reached the producing Go side — five fields in inventory/analytics_types.go against FE-008's two TS fields. Verifier lowered medium→low: the finding argued an unsuffixed field 'actively asserts USD' per CLAUDE.md:194, but the repo emits cents over the wire pervasively with a Cents suffix and genuinely-USD fields carry their own explicit suffix. The real convention is 'the suffix carries the unit', so these fields record NO unit rather than asserting dollars, and no consumer reads them — a latent hazard, not a live defect."
+  },
+  {
+    "n": "Rename EbayChannelMarginPct to match the combined marketplace margin it holds",
+    "tier": "Naming & structure",
+    "ids": ["NAM-002"],
+    "effort": "S",
+    "note": "It names a combined eBay+TCGPlayer margin, and the misnomer has already propagated into internal/domain/portfolio as `ebayMarginPct` plus a second same-named field — so the rename has a blast radius worth scoping before starting."
+  },
+  {
+    "n": "Split the 20-method auth.Service interface",
+    "tier": "Interface segregation & size",
+    "ids": ["SIZE-001"],
+    "effort": "L",
+    "note": "Twenty methods across six unrelated concerns, and every consumer needing two of them hand-rolls a 20-method fake — the fakes are the evidence the segregation is missing. Same type as DUP-003, deliberately kept separate: that one is about a duplicated constant and a misplaced double, this one is about the interface shape. Merging them yields a PR no single review can land."
+  },
+  {
+    "n": "Bring core_types.go back under the size budget before it hard-fails CI",
+    "tier": "Interface segregation & size",
+    "ids": ["SIZE-003"],
+    "effort": "M",
+    "note": "It emerged from the SLA-32 file split already at 562 lines — 38 from the 600-line hard fail — on the one file every inventory feature must touch, so the next feature to land plausibly breaks the build."
+  },
+  {
+    "n": "Close the two blind spots in the file-size check",
+    "tier": "Interface segregation & size",
+    "ids": ["SIZE-002", "SIZE-004"],
+    "effort": "M",
+    "note": "One ticket, one script, two ways it fails to measure what it exists to measure. SIZE-002: cmd/slabledger/main.go is exempted by name with no ceiling and no stated reason, and holds the largest function in the repository. SIZE-004: the two largest domain functions each sit in a file just under the 500-line warn line, so a per-file budget reports nothing about them. Both argue the check should measure functions, not only files."
+  }
+]

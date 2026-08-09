@@ -1,0 +1,355 @@
+[
+  {
+    "id": "DUP-001",
+    "lens": "duplication",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/dhpricing.resolveListingPrice + internal/domain/dhpricing.overrideNewer (verbatim copies of internal/domain/dhlisting.ResolveListingPriceCents + internal/domain/dhlisting.overrideNewer)"
+    },
+    "category": "duplication",
+    "title": "The DH listing-price resolution rule is implemented verbatim in two sibling domain packages with no shared source and no cross-package consistency test",
+    "severity": "high",
+    "confidence": "mechanical",
+    "evidence": [
+      {
+        "claim": "The bodies of dhlisting.ResolveListingPriceCents and dhpricing.resolveListingPrice are byte-identical after comment and whitespace normalization, as are the two overrideNewer helpers. Detected by an exact-body-hash pass over every non-test Go file at the baseline (function bodies of >= 6 normalized lines).",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/dhlisting/dh_push_safety.go | sed -n '27,37p;45,51p' | md5sum; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/dhpricing/service.go | sed -n '48,58p;65,71p' | md5sum",
+        "output": "68f4ba7f3bcdbdeed3463abde65c7208  -\n68f4ba7f3bcdbdeed3463abde65c7208  -",
+        "file_line": "internal/domain/dhlisting/dh_push_safety.go:26 and internal/domain/dhpricing/service.go:47"
+      },
+      {
+        "claim": "The duplication is self-declared in the source: the dhpricing copy states it 'mirrors dhlisting.ResolveListingPriceCents, inlined here to preserve the flat-siblings invariant', and its helper says it is a 'sibling-local copy to avoid importing dhlisting'.",
+        "command": "git grep -n 'mirrors dhlisting.ResolveListingPriceCents\\|sibling-local copy' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/dhpricing",
+        "output": "06d9f8ce...:internal/domain/dhpricing/service.go:40:// resolveListingPrice mirrors dhlisting.ResolveListingPriceCents, inlined\n06d9f8ce...:internal/domain/dhpricing/service.go:61:// after the reviewed commit timestamp. Kept here as a sibling-local copy",
+        "file_line": "internal/domain/dhpricing/service.go:40"
+      },
+      {
+        "claim": "Both copies are live and drive real listing prices: the dhlisting original has six external reference sites (four DH match handlers, the DH listing handler, and the dh_push scheduler) per the Phase 1 Go map, and the dhpricing copy gates SyncPurchasePrice.",
+        "command": "jq -c '.records[] | select(.identity==\"internal/domain/dhlisting.ResolveListingPriceCents\")' docs/audit/runs/2026-08-08/maps/go-reference-map.json; git grep -n 'resolveListingPrice(p)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/dhpricing",
+        "output": "external_refs=6, name_ambiguous=false, ref_sites=[campaigns_dh_listing.go:78, dh_fix_match_handler.go:100, dh_match_handler.go:287, dh_retry_match_handler.go:64, dh_select_match_handler.go:110, dh_push.go:259]; 06d9f8ce...:internal/domain/dhpricing/service.go:87:\treviewed := resolveListingPrice(p)",
+        "file_line": "internal/domain/dhpricing/service.go:87"
+      },
+      {
+        "claim": "Only the dhlisting copy is covered by a test. There is no test in dhpricing that exercises resolveListingPrice's reviewed/override precedence, and no test anywhere asserts that the two copies agree.",
+        "command": "git grep -ln 'resolveListingPrice\\|ResolveListingPriceCents' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*_test.go'",
+        "output": "06d9f8ce...:internal/adapters/httpserver/handlers/campaigns_dh_listing_test.go\n06d9f8ce...:internal/domain/dhlisting/push_safety_test.go",
+        "file_line": "internal/domain/dhlisting/push_safety_test.go:13"
+      },
+      {
+        "claim": "The stated justification (the flat-sibling rule bars dhpricing from importing dhlisting) does not force a copy: CLAUDE.md and internal/README.md both state siblings may depend on the inventory hub, and both copies already take an *inventory.Purchase, so the resolver can live in inventory (or a leaf) and be imported by both.",
+        "command": "git grep -n 'Siblings may depend on' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- CLAUDE.md",
+        "output": "06d9f8ce...:CLAUDE.md:126:Siblings may depend on `inventory` (the hub) and on leaf packages such as `errors`",
+        "file_line": "CLAUDE.md:126"
+      }
+    ],
+    "searched_universe": "All Go files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 enumerated by `git ls-tree -r --name-only <rev>` filtered to *.go, excluding *_test.go, normalized (comments and whitespace stripped, blank lines dropped) and hashed per function body of >= 6 lines; plus targeted `git grep <rev>` verification of every candidate pair.",
+    "exclusions": [
+      "*_test.go excluded from the body-hash pass (test helpers duplicate by design); tests were searched separately by git grep for coverage of the pair",
+      "Function bodies shorter than 6 normalized lines (single-expression delegations produce noise)",
+      "Non-Go files"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "Not applicable to either copy: both are package-level funcs taking *inventory.Purchase, not methods, so neither can satisfy an interface. Confirmed by `git grep -nE 'func (\\(|)' at both definition sites — no receiver on either.",
+      "functional_options": "No option type touches either copy. `git grep -n 'With[A-Z]' <rev> -- internal/domain/dhlisting internal/domain/dhpricing` returns no option constructor wrapping price resolution; dhpricing.NewService takes four required collaborators positionally (service.go:23).",
+      "embedding": "Neither is a promoted method — neither has a receiver, so no struct can embed and promote it.",
+      "serialization": "Neither copy has JSON/DB tags; both return a bare int. The value flows into inventory.Purchase.DHListingPriceCents, which is a separate tagged field and is unaffected by the fix.",
+      "go_embed": "No //go:embed directive in either package. `git grep -n 'go:embed' <rev> -- internal/domain` returns nothing under dhlisting or dhpricing.",
+      "build_tags": "Neither file carries a build constraint; both compile under the default tag set and under `integration`. Verified by reading the head of each file at the baseline — no //go:build line.",
+      "registration": "Both are wired. The dhlisting original has six external ref sites in the Phase 1 Go map, one of which (dh_push.go:259) the map classifies as a registration site. The dhpricing copy is called from SyncPurchasePrice (service.go:87), reached through dhpricing.NewService, wired in cmd/slabledger.",
+      "init_side_effects": "Neither package declares an init(). `git grep -n 'func init()' <rev> -- internal/domain/dhlisting internal/domain/dhpricing` returns nothing.",
+      "reflection_or_string": "Neither name is reached by reflection or a string-keyed lookup; both are direct static calls. No SQL or string-built dispatch references either identifier."
+    },
+    "proposed_fix": "Move the resolver and its overrideNewer helper to a single home both siblings may legally import — the inventory hub (e.g. alongside internal/domain/inventory/price_flags.go) is the smallest option and is explicitly permitted by the flat-sibling rule. Have dhlisting.ResolveListingPriceCents and dhpricing both delegate to it, and move the existing table-driven cases in internal/domain/dhlisting/push_safety_test.go onto the shared function so one test covers both call paths.",
+    "blast_radius": [
+      "internal/domain/dhlisting/dh_push_safety.go",
+      "internal/domain/dhlisting/dh_list_one_purchase.go",
+      "internal/domain/dhpricing/service.go",
+      "internal/domain/inventory/ (new home for the shared resolver)",
+      "internal/adapters/httpserver/handlers/campaigns_dh_listing.go",
+      "internal/adapters/httpserver/handlers/dh_fix_match_handler.go",
+      "internal/adapters/httpserver/handlers/dh_match_handler.go",
+      "internal/adapters/httpserver/handlers/dh_retry_match_handler.go",
+      "internal/adapters/httpserver/handlers/dh_select_match_handler.go",
+      "internal/adapters/scheduler/dh_push.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`grep -c 'time.Parse(time.RFC3339, overrideSetAt)' $(git ls-files 'internal/**/*.go')` totals 1 across the repository — the reviewed/override precedence rule exists in exactly one place.",
+      "`go build ./...` and `go test -race ./...` pass with both dhlisting and dhpricing delegating to the single shared resolver.",
+      "`bash scripts/check-imports.sh` passes — dhpricing still does not import dhlisting, and neither sibling imports the other.",
+      "The precedence table currently in internal/domain/dhlisting/push_safety_test.go runs against the shared function, and a test in dhpricing (or the shared package) fails if the two paths ever resolve a purchase differently."
+    ]
+  },
+  {
+    "id": "DUP-002",
+    "lens": "duplication",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/adapters/storage/postgres: saleColumns/scanSale vs saleColumnsAliased/the inline sale block in scanPurchaseWithSale"
+    },
+    "category": "duplication",
+    "title": "campaign_sales is read through two hand-maintained column-list/scan-destination pairs that have already drifted by six columns, so a JOIN-loaded Sale silently returns zeroed sale-outcome fields",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "There are two column lists for the same table and two independent scan implementations: saleColumns + scanSale, and saleColumnsAliased + a 40-line inline block inside scanPurchaseWithSale that re-declares each sale field as a sql.Null* local and assigns it back by hand.",
+        "command": "git grep -n 'saleColumnsAliased\\|const saleColumns\\|func scanSale\\|func scanPurchaseWithSale' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/purchase_scan_helpers.go",
+        "output": "06d9f8ce...:internal/adapters/storage/postgres/purchase_scan_helpers.go:54:const saleColumnsAliased = `s.id, s.purchase_id, ...\n06d9f8ce...:internal/adapters/storage/postgres/purchase_scan_helpers.go:61:const saleColumns = `id, purchase_id, ...\n06d9f8ce...:internal/adapters/storage/postgres/purchase_scan_helpers.go:74:func scanSale(s scanner) (inventory.Sale, error) {\n06d9f8ce...:internal/adapters/storage/postgres/purchase_scan_helpers.go:146:func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {",
+        "file_line": "internal/adapters/storage/postgres/purchase_scan_helpers.go:54"
+      },
+      {
+        "claim": "The two lists have already diverged: saleColumnsAliased selects 23 columns, saleColumns selects 29. The six missing from the aliased list are original_list_price_cents, price_reductions, days_listed, sold_at_asking_price, was_cracked, order_id.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/purchase_scan_helpers.go | sed -n '54,58p' | tr ',' '\\n' | grep -c 's\\.'; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/purchase_scan_helpers.go | sed -n '61,66p' | tr ',' '\\n' | sed 's/[`]//g' | grep -cE '[a-z_]'",
+        "output": "23\n29",
+        "file_line": "internal/adapters/storage/postgres/purchase_scan_helpers.go:54-66"
+      },
+      {
+        "claim": "The divergence is silent, not loud: each list is internally consistent with its own scan-destination sequence, so Scan never reports an arity mismatch. Every inventory.PurchaseWithSale returned by GetPurchasesWithSales therefore carries a Sale whose OriginalListPriceCents, PriceReductions, DaysListed, SoldAtAskingPrice, WasCracked and OrderID are the Go zero value, indistinguishable from a genuinely-zero row.",
+        "command": "git grep -n 'saleColumnsAliased' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/analytics_store.go",
+        "output": "06d9f8ce...:internal/adapters/storage/postgres/analytics_store.go:190:\tquery := `SELECT ` + purchaseColumnsAliased + `, ` + saleColumnsAliased + `\n06d9f8ce...:internal/adapters/storage/postgres/analytics_store.go:210:\tquery := `SELECT ` + purchaseColumnsAliased + `, ` + saleColumnsAliased + `",
+        "file_line": "internal/adapters/storage/postgres/analytics_store.go:190"
+      },
+      {
+        "claim": "The six fields are real, populated columns on the write path — inventory.Service writes them at sale-creation time from BulkSaleInput — so the JOIN path is dropping data that exists in the row, not data that is never set.",
+        "command": "git grep -nE '\\b(OriginalListPriceCents|PriceReductions|DaysListed)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory/service_crud.go",
+        "output": "06d9f8ce...:internal/domain/inventory/service_crud.go:308:\t\t\tOriginalListPriceCents: item.OriginalListPriceCents,\n06d9f8ce...:internal/domain/inventory/service_crud.go:309:\t\t\tPriceReductions:        item.PriceReductions,\n06d9f8ce...:internal/domain/inventory/service_crud.go:310:\t\t\tDaysListed:             item.DaysListed,",
+        "file_line": "internal/domain/inventory/service_crud.go:308"
+      },
+      {
+        "claim": "No consumer reads the six fields off a PurchaseWithSale today, which is why the drift has gone unnoticed — the hazard is latent, not currently firing. Outside the postgres package and tests, the only references are on the write path.",
+        "command": "git grep -nE '\\b(OriginalListPriceCents|PriceReductions|DaysListed|SoldAtAskingPrice|WasCracked)\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go' | grep -v '/postgres/' | grep -v _test.go | grep -v core_types.go | grep -v import_types.go",
+        "output": "06d9f8ce...:internal/domain/inventory/service_crud.go:308:\t\t\tOriginalListPriceCents: item.OriginalListPriceCents,\n06d9f8ce...:internal/domain/inventory/service_crud.go:309:\t\t\tPriceReductions:        item.PriceReductions,\n06d9f8ce...:internal/domain/inventory/service_crud.go:310:\t\t\tDaysListed:             item.DaysListed,",
+        "file_line": "internal/domain/inventory/service_crud.go:308"
+      },
+      {
+        "claim": "The same file shows the fix already applied to the purchase half: purchaseColumns/purchaseColumnsAliased share a single purchaseScanDests destination builder used by both scanPurchase and scanPurchaseWithSale. Only the sale half was left duplicated.",
+        "command": "git grep -n 'func purchaseScanDests\\|purchaseScanDests(' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/purchase_scan_helpers.go",
+        "output": "06d9f8ce...:internal/adapters/storage/postgres/purchase_scan_helpers.go:107:func purchaseScanDests(p *inventory.Purchase, psaCampaignName, attributionSource *sql.NullString) []any {\n06d9f8ce...:internal/adapters/storage/postgres/purchase_scan_helpers.go:136:\tif err := s.Scan(purchaseScanDests(p, &psaCampaignName, &attributionSource)...); err != nil {\n06d9f8ce...:internal/adapters/storage/postgres/purchase_scan_helpers.go:179:\t\tpurchaseScanDests(&pws.Purchase, &psaCampaignName, &attributionSource),",
+        "file_line": "internal/adapters/storage/postgres/purchase_scan_helpers.go:107"
+      }
+    ],
+    "searched_universe": "internal/adapters/storage/postgres/*.go at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 (enumerated with git ls-tree), read in full for purchase_scan_helpers.go, sale_store.go and analytics_store.go; plus a repo-wide `git grep <rev>` for each of the six divergent field names across all *.go.",
+    "exclusions": [
+      "Migration SQL files — the audit does not connect to a database, so the physical column set was taken from the Go column-list constants, not from the schema",
+      "Frontend consumers of the sale JSON payload (owned by the frontend-health lens)"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "runtime_checks": {
+      "registration": "Both scan paths are wired: scanSale is reached from SaleStore (sale_store.go:53, :104, :129) and scanPurchaseWithSale from AnalyticsStore.GetPurchasesWithSales / the global variant (analytics_store.go:200, :239).",
+      "reflection_or_string": "Both column lists are string literals concatenated into SQL, so the column names have no Go identifier reference at all — this is precisely mechanism 9, and the reason the divergence cannot be caught by any reference count. It has to be read.",
+      "serialization": "The six divergent fields all carry `,omitempty` JSON tags on inventory.Sale (core_types.go:477-486), so a zeroed value is omitted from the API response rather than surfacing as an explicit zero — the drift is invisible on the wire too."
+    },
+    "proposed_fix": "Give the sale half the same treatment the purchase half already has: derive saleColumnsAliased from saleColumns by prefixing, or keep one list and one saleScanDests(*inventory.Sale, ...nulls) []any builder that both scanSale and scanPurchaseWithSale consume. If the six columns are deliberately excluded from the JOIN for query cost, say so in a comment on saleColumnsAliased and make the omission explicit rather than incidental.",
+    "blast_radius": [
+      "internal/adapters/storage/postgres/purchase_scan_helpers.go",
+      "internal/adapters/storage/postgres/sale_store.go",
+      "internal/adapters/storage/postgres/analytics_store.go"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "The campaign_sales column set is written once: `git grep -c 'sale_price_cents' internal/adapters/storage/postgres/purchase_scan_helpers.go` returns 1, or the aliased list is mechanically derived from the canonical one.",
+      "`go build ./...` and `go test -race ./...` pass.",
+      "A test loads a sale through both paths (SaleStore.GetSaleByPurchaseID and AnalyticsStore.GetPurchasesWithSales) for the same purchase and asserts the two inventory.Sale values are equal, so any future column added to one list and not the other fails."
+    ]
+  },
+  {
+    "id": "DUP-003",
+    "lens": "duplication",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/auth.authService (auth.New) — a second full implementation of auth.Service alongside internal/adapters/clients/google.OAuthService"
+    },
+    "category": "duplication",
+    "title": "auth.Service has two full implementations; the domain one is constructed only by its own test file and has already drifted from the production one on session validation",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Two types implement the same 21-method auth.Service interface with matching method sets, each asserting satisfaction explicitly.",
+        "command": "git grep -n 'var _ auth.Service = \\|var _ Service = ' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce...:internal/adapters/clients/google/oauth.go:83:var _ auth.Service = (*OAuthService)(nil)\n06d9f8ce...:internal/domain/auth/service_impl.go:56:var _ Service = (*authService)(nil)",
+        "file_line": "internal/domain/auth/service_impl.go:56"
+      },
+      {
+        "claim": "Only OAuthService is wired into the binary; auth.New is constructed nowhere outside internal/domain/auth/service_test.go. The Phase 1 Go map records internal/domain/auth.New with external_refs=280, but flags name_ambiguous=true with 5 distinct top-level `New` definitions — the count is selector-name inflation, and the targeted verification below is what settles it.",
+        "command": "jq -c '.records[] | select(.identity==\"internal/domain/auth.New\") | {external_refs, name_ambiguous, distinct_definitions_for_name}' docs/audit/runs/2026-08-08/maps/go-reference-map.json; git grep -n 'auth\\.New(' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "{\"external_refs\":280,\"name_ambiguous\":true,\"distinct_definitions_for_name\":5}\n06d9f8ce...:internal/domain/auth/service_test.go:56:\tsvc, err := auth.New(repo, opts...)\n06d9f8ce...:internal/domain/auth/service_test.go:76:\t_, err := auth.New(nil)",
+        "file_line": "internal/domain/auth/service_test.go:56"
+      },
+      {
+        "claim": "The production binary constructs only google.NewOAuthService.",
+        "command": "git grep -n 'NewOAuthService(' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- cmd/",
+        "output": "06d9f8ce...:cmd/slabledger/main.go:232:\t\t\tauthService = google.NewOAuthService(",
+        "file_line": "cmd/slabledger/main.go:232"
+      },
+      {
+        "claim": "The two implementations have already drifted on ValidateSession: OAuthService refreshes the session's last-accessed timestamp (throttled to one write per 60s) after a successful validation; authService returns without touching it. A unit test written against auth.New therefore cannot observe — and will not regress-catch — the production session-touch behavior.",
+        "command": "git grep -n 'UpdateSessionAccess' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce...:internal/adapters/clients/google/oauth.go:242:\t\t\tif err := s.repo.UpdateSessionAccess(ctx, sessionID); err != nil {\n(no hit in internal/domain/auth/service_impl.go — its ValidateSession at :109 returns immediately after the user lookup)",
+        "file_line": "internal/adapters/clients/google/oauth.go:242"
+      },
+      {
+        "claim": "The session-expiry window — a security-relevant constant — is declared twice, once per implementation, with no shared source. They agree today, which is exactly the state that makes a future one-sided edit silent.",
+        "command": "git grep -nE 'sessionExpiry|defaultSessionExpiry' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "06d9f8ce...:internal/adapters/clients/google/oauth.go:46:\tsessionExpiry = 30 * 24 * time.Hour // 30 days\n06d9f8ce...:internal/adapters/clients/google/oauth.go:207:\t\tExpiresAt:      time.Now().Add(sessionExpiry),\n06d9f8ce...:internal/domain/auth/service_impl.go:13:const defaultSessionExpiry = 30 * 24 * time.Hour\n06d9f8ce...:internal/domain/auth/service_impl.go:97:\t\tExpiresAt:      now.Add(defaultSessionExpiry),",
+        "file_line": "internal/domain/auth/service_impl.go:13"
+      },
+      {
+        "claim": "UpdateLastLogin is byte-identical between the two implementations after normalization — found by the same exact-body-hash pass that produced DUP-001 — confirming these are copies rather than independently-motivated behaviors.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/clients/google/oauth.go | sed -n '311,319p' | grep -v '^[[:space:]]*$' | md5sum; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/auth/service_impl.go | sed -n '150,156p' | grep -v '^[[:space:]]*$' | md5sum",
+        "output": "ba9a4393e46a124f2f4ba1c5f1a2f70d  -\nba9a4393e46a124f2f4ba1c5f1a2f70d  -",
+        "file_line": "internal/domain/auth/service_impl.go:149"
+      }
+    ],
+    "searched_universe": "All Go files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 enumerated by `git ls-tree -r --name-only <rev>` filtered to *.go; the exact-body-hash pass excluded *_test.go, and every candidate was verified with a word-anchored `git grep <rev>` that did include *_test.go. Reachability of auth.New was taken from the Phase 1 Go map first and then verified at the source because the map marks it ambiguous.",
+    "exclusions": [
+      "The auth mocks in internal/testutil/mocks/ — mirroring an interface is by-design per the lens brief, and auth_inmemory.go only mentions auth.New in a doc comment, not a call",
+      "cmd/psa-harvest — its `New(` hits belong to unrelated constructors, which is the selector-name inflation the map warns about"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "Both types satisfy auth.Service via an explicit compile-time assertion (oauth.go:83, service_impl.go:56). This is mechanism 1 and is the reason neither implementation looks unreferenced.",
+      "registration": "Only OAuthService is registered: cmd/slabledger/main.go:232 assigns google.NewOAuthService to the auth.Service variable passed to the HTTP handlers, the auth middleware, and the session-cleanup scheduler. No DI path constructs auth.New.",
+      "build_tags": "Neither file carries a build constraint; the test-only construction is in a plain _test.go with no tag, so it is excluded from the binary by the test/non-test split rather than by a tag.",
+      "functional_options": "auth.New takes variadic Option values (WithLoginURLFn, service_impl.go:31). This is mechanism 2 and does not create any production caller — the only two call sites are in service_test.go."
+    },
+    "proposed_fix": "Decide which of the two is the contract. The lowest-risk option is to keep OAuthService as the single implementation and replace the domain authService with a mock or in-memory fake under internal/testutil/mocks/ (where the repo's stated convention already puts test doubles), deleting the parallel production-shaped implementation. If a repository-backed non-OAuth service is genuinely wanted, extract the shared session/user/allowlist logic so ValidateSession, CreateSession and the expiry constant exist once and OAuthService composes it with the Google-specific parts.",
+    "blast_radius": [
+      "internal/domain/auth/service_impl.go",
+      "internal/domain/auth/service_test.go",
+      "internal/adapters/clients/google/oauth.go",
+      "internal/testutil/mocks/auth_inmemory.go"
+    ],
+    "effort": "M",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass after the second implementation is removed or reduced to a shared core.",
+      "`git grep -c 'time.Hour' internal/domain/auth internal/adapters/clients/google | grep -i expiry` shows the session-expiry window declared exactly once.",
+      "The behavior currently unique to OAuthService.ValidateSession (the throttled UpdateSessionAccess write) is exercised by a test that fails if it is removed.",
+      "`bash scripts/check-imports.sh` passes — no domain package gains an adapter import."
+    ]
+  },
+  {
+    "id": "DUP-004",
+    "lens": "duplication",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "component",
+      "identity": "web/src/react/pages/campaign-detail/inventory/DesktopRow.tsx and MobileCard.tsx — the duplicated RowActionHandlers wiring block"
+    },
+    "category": "duplication",
+    "title": "Desktop and mobile inventory rows each hand-assemble the same ten-key row-action handler map, and every key but one is optional, so adding an action to one view silently omits it from the other",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "A sixteen-line block — the ten-key handlers object, the flags object, and the three resolveContextualPrimary / fallbackPrimary / resolveOverflowActions calls — is byte-identical between the two components after whitespace normalization. Found by an exact-body-hash pass over every non-test .ts/.tsx file under web/src at the baseline; it was the only duplicate pair the pass returned.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/src/react/pages/campaign-detail/inventory/DesktopRow.tsx | sed -n '128,143p' | md5sum; git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/src/react/pages/campaign-detail/inventory/MobileCard.tsx | sed -n '55,70p' | md5sum",
+        "output": "4a6b073f1c888efd002ea764f867855c  -\n4a6b073f1c888efd002ea764f867855c  -",
+        "file_line": "web/src/react/pages/campaign-detail/inventory/DesktopRow.tsx:128"
+      },
+      {
+        "claim": "The drift would be silent rather than a type error: nine of the ten keys on RowActionHandlers are optional, so a handler added to one view's object and forgotten in the other still type-checks and the action simply disappears from that viewport.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:web/src/react/pages/campaign-detail/inventory/rowActions.ts | sed -n '19,30p'",
+        "output": "export interface RowActionHandlers {\n  onRecordSale: () => void;\n  onSetPrice?: () => void;\n  onFixPricing?: () => void;\n  onFixDHMatch?: () => void;\n  onUnmatchDH?: () => void;\n  onRetryDHMatch?: () => void;\n  onListOnDH?: (purchaseId: string) => void;\n  onDismiss?: () => void;\n  onUndismiss?: () => void;\n  onDelete?: () => void;\n}",
+        "file_line": "web/src/react/pages/campaign-detail/inventory/rowActions.ts:19"
+      },
+      {
+        "claim": "The action-resolution rules themselves are already correctly shared in rowActions.ts — only the wiring that feeds them is duplicated, so the fix is additive and small.",
+        "command": "git grep -n 'resolveContextualPrimary\\|resolveOverflowActions' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/src",
+        "output": "06d9f8ce...:DesktopRow.tsx:18 (import), :141, :143\n06d9f8ce...:MobileCard.tsx:14 (import), :68, :70\n06d9f8ce...:rowActions.ts:48 (definition), :79 (definition)",
+        "file_line": "web/src/react/pages/campaign-detail/inventory/rowActions.ts:48"
+      }
+    ],
+    "searched_universe": "All .ts/.tsx files under web/src at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 enumerated by `git ls-tree -r --name-only <rev> -- web/src`, excluding *.test.* and *.spec.*, normalized and hashed per function body of >= 10 lines, then verified pairwise with diff.",
+    "exclusions": [
+      "*.test.* and *.spec.* files",
+      "Playwright specs outside web/src (invisible to the frontend map per the Run Card, and out of scope here)",
+      "Function bodies shorter than 10 normalized lines",
+      "web/src/types/ — mirroring Go JSON tags is by design; the Sale interface was spot-checked against inventory.Sale and is in step, so no drift finding is filed there"
+    ],
+    "build_tags": [],
+    "proposed_fix": "Add a small hook or helper in rowActions.ts (e.g. useRowActions(item, callbacks, flags) returning { primary, fallbackPrimary, overflow }) and have both DesktopRow and MobileCard call it, so the handler set is enumerated once. Alternatively, take the handlers object as a single prop from the shared parent that already owns all ten callbacks, rather than re-assembling it per viewport.",
+    "blast_radius": [
+      "web/src/react/pages/campaign-detail/inventory/DesktopRow.tsx",
+      "web/src/react/pages/campaign-detail/inventory/MobileCard.tsx",
+      "web/src/react/pages/campaign-detail/inventory/rowActions.ts"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "The ten-key handler object literal appears once under web/src/react/pages/campaign-detail/inventory/, verified by `grep -rc 'onRetryDHMatch,' web/src/react/pages/campaign-detail/inventory/` totalling 1.",
+      "`cd web && npm run build` and `npm test` pass.",
+      "Adding a new optional action to RowActionHandlers requires editing exactly one file for it to appear in both the desktop row and the mobile card."
+    ]
+  },
+  {
+    "id": "DUP-005",
+    "lens": "duplication",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/arbitrage: the fee-validity fallback inlined in computeAcquisitionOpportunity and computeExpectedValue, vs internal/domain/inventory.EffectiveFeePct"
+    },
+    "category": "duplication",
+    "title": "The \"invalid campaign fee falls back to the default marketplace rate\" rule exists in three places inside one call graph, and two of the three disagree on what counts as invalid",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "inventory.EffectiveFeePct is the documented canonical rule: a fee <= 0 or >= 1 is treated as unset and replaced by constants.DefaultMarketplaceFeePct.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/inventory/channel_fees.go | sed -n '12,21p'",
+        "output": "// EffectiveFeePct returns the campaign's eBay fee percentage,\n// falling back to constants.DefaultMarketplaceFeePct when the campaign has no\n// valid fee set. A fee of 0, negative, or >= 1 (i.e. >= 100%) is treated as\n// unset.\nfunc EffectiveFeePct(c *Campaign) float64 {\n\tif c.EbayFeePct <= 0 || c.EbayFeePct >= 1 {\n\t\treturn constants.DefaultMarketplaceFeePct\n\t}\n\treturn c.EbayFeePct\n}",
+        "file_line": "internal/domain/inventory/channel_fees.go:16"
+      },
+      {
+        "claim": "computeAcquisitionOpportunity re-states the same predicate inline instead of calling it.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/arbitrage/acquisition.go | sed -n '41,43p'",
+        "output": "\tif ebayFeePct <= 0 || ebayFeePct >= 1 {\n\t\tebayFeePct = constants.DefaultMarketplaceFeePct\n\t}",
+        "file_line": "internal/domain/arbitrage/acquisition.go:41"
+      },
+      {
+        "claim": "computeExpectedValue, in the same package, implements a weaker predicate: it accepts any positive value, with no >= 1 upper bound. Given the same out-of-range fee (e.g. 12.35 entered as a percentage rather than a fraction) the two functions disagree — acquisition falls back to 12.35%, EV computes fees at 1235% of the expected sale price.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/arbitrage/expected_value.go | sed -n '57,60p;71,71p'",
+        "output": "\tfeePct := constants.DefaultMarketplaceFeePct\n\tif in.FeePct > 0 {\n\t\tfeePct = in.FeePct\n\t}\n\texpectedFees := int(expectedSale * feePct)",
+        "file_line": "internal/domain/arbitrage/expected_value.go:57"
+      },
+      {
+        "claim": "The reason this is filed as suspected rather than strong: every production call site of both functions already passes a value that went through inventory.EffectiveFeePct, so neither inline guard can currently fire. The divergence is latent — it becomes a defect the first time a caller passes a raw Campaign.EbayFeePct, or the first time the canonical predicate is tightened and only two of the three copies are updated.",
+        "command": "git grep -nE 'computeAcquisitionOpportunity\\(|computeExpectedValue\\(|EffectiveFeePct\\(' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/arbitrage | grep -v _test.go",
+        "output": "06d9f8ce...:acquisition.go:31:func computeAcquisitionOpportunity(\n06d9f8ce...:service_batch.go:16:\t\tm[c.ID] = inventory.EffectiveFeePct(&c)\n06d9f8ce...:service_batch.go:136 and :209 call computeAcquisitionOpportunity with the value from that map\n06d9f8ce...:service_ev.go:66, :130, :144:\t\tfeePct := inventory.EffectiveFeePct(campaign)\n06d9f8ce...:service_ev.go:67, :131, :146: computeExpectedValue(EVInput{... FeePct: feePct})",
+        "file_line": "internal/domain/arbitrage/service_batch.go:16"
+      }
+    ],
+    "searched_universe": "All Go files at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 enumerated by `git ls-tree -r --name-only <rev>` filtered to *.go, searched with word-anchored `git grep <rev>` for FeePct / feePct / EffectiveFeePct / CalculateSaleFee / CalculateNetProfit across all packages including tests.",
+    "exclusions": [
+      "internal/domain/export/service_sell_sheet.go — it calls inventory.EffectiveFeePct rather than re-implementing it, and is not part of this finding",
+      "The cents/dollars conversion helpers, checked in the same sweep: every non-test conversion in the repo routes through internal/domain/mathutil, with no second implementation"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Delete the inline guard in computeAcquisitionOpportunity and change computeExpectedValue's EVInput.FeePct handling to the same predicate, or better, have both take an already-normalized fee and document that the caller must obtain it from inventory.EffectiveFeePct — which is what all three current call sites already do.",
+    "blast_radius": [
+      "internal/domain/arbitrage/acquisition.go",
+      "internal/domain/arbitrage/expected_value.go",
+      "internal/domain/inventory/channel_fees.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`git grep -c 'DefaultMarketplaceFeePct' internal/domain/arbitrage` shows the fallback applied in at most one place in the package, or not at all if the contract moves to the caller.",
+      "`go build ./...` and `go test -race ./...` pass, including internal/domain/arbitrage/acquisition_test.go and expected_value_test.go.",
+      "A table-driven test covers a fee of 0, a negative fee, 0.5, and 12.35 through both computeAcquisitionOpportunity and computeExpectedValue and asserts they resolve the same effective rate."
+    ]
+  }
+]

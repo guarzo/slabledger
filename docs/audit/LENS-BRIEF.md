@@ -2,6 +2,10 @@
 
 Read `docs/audit/PREAMBLE.md` first. This file is additional and does not replace it.
 
+This brief is shared across runs. Every run-specific number, path, and revision
+lives in the Run Card appended to your dispatch — never here. Where this file
+needs a count, it tells you the `jq` that produces it from your own run's maps.
+
 You are the first agent in this audit that makes **judgments**. The five scouts
 gathered data and deliberately refused to classify. You classify. That is why the
 evidence rules below are stricter than theirs.
@@ -10,19 +14,20 @@ evidence rules below are stricter than theirs.
 
 ## 1. Where reachability comes from
 
-Read `docs/audit/maps/*.json` FIRST. Reachability comes from those maps — **never
-from your own search**. If a map lacks what you need, record that as a gap in your
-summary rather than computing it yourself.
+Read the `maps/` directory of the run directory named in your Run Card FIRST.
+Reachability comes from those maps — **never from your own search**. If a map
+lacks what you need, record that as a gap in your summary rather than computing
+it yourself.
 
-**The maps are large.** `go-reference-map.json` has 4,439 records;
-`frontend-reference-map.json` 649; `db-map.json` 572. Do NOT `Read` these files
-whole — you will exhaust your context before you have a single finding. Query them
-with `jq`. Examples:
+**The maps are large** — the Go map alone runs to several megabytes. Do NOT
+`Read` these files whole; you will exhaust your context before you have a single
+finding. Query them with `jq`. Substitute your run's `maps/` path:
 
 ```bash
-jq '[.records[] | select(.external_refs==0 and .name_ambiguous!=true)] | length' docs/audit/maps/go-reference-map.json
-jq -r '.records[] | select(.kind=="column" and .external_refs==0) | .identity' docs/audit/maps/db-map.json
-jq '.records[] | select(.identity=="…")' docs/audit/maps/go-reference-map.json
+jq '.records_count' $MAPS/go-reference-map.json
+jq '[.records[] | select(.external_refs==0 and .name_ambiguous!=true)] | length' $MAPS/go-reference-map.json
+jq -r '.records[] | select(.kind=="column" and .external_refs==0) | .identity' $MAPS/db-map.json
+jq '.records[] | select(.identity=="…")' $MAPS/go-reference-map.json
 ```
 
 You may run targeted `git grep` to *verify* a specific candidate the maps
@@ -34,14 +39,17 @@ unreferenced — that is the maps' job, and yours is bounded by what they cover.
 ## 2. What the maps do and do not prove
 
 These caveats were declared by the scouts themselves. Violating them produces
-confident tickets to delete live code.
+confident tickets to delete live code. **Derive each count from your own run's
+maps** — the `jq` for it is in the first column — and never carry a number
+quoted from a previous run.
 
-| Caveat | Consequence for you |
+| Caveat (with the jq that sizes it) | Consequence for you |
 |---|---|
-| **1,622 Go records and 89 db records are `name_ambiguous: true`** | The identifier is declared more than once in the repo. `external_refs` is an **upper bound**, not a measurement. Never build a mechanical-tier finding on an ambiguous count in either direction. |
-| **1,798 Go records have `external_refs == 0`** | This is **not** a dead-code list. It includes `TestXxx` functions invoked by the test runtime via reflection, and exported helpers used only inside their own package. |
+| **Records with `name_ambiguous: true`**<br>`jq '[.records[]\|select(.name_ambiguous==true)]\|length' $MAPS/go-reference-map.json` (and the same on `db-map.json`) | The identifier is declared more than once in the repo. `external_refs` is an **upper bound**, not a measurement. Never build a mechanical-tier finding on an ambiguous count in either direction. |
+| **Records with `external_refs == 0`**<br>`jq '[.records[]\|select(.external_refs==0)]\|length' $MAPS/go-reference-map.json` | This is **not** a dead-code list. It includes `TestXxx` functions invoked by the test runtime via reflection, exported helpers used only inside their own package, and symbols reachable only through the preamble's nine mechanisms. |
 | **Go map scope is exported symbols only** | Unexported identifiers and inline interface method sets are out of scope. Absent from the map ≠ absent from the repo. |
 | **Go counting is textual, not type-checked** | Interface satisfaction and embedding-promoted methods are **not** detected by the map. Check them yourself per the preamble's nine mechanisms. |
+| **Selector names are counted** | A reference to `x.Foo` counts toward *every* top-level `Foo` in the repo. This inflates `external_refs` and is the mechanism behind most ambiguity. |
 | **Frontend: default exports re-bound at import** | Word-boundary matching cannot follow `import Whatever from './x'` where `x` default-exports `Something`. Any zero-ref finding on a default-exported symbol requires hand-checking its import sites. |
 | **Index reachability is a permanent limitation** | Index names are query-planner hints, never Go string literals. An index's zero direct refs is evidence of **nothing**. Reachability is inferred only from the underlying table/column. |
 
@@ -51,23 +59,28 @@ confident tickets to delete live code.
 
 The preamble's nine mechanisms cover hidden references that make dead code look
 live. These are the cases that bit us in practice — including one that nearly
-scored a genuinely dead cluster as live.
+scored a genuinely dead cluster as live. **The citations illustrate the
+*mechanism* and were captured at an earlier baseline; some no longer resolve at
+your run's revision, and that is not itself a finding.** Learn the shape, not the
+line number.
 
-1. **In-package caller.** `internal/platform/cache/cache.go:49` calls
-   `NewFileCacheBackend`, which reads as a live consumer — until you check that
-   nothing outside the package calls `cache.New`, the only function that reaches
-   line 49. **An in-package caller of an in-package helper proves nothing about
-   external reachability.** A package can be entirely dead while being internally
-   busy.
+1. **In-package caller.** A package-internal call site reads as a live consumer —
+   until you check whether anything *outside* the package reaches the function
+   that contains it. **An in-package caller of an in-package helper proves
+   nothing about external reachability.** A package can be entirely dead while
+   being internally busy. (Illustrated at the 2026-08-07 baseline by
+   `internal/platform/cache/`, whose `cache.go:49` called `NewFileCacheBackend`
+   while nothing outside the package called the only function reaching it. That
+   package no longer exists — which is what the trap predicts happens next.)
 
 2. **Same-name collision.** `api_rate_limits.calls_last_hour` greps non-zero, but
    every hit is the `api_usage_summary` *view's* own computed column of the same
    name, aggregating a different table. An unrelated same-name symbol makes dead
    code look live. Check that a hit refers to *your* subject.
 
-3. **Stale comment ≠ dead object.** Four still-live tables carry stale `sqlite.`
-   provenance comments identical in form to the one on the genuinely dead
-   `marketmovers_config`. The comment being dead does not make the object dead.
+3. **Stale comment ≠ dead object.** Still-live tables carry stale `sqlite.`
+   provenance comments identical in form to the one on a genuinely dead table.
+   The comment being dead does not make the object dead.
 
 ---
 
@@ -143,13 +156,14 @@ real cost on Task 13 and Task 14.
 - Never modify anything under `internal/`, `cmd/`, `web/src/`, any documentation
   file, the maps, the schemas, or `validate.sh`.
 - Do not commit. The controller commits.
-- Baseline revision: `740976ecf80a4f2ccdaa611d7790ccaa95b48773`. Analyze
-  git-tracked files at this revision only. `ls` and `find` are not evidence.
+- **Baseline revision: the one named in your Run Card.** Analyze git-tracked files
+  at that revision only. `ls` and `find` are not evidence.
 
-Before finishing, validate:
+Before finishing, validate (paths and facts from your Run Card):
 
 ```bash
-bash docs/audit/scripts/validate.sh findings <your-output-path>
+AUDIT_BASELINE_FACTS=<run-dir>/baseline.json \
+  bash docs/audit/scripts/validate.sh findings <your-output-path>
 ```
 
 Iterate until it prints GATE PASS. Never edit the validator or schema to pass.

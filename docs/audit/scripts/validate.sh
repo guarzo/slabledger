@@ -24,24 +24,43 @@ jq empty "$FILE" 2>/dev/null || fail "$FILE is not valid JSON"
 schema_check() {
   local schema="$HERE/../schema/$1" filter="$2"
   [ -f "$schema" ] || return 0
+  # `jq "$filter"` emits a STREAM of documents for the '.[]' filter that findings
+  # and verdicts use: concatenated objects, which is not parseable JSON, and which
+  # check-jsonschema likewise cannot read. Both branches below were therefore
+  # broken for every array-shaped artifact — invisible until a validator was
+  # actually present, because with none installed this function only printed a
+  # NOTE. Use -c so each document lands on its own line, and validate them one at
+  # a time against a schema that describes a single record.
+  local docs
+  docs=$(jq -c "$filter" "$FILE") || fail "$FILE: jq filter '$filter' failed"
   if command -v check-jsonschema >/dev/null 2>&1; then
-    jq "$filter" "$FILE" > "$FILE.tmp.$$" || { rm -f "$FILE.tmp.$$"; return 0; }
-    check-jsonschema --schemafile "$schema" "$FILE.tmp.$$" >/dev/null 2>&1
-    local rc=$?
+    local n=0
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      printf '%s' "$line" > "$FILE.tmp.$$"
+      check-jsonschema --schemafile "$schema" "$FILE.tmp.$$" >/dev/null 2>&1 \
+        || { rm -f "$FILE.tmp.$$"; fail "$FILE record $n does not satisfy schema/$1"; }
+      n=$((n + 1))
+    done <<< "$docs"
     rm -f "$FILE.tmp.$$"
-    [ "$rc" -eq 0 ] || fail "$FILE does not satisfy schema/$1"
-    echo "  schema/$1: OK" >&2
+    echo "  schema/$1: OK ($n records)" >&2
   elif python3 -c 'import jsonschema' 2>/dev/null; then
-    python3 - "$schema" "$FILE" "$filter" <<'PY' || fail "$FILE does not satisfy schema"
-import json, subprocess, sys
+    printf '%s\n' "$docs" > "$FILE.tmp.$$"
+    python3 - "$schema" "$FILE.tmp.$$" "$1" <<'PY' \
+      || { rm -f "$FILE.tmp.$$"; fail "$FILE does not satisfy schema/$1"; }
+import json, sys
 import jsonschema
 schema = json.load(open(sys.argv[1]))
-docs = json.loads(subprocess.run(["jq", sys.argv[3], sys.argv[2]],
-                                 capture_output=True, text=True, check=True).stdout)
-for d in (docs if isinstance(docs, list) else [docs]):
-    jsonschema.validate(d, schema)
+n = 0
+for line in open(sys.argv[2]):
+    line = line.strip()
+    if not line:
+        continue
+    jsonschema.validate(json.loads(line), schema)
+    n += 1
+print(f"  schema/{sys.argv[3]}: OK ({n} records)", file=sys.stderr)
 PY
-    echo "  schema/$1: OK" >&2
+    rm -f "$FILE.tmp.$$"
   else
     echo "NOTE: no JSON Schema validator on PATH (check-jsonschema or python3" \
          "jsonschema) — schema/$1 was NOT enforced; only the checks below ran." >&2
@@ -49,8 +68,32 @@ PY
 }
 
 # Baseline facts. Authoritative; see the spec's baseline table.
+#
+# The literals below are the 2026-08-07 run's and stay the default, so re-gating
+# that run's artifacts behaves exactly as it did. A later run pins its own
+# baseline by pointing AUDIT_BASELINE_FACTS at a JSON file carrying `revision`
+# plus the five counts; the same reconciliation then runs against those numbers.
+# Every fact is required and must be an integer — a facts file that merely
+# omitted `packages` would silently reopen the truncation gap the per-scout
+# contract below exists to close.
 declare -A BASELINE=( [go_files]=676 [packages]=53 [migrations]=25
                       [frontend_files]=218 [env_vars]=71 )
+
+if [ -n "${AUDIT_BASELINE_FACTS:-}" ]; then
+  [ -f "$AUDIT_BASELINE_FACTS" ] || \
+    fail "AUDIT_BASELINE_FACTS: no such file: $AUDIT_BASELINE_FACTS"
+  jq empty "$AUDIT_BASELINE_FACTS" 2>/dev/null || \
+    fail "$AUDIT_BASELINE_FACTS is not valid JSON"
+  BASELINE_REV=$(jq -r '.revision // ""' "$AUDIT_BASELINE_FACTS")
+  [[ "$BASELINE_REV" =~ ^[0-9a-f]{40}$ ]] || \
+    fail "$AUDIT_BASELINE_FACTS .revision is not a 40-char sha: '$BASELINE_REV'"
+  for _k in go_files packages migrations frontend_files env_vars; do
+    _v=$(jq -r --arg k "$_k" '.[$k] // ""' "$AUDIT_BASELINE_FACTS")
+    [[ "$_v" =~ ^[0-9]+$ ]] || \
+      fail "$AUDIT_BASELINE_FACTS: baseline fact '$_k' missing or not an integer"
+    BASELINE[$_k]="$_v"
+  done
+fi
 
 # Closed per-scout contract: the exact declared_totals keys each scout must
 # report. Value is a space-separated list of baseline keys (empty = none).
@@ -167,9 +210,13 @@ elif [ "$MODE" = "verdicts" ]; then
   [ -z "$nosev" ] || fail "confirmed_lower_severity with no corrected_severity: $nosev"
 
   # A refuted finding that stays ticketable files a ticket for a non-issue.
-  tick=$(jq -r '[.[] | select(.verdict == "refuted" and .ticketable != false)
-                 | .id] | join(", ")' "$FILE")
-  [ -z "$tick" ] || fail "refuted but still ticketable: $tick"
+  # unresolvable is held to the same bar for a different reason: the verifier is
+  # saying the method could not settle the claim, so a ticket filed off it would
+  # carry a confidence the audit never earned. A finding that is only partly
+  # unverifiable belongs at confirmed_lower_severity, scoped to the verified part.
+  tick=$(jq -r '[.[] | select((.verdict == "refuted" or .verdict == "unresolvable")
+                   and .ticketable != false) | "\(.id)=\(.verdict)"] | join(", ")' "$FILE")
+  [ -z "$tick" ] || fail "refuted/unresolvable but still ticketable: $tick"
 
   n=$(jq 'length' "$FILE")
   echo "GATE PASS: verdicts — $n records, severities are bare tokens"
