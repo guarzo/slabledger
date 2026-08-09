@@ -28,6 +28,7 @@ type Service interface {
 	ImportEbayOrdersSales(ctx context.Context, rows []EbayOrderRow) (*OrdersImportResult, error)
 	ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmItem) (*inventory.BulkSaleResult, error)
 	ReconcilePSAAttribution(ctx context.Context, rows []PSAExportRow) (ReconcileResult, error)
+	ImportCertSales(ctx context.Context, req CertSaleImportRequest) (*CertSaleImportResult, error)
 
 	// Close waits for background work started by an import (card ID backfill)
 	// to finish. Callers that wire this service own calling it at shutdown.
