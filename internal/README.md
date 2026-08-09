@@ -135,8 +135,8 @@ one, which is itself a violation, so the fixed point is reached at iteration zer
 the checker passes.
 
 Edges that look like exceptions but are not — each target is a leaf, so all are legal:
-`advisor → ai`, `advisor → scoring`, `dhlisting → dhevents`, `pricing/lookup → pricing`,
-`inventory → dhevents`, `inventory → intelligence`.
+`csvimport → mathutil`, `csvimport → dhevents`, `dhlisting → dhevents`,
+`pricing/lookup → pricing`, `inventory → dhevents`, `inventory → intelligence`.
 
 Full reasoning: `docs/specs/2026-08-08-domain-leaf-taxonomy-design.md`.
 

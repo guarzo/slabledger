@@ -113,9 +113,9 @@ grep -rl --include='*.go' 'internal/domain/inventory' internal/domain \
   | grep -v _test.go | xargs -n1 dirname | sort -u
 ```
 
-As of 2026-08-08 that set is arbitrage, demand, dhlisting, dhpricing, export, finance,
-portfolio, pricing/lookup, psacampaign, and tuning — but derive it rather than trusting
-this sentence.
+The roster is deliberately not written out here. It has now drifted twice (SLA-46,
+SLA-48) because a dated list goes stale silently on the next package add or delete,
+while the command above cannot.
 
 ## Database
 
