@@ -1,6 +1,7 @@
 import { CardLadderTab } from './CardLadderTab';
 import { DHTab } from './DHTab';
 import { PSASyncTab } from './PSASyncTab';
+import { DHOperationsPanel } from './DHOperationsPanel';
 import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import SalesImportSection from '../tools/SalesImportSection';
 import { StatusPill } from '../../ui';
@@ -106,6 +107,7 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
         </div>
         <div className="mb-3" />
         <DHTab enabled={enabled} />
+        <DHOperationsPanel enabled={enabled} />
       </section>
 
       <hr className="border-[var(--surface-2)]" />
