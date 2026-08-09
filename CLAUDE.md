@@ -55,7 +55,6 @@ Orientation for the packages whose purpose is not obvious from the name:
 - `domain/intelligence` — market intelligence repository and types (DH Tier 3 data).
 - `domain/liquidation` — liquidation candidates and comp pricing.
 - `domain/dhevents` — DH event stream types.
-- `domain/storage` — cache and storage interfaces.
 - `domain/{constants,errors,mathutil,observability,timeutil}` — leaf utilities.
 - `adapters/clients/dh` — the DH API client; `adapters/clients/dhprice` wraps it as a
   `PriceProvider`; `adapters/clients/dhlisting` handles listing pushes.

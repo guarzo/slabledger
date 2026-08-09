@@ -41,8 +41,7 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
  │    ├── intelligence/   (DH market data)         │
  │    ├── mathutil/       (math utilities)         │
  │    ├── observability/  (logger interfaces)      │
- │    ├── pricing/        (price interfaces/models)│
- │    └── storage/        (storage interfaces)     │
+ │    └── pricing/        (price interfaces/models)│
 └───────────────────┬─────────────────────────────┘
                     │ (uses)
                     ▼
@@ -92,7 +91,6 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | `mathutil/` | Math utility functions |
 | `observability/` | Logger, MetricsRecorder interfaces |
 | `pricing/` | `PriceProvider` interface, graded prices, market data models |
-| `storage/` | Storage interfaces |
 
 **Rules**:
 - ✅ Define interfaces for external dependencies
