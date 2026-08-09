@@ -191,7 +191,8 @@ export interface BulkSaleItemInput {
   saleReason?: string;
   /** Provenance of salePriceCents. Mirrors Go's inventory.BulkSaleInput.PriceSource
       (json: priceSource, omitempty): 'itemized' | 'estimated' | 'manual'. Omitted
-      means the server records 'unknown'. */
+      leaves the server's unknown sentinel, which is the empty string (Go's
+      PriceSourceUnknown = ""), not the literal string 'unknown'. */
   priceSource?: string;
 }
 
