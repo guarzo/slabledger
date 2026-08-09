@@ -239,12 +239,20 @@ func TestImportCertSales_NoFalsePositiveNearDuplicates(t *testing.T) {
 
 	// Every pair here is genuinely distinct: no two certs are within edit
 	// distance 1 of each other (verified by hand below). A stub that flags
-	// every submitted cert unconditionally must fail this test.
+	// every submitted cert unconditionally must fail this test. Two pairs
+	// are deliberately placed right at the boundary of "not quite a near
+	// duplicate," so a threshold that drifts from 1 to 2 also gets caught:
 	//
 	//   05442200 vs 17979513: same length, 8 substitutions apart
 	//   05442200 vs 00000000: same length, 5 substitutions apart
 	//   17979513 vs 00000000: same length, 8 substitutions apart
 	//   6098919001 vs the 8-digit certs: length differs by 2, never within 1
+	//   12345678 vs 12345600: same length, exactly 2 substitutions apart
+	//     (positions 6,7: "78" vs "00") — one past the edit-distance-1 line
+	//   2222222 vs 22292225: lengths differ by 1, but not a clean single
+	//     insertion — deleting the inserted '9' from 22292225 still leaves a
+	//     trailing digit ('5') that 2222222 doesn't have, so it takes two
+	//     edits (an insertion and a substitution), not one
 	req := csvimport.CertSaleImportRequest{
 		SaleDate: "2026-03-10", NegotiatedPct: 0.72,
 		Items: []csvimport.CertSaleItem{
@@ -252,6 +260,10 @@ func TestImportCertSales_NoFalsePositiveNearDuplicates(t *testing.T) {
 			{CertNumber: "17979513", TheirCompCents: 5000},
 			{CertNumber: "00000000", TheirCompCents: 3000},
 			{CertNumber: "6098919001", TheirCompCents: 4000},
+			{CertNumber: "12345678", TheirCompCents: 2000},
+			{CertNumber: "12345600", TheirCompCents: 2000},
+			{CertNumber: "2222222", TheirCompCents: 1000},
+			{CertNumber: "22292225", TheirCompCents: 1000},
 		},
 	}
 	result, err := svc.ImportCertSales(context.Background(), req)
