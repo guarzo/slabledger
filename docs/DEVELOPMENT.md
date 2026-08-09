@@ -4,7 +4,7 @@ Operational reference for caching, rate limiting, API integrations, and common g
 
 ## Price Units (Critical)
 
-**Campaign API endpoints use cents (integers). Pricing/card API endpoints use dollars (floats).**
+**Money crosses the API as cents (integers). The frontend formats it for display.**
 
 ### Convention
 
@@ -12,16 +12,12 @@ Operational reference for caching, rate limiting, API integrations, and common g
 |-------|--------|---------|
 | Backend internal | Cents (int) | `355239` |
 | Campaign API responses | Cents (int) | `355239` |
-| Pricing API responses | Dollars (float64) | `3552.39` |
 | Frontend display | Dollars | `$3,552.39` |
 
-Campaign endpoints (`/api/campaigns/*`) return cents. The frontend converts with `(cents / 100).toFixed(2)`.
+Campaign endpoints (`/api/campaigns/*`) return cents. The frontend converts for display.
 
-Pricing endpoints (`/api/cards/search`) return dollars. Display directly.
-
-Key files:
-- `internal/adapters/httpserver/handlers/formatter.go` — converts cents to dollars for pricing endpoints
-- `web/src/react/pages/CampaignDetailPage.tsx` — `formatCents()` helper for campaign data
+Key file:
+- `web/src/react/utils/formatters.ts` — `formatCents()` helper for campaign data
 
 ---
 
@@ -31,13 +27,13 @@ Key files:
 
 | File | Purpose |
 |------|---------|
-| `internal/domain/inventory/types.go` | Campaign, Purchase, Sale structs |
+| `internal/domain/inventory/core_types.go` | Campaign, Purchase, Sale structs |
 | `internal/domain/inventory/service.go` | Business logic, PriceLookup interface |
 | `internal/domain/inventory/channel_fees.go` | CalculateSaleFee, CalculateNetProfit |
-| `internal/domain/inventory/service_interfaces.go` | 8 focused repository interfaces |
+| `internal/domain/inventory/repository_campaign.go` | Repository interfaces (one `repository_*.go` per concern) |
 | `internal/adapters/storage/postgres/campaign_store.go` | Postgres implementation |
 | `internal/adapters/httpserver/handlers/campaigns.go` | HTTP handlers |
-| `internal/adapters/clients/pricelookup/adapter.go` | PriceLookup adapter |
+| `internal/domain/pricing/lookup/adapter.go` | PriceLookup adapter |
 
 ### Functional Options Pattern
 
@@ -55,7 +51,7 @@ func WithPriceLookup(pl PriceLookup) ServiceOption { ... }
 func NewService(repos Repositories, opts ...ServiceOption) Service { ... }
 
 // Wiring in main.go
-adapter := pricelookup.NewAdapter(priceProvider)
+adapter := lookup.NewAdapter(priceProvider)
 svc := inventory.NewService(repos, inventory.WithPriceLookup(adapter))
 ```
 
@@ -131,37 +127,6 @@ qualifies, datacenter IPs do not.
 
 ---
 
-## Cache System
-
-### Cache Types
-
-| Type | TTL | Use Case |
-|------|-----|----------|
-| Memory | 2-4 hours | Hot data, frequently accessed |
-| File | 24 hours | Persistence across restarts |
-| Postgres | 24+ hours | Price persistence with background refresh |
-
-### Recommended TTLs
-
-| Data | TTL | Rationale |
-|------|-----|-----------|
-| Sets | 24 hours | Rarely changes |
-| Cards | 6 hours | Occasional updates |
-| Prices | 1-4 hours | Changes frequently |
-
-### Type-Safe Cache API
-
-```go
-cardCache := cache.NewCardSliceCache(baseCache)
-
-// GetOrLoad pattern (cache-aside)
-cards, err := cardCache.GetOrLoad(ctx, key, func() ([]model.Card, error) {
-    return fetchFromAPI()
-}, 6*time.Hour)
-```
-
----
-
 ## Rate Limiting
 
 | Provider | Limit | Notes |
@@ -197,12 +162,6 @@ CircuitBreakerConfig{
 
 ## API Integrations
 
-### TCGdex.dev
-
-No API key required. Provides card metadata (name, set, number, image URL) for English and Japanese cards.
-
-Code: `internal/adapters/clients/tcgdex/`
-
 ### DH Price Provider
 
 Provides graded card pricing via the DoubleHolo enterprise API. Returns price estimates, market data, and sales history for PSA-graded cards.
@@ -221,7 +180,7 @@ Wraps `PriceProvider` to implement the campaigns domain's `PriceLookup` interfac
 *  -> Raw.LastSoldPrice
 ```
 
-Code: `internal/adapters/clients/pricelookup/adapter.go`
+Code: `internal/domain/pricing/lookup/adapter.go`
 
 ---
 
@@ -282,7 +241,7 @@ curl http://localhost:8081/api/status/api-usage
 Production runs on a single Fly Machine in `iad`, backed by Supabase Postgres (`aws-1-us-east-2`).
 
 - **Secrets**: managed via `fly secrets set`. Pull the list with `fly secrets list --app slabledger`. `DATABASE_URL` points at the Supabase transaction pooler (port 6543, `?sslmode=require`). `ENCRYPTION_KEY` must remain stable — rotating it makes existing OAuth tokens undecryptable.
-- **Deploy**: `.github/workflows/fly-deploy.yml` runs `flyctl deploy --remote-only` on push to `main`. Requires `FLY_API_TOKEN` in GitHub secrets. Manual deploy: `flyctl deploy --remote-only` from the repo root.
+- **Deploy**: auto-deploy on push to `main` is configured in Fly itself (GitHub App integration), not by a workflow in this repository — there is no `.github/workflows/` deploy pipeline to inspect. Manual deploy: `flyctl deploy --remote-only` from the repo root.
 - **Logs**: `flyctl logs --app slabledger`. `flyctl status` for machine / health state.
 - **Rollback**: `flyctl releases list` → `flyctl deploy --image <previous-image>` or redeploy an earlier commit.
 

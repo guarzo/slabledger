@@ -49,11 +49,10 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 ┌─────────────────────────────────────────────────┐
 │      PLATFORM (Infrastructure)                  │
 │    internal/platform/                           │
-│    ├── cache/          (type-safe caching)      │
+│    ├── canonjson/      (canonical JSON encoding)│
 │    ├── cardutil/       (card normalization)     │
 │    ├── config/         (configuration)          │
 │    ├── crypto/         (AES encryption)         │
-│    ├── errors/         (error types)            │
 │    ├── resilience/     (retry + circuit breaker)│
 │    ├── storage/        (file store)             │
 │    └── telemetry/      (slog logging)           │
@@ -83,9 +82,10 @@ This codebase follows **Hexagonal Architecture** (also known as Ports and Adapte
 | Package | Purpose |
 |---------|---------|
 | `auth/` | Authentication interfaces |
-| `inventory/` | Campaign tracking, purchases, sales, P&L, analytics, CSV import |
+| `inventory/` | Campaign tracking, purchases, sales, P&L, analytics |
 | `arbitrage/` | Acquisition targets, expected value, Monte Carlo |
 | `constants/` | Shared application constants |
+| `csvimport/` | CSV import parsing (eBay, Shopify, orders) |
 | `export/` | Sell sheet generation |
 | `finance/` | Invoices, cashflow, capital tracking, revocation flags |
 | `intelligence/` | DH market intelligence repository and types |
@@ -229,18 +229,18 @@ func (p *Provider) GetPrice(ctx context.Context, card pricing.Card) (*pricing.Pr
 **Contains**:
 - Configuration management
 - Observability (logging)
-- Error handling
-- Caching infrastructure
+- Card name/set normalization
+- Canonical JSON encoding
 - Resilience (retry + circuit breaker)
 - Encryption for auth tokens
 
 **Structure**:
 ```
 internal/platform/
-├── cache/          # Type-safe caching (LRU, file store)
+├── canonjson/      # Canonical JSON encoding
+├── cardutil/       # Card name/set normalization
 ├── config/         # Configuration loading and validation
 ├── crypto/         # AES encryption for auth tokens
-├── errors/         # Custom error types
 ├── resilience/     # Retry + circuit breaker
 ├── storage/        # File store
 └── telemetry/      # slog logging implementation
@@ -624,7 +624,7 @@ As of 2026-08-08:
 
 | File | LOC | Why it's large |
 |------|-----|----------------|
-| `domain/inventory/types_core.go` | 562 | Core domain types: Campaign, Purchase, Sale, Phase, DH status |
+| `domain/inventory/core_types.go` | 562 | Core domain types: Campaign, Purchase, Sale, Phase, DH status |
 | `domain/portfolio/service.go` | 540 | Portfolio health, insights, capital timeline, weekly review |
 | `adapters/scheduler/cardladder_refresh.go` | 525 | CardLadder refresh job: options, wiring, single-purchase pricing |
 | `adapters/httpserver/handlers/campaigns_purchases.go` | 520 | Purchase and sale CRUD handlers, price overrides, cert lookup |
