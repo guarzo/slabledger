@@ -385,3 +385,74 @@ test.describe('Accessibility - Mobile/Touch @a11y', () => {
     }
   });
 });
+
+/**
+ * Modal primitive (`src/react/ui/Modal.tsx`) — SLA-100.
+ *
+ * These exercise behaviour jsdom cannot: real Tab sequencing through Radix's
+ * FocusScope sentinels, and focus restore across a real event loop. The
+ * keyboard-shortcuts cheatsheet is the cheapest instance to drive — it is
+ * global, needs no fixture data, and renders through the same primitive as the
+ * five other migrated dialogs.
+ */
+test.describe('Accessibility - Modal primitive @a11y', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await mockAllAPIs(page);
+    await page.goto('/tools');
+    await waitForPageReady(page);
+  });
+
+  async function openCheatsheet(page: Page) {
+    await page.keyboard.press('?');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    return dialog;
+  }
+
+  test('open dialog has no critical accessibility violations', async ({ page }) => {
+    await openCheatsheet(page);
+
+    const results = await createAxeBuilder(page).withTags(['wcag2a', 'wcag2aa']).analyze();
+    const criticalViolations = results.violations.filter(
+      v => v.impact === 'critical' || v.impact === 'serious'
+    );
+    expect(criticalViolations).toEqual([]);
+  });
+
+  test('exposes dialog semantics and an accessible name', async ({ page }) => {
+    const dialog = await openCheatsheet(page);
+
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await expect(dialog).toHaveAccessibleName('Keyboard shortcuts');
+  });
+
+  test('moves focus into the dialog on open and restores it on close', async ({ page }) => {
+    // Give focus to a known page element so restore has a target to return to.
+    const trigger = page.locator('button:visible').first();
+    await trigger.focus();
+
+    const dialog = await openCheatsheet(page);
+    await expect(dialog.locator(':focus')).toHaveCount(1);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+
+  test('traps Tab inside the dialog', async ({ page }) => {
+    const dialog = await openCheatsheet(page);
+
+    // Tab well past the dialog's own focusable count; focus must never escape.
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('Tab');
+      await expect(dialog.locator(':focus')).toHaveCount(1);
+    }
+
+    // And the same going backwards.
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('Shift+Tab');
+      await expect(dialog.locator(':focus')).toHaveCount(1);
+    }
+  });
+});
