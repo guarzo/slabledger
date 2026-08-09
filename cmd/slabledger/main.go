@@ -2,33 +2,20 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/platform/telemetry"
 	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	// Concrete implementations (only imported in main for wiring - Hexagonal Architecture)
-	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
-	dhlistingadapter "github.com/guarzo/slabledger/internal/adapters/clients/dhlisting"
-	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/clients/psaportal"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
-	"github.com/guarzo/slabledger/internal/domain/auth"
-	"github.com/guarzo/slabledger/internal/domain/dhpricing"
-	"github.com/guarzo/slabledger/internal/platform/crypto"
 )
 
 // Compile-time guard: the Postgres snapshot store must satisfy the client's
@@ -167,255 +154,37 @@ func runServer(cfg *config.Config, logger observability.Logger) error {
 		cancel()
 	}()
 
-	// Initialize database
-	db, err := postgres.Open(ctx, cfg.Database.URL, logger)
-	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+	w := &wiring{}
+
+	// dbCleanup must be deferred before metricsCleanup. Defers run LIFO, so at
+	// unwind this makes the metrics server stop first (it has its own 5s
+	// shutdown timeout) and the database close last — the same order the
+	// original inline runServer body registered its two defers in. Reversing
+	// this would close the database before requests draining through the
+	// metrics/health path finish.
+	dbCleanup, metricsCleanup, err := w.setupInfrastructure(ctx, cfg, logger)
+	if dbCleanup != nil {
+		defer dbCleanup()
 	}
-	// db.Close() blocks until in-flight queries complete. Safe because schedulers
-	// are stopped and HTTP server is drained before this runs.
-	defer func() {
-		if err := db.Close(); err != nil {
-			logger.Warn(ctx, "Failed to close database", observability.Err(err))
-		}
-	}()
-
-	// Prometheus metrics server on :9091 — scraped by Fly's built-in Prometheus.
-	// Separate port so app middleware (auth, rate limiter) doesn't interfere.
-	metricsReg := prometheus.NewRegistry()
-	metricsReg.MustRegister(collectors.NewGoCollector())
-	metricsReg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	metricsReg.MustRegister(postgres.NewDBStatsCollector("slabledger", db.Stats))
-
-	metricsMux := http.NewServeMux()
-	metricsMux.Handle("/metrics", promhttp.HandlerFor(metricsReg, promhttp.HandlerOpts{Registry: metricsReg}))
-	metricsSrv := &http.Server{
-		Addr:              ":9091",
-		Handler:           metricsMux,
-		ReadHeaderTimeout: 5 * time.Second,
+	if metricsCleanup != nil {
+		defer metricsCleanup()
 	}
-	go func() {
-		logger.Info(ctx, "metrics server listening", observability.String("addr", metricsSrv.Addr))
-		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error(ctx, "metrics server error", observability.Err(err))
-		}
-	}()
-	defer func() {
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := metricsSrv.Shutdown(shutCtx); err != nil {
-			logger.Warn(context.Background(), "metrics server shutdown error", observability.Err(err))
-		}
-	}()
-
-	migrationsPath := cfg.Database.MigrationsPath
-	if err := postgres.RunMigrations(db, migrationsPath); err != nil {
-		return fmt.Errorf("run migrations: %w", err)
-	}
-
-	// Create DB tracker (API tracking, access tracking, health checks)
-	priceRepo := postgres.NewDBTracker(db)
-	refreshCandidateRepo := postgres.NewRefreshCandidateRepository(db.DB)
-	dhTombstoneStore := postgres.NewDHCardTombstoneStore(db.DB)
-
-	// Initialize authentication
-	var authService auth.Service
-	var authRepo auth.Repository
-	googleConfig := config.LoadGoogleOAuthConfig()
-
-	if encryptionKey := cfg.Auth.EncryptionKey; encryptionKey != "" {
-		encryptor, err := crypto.NewAESEncryptor(encryptionKey)
-		if err != nil {
-			return fmt.Errorf("initialize encryptor: %w", err)
-		}
-
-		authRepo = postgres.NewAuthRepository(db.DB, encryptor)
-
-		if googleConfig.IsConfigured() {
-			authService = google.NewOAuthService(
-				authRepo, logger,
-				googleConfig.ClientID, googleConfig.ClientSecret,
-				googleConfig.RedirectURI, googleConfig.Scopes,
-			)
-			logger.Info(ctx, "authentication service initialized",
-				observability.String("redirect_uri", googleConfig.RedirectURI))
-		}
-	}
-
-	// Card ID mapping repository (caches external provider IDs)
-	cardIDMappingRepo := postgres.NewCardIDMappingRepository(db.DB)
-
-	// Initialize DH client (optional — market intelligence + pricing source)
-	var dhClient *dh.Client
-	if cfg.Adapters.DHEnterpriseKey != "" && cfg.Adapters.DHBaseURL != "" {
-		dhClient = dh.NewClient(
-			cfg.Adapters.DHBaseURL,
-			dh.WithLogger(logger),
-			dh.WithRateLimitRPS(cfg.DH.RateLimitRPS),
-			dh.WithEnterpriseKey(cfg.Adapters.DHEnterpriseKey),
-			dh.WithPSAKeys(cfg.Adapters.PSAToken),
-		)
-		psaKeyCount := len(strings.Split(cfg.Adapters.PSAToken, ","))
-		if cfg.Adapters.PSAToken == "" {
-			psaKeyCount = 0
-		}
-		logger.Info(ctx, "DH client initialized",
-			observability.Int("psa_keys", psaKeyCount))
-	}
-
-	// DH repositories (always created — tables exist after migration 000028)
-	intelRepo := postgres.NewMarketIntelligenceRepository(db.DB)
-	suggestionsRepo := postgres.NewDHSuggestionsRepository(db.DB)
-	demandRepo := postgres.NewDHDemandRepository(db.DB)
-	trajectoryRepo := postgres.NewCardPriceTrajectoryRepository(db.DB)
-
-	// DH event store — records pipeline state transitions (migration 000068)
-	eventStore := postgres.NewDHEventStore(db.DB)
-
-	priceProvImpl, err := initializePriceProviders(
-		ctx, logger, cardIDMappingRepo,
-		dhClient,
-		dhTombstoneStore,
-	)
 	if err != nil {
 		return err
 	}
 
-	// Create encryptor early — needed by Card Ladder.
-	var clEncryptor crypto.Encryptor
-	if cfg.Auth.EncryptionKey != "" {
-		var encErr error
-		clEncryptor, encErr = crypto.NewAESEncryptor(cfg.Auth.EncryptionKey)
-		if encErr != nil {
-			logger.Warn(ctx, "encryptor initialization failed, CL token persistence disabled",
-				observability.Err(encErr))
-		}
+	if err := w.buildRepositoriesAndAuth(ctx, cfg, logger); err != nil {
+		return err
 	}
 
-	campaignsInit := initializeCampaignsService(
-		ctx, cfg, logger, db, priceProvImpl, intelRepo, dhClient, eventStore, cardIDMappingRepo,
-	)
-	campaignsService := campaignsInit.service
-	importService := campaignsInit.importService
-	certLookup := campaignsInit.certLookup
-	arbSvc := campaignsInit.arbSvc
-	portSvc := campaignsInit.portSvc
-	tuningSvc := campaignsInit.tuningSvc
-	financeService := campaignsInit.financeService
-	exportService := campaignsInit.exportService
+	w.buildCampaignsAndIntegrations(ctx, cfg, logger)
 
-	// Sync state repository (for delta poll timestamps)
-	syncStateRepo := postgres.NewSyncStateRepository(db.DB)
+	schedulerResult, cancelScheduler := initializeSchedulers(ctx, w.schedulerDeps(cfg, logger))
 
-	// Initialize Card Ladder
-	clClient, _, clStore := initializeCardLadder(ctx, logger, db, clEncryptor)
-	var clSalesStore *postgres.CLSalesStore
-	var clCompRefreshStore *postgres.CompRefreshStore
-	if clStore != nil {
-		clSalesStore = postgres.NewCLSalesStore(db.DB)
-		clCompRefreshStore = postgres.NewCompRefreshStore(db.DB)
-	}
-	schedulerStatsStore := postgres.NewSchedulerStatsStore(db.DB)
-
-	// PSA portal rows are harvested out-of-process by the `psa-harvest` job (it
-	// needs a browser to pass Cloudflare, which the lean app image can't run) and
-	// stored as a snapshot in Postgres; the reader only queries the DB.
-	var psaSnapshotStore *postgres.PSAPortalSnapshotStore
-	var psaRowProvider *psaportal.SnapshotRowProvider
-	if cfg.PSAPortal.Enabled {
-		psaSnapshotStore = postgres.NewPSAPortalSnapshotStore(db.DB)
-		psaRowProvider = psaportal.NewSnapshotRowProvider(psaSnapshotStore, logger)
-		logger.Info(ctx, "PSA portal snapshot provider initialized")
-	}
-
-	// DH price re-sync service: drives both the inline goroutine on review-price
-	// edits (via CampaignsHandler) and the periodic reconciliation scheduler.
-	// Constructed once so both consumers share the same instance.
-	var dhPriceSyncService dhpricing.Service
-	if dhClient != nil && dhClient.EnterpriseAvailable() && campaignsInit.purchaseStore != nil {
-		dhPriceSyncService = dhpricing.NewService(
-			campaignsInit.purchaseStore,                    // PurchaseLookup: GetPurchase + ListDHPriceDrift
-			dhlistingadapter.NewInventoryAdapter(dhClient), // DHPriceUpdater
-			campaignsInit.purchaseStore,                    // DHPriceWriter: UpdatePurchaseDHPriceSync
-			campaignsInit.purchaseStore,                    // DHReconcileResetter
-			logger,
-		)
-	}
-
-	sDeps := schedulerDeps{
-		Config:                     cfg,
-		Logger:                     logger,
-		DBTracker:                  priceRepo,
-		RefreshCandidates:          refreshCandidateRepo,
-		PriceProvImpl:              priceProvImpl,
-		AuthService:                authService,
-		SyncStateRepo:              syncStateRepo,
-		CardIDMappingRepo:          cardIDMappingRepo,
-		CampaignStore:              campaignsInit.campaignStore,
-		PurchaseStore:              campaignsInit.purchaseStore,
-		DHStore:                    campaignsInit.dhStore,
-		CampaignsService:           campaignsService,
-		ImportService:              importService,
-		CertLookup:                 certLookup,
-		CertEnrichJob:              campaignsInit.certEnrichJob,
-		PricingEnrichJob:           campaignsInit.pricingEnrichJob,
-		CardLadderClient:           clClient,
-		CardLadderStore:            clStore,
-		CardLadderSalesStore:       clSalesStore,
-		CardLadderCompRefreshStore: clCompRefreshStore,
-		SchedulerStatsStore:        schedulerStatsStore,
-		DHClient:                   dhClient,
-		DHEventStore:               eventStore,
-		DHIntelligenceRepo:         intelRepo,
-		DHSuggestionsRepo:          suggestionsRepo,
-		DHDemandRepo:               demandRepo,
-		DHTrajectoryRepo:           trajectoryRepo,
-		DHCompCacheStore:           campaignsInit.dhCompStore,
-		DHPriceSyncService:         dhPriceSyncService,
-		DHTombstoneStore:           dhTombstoneStore,
-	}
-	if psaRowProvider != nil {
-		sDeps.PSARowProvider = psaRowProvider
-	}
-	schedulerResult, cancelScheduler := initializeSchedulers(ctx, sDeps)
-
-	deps, hOut := createHandlers(ctx, handlerInputs{
-		Cfg:                  cfg,
-		Logger:               logger,
-		DB:                   db,
-		PriceProvImpl:        priceProvImpl,
-		PriceRepo:            priceRepo,
-		AuthService:          authService,
-		CampaignsService:     campaignsService,
-		ImportService:        importService,
-		ArbitrageService:     arbSvc,
-		PortfolioService:     portSvc,
-		TuningService:        tuningSvc,
-		CampaignStore:        campaignsInit.campaignStore,
-		FinanceService:       financeService,
-		ExportService:        exportService,
-		PurchaseStore:        campaignsInit.purchaseStore,
-		CardIDMappingRepo:    cardIDMappingRepo,
-		IntelRepo:            intelRepo,
-		TrajectoryRepo:       trajectoryRepo,
-		SuggestionsRepo:      suggestionsRepo,
-		DemandRepo:           demandRepo,
-		CLClient:             clClient,
-		CLStore:              clStore,
-		DHClient:             dhClient,
-		DHEventStore:         eventStore,
-		DHStore:              campaignsInit.dhStore,
-		DHPriceSyncService:   dhPriceSyncService,
-		SyncStateRepo:        syncStateRepo,
-		SchedulerResult:      schedulerResult,
-		PSARowProvider:       psaRowProvider,
-		PSARowsSnapshotStore: psaSnapshotStore,
-		PendingItemsRepo:     campaignsInit.pendingItemsRepo,
-		DHTombstoneStore:     dhTombstoneStore,
-	})
+	deps, hOut := createHandlers(ctx, w.handlerInputs(cfg, logger, schedulerResult))
 	serverErr := startWebServer(ctx, deps)
 
-	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, campaignsService, importService, cfg.Server.SchedulerShutdownTimeout)
+	shutdownGracefully(ctx, logger, cancelScheduler, schedulerResult, hOut, w.campaignsInit.service, w.campaignsInit.importService, cfg.Server.SchedulerShutdownTimeout)
 
 	return serverErr
 }
