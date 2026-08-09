@@ -186,6 +186,11 @@ engine) were removed on 2026-04-06.
 - **Deterministic data**: Use fixed seeds for Monte Carlo, atomic counters for IDs
 - **Unit tests**: Mock all external deps, use `internal/testutil/mocks`
 - **Integration tests**: `internal/integration/` with `-tags integration` flag, requires API keys in `.env`
+- **DH diagnostics**: a few files in `internal/integration/` are investigation tools rather than
+  regression tests — they report what the live API returns instead of asserting what it should.
+  They carry `//go:build integration && dhdiag` so the scheduled run does not spend live API
+  calls on tests that cannot go red. Run them deliberately with `-tags 'integration dhdiag'`.
+  **A new test under `internal/integration/` needs a real assertion or the `dhdiag` tag.**
 - Always run `go test -race` before committing
 
 ## Code Style
