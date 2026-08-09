@@ -23,6 +23,8 @@ export { default as EmptyState } from './EmptyState';
 
 // Feedback & Overlays
 export { default as ConfirmDialog } from './ConfirmDialog';
+export { default as Modal } from './Modal';
+export type { ModalProps, ModalSize } from './Modal';
 export { default as SectionErrorBoundary } from './SectionErrorBoundary';
 export { ErrorAlert } from './ErrorAlert';
 
