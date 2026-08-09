@@ -14,6 +14,7 @@ linters:
     - gocritic
     - misspell
     - revive
+    - funlen
   settings:
     gocritic:
       enabled-tags:
@@ -36,6 +37,21 @@ linters:
           disabled: true
         - name: unexported-return
           disabled: true
+    funlen:
+      # A ratchet, not a target: 262 is the largest function in the tree after
+      # SLA-97's splits (createHandlers, cmd/slabledger/handlers.go). It exists
+      # to stop new growth, not to bless this length. funlen counts
+      # end-start-1, so 262 here means a raw extent of 264 lines.
+      lines: 262
+      # Lines only. A statement budget fires on table-driven cases and large
+      # struct literals for reasons unrelated to readability.
+      statements: -1
+      # REQUIRED, not cosmetic. funlen defaults this to true, which subtracts
+      # comment lines from the count and would make this gate inert: with the
+      # default, runServer measures 243 rather than 267 and nothing in the
+      # tree exceeds 262. A budget that a well-commented function can evade by
+      # being well-commented is not a budget.
+      ignore-comments: false
   exclusions:
     paths:
       - web/node_modules
@@ -53,6 +69,14 @@ linters:
         linters:
           - unused
           - revive
+      # Same rationale as scripts/check-file-size.sh: table-driven tests grow
+      # naturally with the number of cases, and that growth is not a defect.
+      - path: _test\.go
+        linters:
+          - funlen
+      - path: testutil/mocks/
+        linters:
+          - funlen
 
 issues:
   max-issues-per-linter: 0
