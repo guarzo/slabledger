@@ -268,7 +268,7 @@ func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []inventory.Cam
 		// fix the campaign — recommending it would be misleading. The zero
 		// case also excludes campaigns with no marketplace sales at all,
 		// where we don't have enough data to confidently recommend a target.
-		if h.EbayChannelMarginPct <= 0 {
+		if h.MarketplaceChannelMarginPct <= 0 {
 			continue
 		}
 
@@ -311,8 +311,8 @@ func suggestBuyTermsFromLiquidation(_ context.Context, campaigns []inventory.Cam
 				// Projected ROI ≈ margin / fill rate (assumes sale ≈ CL).
 				// Derived from the same projected margin used for ExpectedMarginPct so both
 				// fields describe the post-adjustment state consistently.
-				ExpectedROI:       expectedROIFromMargin(h.EbayChannelMarginPct, newTerms),
-				ExpectedMarginPct: h.EbayChannelMarginPct,
+				ExpectedROI:       expectedROIFromMargin(h.MarketplaceChannelMarginPct, newTerms),
+				ExpectedMarginPct: h.MarketplaceChannelMarginPct,
 				DataConfidence:    confidence,
 			},
 		})

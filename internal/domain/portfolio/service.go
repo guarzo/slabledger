@@ -121,12 +121,12 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 		channelHealth := healthByCampaign[c.ID]
 		liquidationLossCents := channelHealth.LiquidationLossCents
 		liquidationSaleCount := channelHealth.LiquidationSaleCount
-		ebayMarginPct := channelHealth.EbayChannelMarginPct
+		marketplaceMarginPct := channelHealth.MarketplaceChannelMarginPct
 
-		if liquidationLossCents < -50000 && ebayMarginPct > 0.10 {
+		if liquidationLossCents < -50000 && marketplaceMarginPct > 0.10 {
 			liquidationReason := fmt.Sprintf(
 				"marketplace channels profitable (%.1f%%) but $%.2f lost to forced liquidation",
-				ebayMarginPct*100,
+				marketplaceMarginPct*100,
 				float64(-liquidationLossCents)/100,
 			)
 			if status == "critical" {
@@ -139,24 +139,24 @@ func (s *service) GetPortfolioHealth(ctx context.Context) (*inventory.PortfolioH
 
 		stats := inHandStats[c.ID]
 		ch := inventory.CampaignHealth{
-			CampaignID:            c.ID,
-			CampaignName:          c.Name,
-			Phase:                 c.Phase,
-			ROI:                   pnl.ROI,
-			SellThroughPct:        pnl.SellThroughPct,
-			AvgDaysToSell:         pnl.AvgDaysToSell,
-			TotalPurchases:        pnl.TotalPurchases,
-			TotalUnsold:           pnl.TotalUnsold,
-			CapitalAtRisk:         capitalAtRisk,
-			HealthStatus:          status,
-			HealthReason:          reason,
-			LiquidationLossCents:  liquidationLossCents,
-			LiquidationSaleCount:  liquidationSaleCount,
-			EbayChannelMarginPct:  ebayMarginPct,
-			InHandUnsoldCount:     stats[0],
-			InHandCapitalCents:    stats[1],
-			InTransitUnsoldCount:  stats[2],
-			InTransitCapitalCents: stats[3],
+			CampaignID:                  c.ID,
+			CampaignName:                c.Name,
+			Phase:                       c.Phase,
+			ROI:                         pnl.ROI,
+			SellThroughPct:              pnl.SellThroughPct,
+			AvgDaysToSell:               pnl.AvgDaysToSell,
+			TotalPurchases:              pnl.TotalPurchases,
+			TotalUnsold:                 pnl.TotalUnsold,
+			CapitalAtRisk:               capitalAtRisk,
+			HealthStatus:                status,
+			HealthReason:                reason,
+			LiquidationLossCents:        liquidationLossCents,
+			LiquidationSaleCount:        liquidationSaleCount,
+			MarketplaceChannelMarginPct: marketplaceMarginPct,
+			InHandUnsoldCount:           stats[0],
+			InHandCapitalCents:          stats[1],
+			InTransitUnsoldCount:        stats[2],
+			InTransitCapitalCents:       stats[3],
 		}
 		health.Campaigns = append(health.Campaigns, ch)
 		health.TotalDeployed += pnl.TotalSpendCents
@@ -251,10 +251,10 @@ func computeChannelHealthByCampaign(data []inventory.PurchaseWithSale) map[strin
 			margin = float64(b.marketplaceNetProfit) / float64(b.marketplaceRevenue)
 		}
 		result[cid] = inventory.CampaignHealth{
-			CampaignID:           cid,
-			LiquidationLossCents: b.liquidationLossCents,
-			LiquidationSaleCount: b.liquidationSaleCount,
-			EbayChannelMarginPct: margin,
+			CampaignID:                  cid,
+			LiquidationLossCents:        b.liquidationLossCents,
+			LiquidationSaleCount:        b.liquidationSaleCount,
+			MarketplaceChannelMarginPct: margin,
 		}
 	}
 	return result
