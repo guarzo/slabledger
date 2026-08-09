@@ -4,6 +4,10 @@ import "time"
 
 // ModeConfig controls the operation mode of the application
 type ModeConfig struct {
+	// WebMode is set only by the -web/--web CLI flag — it has no default and no
+	// env binding, so no Go-source grep will find a setter. The live setters are
+	// the Dockerfile CMD and the Makefile run target. It is not dead config: it
+	// gates the ListenAddr override in FromFlags.
 	WebMode bool // Start web server mode instead of CLI
 	WebPort int  // Web server port
 
@@ -14,7 +18,7 @@ type ModeConfig struct {
 
 // ServerConfig contains HTTP server configuration
 type ServerConfig struct {
-	ListenAddr               string        // HTTP listen address (default: 127.0.0.1:8080)
+	ListenAddr               string        // HTTP listen address; empty in Default(), resolved by Load to 0.0.0.0:<WebPort>
 	ReadTimeout              time.Duration // HTTP read timeout
 	WriteTimeout             time.Duration // HTTP write timeout
 	IdleTimeout              time.Duration // HTTP idle timeout
