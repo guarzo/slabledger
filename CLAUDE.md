@@ -262,6 +262,8 @@ See [docs/API.md](docs/API.md) for all endpoints with request/response shapes.
 - [Operations](docs/OPERATIONS.md) - Deploy, monitoring, incident handling; see also `docs/runbooks/`
 - [Loop](docs/LOOP.md) - The acquisition/liquidation loop this system exists to run
 - [DH Inventory](docs/DH_INVENTORY.md) - DH listing and inventory sync behavior
+- [PSA Harvester](docs/psa-harvester.md) - The out-of-process `cmd/psa-harvest` job: portal
+  session, token handoff, campaign sync, and its Fly/GitHub Actions scheduling
 
 `ls docs/` for the rest — the list above is the durable set, not an inventory.
 
