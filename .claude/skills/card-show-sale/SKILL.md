@@ -103,6 +103,15 @@ They're shown side by side deliberately: the server returns names shaped like
 showed the display string would hide that mismatch until it was too late to
 notice.
 
+Worked example for row 1: the server returns `cardName: "RONALD ACUNA JR."`.
+Against the key `Ronald Acuna Jr.`, that's a match — casing is not a
+difference. It would still be a match against `Ronald Acuña Jr.` (an accent)
+or `RONALD ACUNA JR. 1ST EDITION` (a trailing variety). It would **not** be a
+match against `MIKE TROUT` — a different player. And if the label's subject
+field were blank, the server can return a category instead, e.g.
+`CELEBRATIONS` — also not a mismatch; verify that one against the label
+rather than flagging it.
+
 Ask for corrections. Apply them. Do not proceed until the user says the table is
 right.
 
@@ -137,13 +146,18 @@ Report to the user:
   for that cert in step 1** (the subject/player name, not the full display
   string) — the server returns uppercase, PSA-shaped names, sometimes with a
   variety suffix (`RONALD ACUNA JR.`, `CHARIZARD-HOLO 1ST EDITION`), and
-  occasionally a category name when the subject was blank. Casing,
+  occasionally a **category name** instead of a player name when the card's
+  subject field was blank (e.g. `CELEBRATIONS` for a set-only cert). Casing,
   punctuation, accents, a missing year/set/number, and a trailing variety
   suffix are **not** mismatches — `RONALD ACUNA JR.` vs `Ronald Acuña Jr.` is
-  the same card. A **different player or different card entirely** is a
-  mismatch, and means the cert was misread and matched a *different* card you
-  own — this is the primary defense against that failure mode (see "Cert
-  numbers are the risk" below). Do not confirm until it's resolved.
+  the same card. A category name in place of a player name is **not** a
+  mismatch either — it's not the wrong card, it's a card whose subject field
+  was empty upstream; verify it against the physical label instead of
+  flagging it as a failed match. A **different player or different card
+  entirely** is a mismatch, and means the cert was misread and matched a
+  *different* card you own — this is the primary defense against that
+  failure mode, with one gap: see "Cert numbers are the risk" below for what
+  it cannot catch. Do not confirm until it's resolved.
 - `notFound` certs, with their `reason`: `not_found` (cert isn't in inventory —
   usually a misread digit), `invalid_comp` (the sticker was read as `$0` or
   blank — not necessarily a misread; confirm whether the card was genuinely
@@ -200,6 +214,17 @@ does one of two things:
   marks it sold, and leaves the real card in inventory. The `cardName` check in
   step 3 is the defense against this — the preview returns the *matched* card's
   name, so a misread cert shows up as the wrong card name if you compare it.
+
+**What the `cardName` check cannot catch:** it only carries a player/subject
+name (plus variety), never set, card number, or grade — the fields that
+actually distinguish one printing of a player from another (the system's own
+identity key for a card is `cardName|setName|cardNumber`, see
+`Purchase.DHCardKey`). A misread cert that lands on a *different* card of the
+*same* player — another year of Acuña, another Charizard set, the same card
+in a different grade — returns an identical `cardName` and passes the check
+clean. It catches a different player. It does not catch a different printing
+of the same player. Nothing in this skill closes that gap; a wrong-printing
+collision is a real risk the check cannot see.
 
 `nearDuplicateCerts` in the response helps too, but read its guarantee
 precisely: it only compares the certs **you submitted in this batch** against
