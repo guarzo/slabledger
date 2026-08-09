@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"strings"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
@@ -50,14 +51,12 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 		p.source_count_at_purchase, p.active_listings_at_purchase, p.sales_last_30d_at_purchase,
 		p.psa_campaign_name, p.attribution_source`
 
-// saleColumnsAliased is the SELECT column list for campaign_sales with "s." alias, used in LEFT JOIN queries.
-const saleColumnsAliased = `s.id, s.purchase_id, s.sale_channel, s.sale_price_cents, s.sale_fee_cents,
-	s.sale_date, s.days_to_sell, s.net_profit_cents, s.created_at, s.updated_at,
-	s.last_sold_cents, s.lowest_list_cents, s.conservative_cents,
-	s.median_cents, s.active_listings, s.sales_last_30d, s.trend_30d, s.snapshot_date, s.snapshot_json,
-	s.forced_liquidation, s.sale_reason, s.cl_value_at_sale_cents, s.channel_fee_pct_at_sale`
-
 // saleColumns is the canonical column list for campaign_sales queries (no table alias).
+// It is the single source of truth for the table's column set and order: the
+// JOIN variant is derived from it (saleColumnsAliased) and both scan paths read
+// it through saleScanDests. Adding a column here means adding it to
+// saleScanDests and (*saleNulls).sale, which the compiler does not enforce but
+// TestSaleColumnsMatchScanDests does.
 const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_cents,
 	sale_date, days_to_sell, net_profit_cents, created_at, updated_at,
 	last_sold_cents, lowest_list_cents, conservative_cents, median_cents,
@@ -65,38 +64,127 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
 	was_cracked, order_id, forced_liquidation, sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale`
 
+// saleColumnsAliased is saleColumns with the "s." table alias, for LEFT JOIN
+// queries. Derived rather than hand-maintained: the two lists had drifted by six
+// columns (original_list_price_cents, price_reductions, days_listed,
+// sold_at_asking_price, was_cracked, order_id), so every JOIN-loaded Sale came
+// back with those fields zeroed and indistinguishable from a genuine zero
+// (SLA-85).
+var saleColumnsAliased = aliasColumns(saleColumns, "s")
+
+// aliasColumns prefixes every bare column name in a canonical list with
+// "<alias>.". It handles only plain identifiers — the column lists in this
+// package contain no expressions, functions, or AS clauses.
+func aliasColumns(columns, alias string) string {
+	parts := strings.Split(columns, ",")
+	for i, p := range parts {
+		parts[i] = alias + "." + strings.TrimSpace(p)
+	}
+	return strings.Join(parts, ", ")
+}
+
 // scanner abstracts *sql.Row and *sql.Rows so scanPurchase works with both.
 type scanner interface {
 	Scan(dest ...any) error
 }
 
+// saleNulls holds one nullable destination per saleColumns entry. Both sale scan
+// paths use it: the direct SELECT (scanSale) and the LEFT JOIN (scanPurchaseWithSale),
+// where every column is NULL for a purchase with no sale.
+type saleNulls struct {
+	id                     sql.NullString
+	purchaseID             sql.NullString
+	saleChannel            sql.NullString
+	salePriceCents         sql.NullInt64
+	saleFeeCents           sql.NullInt64
+	saleDate               sql.NullString
+	daysToSell             sql.NullInt64
+	netProfitCents         sql.NullInt64
+	createdAt              sql.NullTime
+	updatedAt              sql.NullTime
+	lastSoldCents          sql.NullInt64
+	lowestListCents        sql.NullInt64
+	conservativeCents      sql.NullInt64
+	medianCents            sql.NullInt64
+	activeListings         sql.NullInt64
+	salesLast30d           sql.NullInt64
+	trend30d               sql.NullFloat64
+	snapshotDate           sql.NullString
+	snapshotJSON           sql.NullString
+	originalListPriceCents sql.NullInt64
+	priceReductions        sql.NullInt64
+	daysListed             sql.NullInt64
+	soldAtAskingPrice      sql.NullBool
+	wasCracked             sql.NullBool
+	orderID                sql.NullString
+	forcedLiquidation      sql.NullBool
+	saleReason             sql.NullString
+	clValueAtSaleCents     sql.NullInt64
+	channelFeePctAtSale    sql.NullFloat64
+}
+
+// saleScanDests returns the ordered scan destinations for a Sale.
+// The order matches saleColumns exactly.
+func saleScanDests(n *saleNulls) []any {
+	return []any{
+		&n.id, &n.purchaseID, &n.saleChannel, &n.salePriceCents, &n.saleFeeCents,
+		&n.saleDate, &n.daysToSell, &n.netProfitCents, &n.createdAt, &n.updatedAt,
+		&n.lastSoldCents, &n.lowestListCents, &n.conservativeCents, &n.medianCents,
+		&n.activeListings, &n.salesLast30d, &n.trend30d, &n.snapshotDate, &n.snapshotJSON,
+		&n.originalListPriceCents, &n.priceReductions, &n.daysListed, &n.soldAtAskingPrice,
+		&n.wasCracked, &n.orderID, &n.forcedLiquidation,
+		&n.saleReason, &n.clValueAtSaleCents, &n.channelFeePctAtSale,
+	}
+}
+
+// sale materializes the scanned nulls into a Sale. NULL becomes the Go zero
+// value for every field except channel_fee_pct_at_sale, whose nil is meaningful
+// (see the Sale struct's note on the two "unknown" encodings).
+func (n *saleNulls) sale() inventory.Sale {
+	s := inventory.Sale{
+		ID:                     n.id.String,
+		PurchaseID:             n.purchaseID.String,
+		SaleChannel:            inventory.SaleChannel(n.saleChannel.String),
+		SalePriceCents:         int(n.salePriceCents.Int64),
+		SaleFeeCents:           int(n.saleFeeCents.Int64),
+		SaleDate:               n.saleDate.String,
+		DaysToSell:             int(n.daysToSell.Int64),
+		NetProfitCents:         int(n.netProfitCents.Int64),
+		CreatedAt:              n.createdAt.Time,
+		UpdatedAt:              n.updatedAt.Time,
+		OrderID:                n.orderID.String,
+		OriginalListPriceCents: int(n.originalListPriceCents.Int64),
+		PriceReductions:        int(n.priceReductions.Int64),
+		DaysListed:             int(n.daysListed.Int64),
+		SoldAtAskingPrice:      n.soldAtAskingPrice.Bool,
+		WasCracked:             n.wasCracked.Bool,
+		ForcedLiquidation:      n.forcedLiquidation.Bool,
+		SaleReason:             n.saleReason.String,
+		CLValueAtSaleCents:     int(n.clValueAtSaleCents.Int64),
+	}
+	s.LastSoldCents = int(n.lastSoldCents.Int64)
+	s.LowestListCents = int(n.lowestListCents.Int64)
+	s.ConservativeCents = int(n.conservativeCents.Int64)
+	s.MedianCents = int(n.medianCents.Int64)
+	s.ActiveListings = int(n.activeListings.Int64)
+	s.SalesLast30d = int(n.salesLast30d.Int64)
+	s.Trend30d = n.trend30d.Float64
+	s.SnapshotDate = n.snapshotDate.String
+	s.SnapshotJSON = n.snapshotJSON.String
+	if n.channelFeePctAtSale.Valid {
+		v := n.channelFeePctAtSale.Float64
+		s.ChannelFeePctAtSale = &v
+	}
+	return s
+}
+
 // scanSale scans a single Sale row matching saleColumns order.
 func scanSale(s scanner) (inventory.Sale, error) {
-	var sale inventory.Sale
-	var (
-		saleReason          sql.NullString
-		clValueAtSaleCents  sql.NullInt64
-		channelFeePctAtSale sql.NullFloat64
-	)
-	err := s.Scan(
-		&sale.ID, &sale.PurchaseID, &sale.SaleChannel, &sale.SalePriceCents, &sale.SaleFeeCents,
-		&sale.SaleDate, &sale.DaysToSell, &sale.NetProfitCents, &sale.CreatedAt, &sale.UpdatedAt,
-		&sale.LastSoldCents, &sale.LowestListCents, &sale.ConservativeCents, &sale.MedianCents,
-		&sale.ActiveListings, &sale.SalesLast30d, &sale.Trend30d, &sale.SnapshotDate, &sale.SnapshotJSON,
-		&sale.OriginalListPriceCents, &sale.PriceReductions, &sale.DaysListed, &sale.SoldAtAskingPrice,
-		&sale.WasCracked, &sale.OrderID, &sale.ForcedLiquidation,
-		&saleReason, &clValueAtSaleCents, &channelFeePctAtSale,
-	)
-	if err != nil {
-		return sale, err
+	var n saleNulls
+	if err := s.Scan(saleScanDests(&n)...); err != nil {
+		return inventory.Sale{}, err
 	}
-	sale.SaleReason = saleReason.String
-	sale.CLValueAtSaleCents = int(clValueAtSaleCents.Int64)
-	if channelFeePctAtSale.Valid {
-		v := channelFeePctAtSale.Float64
-		sale.ChannelFeePctAtSale = &v
-	}
-	return sale, nil
+	return n.sale(), nil
 }
 
 // purchaseScanDests returns the ordered slice of scan destinations for a Purchase.
@@ -146,30 +234,7 @@ func scanPurchase(s scanner, p *inventory.Purchase) error {
 func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 	var pws inventory.PurchaseWithSale
 	var (
-		sID                sql.NullString
-		sPurchaseID        sql.NullString
-		sSaleChannel       sql.NullString
-		sSalePriceCents    sql.NullInt64
-		sSaleFeeCents      sql.NullInt64
-		sSaleDate          sql.NullString
-		sDaysToSell        sql.NullInt64
-		sNetProfitCents    sql.NullInt64
-		sCreatedAt         sql.NullTime
-		sUpdatedAt         sql.NullTime
-		sLastSold          sql.NullInt64
-		sLowestList        sql.NullInt64
-		sConservative      sql.NullInt64
-		sMedian            sql.NullInt64
-		sActiveListings    sql.NullInt64
-		sSalesLast30d      sql.NullInt64
-		sTrend30d          sql.NullFloat64
-		sSnapshotDate      sql.NullString
-		sSnapshotJSON      sql.NullString
-		sForcedLiquidation sql.NullBool
-		sSaleReason        sql.NullString
-		sCLValueAtSale     sql.NullInt64
-		sChannelFeePct     sql.NullFloat64
-
+		sale              saleNulls
 		psaCampaignName   sql.NullString
 		attributionSource sql.NullString
 	)
@@ -177,11 +242,7 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 	// Build combined dest slice: purchase fields + sale fields.
 	dests := append(
 		purchaseScanDests(&pws.Purchase, &psaCampaignName, &attributionSource),
-		&sID, &sPurchaseID, &sSaleChannel, &sSalePriceCents, &sSaleFeeCents,
-		&sSaleDate, &sDaysToSell, &sNetProfitCents, &sCreatedAt, &sUpdatedAt,
-		&sLastSold, &sLowestList, &sConservative, &sMedian,
-		&sActiveListings, &sSalesLast30d, &sTrend30d, &sSnapshotDate, &sSnapshotJSON,
-		&sForcedLiquidation, &sSaleReason, &sCLValueAtSale, &sChannelFeePct,
+		saleScanDests(&sale)...,
 	)
 
 	if err := s.Scan(dests...); err != nil {
@@ -190,48 +251,10 @@ func scanPurchaseWithSale(s scanner) (inventory.PurchaseWithSale, error) {
 	pws.Purchase.PSACampaignName = psaCampaignName.String
 	pws.Purchase.AttributionSource = attributionSource.String
 
-	if sID.Valid {
-		sale := &inventory.Sale{
-			ID:                sID.String,
-			PurchaseID:        sPurchaseID.String,
-			SaleChannel:       inventory.SaleChannel(sSaleChannel.String),
-			SalePriceCents:    int(sSalePriceCents.Int64),
-			SaleFeeCents:      int(sSaleFeeCents.Int64),
-			SaleDate:          sSaleDate.String,
-			DaysToSell:        int(sDaysToSell.Int64),
-			NetProfitCents:    int(sNetProfitCents.Int64),
-			ForcedLiquidation: sForcedLiquidation.Bool,
-		}
-		if sCreatedAt.Valid {
-			sale.CreatedAt = sCreatedAt.Time
-		}
-		if sUpdatedAt.Valid {
-			sale.UpdatedAt = sUpdatedAt.Time
-		}
-		sale.LastSoldCents = int(sLastSold.Int64)
-		sale.LowestListCents = int(sLowestList.Int64)
-		sale.ConservativeCents = int(sConservative.Int64)
-		sale.MedianCents = int(sMedian.Int64)
-		sale.ActiveListings = int(sActiveListings.Int64)
-		sale.SalesLast30d = int(sSalesLast30d.Int64)
-		if sTrend30d.Valid {
-			sale.Trend30d = sTrend30d.Float64
-		}
-		if sSnapshotDate.Valid {
-			sale.SnapshotDate = sSnapshotDate.String
-		}
-		if sSnapshotJSON.Valid {
-			sale.SnapshotJSON = sSnapshotJSON.String
-		}
-		if sSaleReason.Valid {
-			sale.SaleReason = sSaleReason.String
-		}
-		sale.CLValueAtSaleCents = int(sCLValueAtSale.Int64)
-		if sChannelFeePct.Valid {
-			v := sChannelFeePct.Float64
-			sale.ChannelFeePctAtSale = &v
-		}
-		pws.Sale = sale
+	// A NULL id means the LEFT JOIN matched no sale row.
+	if sale.id.Valid {
+		loaded := sale.sale()
+		pws.Sale = &loaded
 	}
 
 	return pws, nil
