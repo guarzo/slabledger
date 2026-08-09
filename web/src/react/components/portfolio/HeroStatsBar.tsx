@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
-import type { PortfolioHealth, PortfolioDelta, CapitalSummary } from '../../../types/campaigns';
+import type { PortfolioHealth, CapitalSummary } from '../../../types/campaigns';
 import { formatCents, formatPct, formatWeeksToCover } from '../../utils/formatters';
 import { EmptyState, StatusPill } from '../../ui';
 import TrendArrow from '../../ui/TrendArrow';
@@ -86,9 +86,8 @@ export default function HeroStatsBar({
             <span className={styles.roiValue}>
               {roi >= 0 ? '+' : ''}{formatPct(roi)}
             </span>
-            {health.realizedROIDelta && <DeltaChip delta={health.realizedROIDelta} />}
           </div>
-          <FreshnessLine asOfMs={asOfMs} delta={health.realizedROIDelta} />
+          <FreshnessLine asOfMs={asOfMs} />
         </div>
 
         {showAlerts && (
@@ -142,7 +141,6 @@ export default function HeroStatsBar({
             label="Recovered"
             caption="all-time"
             value={formatCents(health.totalRecoveredCents ?? 0)}
-            delta={health.totalRecoveredDelta}
           />
           <Stat
             label="At Risk"
@@ -201,43 +199,19 @@ export default function HeroStatsBar({
   );
 }
 
-/** "as of HH:MM · {delta label}" line under the ROI headline. Driven by
-    the React Query dataUpdatedAt timestamp from the page so the operator
-    can see at a glance that the snapshot is current; the delta label
-    (e.g. "since last login") rides along when the API supplies one.
+/** "as of HH:MM" line under the ROI headline. Driven by the React Query
+    dataUpdatedAt timestamp from the page so the operator can see at a
+    glance that the snapshot is current.
     Renders nothing when no real timestamp is available — falling back to
     the current render time would fabricate a freshness signal in
     precisely the cases where the operator most needs it to be honest. */
-function FreshnessLine({ asOfMs, delta }: { asOfMs?: number; delta?: PortfolioDelta }) {
+function FreshnessLine({ asOfMs }: { asOfMs?: number }) {
   const stamp = useMemo(() => {
     if (!asOfMs || asOfMs <= 0) return null;
     return new Date(asOfMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }, [asOfMs]);
   if (!stamp) return null;
-  return (
-    <div className={styles.freshness}>
-      as of {stamp}
-      {delta?.label && (
-        <span className={styles.freshDelta}>{delta.label}</span>
-      )}
-    </div>
-  );
-}
-
-function DeltaChip({ delta, small }: { delta: PortfolioDelta; small?: boolean }) {
-  const pos = delta.value > 0;
-  const neg = delta.value < 0;
-  const arrow = pos ? '▲' : neg ? '▼' : '';
-  const formatted =
-    delta.unit === 'cents' ? formatCents(Math.abs(delta.value))
-    : `${Math.abs(delta.value).toFixed(1)}`;
-  const suffix = delta.unit === 'cents' ? '' : '%';
-  return (
-    <span className={clsx(styles.delta, pos ? styles.dPos : neg ? styles.dNeg : undefined, small && styles.dSmall)}>
-      {arrow && `${arrow} `}{formatted}{suffix}
-      {delta.label && <span className={styles.dMeta}> {delta.label}</span>}
-    </span>
-  );
+  return <div className={styles.freshness}>as of {stamp}</div>;
 }
 
 const TONE_CLASS: Record<string, string> = {
@@ -250,13 +224,12 @@ const TONE_CLASS: Record<string, string> = {
   problem: styles.tProblem,
 };
 
-function Stat({ label, labelTitle, caption, value, tone, delta }: {
+function Stat({ label, labelTitle, caption, value, tone }: {
   label: string;
   labelTitle?: string;
   caption?: string;
   value: string;
   tone?: 'warn' | 'neg' | 'muted' | 'success' | 'waiting' | 'atRisk' | 'problem';
-  delta?: PortfolioDelta;
 }) {
   return (
     <div className={styles.stat}>
@@ -274,7 +247,6 @@ function Stat({ label, labelTitle, caption, value, tone, delta }: {
       {caption && <div className={styles.statCaption}>{caption}</div>}
       <div className={clsx(styles.statValue, tone && TONE_CLASS[tone])}>
         {value}
-        {delta && <DeltaChip delta={delta} small />}
       </div>
     </div>
   );

@@ -214,19 +214,10 @@ export interface ChannelVelocity {
   revenueCents: number;
 }
 
-// Delta types
-
-export interface PortfolioDelta {
-  /** Signed number. Percentage points for ROI, cents for money fields. */
-  value: number;
-  /** Optional human label, e.g. "vs last wk", "30d". */
-  label?: string;
-  /** "pct" renders with %, "cents" renders through formatCents. Defaults to "pct". */
-  unit?: 'pct' | 'cents';
-}
-
 // Portfolio health types
 
+/** Mirrors inventory.CampaignHealth (internal/domain/inventory/health_types.go).
+    Every field the Go struct emits is modelled here; keep the two in step. */
 export interface CampaignHealth {
   campaignId: string;
   campaignName: string;
@@ -239,6 +230,22 @@ export interface CampaignHealth {
   capitalAtRiskCents: number;
   healthStatus: 'healthy' | 'warning' | 'critical';
   healthReason: string;
+
+  /** Sum of negative net profit on inperson + cardshow sales; always <= 0.
+      Separates "marketplace margin is broken" from "we dumped cards cheap
+      to cover an invoice". */
+  liquidationLossCents: number;
+  /** Count of sales contributing to liquidationLossCents. */
+  liquidationSaleCount: number;
+  /** Net profit / revenue across eBay + TCGPlayer sales combined; 0 when
+      there are no marketplace sales. */
+  ebayChannelMarginPct: number;
+
+  /** In-hand vs in-transit breakdown of unsold inventory (in hand = received). */
+  inHandUnsoldCount: number;
+  inHandCapitalCents: number;
+  inTransitUnsoldCount: number;
+  inTransitCapitalCents: number;
 }
 
 export interface PortfolioHealth {
@@ -248,8 +255,6 @@ export interface PortfolioHealth {
   totalAtRiskCents: number;
   overallROI: number;
   realizedROI: number;
-  realizedROIDelta?: PortfolioDelta;
-  totalRecoveredDelta?: PortfolioDelta;
 }
 
 // Expected Value types
