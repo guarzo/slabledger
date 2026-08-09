@@ -1,0 +1,49 @@
+-- Drop three indexes that no query can prefer over an index already present.
+--
+-- All three were created by 000001 and never touched since -- no later migration
+-- drops, recreates or renames any of them. Each is redundant for a different
+-- structural reason, and in every case the surviving index is a superset, so the
+-- planner has no plan available on the dropped index that it loses.
+--
+-- 1. idx_access_log_covering on card_access_log
+--        (card_name, set_name, card_number, accessed_at)
+--    versus idx_access_log_card, same table, same four columns, same order:
+--        (card_name, set_name, card_number, accessed_at DESC)
+--    The only difference is the trailing column's declared sort direction, and a
+--    btree can be scanned in either direction at equal cost. Postgres will read
+--    idx_access_log_card backwards to satisfy an ASC ordering. The second index
+--    therefore serves no query the first does not, and is pure write
+--    amplification on a table that is written on every card access.
+--
+-- 2. idx_dh_suggestions_date on dh_suggestions(suggestion_date), versus the
+--    table's own PRIMARY KEY (suggestion_date, type, category, rank). A primary
+--    key is backed by a unique btree, and suggestion_date is its leading column,
+--    so a lookup or range scan on suggestion_date alone already uses the PK
+--    index.
+--
+-- 3. idx_purchases_campaign on campaign_purchases(campaign_id), versus
+--    idx_purchases_campaign_date (campaign_id, purchase_date DESC). campaign_id
+--    is a strict leading prefix of the composite, so every query the single-column
+--    index can serve, the composite serves too.
+--
+-- Kept deliberately: idx_access_log_card (the DESC variant, because the access
+-- log is read newest-first), the dh_suggestions PRIMARY KEY, and
+-- idx_purchases_campaign_date. Also kept is idx_dh_suggestions_fetched_at,
+-- which shares a table with a dropped index but has no overlapping prefix and
+-- is not redundant. (000001's other dh_suggestions index, idx_dh_suggestions_card,
+-- is not in the picture either way: 000003 dropped it and never restored it.)
+--
+-- The narrower index in a redundant pair can still win on size alone -- a
+-- one-column index is cheaper to keep cached than a four-column one, so a very
+-- hot count-only scan can prefer it. That trade is measured against
+-- pg_stat_user_indexes and EXPLAIN on production, which is a pre-merge check
+-- outside this repository's reach; see the pull request.
+--
+-- IF EXISTS on each, matching every other drop in this migration set: the
+-- statement has to be a no-op on a database where the object is already absent,
+-- since migrations run automatically on startup against environments this
+-- repository cannot inspect.
+
+DROP INDEX IF EXISTS idx_access_log_covering;
+DROP INDEX IF EXISTS idx_dh_suggestions_date;
+DROP INDEX IF EXISTS idx_purchases_campaign;

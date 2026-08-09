@@ -2,12 +2,8 @@ package postgres
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
-	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,9 +73,15 @@ func TestMigration000038_ApiUsageStillSelectable(t *testing.T) {
 //     is readable by anon unless the REVOKE is repeated — which is why 000028
 //     listed all four by name.
 //
-// Rolls back one step rather than to a hard-coded version number: this branch
-// and the 000037 branch are in flight together, so the version immediately
-// below head depends on merge order, while "undo the newest migration" does not.
+// Rolls back to version 37, the version immediately below this migration, so
+// the step under test is exactly 000038's down.
+//
+// This was a relative migrateSteps(db, -1) -- "undo the newest migration" --
+// on the reasoning that a relative step stays correct as the migration set
+// grows. It does not: 000039 landed, -1 began undoing the index drops instead
+// of the view drops, and the assertions below failed on a rollback that had
+// never run. An absolute target names the state the assertions are written
+// against, and breaks loudly rather than silently retargeting.
 //
 // Not parallel: it steps schema_migrations backwards for the whole package.
 func TestMigration000038_DownRestoresViews(t *testing.T) {
@@ -89,7 +91,7 @@ func TestMigration000038_DownRestoresViews(t *testing.T) {
 	// Restore the package's shared database no matter how this test exits.
 	t.Cleanup(func() { resetSchemaAndMigrate(t, db) })
 
-	require.NoError(t, migrateSteps(db, -1), "roll back the newest migration")
+	require.NoError(t, migrateToVersion(db, 37), "roll back migration 000038")
 
 	for _, view := range unusedViews {
 		require.True(t, viewExists(ctx, t, db, view),
@@ -152,29 +154,4 @@ func viewIsSecurityInvoker(ctx context.Context, t *testing.T, db *DB, view strin
 		WHERE n.nspname = 'public' AND c.relname = $1 AND c.relkind = 'v'`,
 		view).Scan(&invoker), "read reloptions for view %s", view)
 	return invoker
-}
-
-// migrateSteps moves the database n migrations in either direction, relative to
-// wherever it currently is. Negative n rolls back.
-//
-// Distinct from migrateToVersion (migration_000030_test.go:117), which needs an
-// absolute version number. A relative step is what "undo the newest migration"
-// actually means, and it stays correct when the migration set gains a file.
-func migrateSteps(db *DB, n int) error {
-	driver, err := migratepgx.WithInstance(db.DB, &migratepgx.Config{})
-	if err != nil {
-		return fmt.Errorf("create migration driver: %w", err)
-	}
-	iofsDriver, err := iofs.New(MigrationsFS, "migrations")
-	if err != nil {
-		return fmt.Errorf("create iofs source: %w", err)
-	}
-	m, err := migrate.NewWithInstance("iofs", iofsDriver, "pgx5", driver)
-	if err != nil {
-		return fmt.Errorf("create migration instance: %w", err)
-	}
-	if err := m.Steps(n); err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("migrate %d steps: %w", n, err)
-	}
-	return nil
 }

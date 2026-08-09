@@ -238,7 +238,7 @@ Access log used to prioritize price staleness detection (recently viewed cards g
 
 **Indexes:**
 - `idx_access_log_card` on `(card_name, set_name, card_number, accessed_at DESC)`
-- `idx_access_log_covering` on `(card_name, set_name, card_number, accessed_at)`
+- ~~`idx_access_log_covering` on `(card_name, set_name, card_number, accessed_at)`~~ — DROPPED (migration 000039): same columns in the same order as `idx_access_log_card`, differing only in the trailing sort direction, which a btree scan does not need a second index for
 - `idx_card_access_log_recent` on `(accessed_at DESC, card_name, set_name, card_number)`
 
 **Foreign Keys:** none
@@ -440,7 +440,7 @@ Individual graded cards bought under a campaign.
 **Unique:** `(grader, cert_number)`
 
 **Indexes:**
-- `idx_purchases_campaign` on `(campaign_id)`
+- ~~`idx_purchases_campaign` on `(campaign_id)`~~ — DROPPED (migration 000039): strict leading prefix of `idx_purchases_campaign_date`
 - `idx_purchases_date` on `(purchase_date)`
 - `idx_purchases_campaign_date` on `(campaign_id, purchase_date DESC)`
 - `idx_purchases_snapshot_pending` on `(snapshot_status)` WHERE `snapshot_status != ''` (partial)
@@ -783,7 +783,7 @@ Daily buy/sell suggestions from DoubleHolo.
 **Primary Key:** `(suggestion_date, type, category, rank)`
 
 **Indexes:**
-- `idx_dh_suggestions_date` on `(suggestion_date)`
+- ~~`idx_dh_suggestions_date` on `(suggestion_date)`~~ — DROPPED (migration 000039): `suggestion_date` is the leading column of the primary key `(suggestion_date, type, category, rank)`, whose backing btree already serves it
 - `idx_dh_suggestions_fetched_at` on `(fetched_at)`; added migration 000003
 
 **Foreign Keys:** none
