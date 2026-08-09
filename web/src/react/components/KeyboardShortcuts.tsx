@@ -13,6 +13,7 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Modal } from '../ui';
 
 const NAV_BINDINGS: Array<{ key: string; path: string; label: string }> = [
   { key: 'd', path: '/', label: 'Dashboard' },
@@ -64,9 +65,9 @@ export default function KeyboardShortcuts() {
 
       // ⌘K is owned by Header (real CommandPalette); don't double-toggle here.
 
-      // While the cheatsheet is open it owns the keyboard — Escape closes it
-      // (the Overlay handles that locally and stopPropagation's), and we don't
-      // want `?` to re-toggle or `g`+key to navigate from a modal.
+      // While the cheatsheet is open it owns the keyboard — Modal closes it on
+      // Escape — and we don't want `?` to re-toggle or `g`+key to navigate from
+      // a modal.
       if (showHelp) return;
 
       if (e.key === 'Escape') {
@@ -128,7 +129,7 @@ export default function KeyboardShortcuts() {
       )}
 
       {showHelp && (
-        <Overlay onClose={closeAll} title="Keyboard shortcuts">
+        <Modal onClose={closeAll} title="Keyboard shortcuts" size="lg" showClose>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <ShortcutRow keys={['?']} label="Toggle this cheatsheet" />
             <ShortcutRow keys={['Esc']} label="Close overlay" />
@@ -138,91 +139,9 @@ export default function KeyboardShortcuts() {
               <ShortcutRow key={b.key} keys={['g', b.key]} label={b.label} />
             ))}
           </div>
-        </Overlay>
+        </Modal>
       )}
     </>
-  );
-}
-
-function Overlay({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    // Move focus into the dialog. Prefer the first focusable child; fall back
-    // to the container itself (made focusable via tabIndex={-1}).
-    const node = containerRef.current;
-    if (node) {
-      const focusable = node.querySelector<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      (focusable ?? node).focus();
-    }
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab' || !containerRef.current) return;
-      const focusables = containerRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusables.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (e.shiftKey) {
-        if (active === first || !containerRef.current.contains(active)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (active === last || !containerRef.current.contains(active)) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    }
-
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previouslyFocused?.focus?.();
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-black/60"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onClick={onClose}
-    >
-      <div
-        ref={containerRef}
-        tabIndex={-1}
-        className="w-full max-w-lg rounded-xl bg-[var(--surface-1)] border border-[var(--surface-2)] p-5 shadow-xl outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
-            aria-label="Close"
-          >
-            Esc
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }
 

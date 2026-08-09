@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { PriceHint } from '../types/pricing';
 import { api } from '../js/api';
 import { useToast } from './contexts/ToastContext';
+import { Modal } from './ui';
 
 interface PriceHintDialogProps {
   cardName: string;
@@ -22,23 +23,7 @@ export default function PriceHintDialog({
   const [externalId, setExternalId] = useState('');
   const [saving, setSaving] = useState(false);
   const toast = useToast();
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Focus management: focus the panel on mount
-  useEffect(() => {
-    panelRef.current?.focus();
-  }, []);
-
-  // Escape key handler
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  const externalIdRef = useRef<HTMLInputElement>(null);
 
   const handleSave = useCallback(async () => {
     if (!externalId.trim()) return;
@@ -62,83 +47,69 @@ export default function PriceHintDialog({
   }, [cardName, setName, cardNumber, provider, externalId, onClose, onSaved, toast]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--surface-overlay)]"
-      onClick={onClose}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="price-hint-dialog-title"
-        tabIndex={-1}
-        className="bg-[var(--surface-1)] rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="price-hint-dialog-title" className="text-lg font-semibold mb-4">Fix Pricing</h3>
+    <Modal title="Fix Pricing" onClose={onClose} busy={saving} initialFocusRef={externalIdRef}>
+      <div className="space-y-3 text-sm">
+        <div>
+          <div className="block text-[var(--text-muted)] mb-1">Card</div>
+          <div className="font-medium">{cardName}</div>
+        </div>
+        <div>
+          <div className="block text-[var(--text-muted)] mb-1">Set</div>
+          <div className="font-medium">{setName}</div>
+        </div>
+        {cardNumber && (
+          <div>
+            <div className="block text-[var(--text-muted)] mb-1">Number</div>
+            <div className="font-medium">{cardNumber}</div>
+          </div>
+        )}
 
-        <div className="space-y-3 text-sm">
-          <div>
-            <div className="block text-[var(--text-muted)] mb-1">Card</div>
-            <div className="font-medium">{cardName}</div>
-          </div>
-          <div>
-            <div className="block text-[var(--text-muted)] mb-1">Set</div>
-            <div className="font-medium">{setName}</div>
-          </div>
-          {cardNumber && (
-            <div>
-              <div className="block text-[var(--text-muted)] mb-1">Number</div>
-              <div className="font-medium">{cardNumber}</div>
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="price-hint-provider" className="block text-[var(--text-muted)] mb-1">Provider</label>
-            <select
-              id="price-hint-provider"
-              value={provider}
-              onChange={(e) => setProvider(e.target.value as PriceHint['provider'])}
-              className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)]"
-            >
-              <option value="doubleholo">DoubleHolo</option>
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="price-hint-external-id" className="block text-[var(--text-muted)] mb-1">
-              External ID
-            </label>
-            <input
-              id="price-hint-external-id"
-              type="text"
-              value={externalId}
-              onChange={(e) => setExternalId(e.target.value)}
-              placeholder="DoubleHolo Card ID"
-              className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)]"
-              autoFocus
-            />
-          </div>
+        <div>
+          <label htmlFor="price-hint-provider" className="block text-[var(--text-muted)] mb-1">Provider</label>
+          <select
+            id="price-hint-provider"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as PriceHint['provider'])}
+            className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)]"
+          >
+            <option value="doubleholo">DoubleHolo</option>
+          </select>
         </div>
 
-        <div className="flex justify-end gap-2 mt-6">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded bg-[var(--surface-2)] hover:bg-[var(--surface-3)] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !externalId.trim()}
-            className="px-4 py-2 text-sm rounded bg-[var(--accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Hint'}
-          </button>
+        <div>
+          <label htmlFor="price-hint-external-id" className="block text-[var(--text-muted)] mb-1">
+            External ID
+          </label>
+          <input
+            id="price-hint-external-id"
+            ref={externalIdRef}
+            type="text"
+            value={externalId}
+            onChange={(e) => setExternalId(e.target.value)}
+            placeholder="DoubleHolo Card ID"
+            className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)]"
+          />
         </div>
       </div>
-    </div>
+
+      <div className="flex justify-end gap-2 mt-6">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={saving}
+          className="px-4 py-2 text-sm rounded bg-[var(--surface-2)] hover:bg-[var(--surface-3)] transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !externalId.trim()}
+          className="px-4 py-2 text-sm rounded bg-[var(--accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Hint'}
+        </button>
+      </div>
+    </Modal>
   );
 }

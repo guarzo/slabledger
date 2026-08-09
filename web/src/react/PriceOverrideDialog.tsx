@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { api, isAPIError } from '../js/api';
 import { useToast } from './contexts/ToastContext';
+import { Modal } from './ui';
 import { formatCents } from './utils/formatters';
 
 interface PriceOverrideDialogProps {
@@ -32,15 +33,7 @@ export default function PriceOverrideDialog({
   const [source, setSource] = useState<string>(currentOverrideSource || 'manual');
   const [saving, setSaving] = useState(false);
   const toast = useToast();
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, saving]);
+  const priceInputRef = useRef<HTMLInputElement>(null);
 
   const markupPrice = Math.round(costBasisCents * 1.12);
 
@@ -116,22 +109,8 @@ export default function PriceOverrideDialog({
   const isValid = !isNaN(parsedCents) && parsedCents > 0;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--surface-overlay)]"
-      onClick={() => { if (!saving) onClose(); }}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="price-override-dialog-title"
-        tabIndex={-1}
-        className="bg-[var(--surface-1)] rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="price-override-dialog-title" className="text-lg font-semibold mb-4">Set Price</h3>
-
-        <div className="space-y-3 text-sm">
+    <Modal title="Set Price" onClose={onClose} busy={saving} initialFocusRef={priceInputRef}>
+      <div className="space-y-3 text-sm">
           <div>
             <div className="text-[var(--text-muted)] mb-1">Card</div>
             <div className="font-medium truncate">{cardName}</div>
@@ -201,6 +180,7 @@ export default function PriceOverrideDialog({
             </div>
             <input
               id="price-override-input"
+              ref={priceInputRef}
               type="number"
               step="0.01"
               min="0"
@@ -208,45 +188,43 @@ export default function PriceOverrideDialog({
               onChange={(e) => { setPriceInput(e.target.value); setSource('manual'); }}
               placeholder="e.g. 125.00"
               className="w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--surface-2)] text-[var(--text)] placeholder:text-[var(--text-muted)]"
-              autoFocus
             />
           </div>
-        </div>
+      </div>
 
-        <div className="flex justify-between mt-6">
-          <div>
-            {currentOverrideCents && currentOverrideCents > 0 && (
-              <button
-                type="button"
-                onClick={handleClear}
-                disabled={saving}
-                className="px-4 py-2 text-sm rounded text-[var(--danger)] bg-[var(--danger)]/10 hover:bg-[var(--danger)]/20 transition-colors disabled:opacity-50"
-              >
-                Clear Override
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
+      <div className="flex justify-between mt-6">
+        <div>
+          {currentOverrideCents && currentOverrideCents > 0 && (
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClear}
               disabled={saving}
-              aria-disabled={saving}
-              className="px-4 py-2 text-sm rounded bg-[var(--surface-2)] hover:bg-[var(--surface-3)] transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm rounded text-[var(--danger)] bg-[var(--danger)]/10 hover:bg-[var(--danger)]/20 transition-colors disabled:opacity-50"
             >
-              Cancel
+              Clear Override
             </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !isValid}
-              className="px-4 py-2 text-sm rounded bg-[var(--accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Price'}
-            </button>
-          </div>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            aria-disabled={saving}
+            className="px-4 py-2 text-sm rounded bg-[var(--surface-2)] hover:bg-[var(--surface-3)] transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !isValid}
+            className="px-4 py-2 text-sm rounded bg-[var(--accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Price'}
+          </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

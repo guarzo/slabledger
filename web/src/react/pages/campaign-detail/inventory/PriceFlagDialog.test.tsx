@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PriceFlagDialog from './PriceFlagDialog';
 
 function renderDialog(overrides: Partial<React.ComponentProps<typeof PriceFlagDialog>> = {}) {
@@ -43,7 +43,7 @@ describe('PriceFlagDialog accessibility', () => {
     expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
   });
 
-  it('restores focus to the invoking trigger on unmount', () => {
+  it('restores focus to the invoking trigger on unmount', async () => {
     // The dialog is rendered conditionally next to its trigger, mirroring
     // InventoryTab's `{flagTarget && <PriceFlagDialog .../>}`.
     function Harness() {
@@ -71,27 +71,12 @@ describe('PriceFlagDialog accessibility', () => {
     expect(trigger).not.toHaveFocus();
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // Radix restores focus from a post-unmount task, so this settles async.
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
-  it('cycles Tab from the last focusable back to the first', () => {
-    renderDialog();
-    const dialog = screen.getByRole('dialog');
-    const focusables = Array.from(
-      dialog.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    );
-    expect(focusables.length).toBeGreaterThan(1);
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-
-    last.focus();
-    fireEvent.keyDown(document, { key: 'Tab' });
-    expect(first).toHaveFocus();
-
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
-    expect(last).toHaveFocus();
-  });
+  // Tab trapping is Radix FocusScope's job and depends on real browser tab
+  // sequencing plus focus sentinels, neither of which jsdom implements.
+  // Covered instead by the @a11y Playwright spec in tests/e2e/accessibility.spec.ts.
 });
