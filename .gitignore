@@ -40,7 +40,7 @@ go.work.sum
 # Project binary
 /slabledger
 pokeprice
-
+docs/superpowers
 # Build directories
 dist/
 build/
