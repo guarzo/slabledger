@@ -15,7 +15,7 @@ import { wasUnlistedFromDH } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_TONES } from './dhBadge';
 import InlinePriceEdit from './InlinePriceEdit';
 import RowActions from './RowActions';
-import { resolveContextualPrimary, resolveOverflowActions, ACTION_LABELS } from './rowActions';
+import { resolveRowActions, type RowActionHandlers, type RowActionFlags } from './rowActions';
 import { ACTIONS_COLUMN_WIDTH } from './columnWidths';
 import CopyableCert from './CopyableCert';
 
@@ -48,34 +48,25 @@ function campaignColor(name: string) {
   return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
 }
 
-interface DesktopRowProps {
+// The row-action callbacks and flags come in via RowActionHandlers /
+// RowActionFlags so the whole props object can be handed to resolveRowActions
+// unchanged — see the note there on why they are not re-listed here (SLA-87).
+interface DesktopRowProps extends RowActionHandlers, RowActionFlags {
   item: AgingItem;
   selected: boolean;
   onToggle: () => void;
   onExpand: () => void;
-  onRecordSale: () => void;
-  onFixPricing?: () => void;
-  onFixDHMatch?: () => void;
-  onSetPrice?: () => void;
-  onDelete?: () => void;
-  onListOnDH?: (purchaseId: string) => void;
   onInlinePriceSave?: (purchaseId: string, priceCents: number) => Promise<void>;
-  onDismiss?: () => void;
-  onUndismiss?: () => void;
-  onUnmatchDH?: () => void;
-  onRetryDHMatch?: () => void;
-  dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   showCampaignColumn?: boolean;
 }
 
-export default function DesktopRow({
-  item, selected, onToggle, onExpand, onRecordSale,
-  onFixPricing, onFixDHMatch, onSetPrice, onDelete,
-  onListOnDH, onInlinePriceSave,
-  onDismiss, onUndismiss, onUnmatchDH, onRetryDHMatch,
-  dhListingLoading, dhListedOverride, showCampaignColumn,
-}: DesktopRowProps) {
+export default function DesktopRow(props: DesktopRowProps) {
+  const {
+    item, selected, onToggle, onExpand,
+    onFixPricing, onInlinePriceSave,
+    dhListedOverride, showCampaignColumn,
+  } = props;
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -125,22 +116,7 @@ export default function DesktopRow({
     clLastError: item.purchase.clLastError,
   });
 
-  const handlers = {
-    onRecordSale,
-    onSetPrice,
-    onFixPricing,
-    onFixDHMatch,
-    onUnmatchDH,
-    onRetryDHMatch,
-    onListOnDH,
-    onDismiss,
-    onUndismiss,
-    onDelete,
-  };
-  const flags = { dhListingLoading };
-  const primary = resolveContextualPrimary(item, handlers, flags);
-  const fallbackPrimary = { key: 'sell', label: ACTION_LABELS.sell, onSelect: onRecordSale };
-  const overflow = resolveOverflowActions(item, handlers, flags, primary);
+  const { primary, fallbackPrimary, overflow } = resolveRowActions(item, props);
 
   const inHandLabel = item.purchase.receivedAt
     ? `In hand · ${item.daysHeld}d`
