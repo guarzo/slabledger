@@ -132,6 +132,10 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/campaigns/{id}/sales/{saleID}", authRoute(rt.campaignsHandler.HandleUpdateSaleReason))
 	mux.Handle("DELETE /api/campaigns/{id}/purchases/{purchaseId}/sale", authRoute(rt.campaignsHandler.HandleDeleteSale))
 
+	// Global sale-import endpoints (cross-campaign)
+	mux.Handle("POST /api/sales/import-certs", authRoute(rt.campaignsHandler.HandleImportCertSales))
+	mux.Handle("POST /api/sales/import-certs/confirm", authRoute(rt.campaignsHandler.HandleConfirmCertSales))
+
 	// Campaign analytics
 	mux.Handle("GET /api/campaigns/{id}/pnl", authRoute(rt.campaignsHandler.HandleCampaignPNL))
 	mux.Handle("GET /api/campaigns/{id}/pnl-by-channel", authRoute(rt.campaignsHandler.HandlePNLByChannel))
