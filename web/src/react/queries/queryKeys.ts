@@ -31,6 +31,7 @@ export const queryKeys = {
     cardLadderStatus: ['admin', 'cardLadderStatus'] as const,
     cardLadderFailures: ['admin', 'cardLadderFailures'] as const,
     dhStatus: ['admin', 'dhStatus'] as const,
+    dhPushConfig: ['admin', 'dhPushConfig'] as const,
     dhUnmatched: ['admin', 'dhUnmatched'] as const,
     psaSyncStatus: ['admin', 'psaSyncStatus'] as const,
     dhTombstoneCount: ['admin', 'dhTombstoneCount'] as const,

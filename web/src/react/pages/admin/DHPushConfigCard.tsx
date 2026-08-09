@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../../js/api';
 import { CardShell } from '../../ui/CardShell';
 import Button from '../../ui/Button';
 import { useToast } from '../../contexts/ToastContext';
+import { useDHPushConfig, useSaveDHPushConfig } from '../../queries/useAdminQueries';
 import type { DHPushConfig } from '../../../types/apiStatus';
-import { formatCents } from '../../utils/formatters';
+import { formatCents, getErrorMessage } from '../../utils/formatters';
 import PokeballLoader from '../../PokeballLoader';
 
 function ConfigField({ id, label, value, onChange, suffix }: {
@@ -17,6 +16,16 @@ function ConfigField({ id, label, value, onChange, suffix }: {
 }) {
   const inputId = `cfg-${id}`;
   const descId = `cfg-${id}-desc`;
+  // The input keeps its own draft string so a cleared box stays cleared. The
+  // parent only ever receives a real non-negative integer; an empty or
+  // half-typed value simply doesn't propagate. The effect re-syncs the draft
+  // when the value changes from outside (a refetch after save), but leaves a
+  // draft that already parses to the same number alone so "07" isn't rewritten
+  // mid-typing.
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    setDraft((d) => (Number.parseInt(d, 10) === value ? d : String(value)));
+  }, [value]);
   return (
     <div>
       <label htmlFor={inputId} className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
@@ -25,8 +34,15 @@ function ConfigField({ id, label, value, onChange, suffix }: {
           id={inputId}
           type="number"
           min={0}
-          value={value}
-          onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            const parsed = Number.parseInt(e.target.value, 10);
+            if (Number.isFinite(parsed) && parsed >= 0) onChange(parsed);
+          }}
+          onBlur={() => {
+            if (draft.trim() === '') setDraft(String(value));
+          }}
           aria-describedby={descId}
           className="w-24 px-2 py-1.5 text-sm rounded-lg bg-[var(--surface-0)] border border-[var(--surface-2)] text-[var(--text)]"
         />
@@ -38,33 +54,46 @@ function ConfigField({ id, label, value, onChange, suffix }: {
 
 export function DHPushConfigCard() {
   const toast = useToast();
-  const queryClient = useQueryClient();
 
-  const { data: config, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['admin', 'dh-push-config'],
-    queryFn: () => api.getDHPushConfig(),
-  });
+  const { data: config, isLoading, isError, error, refetch } = useDHPushConfig();
+  const saveMutation = useSaveDHPushConfig();
 
   const [form, setForm] = useState<DHPushConfig | null>(null);
-
-  const saveMutation = useMutation({
-    mutationFn: (cfg: DHPushConfig) => api.saveDHPushConfig(cfg),
-    onSuccess: () => {
-      toast.success('DH push config saved');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'dh-push-config'] });
-    },
-    onError: () => toast.error('Failed to save config'),
-  });
 
   useEffect(() => {
     if (config) setForm(config);
   }, [config]);
 
+  // The card owns exactly these five fields. `listingsPaused` is deliberately
+  // absent: Task 4 moves that control into DHListingsPauseControl, and because
+  // useSaveDHPushConfig merges patches server-side-first, the card must never
+  // transmit a key it does not render. Sending it back would be precisely the
+  // clobber the merging mutation exists to prevent.
+  const thresholdPatch = (cfg: DHPushConfig): Partial<DHPushConfig> => ({
+    swingPctThreshold: cfg.swingPctThreshold,
+    swingMinCents: cfg.swingMinCents,
+    disagreementPctThreshold: cfg.disagreementPctThreshold,
+    unreviewedChangePctThreshold: cfg.unreviewedChangePctThreshold,
+    unreviewedChangeMinCents: cfg.unreviewedChangeMinCents,
+  });
+
+  const save = (patch: Partial<DHPushConfig>, onFailure?: () => void) => {
+    saveMutation.mutate(patch, {
+      onSuccess: () => toast.success('DH push config saved'),
+      onError: () => {
+        toast.error('Failed to save config');
+        onFailure?.();
+      },
+    });
+  };
+
   if (isError) {
     return (
       <CardShell padding="lg">
         <div className="text-center">
-          <p className="text-red-500 mb-2">Failed to load config: {String(error)}</p>
+          <p className="text-[var(--danger)] mb-2">
+            Failed to load config: {getErrorMessage(error, 'Unknown error')}
+          </p>
           <Button onClick={() => refetch()}>Retry</Button>
         </div>
       </CardShell>
@@ -103,9 +132,7 @@ export function DHPushConfigCard() {
               const prev = form;
               const next = { ...form, listingsPaused: !form.listingsPaused };
               setForm(next);
-              saveMutation.mutate(next, {
-                onError: () => setForm(prev),
-              });
+              save({ listingsPaused: next.listingsPaused }, () => setForm(prev));
             }}
             className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
               form.listingsPaused ? 'bg-amber-500' : 'bg-[var(--surface-3,#3a3a3a)]'
@@ -166,7 +193,7 @@ export function DHPushConfigCard() {
       <div className="mt-4">
         <Button
           size="sm"
-          onClick={() => saveMutation.mutate(form)}
+          onClick={() => save(thresholdPatch(form))}
           loading={saveMutation.isPending}
         >
           Save
