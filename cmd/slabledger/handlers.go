@@ -76,6 +76,9 @@ type handlerOutputs struct {
 // callbacks, and assembles the ServerDependencies struct ready for
 // startWebServer. Handler construction order follows the route order defined
 // in docs/API.md. When adding new handlers, update docs/API.md in the same commit.
+//
+// This function sits exactly at the funlen budget (262 lines). Adding to it
+// requires splitting it first.
 func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, handlerOutputs) {
 	logger := in.Logger
 
