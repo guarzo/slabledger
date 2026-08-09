@@ -2,6 +2,7 @@ import { CardLadderTab } from './CardLadderTab';
 import { DHTab } from './DHTab';
 import { PSASyncTab } from './PSASyncTab';
 import { DHOperationsPanel } from './DHOperationsPanel';
+import { IntegrationHealthStrip } from './IntegrationHealthStrip';
 import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import SalesImportSection from '../tools/SalesImportSection';
 import { StatusPill } from '../../ui';
@@ -92,6 +93,8 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
           <span>{dhBanner}</span>
         </div>
       )}
+
+      <IntegrationHealthStrip enabled={enabled} />
 
       <section>
         <div className="flex items-center justify-between mb-1">
