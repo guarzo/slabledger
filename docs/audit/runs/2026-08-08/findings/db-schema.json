@@ -1,0 +1,418 @@
+[
+  {
+    "id": "DB-001",
+    "lens": "db-schema",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "column",
+      "identity": "dh_card_cache.demand_json, dh_card_cache.velocity_json, dh_card_cache.trend_json, dh_card_cache.saturation_json, dh_card_cache.price_distribution_json"
+    },
+    "category": "db",
+    "title": "The five analytics payload columns on dh_card_cache are never written or read; the sibling table dh_character_cache owns the same-named columns that are",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The db-map scores dh_card_cache.trend_json and dh_card_cache.price_distribution_json at zero external refs with distinct_definitions_for_name = 1, i.e. unambiguous.",
+        "command": "jq -r '.records[] | select(.identity==\"dh_card_cache.trend_json\" or .identity==\"dh_card_cache.price_distribution_json\") | \"\\(.identity) refs=\\(.external_refs) ambiguous=\\(.name_ambiguous//false)\"' docs/audit/runs/2026-08-08/maps/db-map.json",
+        "output": "dh_card_cache.price_distribution_json refs=0 ambiguous=false\ndh_card_cache.trend_json refs=0 ambiguous=false"
+      },
+      {
+        "claim": "The other three (demand_json, velocity_json, saturation_json) are name_ambiguous because dh_character_cache declares the same three bare names. Every hit the grep produces resolves to a dh_character_cache statement or to a log-message string, never to a dh_card_cache statement.",
+        "command": "git grep -nE '\\bdemand_json\\b|\\bvelocity_json\\b|\\bsaturation_json\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal web/src ':(exclude)internal/adapters/storage/postgres/migrations'",
+        "output": "internal/adapters/storage/postgres/dh_demand_repository.go:188:\t\t\tdemand_json, velocity_json, saturation_json,\ninternal/adapters/storage/postgres/dh_demand_repository.go:192:\t\t\tdemand_json           = excluded.demand_json,\ninternal/adapters/storage/postgres/dh_demand_repository.go:193:\t\t\tvelocity_json         = excluded.velocity_json,\ninternal/adapters/storage/postgres/dh_demand_repository.go:194:\t\t\tsaturation_json       = excluded.saturation_json,\ninternal/adapters/storage/postgres/dh_demand_repository.go:213:\t\t\tdemand_json, velocity_json, saturation_json,\ninternal/adapters/storage/postgres/dh_demand_repository.go:234:\t\t\tdemand_json, velocity_json, saturation_json,\ninternal/domain/demand/campaign_signals.go:39:\t// had to be excluded from the index due to unparseable velocity_json. A\ninternal/domain/demand/service.go:135:\t\t\t\ts.logger.Warn(ctx, \"demand_json unmarshal failed\",\ninternal/domain/demand/service.go:347:\t\t\t\ts.logger.Warn(ctx, \"velocity_json unmarshal failed\",\ninternal/domain/demand/service.go:355:\t\t\t\ts.logger.Warn(ctx, \"saturation_json unmarshal failed\",\ninternal/domain/demand/service_test.go:168:\t// 3 characters, each with 2 eras in demand_json. Grade filter 10 -> exactly\ninternal/domain/demand/service_test.go:611:\t\t\twantMessage: \"velocity_json unmarshal failed\",\ninternal/domain/demand/service_test.go:631:\t\t\twantMessage: \"demand_json unmarshal failed\",\ninternal/domain/demand/service_test.go:656:\t\t\twantMessage: \"saturation_json unmarshal failed\",",
+        "file_line": "internal/adapters/storage/postgres/dh_demand_repository.go:186"
+      },
+      {
+        "claim": "dh_demand_repository.go:186 and :211 show the three payload hits sit inside INSERT INTO dh_character_cache / SELECT ... FROM dh_character_cache, not dh_card_cache.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/dh_demand_repository.go | sed -n '185,190p;210,217p'",
+        "output": "\t\t`INSERT INTO dh_character_cache (\n\t\t\tcharacter, \"window\",\n\t\t\tdemand_json, velocity_json, saturation_json,\n\t\t\tdemand_computed_at, analytics_computed_at, fetched_at\n\t\t) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n... \n\t\t`SELECT character, \"window\",\n\t\t\tdemand_json, velocity_json, saturation_json,\n\t\t\tdemand_computed_at, analytics_computed_at, fetched_at\n\t\tFROM dh_character_cache\n\t\tWHERE character = $1 AND \"window\" = $2`,",
+        "file_line": "internal/adapters/storage/postgres/dh_demand_repository.go:186"
+      },
+      {
+        "claim": "Every statement that does touch dh_card_cache names its columns explicitly and names none of the five. UpsertCardCache writes 8 columns; GetCardCache reads the same 8.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/dh_demand_repository.go | sed -n '33,40p'",
+        "output": "\t\t`INSERT INTO dh_card_cache (\n\t\t\tcard_id, \"window\",\n\t\t\tcharacter_name,\n\t\t\tdemand_score, demand_data_quality,\n\t\t\tanalytics_computed_at, demand_computed_at, fetched_at\n\t\t) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        "file_line": "internal/adapters/storage/postgres/dh_demand_repository.go:33"
+      },
+      {
+        "claim": "The domain mirror type confirms the intent: demand.CardCache has no payload fields at all, while demand.CharacterCache has Demand/Velocity/Saturation.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/demand/types.go | sed -n '16,38p'",
+        "output": "type CardCache struct {\n\tCardID              string\n\tWindow              string  // \"7d\" or \"30d\"\n\tCharacterName       *string // DH character this card belongs to; nil until attributed\n\tDemandScore         *float64\n\tDemandDataQuality   *string // \"proxy\" | \"full\"\n\tAnalyticsComputedAt *time.Time\n\tDemandComputedAt    *time.Time\n\tFetchedAt           time.Time\n}\n\n// CharacterCache is the domain view of a dh_character_cache row.\ntype CharacterCache struct {\n\tCharacter           string\n\tWindow              string\n\tDemand              *CharacterDemand\n\tVelocity            *CharacterVelocity\n\tSaturation          *CharacterSaturation\n...",
+        "file_line": "internal/domain/demand/types.go:16"
+      },
+      {
+        "claim": "No dynamically-assembled SQL and no wildcard table select exists in the postgres adapter, so an explicit column list is the only channel by which a column name reaches the database. Every SELECT * in the adapter is over UNNEST, not a table.",
+        "command": "git grep -nE 'Sprintf\\(.*(SELECT|INSERT|UPDATE|FROM|WHERE)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres; git grep -n 'SELECT \\*' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres",
+        "output": "internal/adapters/storage/postgres/cl_sales_store.go:364:\t\tWHERE (gem_rate_id, condition) IN (SELECT * FROM UNNEST($1::text[], $2::text[]))\ninternal/adapters/storage/postgres/cl_sales_store.go:407:\t\tWHERE (gem_rate_id, condition) IN (SELECT * FROM UNNEST($1::text[], $2::text[]))\ninternal/adapters/storage/postgres/dh_comp_cache_store.go:167:\t\t WHERE (dh_card_id, grade) IN (SELECT * FROM UNNEST($1::int[], $2::text[]))\n(the Sprintf grep produced no output)"
+      }
+    ],
+    "searched_universe": "Reachability from docs/audit/runs/2026-08-08/maps/db-map.json (column records for dh_card_cache and dh_character_cache). Verification greps pinned to 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 over pathspec `internal web/src`, with `:(exclude)internal/adapters/storage/postgres/migrations` so an object's own DDL does not count as a reference to itself. Test files included.",
+    "exclusions": [
+      "internal/adapters/storage/postgres/migrations/ — a column's own DDL is not a reference to it",
+      "Directories outside internal/ and web/src/ (docs, scripts, web config) — not consumers of SQL column names"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — the subject is a SQL column, not a Go symbol; no Go interface can be satisfied by a column name.",
+      "functional_options": "N/A — no option constructor selects a column list; UpsertCardCache/GetCardCache take no options.",
+      "embedding": "N/A — no Go type promotion can introduce a SQL column reference.",
+      "serialization": "Checked. demand.CardCache carries no field for any of the five, so no JSON/DB tag maps to them (internal/domain/demand/types.go:16).",
+      "go_embed": "Checked. The only //go:embed in the postgres adapter is embedded_migrations.go, which embeds the migration SQL itself — the DDL, not a query referencing these columns.",
+      "build_tags": "Both tag sets searched: default and integration. No hit under either.",
+      "registration": "N/A — columns are not registered/wired; there is no column registry in cmd/slabledger.",
+      "init_side_effects": "N/A — no init() in the postgres adapter builds SQL text.",
+      "reflection_or_string": "This is the load-bearing channel and it was searched exhaustively. No Sprintf-built SQL and no wildcard table SELECT exists in internal/adapters/storage/postgres, so a column reaches Postgres only via a literal column list, all of which were greped."
+    },
+    "proposed_fix": "Add a migration dropping demand_json, velocity_json, trend_json, saturation_json and price_distribution_json from dh_card_cache, with a .down.sql that restores the five columns as nullable TEXT (structure only — the columns hold no data any code ever wrote). Follow the 000035 pattern: explicit statements, no CASCADE.",
+    "blast_radius": [
+      "internal/adapters/storage/postgres/dh_demand_repository.go — must remain unchanged; it already names no payload column for dh_card_cache",
+      "internal/domain/demand/types.go — CardCache already has no corresponding fields",
+      "internal/adapters/storage/postgres/migrations/ — one new up/down pair",
+      "docs/SCHEMA.md — dh_card_cache column list"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass with the five columns dropped.",
+      "`grep -nE 'trend_json|price_distribution_json' internal/ --include='*.go'` returns nothing.",
+      "The new .down.sql recreates all five columns, and applying up-then-down-then-up leaves dh_card_cache with the same 8 live columns each time.",
+      "docs/SCHEMA.md's dh_card_cache entry lists only the surviving columns."
+    ]
+  },
+  {
+    "id": "DB-002",
+    "lens": "db-schema",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "column",
+      "identity": "api_rate_limits.calls_last_minute, api_rate_limits.calls_last_hour, api_rate_limits.calls_last_day"
+    },
+    "category": "db",
+    "title": "The three call-counter columns on api_rate_limits are never written and never read; they sit at their DEFAULT 0 forever and read as live telemetry",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The db-map scores calls_last_minute and calls_last_day at zero external refs, unambiguous. calls_last_hour scores 2 refs, also unambiguous by name — the collision is by table, not by name.",
+        "command": "jq -r '.records[] | select(.identity|test(\"^api_rate_limits\\\\.calls_\")) | \"\\(.identity) refs=\\(.external_refs) ambiguous=\\(.name_ambiguous//false) sites=\\(.ref_sites|join(\\\" \\\"))\"' docs/audit/runs/2026-08-08/maps/db-map.json",
+        "output": "api_rate_limits.calls_last_day refs=0 ambiguous=false sites=\napi_rate_limits.calls_last_hour refs=2 ambiguous=false sites=internal/adapters/scheduler/price_refresh.go:131 internal/adapters/storage/postgres/api_tracker.go:52\napi_rate_limits.calls_last_minute refs=0 ambiguous=false sites="
+      },
+      {
+        "claim": "Neither of calls_last_hour's two hits is a reference to the api_rate_limits column. api_tracker.go:52 selects calls_last_hour FROM the api_usage_summary VIEW, which computes its own column of that name over api_calls; price_refresh.go:131 is a structured-log key string.",
+        "command": "git grep -nE '\\bcalls_last_hour\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal web/src",
+        "output": "internal/adapters/scheduler/price_refresh.go:131:\t\t\tobservability.Int(\"calls_last_hour\", int(usage.CallsLastHour)),\ninternal/adapters/storage/postgres/api_tracker.go:52:\t\t\tcalls_last_hour,\ninternal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:456:    calls_last_hour    BIGINT DEFAULT 0,\ninternal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:813:    COUNT(CASE WHEN timestamp > NOW() - INTERVAL '1 hour' THEN 1 END) AS calls_last_hour,\ninternal/adapters/storage/postgres/migrations/000003_supabase_security_and_perf_fixes.up.sql:72:    COUNT(CASE WHEN timestamp > NOW() - INTERVAL '1 hour' THEN 1 END) AS calls_last_hour,",
+        "file_line": "internal/adapters/storage/postgres/api_tracker.go:52"
+      },
+      {
+        "claim": "api_tracker.go:44-57 shows the SELECT list containing calls_last_hour reads FROM api_usage_summary, not FROM api_rate_limits.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/api_tracker.go | sed -n '42,57p'",
+        "output": "\tquery := `\n\t\tSELECT\n\t\t\tprovider,\n\t\t\ttotal_calls,\n\t\t\terror_calls,\n\t\t\trate_limit_hits,\n\t\t\tavg_latency_ms,\n\t\t\tlast_call_at,\n\t\t\tcalls_last_hour,\n\t\t\tcalls_last_5min\n\t\tFROM api_usage_summary\n\t\tWHERE provider = $1\n\t`",
+        "file_line": "internal/adapters/storage/postgres/api_tracker.go:52"
+      },
+      {
+        "claim": "The only two statements in the repository that touch api_rate_limits name four columns between them — provider, blocked_until, last_429_at, updated_at — and none of the three counters. So the counters are never written either.",
+        "command": "git grep -n 'api_rate_limits' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal web/src ':(exclude)internal/adapters/storage/postgres/migrations'",
+        "output": "internal/adapters/storage/postgres/api_tracker.go:107:\t\tINSERT INTO api_rate_limits (provider, blocked_until, last_429_at, updated_at)\ninternal/adapters/storage/postgres/api_tracker.go:135:\t\tFROM api_rate_limits",
+        "file_line": "internal/adapters/storage/postgres/api_tracker.go:107"
+      },
+      {
+        "claim": "No dynamically-assembled SQL exists in the postgres adapter, so an explicit column list is the only channel by which a column name reaches the database.",
+        "command": "git grep -nE 'Sprintf\\(.*(SELECT|INSERT|UPDATE|FROM|WHERE)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres",
+        "output": "(no output — no Sprintf-built SQL in the postgres adapter)"
+      }
+    ],
+    "searched_universe": "Reachability from docs/audit/runs/2026-08-08/maps/db-map.json (the seven api_rate_limits column records). Verification greps pinned to 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 over pathspec `internal web/src`. The whole-table grep excludes the migrations directory; the calls_last_hour grep deliberately does not, so the view definitions that cause the collision are visible in the output. Test files included.",
+    "exclusions": [
+      "internal/adapters/storage/postgres/migrations/ — excluded from the table-level grep only, so a column's own DDL does not count as a reference to itself",
+      "Directories outside internal/ and web/src/"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — the subject is a SQL column, not a Go symbol.",
+      "functional_options": "N/A — DBTracker.UpdateRateLimit and IsProviderBlocked take no options that could vary the column list.",
+      "embedding": "N/A — no Go type promotion introduces a SQL column reference.",
+      "serialization": "Checked. pricing.APIUsageStats carries CallsLastHour, but it is populated from the api_usage_summary view (api_tracker.go:52/68), not from api_rate_limits. No Go field maps to any api_rate_limits counter.",
+      "go_embed": "Checked. The only //go:embed here is embedded_migrations.go, which embeds the DDL declaring these columns, not a query using them.",
+      "build_tags": "Both tag sets searched: default and integration. No hit under either.",
+      "registration": "N/A — columns are not wired or registered.",
+      "init_side_effects": "N/A — no init() in the postgres adapter builds SQL text.",
+      "reflection_or_string": "The load-bearing channel, searched exhaustively: no Sprintf-built SQL in internal/adapters/storage/postgres, so only literal column lists reach Postgres, and both api_rate_limits statements were read in full."
+    },
+    "proposed_fix": "Drop calls_last_minute, calls_last_hour and calls_last_day from api_rate_limits in a new migration, with a .down.sql restoring them as BIGINT DEFAULT 0. Per-window call counts are already derived correctly by the api_usage_summary view over api_calls, which is what the code actually reads — the table columns are a second, never-populated copy of the same idea.",
+    "blast_radius": [
+      "internal/adapters/storage/postgres/api_tracker.go — reads api_usage_summary, not these columns; must remain unchanged",
+      "internal/adapters/storage/postgres/migrations/ — one new up/down pair",
+      "docs/SCHEMA.md — api_rate_limits column list"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass with the three columns dropped.",
+      "DBTracker.GetAPIUsage still returns a non-zero CallsLastHour for a provider with recent api_calls rows (it reads the view, not the table).",
+      "The new .down.sql restores all three columns; up-then-down-then-up is idempotent.",
+      "docs/SCHEMA.md's api_rate_limits entry lists only provider, last_429_at, blocked_until, updated_at."
+    ]
+  },
+  {
+    "id": "DB-003",
+    "lens": "db-schema",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "table",
+      "identity": "views active_sessions, expired_sessions, api_hourly_distribution, api_daily_summary"
+    },
+    "category": "db",
+    "title": "Four of the five surviving views have no consumer anywhere in the codebase, yet 000028 still carries them as REVOKE targets — the exact condition 000035 cited when it removed the ai_usage_* views",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The db-map scores all four at zero external refs, unambiguous. Only api_usage_summary among the live views has a consumer.",
+        "command": "jq -r '.records[] | select(.kind==\"view\") | \"\\(.identity) refs=\\(.external_refs) ambiguous=\\(.name_ambiguous//false)\"' docs/audit/runs/2026-08-08/maps/db-map.json",
+        "output": "active_sessions refs=0 ambiguous=false\napi_daily_summary refs=0 ambiguous=false\napi_hourly_distribution refs=0 ambiguous=false\napi_usage_summary refs=1 ambiguous=false\nexpired_sessions refs=0 ambiguous=false\nai_usage_by_operation refs=2 ambiguous=false\nai_usage_summary refs=2 ambiguous=false"
+      },
+      {
+        "claim": "Grepping the four names across internal and web/src returns only migration files — their own CREATE/DROP statements and 000028's REVOKE target list. No Go or TypeScript file names any of them.",
+        "command": "git grep -nE '\\bactive_sessions\\b|\\bexpired_sessions\\b|\\bapi_daily_summary\\b|\\bapi_hourly_distribution\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal web/src ':(exclude)internal/adapters/storage/postgres/migrations'",
+        "output": "(no output — every hit for these four names lies inside internal/adapters/storage/postgres/migrations/)"
+      },
+      {
+        "claim": "Without the migrations exclusion the same grep shows exactly what does reference them: 000001/000003 create them, 000001/000003 down-migrations drop them, and 000028 lists them among its REVOKE targets.",
+        "command": "git grep -nE '\\bactive_sessions\\b|\\bexpired_sessions\\b|\\bapi_daily_summary\\b|\\bapi_hourly_distribution\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal web/src",
+        "output": "internal/adapters/storage/postgres/migrations/000001_initial_schema.down.sql:11:DROP VIEW IF EXISTS api_daily_summary CASCADE;\ninternal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:751:CREATE VIEW active_sessions AS\ninternal/adapters/storage/postgres/migrations/000003_supabase_security_and_perf_fixes.up.sql:10:CREATE VIEW public.active_sessions WITH (security_invoker = true) AS\ninternal/adapters/storage/postgres/migrations/000028_tighten_000003_rls_policies.up.sql:56:        'active_sessions', 'expired_sessions', 'ai_usage_summary',\ninternal/adapters/storage/postgres/migrations/000028_tighten_000003_rls_policies.up.sql:58:        'api_daily_summary'\n(28 lines total, all under internal/adapters/storage/postgres/migrations/)",
+        "file_line": "internal/adapters/storage/postgres/migrations/000028_tighten_000003_rls_policies.up.sql:56"
+      },
+      {
+        "claim": "000035 established the precedent and the reasoning verbatim, for the two sibling views in the same 000028 target list.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000035_drop_ai_advisor_tables.up.sql | sed -n '4,10p'",
+        "output": "-- The Azure AI advisor feature is removed in this change set. ai_tracker.go and\n-- gap_store.go — the only code that ever read or wrote these objects — go with\n-- it, along with the gap-cleanup scheduler that existed solely to keep\n-- scoring_data_gaps from growing unbounded. What is left behind is schema\n-- nobody owns, which 000028 was still dutifully maintaining RLS policies for.",
+        "file_line": "internal/adapters/storage/postgres/migrations/000035_drop_ai_advisor_tables.up.sql:4"
+      }
+    ],
+    "searched_universe": "Reachability from docs/audit/runs/2026-08-08/maps/db-map.json (all 7 view records). Verification greps pinned to 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 over pathspec `internal web/src`, run both with and without `:(exclude)internal/adapters/storage/postgres/migrations`. Test files included.",
+    "exclusions": [
+      "internal/adapters/storage/postgres/migrations/ — excluded in the absence-proving grep so a view's own DDL does not count as a consumer; the un-excluded run is included as evidence so the reader can see what remains",
+      "Directories outside internal/ and web/src/"
+    ],
+    "build_tags": [
+      "default",
+      "integration"
+    ],
+    "runtime_checks": {
+      "interface_satisfaction": "N/A — the subject is a SQL view, not a Go symbol.",
+      "functional_options": "N/A — no option selects a view.",
+      "embedding": "N/A.",
+      "serialization": "Checked. No Go struct in internal/ carries a field set matching any of the four view shapes; the only view-backed struct is pricing.APIUsageStats, which maps to api_usage_summary (the one live view, excluded from this finding).",
+      "go_embed": "Checked. embedded_migrations.go embeds the SQL that defines these views; that is the definition, not a consumer.",
+      "build_tags": "Both tag sets searched: default and integration. No hit under either, including internal/integration/.",
+      "registration": "N/A — views are not wired into cmd/slabledger.",
+      "init_side_effects": "N/A.",
+      "reflection_or_string": "The only channel; no Sprintf-built SQL exists in internal/adapters/storage/postgres, so a view name reaches Postgres only as a literal, and the literal grep is empty outside migrations."
+    },
+    "proposed_fix": "Add a migration dropping the four views, following 000035 exactly: explicit DROP VIEW IF EXISTS by name (no CASCADE), and a .down.sql that recreates them WITH (security_invoker = true) plus the pg_roles-guarded REVOKE from anon and authenticated, so a rollback does not reopen what 000028 closed. Remove the four names from any future RLS-maintenance target list. If session and API-usage dashboards are a wanted future feature, keep api_usage_summary (live) and note the four as intentionally deferred rather than dropping them.",
+    "blast_radius": [
+      "internal/adapters/storage/postgres/migrations/ — one new up/down pair",
+      "Any external Supabase dashboard or SQL console query outside this repository that reads these views — not visible to a repository-scoped audit",
+      "docs/SCHEMA.md — view list"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass with the four views dropped.",
+      "Applying the new migration then rolling it back leaves the four views present, security_invoker = true, and revoked from anon and authenticated.",
+      "`grep -rn 'active_sessions\\|expired_sessions\\|api_daily_summary\\|api_hourly_distribution' internal/ web/src/` returns nothing outside the migrations directory.",
+      "The maintainer has confirmed no Supabase dashboard outside the repository reads these views."
+    ]
+  },
+  {
+    "id": "DB-004",
+    "lens": "db-schema",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "index",
+      "identity": "idx_campaign_purchases_dh_push_status"
+    },
+    "category": "db",
+    "title": "000003's index-advisor fix for the ~27%-of-query-time dh_push_status path is a silent no-op: CREATE INDEX IF NOT EXISTS collides with 000001's partial index of the same name, and 000003's down-migration then drops the index it never created",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "000001 creates the name as a PARTIAL index, excluding empty-string rows.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql | sed -n '245,247p'",
+        "output": "CREATE INDEX idx_campaign_purchases_dh_push_status\n    ON campaign_purchases(dh_push_status)\n    WHERE dh_push_status != '';",
+        "file_line": "internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:245"
+      },
+      {
+        "claim": "000003 'Fix 6' intends a NON-partial index under the same name, citing ~27% of total DB query time. CREATE INDEX IF NOT EXISTS keys on the relation name only, so with 000001's index already present this statement is a no-op and the differing definition is silently discarded.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000003_supabase_security_and_perf_fixes.up.sql | sed -n '281,285p'",
+        "output": "-- campaign_purchases: filter by dh_push_status (~27% of total DB query time)\nCREATE INDEX IF NOT EXISTS idx_campaign_purchases_dh_push_status\n    ON public.campaign_purchases USING btree (dh_push_status);",
+        "file_line": "internal/adapters/storage/postgres/migrations/000003_supabase_security_and_perf_fixes.up.sql:283"
+      },
+      {
+        "claim": "The db-map's cumulative replay independently reaches the same conclusion: the final state is 000001's partial definition.",
+        "command": "jq -r '.records[] | select(.identity==\"idx_campaign_purchases_dh_push_status\") | \"\\(.defined_at)\\n\\(.note)\"' docs/audit/runs/2026-08-08/maps/db-map.json",
+        "output": "migrations/000001_initial_schema.up.sql:245\nOn table `campaign_purchases`. 000003_supabase_security_and_perf_fixes.up.sql:283 issues CREATE INDEX IF NOT EXISTS under this same name with a non-partial definition; the name already existed, so that statement is a no-op and the 000001 partial definition (WHERE dh_push_status != '') is the final state."
+      },
+      {
+        "claim": "000003's down-migration drops the index under 'Undo Fix 6', on the assumption 000003 created it. It did not — 000001 did. Rolling 000003 back therefore destroys 000001's partial index and leaves campaign_purchases with no dh_push_status index; re-applying 000003 then creates the NON-partial one, so the index definition depends on migration history rather than on the files.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000003_supabase_security_and_perf_fixes.down.sql | sed -n '6,12p'",
+        "output": "-- ================================================================\n-- Undo Fix 6: Drop the 7 index advisor indexes\n-- ================================================================\n\nDROP INDEX IF EXISTS public.idx_card_id_mappings_card_name;\nDROP INDEX IF EXISTS public.idx_campaign_purchases_dh_push_status;",
+        "file_line": "internal/adapters/storage/postgres/migrations/000003_supabase_security_and_perf_fixes.down.sql:11"
+      },
+      {
+        "claim": "The gap is not academic: live queries filter on exactly the rows the partial predicate excludes (NULL or empty dh_push_status), which the intended non-partial index would have covered.",
+        "command": "git grep -nE 'dh_push_status IS NULL|COALESCE\\(p\\.dh_push_status' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres",
+        "output": "internal/adapters/storage/postgres/purchase_dh_query_store.go:101:\t\t\t\tWHEN (p.dh_push_status IS NULL OR p.dh_push_status = '')\ninternal/adapters/storage/postgres/purchase_dh_query_store.go:325:\t\t   AND COALESCE(p.dh_push_status, '') NOT IN ($1, $2)",
+        "file_line": "internal/adapters/storage/postgres/purchase_dh_query_store.go:101"
+      }
+    ],
+    "searched_universe": "All 35 up/down migration pairs under internal/adapters/storage/postgres/migrations at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, enumerated with `git ls-tree -r --name-only`. Index lifecycle traced by greping the index name across `internal` at the pinned revision. Query predicates traced across internal/adapters/storage/postgres.",
+    "exclusions": [
+      "The live database — no connection was made and none is permitted; the deployed index definition is inferred from a static replay of the checked-in SQL, not observed"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Decide which definition is wanted and make the files say so. If the non-partial index is wanted (as 000003's telemetry comment argues), add a new migration that DROPs the name and recreates it without the WHERE clause. If the partial one is wanted, delete the dead statement from 000003's up and the matching DROP from 000003's down, so a rollback stops destroying an index 000001 owns. Either way, never reuse an existing index name under CREATE INDEX IF NOT EXISTS with a different definition — that construct matches on name alone.",
+    "blast_radius": [
+      "internal/adapters/storage/postgres/migrations/000003_supabase_security_and_perf_fixes.up.sql and .down.sql — editing an already-applied migration is only safe if every deployment has the same checksum state; prefer a new forward migration",
+      "internal/adapters/storage/postgres/purchase_dh_query_store.go — the queries whose plans change",
+      "docs/SCHEMA.md — index list"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "A fresh database migrated to head has exactly one index named idx_campaign_purchases_dh_push_status, with the definition the team chose, and no migration file contains a CREATE INDEX IF NOT EXISTS that reuses an existing index name with a different definition.",
+      "Migrating to head, rolling back to 000002, and migrating to head again yields the same index definition all three times.",
+      "`go test -race ./internal/adapters/storage/postgres/...` passes.",
+      "If the non-partial definition is chosen, EXPLAIN on the CountUnsoldByDHPushStatus and DH-pending queries in purchase_dh_query_store.go shows the index used for the NULL/empty branch."
+    ]
+  },
+  {
+    "id": "DB-005",
+    "lens": "db-schema",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "index",
+      "identity": "idx_access_log_covering, idx_dh_suggestions_date, idx_purchases_campaign"
+    },
+    "category": "db",
+    "title": "Three live indexes are fully subsumed by another index or by their table's primary key, and survived 000003's unused-index purge because that purge went by usage telemetry rather than by containment",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "idx_access_log_card and idx_access_log_covering are the same four columns in the same order, differing only in the sort direction of the trailing column. Postgres scans a btree in either direction, so one of the pair serves both orderings and the other is pure write amplification. Both are in the final schema.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql | sed -n '366,368p'",
+        "output": "CREATE INDEX idx_access_log_card ON card_access_log(card_name, set_name, card_number, accessed_at DESC);\nCREATE INDEX idx_access_log_covering ON card_access_log(card_name, set_name, card_number, accessed_at);\nCREATE INDEX idx_card_access_log_recent ON card_access_log(accessed_at DESC, card_name, set_name, card_number);",
+        "file_line": "internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:367"
+      },
+      {
+        "claim": "idx_dh_suggestions_date indexes (suggestion_date), which is the leading column of dh_suggestions' primary key (suggestion_date, type, category, rank). The PK's implicit unique index already serves every query the standalone index could.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql | sed -n '590,592p'",
+        "output": "    PRIMARY KEY (suggestion_date, type, category, rank)\n);\nCREATE INDEX idx_dh_suggestions_date ON dh_suggestions(suggestion_date);",
+        "file_line": "internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:591"
+      },
+      {
+        "claim": "idx_purchases_campaign indexes (campaign_id), a strict leading prefix of idx_purchases_campaign_date (campaign_id, purchase_date DESC) declared two lines below it. Both are in the final schema.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql | sed -n '234,236p'",
+        "output": "CREATE INDEX idx_purchases_campaign ON campaign_purchases(campaign_id);\nCREATE INDEX idx_purchases_date ON campaign_purchases(purchase_date);\nCREATE INDEX idx_purchases_campaign_date ON campaign_purchases(campaign_id, purchase_date DESC);",
+        "file_line": "internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:234"
+      },
+      {
+        "claim": "All three survive the cumulative replay of all 35 migrations — none was caught by 000003's Fix 5, which dropped 26 indexes by Supabase usage telemetry.",
+        "command": "jq -r '.records[] | select(.kind==\"index\") | select((.note//\"\")|test(\"NOT in the final schema\")|not) | select(.identity==\"idx_access_log_covering\" or .identity==\"idx_dh_suggestions_date\" or .identity==\"idx_purchases_campaign\") | \"\\(.identity)\\t\\(.defined_at)\"' docs/audit/runs/2026-08-08/maps/db-map.json",
+        "output": "idx_access_log_covering\tmigrations/000001_initial_schema.up.sql:367\nidx_dh_suggestions_date\tmigrations/000001_initial_schema.up.sql:591\nidx_purchases_campaign\tmigrations/000001_initial_schema.up.sql:234"
+      },
+      {
+        "claim": "campaign_purchases' primary key is a single TEXT id, so idx_purchases_campaign is not additionally covered by the PK — the redundancy is specifically against idx_purchases_campaign_date.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql | sed -n '156,158p'",
+        "output": "CREATE TABLE campaign_purchases (\n    id                         TEXT PRIMARY KEY,                     -- Purchase.ID string\n    campaign_id                TEXT NOT NULL,                        -- Purchase.CampaignID string",
+        "file_line": "internal/adapters/storage/postgres/migrations/000001_initial_schema.up.sql:157"
+      }
+    ],
+    "searched_universe": "All 75 index records in docs/audit/runs/2026-08-08/maps/db-map.json, filtered to the 45 present in the final schema, each read back against its defining statement in the migration file at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6. Redundancy assessed by leading-column containment against sibling indexes and against each table's declared PRIMARY KEY. This is a static schema property, deliberately NOT an inference from reference counts — index names are never Go string literals and their zero-ref score is evidence of nothing.",
+    "exclusions": [
+      "The live database — index size, bloat and pg_stat_user_indexes scan counts were not and cannot be observed here, so the cost of each duplicate is argued from containment, not measured",
+      "Indexes marked NOT in the final schema by the replay (30 of the 75 records)"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Add one migration dropping idx_access_log_covering, idx_dh_suggestions_date and idx_purchases_campaign, with a .down.sql recreating all three verbatim. Confirm against pg_stat_user_indexes on the production database before merging — that check needs database access this audit does not have, and is the one step that turns this from containment reasoning into a measurement.",
+    "blast_radius": [
+      "internal/adapters/storage/postgres/migrations/ — one new up/down pair",
+      "Query plans over card_access_log, dh_suggestions and campaign_purchases",
+      "docs/SCHEMA.md — index list"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "pg_stat_user_indexes on production shows the three dropped indexes had idx_scan counts that the surviving covering index or PK absorbs, checked before the migration is merged.",
+      "EXPLAIN on the queries in card_access_log, dh_suggestions and campaign_purchases access paths shows no sequential scan appearing where an index scan ran before.",
+      "`go test -race ./internal/adapters/storage/postgres/...` passes.",
+      "The .down.sql recreates all three indexes with their original definitions; up-then-down-then-up is idempotent."
+    ]
+  },
+  {
+    "id": "DB-006",
+    "lens": "db-schema",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "migration",
+      "identity": "000021_drop_market_movers.down.sql"
+    },
+    "category": "db",
+    "title": "000021's rollback recreates mm_card_mappings and mm_sales_comps with no RLS statement at all, unlike the three later drop-rollbacks which all restore it — a rollback past 000021 leaves those tables outside the RLS regime every other table is under",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "000021.down recreates both tables with structure only. It contains no ENABLE ROW LEVEL SECURITY, no CREATE POLICY, and no REVOKE.",
+        "command": "git grep -c -iE 'ROW LEVEL SECURITY|CREATE POLICY|REVOKE' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/adapters/storage/postgres/migrations/000021_drop_market_movers.down.sql",
+        "output": "(no output — grep -c reports no matching file, i.e. zero occurrences of all three patterns)"
+      },
+      {
+        "claim": "mm_card_mappings did have an RLS policy in the state 000021 destroyed: 000003's blanket pass created one at line 173.",
+        "command": "jq -r '.records[] | select(.identity|test(\"^mm_card_mappings\\\\.\")) | \"\\(.identity)\\t\\(.defined_at)\"' docs/audit/runs/2026-08-08/maps/db-map.json",
+        "output": "mm_card_mappings.\"service role bypass\"\tmigrations/000003_supabase_security_and_perf_fixes.up.sql:173"
+      },
+      {
+        "claim": "The three later drop-rollbacks all restore RLS for the table they recreate, so 000021 is the outlier rather than the convention. 000013 and 000030 re-enable it; 000035 re-enables it and adds the pg_roles-guarded TO service_role policy plus REVOKEs.",
+        "command": "git grep -n -i 'ENABLE ROW LEVEL SECURITY' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/adapters/storage/postgres/migrations/*.down.sql'",
+        "output": "internal/adapters/storage/postgres/migrations/000007_drop_sell_sheet_items.down.sql:8:ALTER TABLE public.sell_sheet_items ENABLE ROW LEVEL SECURITY;\ninternal/adapters/storage/postgres/migrations/000013_drop_advisor_cache.down.sql:33:ALTER TABLE public.advisor_cache ENABLE ROW LEVEL SECURITY;\ninternal/adapters/storage/postgres/migrations/000014_drop_psa_exchange_policy.down.sql:16:ALTER TABLE public.psa_exchange_policy ENABLE ROW LEVEL SECURITY;\ninternal/adapters/storage/postgres/migrations/000030_drop_marketmovers_config.down.sql:18:ALTER TABLE public.marketmovers_config ENABLE ROW LEVEL SECURITY;\ninternal/adapters/storage/postgres/migrations/000035_drop_ai_advisor_tables.down.sql:92:ALTER TABLE public.ai_calls ENABLE ROW LEVEL SECURITY;\ninternal/adapters/storage/postgres/migrations/000035_drop_ai_advisor_tables.down.sql:95:ALTER TABLE public.scoring_data_gaps ENABLE ROW LEVEL SECURITY;",
+        "file_line": "internal/adapters/storage/postgres/migrations/000035_drop_ai_advisor_tables.down.sql:92"
+      },
+      {
+        "claim": "000035's rollback states the invariant the project holds itself to and that 000021 does not meet: a restored object must not come back looser than the state it replaced.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/adapters/storage/postgres/migrations/000035_drop_ai_advisor_tables.down.sql | sed -n '15,20p'",
+        "output": "--   RLS. 000003 created both policies with no TO clause, which defaults to\n--   TO PUBLIC and therefore admits anon and authenticated; 000028 rewrote them\n--   TO service_role and revoked the default grants. Restoring 000003's looser\n--   statement would reopen the hole 000028 closed.",
+        "file_line": "internal/adapters/storage/postgres/migrations/000035_drop_ai_advisor_tables.down.sql:15"
+      }
+    ],
+    "searched_universe": "All 35 .down.sql files under internal/adapters/storage/postgres/migrations at 06d9f8ce172dada98f307f860e2e2985c9fb5ca6, enumerated with `git ls-tree -r --name-only` and greped for CREATE TABLE, ENABLE ROW LEVEL SECURITY, CREATE POLICY and REVOKE. Pre-drop RLS state taken from the rls_policy records in docs/audit/runs/2026-08-08/maps/db-map.json.",
+    "exclusions": [
+      "The live database — no rollback was executed and none is permitted; the post-rollback state is derived from the checked-in SQL only",
+      "000028.down's `USING (true)` policy recreation, which is correct by design: its job is to restore 000003's exact state",
+      "000007.down and 000013.down, whose no-TO-clause policies match the state that exists at the point a full sequential rollback reaches them"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Amend 000021_drop_market_movers.down.sql to bring the two recreated tables back under the current regime, copying 000035's shape: ALTER TABLE ... ENABLE ROW LEVEL SECURITY, then a DO block guarded on pg_roles that creates the `service role bypass` policy TO service_role and REVOKEs ALL from anon and authenticated. Editing an applied down-migration is safe here because golang-migrate checksums only the up direction that has run; confirm against the deployment's schema_migrations state before merging.",
+    "blast_radius": [
+      "internal/adapters/storage/postgres/migrations/000021_drop_market_movers.down.sql only — the up direction and the head schema are unchanged",
+      "Any operator runbook that documents rolling back past 000021"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "Against a local Postgres: migrating to head, rolling back to 000020, then querying pg_tables shows rowsecurity = true for both mm_card_mappings and mm_sales_comps.",
+      "On an instance where the anon and authenticated roles exist, neither role holds any privilege on either recreated table after the rollback.",
+      "The pg_roles guards mean the same down-migration still applies cleanly on a local Postgres where Supabase's roles are absent.",
+      "`go test -race ./internal/adapters/storage/postgres/...` passes."
+    ]
+  }
+]

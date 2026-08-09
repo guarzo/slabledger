@@ -19,7 +19,8 @@ finding costs one re-check. These are not symmetric.
 
 The finding's own `description` and `runtime_checks` are **claims under test**,
 never evidence. Do not reason from them. Re-derive the conclusion from source and
-from `docs/audit/maps/*.json`, then compare what you found to what it claims.
+from the `maps/` directory of the run directory named in your Run Card, then
+compare what you found to what it claims.
 
 Concretely, for every finding:
 
@@ -81,9 +82,16 @@ you were assigned — **every one, including those you confirm**:
 ```
 
 `unresolvable` is for claims that cannot be settled by static analysis at all
-(index reachability, live database grants). It is an honest verdict, not a
-failure — but it means `ticketable: false` unless the finding stands on some
-other leg you did verify.
+(index reachability, live database grants, production row counts). It is an
+honest verdict, not a failure — but it always means `ticketable: false`. The
+schema enforces that, and so does `scripts/validate.sh verdicts`.
+
+There is no "unresolvable overall, but ticketable on the part I did verify."
+If one leg of a finding is verifiable and another is not, the verifiable leg
+*is* the finding: return `confirmed_lower_severity`, scope
+`what_the_finding_got_wrong` to the part you could not reach, and set a
+`corrected_severity` that reflects only what you established. A ticket must
+never carry a confidence no one earned.
 
 `ticketable` is your judgment on whether a developer could act on this finding
 and prove the fix correct from its `acceptance_criteria` alone.
@@ -96,7 +104,7 @@ and prove the fix correct from its `acceptance_criteria` alone.
 - Never connect to a database, run migrations, or execute SQL. There is a live
   production database behind `DATABASE_URL`. Static analysis of files only.
 - Do not read any real `.env` file. Report secret NAMES only, never values.
-- Baseline revision `740976ecf80a4f2ccdaa611d7790ccaa95b48773`; git-tracked files
+- **Baseline revision: the one named in your Run Card**; git-tracked files
   only, via `git ls-files`. `ls` and `find` are not evidence.
 - Do not commit. The controller commits.
 

@@ -49,8 +49,9 @@ internal/
   domain/                   # Pure business logic
     auth/                   # Authentication service interface
     inventory/              # Campaign tracking, purchases, sales, analytics
-      types.go              # Campaign, Purchase, Sale, Phase, SaleChannel
-      service_interfaces.go # 8 focused repository interfaces
+      core_types.go         # Campaign, Purchase, Sale, Phase, SaleChannel
+      repository_*.go       # 8 focused repository interfaces
+      service_interfaces.go # Service-facing interfaces
       service.go            # Business logic, PriceLookup interface, ServiceOption
       channel_fees.go       # CalculateSaleFee, CalculateNetProfit
       errors.go             # Sentinel errors (ErrCampaignNotFound, etc.)
@@ -82,12 +83,12 @@ internal/
     scheduler/              # Background jobs (price refresh, session cleanup)
 
   platform/                 # Cross-cutting concerns
-    cache/                  # Type-safe cache (memory + file)
+    canonjson/              # Canonical JSON encoding
     cardutil/               # Card name/set normalization
     config/                 # Configuration loading
     crypto/                 # AES encryption for auth tokens
-    errors/                 # Platform error types (AppError)
     resilience/             # Retry and circuit breaker
+    storage/                # File store
     telemetry/              # slog-based structured logging
 ```
 
@@ -156,7 +157,7 @@ All dependencies injected via constructors in `main.go`:
 priceProvImpl := dhprice.NewProvider(dhClient, ...)
 
 // Inventory service with optional market signals
-priceLookupAdapter := pricelookup.NewAdapter(priceProvImpl)
+priceLookupAdapter := lookup.NewAdapter(priceProvImpl)
 inventoryService := inventory.NewService(repos, inventory.WithPriceLookup(priceLookupAdapter))
 
 // HTTP server
@@ -198,7 +199,7 @@ To support multi-tenant usage, the following changes would be required:
 
 **Problem**: Campaign domain needs market price data for signals, but shouldn't import the pricing package directly.
 
-**Decision**: Define `PriceLookup` interface in inventory domain. Adapter in `clients/pricelookup/` wraps `PriceProvider`. Injected via functional option `WithPriceLookup`.
+**Decision**: Define `PriceLookup` interface in inventory domain. Adapter in `domain/pricing/lookup/` wraps `PriceProvider`. Injected via functional option `WithPriceLookup`.
 
 **Result**: Domain stays pure, market signals work when price provider is available, gracefully degrade when not.
 
@@ -237,11 +238,11 @@ To support multi-tenant usage, the following changes would be required:
 | Package | Interface | File | Methods | Purpose |
 |---------|-----------|------|---------|---------|
 | `inventory` | `Service` | `service.go` | ~40 | Full campaign/inventory business logic |
-| `inventory` | `CampaignRepository` | `service_interfaces.go` | ~5 | Campaign CRUD |
-| `inventory` | `PurchaseRepository` | `service_interfaces.go` | ~6 | Purchase CRUD |
-| `inventory` | `SaleRepository` | `service_interfaces.go` | ~4 | Sale CRUD |
-| `inventory` | `AnalyticsRepository` | `service_interfaces.go` | ~8 | PNL, aging, channel analytics |
-| `inventory` | `FinanceRepository` | `service_interfaces.go` | ~6 | Capital, cashflow, invoices |
+| `inventory` | `CampaignRepository` | `repository_campaign.go` | ~5 | Campaign CRUD |
+| `inventory` | `PurchaseRepository` | `repository_purchase.go` | ~6 | Purchase CRUD |
+| `inventory` | `SaleRepository` | `repository_sale.go` | ~4 | Sale CRUD |
+| `inventory` | `AnalyticsRepository` | `repository_analytics.go` | ~8 | PNL, aging, channel analytics |
+| `inventory` | `FinanceRepository` | `repository_finance.go` | ~6 | Capital, cashflow, invoices |
 | `inventory` | `PriceLookup` | `service.go` | 2 | Market signals for inventory aging |
 | `pricing` | `PriceProvider` | `provider.go` | 5 | Card price lookup (DH) |
 | `pricing` | `APITracker` | `repository.go` | 3 | Rate limit state tracking |

@@ -12,13 +12,23 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-AUDIT = HERE + "/.."
-# Same single source as build-report.py and validate.sh: the schema's pinned
+AUDIT_HOME = HERE + "/.."
+# Run-scoped root; see build-report.py. Defaults to AUDIT_HOME so the flat
+# 2026-08-07 layout still regenerates in place.
+AUDIT = os.environ.get("AUDIT_RUN", AUDIT_HOME)
+# Repo-relative form of AUDIT. This one is load-bearing in a way build-report's
+# is not: it is rendered into every ticket body POSTed to Linear, where a stale
+# `docs/audit/REPORT.md` would send each fixer to a previous run's report.
+AUDIT_DISPLAY = os.path.relpath(
+    os.path.abspath(AUDIT), os.path.abspath(AUDIT_HOME + "/../.."))
+if AUDIT_DISPLAY.startswith(".."):  # run dir outside the repo; see build-report.py
+    AUDIT_DISPLAY = os.path.abspath(AUDIT)
+# Same single source as build-report.py and validate.sh: the run's pinned
 # revision, abbreviated for display. A hand-typed short hash here could drift
 # from the revision the gate actually enforces, and a ticket that cites the
 # wrong baseline sends its fixer to the wrong tree.
-BASELINE = json.load(open(f"{AUDIT}/schema/finding.schema.json")
-                     )["properties"]["revision"]["const"][:8]
+BASELINE = json.load(open(os.environ.get(
+    "AUDIT_BASELINE_FACTS", f"{AUDIT}/baseline.json")))["revision"][:8]
 
 # Where the filing script picks up the bodies to POST. Defaults inside the repo
 # so a reboot or a /tmp sweep between "generate" and "file" cannot strand a
@@ -62,11 +72,53 @@ PRIORITY = {  # Linear: 1=Urgent 2=High 3=Normal 4=Low
 #   * fenced blocks survive verbatim, backslashes included.
 # So: escape backslashes only outside code spans, and fence anything that
 # is multi-line or already contains a backtick.
+#
+# A third transformation, found by round-tripping the 2026-08-08 batch: Linear
+# autolinks any bare dotted token in raw prose that resembles a hostname, and
+# `CLAUDE.md:126`, `check-imports.sh`, `inventory.Sale` and
+# `internal/domain/auth.New` all qualify. The label text survives, so nothing is
+# lost — the issue gains a dead `http://` href over a filename. Cosmetic, but it
+# is on nearly every line of evidence in the batch. A code span suppresses it,
+# which is also how these tokens should have been marked up in the first place.
+
+_URL = re.compile(r"https?://\S+")
+# A dotted token is only wrapped when the segment after the dot is a known file
+# extension or an exported Go identifier. That is deliberately narrow: it leaves
+# "e.g." (lowercase, not an extension), "1.5" (digit) and sentence boundaries
+# (dot then space) alone. Known gap: a dotted token already inside a markdown
+# link would be double-wrapped, so findings prose must not contain one.
+_EXT = ("md|sh|go|tsx?|jsx?|json|py|sql|ya?ml|css|html|txt|mod|sum|env|toml"
+        "|lock|xml|csv")
+_DOTTED = re.compile(r"""
+    (?<![\w./-])                       # start of token
+    (
+      (?:[\w-]+/)*                     # optional path prefix
+      (?: [\w-]{2,} \. [A-Z][\w-]*     # pkg.Symbol — Go selector. The >=2-char
+                                       # base is what keeps "U.S." intact.
+        | [\w-]+ \. (?:""" + _EXT + r""")\b )   # file.md, file.sh, ...
+      (?:\.[A-Za-z][\w-]*)*            # further dotted segments
+      (?::\d+(?:-\d+)?(?::\d+)?)?      # :line, :line-line, :line:col
+    )
+    (?![\w/-])                         # end of token
+""", re.X)
+
+
+def _despan(s):
+    """Wrap bare dotted tokens in code spans so Linear will not autolink them."""
+    out, last = [], 0
+    for m in _URL.finditer(s):  # real URLs are left exactly as written
+        out.append(_DOTTED.sub(r"`\1`", s[last:m.start()]))
+        out.append(m.group(0))
+        last = m.end()
+    out.append(_DOTTED.sub(r"`\1`", s[last:]))
+    return "".join(out)
+
 
 def prose(s):
-    """Escape backslashes in the non-code segments of a markdown string."""
+    """Escape backslashes in the non-code segments of a markdown string, and
+    code-span anything Linear would otherwise autolink."""
     parts = s.split("`")
-    return "`".join(p.replace("\\", "\\\\") if n % 2 == 0 else p
+    return "`".join(_despan(p.replace("\\", "\\\\")) if n % 2 == 0 else p
                     for n, p in enumerate(parts))
 
 
@@ -80,6 +132,20 @@ def code(s, indent=""):
     if "\n" in s or "`" in s:
         return f"\n```\n{s}\n```"
     return f"`{s}`"
+
+
+def subject(s):
+    """Render a finding's {kind, identity} pair for a human.
+
+    It used to be `str(dict)`, which shipped a raw Python repr —
+    `{'kind': 'table', 'identity': 'marketmovers_config'}` — into every filed
+    ticket in the 2026-08-07 and 2026-08-08 batches. The dict form is kept as a
+    fallback so a malformed subject degrades instead of raising mid-render.
+    """
+    if isinstance(s, dict) and s.get("identity"):
+        kind = s.get("kind", "")
+        return code(str(s["identity"])) + (f" ({kind})" if kind else "")
+    return code(str(s))
 
 
 def load():
@@ -114,7 +180,7 @@ def ticket_body(u, F, V):
     w("")
     w("Produced by the read-only tech-debt audit. Every claim below survived an "
       "adversarial verification pass whose brief was to refute it. "
-      "Full record: `docs/audit/REPORT.md`.")
+      f"Full record: `{AUDIT_DISPLAY}/REPORT.md`.")
     w("")
 
     if u.get("note"):
@@ -132,7 +198,7 @@ def ticket_body(u, F, V):
             w("")
             w(prose(f["title"]))
         w("")
-        w(f"**Subject:** {code(str(f['subject']))}")
+        w(f"**Subject:** {subject(f['subject'])}")
         if v.get("what_the_finding_got_wrong"):
             w("")
             w(f"**Verifier correction (already applied to this ticket):** "
@@ -170,11 +236,31 @@ def ticket_body(u, F, V):
     return "\n".join(o)
 
 
+def load_linear_ids(path):
+    """Normalize either `linear-ids.json` shape to `{FU-xx: {id, url}}`.
+
+    The 2026-08-07 run wrote a flat `{FU-xx: {id, url}}` map. The 2026-08-08 run
+    wrote a run document: baseline, team, findings_covered and a `not_filed`
+    record, with the per-unit rows under `tickets` and the id under `linear_id`.
+    Fed the second shape, the coverage check below reported all 32 units missing
+    and every metadata key as "extra" — a hard exit at the one moment the run is
+    least recoverable. The document shape is the better record (the flat one
+    cannot say which findings were deliberately not filed), so normalize here
+    instead of rewriting a filed run's artifact to suit the reader.
+    """
+    doc = json.load(open(path))
+    if isinstance(doc, dict) and isinstance(doc.get("tickets"), list):
+        return {t["fu"]: {"id": t.get("linear_id") or t.get("id", ""),
+                          "url": t.get("url", "")}
+                for t in doc["tickets"] if t.get("fu")}
+    return doc
+
+
 def main():
     F, V = load()
     ids = {}
     if os.path.exists(f"{AUDIT}/linear-ids.json"):
-        ids = json.load(open(f"{AUDIT}/linear-ids.json"))
+        ids = load_linear_ids(f"{AUDIT}/linear-ids.json")
     fus = {f"FU-{n:02d}" for n in range(1, len(UNITS) + 1)}
     # METHODOLOGY.md lists "every fix unit filed" as a final check. Enforce it
     # here rather than asserting it in a table: an unfiled unit used to degrade
@@ -229,7 +315,7 @@ def main():
         fh.write("\n".join(out) + "\n")
     with open(MANIFEST, "w") as fh:
         json.dump(manifest, fh, indent=1)
-    print(f"drafted {len(manifest)} tickets -> docs/audit/TICKETS.md")
+    print(f"drafted {len(manifest)} tickets -> {AUDIT_DISPLAY}/TICKETS.md")
     print(f"manifest -> {MANIFEST}")
     for m in manifest:
         print(f"  {m['fu']}  [{m['label']}/P{m['priority']}]  {m['title']}")

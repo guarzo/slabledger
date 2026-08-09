@@ -19,10 +19,12 @@
       "pattern": "^[A-Z]+-[0-9]{3}$"
     },
     "verdict": {
+      "description": "unresolvable is for a claim that static analysis cannot settle at all (index reachability, live grants, production row counts). It is distinct from refuted: refuted asserts the finding is wrong, unresolvable asserts the method cannot say. Collapsing the two would print \"How it was refuted\" in REPORT.md under a claim nobody refuted.",
       "enum": [
         "confirmed",
         "confirmed_lower_severity",
-        "refuted"
+        "refuted",
+        "unresolvable"
       ]
     },
     "basis": {
@@ -78,7 +80,10 @@
       "if": {
         "properties": {
           "verdict": {
-            "const": "refuted"
+            "enum": [
+              "refuted",
+              "unresolvable"
+            ]
           }
         },
         "required": [

@@ -1,0 +1,279 @@
+[
+  {
+    "id": "NAM-001",
+    "lens": "naming-and-boundaries",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "type",
+      "identity": "internal/domain/inventory.SellSheetItem.TargetSellPrice, .MinimumAcceptPrice; internal/domain/inventory.SellSheetTotals.TotalCostBasis, .TotalExpectedRevenue, .TotalProjectedProfit"
+    },
+    "category": "naming",
+    "title": "Five cent-denominated sell-sheet money fields carry no unit in either the Go name or the JSON tag, in a repo whose stated convention makes an unsuffixed API field mean USD",
+    "severity": "medium",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "Five money-carrying fields in SellSheetItem/SellSheetTotals declare no unit in the Go field name and no unit in the JSON tag, while every money sibling in the same two structs (BuyCostCents, CostBasisCents, CLValueCents, OverridePriceCents, ComputedPriceCents, AISuggestedPriceCents) carries the Cents suffix in both.",
+        "command": "git grep -nE '^\\s+(TargetSellPrice|MinimumAcceptPrice|TotalCostBasis|TotalExpectedRevenue|TotalProjectedProfit)\\s' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory/analytics_types.go",
+        "output": "internal/domain/inventory/analytics_types.go:123:\tTargetSellPrice       int               `json:\"targetSellPrice\"`\ninternal/domain/inventory/analytics_types.go:124:\tMinimumAcceptPrice    int               `json:\"minimumAcceptPrice\"`\ninternal/domain/inventory/analytics_types.go:140:\tTotalCostBasis       int `json:\"totalCostBasis\"`\ninternal/domain/inventory/analytics_types.go:141:\tTotalExpectedRevenue int `json:\"totalExpectedRevenue\"`\ninternal/domain/inventory/analytics_types.go:142:\tTotalProjectedProfit int `json:\"totalProjectedProfit\"`",
+        "file_line": "internal/domain/inventory/analytics_types.go:123-142"
+      },
+      {
+        "claim": "The values are unambiguously cents: MinimumAcceptPrice is assigned MarketSnapshot.ConservativeCents, TargetSellPrice is assigned purchase.CLValueCents and purchase.OverridePriceCents and is then copied into item.ComputedPriceCents, TotalCostBasis accumulates item.CostBasisCents, and TotalExpectedRevenue accumulates item.TargetSellPrice.",
+        "command": "git grep -nE 'item\\.(TargetSellPrice|MinimumAcceptPrice)|Totals\\.(TotalCostBasis|TotalExpectedRevenue)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/export/service_sell_sheet.go",
+        "output": "internal/domain/export/service_sell_sheet.go:47:\t\titem.TargetSellPrice = computeTargetPrice(snapshot, item.Recommendation)\ninternal/domain/export/service_sell_sheet.go:48:\t\titem.MinimumAcceptPrice = snapshot.ConservativeCents\ninternal/domain/export/service_sell_sheet.go:55:\t\t\titem.TargetSellPrice = purchase.CLValueCents\ninternal/domain/export/service_sell_sheet.go:58:\t\t\titem.MinimumAcceptPrice = purchase.CLValueCents\ninternal/domain/export/service_sell_sheet.go:82:\titem.ComputedPriceCents = item.TargetSellPrice\ninternal/domain/export/service_sell_sheet.go:86:\t\titem.TargetSellPrice = purchase.OverridePriceCents\ninternal/domain/export/service_sell_sheet.go:174:\t\tsheet.Totals.TotalExpectedRevenue += item.TargetSellPrice\ninternal/domain/export/service_sell_sheet.go:176:\t\tsheet.Totals.TotalCostBasis += item.CostBasisCents",
+        "file_line": "internal/domain/export/service_sell_sheet.go:47-180"
+      },
+      {
+        "claim": "The frontend mirrors all five as bare `number` with no unit in the identifier and no comment, so nothing on the consuming side records the denomination either. Grep across web/src returns only the type declarations — no component reads them, so no live 100x display bug is being claimed here, only the naming hazard for the next consumer.",
+        "command": "git grep -nE 'targetSellPrice|minimumAcceptPrice|totalCostBasis|totalExpectedRevenue|totalProjectedProfit' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- web/",
+        "output": "web/src/types/campaigns/market.ts:101:  targetSellPrice: number;\nweb/src/types/campaigns/market.ts:102:  minimumAcceptPrice: number;\nweb/src/types/campaigns/market.ts:120:    totalCostBasis: number;\nweb/src/types/campaigns/market.ts:121:    totalExpectedRevenue: number;\nweb/src/types/campaigns/market.ts:122:    totalProjectedProfit: number;",
+        "file_line": "web/src/types/campaigns/market.ts:101-122"
+      },
+      {
+        "claim": "The repo's declared convention is 'Backend uses cents internally, API responses use USD (dollars)'. Under that rule an unsuffixed JSON field on an API response reads as dollars, so these five tags actively assert the wrong unit rather than merely omitting it.",
+        "command": "git grep -nE 'cents internally' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- CLAUDE.md",
+        "output": "CLAUDE.md:194:- Backend uses cents internally, API responses use USD (dollars)",
+        "file_line": "CLAUDE.md:194"
+      }
+    ],
+    "searched_universe": "All non-test Go files under internal/ at 06d9f8ce, enumerated via `git grep` pinned to that revision over pathspecs 'internal/*.go' and 'internal/**/*.go', matching struct fields whose identifier contains Price|Cost|Value|Amount|Total|Fee|Profit|Revenue|Proceeds|Spend|Budget|Cash|Basis and whose type is int/int64/float64. Cross-checked against web/ for the JSON-tag consumers.",
+    "exclusions": [
+      "_test.go files (excluded from the field-declaration sweep; test fixtures do not define the contract)",
+      "internal/domain/psacampaign/types.go CampaignFormData (FlatFee, DailyBudget, PriceMinimum, PriceMaximum) — unitless by name but the struct doc comment states 'Prices here are whole USD to match the portal wire', so the unit is documented at the declaration and the wire shape is externally fixed",
+      "internal/domain/csvimport/import_types.go VariantPrice/UnitPrice — float64 dollars at a CSV parse boundary, with 'in dollars'/'Dollars' comments on the declaration lines"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Rename the five Go fields to TargetSellPriceCents, MinimumAcceptPriceCents, TotalCostBasisCents, TotalExpectedRevenueCents, TotalProjectedProfitCents, and add the matching Cents suffix to their JSON tags plus the mirrored TypeScript members in web/src/types/campaigns/market.ts. Because no web/src component reads any of the five, the JSON tags can be renamed rather than kept for compatibility — but confirm no non-TS consumer (Playwright spec, external client) reads them before changing the tags; if one does, rename only the Go fields and leave the tags.",
+    "blast_radius": [
+      "internal/domain/inventory/analytics_types.go",
+      "internal/domain/export/service_sell_sheet.go",
+      "web/src/types/campaigns/market.ts",
+      "docs/API.md (sell-sheet response shape, if the JSON tags change)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass after the rename.",
+      "`git grep -nE '\\b(TargetSellPrice|MinimumAcceptPrice|TotalCostBasis|TotalExpectedRevenue|TotalProjectedProfit)\\b' -- '*.go'` returns no results (every remaining occurrence carries the Cents suffix).",
+      "`cd web && npm run build && npm test` pass with the TypeScript members renamed in step with the JSON tags.",
+      "Every money-carrying field in SellSheetItem and SellSheetTotals has a name ending in Cents, Usd, or Pct."
+    ]
+  },
+  {
+    "id": "NAM-002",
+    "lens": "naming-and-boundaries",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "symbol",
+      "identity": "internal/domain/inventory.CampaignHealth.EbayChannelMarginPct"
+    },
+    "category": "naming",
+    "title": "EbayChannelMarginPct names a combined eBay+TCGPlayer marketplace margin; the misnomer has already propagated into internal/domain/portfolio as `ebayMarginPct` and a second same-named field",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The producer aggregates eBay AND TCGPlayer sales into locals it names marketplaceRevenue/marketplaceNetProfit, then stores the resulting ratio into a field named EbayChannelMarginPct. The author's own local naming shows the concept is 'marketplace', not 'eBay'.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/portfolio/service.go | sed -n '236,260p'",
+        "output": "\t\tcase inventory.SaleChannelEbay, inventory.SaleChannelTCGPlayer:\n\t\t\tbucket.marketplaceRevenue += d.Sale.SalePriceCents\n\t\t\tbucket.marketplaceNetProfit += d.Sale.NetProfitCents\n\t\t}\n\t}\n\tresult := make(map[string]inventory.CampaignHealth, len(byCampaign))\n\tfor cid, b := range byCampaign {\n\t\tmargin := 0.0\n\t\tif b.marketplaceRevenue > 0 {\n\t\t\tmargin = float64(b.marketplaceNetProfit) / float64(b.marketplaceRevenue)\n\t\t}\n\t\tresult[cid] = inventory.CampaignHealth{\n\t\t\tCampaignID:           cid,\n\t\t\tLiquidationLossCents: b.liquidationLossCents,\n\t\t\tLiquidationSaleCount: b.liquidationSaleCount,\n\t\t\tEbayChannelMarginPct: margin,\n\t\t}\n\t}\n\treturn result",
+        "file_line": "internal/domain/portfolio/service.go:242-257"
+      },
+      {
+        "claim": "The declaration itself records that the name is wrong, but attributes the constraint to frontend JSON compatibility — which binds the JSON tag, not the Go identifier.",
+        "command": "git grep -nE 'EbayChannelMarginPct' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/inventory/health_types.go",
+        "output": "internal/domain/inventory/health_types.go:39:\tEbayChannelMarginPct float64 `json:\"ebayChannelMarginPct\"` // net profit / revenue on eBay + TCGPlayer sales combined; 0 if no marketplace sales. JSON field name retained for frontend compatibility.",
+        "file_line": "internal/domain/inventory/health_types.go:39"
+      },
+      {
+        "claim": "Consumers outside the declaring package re-narrow the value back to eBay: internal/domain/portfolio binds it to locals named ebayMarginPct in two files and copies it into a second struct field also named EbayChannelMarginPct, and internal/domain/portfolio/suggestion_rules.go gates a suggestion on it and feeds it to expectedROIFromMargin. None of these sites sees the corrective comment.",
+        "command": "git grep -nE '\\bEbayChannelMarginPct\\b|\\bebayMarginPct\\b' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/domain/portfolio/*.go' | grep -v _test.go",
+        "output": "internal/domain/portfolio/service.go:124:\t\tebayMarginPct := channelHealth.EbayChannelMarginPct\ninternal/domain/portfolio/service.go:155:\t\t\tEbayChannelMarginPct:  ebayMarginPct,\ninternal/domain/portfolio/service.go:257:\t\t\tEbayChannelMarginPct: margin,\ninternal/domain/portfolio/snapshot.go:135:\t\tebayMarginPct := channelHealth.EbayChannelMarginPct\ninternal/domain/portfolio/snapshot.go:166:\t\t\tEbayChannelMarginPct:  ebayMarginPct,\ninternal/domain/portfolio/suggestion_rules.go:271:\t\tif h.EbayChannelMarginPct <= 0 {\ninternal/domain/portfolio/suggestion_rules.go:314:\t\t\t\tExpectedROI:       expectedROIFromMargin(h.EbayChannelMarginPct, newTerms),\ninternal/domain/portfolio/suggestion_rules.go:315:\t\t\t\tExpectedMarginPct: h.EbayChannelMarginPct,",
+        "file_line": "internal/domain/portfolio/service.go:124"
+      }
+    ],
+    "searched_universe": "All Go files at 06d9f8ce matching `\\bEbayChannelMarginPct\\b` or `ebayChannelMarginPct`, plus the producing function computeChannelHealthByCampaign in internal/domain/portfolio/service.go, plus the channel-set definition at internal/domain/inventory/channel_fees.go.",
+    "exclusions": [
+      "_test.go files are included in the propagation count above only as context; the finding rests on the eight non-test sites listed"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Rename the Go field to MarketplaceChannelMarginPct (and the derived locals ebayMarginPct to marketplaceMarginPct), keeping the `json:\"ebayChannelMarginPct\"` tag as-is so the frontend contract the comment protects is untouched. Delete the now-redundant 'JSON field name retained' clause from the comment and keep the definition clause.",
+    "blast_radius": [
+      "internal/domain/inventory/health_types.go",
+      "internal/domain/portfolio/service.go",
+      "internal/domain/portfolio/snapshot.go",
+      "internal/domain/portfolio/suggestion_rules.go",
+      "internal/domain/portfolio/analysis_types.go",
+      "internal/domain/portfolio/service_test.go and suggestions_test.go (field literals)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass after the rename.",
+      "`git grep -n 'EbayChannelMarginPct' -- '*.go'` returns no results.",
+      "`git grep -n 'ebayChannelMarginPct' -- '*.go' web/` still shows the JSON tag and any frontend consumer unchanged, proving the wire contract did not move.",
+      "The declaration comment states the eBay+TCGPlayer definition without claiming the Go identifier is compatibility-constrained."
+    ]
+  },
+  {
+    "id": "NAM-003",
+    "lens": "naming-and-boundaries",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/domain/storage"
+    },
+    "category": "naming",
+    "title": "Package internal/domain/storage consists solely of a doc.go documenting a `Cache` interface, with usage examples, that no longer exists anywhere in the repo",
+    "severity": "low",
+    "confidence": "strong",
+    "evidence": [
+      {
+        "claim": "The package contains exactly one file, doc.go.",
+        "command": "git ls-tree -r --name-only 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/storage",
+        "output": "internal/domain/storage/doc.go",
+        "file_line": "internal/domain/storage/doc.go"
+      },
+      {
+        "claim": "The package declares nothing — no type, func, var, or const. Absence established by the command's empty output and exit status 1, not by a file:line citation.",
+        "command": "git grep -cE '^(type|func|var|const)' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- internal/domain/storage; echo \"exit=$?\"",
+        "output": "exit=1\n(no matching lines)",
+        "file_line": "internal/domain/storage/doc.go"
+      },
+      {
+        "claim": "The doc comment asserts the package defines interfaces and names Cache as the core one, with a two-call usage example.",
+        "command": "git show 06d9f8ce172dada98f307f860e2e2985c9fb5ca6:internal/domain/storage/doc.go | head -12",
+        "output": "// Package storage defines interfaces for caching and data persistence.\n//\n// The core interface is Cache, which provides a generic key-value storage\n// abstraction with TTL support. Implementations handle different storage\n// backends transparently.\n//\n// # Usage\n//\n//\terr := cache.Set(ctx, \"key\", data, 1*time.Hour)\n//\n//\tvar result MyType\n//\tfound, err := cache.Get(ctx, \"key\", &result)",
+        "file_line": "internal/domain/storage/doc.go:1-12"
+      },
+      {
+        "claim": "No `Cache` interface exists anywhere in the repo at this revision. Empty output is the evidence.",
+        "command": "git grep -nE 'type Cache\\b|Cache interface' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'; echo \"exit=$?\"",
+        "output": "exit=1\n(no matching lines)"
+      },
+      {
+        "claim": "No Go file imports the package.",
+        "command": "git grep -nE '\"github.com/guarzo/slabledger/internal/domain/storage\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6; echo \"exit=$?\"",
+        "output": "exit=1\n(no matching lines)"
+      },
+      {
+        "claim": "CLAUDE.md — the orientation file loaded into every session — repeats the false claim, so the misnaming propagates to every reader before they open a file.",
+        "command": "git grep -n 'domain/storage' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- CLAUDE.md",
+        "output": "CLAUDE.md:58:- `domain/storage` — cache and storage interfaces.",
+        "file_line": "CLAUDE.md:58"
+      }
+    ],
+    "searched_universe": "internal/domain/storage enumerated via `git ls-tree -r --name-only` at 06d9f8ce; declaration and importer searches run as `git grep` pinned to the same revision over all tracked files and over the '*.go' pathspec; CLAUDE.md checked for the orientation claim.",
+    "exclusions": [
+      "Whether the empty package should be deleted outright is a dead-code judgment, not a naming one — this finding claims only that the package name and its doc describe contents the package does not have. See the note in proposed_fix.",
+      "The stale CLAUDE.md line is cited as blast radius, not filed as a competing docs finding."
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Delete internal/domain/storage/ and the CLAUDE.md line that describes it. Because the package declares nothing and has zero importers, removal cannot break a build — but the delete/keep call belongs to the dead-code-go lens; if that lens argues for keeping the package as a future home for persistence interfaces, the minimum naming fix is to rewrite doc.go so it stops naming a `Cache` interface and stops showing usage examples for a type that does not exist.",
+    "blast_radius": [
+      "internal/domain/storage/doc.go",
+      "CLAUDE.md:58",
+      "internal/README.md (if it repeats the claim)",
+      "docs/ARCHITECTURE.md (domain interface list, if it repeats the claim)"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass with the package removed.",
+      "`make check` passes (the architecture import checker derives package membership from the tree, so a removed package must not break it).",
+      "`git grep -n 'domain/storage'` returns no results outside historical migration comments and audit run directories.",
+      "If the package is kept instead, `git grep -n 'Cache' internal/domain/storage/` returns no results."
+    ]
+  },
+  {
+    "id": "NAM-004",
+    "lens": "naming-and-boundaries",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "type",
+      "identity": "12 struct fields across internal/domain/{arbitrage,inventory,tuning} whose Go name drops the Cents suffix their own JSON tag carries"
+    },
+    "category": "naming",
+    "title": "Twelve money fields carry the unit in the JSON tag but not in the Go identifier, making the repo's Cents-suffix convention unreliable to read against",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "Twelve non-test struct fields declare an unsuffixed Go name against a `...Cents` JSON tag. Several sit directly beside correctly-suffixed siblings — CapitalAtRisk at health_types.go:31 is adjacent to LiquidationLossCents, InHandCapitalCents and InTransitCapitalCents; ExpectedSalePrice/ExpectedFees/ExpectedProfit at expected_value.go:17-19 are adjacent to CarryingCostCents at line 20.",
+        "command": "git grep -nE '^\\s+[A-Za-z0-9]+\\s+(int|int64|float64)\\s+`json:\"[a-zA-Z0-9]*Cents\"' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- 'internal/*.go' 'internal/**/*.go' | grep -v _test.go | grep -viE '\\s(Cents|[A-Za-z0-9]*Cents)\\s+'",
+        "output": "internal/domain/arbitrage/expected_value.go:17:\tExpectedSalePrice  int     `json:\"expectedSalePriceCents\"`\ninternal/domain/arbitrage/expected_value.go:18:\tExpectedFees       int     `json:\"expectedFeesCents\"`\ninternal/domain/arbitrage/expected_value.go:19:\tExpectedProfit     int     `json:\"expectedProfitCents\"`\ninternal/domain/arbitrage/montecarlo.go:28:\tMedianProfit int     `json:\"medianProfitCents\"`\ninternal/domain/arbitrage/montecarlo.go:29:\tP10Profit    int     `json:\"p10ProfitCents\"`\ninternal/domain/arbitrage/montecarlo.go:30:\tP90Profit    int     `json:\"p90ProfitCents\"`\ninternal/domain/inventory/health_types.go:14:\tTotalDeployed  int              `json:\"totalDeployedCents\"`\ninternal/domain/inventory/health_types.go:15:\tTotalRecovered int              `json:\"totalRecoveredCents\"`\ninternal/domain/inventory/health_types.go:16:\tTotalAtRisk    int              `json:\"totalAtRiskCents\"`\ninternal/domain/inventory/health_types.go:31:\tCapitalAtRisk  int     `json:\"capitalAtRiskCents\"`\ninternal/domain/tuning/types.go:40:\tCostBasis   int     `json:\"costBasisCents\"`\ninternal/domain/tuning/types.go:52:\tTotalProfit int     `json:\"totalProfitCents\"`",
+        "file_line": "internal/domain/inventory/health_types.go:31"
+      }
+    ],
+    "searched_universe": "All non-test Go files under internal/ at 06d9f8ce, enumerated via `git grep` pinned to that revision over 'internal/*.go' and 'internal/**/*.go', matching int/int64/float64 struct fields whose JSON tag ends in Cents and whose Go identifier does not.",
+    "exclusions": [
+      "_test.go files",
+      "Fields where both name and tag carry the unit (the correct majority; the same sweep without the final filter returns them)",
+      "Deliberately-aliased local variables and function parameters — only struct field declarations were swept"
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Rename the twelve Go fields to carry the Cents suffix their JSON tags already state, leaving every JSON tag byte-identical so no wire contract moves. This is mechanical and independently reviewable per package. Recorded at `suspected` because the JSON tag documents the unit at the declaration, so the false-belief risk is confined to Go-side readers who never see the tag — materially weaker than NAM-001, where no unit is recorded anywhere.",
+    "blast_radius": [
+      "internal/domain/arbitrage/expected_value.go",
+      "internal/domain/arbitrage/montecarlo.go",
+      "internal/domain/inventory/health_types.go",
+      "internal/domain/tuning/types.go",
+      "call sites and test fixtures referencing the twelve fields"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass after the rename.",
+      "The sweep command in this finding's evidence returns empty output.",
+      "`git diff` shows zero changes to any JSON tag string, proving no API response field name moved.",
+      "`cd web && npm run build && npm test` pass unchanged (no frontend edit should be required)."
+    ]
+  },
+  {
+    "id": "NAM-005",
+    "lens": "naming-and-boundaries",
+    "revision": "06d9f8ce172dada98f307f860e2e2985c9fb5ca6",
+    "subject": {
+      "kind": "package",
+      "identity": "internal/domain/llmutil"
+    },
+    "category": "dead-code",
+    "title": "POINTER for dead-code-go: internal/domain/llmutil survives the Azure AI / advisor removal with its only consumer being its own test",
+    "severity": "low",
+    "confidence": "suspected",
+    "evidence": [
+      {
+        "claim": "Every occurrence of the package name across all Go files at this revision is inside the package itself or its own external test package. No production consumer appears. This is offered as a lead for the dead-code-go lens, not as a reachability verdict — the preamble's nine mechanisms are unanswered here and reachability is not this lens's to establish.",
+        "command": "git grep -nE 'llmutil' 06d9f8ce172dada98f307f860e2e2985c9fb5ca6 -- '*.go'",
+        "output": "internal/domain/llmutil/strip_fences.go:1:// Package llmutil provides pure utility functions for processing LLM responses.\ninternal/domain/llmutil/strip_fences.go:2:package llmutil\ninternal/domain/llmutil/strip_fences_test.go:1:package llmutil_test\ninternal/domain/llmutil/strip_fences_test.go:6:\t\"github.com/guarzo/slabledger/internal/domain/llmutil\"\ninternal/domain/llmutil/strip_fences_test.go:49:\t\t\tgot := llmutil.StripMarkdownFences(tc.input)",
+        "file_line": "internal/domain/llmutil/strip_fences.go:1"
+      },
+      {
+        "claim": "The package doc describes processing LLM responses; commit e46370e5 removed the Azure AI / advisor feature wholesale, and the Run Card records the resulting package count drop from 53 to 48.",
+        "command": "git log --oneline -1 e46370e5",
+        "output": "e46370e5 refactor: fully remove the Azure AI / advisor feature (#623)"
+      }
+    ],
+    "searched_universe": "All Go files at 06d9f8ce, via `git grep -nE 'llmutil'` pinned to that revision over the '*.go' pathspec.",
+    "exclusions": [
+      "Reachability is not asserted. The nine runtime mechanisms are unanswered — this record exists only to hand the lead to the owning lens per LENS-BRIEF section 6."
+    ],
+    "build_tags": [
+      "default"
+    ],
+    "proposed_fix": "Hand to the dead-code-go lens for a reachability judgment. If confirmed orphaned, delete internal/domain/llmutil/ together with its test.",
+    "blast_radius": [
+      "internal/domain/llmutil/strip_fences.go",
+      "internal/domain/llmutil/strip_fences_test.go"
+    ],
+    "effort": "S",
+    "acceptance_criteria": [
+      "`go build ./...` and `go test -race ./...` pass with the package removed.",
+      "`make check` passes with the package removed."
+    ]
+  }
+]

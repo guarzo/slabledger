@@ -24,6 +24,14 @@ func Load(args []string) (Config, error) {
 		return cfg, err
 	}
 
+	// Resolve the listen address. Anything explicit — HTTP_LISTEN_ADDR, or the
+	// --web branch in FromFlags — has already set it; this only fills the
+	// default case, so `slabledger` and `slabledger --port N` both bind the
+	// port they document rather than silently ignoring it.
+	if cfg.Server.ListenAddr == "" {
+		cfg.Server.ListenAddr = fmt.Sprintf("0.0.0.0:%d", cfg.Mode.WebPort)
+	}
+
 	// Validate
 	if err := cfg.Validate(); err != nil {
 		return cfg, err

@@ -83,34 +83,13 @@ LOG_LEVEL="info"                # debug, info, warn, error
 
 ## API Endpoints
 
-Core campaign endpoints. See [docs/API.md](docs/API.md) for the complete reference.
+See **[docs/API.md](docs/API.md)** for the complete reference — every endpoint with its
+request and response shape.
 
-### Campaigns
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/campaigns` | List campaigns (`?includeArchived=true`) |
-| POST | `/api/campaigns` | Create campaign |
-| GET | `/api/campaigns/{id}` | Get campaign |
-| PUT | `/api/campaigns/{id}` | Update campaign |
-| POST | `/api/campaigns/{id}/archive` | Archive campaign |
-| GET/POST | `/api/campaigns/{id}/purchases` | List/create purchases |
-| POST | `/api/campaigns/{id}/purchases/import` | CSV import (multipart) |
-| GET/POST | `/api/campaigns/{id}/sales` | List/create sales |
-| GET | `/api/campaigns/{id}/pnl` | Campaign P&L summary |
-| GET | `/api/campaigns/{id}/pnl-by-channel` | P&L by sale channel |
-| GET | `/api/campaigns/{id}/fill-rate` | Daily spend vs cap |
-| GET | `/api/campaigns/{id}/days-to-sell` | Distribution histogram |
-| GET | `/api/campaigns/{id}/inventory` | Unsold cards + aging + market signals |
-| GET | `/api/campaigns/cash-flow` | Overall cash position |
-
-### Other
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/sets` | List Pokemon sets |
-| GET | `/api/cards/search` | Search cards |
-| GET | `/api/health` | Health check |
-| GET/POST/DELETE | `/api/favorites` | Manage favorites |
-| GET | `/api/status/api-usage` | API usage per provider |
+This file deliberately does not reproduce an abbreviated table. The surface is ~115 paths,
+and a hand-maintained excerpt drifts silently: the previous table advertised seven routes
+that were registered nowhere. The registration itself is the ground truth, in
+`internal/adapters/httpserver/routes.go` and `router.go`.
 
 ## Testing
 
