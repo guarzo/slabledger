@@ -11,36 +11,26 @@ import {
 import { wasUnlistedFromDH } from './inventoryCalcs';
 import { dhBadgeFor, DH_BADGE_TONES } from './dhBadge';
 import RowActions from './RowActions';
-import { resolveContextualPrimary, resolveOverflowActions, ACTION_LABELS } from './rowActions';
+import { resolveRowActions, type RowActionHandlers, type RowActionFlags } from './rowActions';
 import CopyableCert from './CopyableCert';
 
-interface MobileCardProps {
+// See DesktopRowProps — the action callbacks and flags arrive via the shared
+// RowActionHandlers / RowActionFlags interfaces so both viewports enumerate
+// them exactly once (SLA-87).
+interface MobileCardProps extends RowActionHandlers, RowActionFlags {
   item: AgingItem;
   selected: boolean;
   onToggle: () => void;
-  onRecordSale: () => void;
-  onFixPricing?: () => void;
-  onFixDHMatch?: () => void;
-  onSetPrice?: () => void;
-  onDelete?: () => void;
-  onListOnDH?: (purchaseId: string) => void;
-  onUnmatchDH?: () => void;
-  onRetryDHMatch?: () => void;
-  onDismiss?: () => void;
-  onUndismiss?: () => void;
-  dhListingLoading?: boolean;
   dhListedOverride?: boolean;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
 }
 
-export default function MobileCard({
-  item, selected, onToggle, onRecordSale,
-  onFixPricing, onFixDHMatch, onSetPrice, onDelete,
-  onListOnDH, onUnmatchDH, onRetryDHMatch,
-  onDismiss, onUndismiss, dhListingLoading, dhListedOverride,
-  ev, showCampaignColumn,
-}: MobileCardProps) {
+export default function MobileCard(props: MobileCardProps) {
+  const {
+    item, selected, onToggle,
+    dhListedOverride, ev, showCampaignColumn,
+  } = props;
   const cb = costBasis(item.purchase);
   const snap = item.currentMarket;
   const daysColor = daysHeldColor(item.daysHeld);
@@ -52,22 +42,7 @@ export default function MobileCard({
   const deltaPct = deriveSignalDelta(item);
   const hotSeller = isHotSeller(item);
 
-  const handlers = {
-    onRecordSale,
-    onSetPrice,
-    onFixPricing,
-    onFixDHMatch,
-    onUnmatchDH,
-    onRetryDHMatch,
-    onListOnDH,
-    onDismiss,
-    onUndismiss,
-    onDelete,
-  };
-  const flags = { dhListingLoading };
-  const primary = resolveContextualPrimary(item, handlers, flags);
-  const fallbackPrimary = { key: 'sell', label: ACTION_LABELS.sell, onSelect: onRecordSale };
-  const overflow = resolveOverflowActions(item, handlers, flags, primary);
+  const { primary, fallbackPrimary, overflow } = resolveRowActions(item, props);
 
   const inHandLabel = item.purchase.receivedAt
     ? `In hand · ${item.daysHeld}d`

@@ -42,6 +42,34 @@ export interface ResolvedAction {
   confirm?: { title: string; message: string; confirmLabel: string; variant?: 'danger' };
 }
 
+export interface ResolvedRowActions {
+  primary: ResolvedAction | null;
+  fallbackPrimary: ResolvedAction;
+  overflow: ResolvedAction[];
+}
+
+// resolveRowActions is the single wiring point between a row component's props
+// and the resolution rules below. Both DesktopRow and MobileCard used to
+// hand-assemble the same ten-key handlers object; because nine of the ten keys
+// are optional, adding an action to one view and forgetting the other still
+// type-checked and the action simply vanished from that viewport (SLA-87).
+//
+// `source` is deliberately the row's whole props object rather than a
+// re-assembled literal: DesktopRowProps and MobileCardProps both extend
+// RowActionHandlers and RowActionFlags, so a new optional action added to those
+// interfaces reaches both views without any per-view edit.
+export function resolveRowActions(
+  item: AgingItem,
+  source: RowActionHandlers & RowActionFlags,
+): ResolvedRowActions {
+  const primary = resolveContextualPrimary(item, source, source);
+  return {
+    primary,
+    fallbackPrimary: { key: 'sell', label: ACTION_LABELS.sell, onSelect: source.onRecordSale },
+    overflow: resolveOverflowActions(item, source, source, primary),
+  };
+}
+
 // resolveContextualPrimary returns the single recommended next action for a row,
 // derived from the item's state. When this returns null, Sell is the row's
 // primary affordance. When it returns an action, Sell demotes into the overflow.
