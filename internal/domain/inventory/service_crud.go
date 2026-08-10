@@ -195,9 +195,9 @@ func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req Q
 // FreezeSaleProvenance validates and defaults SaleReason, validates PriceSource
 // (defaulting is left to each call site, since the correct default differs by
 // intake path), then overwrites the derived, server-authoritative provenance
-// fields (CLValueAtSaleCents, ChannelFeePctAtSale, ForcedLiquidation) at
-// sale-creation time. SaleReason and PriceSource are legitimate client input
-// and are preserved when valid.
+// fields (CLValueAtSaleCents, CLValueAtSaleObservedAt, CLValueAtSaleSource,
+// ChannelFeePctAtSale, ForcedLiquidation) at sale-creation time. SaleReason
+// and PriceSource are legitimate client input and are preserved when valid.
 func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
 	if sa.SaleReason != "" && !ValidSaleReason(sa.SaleReason) {
 		return ErrInvalidSaleReason
@@ -226,6 +226,10 @@ func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forc
 	// observed three months before this sale is not a CL-at-sale snapshot, it is a
 	// stale number wearing the label. Only the timestamp exposes that gap, so both
 	// fields are set together and neither is trustworthy read alone.
+	// Every branch assigns both fields unconditionally -- HandleCreateSale
+	// decodes the request body straight into inventory.Sale with no scrub, so
+	// a client-forged CLValueAtSaleSource/CLValueAtSaleObservedAt must not
+	// survive on any branch, not just the one that happens to set a value.
 	switch {
 	case purchase.CLValueUpdatedAt != "":
 		sa.CLValueAtSaleObservedAt = purchase.CLValueUpdatedAt
@@ -233,10 +237,13 @@ func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forc
 	case purchase.CLValueCents > 0:
 		// A positive value with no CardLadder update stamp: unambiguously the
 		// intake-time figure (Shopify import or manual entry), not an observation.
+		sa.CLValueAtSaleObservedAt = ""
 		sa.CLValueAtSaleSource = CLProvenanceSourceIntake
 	default:
 		// No CL value at all: leave both empty rather than writing a label for
 		// data that was never observed.
+		sa.CLValueAtSaleObservedAt = ""
+		sa.CLValueAtSaleSource = ""
 	}
 	pct := EffectiveChannelFeePct(sa.SaleChannel, campaign)
 	sa.ChannelFeePctAtSale = &pct
