@@ -58,11 +58,16 @@ func TestCLValueAtPurchaseSetOnce(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := makeTestPurchase()
 			p.CLValueCents = tt.createCL
-			// "snapshot at first enrichment" freezes via UpdatePurchaseCLValue's own
-			// write-time lateness guard (D4), not the create-time freeze, since
-			// createCL is 0 here. That guard requires purchase_date to be within
-			// clFreezeMaxAgeDays of today, so this can't use makeTestPurchase()'s
-			// fixed "2026-01-01" default unmodified -- it's stale by construction.
+			// All three subtests get a fresh purchase_date, not just "snapshot at
+			// first enrichment": that one strictly needs it (createCL is 0, so the
+			// create-time freeze never fires there and it depends entirely on
+			// UpdatePurchaseCLValue's own write-time lateness guard, D4, which
+			// requires purchase_date within clFreezeMaxAgeDays of today) --
+			// makeTestPurchase()'s fixed "2026-01-01" default is stale by
+			// construction and would fail it. "snapshot at creation" doesn't need
+			// this to pass, but a fresh date is still correct there: it keeps that
+			// subtest from accidentally passing "for the wrong reason" if the
+			// create-time freeze is ever changed to also consult recency.
 			p.PurchaseDate = time.Now().UTC().Format("2006-01-02")
 			if err := ps.CreatePurchase(ctx, p); err != nil {
 				t.Fatalf("create: %v", err)
