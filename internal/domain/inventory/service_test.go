@@ -594,6 +594,51 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 	}
 }
 
+// TestCreatePurchase_ClearsForgedCLSnapshot proves service.CreatePurchase
+// discards a client-supplied CL-at-purchase snapshot. These four fields are the
+// OUTPUTS of the store's create-time freeze rather than its inputs, so clearing
+// clValueCents/clValueUpdatedAt does not cover them: on the HTTP create path
+// HandleCreatePurchase zeroes clValueCents, which means the freeze's guard never
+// fires and anything the body carried would reach the INSERT verbatim. A forged
+// clValueAtPurchaseSource would pull a fabricated row into the provenance study,
+// whose inclusion predicate is cl_value_at_purchase_source <> "".
+func TestCreatePurchase_ClearsForgedCLSnapshot(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers())
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	forgedConfidence := 99
+	p := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Charizard", CertNumber: "33333331",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+		CLValueAtPurchaseCents:      1234567,
+		CLValueAtPurchaseObservedAt: "2020-01-01T00:00:00Z",
+		CLValueAtPurchaseSource:     inventory.CLProvenanceSourceCardLadder,
+		CLCardConfidenceAtPurchase:  &forgedConfidence,
+	}
+	if err := svc.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("CreatePurchase: %v", err)
+	}
+
+	if p.CLValueAtPurchaseCents != 0 {
+		t.Errorf("CLValueAtPurchaseCents = %d, want 0 (client-forged value discarded)", p.CLValueAtPurchaseCents)
+	}
+	if p.CLValueAtPurchaseObservedAt != "" {
+		t.Errorf("CLValueAtPurchaseObservedAt = %q, want \"\" (client-forged value discarded)", p.CLValueAtPurchaseObservedAt)
+	}
+	if p.CLValueAtPurchaseSource != "" {
+		t.Errorf("CLValueAtPurchaseSource = %q, want \"\" (client-forged value discarded)", p.CLValueAtPurchaseSource)
+	}
+	if p.CLCardConfidenceAtPurchase != nil {
+		t.Errorf("CLCardConfidenceAtPurchase = %v, want nil (client-forged value discarded)", p.CLCardConfidenceAtPurchase)
+	}
+}
+
 // TestCreatePurchase_ClearsCLValueUpdatedAt proves service.CreatePurchase
 // unconditionally discards a supplied CLValueUpdatedAt before the create-time
 // freeze runs, regardless of caller. This is the single choke point covering

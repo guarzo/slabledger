@@ -84,6 +84,25 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	p.ActiveListingsAtPurchase = nil
 	p.SalesLast30dAtPurchase = nil
 
+	// The same discard, for the CL snapshot the store's create-time freeze
+	// DERIVES. Clearing that freeze's two inputs is not enough: these four are
+	// the freeze's outputs, they carry JSON tags, and the freeze only writes
+	// them when it fires (p.CLValueAtPurchaseCents == 0 && p.CLValueCents > 0).
+	// HandleCreatePurchase zeroes CLValueCents, so on the HTTP create path the
+	// freeze never fires at all and anything the body carried here would reach
+	// the INSERT verbatim -- a forged clValueAtPurchaseSource pulls a fabricated
+	// row straight into the provenance study, whose inclusion predicate is
+	// cl_value_at_purchase_source <> "". Unlike CLValueCents these can be
+	// cleared at this choke point rather than in the handler, because no
+	// legitimate caller of this method supplies them: their only non-test
+	// writers are the store's own freeze (which runs after this, on the
+	// repository call below) and UpdatePurchaseCLValue, which runs later from
+	// the CardLadder scheduler.
+	p.CLValueAtPurchaseCents = 0
+	p.CLValueAtPurchaseObservedAt = ""
+	p.CLValueAtPurchaseSource = ""
+	p.CLCardConfidenceAtPurchase = nil
+
 	// CLValueUpdatedAt is the sole discriminator the store's create-time freeze
 	// (purchase_store.go) uses to decide whether the freeze's provenance source
 	// is "cardladder" or "intake" -- a forged value here earns a false
