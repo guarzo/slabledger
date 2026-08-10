@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -627,16 +628,38 @@ func TestFetchCLEstimate_ZeroConfidenceIsPreserved(t *testing.T) {
 	assert.Equal(t, 0, est.confidence)
 }
 
+// TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies guards two distinct
+// hazards in one run:
+//
+//  1. Cache-shape: p1 and p2 share (gemRateID, condition) "psa-123"/"PSA 8" and
+//     must hit the API once, both getting that estimate's confidence (72).
+//  2. Loop-variable aliasing: p3 uses a DIFFERENT gemRateID ("psa-456") whose
+//     estimate carries a different (and legitimately zero) confidence. If
+//     UpdatePurchaseCLValue's *int argument aliased one shared loop variable
+//     instead of a fresh one per iteration, every recorded pointer would
+//     dereference to whatever value that shared variable held when the loop
+//     finished — p3's 0 — so p1/p2 would incorrectly read 0 instead of 72.
+//     A test with only one shared estimate could not detect this: hoisting
+//     the confidence variable would still pass because every call shares the
+//     same (correct) value.
 func TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"result": cardladder.CardEstimateResponse{
-				EstimatedValue: 210,
-				Confidence:     72,
-			},
-		})
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		var req struct {
+			Data struct {
+				ProfileID string `json:"profileId"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(body, &req))
+
+		resp := cardladder.CardEstimateResponse{EstimatedValue: 210, Confidence: 72}
+		if req.Data.ProfileID == "psa-456" {
+			resp = cardladder.CardEstimateResponse{EstimatedValue: 300, Confidence: 0}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"result": resp}) //nolint:errcheck
 	}))
 	defer server.Close()
 
@@ -658,20 +681,26 @@ func TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies(t *testing.T) {
 
 	p1 := &inventory.Purchase{ID: "p1", CertNumber: "CERT-1", CardName: "Charizard"}
 	p2 := &inventory.Purchase{ID: "p2", CertNumber: "CERT-2", CardName: "Charizard"}
+	p3 := &inventory.Purchase{ID: "p3", CertNumber: "CERT-3", CardName: "Blastoise"}
 	resolved := []clResolvedPurchase{
 		{purchase: p1, gemRateID: "psa-123", condition: "PSA 8"},
 		{purchase: p2, gemRateID: "psa-123", condition: "PSA 8"},
+		{purchase: p3, gemRateID: "psa-456", condition: "PSA 8"},
 	}
 	stats := CLRunStats{}
 
 	err := s.applyCLEstimates(context.Background(), client, resolved, &stats)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, calls, "the second copy should hit the cache, not the API")
-	require.Len(t, valueUpdater.Calls, 2)
-	for i, call := range valueUpdater.Calls {
-		require.NotNilf(t, call.Confidence, "call %d: confidence pointer should not be nil", i)
-		assert.Equal(t, 72, *call.Confidence)
+	require.Equal(t, 2, calls, "one call per distinct (gemRateID, condition); p2 should hit the cache")
+	require.Len(t, valueUpdater.Calls, 3)
+
+	wantConfidence := map[string]int{"p1": 72, "p2": 72, "p3": 0}
+	for _, call := range valueUpdater.Calls {
+		want, ok := wantConfidence[call.PurchaseID]
+		require.Truef(t, ok, "unexpected purchase ID %q in calls", call.PurchaseID)
+		require.NotNilf(t, call.Confidence, "purchase %s: confidence pointer should not be nil", call.PurchaseID)
+		assert.Equalf(t, want, *call.Confidence, "purchase %s: confidence mismatch", call.PurchaseID)
 	}
-	assert.Equal(t, 2, stats.Updated)
+	assert.Equal(t, 3, stats.Updated)
 }
