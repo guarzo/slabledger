@@ -49,6 +49,13 @@ func TestMigration000042_RenamePolicyConfidence(t *testing.T) {
 		INSERT INTO campaign_purchases (id, campaign_id, card_name, cert_number, purchase_date)
 		VALUES ('p2', 'camp1', 'Card 2', 'cert2', '2026-01-01')`)
 	require.NoError(t, err)
+	// A stored 0 is a legitimate policy floor, not an absent one: the backfill
+	// must carry it across. This row fails if the up migration's predicate is
+	// ever narrowed from IS NOT NULL to something truthiness-based (> 0).
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO campaign_purchases (id, campaign_id, card_name, cert_number, purchase_date, cl_confidence_at_purchase)
+		VALUES ('p3', 'camp1', 'Card 3', 'cert3', '2026-01-01', 0)`)
+	require.NoError(t, err)
 
 	// Step up to v42 — adds the new column and backfills it.
 	require.NoError(t, m.Steps(1))
@@ -57,6 +64,7 @@ func TestMigration000042_RenamePolicyConfidence(t *testing.T) {
 		newVal   sql.NullInt64
 		oldVal   sql.NullInt64
 		newValP2 sql.NullInt64
+		newValP3 sql.NullInt64
 	)
 	require.NoError(t, db.QueryRowContext(ctx,
 		`SELECT cl_policy_confidence_min_at_purchase, cl_confidence_at_purchase FROM campaign_purchases WHERE id = 'p1'`,
@@ -71,7 +79,26 @@ func TestMigration000042_RenamePolicyConfidence(t *testing.T) {
 	).Scan(&newValP2))
 	require.False(t, newValP2.Valid, "a row with no legacy value must backfill to NULL, not 0")
 
-	// Round-trip down/up to confirm reversibility.
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT cl_policy_confidence_min_at_purchase FROM campaign_purchases WHERE id = 'p3'`,
+	).Scan(&newValP3))
+	require.True(t, newValP3.Valid, "a stored 0 must backfill as 0, not be skipped as absent")
+	require.Equal(t, int64(0), newValP3.Int64)
+
+	// Round-trip down/up: the down must drop cleanly and the up must re-run,
+	// backfill included, so both values survive a rollback and re-apply.
 	require.NoError(t, m.Steps(-1))
 	require.NoError(t, m.Steps(1))
+
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT cl_policy_confidence_min_at_purchase FROM campaign_purchases WHERE id = 'p1'`,
+	).Scan(&newVal))
+	require.True(t, newVal.Valid, "backfill must re-run after a down/up round trip")
+	require.Equal(t, int64(65), newVal.Int64)
+
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT cl_policy_confidence_min_at_purchase FROM campaign_purchases WHERE id = 'p3'`,
+	).Scan(&newValP3))
+	require.True(t, newValP3.Valid, "the 0 row must survive the round trip as 0")
+	require.Equal(t, int64(0), newValP3.Int64)
 }
