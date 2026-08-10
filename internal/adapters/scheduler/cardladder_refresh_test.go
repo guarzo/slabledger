@@ -2,6 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -576,4 +579,99 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 			assert.Equal(t, tt.expectSold, len(sold), "sold count mismatch")
 		})
 	}
+}
+
+func TestFetchCLEstimate_ReturnsConfidence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"result": cardladder.CardEstimateResponse{
+				EstimatedValue: 210,
+				Confidence:     72,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := cardladder.NewClient(
+		cardladder.WithFunctionsURL(server.URL),
+		cardladder.WithStaticToken("test-token"),
+	)
+	s := &CardLadderRefreshScheduler{logger: mocks.NewMockLogger()}
+
+	est, err := s.fetchCLEstimate(context.Background(), client, "psa-123", "g8", "Test Card")
+	require.NoError(t, err)
+	assert.Equal(t, 210.0, est.value)
+	assert.Equal(t, 72, est.confidence)
+}
+
+func TestFetchCLEstimate_ZeroConfidenceIsPreserved(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"result": cardladder.CardEstimateResponse{
+				EstimatedValue: 50,
+				Confidence:     0,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := cardladder.NewClient(
+		cardladder.WithFunctionsURL(server.URL),
+		cardladder.WithStaticToken("test-token"),
+	)
+	s := &CardLadderRefreshScheduler{logger: mocks.NewMockLogger()}
+
+	est, err := s.fetchCLEstimate(context.Background(), client, "psa-123", "g8", "Test Card")
+	require.NoError(t, err)
+	assert.Equal(t, 50.0, est.value)
+	assert.Equal(t, 0, est.confidence)
+}
+
+func TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			"result": cardladder.CardEstimateResponse{
+				EstimatedValue: 210,
+				Confidence:     72,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := cardladder.NewClient(
+		cardladder.WithFunctionsURL(server.URL),
+		cardladder.WithStaticToken("test-token"),
+	)
+
+	valueUpdater := &mockCLValueUpdater{}
+	s := NewCardLadderRefreshScheduler(
+		client, nil,
+		&mockCLPurchaseLister{},
+		valueUpdater,
+		&mockCLGemRateUpdater{},
+		nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true},
+	)
+
+	p1 := &inventory.Purchase{ID: "p1", CertNumber: "CERT-1", CardName: "Charizard"}
+	p2 := &inventory.Purchase{ID: "p2", CertNumber: "CERT-2", CardName: "Charizard"}
+	resolved := []clResolvedPurchase{
+		{purchase: p1, gemRateID: "psa-123", condition: "PSA 8"},
+		{purchase: p2, gemRateID: "psa-123", condition: "PSA 8"},
+	}
+	stats := CLRunStats{}
+
+	err := s.applyCLEstimates(context.Background(), client, resolved, &stats)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, calls, "the second copy should hit the cache, not the API")
+	require.Len(t, valueUpdater.Calls, 2)
+	for i, call := range valueUpdater.Calls {
+		require.NotNilf(t, call.Confidence, "call %d: confidence pointer should not be nil", i)
+		assert.Equal(t, 72, *call.Confidence)
+	}
+	assert.Equal(t, 2, stats.Updated)
 }
