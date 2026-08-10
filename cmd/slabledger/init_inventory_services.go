@@ -273,8 +273,10 @@ func initializeCampaignsService(
 
 // enqueueImageBackfill re-enqueues unsold PSA purchases with empty image URLs
 // onto the cert-enrichment queue so the async worker fills them from PSA.
-// Safe to run repeatedly: rows that already have images will skip the PSA call
-// inside enrichImages.
+// Safe to run repeatedly for correctness: rows that already have images skip
+// the PSA call inside enrichImages. It is enqueued images-only — these rows
+// already carry their card metadata, so a cert lookup here would double the
+// PSA calls this sweep costs for nothing (SLA-108).
 func enqueueImageBackfill(ctx context.Context, repo inventory.PurchaseRepository, enq *scheduler.CertEnrichJob, logger observability.Logger) {
 	unsold, err := repo.ListAllUnsoldPurchases(ctx)
 	if err != nil {
@@ -289,7 +291,7 @@ func enqueueImageBackfill(ctx context.Context, repo inventory.PurchaseRepository
 		if p.FrontImageURL != "" || p.BackImageURL != "" {
 			continue
 		}
-		enq.Enqueue(p.CertNumber)
+		enq.EnqueueImagesOnly(p.CertNumber)
 		enqueued++
 	}
 	logger.Info(ctx, "image backfill: enqueued unsold PSA certs with missing images",

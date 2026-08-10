@@ -359,12 +359,15 @@ func TestIsCircuitBreakerSuccess(t *testing.T) {
 		{"query too short (string)", fmt.Errorf("no product match - query too short"), true},
 		{"AppError ProviderNotFound", apperrors.ProviderNotFound("doubleholo", "Pikachu"), true},
 		{"AppError ProviderInvalidReq", apperrors.ProviderInvalidRequest("doubleholo", fmt.Errorf("bad request")), true},
+		// 401/403: the provider is up and answered — it just rejected the
+		// credential. Tripping the breaker on this masks a key problem as an
+		// outage and blocks the healthy keys in a rotating pool (SLA-108).
+		{"AppError ProviderAuthFailed", apperrors.ProviderAuthFailed("doubleholo", fmt.Errorf("HTTP 401")), true},
 
 		// Infrastructure errors that SHOULD trip the circuit (count as failure)
 		{"AppError ProviderUnavailable", apperrors.ProviderUnavailable("doubleholo", fmt.Errorf("HTTP 503")), false},
 		{"AppError ProviderTimeout", apperrors.ProviderTimeout("doubleholo", fmt.Errorf("timeout")), false},
 		{"AppError ProviderRateLimited", apperrors.ProviderRateLimited("doubleholo", ""), false},
-		{"AppError ProviderAuthFailed", apperrors.ProviderAuthFailed("doubleholo", fmt.Errorf("HTTP 401")), false},
 		{"AppError ProviderCircuitOpen", apperrors.ProviderCircuitOpen("doubleholo"), false},
 		{"generic error", fmt.Errorf("connection refused"), false},
 		{"timeout error", fmt.Errorf("request timeout"), false},
