@@ -5,6 +5,12 @@ import FixDHMatchDialog from '../campaign-detail/inventory/FixDHMatchDialog';
 import type { CertRow } from './cardIntakeTypes';
 import { rowIsListable, rowAwaitingSync, dhPushStuck, scanFieldsFromResult, importErrorStatus } from './cardIntakeTypes';
 import { loadQueue, saveQueue } from './cardIntakeStorage';
+import {
+  autoRetryDelayMs,
+  retryPendingMessage,
+  batchRetryPendingMessage,
+  retryExhaustedMessage,
+} from './cardIntakeRetry';
 import { CertRowItem, StatDot } from './CardIntakeRow';
 import { useCardIntakePolling } from './useCardIntakePolling';
 import { ConfirmDialog } from '../../ui';
@@ -20,6 +26,25 @@ export default function CardIntakeTab() {
   const inputRef = useRef<HTMLInputElement>(null);
   const certsRef = useRef(certs);
   certsRef.current = certs;
+
+  // Automatic retry state for a transient-failure episode. retryAttemptRef
+  // counts attempts already spent in the current episode; it resets on any
+  // clean import and on a manual Import press, so each episode gets a full
+  // budget. importNewRef breaks the cycle between the scheduled callback and
+  // the handler that schedules it.
+  const retryAttemptRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const importNewRef = useRef<(auto?: boolean) => void>(() => {});
+
+  const cancelScheduledRetry = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  // Don't leave a timer firing into an unmounted tree.
+  useEffect(() => cancelScheduledRetry, [cancelScheduledRetry]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -178,20 +203,63 @@ export default function CardIntakeTab() {
   const handleClearAll = () => {
     setCerts(new Map());
     setClearAllOpen(false);
+    // Nothing left to retry — drop the pending attempt and its message rather
+    // than letting a timer fire into an empty queue.
+    cancelScheduledRetry();
+    retryAttemptRef.current = 0;
+    setImportError(null);
     // Defer refocus until after the Radix AlertDialog has finished closing;
     // its onCloseAutoFocus restores focus on unmount and would otherwise
     // clobber a synchronous focus() call here.
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const handleImportNew = async () => {
+  // scheduleAutoRetry books the next automatic attempt, or reports the honest
+  // terminal state once the budget is spent. Returns nothing — the caller has
+  // already put the rows back into an importable state.
+  const scheduleAutoRetry = useCallback(
+    (count: number, buildMessage: (attempt: number, delayMs: number) => string) => {
+      const attempt = retryAttemptRef.current + 1;
+      const delayMs = autoRetryDelayMs(attempt);
+      if (delayMs === null) {
+        // Budget spent. Reset so a manual press starts a fresh episode.
+        retryAttemptRef.current = 0;
+        setImportError(retryExhaustedMessage(count));
+        return;
+      }
+      retryAttemptRef.current = attempt;
+      setImportError(buildMessage(attempt, delayMs));
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+        importNewRef.current(true);
+      }, delayMs);
+    },
+    [],
+  );
+
+  const handleImportNew = useCallback(async (auto = false) => {
+    // A manual press supersedes any pending automatic attempt and starts a
+    // fresh retry budget.
+    cancelScheduledRetry();
+    if (!auto) retryAttemptRef.current = 0;
+
     // Re-collect both freshly-resolved rows and rows staged for retry after a
-    // previous transient PSA failure.
-    const resolvedCerts = Array.from(certs.values())
+    // previous transient PSA failure. Read through the ref: an automatic
+    // attempt fires from a timer whose closure may be several renders stale.
+    const resolvedCerts = Array.from(certsRef.current.values())
       .filter(c => c.status === 'resolved' || c.status === 'retry')
       .map(c => c.certNumber);
 
-    if (resolvedCerts.length === 0) return;
+    if (resolvedCerts.length === 0) {
+      // Nothing left to import, so the retry episode is over. cancelScheduledRetry
+      // above already killed the pending timer; leaving the state alone would
+      // strand "Retrying automatically in Ns" on screen describing a timer that
+      // no longer exists — the same dishonest message this change exists to
+      // remove. End the episode explicitly instead (SLA-108).
+      retryAttemptRef.current = 0;
+      setImportError(null);
+      return;
+    }
 
     setImportLoading(true);
     setImportError(null);
@@ -209,7 +277,7 @@ export default function CardIntakeTab() {
       const result: CertImportResult = await api.importCerts(resolvedCerts);
 
       // Partition per-cert errors: transient (PSA down / quota) failures are
-      // staged as 'retry' so the operator can re-import them with one click;
+      // staged as 'retry' and picked up by the automatic attempt below;
       // permanent failures (cert not found) become terminal 'failed'.
       const errorByCert = new Map(result.errors.map(e => [e.certNumber, e]));
       // Count retryable certs OUTSIDE the state updater — React 18 Strict Mode
@@ -231,18 +299,21 @@ export default function CardIntakeTab() {
         return next;
       });
       if (retryCount > 0) {
-        setImportError(
-          `PSA was temporarily unavailable, so ${retryCount} cert${retryCount > 1 ? 's' : ''} couldn't be imported yet. ` +
-          `They're staged and ready — click "Import" again to retry. Nothing was lost.`
-        );
+        scheduleAutoRetry(retryCount, (attempt, delayMs) =>
+          retryPendingMessage(retryCount, attempt, delayMs));
+      } else {
+        // Clean pass: the episode is over, restore the full budget.
+        retryAttemptRef.current = 0;
       }
       for (const cn of resolvedCerts) {
         if (!errorByCert.has(cn)) void pollCert(cn);
       }
     } catch (err) {
       // Whole-batch failure (network error / 500): nothing was processed, so
-      // return every row to 'resolved' — it's all still importable.
-      setImportError(err instanceof Error ? err.message : 'Import failed');
+      // return every row to 'resolved' — it's all still importable — and retry
+      // on the same schedule. A batch that never reached the server is the
+      // clearest transient case there is.
+      const detail = err instanceof Error ? err.message : 'Import failed';
       setCerts(prev => {
         const next = new Map(prev);
         for (const cn of resolvedCerts) {
@@ -251,11 +322,15 @@ export default function CardIntakeTab() {
         }
         return next;
       });
+      scheduleAutoRetry(resolvedCerts.length, (attempt, delayMs) =>
+        batchRetryPendingMessage(detail, attempt, delayMs));
     } finally {
       setImportLoading(false);
       inputRef.current?.focus();
     }
-  };
+  }, [cancelScheduledRetry, scheduleAutoRetry, pollCert]);
+
+  importNewRef.current = handleImportNew;
 
   const rows = useMemo(() => Array.from(certs.values()), [certs]);
 
@@ -379,15 +454,16 @@ export default function CardIntakeTab() {
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-400)]">
               {batchStats.retry > 0
-                ? `${resolvedCount} cert${resolvedCount > 1 ? 's' : ''} staged (${batchStats.retry} to retry)`
+                ? `${resolvedCount} cert${resolvedCount > 1 ? 's' : ''} staged (${batchStats.retry} retrying automatically)`
                 : `${resolvedCount} new cert${resolvedCount > 1 ? 's' : ''} staged`}
             </span>
             <button
-              onClick={handleImportNew}
+              onClick={() => void handleImportNew()}
               disabled={importLoading}
               className="rounded-lg bg-[var(--brand-500)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-600)] disabled:opacity-50 transition-colors"
+              title={batchStats.retry > 0 ? 'Retry now instead of waiting for the automatic attempt' : undefined}
             >
-              {importLoading ? 'Importing…' : batchStats.retry > 0 ? `Import ${resolvedCount}` : `Import ${resolvedCount} New`}
+              {importLoading ? 'Importing…' : batchStats.retry > 0 ? `Retry ${resolvedCount} now` : `Import ${resolvedCount} New`}
             </button>
           </div>
         </div>

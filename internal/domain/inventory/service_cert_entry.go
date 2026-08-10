@@ -24,6 +24,14 @@ var transientImportErrorCodes = []apperrors.ErrorCode{
 	apperrors.ErrCodeProviderRateLimit,
 	apperrors.ErrCodeProviderTimeout,
 	apperrors.ErrCodeProviderCircuitOpen,
+	// An exhausted PSA token pool reports ERR_PROV_AUTH. It belongs here for
+	// the same reason ERR_PROV_RATE_LIMIT does: the row is intact and a later
+	// attempt can succeed — quota returns at UTC rollover, and a key retired
+	// for repeated 401s is restored on restart. Its neighbours in the same
+	// batch are staged retryable regardless (the batch latch queues them), so
+	// leaving this one out only made the first cert of a failed batch look
+	// permanently broken when it is not (SLA-108).
+	apperrors.ErrCodeProviderAuth,
 	apperrors.ErrCodeNetworkUnavailable,
 	apperrors.ErrCodeNetworkTimeout,
 }
@@ -49,15 +57,25 @@ func isRetryableImportError(err error) bool {
 	return false
 }
 
-// isPSAUnavailableError reports whether an error indicates PSA itself is
-// unreachable batch-wide (circuit breaker open or rate-limited), as opposed to
-// a failure specific to one cert (not-found, a single timeout). When true, the
-// import loop stops issuing lookups for the remaining certs and queues them for
-// retry instead — hammering an open breaker only produces instant
-// ERR_PROV_CIRCUIT_OPEN noise and delays recovery.
-func isPSAUnavailableError(err error) bool {
+// IsPSAUnavailableError reports whether an error means PSA is unusable for
+// every cert right now — the circuit breaker is open, the token pool is rate
+// limited, or every token has been rejected — as opposed to a failure specific
+// to one cert (not-found, a single timeout).
+//
+// Two callers depend on the distinction. The import loop stops issuing lookups
+// for the remaining certs and queues them for retry, because hammering an open
+// breaker only produces instant ERR_PROV_CIRCUIT_OPEN noise and delays
+// recovery. The cert-enrichment job uses it to decide whether a failed image
+// lookup says anything about that cert at all; a pool-wide failure says
+// nothing, so the cert must not be added to the skip set (SLA-108).
+//
+// Auth is included because an exhausted PSA token pool surfaces as
+// ERR_PROV_AUTH once every token is dead, which is a property of the pool and
+// not of the cert being looked up.
+func IsPSAUnavailableError(err error) bool {
 	return apperrors.HasErrorCode(err, apperrors.ErrCodeProviderCircuitOpen) ||
-		apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit)
+		apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) ||
+		apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth)
 }
 
 func (s *service) ImportCerts(ctx context.Context, certNumbers []string) (*CertImportResult, error) {

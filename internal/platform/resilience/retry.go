@@ -98,8 +98,16 @@ func isCircuitBreakerSuccess(err error) bool {
 		case apperrors.ErrCodeProviderInvalidReq:
 			// 400 Bad Request means our request was wrong, not that the service is failing
 			return true
+		case apperrors.ErrCodeProviderAuth:
+			// 401/403 means the service is up and answering — it evaluated our
+			// credential and rejected it. Counting that as an infrastructure
+			// failure trips the breaker for the whole provider, which then
+			// masks a credential problem as a transient outage and blocks the
+			// healthy credentials in a rotating pool (SLA-108). The error is
+			// already non-retryable, so nothing hammers the provider here.
+			return true
 		}
-		// All other AppError types (unavailable, timeout, rate limit, auth) are real failures
+		// All other AppError types (unavailable, timeout, rate limit) are real failures
 		return false
 	}
 

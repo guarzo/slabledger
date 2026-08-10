@@ -302,7 +302,7 @@ func TestImportCerts_DuplicateOnCreate(t *testing.T) {
 // further lookups and queues the rest as retryable (calls == 1), while a
 // permanent per-cert failure (not-found) must NOT latch — every cert is still
 // looked up (calls == len(certs)) and none is marked retryable. The negative
-// case is the important one: it pins isPSAUnavailableError to exactly the
+// case is the important one: it pins IsPSAUnavailableError to exactly the
 // batch-wide codes, so a future broadening that latched on a single bad cert
 // (silently queuing the rest of a large batch) would fail here.
 func TestImportCerts_BatchLatchOnPSAUnavailable(t *testing.T) {
@@ -315,6 +315,13 @@ func TestImportCerts_BatchLatchOnPSAUnavailable(t *testing.T) {
 	}{
 		{name: "circuit open latches the batch", lookupErr: apperrors.ProviderCircuitOpen("PSA"), wantCalls: 1, wantRetryable: true},
 		{name: "rate limit latches the batch", lookupErr: apperrors.ProviderRateLimited("PSA", ""), wantCalls: 1, wantRetryable: true},
+		// An exhausted PSA token pool surfaces as ERR_PROV_AUTH once every key
+		// is dead. That is a property of the pool, not of cert "1", so the rest
+		// of the batch must be queued rather than each burning a lookup that
+		// cannot succeed (SLA-108). The queued certs are staged retryable like
+		// any other latched batch: the rows are intact and a later press — or
+		// the automatic retry — costs nothing extra.
+		{name: "dead key pool latches the batch", lookupErr: apperrors.ProviderAuthFailed("PSA", nil), wantCalls: 1, wantRetryable: true},
 		{name: "not found does not latch the batch", lookupErr: apperrors.ProviderNotFound("PSA", "cert"), wantCalls: len(certs), wantRetryable: false},
 	}
 
