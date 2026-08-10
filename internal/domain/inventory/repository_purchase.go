@@ -40,6 +40,12 @@ type PurchaseCoreRepository interface {
 // purchase: card metadata, images, cost, receipt timing, and campaign
 // attribution. Every method here mutates a purchase that already exists.
 type PurchaseFieldRepository interface {
+	// UpdatePurchaseCLValue refreshes the current CL value and population.
+	// confidence is CardLadder's confidence in this specific card, and the
+	// nil/zero distinction is load-bearing: nil means CardLadder gave no answer
+	// and must leave any stored value NULL, while a non-nil pointer to 0 is a
+	// genuine zero-confidence answer and must be stored as 0. Implementations
+	// must not collapse the two (no COALESCE(confidence, 0)).
 	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents, population int, confidence *int) error
 	UpdatePurchaseCLSyncedAt(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -582,50 +583,42 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 	}
 }
 
-func TestFetchCLEstimate_ReturnsConfidence(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"result": cardladder.CardEstimateResponse{
-				EstimatedValue: 210,
-				Confidence:     72,
-			},
+func TestFetchCLEstimate_ReturnsValueAndConfidence(t *testing.T) {
+	tests := []struct {
+		name           string
+		estimatedValue float64
+		confidence     int
+	}{
+		{name: "non-zero confidence", estimatedValue: 210, confidence: 72},
+		// 0 is a real CardLadder answer, not "no answer": it must survive the
+		// round trip rather than being normalized away.
+		{name: "zero confidence is preserved", estimatedValue: 50, confidence: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"result": cardladder.CardEstimateResponse{
+						EstimatedValue: tt.estimatedValue,
+						Confidence:     tt.confidence,
+					},
+				})
+			}))
+			defer server.Close()
+
+			client := cardladder.NewClient(
+				cardladder.WithFunctionsURL(server.URL),
+				cardladder.WithStaticToken("test-token"),
+			)
+			s := &CardLadderRefreshScheduler{logger: mocks.NewMockLogger()}
+
+			est, err := s.fetchCLEstimate(context.Background(), client, "psa-123", "g8", "Test Card")
+			require.NoError(t, err)
+			assert.Equal(t, tt.estimatedValue, est.value)
+			assert.Equal(t, tt.confidence, est.confidence)
 		})
-	}))
-	defer server.Close()
-
-	client := cardladder.NewClient(
-		cardladder.WithFunctionsURL(server.URL),
-		cardladder.WithStaticToken("test-token"),
-	)
-	s := &CardLadderRefreshScheduler{logger: mocks.NewMockLogger()}
-
-	est, err := s.fetchCLEstimate(context.Background(), client, "psa-123", "g8", "Test Card")
-	require.NoError(t, err)
-	assert.Equal(t, 210.0, est.value)
-	assert.Equal(t, 72, est.confidence)
-}
-
-func TestFetchCLEstimate_ZeroConfidenceIsPreserved(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"result": cardladder.CardEstimateResponse{
-				EstimatedValue: 50,
-				Confidence:     0,
-			},
-		})
-	}))
-	defer server.Close()
-
-	client := cardladder.NewClient(
-		cardladder.WithFunctionsURL(server.URL),
-		cardladder.WithStaticToken("test-token"),
-	)
-	s := &CardLadderRefreshScheduler{logger: mocks.NewMockLogger()}
-
-	est, err := s.fetchCLEstimate(context.Background(), client, "psa-123", "g8", "Test Card")
-	require.NoError(t, err)
-	assert.Equal(t, 50.0, est.value)
-	assert.Equal(t, 0, est.confidence)
+	}
 }
 
 // TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies guards two distinct
@@ -643,9 +636,12 @@ func TestFetchCLEstimate_ZeroConfidenceIsPreserved(t *testing.T) {
 //     the confidence variable would still pass because every call shares the
 //     same (correct) value.
 func TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies(t *testing.T) {
-	calls := 0
+	// Atomic because httptest runs every handler invocation on its own
+	// goroutine; a plain int would be a data race the moment applyCLEstimates
+	// stops issuing its calls strictly sequentially.
+	var calls atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
+		calls.Add(1)
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		var req struct {
@@ -692,7 +688,7 @@ func TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies(t *testing.T) {
 	err := s.applyCLEstimates(context.Background(), client, resolved, &stats)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, calls, "one call per distinct (gemRateID, condition); p2 should hit the cache")
+	require.Equal(t, int64(2), calls.Load(), "one call per distinct (gemRateID, condition); p2 should hit the cache")
 	require.Len(t, valueUpdater.Calls, 3)
 
 	wantConfidence := map[string]int{"p1": 72, "p2": 72, "p3": 0}

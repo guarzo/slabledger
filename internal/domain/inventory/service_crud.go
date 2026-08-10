@@ -123,8 +123,9 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 
 	// (a) creation-time facts, set-once.
 	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
+		policyMin := c // distinct backing var: one shared address would couple the two fields
 		p.CLConfidenceAtPurchase = &c
-		p.CLPolicyConfidenceMinAtPurchase = &c
+		p.CLPolicyConfidenceMinAtPurchase = &policyMin
 	}
 	// PopulationAtPurchase is deliberately NOT frozen here (D2). It used to be
 	// set from p.Population whenever positive, but that branch was dead on

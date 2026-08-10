@@ -570,31 +570,6 @@ func TestCreatePurchaseCLProvenanceSource(t *testing.T) {
 	}
 }
 
-func TestUpdatePurchaseCLValue_AcceptsConfidenceParam(t *testing.T) {
-	db := setupTestDB(t)
-	logger := mocks.NewMockLogger()
-	ps := NewPurchaseStore(db.DB, logger)
-	ctx := context.Background()
-
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
-		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
-		 ON CONFLICT (id) DO NOTHING`)
-	if err != nil {
-		t.Fatalf("seed campaign: %v", err)
-	}
-
-	p := makeTestPurchase()
-	if err := ps.CreatePurchase(ctx, p); err != nil {
-		t.Fatalf("create: %v", err)
-	}
-
-	confidence := 72
-	if err := ps.UpdatePurchaseCLValue(ctx, p.ID, 500, 10, &confidence); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-}
-
 func TestUpdatePurchaseCLValue_FreezeGuardAndConfidence(t *testing.T) {
 	db := setupTestDB(t)
 	logger := mocks.NewMockLogger()
@@ -664,7 +639,14 @@ func TestUpdatePurchaseCLValue_FreezeGuardAndConfidence(t *testing.T) {
 			wantConfFrozen:  false,
 		},
 		{
-			name:            "impossible day-of-month fails closed without erroring",
+			// Calendar-invalid but shape-valid, and also far outside the window.
+			// The guard does NOT reject this for being an impossible day -- the
+			// regex accepts day 30 under month 02 and the comparison is textual,
+			// exactly as cl_freeze.go's documented residual says. What this case
+			// pins is that such input is handled as ordinary out-of-window text:
+			// no freeze, and critically no error, where a ::date cast would raise
+			// and abort the whole UPDATE.
+			name:            "calendar-invalid date is compared as text, not cast",
 			purchaseDate:    "2026-02-30",
 			confidence:      &conf72,
 			wantCentsFrozen: false,
@@ -757,8 +739,9 @@ func TestUpdatePurchaseCLValue_FreezeGuardAndConfidence(t *testing.T) {
 				if got.CLValueAtPurchaseObservedAt == "" {
 					t.Error("CLValueAtPurchaseObservedAt should be set when frozen")
 				}
-				if got.CLValueAtPurchaseSource != "cardladder" {
-					t.Errorf("CLValueAtPurchaseSource = %q, want cardladder", got.CLValueAtPurchaseSource)
+				if got.CLValueAtPurchaseSource != inventory.CLProvenanceSourceCardLadder {
+					t.Errorf("CLValueAtPurchaseSource = %q, want %q",
+						got.CLValueAtPurchaseSource, inventory.CLProvenanceSourceCardLadder)
 				}
 			} else {
 				if got.CLValueAtPurchaseCents != 0 {

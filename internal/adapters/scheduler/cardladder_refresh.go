@@ -8,6 +8,7 @@ import (
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/mathutil"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -247,7 +248,14 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 
 	est, err := s.fetchCLEstimate(ctx, client, gemRateID, condition, p.CardName)
 	if err != nil {
-		s.recordCLError(ctx, p.ID, CLReasonAPIError)
+		// Same quota/error split resolveGemRate applies to its own CL call: a
+		// quota-exhausted card was never attempted, so tagging it api_error
+		// misreports why it has no value.
+		reason := CLReasonAPIError
+		if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
+			reason = CLReasonQuotaExhausted
+		}
+		s.recordCLError(ctx, p.ID, reason)
 		return nil
 	}
 	if est.value <= 0 {
