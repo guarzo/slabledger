@@ -83,6 +83,24 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	p.ActiveListingsAtPurchase = nil
 	p.SalesLast30dAtPurchase = nil
 
+	// CLValueUpdatedAt is the sole discriminator the store's create-time freeze
+	// (purchase_store.go) uses to decide whether the freeze's provenance source
+	// is "cardladder" or "intake" -- a forged value here earns a false
+	// "cardladder" label, which is what pulls a fabricated row into the
+	// provenance study. Cleared unconditionally, at this single choke point
+	// covering every caller of this method (HTTP create, QuickAdd, PSA/CSV
+	// import, ...), because no legitimate caller ever sets it: it has exactly
+	// one legitimate writer, UpdatePurchaseCLValue, which runs later from the
+	// CardLadder scheduler. CLValueCents cannot be cleared here the same way --
+	// QuickAddPurchase legitimately supplies it through this exact method as the
+	// operator's manually-entered CL value at intake -- so that half of the
+	// clear stays in HandleCreatePurchase (campaigns_purchases.go), which has no
+	// way to tell a QuickAdd value from a forged HTTP body apart from the path
+	// it arrived on. A future handler that decodes a request body straight into
+	// Purchase must clear CLValueCents itself the same way; this comment is the
+	// warning for it.
+	p.CLValueUpdatedAt = ""
+
 	// (a) creation-time facts, set-once.
 	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
 		p.CLConfidenceAtPurchase = &c

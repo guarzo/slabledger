@@ -557,6 +557,60 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 	}
 }
 
+// TestCreatePurchase_ClearsCLValueUpdatedAt proves service.CreatePurchase
+// unconditionally discards a supplied CLValueUpdatedAt before the create-time
+// freeze runs, regardless of caller. This is the single choke point covering
+// every caller of the service method (HandleCreatePurchase's raw body decode,
+// QuickAddPurchase, PSA/CSV import, ...), unlike CLValueCents, which QuickAdd
+// legitimately supplies here as the operator's manually-entered CL value at
+// intake and so cannot be cleared at this layer (see
+// HandleCreatePurchase in campaigns_purchases.go for that half of the clear).
+func TestCreatePurchase_ClearsCLValueUpdatedAt(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers())
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		certNumber       string
+		clValueCents     int
+		clValueUpdatedAt string
+	}{
+		{name: "forged cardladder marker with value", certNumber: "22222221", clValueCents: 4200, clValueUpdatedAt: "2026-08-10T00:00:00Z"},
+		{name: "marker only, no value", certNumber: "22222222", clValueCents: 0, clValueUpdatedAt: "2026-08-10T00:00:00Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &inventory.Purchase{
+				CampaignID:       c.ID,
+				CardName:         "Charizard",
+				CertNumber:       tt.certNumber,
+				GradeValue:       10,
+				BuyCostCents:     10000,
+				PurchaseDate:     "2026-08-10",
+				CLValueCents:     tt.clValueCents,
+				CLValueUpdatedAt: tt.clValueUpdatedAt,
+			}
+			if err := svc.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+			if p.CLValueUpdatedAt != "" {
+				t.Errorf("CLValueUpdatedAt = %q, want empty (service must clear it unconditionally)", p.CLValueUpdatedAt)
+			}
+			// CLValueCents must survive: QuickAddPurchase relies on this same
+			// service method to carry an operator's legitimate intake value.
+			if p.CLValueCents != tt.clValueCents {
+				t.Errorf("CLValueCents = %d, want %d (must survive; only CLValueUpdatedAt is cleared here)", p.CLValueCents, tt.clValueCents)
+			}
+		})
+	}
+}
+
 // --- ImportPSAExportGlobal tests ---
 
 func TestService_CreateSale_WasCracked(t *testing.T) {
