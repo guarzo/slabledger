@@ -54,8 +54,14 @@ type Deps struct {
 	PriceLookup     inventory.PriceLookup
 	CardIDResolver  inventory.CardIDResolver
 	CertEnrichQueue inventory.CertEnrichEnqueuer
-	DHSoldNotifier  inventory.DHSoldNotifier
-	PSAResolver     inventory.PSACampaignResolver
+	// PricingQueue submits allocated certs for immediate on-demand CL pricing so
+	// bulk-imported inventory is priced at intake rather than waiting for the
+	// next daily refresh sweep (D6). Nil-checked at its use site exactly like
+	// CertEnrichQueue, so a caller that has no pricing pipeline wired (e.g.
+	// cmd/psa-harvest, which only reconciles PSA attribution) can omit it.
+	PricingQueue   inventory.PricingEnqueuer
+	DHSoldNotifier inventory.DHSoldNotifier
+	PSAResolver    inventory.PSACampaignResolver
 
 	IDGen  func() string
 	Logger observability.Logger
@@ -73,6 +79,7 @@ type service struct {
 	priceProv       inventory.PriceLookup
 	cardIDResolver  inventory.CardIDResolver
 	certEnrichQueue inventory.CertEnrichEnqueuer
+	pricingQueue    inventory.PricingEnqueuer
 	dhSoldNotifier  inventory.DHSoldNotifier
 	psaResolver     inventory.PSACampaignResolver
 
@@ -105,6 +112,7 @@ func NewService(d Deps) Service {
 		priceProv:       d.PriceLookup,
 		cardIDResolver:  d.CardIDResolver,
 		certEnrichQueue: d.CertEnrichQueue,
+		pricingQueue:    d.PricingQueue,
 		dhSoldNotifier:  d.DHSoldNotifier,
 		psaResolver:     d.PSAResolver,
 		idGen:           d.IDGen,

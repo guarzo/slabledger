@@ -75,6 +75,82 @@ func newServicesWithResolver(repo *mocks.InMemoryCampaignStore, pending inventor
 	return inv, imp
 }
 
+// setupActiveVintageCampaign creates and activates the same "Vintage"
+// grade-range campaign TestService_ImportPSAExportGlobal_Allocate uses, so the
+// pricing-enqueue tests below allocate their rows through the identical match
+// path instead of duplicating a second fixture shape.
+func setupActiveVintageCampaign(t *testing.T, repo *mocks.InMemoryCampaignStore) (inventory.Service, error) {
+	t.Helper()
+	ctx := context.Background()
+	svc, _ := newServices(repo, nil)
+	c := &inventory.Campaign{Name: "Vintage", Sport: "Pokemon", BuyTermsCLPct: 0.78, GradeRange: "8-10", PSASourcingFeeCents: 300}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		return nil, err
+	}
+	c.Phase = inventory.PhaseActive
+	if err := svc.UpdateCampaign(ctx, c); err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
+
+func TestService_ImportPSAExportGlobal_EnqueuesPricing(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc, err := setupActiveVintageCampaign(t, repo)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	pricingQueue := &mocks.PricingEnqueuerMock{}
+	imp := csvimport.NewService(csvimport.Deps{
+		Campaigns:    repo,
+		Purchases:    repo,
+		Sales:        repo,
+		Finance:      repo,
+		Inventory:    svc,
+		PricingQueue: pricingQueue,
+		IDGen:        func() string { return "test-id-pricing" },
+	})
+
+	rows := []csvimport.PSAExportRow{
+		{CertNumber: "PRICE01", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 500, Date: "2026-01-15", Category: "Pokemon"},
+	}
+	result, err := imp.ImportPSAExportGlobal(context.Background(), rows)
+	if err != nil {
+		t.Fatalf("ImportPSAExportGlobal: %v", err)
+	}
+	if result.Allocated != 1 {
+		t.Fatalf("Allocated = %d, want 1", result.Allocated)
+	}
+	got := pricingQueue.Certs()
+	if len(got) != 1 || got[0] != "PRICE01" {
+		t.Errorf("pricingQueue certs = %v, want [PRICE01]", got)
+	}
+}
+
+func TestService_ImportPSAExportGlobal_NilPricingQueueDoesNotPanic(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc, err := setupActiveVintageCampaign(t, repo)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	imp := csvimport.NewService(csvimport.Deps{
+		Campaigns: repo,
+		Purchases: repo,
+		Sales:     repo,
+		Finance:   repo,
+		Inventory: svc,
+		// PricingQueue intentionally left nil.
+		IDGen: func() string { return "test-id-nilpricing" },
+	})
+
+	rows := []csvimport.PSAExportRow{
+		{CertNumber: "PRICE02", ListingTitle: "2022 POKEMON CHARIZARD PSA 9", Grade: 9, PricePaid: 500, Date: "2026-01-15", Category: "Pokemon"},
+	}
+	if _, err := imp.ImportPSAExportGlobal(context.Background(), rows); err != nil {
+		t.Fatalf("ImportPSAExportGlobal with nil PricingQueue: %v", err)
+	}
+}
+
 func TestService_ImportPSAExportGlobal_Allocate(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
 	svc, imp := newServices(repo, nil)

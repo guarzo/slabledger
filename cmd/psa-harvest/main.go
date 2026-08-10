@@ -274,6 +274,10 @@ func decideReconcileGate(campaignsFresh bool, rowsErr error) reconcileGate {
 // of it: PSA attribution reconciliation. It wires the repositories that path
 // touches plus the pending-items repository, so an unresolved PSA campaign name
 // still lands in the operator work queue.
+//
+// PricingQueue is deliberately omitted (left nil): this binary reconciles
+// existing purchases' campaign attribution, it does not import new inventory,
+// so there is nothing here for D6's intake-time pricing to enqueue against.
 func buildImportService(db *postgres.DB, logger observability.Logger, campaignStore *postgres.CampaignStore, resolver inventory.PSACampaignResolver) csvimport.Service {
 	return csvimport.NewService(csvimport.Deps{
 		Campaigns:    campaignStore,
