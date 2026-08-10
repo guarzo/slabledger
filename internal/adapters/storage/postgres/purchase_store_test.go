@@ -404,3 +404,41 @@ func TestUpdatePurchaseAttributionName(t *testing.T) {
 		t.Errorf("AttributionSource = %q, want %q", got.AttributionSource, inventory.AttributionSourcePSA)
 	}
 }
+
+func TestPurchaseCLProvenanceColumnsRoundTrip(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	p := makeTestPurchase()
+	p.CLValueAtPurchaseCents = 5000
+	p.CLValueAtPurchaseObservedAt = "2026-01-01T00:00:00Z"
+	p.CLValueAtPurchaseSource = inventory.CLProvenanceSourceCardLadder
+	p.CLCardConfidenceAtPurchase = intPtr(72)
+	if err := ps.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := ps.GetPurchase(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.CLValueAtPurchaseObservedAt != p.CLValueAtPurchaseObservedAt {
+		t.Errorf("CLValueAtPurchaseObservedAt = %q, want %q", got.CLValueAtPurchaseObservedAt, p.CLValueAtPurchaseObservedAt)
+	}
+	if got.CLValueAtPurchaseSource != p.CLValueAtPurchaseSource {
+		t.Errorf("CLValueAtPurchaseSource = %q, want %q", got.CLValueAtPurchaseSource, p.CLValueAtPurchaseSource)
+	}
+	if got.CLCardConfidenceAtPurchase == nil || *got.CLCardConfidenceAtPurchase != *p.CLCardConfidenceAtPurchase {
+		t.Errorf("CLCardConfidenceAtPurchase = %v, want %v", got.CLCardConfidenceAtPurchase, p.CLCardConfidenceAtPurchase)
+	}
+}

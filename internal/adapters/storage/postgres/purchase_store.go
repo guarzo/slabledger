@@ -75,6 +75,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			gem_rate_id, psa_spec_id,
 			-- provenance snapshot
 			cl_value_at_purchase_cents,
+			cl_value_at_purchase_observed_at, cl_value_at_purchase_source, cl_card_confidence_at_purchase,
 			cl_confidence_at_purchase, population_at_purchase, dh_confidence_at_purchase,
 			source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
 			-- attribution
@@ -106,9 +107,10 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			$53, $54,
 			-- provenance snapshot
 			$55,
-			$56, $57, $58, $59, $60, $61,
+			$56, $57, $58,
+			$59, $60, $61, $62, $63, $64,
 			-- attribution
-			$62, $63
+			$65, $66
 		)
 	`
 	_, err := ps.db.ExecContext(ctx, query,
@@ -128,6 +130,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus, p.DHCandidatesJSON,
 		p.GemRateID, p.PSASpecID,
 		p.CLValueAtPurchaseCents,
+		p.CLValueAtPurchaseObservedAt, p.CLValueAtPurchaseSource, p.CLCardConfidenceAtPurchase,
 		p.CLConfidenceAtPurchase, p.PopulationAtPurchase, p.DHConfidenceAtPurchase,
 		p.SourceCountAtPurchase, p.ActiveListingsAtPurchase, p.SalesLast30dAtPurchase,
 		p.PSACampaignName, p.AttributionSource,
