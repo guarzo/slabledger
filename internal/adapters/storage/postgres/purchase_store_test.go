@@ -58,6 +58,12 @@ func TestCLValueAtPurchaseSetOnce(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := makeTestPurchase()
 			p.CLValueCents = tt.createCL
+			// "snapshot at first enrichment" freezes via UpdatePurchaseCLValue's own
+			// write-time lateness guard (D4), not the create-time freeze, since
+			// createCL is 0 here. That guard requires purchase_date to be within
+			// clFreezeMaxAgeDays of today, so this can't use makeTestPurchase()'s
+			// fixed "2026-01-01" default unmodified -- it's stale by construction.
+			p.PurchaseDate = time.Now().UTC().Format("2006-01-02")
 			if err := ps.CreatePurchase(ctx, p); err != nil {
 				t.Fatalf("create: %v", err)
 			}
@@ -547,5 +553,212 @@ func TestUpdatePurchaseCLValue_AcceptsConfidenceParam(t *testing.T) {
 	confidence := 72
 	if err := ps.UpdatePurchaseCLValue(ctx, p.ID, 500, 10, &confidence); err != nil {
 		t.Fatalf("update: %v", err)
+	}
+}
+
+func TestUpdatePurchaseCLValue_FreezeGuardAndConfidence(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	stale := time.Now().UTC().AddDate(0, 0, -30).Format("2006-01-02")
+	conf72 := 72
+	conf0 := 0
+	preConf := 1
+
+	tests := []struct {
+		name            string
+		purchaseDate    string
+		confidence      *int
+		preFreeze       bool // apply an in-window freezing update before the one under test
+		wantCentsFrozen bool
+		wantPopFrozen   bool
+		wantConfFrozen  bool
+		wantConfValue   *int
+	}{
+		{
+			name:            "recent purchase freezes everything",
+			purchaseDate:    today,
+			confidence:      &conf72,
+			wantCentsFrozen: true,
+			wantPopFrozen:   true,
+			wantConfFrozen:  true,
+			wantConfValue:   &conf72,
+		},
+		{
+			name:            "stale purchase freezes nothing",
+			purchaseDate:    stale,
+			confidence:      &conf72,
+			wantCentsFrozen: false,
+			wantPopFrozen:   false,
+			wantConfFrozen:  false,
+		},
+		{
+			name:            "malformed purchase_date fails closed",
+			purchaseDate:    "not-a-date",
+			confidence:      &conf72,
+			wantCentsFrozen: false,
+			wantPopFrozen:   false,
+			wantConfFrozen:  false,
+		},
+		{
+			// The dangerous class: date-SHAPED but calendar-invalid. A ::date or
+			// to_date() guard RAISES on these, aborting the whole UPDATE -- and
+			// purchase_date is validated for non-emptiness only, so a client can
+			// plant one and poison every later call. This case must return an
+			// error-free "froze nothing", not an error.
+			name:            "date-shaped but out-of-range month/day fails closed without erroring",
+			purchaseDate:    "2026-99-99",
+			confidence:      &conf72,
+			wantCentsFrozen: false,
+			wantPopFrozen:   false,
+			wantConfFrozen:  false,
+		},
+		{
+			name:            "impossible day-of-month fails closed without erroring",
+			purchaseDate:    "2026-02-30",
+			confidence:      &conf72,
+			wantCentsFrozen: false,
+			wantPopFrozen:   false,
+			wantConfFrozen:  false,
+		},
+		{
+			// Forged recency: a future purchase_date is within "7 days before
+			// today" under a lower-bound-only guard. The upper bound rejects it.
+			name:            "future purchase_date fails closed",
+			purchaseDate:    "2099-01-01",
+			confidence:      &conf72,
+			wantCentsFrozen: false,
+			wantPopFrozen:   false,
+			wantConfFrozen:  false,
+		},
+		{
+			name:            "nil confidence stays null",
+			purchaseDate:    today,
+			confidence:      nil,
+			wantCentsFrozen: true,
+			wantPopFrozen:   true,
+			wantConfFrozen:  false,
+		},
+		{
+			name:            "zero confidence freezes as zero, not null",
+			purchaseDate:    today,
+			confidence:      &conf0,
+			wantCentsFrozen: true,
+			wantPopFrozen:   true,
+			wantConfFrozen:  true,
+			wantConfValue:   &conf0,
+		},
+		{
+			name:            "already-frozen recent purchase holds set-once",
+			purchaseDate:    today,
+			confidence:      &conf72,
+			preFreeze:       true,
+			wantCentsFrozen: true,
+			wantPopFrozen:   true,
+			wantConfFrozen:  true,
+			wantConfValue:   &conf72,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := makeTestPurchase()
+			p.PurchaseDate = tt.purchaseDate
+			if err := ps.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			if tt.preFreeze {
+				if err := ps.UpdatePurchaseCLValue(ctx, p.ID, 900, 5, &preConf); err != nil {
+					t.Fatalf("pre-freeze update: %v", err)
+				}
+			}
+
+			// This Fatalf is load-bearing for the malformed-date cases: the whole
+			// point of the shape-check-plus-text-comparison guard is that a
+			// garbage purchase_date makes the freeze not fire, WITHOUT raising.
+			// A cast-based guard fails here with a Postgres error, not with a
+			// wrong value.
+			if err := ps.UpdatePurchaseCLValue(ctx, p.ID, 500, 10, tt.confidence); err != nil {
+				t.Fatalf("update: %v", err)
+			}
+
+			got, err := ps.GetPurchase(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+
+			// cl_value_cents and population always update, freeze guard notwithstanding.
+			if got.CLValueCents != 500 {
+				t.Errorf("CLValueCents = %d, want 500", got.CLValueCents)
+			}
+			if got.Population != 10 {
+				t.Errorf("Population = %d, want 10", got.Population)
+			}
+
+			if tt.wantCentsFrozen {
+				wantCents := 500
+				if tt.preFreeze {
+					wantCents = 900
+				}
+				if got.CLValueAtPurchaseCents != wantCents {
+					t.Errorf("CLValueAtPurchaseCents = %d, want %d", got.CLValueAtPurchaseCents, wantCents)
+				}
+				if got.CLValueAtPurchaseObservedAt == "" {
+					t.Error("CLValueAtPurchaseObservedAt should be set when frozen")
+				}
+				if got.CLValueAtPurchaseSource != "cardladder" {
+					t.Errorf("CLValueAtPurchaseSource = %q, want cardladder", got.CLValueAtPurchaseSource)
+				}
+			} else {
+				if got.CLValueAtPurchaseCents != 0 {
+					t.Errorf("CLValueAtPurchaseCents = %d, want 0 (not frozen)", got.CLValueAtPurchaseCents)
+				}
+				if got.CLValueAtPurchaseObservedAt != "" {
+					t.Errorf("CLValueAtPurchaseObservedAt = %q, want empty", got.CLValueAtPurchaseObservedAt)
+				}
+				if got.CLValueAtPurchaseSource != "" {
+					t.Errorf("CLValueAtPurchaseSource = %q, want empty", got.CLValueAtPurchaseSource)
+				}
+			}
+
+			if tt.wantPopFrozen {
+				wantPop := 10
+				if tt.preFreeze {
+					wantPop = 5
+				}
+				if got.PopulationAtPurchase == nil || *got.PopulationAtPurchase != wantPop {
+					t.Errorf("PopulationAtPurchase = %v, want %d", got.PopulationAtPurchase, wantPop)
+				}
+			} else if got.PopulationAtPurchase != nil {
+				t.Errorf("PopulationAtPurchase = %v, want nil", got.PopulationAtPurchase)
+			}
+
+			if tt.wantConfFrozen {
+				if got.CLCardConfidenceAtPurchase == nil {
+					t.Fatal("CLCardConfidenceAtPurchase = nil, want frozen value")
+				}
+				want := tt.wantConfValue
+				if tt.preFreeze {
+					want = &preConf
+				}
+				if *got.CLCardConfidenceAtPurchase != *want {
+					t.Errorf("CLCardConfidenceAtPurchase = %d, want %d", *got.CLCardConfidenceAtPurchase, *want)
+				}
+			} else if got.CLCardConfidenceAtPurchase != nil {
+				t.Errorf("CLCardConfidenceAtPurchase = %v, want nil", got.CLCardConfidenceAtPurchase)
+			}
+		})
 	}
 }
