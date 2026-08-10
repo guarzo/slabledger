@@ -403,3 +403,56 @@ func TestCreateBulkSales_PriceSourceDefaults(t *testing.T) {
 		t.Errorf("Errors[0].Error = %q, want %q", result.Errors[0].Error, inventory.ErrInvalidPriceSource.Error())
 	}
 }
+
+func TestFreezeSaleProvenance_CLProvenanceLabel(t *testing.T) {
+	tests := []struct {
+		name             string
+		clValueCents     int
+		clValueUpdatedAt string
+		wantObservedAt   string
+		wantSource       string
+	}{
+		{
+			name:             "cardladder answered: source is cardladder, observed_at is the CL update stamp",
+			clValueCents:     12000,
+			clValueUpdatedAt: "2026-06-15T10:00:00Z",
+			wantObservedAt:   "2026-06-15T10:00:00Z",
+			wantSource:       inventory.CLProvenanceSourceCardLadder,
+		},
+		{
+			name:             "cardladder never answered but a positive value carried from intake: source is intake",
+			clValueCents:     12000,
+			clValueUpdatedAt: "",
+			wantObservedAt:   "",
+			wantSource:       inventory.CLProvenanceSourceIntake,
+		},
+		{
+			name:             "no CL value at all: both fields stay empty",
+			clValueCents:     0,
+			clValueUpdatedAt: "",
+			wantObservedAt:   "",
+			wantSource:       "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			purchase := &inventory.Purchase{
+				CLValueCents:     tt.clValueCents,
+				CLValueUpdatedAt: tt.clValueUpdatedAt,
+			}
+			campaign := &inventory.Campaign{EbayFeePct: 0.10}
+			sa := &inventory.Sale{SaleChannel: inventory.SaleChannelEbay}
+
+			if err := inventory.FreezeSaleProvenance(sa, purchase, campaign, false); err != nil {
+				t.Fatalf("FreezeSaleProvenance: %v", err)
+			}
+
+			if sa.CLValueAtSaleObservedAt != tt.wantObservedAt {
+				t.Errorf("CLValueAtSaleObservedAt = %q, want %q", sa.CLValueAtSaleObservedAt, tt.wantObservedAt)
+			}
+			if sa.CLValueAtSaleSource != tt.wantSource {
+				t.Errorf("CLValueAtSaleSource = %q, want %q", sa.CLValueAtSaleSource, tt.wantSource)
+			}
+		})
+	}
+}

@@ -214,6 +214,30 @@ func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forc
 	}
 	// Server-authoritative: overwrite any client-supplied values.
 	sa.CLValueAtSaleCents = purchase.CLValueCents
+	// Label the CL-at-sale snapshot the same way D5 labels the CL-at-purchase
+	// snapshot: cl_value_cents has a second writer, the Shopify external import
+	// (purchase_price_store.go UpdateExternalPurchaseFields, 339 production rows),
+	// which never calls CardLadder. cl_value_updated_at is the only predicate with
+	// exactly one writer (UpdatePurchaseCLValue) and is therefore the sole reliable
+	// signal that CardLadder actually answered — see the comments at
+	// pricing_diagnostics.go:91-95 and cl_coverage_store.go:161-166.
+	//
+	// observed_at matters more than source: a value labelled "cardladder" but
+	// observed three months before this sale is not a CL-at-sale snapshot, it is a
+	// stale number wearing the label. Only the timestamp exposes that gap, so both
+	// fields are set together and neither is trustworthy read alone.
+	switch {
+	case purchase.CLValueUpdatedAt != "":
+		sa.CLValueAtSaleObservedAt = purchase.CLValueUpdatedAt
+		sa.CLValueAtSaleSource = CLProvenanceSourceCardLadder
+	case purchase.CLValueCents > 0:
+		// A positive value with no CardLadder update stamp: unambiguously the
+		// intake-time figure (Shopify import or manual entry), not an observation.
+		sa.CLValueAtSaleSource = CLProvenanceSourceIntake
+	default:
+		// No CL value at all: leave both empty rather than writing a label for
+		// data that was never observed.
+	}
 	pct := EffectiveChannelFeePct(sa.SaleChannel, campaign)
 	sa.ChannelFeePctAtSale = &pct
 	// Keep the plain boolean in sync with the reason (app-maintained; not generated).
