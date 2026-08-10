@@ -402,61 +402,124 @@ func TestDoRequest_PreservesRetryAfter(t *testing.T) {
 	}
 }
 
-// --- doRequest: daily call limit ---
+// --- doRequest: 403 handling ---
 
-func TestDoRequest_DailyCallLimitEnforced(t *testing.T) {
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "111", CardGrade: "MINT 9"}}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	c := newTestClient(t, server.URL)
-	today := time.Now().UTC().Format("2006-01-02")
-	c.dailyCounts.mu.Lock()
-	c.dailyCounts.counts[tokenDayKey{token: "test-token", day: today}] = dailyCallLimit - 1
-	c.dailyCounts.mu.Unlock()
-
-	_, err := c.GetCert(context.Background(), "111")
-	if err != nil {
-		t.Fatalf("expected first call to succeed: %v", err)
-	}
-
-	_, err = c.GetCert(context.Background(), "222")
-	if err == nil {
-		t.Fatal("expected daily limit error")
-	}
-}
-
-func TestDoRequest_DailyLimitRotatesToNextToken(t *testing.T) {
+// TestDoRequest_RotatesOn403 is the regression test for SLA-108: a 403 from an
+// unapproved key used to fall through to the blanket ProviderUnavailable wrap,
+// so the client neither rotated nor reported the real cause. Every subsequent
+// call reused the same rejected key until the breaker tripped.
+func TestDoRequest_RotatesOn403(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer token-b" {
-			t.Errorf("expected token-b after rotation, got %s", auth)
+		if r.Header.Get("Authorization") == "Bearer token-a" {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"Message":"Access to this API is limited to approved customers."}`)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		resp := CertResponse{PSACert: CertInfo{CertNumber: "333", CardGrade: "NM-MT 8"}}
-		json.NewEncoder(w).Encode(resp)
+		json.NewEncoder(w).Encode(CertResponse{PSACert: CertInfo{CertNumber: "777", CardGrade: "MINT 9"}})
 	}))
 	defer server.Close()
 
 	c := newTestClient(t, server.URL, "token-a", "token-b")
-	today := time.Now().UTC().Format("2006-01-02")
-	c.dailyCounts.mu.Lock()
-	c.dailyCounts.counts[tokenDayKey{token: "token-a", day: today}] = dailyCallLimit
-	c.dailyCounts.mu.Unlock()
-
-	info, err := c.GetCert(context.Background(), "333")
+	info, err := c.GetCert(context.Background(), "777")
 	if err != nil {
-		t.Fatalf("expected success with token-b: %v", err)
+		t.Fatalf("expected rotation past the 403 key, got: %v", err)
 	}
-	if info.CertNumber != "333" {
-		t.Errorf("CertNumber = %q, want %q", info.CertNumber, "333")
+	if info.CertNumber != "777" {
+		t.Errorf("CertNumber = %q, want %q", info.CertNumber, "777")
+	}
+	if calls.Load() != 2 {
+		t.Errorf("expected 2 calls (403 then success), got %d", calls.Load())
+	}
+}
+
+// TestDoRequest_DeadKeyNotRetried proves a 403'd key is retired rather than
+// re-tried on every subsequent request. Without this the client burns a call
+// per request on a key that can never succeed.
+func TestDoRequest_DeadKeyNotRetried(t *testing.T) {
+	var tokenACalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer token-a" {
+			tokenACalls.Add(1)
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(CertResponse{PSACert: CertInfo{CertNumber: "888", CardGrade: "MINT 9"}})
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server.URL, "token-a", "token-b")
+	for i := 0; i < 3; i++ {
+		if _, err := c.GetCert(context.Background(), "888"); err != nil {
+			t.Fatalf("call %d failed: %v", i+1, err)
+		}
+	}
+	if got := tokenACalls.Load(); got != 1 {
+		t.Errorf("dead key was tried %d times, want 1", got)
+	}
+}
+
+// TestDoRequest_All403ReturnsAuthError proves an all-unapproved pool surfaces
+// ERR_PROV_AUTH rather than ERR_PROV_UNAVAILABLE. The distinction drives
+// whether the import layer queues the cert for retry or tells the operator the
+// keys need fixing.
+func TestDoRequest_All403ReturnsAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"Message":"Access to this API is limited to approved customers."}`)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server.URL, "token-a", "token-b")
+	_, err := c.GetCert(context.Background(), "12345678")
+	if err == nil {
+		t.Fatal("expected error when every key is rejected")
+	}
+	if !apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth) {
+		t.Fatalf("expected ErrCodeProviderAuth, got %v", err)
+	}
+
+	// A second call must not re-probe the dead keys.
+	_, err = c.GetCert(context.Background(), "12345678")
+	if !apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth) {
+		t.Fatalf("second call: expected ErrCodeProviderAuth, got %v", err)
+	}
+}
+
+// --- doRequest: quota exhaustion ---
+
+// TestDoRequest_SpentKeySkipped proves a 429'd key is retired for the rest of
+// the UTC day instead of being re-probed on every call. Unlike a 403 the key is
+// healthy, so it is only shelved until rollover.
+func TestDoRequest_SpentKeySkipped(t *testing.T) {
+	var tokenACalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer token-a" {
+			tokenACalls.Add(1)
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, `"API calls quota exceeded! maximum admitted 100 per Day."`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(CertResponse{PSACert: CertInfo{CertNumber: "333", CardGrade: "NM-MT 8"}})
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server.URL, "token-a", "token-b")
+	for i := 0; i < 3; i++ {
+		info, err := c.GetCert(context.Background(), "333")
+		if err != nil {
+			t.Fatalf("call %d failed: %v", i+1, err)
+		}
+		if info.CertNumber != "333" {
+			t.Errorf("call %d: CertNumber = %q, want %q", i+1, info.CertNumber, "333")
+		}
+	}
+	if got := tokenACalls.Load(); got != 1 {
+		t.Errorf("spent key was tried %d times, want 1", got)
 	}
 }
 
@@ -464,11 +527,10 @@ func TestDoRequest_DailyLimitRotatesToNextToken(t *testing.T) {
 
 func TestDoRequest_NoTokensConfigured(t *testing.T) {
 	c := &Client{
-		httpClient:  httpx.NewClient(httpx.DefaultConfig("test")),
-		baseURL:     "http://localhost",
-		tokens:      nil,
-		logger:      observability.NewNoopLogger(),
-		dailyCounts: newTokenDayCounter(),
+		httpClient: httpx.NewClient(httpx.DefaultConfig("test")),
+		baseURL:    "http://localhost",
+		pool:       newTokenPool(nil),
+		logger:     observability.NewNoopLogger(),
 	}
 	_, err := c.GetCert(context.Background(), "12345678")
 	if err == nil {
@@ -661,51 +723,137 @@ func TestCertAdapter_LookupCert_FallbackGradeDescription(t *testing.T) {
 	}
 }
 
-// --- tokenDayCounter ---
+// --- tokenPool ---
 
-func TestTokenDayCounter_Increments(t *testing.T) {
-	c := newTokenDayCounter()
-	if got := c.add("tok1"); got != 1 {
-		t.Errorf("first add = %d, want 1", got)
+func TestTokenPool_NextSkipsDeadAndSpent(t *testing.T) {
+	tests := []struct {
+		name    string
+		tokens  []string
+		dead    []string
+		spent   []string
+		want    string
+		wantOK  bool
+		wantCnt int
+	}{
+		{
+			name:    "all usable returns first",
+			tokens:  []string{"a", "b", "c"},
+			want:    "a",
+			wantOK:  true,
+			wantCnt: 3,
+		},
+		{
+			name:    "skips dead key",
+			tokens:  []string{"a", "b"},
+			dead:    []string{"a"},
+			want:    "b",
+			wantOK:  true,
+			wantCnt: 1,
+		},
+		{
+			name:    "skips spent key",
+			tokens:  []string{"a", "b"},
+			spent:   []string{"a"},
+			want:    "b",
+			wantOK:  true,
+			wantCnt: 1,
+		},
+		{
+			name:    "dead and spent leaves one",
+			tokens:  []string{"a", "b", "c"},
+			dead:    []string{"a"},
+			spent:   []string{"b"},
+			want:    "c",
+			wantOK:  true,
+			wantCnt: 1,
+		},
+		{
+			name:    "everything unusable",
+			tokens:  []string{"a", "b"},
+			dead:    []string{"a"},
+			spent:   []string{"b"},
+			wantOK:  false,
+			wantCnt: 0,
+		},
+		{
+			name:    "empty pool",
+			tokens:  nil,
+			wantOK:  false,
+			wantCnt: 0,
+		},
 	}
-	if got := c.add("tok1"); got != 2 {
-		t.Errorf("second add = %d, want 2", got)
-	}
-	// Different token starts at 1.
-	if got := c.add("tok2"); got != 1 {
-		t.Errorf("tok2 first add = %d, want 1", got)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newTokenPool(tc.tokens)
+			for _, d := range tc.dead {
+				p.markDead(d)
+			}
+			for _, s := range tc.spent {
+				p.markSpent(s)
+			}
+			got, ok := p.next()
+			if ok != tc.wantOK {
+				t.Fatalf("next() ok = %v, want %v", ok, tc.wantOK)
+			}
+			if ok && got != tc.want {
+				t.Errorf("next() = %q, want %q", got, tc.want)
+			}
+			if n := p.usableCount(); n != tc.wantCnt {
+				t.Errorf("usableCount() = %d, want %d", n, tc.wantCnt)
+			}
+		})
 	}
 }
 
-// --- currentToken / rotateToken ---
+func TestTokenPool_AdvanceMovesToNextUsable(t *testing.T) {
+	p := newTokenPool([]string{"a", "b"})
+	if got, _ := p.next(); got != "a" {
+		t.Fatalf("initial next() = %q, want %q", got, "a")
+	}
+	if !p.advance() {
+		t.Fatal("advance() = false, want true with a second usable key")
+	}
+	if got, _ := p.next(); got != "b" {
+		t.Errorf("after advance, next() = %q, want %q", got, "b")
+	}
 
-func TestCurrentToken_EmptyTokens(t *testing.T) {
-	c := &Client{tokens: nil}
-	if got := c.currentToken(); got != "" {
-		t.Errorf("currentToken with no tokens = %q, want empty", got)
+	// With the only remaining key retired, advance reports exhaustion.
+	p.markDead("b")
+	p.markDead("a")
+	if p.advance() {
+		t.Error("advance() = true, want false when no key is usable")
 	}
 }
 
-func TestRotateToken_SingleToken(t *testing.T) {
-	c := &Client{
-		tokens: []string{"only-one"},
-		logger: observability.NewNoopLogger(),
+// TestTokenPool_SpentClearsOnDayRollover proves the spent marker is keyed on
+// the UTC day, so a key exhausted yesterday is usable again today. Dead keys
+// have no such reprieve.
+func TestTokenPool_SpentClearsOnDayRollover(t *testing.T) {
+	p := newTokenPool([]string{"a"})
+	p.mu.Lock()
+	p.spent[tokenDayKey{token: "a", day: "2000-01-01"}] = true
+	p.mu.Unlock()
+
+	got, ok := p.next()
+	if !ok || got != "a" {
+		t.Fatalf("next() = (%q, %v), want (\"a\", true) — stale spent marker not pruned", got, ok)
 	}
-	if c.rotateToken() {
-		t.Error("rotateToken should return false with single token")
+	p.mu.Lock()
+	stale := len(p.spent)
+	p.mu.Unlock()
+	if stale != 0 {
+		t.Errorf("stale spent entries = %d, want 0", stale)
 	}
 }
 
-func TestRotateToken_MultipleTokens(t *testing.T) {
-	c := &Client{
-		tokens: []string{"a", "b", "c"},
-		logger: observability.NewNoopLogger(),
-	}
-	if !c.rotateToken() {
-		t.Error("rotateToken should return true with multiple tokens")
-	}
-	if got := c.currentToken(); got != "b" {
-		t.Errorf("after rotation, currentToken = %q, want %q", got, "b")
+func TestTokenPool_Stats(t *testing.T) {
+	p := newTokenPool([]string{"a", "b", "c"})
+	p.markDead("a")
+	p.markSpent("b")
+	total, dead, spent := p.stats()
+	if total != 3 || dead != 1 || spent != 1 {
+		t.Errorf("stats() = (%d, %d, %d), want (3, 1, 1)", total, dead, spent)
 	}
 }
 
@@ -714,11 +862,10 @@ func TestRotateToken_MultipleTokens(t *testing.T) {
 func TestClient_GetCert_ErrorTypes(t *testing.T) {
 	t.Run("no tokens returns ConfigMissing", func(t *testing.T) {
 		c := &Client{
-			httpClient:  httpx.NewClient(httpx.DefaultConfig("test")),
-			baseURL:     "http://localhost",
-			tokens:      nil,
-			logger:      observability.NewNoopLogger(),
-			dailyCounts: newTokenDayCounter(),
+			httpClient: httpx.NewClient(httpx.DefaultConfig("test")),
+			baseURL:    "http://localhost",
+			pool:       newTokenPool(nil),
+			logger:     observability.NewNoopLogger(),
 		}
 		_, err := c.GetCert(context.Background(), "12345678")
 		var appErr *apperrors.AppError
@@ -782,20 +929,19 @@ func TestClient_GetCert_ErrorTypes(t *testing.T) {
 		}
 	})
 
-	t.Run("daily limit returns ProviderRateLimited", func(t *testing.T) {
+	t.Run("exhausted pool returns ProviderRateLimited", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			resp := CertResponse{PSACert: CertInfo{CertNumber: "111", CardGrade: "MINT 9"}}
-			json.NewEncoder(w).Encode(resp)
+			w.WriteHeader(http.StatusTooManyRequests)
 		}))
 		defer server.Close()
 
 		c := newTestClient(t, server.URL) // single token
-		today := time.Now().UTC().Format("2006-01-02")
-		c.dailyCounts.mu.Lock()
-		c.dailyCounts.counts[tokenDayKey{token: "test-token", day: today}] = dailyCallLimit + 1
-		c.dailyCounts.mu.Unlock()
+		if _, err := c.GetCert(context.Background(), "111"); err == nil {
+			t.Fatal("expected first call to 429")
+		}
 
+		// The key is now marked spent, so the second call short-circuits
+		// without another HTTP request and still reports a rate limit.
 		_, err := c.GetCert(context.Background(), "111")
 		var appErr *apperrors.AppError
 		if !errors.As(err, &appErr) {

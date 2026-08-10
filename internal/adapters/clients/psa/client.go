@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,47 +16,9 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
-// tokenDayKey uniquely identifies a token + UTC day combination.
-type tokenDayKey struct {
-	token string
-	day   string // UTC date string "2006-01-02"
-}
-
-// tokenDayCounter tracks API calls per token per UTC day.
-type tokenDayCounter struct {
-	mu     sync.Mutex
-	counts map[tokenDayKey]int32
-}
-
-func newTokenDayCounter() *tokenDayCounter {
-	return &tokenDayCounter{counts: make(map[tokenDayKey]int32)}
-}
-
-// add increments and returns the new count for the given token on the current UTC day.
-// Automatically rolls over when the date changes.
-func (c *tokenDayCounter) add(token string) int32 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	today := time.Now().UTC().Format("2006-01-02")
-	key := tokenDayKey{token: token, day: today}
-
-	// Clean stale entries from previous days
-	for k := range c.counts {
-		if k.day != today {
-			delete(c.counts, k)
-		}
-	}
-
-	c.counts[key]++
-	return c.counts[key]
-}
-
 const (
 	defaultBaseURL = "https://api.psacard.com/publicapi"
 
-	// PSA API allows 100 calls per day. Stop making calls after this threshold
-	// to leave headroom for manual lookups.
-	dailyCallLimit    = 90
 	minRequestSpacing = 500 * time.Millisecond // avoid burst requests
 )
 
@@ -83,21 +44,20 @@ type CertInfo struct {
 }
 
 // Client communicates with the PSA public API.
-// Supports multiple API tokens for higher throughput — when one token
-// hits its daily limit, the client rotates to the next.
+// Supports multiple API tokens for higher throughput — when one token is
+// rejected or exhausts its daily quota, the client rotates to the next.
 type Client struct {
-	httpClient  *httpx.Client
-	baseURL     string
-	tokens      []string // one or more API tokens
-	logger      observability.Logger
-	dailyCounts *tokenDayCounter
-	lastCall    atomic.Int64 // unix nano of last API call
-	tokenIdx    atomic.Int32 // current token index
+	httpClient *httpx.Client
+	baseURL    string
+	pool       *tokenPool
+	logger     observability.Logger
+	lastCall   atomic.Int64 // unix nano of last API call
 }
 
 // NewClient creates a PSA API client.
 // The token parameter may be a single key or comma-separated keys
-// (e.g., "key1,key2") for automatic failover when one key is rate-limited.
+// (e.g., "key1,key2") for automatic failover when one key is rejected or
+// rate-limited.
 func NewClient(token string, logger observability.Logger) *Client {
 	var tokens []string
 	for _, t := range strings.Split(token, ",") {
@@ -109,61 +69,56 @@ func NewClient(token string, logger observability.Logger) *Client {
 	httpCfg := httpx.DefaultConfig("PSA")
 	httpCfg.DefaultTimeout = 15 * time.Second
 	return &Client{
-		httpClient:  httpx.NewClient(httpCfg),
-		baseURL:     defaultBaseURL,
-		tokens:      tokens,
-		logger:      logger,
-		dailyCounts: newTokenDayCounter(),
+		httpClient: httpx.NewClient(httpCfg),
+		baseURL:    defaultBaseURL,
+		pool:       newTokenPool(tokens),
+		logger:     logger,
 	}
 }
 
-// currentToken returns the active API token.
-func (c *Client) currentToken() string {
-	if len(c.tokens) == 0 {
-		return ""
+// exhaustedError builds the error returned when no token can be tried. The
+// distinction matters to callers: a spent pool recovers at UTC rollover and is
+// worth retrying, whereas an all-dead pool needs an operator to fix the keys
+// and must not be presented to the user as "temporarily unavailable".
+func (c *Client) exhaustedError() error {
+	total, dead, spent := c.pool.stats()
+	if spent > 0 {
+		return apperrors.ProviderRateLimited("PSA", "")
 	}
-	idx := int(c.tokenIdx.Load()) % len(c.tokens)
-	return c.tokens[idx]
+	if dead > 0 && dead == total {
+		return apperrors.ProviderAuthFailed("PSA",
+			fmt.Errorf("all %d PSA API keys rejected as unapproved", total))
+	}
+	return apperrors.ProviderRateLimited("PSA", "")
 }
 
-// rotateToken switches to the next API token (when the current one is rate-limited).
-func (c *Client) rotateToken() bool {
-	if len(c.tokens) <= 1 {
-		return false
-	}
-	newIdx := (c.tokenIdx.Add(1)) % int32(len(c.tokens))
-	c.logger.Info(context.Background(), "rotating to next PSA API key",
-		observability.Int("key_index", int(newIdx)),
-		observability.Int("total_keys", len(c.tokens)))
-	return true
-}
-
-// doRequest handles the shared logic for PSA API calls: budget enforcement,
-// request pacing, token rotation on 429, and response reading.
+// doRequest handles the shared logic for PSA API calls: token selection,
+// request pacing, rotation on 401/403/429, and response reading.
 func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string) (*httpx.Response, error) {
-	if len(c.tokens) == 0 {
+	total, _, _ := c.pool.stats()
+	if total == 0 {
 		return nil, apperrors.ConfigMissing("PSA API token", "PSA_API_TOKENS")
 	}
 
-	maxAttempts := len(c.tokens)
+	maxAttempts := c.pool.usableCount()
+	if maxAttempts == 0 {
+		return nil, c.exhaustedError()
+	}
 
 	// Capture the most recent 429 error from httpx — it carries the parsed
-	// Retry-After header in its reset_time context. On a multi-token client
-	// every attempt 429s and the loop exhausts, so we return this at the end
-	// rather than a fresh empty ProviderRateLimited.
+	// Retry-After header in its reset_time context. When every remaining token
+	// is spent the loop exhausts, so we return this rather than a fresh empty
+	// ProviderRateLimited that has lost the reset window.
 	var lastRateLimitErr error
+	// Likewise for auth: returning httpx's ProviderAuthFailed keeps the error
+	// non-retryable, so a batch of unapproved keys is never dressed up as a
+	// transient outage the caller should queue and retry.
+	var lastAuthErr error
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		token := c.currentToken()
-		calls := c.dailyCounts.add(token)
-		if calls > dailyCallLimit {
-			c.logger.Warn(ctx, "PSA daily call limit reached for "+opName,
-				observability.String("cert", certNumber),
-				observability.Int("calls", int(calls)))
-			if c.rotateToken() {
-				continue
-			}
-			return nil, apperrors.ProviderRateLimited("PSA", "")
+		token, ok := c.pool.next()
+		if !ok {
+			break
 		}
 
 		// Pace requests to avoid burst-triggered rate limits
@@ -189,35 +144,65 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 		// httpx returns both (*Response, error) on HTTP 4xx/5xx, allowing us
 		// to inspect the status code even when err != nil.
 		resp, err := c.httpClient.Get(ctx, url, headers, 0)
-		if err != nil {
-			// 429: rotate to the next token and retry rather than giving up immediately.
-			if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
-				// httpx's error carries the Retry-After header in its
-				// reset_time context; keep it so callers (and a future paced
-				// retry) can read the reset window.
-				lastRateLimitErr = err
-				if c.rotateToken() {
-					c.logger.Info(ctx, "PSA "+opName+": rate limited, retrying with backup key",
-						observability.String("cert", certNumber))
-					continue
-				}
-				c.logger.Warn(ctx, "PSA "+opName+": rate limited, no backup keys available",
+		if err == nil {
+			return resp, nil
+		}
+
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+
+		switch status {
+		case http.StatusTooManyRequests:
+			// The key is healthy but spent for the day. Only an approved key
+			// gets a quota response at all, so this also confirms the key is
+			// good — retire it until UTC rollover, don't discard it.
+			lastRateLimitErr = err
+			c.pool.markSpent(token)
+			if c.pool.advance() {
+				c.logger.Info(ctx, "PSA "+opName+": key quota exhausted, retrying with next key",
 					observability.String("cert", certNumber))
-				return nil, err
+				continue
 			}
+			c.logger.Warn(ctx, "PSA "+opName+": rate limited, no usable keys remain",
+				observability.String("cert", certNumber))
+			return nil, err
+
+		case http.StatusUnauthorized, http.StatusForbidden:
+			// PSA returns 403 "Access to this API is limited to approved
+			// customers" for keys it never approved. That never resolves on its
+			// own, so the key is retired for the process lifetime instead of
+			// being retried on every call.
+			lastAuthErr = err
+			c.pool.markDead(token)
+			t, d, s := c.pool.stats()
+			c.logger.Warn(ctx, "PSA "+opName+": key rejected, retiring it",
+				observability.String("cert", certNumber),
+				observability.Int("http_status", status),
+				observability.Int("keys_total", t),
+				observability.Int("keys_dead", d),
+				observability.Int("keys_spent", s))
+			if c.pool.advance() {
+				continue
+			}
+			return nil, err
+
+		default:
 			c.logger.Info(ctx, "PSA "+opName+": request failed",
 				observability.String("cert", certNumber),
 				observability.Err(err))
 			return nil, apperrors.ProviderUnavailable("PSA", fmt.Errorf("PSA API request: %w", err))
 		}
-
-		return resp, nil
 	}
 
 	if lastRateLimitErr != nil {
 		return nil, lastRateLimitErr
 	}
-	return nil, apperrors.ProviderRateLimited("PSA", "")
+	if lastAuthErr != nil {
+		return nil, lastAuthErr
+	}
+	return nil, c.exhaustedError()
 }
 
 // GetCert looks up a PSA certificate by number.

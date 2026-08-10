@@ -8,19 +8,29 @@ import (
 )
 
 // CertAdapter wraps a PSA Client to implement inventory.CertLookup.
+//
+// A single adapter instance is shared by the HTTP handler and the background
+// enrichment job (see cmd/slabledger/init_inventory_services.go), so its cache
+// spans the whole scan → import → enrich path.
 type CertAdapter struct {
 	client *Client
+	cache  *certCache
 }
 
 var _ inventory.CertLookup = (*CertAdapter)(nil)
 
 // NewCertAdapter creates a CertLookup adapter around a PSA client.
 func NewCertAdapter(client *Client) *CertAdapter {
-	return &CertAdapter{client: client}
+	return &CertAdapter{client: client, cache: newCertCache()}
 }
 
-// LookupCert resolves a PSA certificate number to card details.
+// LookupCert resolves a PSA certificate number to card details, serving
+// repeat lookups of the same cert from a short-lived cache.
 func (a *CertAdapter) LookupCert(ctx context.Context, certNumber string) (*inventory.CertInfo, error) {
+	if cached, ok := a.cache.get(certNumber); ok {
+		return cached, nil
+	}
+
 	info, err := a.client.GetCert(ctx, certNumber)
 	if err != nil {
 		return nil, fmt.Errorf("PSA cert lookup %s: %w", certNumber, err)
@@ -31,7 +41,7 @@ func (a *CertAdapter) LookupCert(ctx context.Context, certNumber string) (*inven
 		grade = ParseGrade(info.GradeDescription)
 	}
 
-	return &inventory.CertInfo{
+	result := &inventory.CertInfo{
 		CertNumber: info.CertNumber,
 		CardName:   BuildCardName(info),
 		Grade:      grade, // float64 from ParseGrade
@@ -43,7 +53,9 @@ func (a *CertAdapter) LookupCert(ctx context.Context, certNumber string) (*inven
 		CardNumber: info.CardNumber,
 		Population: info.TotalPopulation,
 		PopHigher:  info.PopulationHigher,
-	}, nil
+	}
+	a.cache.put(certNumber, result)
+	return result, nil
 }
 
 // LookupImages resolves a PSA certificate number to front/back slab image URLs.

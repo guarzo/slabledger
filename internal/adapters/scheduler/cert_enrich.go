@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -24,13 +25,34 @@ type CertEnrichRepository interface {
 }
 
 // CertEnrichJob handles background PSA certificate enrichment.
-// It processes cert numbers sequentially, respecting PSA API rate limits (100/day).
+// It processes cert numbers sequentially, respecting PSA API rate limits.
 type CertEnrichJob struct {
 	StopHandle
-	ch         chan string
+	ch         chan enrichRequest
 	certLookup inventory.CertLookup
 	repo       CertEnrichRepository
 	logger     observability.Logger
+
+	// imagesUnavailable records certs whose image lookup already failed or came
+	// back empty in this process. PSA returns a per-cert 500 from
+	// GetImagesByCertNumber for slabs whose images it cannot serve, and that
+	// does not resolve on its own. Without this, the BACKFILL_IMAGES sweep
+	// re-requests the same doomed certs on every restart and burns the daily
+	// quota that intake needs (SLA-108).
+	//
+	// In-process only: it is deliberately not persisted, so a genuine PSA
+	// outage during one boot cannot permanently blacklist good certs.
+	imagesMu          sync.Mutex
+	imagesUnavailable map[string]bool
+}
+
+// enrichRequest is one unit of work for the enrichment worker.
+type enrichRequest struct {
+	certNumber string
+	// imagesOnly skips the PSA cert lookup and fetches images alone. The
+	// backfill sweep uses it: those rows already have their metadata, so the
+	// cert lookup is a second PSA call bought for nothing.
+	imagesOnly bool
 }
 
 // NewCertEnrichJob creates a new cert enrichment job.
@@ -40,23 +62,35 @@ func NewCertEnrichJob(
 	logger observability.Logger,
 ) *CertEnrichJob {
 	return &CertEnrichJob{
-		StopHandle: NewStopHandle(),
-		ch:         make(chan string, 200), // bounded channel matching previous implementation
-		certLookup: certLookup,
-		repo:       repo,
-		logger:     logger.With(context.Background(), observability.String("component", "cert-enrich")),
+		StopHandle:        NewStopHandle(),
+		ch:                make(chan enrichRequest, 200), // bounded channel matching previous implementation
+		certLookup:        certLookup,
+		repo:              repo,
+		logger:            logger.With(context.Background(), observability.String("component", "cert-enrich")),
+		imagesUnavailable: make(map[string]bool),
 	}
 }
 
 // Enqueue submits a cert number for background enrichment (non-blocking).
 // If the queue is full, the cert is dropped silently.
 func (j *CertEnrichJob) Enqueue(certNumber string) {
+	j.submit(enrichRequest{certNumber: certNumber})
+}
+
+// EnqueueImagesOnly submits a cert for image backfill alone, skipping the PSA
+// cert lookup. Used by the startup backfill sweep, where card metadata is
+// already persisted and only the image URLs are missing.
+func (j *CertEnrichJob) EnqueueImagesOnly(certNumber string) {
+	j.submit(enrichRequest{certNumber: certNumber, imagesOnly: true})
+}
+
+func (j *CertEnrichJob) submit(req enrichRequest) {
 	select {
-	case j.ch <- certNumber:
+	case j.ch <- req:
 	default:
 		if j.logger != nil {
 			j.logger.Warn(context.Background(), "cert enrichment queue full, dropping cert",
-				observability.String("cert", certNumber))
+				observability.String("cert", req.certNumber))
 		}
 	}
 }
@@ -79,7 +113,7 @@ func (j *CertEnrichJob) worker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case certNum, ok := <-j.ch:
+		case req, ok := <-j.ch:
 			if !ok {
 				return
 			}
@@ -87,9 +121,34 @@ func (j *CertEnrichJob) worker(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			j.enrichSingleCert(ctx, certNum)
+			if req.imagesOnly {
+				j.enrichImagesOnly(ctx, req.certNumber)
+				continue
+			}
+			j.enrichSingleCert(ctx, req.certNumber)
 		}
 	}
+}
+
+// enrichImagesOnly handles a backfill request: load the purchase and fetch
+// images, with no PSA cert lookup.
+func (j *CertEnrichJob) enrichImagesOnly(ctx context.Context, certNum string) {
+	if j.certLookup == nil {
+		return
+	}
+	purchase, err := j.repo.GetPurchaseByCertNumber(ctx, "PSA", certNum)
+	if err != nil {
+		if j.logger != nil {
+			j.logger.Warn(ctx, "image backfill: failed to lookup purchase",
+				observability.String("cert", certNum),
+				observability.Err(err))
+		}
+		return
+	}
+	if purchase == nil {
+		return
+	}
+	j.enrichImages(ctx, purchase, certNum)
 }
 
 // enrichSingleCert enriches a single PSA cert by looking up its metadata and updating the purchase.
@@ -207,17 +266,28 @@ func (j *CertEnrichJob) enrichImages(ctx context.Context, purchase *inventory.Pu
 	if purchase.FrontImageURL != "" || purchase.BackImageURL != "" {
 		return
 	}
+	if j.imagesKnownUnavailable(certNum) {
+		return
+	}
 
 	front, back, err := j.certLookup.LookupImages(ctx, certNum)
 	if err != nil {
+		// Don't ask PSA for this cert's images again in this process. Whether
+		// the cause is a per-cert data fault or a wider outage, re-requesting
+		// it on the next sweep spends quota we cannot spare; a restart clears
+		// the mark, so a real outage self-heals.
+		j.markImagesUnavailable(certNum)
 		if j.logger != nil {
-			j.logger.Warn(ctx, "cert enrichment: PSA image lookup failed",
+			j.logger.Warn(ctx, "cert enrichment: PSA image lookup failed, skipping cert until restart",
 				observability.String("cert", certNum),
 				observability.Err(err))
 		}
 		return
 	}
 	if front == "" && back == "" {
+		// PSA answered and has no images for this slab. Re-asking cannot
+		// change that, so retire the cert from the backfill sweep too.
+		j.markImagesUnavailable(certNum)
 		return
 	}
 
@@ -228,4 +298,16 @@ func (j *CertEnrichJob) enrichImages(ctx context.Context, purchase *inventory.Pu
 				observability.Err(err))
 		}
 	}
+}
+
+func (j *CertEnrichJob) imagesKnownUnavailable(certNum string) bool {
+	j.imagesMu.Lock()
+	defer j.imagesMu.Unlock()
+	return j.imagesUnavailable[certNum]
+}
+
+func (j *CertEnrichJob) markImagesUnavailable(certNum string) {
+	j.imagesMu.Lock()
+	defer j.imagesMu.Unlock()
+	j.imagesUnavailable[certNum] = true
 }
