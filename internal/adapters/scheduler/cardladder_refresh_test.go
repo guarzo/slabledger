@@ -365,7 +365,7 @@ func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
 // TestWithCLEventRecorder_WiredAndRecords verifies the WithCLEventRecorder
 // functional option wires up the recorder and that the nil-safe recordEvent
 // helper forwards the call when configured. This is the unit-level guard
-// for the Task 11 re-enrollment site — the emission site is exercised through
+// for the SLA-106 re-enrollment site — the emission site is exercised through
 // the recordEvent path exactly as production does.
 func TestWithCLEventRecorder_WiredAndRecords(t *testing.T) {
 	rec := &mocks.MockEventRecorder{}

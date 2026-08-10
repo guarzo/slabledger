@@ -510,7 +510,7 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 // the same server-derived value into both CLConfidenceAtPurchase (the
 // misnamed legacy field) and CLPolicyConfidenceMinAtPurchase (its replacement)
 // for the duration of the deploy-N/N+1 API compatibility window (migration
-// 000042). Task 11 removes the legacy field once production confirms nothing
+// 000042). SLA-106 removes the legacy field once production confirms nothing
 // depends on it.
 func TestCreatePurchase_DualWritesPolicyConfidence(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()

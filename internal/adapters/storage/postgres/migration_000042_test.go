@@ -16,7 +16,7 @@ import (
 // (pre-rename schema, post the cl_card_confidence_at_purchase addition), steps
 // up to v42 to add cl_policy_confidence_min_at_purchase and backfill it from
 // the old column, and verifies the old column is untouched (deploy N is
-// additive-only; Task 12 drops it, two deploys later).
+// additive-only; SLA-106 drops it, two deploys later).
 func TestMigration000042_RenamePolicyConfidence(t *testing.T) {
 	db := requireTestDB(t)
 	ctx := context.Background()

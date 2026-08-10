@@ -304,14 +304,14 @@ type Purchase struct {
 	// CLProvenanceSourceCardLadder and migration 000041. "" for both means
 	// this purchase predates the column (provenance unknown). CLCardConfidenceAtPurchase
 	// is CardLadder's own per-card comp confidence (resp.Confidence) -- distinct
-	// from CLConfidenceAtPurchase below, which is the campaign's configured
+	// from CLPolicyConfidenceMinAtPurchase below, which is the campaign's configured
 	// policy minimum, not an observation about the card.
 	CLValueAtPurchaseObservedAt string `json:"clValueAtPurchaseObservedAt,omitempty"`
 	CLValueAtPurchaseSource     string `json:"clValueAtPurchaseSource,omitempty"`
 	CLCardConfidenceAtPurchase  *int   `json:"clCardConfidenceAtPurchase,omitempty"`
 
 	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
-	CLConfidenceAtPurchase          *int     `json:"clConfidenceAtPurchase,omitempty"`          // MISNAMED: this is the campaign's policy floor (ParseCLConfidenceMin), not card confidence. Superseded by CLPolicyConfidenceMinAtPurchase; kept only for the deploy-N/N+1 API compatibility window (see migration 000042). The Go field goes away in Task 11 (deploy N+1); the DB column outlives it by one deploy and is dropped in Task 12.
+	CLConfidenceAtPurchase          *int     `json:"clConfidenceAtPurchase,omitempty"`          // MISNAMED: this is the campaign's policy floor (ParseCLConfidenceMin), not card confidence. Superseded by CLPolicyConfidenceMinAtPurchase; kept only for the deploy-N/N+1 API compatibility window (see migration 000042). The Go field goes away in deploy N+1 and the DB column, which outlives it by one deploy, is dropped in deploy N+2 -- both in SLA-106.
 	CLPolicyConfidenceMinAtPurchase *int     `json:"clPolicyConfidenceMinAtPurchase,omitempty"` // The campaign's configured CL-confidence policy minimum at purchase time (ParseCLConfidenceMin(campaign.CLConfidence)). NOT the card's real CardLadder confidence -- see CLCardConfidenceAtPurchase for that.
 	PopulationAtPurchase            *int     `json:"populationAtPurchase,omitempty"`
 	DHConfidenceAtPurchase          *float64 `json:"dhConfidenceAtPurchase,omitempty"`

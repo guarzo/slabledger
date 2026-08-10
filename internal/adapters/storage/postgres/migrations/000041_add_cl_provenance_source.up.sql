@@ -11,7 +11,7 @@
 --
 -- These columns are purely additive: no existing column is touched, no
 -- existing write path stops being valid mid-deploy. They give the write
--- paths (Task 2/3 of this change) somewhere to record source and timing;
+-- paths (the Go changes shipping alongside it) somewhere to record source and timing;
 -- this migration itself does not classify a single existing row.
 --
 -- NO BACKFILL. This is the governing principle of the whole design: a column

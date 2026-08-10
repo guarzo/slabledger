@@ -17,7 +17,7 @@ const (
 // purchase. CLConfidenceAtPurchase and CLPolicyConfidenceMinAtPurchase are nil
 // when the value cannot be vouched for and must be stored as NULL rather than
 // guessed. Both carry the same value during the deploy-N/N+1 compatibility
-// window (migration 000042); CLConfidenceAtPurchase is removed in Task 11.
+// window (migration 000042); CLConfidenceAtPurchase is removed in SLA-106.
 type Reattribution struct {
 	CampaignID                      string
 	PSACampaignName                 string

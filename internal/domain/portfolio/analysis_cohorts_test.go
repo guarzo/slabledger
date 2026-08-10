@@ -275,3 +275,54 @@ func TestBuyTermsBucketOrdering(t *testing.T) {
 		})
 	}
 }
+
+// TestConfidenceBucketRenameFallback pins the read half of the
+// cl_confidence_at_purchase -> cl_policy_confidence_min_at_purchase
+// expand/contract rename (migration 000042). During the deploy-N rollout an
+// old instance still writes only the legacy field; those rows must bucket by
+// their real value rather than silently collecting in "unknown". The new field
+// wins whenever both are set, so a dual-written row never reads the stale one.
+func TestConfidenceBucketRenameFallback(t *testing.T) {
+	tests := []struct {
+		name     string
+		purchase inventory.Purchase
+		want     string
+	}{
+		{
+			name:     "new field only (post-rollout write)",
+			purchase: inventory.Purchase{CLPolicyConfidenceMinAtPurchase: intPtr(7)},
+			want:     "7",
+		},
+		{
+			name:     "legacy field only (old instance mid-rollout)",
+			purchase: inventory.Purchase{CLConfidenceAtPurchase: intPtr(4)},
+			want:     "4",
+		},
+		{
+			name: "both set: new field wins",
+			purchase: inventory.Purchase{
+				CLPolicyConfidenceMinAtPurchase: intPtr(7),
+				CLConfidenceAtPurchase:          intPtr(4),
+			},
+			want: "7",
+		},
+		{
+			name:     "neither set",
+			purchase: inventory.Purchase{},
+			want:     "unknown",
+		},
+		{
+			name:     "legacy zero is a real floor, not absent",
+			purchase: inventory.Purchase{CLConfidenceAtPurchase: intPtr(0)},
+			want:     "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := confidenceBucket(tt.purchase); got != tt.want {
+				t.Errorf("confidenceBucket = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

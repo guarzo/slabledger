@@ -14,11 +14,11 @@
 -- otherwise rename the column while old instances are still SELECTing the old
 -- name -- every purchase read on an old instance would fail from the moment
 -- this migration commits until the last old instance cycles out. Adding a new
--- column and dual-writing (Task 10's Go changes) keeps both names valid for
--- the duration of the rollout. Task 11 (deploy N+1) is code-only: it removes
+-- column and dual-writing (the Go changes shipping with this migration) keeps both names valid for
+-- the duration of the rollout. Deploy N+1 (SLA-106) is code-only: it removes
 -- the last Go/TS reference to the old column but leaves the column in place,
 -- because deploy-N instances are still SELECTing it by name for the whole of
--- that rollout. Task 12 (deploy N+2) drops the column, once no instance
+-- that rollout. Deploy N+2 (SLA-106) drops the column, once no instance
 -- referencing it remains -- see docs/superpowers/specs/
 -- 2026-08-10-buy-decision-provenance-design.md, "Sequencing".
 ALTER TABLE campaign_purchases
