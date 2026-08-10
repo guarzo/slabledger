@@ -84,7 +84,7 @@ func (s *service) importNewCert(ctx context.Context, certNum string, now time.Ti
 		// A breaker-open / rate-limit error means PSA is down for the whole
 		// batch, not just this cert — latch it so remaining certs are
 		// queued instead of hammering the open breaker.
-		if isPSAUnavailableError(certErr) {
+		if IsPSAUnavailableError(certErr) {
 			return false, true
 		}
 		return false, false

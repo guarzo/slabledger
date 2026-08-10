@@ -7,6 +7,8 @@ import (
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
+
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 func newEnrichJob(certLookup inventory.CertLookup, repo inventory.PurchaseRepository) *CertEnrichJob {
@@ -131,6 +133,58 @@ func TestEnrichImages_FailedCertNotRetried(t *testing.T) {
 
 			if calls != 1 {
 				t.Errorf("LookupImages called %d times across 3 sweeps, want 1", calls)
+			}
+		})
+	}
+}
+
+// TestEnrichImages_PoolWideFailureDoesNotRetireCert is the counterweight to
+// TestEnrichImages_FailedCertNotRetried. Quota exhaustion is the ordinary
+// end-of-day state for a two-token PSA pool, and it says nothing about the cert
+// being looked up. Marking on it would retire every cert the sweep touched and
+// kill image backfill for the life of the process, which — with deploy-on-push
+// — can be days (SLA-108).
+func TestEnrichImages_PoolWideFailureDoesNotRetireCert(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "quota exhausted", err: apperrors.ProviderRateLimited("PSA", "")},
+		{name: "every token rejected", err: apperrors.ProviderAuthFailed("PSA", errors.New("all keys rejected"))},
+		{name: "circuit breaker open", err: apperrors.ProviderCircuitOpen("PSA")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			var calls int
+			certLookup := &mocks.MockCertLookup{
+				LookupImagesFn: func(_ context.Context, _ string) (string, string, error) {
+					calls++
+					// Recover once PSA is usable again, as a real outage would.
+					if calls == 1 {
+						return "", "", tc.err
+					}
+					return "https://psa.example/f.jpg", "https://psa.example/b.jpg", nil
+				},
+			}
+			var updated string
+			repo := &mocks.PurchaseRepositoryMock{
+				UpdatePurchaseImagesFn: func(_ context.Context, id, _, _ string) error {
+					updated = id
+					return nil
+				},
+			}
+			job := newEnrichJob(certLookup, repo)
+
+			job.enrichImages(ctx, &inventory.Purchase{ID: "p1", CertNumber: "C1"}, "C1")
+			job.enrichImages(ctx, &inventory.Purchase{ID: "p1", CertNumber: "C1"}, "C1")
+
+			if calls != 2 {
+				t.Errorf("LookupImages called %d times, want 2 (the cert must stay eligible)", calls)
+			}
+			if updated != "p1" {
+				t.Errorf("images were not backfilled after PSA recovered; updated = %q", updated)
 			}
 		})
 	}

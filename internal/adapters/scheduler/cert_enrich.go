@@ -33,12 +33,14 @@ type CertEnrichJob struct {
 	repo       CertEnrichRepository
 	logger     observability.Logger
 
-	// imagesUnavailable records certs whose image lookup already failed or came
-	// back empty in this process. PSA returns a per-cert 500 from
-	// GetImagesByCertNumber for slabs whose images it cannot serve, and that
-	// does not resolve on its own. Without this, the BACKFILL_IMAGES sweep
-	// re-requests the same doomed certs on every restart and burns the daily
-	// quota that intake needs (SLA-108).
+	// imagesUnavailable records certs whose image lookup already failed for a
+	// cert-specific reason, or came back empty, in this process. PSA returns a
+	// per-cert 500 from GetImagesByCertNumber for slabs whose images it cannot
+	// serve, and that does not resolve on its own. Without this, the
+	// BACKFILL_IMAGES sweep re-requests the same doomed certs on every restart
+	// and burns the daily quota that intake needs (SLA-108).
+	//
+	// Pool-wide failures are deliberately excluded — see enrichImages.
 	//
 	// In-process only: it is deliberately not persisted, so a genuine PSA
 	// outage during one boot cannot permanently blacklist good certs.
@@ -272,13 +274,27 @@ func (j *CertEnrichJob) enrichImages(ctx context.Context, purchase *inventory.Pu
 
 	front, back, err := j.certLookup.LookupImages(ctx, certNum)
 	if err != nil {
-		// Don't ask PSA for this cert's images again in this process. Whether
-		// the cause is a per-cert data fault or a wider outage, re-requesting
-		// it on the next sweep spends quota we cannot spare; a restart clears
-		// the mark, so a real outage self-heals.
-		j.markImagesUnavailable(certNum)
+		// Only retire the cert when the failure says something about *this*
+		// cert. PSA answers a per-cert 500 for slabs whose images it cannot
+		// serve, and re-asking never changes that.
+		//
+		// A pool-wide failure — quota spent, every token rejected, breaker open
+		// — says nothing about the cert. Marking on those would be fatal rather
+		// than merely wasteful: quota exhaustion is the ordinary end-of-day
+		// state for a two-token pool, so the first sweep after it would retire
+		// every cert it touched and image backfill would go permanently dead.
+		// "A restart clears the mark" is no defence when a deploy can be days
+		// away (SLA-108).
+		poolDown := inventory.IsPSAUnavailableError(err)
+		if !poolDown {
+			j.markImagesUnavailable(certNum)
+		}
 		if j.logger != nil {
-			j.logger.Warn(ctx, "cert enrichment: PSA image lookup failed, skipping cert until restart",
+			msg := "cert enrichment: PSA image lookup failed, skipping cert until restart"
+			if poolDown {
+				msg = "cert enrichment: PSA unavailable, leaving cert eligible for a later sweep"
+			}
+			j.logger.Warn(ctx, msg,
 				observability.String("cert", certNum),
 				observability.Err(err))
 		}

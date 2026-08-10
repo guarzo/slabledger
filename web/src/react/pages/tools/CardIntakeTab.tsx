@@ -250,7 +250,16 @@ export default function CardIntakeTab() {
       .filter(c => c.status === 'resolved' || c.status === 'retry')
       .map(c => c.certNumber);
 
-    if (resolvedCerts.length === 0) return;
+    if (resolvedCerts.length === 0) {
+      // Nothing left to import, so the retry episode is over. cancelScheduledRetry
+      // above already killed the pending timer; leaving the state alone would
+      // strand "Retrying automatically in Ns" on screen describing a timer that
+      // no longer exists — the same dishonest message this change exists to
+      // remove. End the episode explicitly instead (SLA-108).
+      retryAttemptRef.current = 0;
+      setImportError(null);
+      return;
+    }
 
     setImportLoading(true);
     setImportError(null);

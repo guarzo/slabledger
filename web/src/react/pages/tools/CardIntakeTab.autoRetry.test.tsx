@@ -77,6 +77,31 @@ it('retries a transient failure automatically, with no second click', async () =
   await waitFor(() => expect(screen.queryByText(/Retrying automatically in/i)).toBeNull());
 });
 
+// If the staged rows are gone by the time the timer fires, the episode must end
+// honestly rather than leaving "Retrying automatically in Ns" on screen
+// describing a timer that no longer exists — the same dishonest message this
+// change exists to remove. Clear all already handles its own case; dismissing
+// the last retry row individually is the path that reaches the import handler
+// with nothing to send.
+it('ends the episode when the staged rows are dismissed before a retry fires', async () => {
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+
+  const importCerts = vi.spyOn(api, 'importCerts').mockResolvedValue(transientFailure);
+
+  await stageAndImport(user);
+  await screen.findByText(/Retrying automatically in/i);
+
+  // Drop the only staged row while the retry is still pending.
+  await user.click(screen.getByRole('button', { name: /dismiss/i }));
+
+  await act(async () => { vi.advanceTimersByTime(AUTO_RETRY_DELAYS_MS[0]); });
+
+  // No second import was attempted, and no stale promise is left on screen.
+  expect(importCerts).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(screen.queryByText(/Retrying automatically in/i)).toBeNull());
+});
+
 it('gives up honestly after the retry budget is spent', async () => {
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   vi.useFakeTimers({ shouldAdvanceTime: true });

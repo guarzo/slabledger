@@ -145,6 +145,9 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 		// to inspect the status code even when err != nil.
 		resp, err := c.httpClient.Get(ctx, url, headers, 0)
 		if err == nil {
+			// Any success clears the token's consecutive-401 count, so a token
+			// is only retired for a genuine unbroken run of rejections.
+			c.pool.markHealthy(token)
 			return resp, nil
 		}
 
@@ -169,7 +172,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 				observability.String("cert", certNumber))
 			return nil, err
 
-		case http.StatusUnauthorized, http.StatusForbidden:
+		case http.StatusForbidden:
 			// PSA returns 403 "Access to this API is limited to approved
 			// customers" for keys it never approved. That never resolves on its
 			// own, so the key is retired for the process lifetime instead of
@@ -177,12 +180,39 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 			lastAuthErr = err
 			c.pool.markDead(token)
 			t, d, s := c.pool.stats()
-			c.logger.Warn(ctx, "PSA "+opName+": key rejected, retiring it",
+			c.logger.Warn(ctx, "PSA "+opName+": key unapproved, retiring it",
 				observability.String("cert", certNumber),
 				observability.Int("http_status", status),
 				observability.Int("keys_total", t),
 				observability.Int("keys_dead", d),
 				observability.Int("keys_spent", s))
+			if c.pool.advance() {
+				continue
+			}
+			return nil, err
+
+		case http.StatusUnauthorized:
+			// A 401 says only that PSA did not accept the credential on this
+			// call — it makes no claim about the next one. Retiring on the first
+			// 401 would let one blip cost us a working key until restart, which
+			// with a two-key pool halves capacity. Retire only after an unbroken
+			// run of them; any success resets the count.
+			lastAuthErr = err
+			retired := c.pool.markAuthFailure(token)
+			t, d, s := c.pool.stats()
+			msg := "PSA " + opName + ": key rejected, will retry it"
+			if retired {
+				msg = "PSA " + opName + ": key rejected repeatedly, retiring it"
+			}
+			c.logger.Warn(ctx, msg,
+				observability.String("cert", certNumber),
+				observability.Int("http_status", status),
+				observability.Int("keys_total", t),
+				observability.Int("keys_dead", d),
+				observability.Int("keys_spent", s))
+			// The loop is bounded by usableCount(), so a token that stays in the
+			// pool is still visited at most once per call — not retiring cannot
+			// spin here.
 			if c.pool.advance() {
 				continue
 			}

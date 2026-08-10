@@ -11,15 +11,29 @@ type tokenDayKey struct {
 	day   string // UTC date string "2006-01-02"
 }
 
+// maxConsecutiveAuthFailures is how many 401s in a row retire a token.
+//
+// A 401 is not self-describing the way a 403 is: it can mean "this credential
+// is invalid" or "PSA would not accept it just now". Retiring on the first one
+// lets a single blip permanently cost us a healthy key, which matters because
+// the pool is small — with two live keys, one bad 401 halves capacity until
+// restart. Retrying forever is the opposite failure: a genuinely revoked key
+// then burns one call per request for the life of the process. Three strikes
+// bounds the waste at three calls while surviving a blip.
+const maxConsecutiveAuthFailures = 3
+
 // tokenPool holds the PSA API tokens and tracks which are currently usable.
 //
-// PSA distinguishes two failure modes that look alike from the outside but
-// need opposite handling, and conflating them caused an outage (SLA-108):
+// PSA distinguishes failure modes that look alike from the outside but need
+// opposite handling, and conflating them caused an outage (SLA-108):
 //
 //   - HTTP 403 "Access to this API is limited to approved customers" — the key
 //     was issued but never approved. It will never work, so it is marked dead
 //     for the lifetime of the process and skipped from then on. Retrying it
 //     burns wall-clock and trips the circuit breaker for no possible gain.
+//   - HTTP 401 — PSA did not accept the credential on this call. Unlike 403 it
+//     carries no claim about the future, so the key is only retired after
+//     maxConsecutiveAuthFailures in a row; any success resets the count.
 //   - HTTP 429 "API calls quota exceeded! maximum admitted 100 per Day" — the
 //     key is healthy but spent. It is marked spent for the current UTC day and
 //     becomes usable again at rollover.
@@ -32,18 +46,20 @@ type tokenDayKey struct {
 // counting — which is exactly how a key sailed past its limit during the
 // incident. One wasted call per token per day is the price of not guessing.
 type tokenPool struct {
-	mu     sync.Mutex
-	tokens []string
-	idx    int
-	dead   map[string]bool      // 403 — unapproved, dead for the process lifetime
-	spent  map[tokenDayKey]bool // 429 — quota exhausted for that UTC day
+	mu        sync.Mutex
+	tokens    []string
+	idx       int
+	dead      map[string]bool      // 403 (or repeated 401) — dead for the process lifetime
+	spent     map[tokenDayKey]bool // 429 — quota exhausted for that UTC day
+	authFails map[string]int       // consecutive 401s, cleared by any success
 }
 
 func newTokenPool(tokens []string) *tokenPool {
 	return &tokenPool{
-		tokens: tokens,
-		dead:   make(map[string]bool),
-		spent:  make(map[tokenDayKey]bool),
+		tokens:    tokens,
+		dead:      make(map[string]bool),
+		spent:     make(map[tokenDayKey]bool),
+		authFails: make(map[string]int),
 	}
 }
 
@@ -99,12 +115,40 @@ func (p *tokenPool) markDead(token string) {
 	p.dead[token] = true
 }
 
+// markAuthFailure records a 401 for a token and reports whether that was the
+// strike that retired it. Unlike a 403, one 401 is not proof the credential is
+// finished, so the token only joins the dead set after
+// maxConsecutiveAuthFailures in a row.
+func (p *tokenPool) markAuthFailure(token string) (retired bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.authFails[token]++
+	if p.authFails[token] >= maxConsecutiveAuthFailures {
+		p.dead[token] = true
+		return true
+	}
+	return false
+}
+
+// markHealthy clears a token's consecutive-401 count. Called on every success
+// so the strike count only ever reflects an unbroken run of failures.
+func (p *tokenPool) markHealthy(token string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.authFails[token] != 0 {
+		delete(p.authFails, token)
+	}
+}
+
 // markSpent records that a token has exhausted its quota for the current UTC
 // day (429). It becomes usable again at the next UTC rollover.
 func (p *tokenPool) markSpent(token string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.spent[tokenDayKey{token: token, day: utcDay()}] = true
+	// A 429 means PSA authenticated the token and then counted its quota, so it
+	// is as much proof of a good credential as a 200 is.
+	delete(p.authFails, token)
 }
 
 // pruneSpentLocked drops spent markers from previous days so the map does not

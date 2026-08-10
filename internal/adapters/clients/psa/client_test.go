@@ -489,6 +489,184 @@ func TestDoRequest_All403ReturnsAuthError(t *testing.T) {
 	}
 }
 
+// TestDoRequest_TransientUnauthorizedKeyKept proves a one-off 401 does not
+// retire a key, and that a later success clears its strike count. A 401 makes
+// no claim about the next call, and with a two-key pool retiring on the first
+// one halves capacity until the process restarts.
+//
+// The pool is inspected directly rather than by counting calls: rotation is
+// sticky, so after advancing past token-a the client has no reason to come back
+// to it while token-b keeps working — "not called again" would prove nothing.
+func TestDoRequest_TransientUnauthorizedKeyKept(t *testing.T) {
+	var tokenACalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer token-b" {
+			// token-b is spent, which forces the client back onto token-a.
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, `"API calls quota exceeded! maximum admitted 100 per Day."`)
+			return
+		}
+		// Reject token-a exactly once, then accept it like PSA would after a
+		// transient blip.
+		if tokenACalls.Add(1) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(CertResponse{PSACert: CertInfo{CertNumber: "901", CardGrade: "MINT 9"}})
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server.URL, "token-a", "token-b")
+
+	// First call: token-a 401s, token-b is spent, so the call fails.
+	if _, err := c.GetCert(context.Background(), "901"); err == nil {
+		t.Fatal("expected the first call to fail: one key 401'd and the other is spent")
+	}
+	if c.pool.dead["token-a"] {
+		t.Fatal("token-a was retired by a single 401")
+	}
+	if got := c.pool.authFails["token-a"]; got != 1 {
+		t.Errorf("authFails[token-a] = %d, want 1", got)
+	}
+
+	// Second call: token-a is still in the pool and now answers, which must
+	// clear the strike.
+	if _, err := c.GetCert(context.Background(), "901"); err != nil {
+		t.Fatalf("expected the kept key to serve the second call, got: %v", err)
+	}
+	if got := c.pool.authFails["token-a"]; got != 0 {
+		t.Errorf("authFails[token-a] = %d after a success, want 0", got)
+	}
+}
+
+// TestDoRequest_PersistentUnauthorizedKeyRetired proves the other half: keys
+// that keep answering 401 are eventually retired, so genuinely revoked
+// credentials do not cost a wasted call on every request forever.
+func TestDoRequest_PersistentUnauthorizedKeyRetired(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server.URL, "token-a", "token-b")
+
+	// Each call visits both usable keys, so the strike budget is spent after
+	// maxConsecutiveAuthFailures calls.
+	for i := 0; i < maxConsecutiveAuthFailures; i++ {
+		if _, err := c.GetCert(context.Background(), "902"); err == nil {
+			t.Fatalf("call %d: expected failure from an all-401 pool", i+1)
+		}
+	}
+	for _, tok := range []string{"token-a", "token-b"} {
+		if !c.pool.dead[tok] {
+			t.Errorf("%s still usable after %d rejections", tok, maxConsecutiveAuthFailures)
+		}
+	}
+
+	// With the pool retired, the next call must not touch the network at all.
+	before := calls.Load()
+	_, err := c.GetCert(context.Background(), "902")
+	if !apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth) {
+		t.Fatalf("expected ErrCodeProviderAuth once every key is dead, got %v", err)
+	}
+	if got := calls.Load(); got != before {
+		t.Errorf("made %d further request(s) with an entirely dead pool", got-before)
+	}
+}
+
+// TestTokenPool_AuthFailureStrikes covers the counter directly, including the
+// reset paths that the HTTP-level tests cannot isolate.
+func TestTokenPool_AuthFailureStrikes(t *testing.T) {
+	tests := []struct {
+		name string
+		// run applies some sequence of outcomes to token "a".
+		run      func(p *tokenPool)
+		wantDead bool
+	}{
+		{
+			name:     "one strike keeps the token",
+			run:      func(p *tokenPool) { p.markAuthFailure("a") },
+			wantDead: false,
+		},
+		{
+			name: "one short of the budget keeps the token",
+			run: func(p *tokenPool) {
+				for i := 0; i < maxConsecutiveAuthFailures-1; i++ {
+					p.markAuthFailure("a")
+				}
+			},
+			wantDead: false,
+		},
+		{
+			name: "the budget retires the token",
+			run: func(p *tokenPool) {
+				for i := 0; i < maxConsecutiveAuthFailures; i++ {
+					p.markAuthFailure("a")
+				}
+			},
+			wantDead: true,
+		},
+		{
+			name: "a success resets the run",
+			run: func(p *tokenPool) {
+				for i := 0; i < maxConsecutiveAuthFailures-1; i++ {
+					p.markAuthFailure("a")
+				}
+				p.markHealthy("a")
+				p.markAuthFailure("a")
+			},
+			wantDead: false,
+		},
+		{
+			name: "a 429 counts as a success",
+			run: func(p *tokenPool) {
+				for i := 0; i < maxConsecutiveAuthFailures-1; i++ {
+					p.markAuthFailure("a")
+				}
+				// Only an authenticated key is told its quota is spent.
+				p.markSpent("a")
+				p.markAuthFailure("a")
+			},
+			wantDead: false,
+		},
+		{
+			name: "strikes are per token",
+			run: func(p *tokenPool) {
+				for i := 0; i < maxConsecutiveAuthFailures; i++ {
+					p.markAuthFailure("b")
+				}
+			},
+			wantDead: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newTokenPool([]string{"a", "b"})
+			tc.run(p)
+			if got := p.dead["a"]; got != tc.wantDead {
+				t.Errorf("dead[a] = %v, want %v", got, tc.wantDead)
+			}
+		})
+	}
+}
+
+// TestTokenPool_AuthFailureReportsRetirement pins the return value, which the
+// client uses to choose between two different log lines.
+func TestTokenPool_AuthFailureReportsRetirement(t *testing.T) {
+	p := newTokenPool([]string{"a"})
+	for i := 1; i <= maxConsecutiveAuthFailures; i++ {
+		retired := p.markAuthFailure("a")
+		want := i == maxConsecutiveAuthFailures
+		if retired != want {
+			t.Errorf("strike %d: retired = %v, want %v", i, retired, want)
+		}
+	}
+}
+
 // --- doRequest: quota exhaustion ---
 
 // TestDoRequest_SpentKeySkipped proves a 429'd key is retired for the rest of
