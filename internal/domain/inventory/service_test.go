@@ -506,6 +506,42 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 	}
 }
 
+// TestCreatePurchase_DualWritesPolicyConfidence proves CreatePurchase writes
+// the same server-derived value into both CLConfidenceAtPurchase (the
+// misnamed legacy field) and CLPolicyConfidenceMinAtPurchase (its replacement)
+// for the duration of the deploy-N/N+1 API compatibility window (migration
+// 000042). Task 11 removes the legacy field once production confirms nothing
+// depends on it.
+func TestCreatePurchase_DualWritesPolicyConfidence(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "")))
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", CLConfidence: "2.5-4"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	p := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Test Card", CertNumber: "88888884",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+	}
+	if err := svc.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("CreatePurchase: %v", err)
+	}
+
+	if p.CLConfidenceAtPurchase == nil {
+		t.Fatal("CLConfidenceAtPurchase = nil, want non-nil")
+	}
+	if p.CLPolicyConfidenceMinAtPurchase == nil {
+		t.Fatal("CLPolicyConfidenceMinAtPurchase = nil, want non-nil")
+	}
+	if *p.CLConfidenceAtPurchase != *p.CLPolicyConfidenceMinAtPurchase {
+		t.Errorf("CLConfidenceAtPurchase = %d, CLPolicyConfidenceMinAtPurchase = %d, want equal",
+			*p.CLConfidenceAtPurchase, *p.CLPolicyConfidenceMinAtPurchase)
+	}
+}
+
 func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
 	failingLookup := &mockPriceLookup{

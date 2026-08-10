@@ -77,6 +77,7 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	// so these pointers are attacker-controllable; clearing them here ensures the
 	// freeze logic below can only ever set SERVER-derived values.
 	p.CLConfidenceAtPurchase = nil
+	p.CLPolicyConfidenceMinAtPurchase = nil
 	p.PopulationAtPurchase = nil
 	p.DHConfidenceAtPurchase = nil
 	p.SourceCountAtPurchase = nil
@@ -104,6 +105,7 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	// (a) creation-time facts, set-once.
 	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
 		p.CLConfidenceAtPurchase = &c
+		p.CLPolicyConfidenceMinAtPurchase = &c
 	}
 	// PopulationAtPurchase is deliberately NOT frozen here (D2). It used to be
 	// set from p.Population whenever positive, but that branch was dead on

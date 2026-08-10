@@ -103,6 +103,7 @@ export interface Purchase {
   snapshotDate?: string;
   // Decision provenance at time of purchase
   clConfidenceAtPurchase?: number;
+  clPolicyConfidenceMinAtPurchase?: number;
   populationAtPurchase?: number;
   dhConfidenceAtPurchase?: number;
   sourceCountAtPurchase?: number;

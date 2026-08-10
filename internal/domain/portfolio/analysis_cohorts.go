@@ -8,13 +8,16 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-// confidenceBucket returns the frozen CL confidence at purchase as a string
-// bucket key, or "unknown" when no snapshot was captured.
+// confidenceBucket returns the frozen CL policy-confidence minimum at
+// purchase as a string bucket key, or "unknown" when no snapshot was
+// captured. This reads the campaign's targeting policy floor, not the card's
+// real CardLadder confidence -- see inventory.Purchase.CLCardConfidenceAtPurchase
+// for that.
 func confidenceBucket(p inventory.Purchase) string {
-	if p.CLConfidenceAtPurchase == nil {
+	if p.CLPolicyConfidenceMinAtPurchase == nil {
 		return "unknown"
 	}
-	return strconv.Itoa(*p.CLConfidenceAtPurchase)
+	return strconv.Itoa(*p.CLPolicyConfidenceMinAtPurchase)
 }
 
 // buyTermsBucketInfo pairs a buy-terms bucket label with the numeric rank

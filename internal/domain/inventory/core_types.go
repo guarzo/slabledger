@@ -311,12 +311,13 @@ type Purchase struct {
 	CLCardConfidenceAtPurchase  *int   `json:"clCardConfidenceAtPurchase,omitempty"`
 
 	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
-	CLConfidenceAtPurchase   *int     `json:"clConfidenceAtPurchase,omitempty"`
-	PopulationAtPurchase     *int     `json:"populationAtPurchase,omitempty"`
-	DHConfidenceAtPurchase   *float64 `json:"dhConfidenceAtPurchase,omitempty"`
-	SourceCountAtPurchase    *int     `json:"sourceCountAtPurchase,omitempty"`
-	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
-	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
+	CLConfidenceAtPurchase          *int     `json:"clConfidenceAtPurchase,omitempty"`          // MISNAMED: this is the campaign's policy floor (ParseCLConfidenceMin), not card confidence. Superseded by CLPolicyConfidenceMinAtPurchase; kept only for the deploy-N/N+1 API compatibility window (see migration 000042). The Go field goes away in Task 11 (deploy N+1); the DB column outlives it by one deploy and is dropped in Task 12.
+	CLPolicyConfidenceMinAtPurchase *int     `json:"clPolicyConfidenceMinAtPurchase,omitempty"` // The campaign's configured CL-confidence policy minimum at purchase time (ParseCLConfidenceMin(campaign.CLConfidence)). NOT the card's real CardLadder confidence -- see CLCardConfidenceAtPurchase for that.
+	PopulationAtPurchase            *int     `json:"populationAtPurchase,omitempty"`
+	DHConfidenceAtPurchase          *float64 `json:"dhConfidenceAtPurchase,omitempty"`
+	SourceCountAtPurchase           *int     `json:"sourceCountAtPurchase,omitempty"`
+	ActiveListingsAtPurchase        *int     `json:"activeListingsAtPurchase,omitempty"`
+	SalesLast30dAtPurchase          *int     `json:"salesLast30dAtPurchase,omitempty"`
 
 	// --- Campaign attribution provenance ---
 	PSACampaignName   string `json:"psaCampaignName,omitempty"`   // raw campaign name PSA reported, verbatim
