@@ -551,7 +551,7 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 		t.Errorf("SalesLast30dAtPurchase = %v, want nil (capture failed)", p.SalesLast30dAtPurchase)
 	}
 	if p.PopulationAtPurchase != nil {
-		t.Errorf("PopulationAtPurchase = %v, want nil (D2: no longer frozen at create time)", p.PopulationAtPurchase)
+		t.Errorf("PopulationAtPurchase = %v, want nil (client-forged value discarded)", p.PopulationAtPurchase)
 	}
 	if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
 		t.Errorf("CLConfidenceAtPurchase = %v, want 2 (derived from campaign)", p.CLConfidenceAtPurchase)

@@ -106,15 +106,21 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 		p.CLConfidenceAtPurchase = &c
 	}
 	// PopulationAtPurchase is deliberately NOT frozen here (D2). It used to be
-	// set from p.Population whenever positive, but that branch was dead: the
-	// only intake path that sets Population at create time (cert-entry import,
-	// service_cert_entry_import.go) calls the repository's CreatePurchase
-	// directly and never reaches this service method, and the campaign path
-	// does not know Population yet at create time — it arrives later with CL
-	// enrichment. The freeze now happens in PurchaseStore.UpdatePurchaseCLValue,
-	// under the same write-time lateness guard that protects the CL value
-	// freeze, which is where population actually becomes known. Do not re-add
-	// this branch; it would silently do nothing again.
+	// set from p.Population whenever positive, but that branch was dead on
+	// every legitimate path: the only intake path that sets Population at
+	// create time (cert-entry import, service_cert_entry_import.go) calls the
+	// repository's CreatePurchase directly and never reaches this service
+	// method, and the campaign path does not know Population yet at create
+	// time. Worse than dead on the one path that could reach it:
+	// HandleCreatePurchase (campaigns_purchases.go) decodes the raw request
+	// body straight into Purchase without clearing Population, so this
+	// branch's only reachable effect was freezing a client-supplied number as
+	// an at-purchase fact.
+	// The freeze now happens in PurchaseStore.UpdatePurchaseCLValue, under the
+	// same write-time lateness guard as the CL value freeze; that clause
+	// echoes the row's own already-stored population back — correctly timed,
+	// not a fresh at-purchase observation (see spec D2). Do not re-add this
+	// branch; it would silently reintroduce the forgery hole.
 
 	// Skip synchronous market snapshot when the caller has flagged the purchase
 	// for asynchronous background enrichment (e.g. during bulk PSA import).
