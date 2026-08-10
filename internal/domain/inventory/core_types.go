@@ -275,7 +275,7 @@ const (
 // (D5): a frozen CL value can come from two different writers -- the
 // create-time copy of whatever value the intake carried, or CardLadder's own
 // refresh sweep -- and only the latter is a genuine "CardLadder answered"
-// observation. '' (the zero value) means unknown provenance, for every row
+// observation. "" (the zero value) means unknown provenance, for every row
 // written before this column existed.
 const (
 	CLProvenanceSourceIntake     = "intake"
@@ -301,7 +301,7 @@ type Purchase struct {
 
 	// CLValueAtPurchaseObservedAt/CLValueAtPurchaseSource record WHEN and HOW
 	// CLValueAtPurchaseCents was captured; see CLProvenanceSourceIntake/
-	// CLProvenanceSourceCardLadder and migration 000041. '' for both means
+	// CLProvenanceSourceCardLadder and migration 000041. "" for both means
 	// this purchase predates the column (provenance unknown). CLCardConfidenceAtPurchase
 	// is CardLadder's own per-card comp confidence (resp.Confidence) -- distinct
 	// from CLConfidenceAtPurchase below, which is the campaign's configured

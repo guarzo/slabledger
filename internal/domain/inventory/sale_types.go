@@ -59,7 +59,7 @@ type Sale struct {
 	// CLValueAtSaleCents is a genuine CardLadder observation at sale time or
 	// merely the purchase's carried-over value. See migration 000041 and
 	// CLProvenanceSourceIntake/CLProvenanceSourceCardLadder in core_types.go.
-	// '' for both means this sale predates the column (provenance unknown).
+	// "" for both means this sale predates the column (provenance unknown).
 	CLValueAtSaleObservedAt string `json:"clValueAtSaleObservedAt,omitempty"`
 	CLValueAtSaleSource     string `json:"clValueAtSaleSource,omitempty"`
 
