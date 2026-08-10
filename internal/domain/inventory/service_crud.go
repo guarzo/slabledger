@@ -105,10 +105,16 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
 		p.CLConfidenceAtPurchase = &c
 	}
-	if p.Population > 0 {
-		pop := p.Population
-		p.PopulationAtPurchase = &pop
-	}
+	// PopulationAtPurchase is deliberately NOT frozen here (D2). It used to be
+	// set from p.Population whenever positive, but that branch was dead: the
+	// only intake path that sets Population at create time (cert-entry import,
+	// service_cert_entry_import.go) calls the repository's CreatePurchase
+	// directly and never reaches this service method, and the campaign path
+	// does not know Population yet at create time — it arrives later with CL
+	// enrichment. The freeze now happens in PurchaseStore.UpdatePurchaseCLValue,
+	// under the same write-time lateness guard that protects the CL value
+	// freeze, which is where population actually becomes known. Do not re-add
+	// this branch; it would silently do nothing again.
 
 	// Skip synchronous market snapshot when the caller has flagged the purchase
 	// for asynchronous background enrichment (e.g. during bulk PSA import).

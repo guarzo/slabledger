@@ -470,13 +470,20 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		certNumber     string
-		population     int
-		wantPopulation *int
+		name       string
+		certNumber string
+		population int
 	}{
-		{name: "positive population is frozen", certNumber: "88888881", population: 50, wantPopulation: func() *int { v := 50; return &v }()},
-		{name: "zero population freezes to nil", certNumber: "88888882", population: 0, wantPopulation: nil},
+		// PopulationAtPurchase is no longer frozen at create time (D2): the one
+		// intake path that sets Population at create time (cert-entry import)
+		// calls the repository directly and bypasses this service method, and
+		// the campaign path does not know Population until CL enrichment lands
+		// later. The freeze now happens in PurchaseStore.UpdatePurchaseCLValue,
+		// under the same write-time lateness guard as the CL value freeze — so
+		// both cases here must leave PopulationAtPurchase nil regardless of the
+		// incoming Population value.
+		{name: "positive population is not frozen at create time", certNumber: "88888881", population: 50},
+		{name: "zero population is not frozen at create time", certNumber: "88888882", population: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -492,14 +499,8 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 			if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
 				t.Errorf("CLConfidenceAtPurchase = %v, want 2", p.CLConfidenceAtPurchase)
 			}
-			if tt.wantPopulation == nil {
-				if p.PopulationAtPurchase != nil {
-					t.Errorf("PopulationAtPurchase = %v, want nil for Population:0", p.PopulationAtPurchase)
-				}
-				return
-			}
-			if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != *tt.wantPopulation {
-				t.Errorf("PopulationAtPurchase = %v, want %v", p.PopulationAtPurchase, *tt.wantPopulation)
+			if p.PopulationAtPurchase != nil {
+				t.Errorf("PopulationAtPurchase = %v, want nil (D2: no longer frozen at create time)", p.PopulationAtPurchase)
 			}
 		})
 	}
@@ -549,8 +550,8 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 	if p.SalesLast30dAtPurchase != nil {
 		t.Errorf("SalesLast30dAtPurchase = %v, want nil (capture failed)", p.SalesLast30dAtPurchase)
 	}
-	if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != 50 {
-		t.Errorf("PopulationAtPurchase = %v, want 50 (real value)", p.PopulationAtPurchase)
+	if p.PopulationAtPurchase != nil {
+		t.Errorf("PopulationAtPurchase = %v, want nil (D2: no longer frozen at create time)", p.PopulationAtPurchase)
 	}
 	if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
 		t.Errorf("CLConfidenceAtPurchase = %v, want 2 (derived from campaign)", p.CLConfidenceAtPurchase)
