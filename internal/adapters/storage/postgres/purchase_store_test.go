@@ -442,3 +442,85 @@ func TestPurchaseCLProvenanceColumnsRoundTrip(t *testing.T) {
 		t.Errorf("CLCardConfidenceAtPurchase = %v, want %v", got.CLCardConfidenceAtPurchase, p.CLCardConfidenceAtPurchase)
 	}
 }
+
+func TestCreatePurchaseCLProvenanceSource(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		clValueCents     int
+		clValueUpdatedAt string
+		wantSource       string
+		wantAtCents      int
+		wantObservedSet  bool // true: must be non-empty and RFC3339-parseable
+	}{
+		{
+			name:             "CardLadder already answered before create",
+			clValueCents:     4200,
+			clValueUpdatedAt: "2026-03-01T12:00:00Z",
+			wantSource:       inventory.CLProvenanceSourceCardLadder,
+			wantAtCents:      4200,
+			wantObservedSet:  true,
+		},
+		{
+			name:             "value carried from intake, CardLadder never answered",
+			clValueCents:     3100,
+			clValueUpdatedAt: "",
+			wantSource:       inventory.CLProvenanceSourceIntake,
+			wantAtCents:      3100,
+			wantObservedSet:  true,
+		},
+		{
+			name:             "no CL value at all",
+			clValueCents:     0,
+			clValueUpdatedAt: "",
+			wantSource:       "",
+			wantAtCents:      0,
+			wantObservedSet:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := makeTestPurchase()
+			p.CLValueCents = tt.clValueCents
+			p.CLValueUpdatedAt = tt.clValueUpdatedAt
+			if err := ps.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+			got, err := ps.GetPurchase(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if got.CLValueAtPurchaseCents != tt.wantAtCents {
+				t.Errorf("CLValueAtPurchaseCents = %d, want %d", got.CLValueAtPurchaseCents, tt.wantAtCents)
+			}
+			if got.CLValueAtPurchaseSource != tt.wantSource {
+				t.Errorf("CLValueAtPurchaseSource = %q, want %q", got.CLValueAtPurchaseSource, tt.wantSource)
+			}
+			if tt.wantObservedSet {
+				if got.CLValueAtPurchaseObservedAt == "" {
+					t.Fatalf("CLValueAtPurchaseObservedAt must be set, got empty")
+				}
+				if _, err := time.Parse(time.RFC3339, got.CLValueAtPurchaseObservedAt); err != nil {
+					t.Errorf("CLValueAtPurchaseObservedAt = %q is not RFC3339: %v", got.CLValueAtPurchaseObservedAt, err)
+				}
+				if tt.clValueUpdatedAt != "" && got.CLValueAtPurchaseObservedAt != tt.clValueUpdatedAt {
+					t.Errorf("CLValueAtPurchaseObservedAt = %q, want %q (must equal CLValueUpdatedAt for a CardLadder-sourced freeze)", got.CLValueAtPurchaseObservedAt, tt.clValueUpdatedAt)
+				}
+			} else if got.CLValueAtPurchaseObservedAt != "" {
+				t.Errorf("CLValueAtPurchaseObservedAt = %q, want empty", got.CLValueAtPurchaseObservedAt)
+			}
+		})
+	}
+}

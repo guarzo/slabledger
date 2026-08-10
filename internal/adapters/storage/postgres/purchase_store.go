@@ -43,8 +43,29 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.AttributionSource = inventory.AttributionSourceInferred
 	}
 	// Snapshot CL value at creation when known; set-once (never overwritten later).
+	// Zero lateness by construction: this write happens at purchase creation, so
+	// the value is observed at the moment the column claims. Zero lateness is not
+	// the same as trustworthy -- both inputs read here arrive over the wire on the
+	// HTTP create path (HandleCreatePurchase clears them before the service call,
+	// since QuickAddPurchase legitimately supplies clValueCents through this same
+	// service method), so this stamp is only as good as that clearing. What it
+	// lacked until now was a recorded SOURCE -- cl_value_cents has a second writer
+	// (the Shopify external import, via UpdateExternalPurchaseFields), so a
+	// non-zero value here does not by itself imply CardLadder answered.
+	// cl_value_updated_at is the only reliable "CardLadder answered" marker: it
+	// has exactly one writer (UpdatePurchaseCLValue) and is never cleared. See
+	// docs/superpowers/specs/2026-08-10-buy-decision-provenance-design.md (D5),
+	// internal/adapters/storage/postgres/cl_coverage_store.go:161-166, and
+	// internal/adapters/storage/postgres/pricing_diagnostics.go:91-95.
 	if p.CLValueAtPurchaseCents == 0 && p.CLValueCents > 0 {
 		p.CLValueAtPurchaseCents = p.CLValueCents
+		if p.CLValueUpdatedAt != "" {
+			p.CLValueAtPurchaseSource = inventory.CLProvenanceSourceCardLadder
+			p.CLValueAtPurchaseObservedAt = p.CLValueUpdatedAt
+		} else {
+			p.CLValueAtPurchaseSource = inventory.CLProvenanceSourceIntake
+			p.CLValueAtPurchaseObservedAt = time.Now().UTC().Format(time.RFC3339)
+		}
 	}
 	query := `
 		INSERT INTO campaign_purchases (
