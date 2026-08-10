@@ -51,7 +51,7 @@ type InMemoryCampaignStore struct {
 	GetPerformanceByGradeFn             func(ctx context.Context, campaignID string) ([]inventory.GradePerformance, error)
 	GetPurchasesWithSalesFn             func(ctx context.Context, campaignID string) ([]inventory.PurchaseWithSale, error)
 	GetPurchaseByCertNumberFn           func(ctx context.Context, grader, certNumber string) (*inventory.Purchase, error)
-	UpdatePurchaseCLValueFn             func(ctx context.Context, id string, clValueCents int, population int) error
+	UpdatePurchaseCLValueFn             func(ctx context.Context, id string, clValueCents int, population int, confidence *int) error
 	UpdatePurchaseCLSyncedAtFn          func(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseCardMetadataFn        func(ctx context.Context, id string, cardName, cardNumber, setName string) error
 	UpdatePurchaseImagesFn              func(ctx context.Context, id string, frontURL, backURL string) error

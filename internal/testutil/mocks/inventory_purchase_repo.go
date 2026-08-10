@@ -21,7 +21,7 @@ type PurchaseRepositoryMock struct {
 	GetPurchasesByIDsFn                  func(ctx context.Context, ids []string) (map[string]*inventory.Purchase, error)
 	GetPurchasesByCertNumbersFn          func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
 	GetPurchasesByDHInventoryIDsFn       func(ctx context.Context, dhIDs []int) (map[int]*inventory.Purchase, error)
-	UpdatePurchaseCLValueFn              func(ctx context.Context, id string, clValueCents int, population int) error
+	UpdatePurchaseCLValueFn              func(ctx context.Context, id string, clValueCents int, population int, confidence *int) error
 	UpdatePurchaseCLSyncedAtFn           func(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseCardMetadataFn         func(ctx context.Context, id, cardName, cardNumber, setName string) error
 	UpdatePurchaseImagesFn               func(ctx context.Context, id, frontURL, backURL string) error
@@ -152,9 +152,9 @@ func (m *PurchaseRepositoryMock) GetPurchasesByIDs(ctx context.Context, ids []st
 	return map[string]*inventory.Purchase{}, nil
 }
 
-func (m *PurchaseRepositoryMock) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
+func (m *PurchaseRepositoryMock) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int, confidence *int) error {
 	if m.UpdatePurchaseCLValueFn != nil {
-		return m.UpdatePurchaseCLValueFn(ctx, id, clValueCents, population)
+		return m.UpdatePurchaseCLValueFn(ctx, id, clValueCents, population, confidence)
 	}
 	return nil
 }

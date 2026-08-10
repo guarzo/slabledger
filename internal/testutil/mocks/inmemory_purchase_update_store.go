@@ -8,9 +8,9 @@ import (
 
 // --- PurchaseRepository: field updates and attribution ---
 
-func (m *InMemoryCampaignStore) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
+func (m *InMemoryCampaignStore) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents, population int, confidence *int) error {
 	if m.UpdatePurchaseCLValueFn != nil {
-		return m.UpdatePurchaseCLValueFn(ctx, id, clValueCents, population)
+		return m.UpdatePurchaseCLValueFn(ctx, id, clValueCents, population, confidence)
 	}
 	p, ok := m.Purchases[id]
 	if !ok {
@@ -18,6 +18,10 @@ func (m *InMemoryCampaignStore) UpdatePurchaseCLValue(ctx context.Context, id st
 	}
 	p.CLValueCents = clValueCents
 	p.Population = population
+	if confidence != nil {
+		c := *confidence
+		p.CLCardConfidenceAtPurchase = &c
+	}
 	return nil
 }
 

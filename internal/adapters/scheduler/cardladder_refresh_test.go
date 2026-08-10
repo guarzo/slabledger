@@ -37,24 +37,26 @@ type clErrorCall struct {
 }
 
 type mockCLValueUpdater struct {
-	UpdateFn      func(ctx context.Context, purchaseID string, clValueCents, population int) error
+	UpdateFn      func(ctx context.Context, purchaseID string, clValueCents, population int, confidence *int) error
 	UpdateErrorFn func(ctx context.Context, purchaseID, reason, reasonAt string) error
 	Calls         []struct {
 		PurchaseID   string
 		CLValueCents int
 		Population   int
+		Confidence   *int
 	}
 	ErrorCalls []clErrorCall
 }
 
-func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error {
+func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int, confidence *int) error {
 	m.Calls = append(m.Calls, struct {
 		PurchaseID   string
 		CLValueCents int
 		Population   int
-	}{purchaseID, clValueCents, population})
+		Confidence   *int
+	}{purchaseID, clValueCents, population, confidence})
 	if m.UpdateFn != nil {
-		return m.UpdateFn(ctx, purchaseID, clValueCents, population)
+		return m.UpdateFn(ctx, purchaseID, clValueCents, population, confidence)
 	}
 	return nil
 }

@@ -299,7 +299,7 @@ func (ps *PurchaseStore) execAndExpectRow(ctx context.Context, op, query string,
 	return nil
 }
 
-func (ps *PurchaseStore) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
+func (ps *PurchaseStore) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents, population int, _ *int) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return ps.execAndExpectRow(ctx, "update cl value",
 		`UPDATE campaign_purchases SET cl_value_cents = $1, population = $2, cl_value_updated_at = $3, updated_at = $4,

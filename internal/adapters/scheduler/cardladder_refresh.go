@@ -22,7 +22,7 @@ type CardLadderPurchaseLister interface {
 
 // CardLadderValueUpdater updates CL values on purchases.
 type CardLadderValueUpdater interface {
-	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error
+	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int, confidence *int) error
 	// UpdatePurchaseCLError records or clears the last mapping/pricing failure reason.
 	// Pass reason="" and reasonAt="" to clear on success.
 	UpdatePurchaseCLError(ctx context.Context, purchaseID, reason, reasonAt string) error
@@ -258,7 +258,7 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 
 	newCLCents := mathutil.ToCentsInt(value)
 	oldCLCents := p.CLValueCents
-	if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, p.ID, newCLCents, p.Population); err != nil {
+	if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, p.ID, newCLCents, p.Population, nil); err != nil {
 		return err
 	}
 	// Keep the in-memory purchase consistent with the DB so the next pricer
@@ -445,7 +445,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) er
 		}
 		newCLCents := mathutil.ToCentsInt(value)
 		oldCLCents := r.purchase.CLValueCents
-		if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, r.purchase.ID, newCLCents, r.purchase.Population); err != nil {
+		if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, r.purchase.ID, newCLCents, r.purchase.Population, nil); err != nil {
 			s.logger.Warn(ctx, "CL refresh: failed to update CL value",
 				observability.String("cert", r.purchase.CertNumber),
 				observability.Err(err))

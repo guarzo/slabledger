@@ -62,7 +62,7 @@ func TestCLValueAtPurchaseSetOnce(t *testing.T) {
 				t.Fatalf("create: %v", err)
 			}
 			for _, cl := range tt.updates {
-				if err := ps.UpdatePurchaseCLValue(ctx, p.ID, cl, 10); err != nil {
+				if err := ps.UpdatePurchaseCLValue(ctx, p.ID, cl, 10, nil); err != nil {
 					t.Fatalf("update: %v", err)
 				}
 			}
@@ -522,5 +522,30 @@ func TestCreatePurchaseCLProvenanceSource(t *testing.T) {
 				t.Errorf("CLValueAtPurchaseObservedAt = %q, want empty", got.CLValueAtPurchaseObservedAt)
 			}
 		})
+	}
+}
+
+func TestUpdatePurchaseCLValue_AcceptsConfidenceParam(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	p := makeTestPurchase()
+	if err := ps.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	confidence := 72
+	if err := ps.UpdatePurchaseCLValue(ctx, p.ID, 500, 10, &confidence); err != nil {
+		t.Fatalf("update: %v", err)
 	}
 }

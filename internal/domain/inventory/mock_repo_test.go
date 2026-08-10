@@ -382,7 +382,7 @@ func (m *mockRepo) GetPurchasesByIDs(_ context.Context, ids []string) (map[strin
 	return result, nil
 }
 
-func (m *mockRepo) UpdatePurchaseCLValue(_ context.Context, id string, clValueCents int, population int) error {
+func (m *mockRepo) UpdatePurchaseCLValue(_ context.Context, id string, clValueCents int, population int, _ *int) error {
 	p, ok := m.purchases[id]
 	if !ok {
 		return ErrPurchaseNotFound

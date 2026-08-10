@@ -40,7 +40,7 @@ type PurchaseCoreRepository interface {
 // purchase: card metadata, images, cost, receipt timing, and campaign
 // attribution. Every method here mutates a purchase that already exists.
 type PurchaseFieldRepository interface {
-	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error
+	UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents, population int, confidence *int) error
 	UpdatePurchaseCLSyncedAt(ctx context.Context, id string, syncedAt string) error
 	UpdatePurchaseCardMetadata(ctx context.Context, id string, cardName, cardNumber, setName string) error
 	UpdatePurchaseCardYear(ctx context.Context, id string, year string) error
