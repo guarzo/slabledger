@@ -430,7 +430,6 @@ Individual graded cards bought under a campaign.
 | `cl_value_updated_at` | TEXT | NOT NULL DEFAULT '' | When CL value was last refreshed; added migration 000001 |
 | `mid_price_cents` | INTEGER | NOT NULL DEFAULT 0 | Mid-market price from DH snapshot; added migration 000001 |
 | `last_sold_date` | TEXT | NOT NULL DEFAULT '' | ISO date of last DH sale; added migration 000001 |
-| `cl_confidence_at_purchase` | SMALLINT | NULL | **MISNAMED — not card confidence.** Holds the *campaign's configured policy minimum* (`ParseCLConfidenceMin`), a targeting parameter, not an observation about the card. Superseded by `cl_policy_confidence_min_at_purchase`; retained only for the expand/contract rename window and dropped in SLA-106. NULL=not captured; added migration 000022 |
 | `population_at_purchase` | BIGINT | NULL | PSA population snapshot at time of purchase; NULL=not captured; added migration 000022 |
 | `dh_confidence_at_purchase` | DOUBLE PRECISION | NULL | DH price confidence at time of purchase; NULL=not captured; added migration 000022 |
 | `source_count_at_purchase` | BIGINT | NULL | Number of pricing sources observed at purchase; NULL=not captured; added migration 000022 |
@@ -438,8 +437,8 @@ Individual graded cards bought under a campaign.
 | `sales_last_30d_at_purchase` | BIGINT | NULL | 30-day sale count at time of purchase; NULL=not captured; added migration 000022 |
 | `cl_value_at_purchase_observed_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime the CL value in `cl_value_at_purchase_cents` was observed; ''=unknown provenance; added migration 000041 |
 | `cl_value_at_purchase_source` | TEXT | NOT NULL DEFAULT '' | Which writer produced `cl_value_at_purchase_cents`: `intake` or `cardladder`. ''=unknown provenance (pre-000041 rows, never backfilled) — provenance studies filter on `cl_value_at_purchase_source <> ''`; CHECK-constrained; added migration 000041 |
-| `cl_card_confidence_at_purchase` | SMALLINT | NULL | The card's **real** CardLadder comp confidence at purchase — the observation `cl_confidence_at_purchase` was mistaken for. NULL=not captured (0 is a legitimate CL answer, so it cannot double as the sentinel); added migration 000041 |
-| `cl_policy_confidence_min_at_purchase` | SMALLINT | NULL | The campaign's configured CL policy minimum at purchase; correctly-named replacement for `cl_confidence_at_purchase`, backfilled from it. Both are dual-written during the rename window; added migration 000042 |
+| `cl_card_confidence_at_purchase` | SMALLINT | NULL | The card's **real** CardLadder comp confidence at purchase — the observation the since-dropped `cl_confidence_at_purchase` was mistaken for. NULL=not captured (0 is a legitimate CL answer, so it cannot double as the sentinel); added migration 000041 |
+| `cl_policy_confidence_min_at_purchase` | SMALLINT | NULL | The campaign's configured CL policy minimum at purchase. Correctly-named replacement for the misnamed `cl_confidence_at_purchase` (added 000022, backfilled from it by 000042, dropped by 000043 after the expand/contract rename window closed); added migration 000042 |
 
 **Unique:** `(grader, cert_number)`
 
