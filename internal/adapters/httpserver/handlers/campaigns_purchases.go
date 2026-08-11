@@ -52,6 +52,18 @@ func (h *CampaignsHandler) HandleCreatePurchase(w http.ResponseWriter, r *http.R
 	p.AttributionSource = inventory.AttributionSourceManual
 	p.PSACampaignName = ""
 
+	// Same reasoning, for the two CL value fields the store's create-time
+	// freeze (internal/adapters/storage/postgres/purchase_store.go) derives a
+	// provenance source from: a non-empty clValueUpdatedAt earns "cardladder",
+	// a bare clValueCents earns "intake". Either forged pulls a fabricated row
+	// into the provenance study, whose inclusion predicate is
+	// cl_value_at_purchase_source <> "". Cleared here rather than in the
+	// service because QuickAddPurchase legitimately supplies clValueCents (the
+	// operator's manually-entered CL value at intake) through the same
+	// service method.
+	p.CLValueCents = 0
+	p.CLValueUpdatedAt = ""
+
 	if err := h.service.CreatePurchase(r.Context(), &p); err != nil {
 		if inventory.IsDuplicateCertNumber(err) {
 			writeError(w, http.StatusConflict, "Certificate number already exists")

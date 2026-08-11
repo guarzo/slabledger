@@ -153,9 +153,10 @@ func (s *service) savePendingItems(ctx context.Context, result *PSAImportResult)
 }
 
 // enqueueCertEnrichment submits allocated cert numbers to the cert enrichment
-// queue and kicks off background batch cert→card_id resolution. Both are
-// best-effort background work: cert lookups are rate-limited (100/day) and
-// card ID resolution is deferred so neither blocks the import response.
+// queue and the pricing queue, and kicks off background batch cert→card_id
+// resolution. All three are best-effort background work: cert lookups are
+// rate-limited (100/day), pricing is a bounded async queue (D6), and card ID
+// resolution is deferred — none of them block the import response.
 func (s *service) enqueueCertEnrichment(ctx context.Context, result *PSAImportResult) {
 	// Submit cert numbers to the cert enrichment queue.
 	// Cert lookups are rate-limited (100/day), so they run in the background
@@ -169,6 +170,18 @@ func (s *service) enqueueCertEnrichment(ctx context.Context, result *PSAImportRe
 			}
 		}
 		result.CertEnrichmentPending = queued
+	}
+
+	// Submit cert numbers for intake-time CL pricing (D6). Without this, a
+	// bulk-imported purchase has no CL observation until the next daily refresh
+	// sweep — and that sweep only ever touches unsold inventory, so a card that
+	// sells quickly gets no CL-at-purchase snapshot at all.
+	if s.pricingQueue != nil && result.Allocated > 0 {
+		for _, r := range result.Results {
+			if r.Status == "allocated" && r.CertNumber != "" {
+				s.pricingQueue.Enqueue(r.CertNumber)
+			}
+		}
 	}
 
 	// Kick off background batch cert→card_id resolution if resolver is available

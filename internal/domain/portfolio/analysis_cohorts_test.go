@@ -12,61 +12,61 @@ func intPtr(i int) *int { return &i }
 func TestComputeConfidenceBuyCohorts(t *testing.T) {
 	// Row A: conf=2, buyCost 7000, clAtPurchase 10000 -> "2","70-75".
 	pA := inventory.Purchase{
-		CLConfidenceAtPurchase: intPtr(2),
-		BuyCostCents:           7000,
-		CLValueAtPurchaseCents: 10000,
+		CLPolicyConfidenceMinAtPurchase: intPtr(2),
+		BuyCostCents:                    7000,
+		CLValueAtPurchaseCents:          10000,
 	}
 	// Row B: confidence nil -> "unknown".
 	pB := inventory.Purchase{
-		CLConfidenceAtPurchase: nil,
-		BuyCostCents:           5000,
-		CLValueAtPurchaseCents: 10000,
+		CLPolicyConfidenceMinAtPurchase: nil,
+		BuyCostCents:                    5000,
+		CLValueAtPurchaseCents:          10000,
 	}
 	// Row C: cl 0 -> buyTerms "unknown".
 	pC := inventory.Purchase{
-		CLConfidenceAtPurchase: intPtr(3),
-		BuyCostCents:           5000,
-		CLValueAtPurchaseCents: 0,
+		CLPolicyConfidenceMinAtPurchase: intPtr(3),
+		BuyCostCents:                    5000,
+		CLValueAtPurchaseCents:          0,
 	}
 	// Boundary D: buyCost 7500, cl 10000 -> ratio exactly 0.75 -> "75-80" (lower-inclusive).
 	pD := inventory.Purchase{
-		CLConfidenceAtPurchase: intPtr(2),
-		BuyCostCents:           7500,
-		CLValueAtPurchaseCents: 10000,
+		CLPolicyConfidenceMinAtPurchase: intPtr(2),
+		BuyCostCents:                    7500,
+		CLValueAtPurchaseCents:          10000,
 	}
 	// Boundary E: buyCost 5000, cl 10000 -> ratio 0.50 -> "50-55" (not "<50").
 	pE := inventory.Purchase{
-		CLConfidenceAtPurchase: intPtr(5),
-		BuyCostCents:           5000,
-		CLValueAtPurchaseCents: 10000,
+		CLPolicyConfidenceMinAtPurchase: intPtr(5),
+		BuyCostCents:                    5000,
+		CLValueAtPurchaseCents:          10000,
 	}
 	// Boundary F1: ratio 1.00 -> ">=100".
 	pF1 := inventory.Purchase{
-		CLConfidenceAtPurchase: intPtr(4),
-		BuyCostCents:           10000,
-		CLValueAtPurchaseCents: 10000,
+		CLPolicyConfidenceMinAtPurchase: intPtr(4),
+		BuyCostCents:                    10000,
+		CLValueAtPurchaseCents:          10000,
 	}
 	// Boundary F2: ratio 0.4999 -> "<50".
 	pF2 := inventory.Purchase{
-		CLConfidenceAtPurchase: intPtr(4),
-		BuyCostCents:           4999,
-		CLValueAtPurchaseCents: 10000,
+		CLPolicyConfidenceMinAtPurchase: intPtr(4),
+		BuyCostCents:                    4999,
+		CLValueAtPurchaseCents:          10000,
 	}
 	// avgActiveListings: skips nil pointers but includes a real 0.
 	zero := 0
 	pG1 := inventory.Purchase{
-		CLConfidenceAtPurchase:   intPtr(9),
-		BuyCostCents:             6000,
-		CLValueAtPurchaseCents:   10000,
-		ActiveListingsAtPurchase: &zero,
-		SalesLast30dAtPurchase:   intPtr(1),
+		CLPolicyConfidenceMinAtPurchase: intPtr(9),
+		BuyCostCents:                    6000,
+		CLValueAtPurchaseCents:          10000,
+		ActiveListingsAtPurchase:        &zero,
+		SalesLast30dAtPurchase:          intPtr(1),
 	}
 	pG2 := inventory.Purchase{
-		CLConfidenceAtPurchase:   intPtr(9),
-		BuyCostCents:             6100,
-		CLValueAtPurchaseCents:   10000,
-		ActiveListingsAtPurchase: nil,
-		SalesLast30dAtPurchase:   nil,
+		CLPolicyConfidenceMinAtPurchase: intPtr(9),
+		BuyCostCents:                    6100,
+		CLValueAtPurchaseCents:          10000,
+		ActiveListingsAtPurchase:        nil,
+		SalesLast30dAtPurchase:          nil,
 	}
 
 	rows := []inventory.PurchaseWithSale{
@@ -271,6 +271,57 @@ func TestBuyTermsBucketOrdering(t *testing.T) {
 			}
 			if got.rank >= before.rank {
 				t.Errorf("rank(%q)=%d, want < rank(%q)=%d", got.label, got.rank, before.label, before.rank)
+			}
+		})
+	}
+}
+
+// TestConfidenceBucketRenameFallback pins the read half of the
+// cl_confidence_at_purchase -> cl_policy_confidence_min_at_purchase
+// expand/contract rename (migration 000042). During the deploy-N rollout an
+// old instance still writes only the legacy field; those rows must bucket by
+// their real value rather than silently collecting in "unknown". The new field
+// wins whenever both are set, so a dual-written row never reads the stale one.
+func TestConfidenceBucketRenameFallback(t *testing.T) {
+	tests := []struct {
+		name     string
+		purchase inventory.Purchase
+		want     string
+	}{
+		{
+			name:     "new field only (post-rollout write)",
+			purchase: inventory.Purchase{CLPolicyConfidenceMinAtPurchase: intPtr(7)},
+			want:     "7",
+		},
+		{
+			name:     "legacy field only (old instance mid-rollout)",
+			purchase: inventory.Purchase{CLConfidenceAtPurchase: intPtr(4)},
+			want:     "4",
+		},
+		{
+			name: "both set: new field wins",
+			purchase: inventory.Purchase{
+				CLPolicyConfidenceMinAtPurchase: intPtr(7),
+				CLConfidenceAtPurchase:          intPtr(4),
+			},
+			want: "7",
+		},
+		{
+			name:     "neither set",
+			purchase: inventory.Purchase{},
+			want:     "unknown",
+		},
+		{
+			name:     "legacy zero is a real floor, not absent",
+			purchase: inventory.Purchase{CLConfidenceAtPurchase: intPtr(0)},
+			want:     "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := confidenceBucket(tt.purchase); got != tt.want {
+				t.Errorf("confidenceBucket = %q, want %q", got, tt.want)
 			}
 		})
 	}

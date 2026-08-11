@@ -43,8 +43,29 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.AttributionSource = inventory.AttributionSourceInferred
 	}
 	// Snapshot CL value at creation when known; set-once (never overwritten later).
+	// Zero lateness by construction: this write happens at purchase creation, so
+	// the value is observed at the moment the column claims. Zero lateness is not
+	// the same as trustworthy -- both inputs read here arrive over the wire on the
+	// HTTP create path (HandleCreatePurchase clears them before the service call,
+	// since QuickAddPurchase legitimately supplies clValueCents through this same
+	// service method), so this stamp is only as good as that clearing. What it
+	// lacked until now was a recorded SOURCE -- cl_value_cents has a second writer
+	// (the Shopify external import, via UpdateExternalPurchaseFields), so a
+	// non-zero value here does not by itself imply CardLadder answered.
+	// cl_value_updated_at is the only reliable "CardLadder answered" marker: it
+	// has exactly one writer (UpdatePurchaseCLValue) and is never cleared. See
+	// docs/superpowers/specs/2026-08-10-buy-decision-provenance-design.md (D5),
+	// internal/adapters/storage/postgres/cl_coverage_store.go:161-166, and
+	// internal/adapters/storage/postgres/pricing_diagnostics.go:91-95.
 	if p.CLValueAtPurchaseCents == 0 && p.CLValueCents > 0 {
 		p.CLValueAtPurchaseCents = p.CLValueCents
+		if p.CLValueUpdatedAt != "" {
+			p.CLValueAtPurchaseSource = inventory.CLProvenanceSourceCardLadder
+			p.CLValueAtPurchaseObservedAt = p.CLValueUpdatedAt
+		} else {
+			p.CLValueAtPurchaseSource = inventory.CLProvenanceSourceIntake
+			p.CLValueAtPurchaseObservedAt = time.Now().UTC().Format(time.RFC3339)
+		}
 	}
 	query := `
 		INSERT INTO campaign_purchases (
@@ -75,7 +96,8 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			gem_rate_id, psa_spec_id,
 			-- provenance snapshot
 			cl_value_at_purchase_cents,
-			cl_confidence_at_purchase, population_at_purchase, dh_confidence_at_purchase,
+			cl_value_at_purchase_observed_at, cl_value_at_purchase_source, cl_card_confidence_at_purchase,
+			cl_confidence_at_purchase, cl_policy_confidence_min_at_purchase, population_at_purchase, dh_confidence_at_purchase,
 			source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
 			-- attribution
 			psa_campaign_name, attribution_source
@@ -106,9 +128,10 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			$53, $54,
 			-- provenance snapshot
 			$55,
-			$56, $57, $58, $59, $60, $61,
+			$56, $57, $58,
+			$59, $60, $61, $62, $63, $64, $65,
 			-- attribution
-			$62, $63
+			$66, $67
 		)
 	`
 	_, err := ps.db.ExecContext(ctx, query,
@@ -128,7 +151,8 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.DHCardID, p.DHInventoryID, p.DHCertStatus, p.DHListingPriceCents, p.DHChannelsJSON, p.DHStatus, p.DHPushStatus, p.DHCandidatesJSON,
 		p.GemRateID, p.PSASpecID,
 		p.CLValueAtPurchaseCents,
-		p.CLConfidenceAtPurchase, p.PopulationAtPurchase, p.DHConfidenceAtPurchase,
+		p.CLValueAtPurchaseObservedAt, p.CLValueAtPurchaseSource, p.CLCardConfidenceAtPurchase,
+		p.CLConfidenceAtPurchase, p.CLPolicyConfidenceMinAtPurchase, p.PopulationAtPurchase, p.DHConfidenceAtPurchase,
 		p.SourceCountAtPurchase, p.ActiveListingsAtPurchase, p.SalesLast30dAtPurchase,
 		p.PSACampaignName, p.AttributionSource,
 	)
@@ -275,13 +299,36 @@ func (ps *PurchaseStore) execAndExpectRow(ctx context.Context, op, query string,
 	return nil
 }
 
-func (ps *PurchaseStore) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents int, population int) error {
+// UpdatePurchaseCLValue refreshes the current CL value and, when the write
+// lands within clFreezeMaxAgeDays of purchase_date, freezes the at-purchase
+// snapshot columns (D4). Population and card confidence freeze under the
+// same guard (D2, D1) — see the design doc for why these all share one
+// lateness window instead of each picking their own.
+func (ps *PurchaseStore) UpdatePurchaseCLValue(ctx context.Context, id string, clValueCents, population int, confidence *int) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return ps.execAndExpectRow(ctx, "update cl value",
-		`UPDATE campaign_purchases SET cl_value_cents = $1, population = $2, cl_value_updated_at = $3, updated_at = $4,
-		 cl_value_at_purchase_cents = CASE WHEN cl_value_at_purchase_cents = 0 AND $1::bigint > 0 THEN $1::bigint ELSE cl_value_at_purchase_cents END
-		 WHERE id = $5`,
-		clValueCents, population, now, now, id,
+		`UPDATE campaign_purchases SET
+		 cl_value_cents = $1,
+		 population = $2,
+		 cl_value_updated_at = $3,
+		 updated_at = $4,
+		 cl_value_at_purchase_cents = CASE
+		   WHEN cl_value_at_purchase_cents = 0 AND $1::bigint > 0 AND `+clFreezeLateness+`
+		   THEN $1::bigint ELSE cl_value_at_purchase_cents END,
+		 cl_value_at_purchase_observed_at = CASE
+		   WHEN cl_value_at_purchase_cents = 0 AND $1::bigint > 0 AND `+clFreezeLateness+`
+		   THEN $3 ELSE cl_value_at_purchase_observed_at END,
+		 cl_value_at_purchase_source = CASE
+		   WHEN cl_value_at_purchase_cents = 0 AND $1::bigint > 0 AND `+clFreezeLateness+`
+		   THEN '`+inventory.CLProvenanceSourceCardLadder+`' ELSE cl_value_at_purchase_source END,
+		 population_at_purchase = CASE
+		   WHEN population_at_purchase IS NULL AND $2::bigint > 0 AND `+clFreezeLateness+`
+		   THEN $2::bigint ELSE population_at_purchase END,
+		 cl_card_confidence_at_purchase = CASE
+		   WHEN cl_card_confidence_at_purchase IS NULL AND $5::smallint IS NOT NULL AND `+clFreezeLateness+`
+		   THEN $5::smallint ELSE cl_card_confidence_at_purchase END
+		 WHERE id = $6`,
+		clValueCents, population, now, now, confidence, id,
 	)
 }
 
@@ -388,12 +435,13 @@ func (ps *PurchaseStore) ReattributePurchase(ctx context.Context, purchaseID str
 		 SET campaign_id = $1,
 		     psa_sourcing_fee_cents = $2,
 		     cl_confidence_at_purchase = $3,
-		     psa_campaign_name = $4,
-		     attribution_source = $5,
-		     updated_at = $6
-		 WHERE id = $7
-		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $8)`,
-		r.CampaignID, r.PSASourcingFeeCents, r.CLConfidenceAtPurchase,
+		     cl_policy_confidence_min_at_purchase = $4,
+		     psa_campaign_name = $5,
+		     attribution_source = $6,
+		     updated_at = $7
+		 WHERE id = $8
+		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $9)`,
+		r.CampaignID, r.PSASourcingFeeCents, r.CLConfidenceAtPurchase, r.CLPolicyConfidenceMinAtPurchase,
 		r.PSACampaignName, inventory.AttributionSourcePSA, time.Now(), purchaseID, purchaseID,
 	)
 	if err != nil {

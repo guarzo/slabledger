@@ -22,7 +22,7 @@ type CardLadderPurchaseLister interface {
 
 // CardLadderValueUpdater updates CL values on purchases.
 type CardLadderValueUpdater interface {
-	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error
+	UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int, confidence *int) error
 	// UpdatePurchaseCLError records or clears the last mapping/pricing failure reason.
 	// Pass reason="" and reasonAt="" to clear on success.
 	UpdatePurchaseCLError(ctx context.Context, purchaseID, reason, reasonAt string) error
@@ -246,19 +246,27 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 		return nil // resolveGemRate already recorded the failure reason.
 	}
 
-	value, err := s.fetchCLEstimate(ctx, client, gemRateID, condition, p.CardName)
+	est, err := s.fetchCLEstimate(ctx, client, gemRateID, condition, p.CardName)
 	if err != nil {
-		s.recordCLError(ctx, p.ID, CLReasonAPIError)
+		// Same quota/error split resolveGemRate applies to its own CL call: a
+		// quota-exhausted card was never attempted, so tagging it api_error
+		// misreports why it has no value.
+		reason := CLReasonAPIError
+		if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
+			reason = CLReasonQuotaExhausted
+		}
+		s.recordCLError(ctx, p.ID, reason)
 		return nil
 	}
-	if value <= 0 {
+	if est.value <= 0 {
 		s.recordCLError(ctx, p.ID, CLReasonNoValue)
 		return nil
 	}
 
-	newCLCents := mathutil.ToCentsInt(value)
+	newCLCents := mathutil.ToCentsInt(est.value)
 	oldCLCents := p.CLValueCents
-	if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, p.ID, newCLCents, p.Population); err != nil {
+	conf := est.confidence
+	if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, p.ID, newCLCents, p.Population, &conf); err != nil {
 		return err
 	}
 	// Keep the in-memory purchase consistent with the DB so the next pricer
@@ -353,12 +361,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) er
 	// Phase 1: resolve (cert → gemRateID+condition) for every purchase that
 	// needs it. Collect the gemRateIDs we care about so Phase 2 can batch
 	// catalog fetches.
-	type resolved struct {
-		purchase  *inventory.Purchase
-		gemRateID string
-		condition string
-	}
-	resolvedPurchases := make([]resolved, 0, len(purchases))
+	resolvedPurchases := make([]clResolvedPurchase, 0, len(purchases))
 	stats := CLRunStats{TotalPurchases: len(purchases)}
 
 	for i := range purchases {
@@ -390,91 +393,15 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) er
 		if _, cached := mappingByCert[p.CertNumber]; !cached {
 			stats.Resolved++
 		}
-		resolvedPurchases = append(resolvedPurchases, resolved{p, gemRateID, condition})
+		resolvedPurchases = append(resolvedPurchases, clResolvedPurchase{p, gemRateID, condition})
 	}
 
 	// Phase 2+3: fetch the live CardEstimate for each resolved purchase and
-	// apply it. Successful and no-value estimates are cached per (gemRateID,
-	// condition) so multiple physical copies of the same card cost a single
-	// callable — the dominant fix for quota burn, since the index doesn't
-	// reliably surface these gemRateIDs and we hit the canonical estimate
-	// function directly. (A hard error is not cached, so a persistently-failing
-	// card still retries once per copy — acceptable, and lets transient errors
-	// recover.) When CL's daily quota is hit, stop making further estimate calls
-	// for this cycle (they would all fail identically) but keep applying values
-	// we already fetched this run.
-	type estimateKey struct{ gemRateID, condition string }
-	estimates := make(map[estimateKey]float64, len(resolvedPurchases))
-	for _, r := range resolvedPurchases {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		key := estimateKey{r.gemRateID, r.condition}
-		value, cached := estimates[key]
-		if !cached {
-			if stats.QuotaExhausted {
-				// Quota wall already hit this cycle — don't burn more calls.
-				// Tagged quota_exhausted (not api_error) so the admin /failures
-				// view doesn't read these as genuine CL failures: they were
-				// never attempted.
-				stats.SkippedQuota++
-				s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted)
-				continue
-			}
-			var err error
-			value, err = s.fetchCLEstimate(ctx, client, r.gemRateID, r.condition, r.purchase.CardName)
-			if err != nil {
-				if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
-					stats.QuotaExhausted = true
-					stats.SkippedQuota++
-					s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted)
-					s.logger.Warn(ctx, "CL refresh: daily quota exhausted, skipping remaining estimates this cycle",
-						observability.Int("updatedSoFar", stats.Updated))
-					continue
-				}
-				stats.EstimateFailed++
-				s.recordCLError(ctx, r.purchase.ID, CLReasonAPIError)
-				continue
-			}
-			estimates[key] = value
-		}
-		if value <= 0 {
-			stats.NoValue++
-			s.recordCLError(ctx, r.purchase.ID, CLReasonNoValue)
-			continue
-		}
-		newCLCents := mathutil.ToCentsInt(value)
-		oldCLCents := r.purchase.CLValueCents
-		if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, r.purchase.ID, newCLCents, r.purchase.Population); err != nil {
-			s.logger.Warn(ctx, "CL refresh: failed to update CL value",
-				observability.String("cert", r.purchase.CertNumber),
-				observability.Err(err))
-			continue
-		}
-		r.purchase.CLValueCents = newCLCents
-		stats.Updated++
-		s.recordCLError(ctx, r.purchase.ID, "")
-
-		// Re-enroll for DH push when market value changes. Two qualifying cases:
-		//  1. Already-pushed rows (DHInventoryID != 0) — so DH picks up the new price.
-		//  2. Received-but-unmatched rows — so a fresh cert resolve is attempted
-		//     with the new market value, which may push it above a price floor.
-		if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(r.purchase) {
-			if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, r.purchase.ID, inventory.DHPushStatusPending); err != nil {
-				s.logger.Warn(ctx, "CL refresh: failed to re-enroll for DH push",
-					observability.String("cert", r.purchase.CertNumber),
-					observability.Err(err))
-			} else {
-				r.purchase.DHPushStatus = inventory.DHPushStatusPending
-				s.recordEvent(ctx, dhevents.Event{
-					PurchaseID:    r.purchase.ID,
-					CertNumber:    r.purchase.CertNumber,
-					Type:          dhevents.TypeEnrolled,
-					NewPushStatus: inventory.DHPushStatusPending,
-					Source:        dhevents.SourceCLRefresh,
-				})
-			}
-		}
+	// apply it. Extracted into applyCLEstimates (cardladder_catalog.go) so the
+	// batch-cache-shape regression it guards against is unit-testable without
+	// a live CardLadderStore.
+	if err := s.applyCLEstimates(ctx, client, resolvedPurchases, &stats); err != nil {
+		return err
 	}
 
 	// Phase 4: refresh sales comps (decoupled — queries gem_rate_id directly).

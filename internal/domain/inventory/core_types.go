@@ -270,6 +270,18 @@ const (
 	SnapshotStatusExhausted SnapshotStatus = "exhausted" // max retries reached, requires manual fix
 )
 
+// CL provenance source discriminators for *AtPurchase / *AtSale value freezes.
+// See migration 000041 and docs/superpowers/specs/2026-08-10-buy-decision-provenance-design.md
+// (D5): a frozen CL value can come from two different writers -- the
+// create-time copy of whatever value the intake carried, or CardLadder's own
+// refresh sweep -- and only the latter is a genuine "CardLadder answered"
+// observation. "" (the zero value) means unknown provenance, for every row
+// written before this column existed.
+const (
+	CLProvenanceSourceIntake     = "intake"
+	CLProvenanceSourceCardLadder = "cardladder"
+)
+
 // Purchase represents a single card purchased through a campaign.
 type Purchase struct {
 	// --- Core identity ---
@@ -287,13 +299,25 @@ type Purchase struct {
 	CLValueUpdatedAt       string `json:"clValueUpdatedAt,omitempty"`       // When CL value was last refreshed (RFC3339)
 	CLValueAtPurchaseCents int    `json:"clValueAtPurchaseCents,omitempty"` // CL value at purchase/first-enrichment; set once, never overwritten (0 = no snapshot)
 
+	// CLValueAtPurchaseObservedAt/CLValueAtPurchaseSource record WHEN and HOW
+	// CLValueAtPurchaseCents was captured; see CLProvenanceSourceIntake/
+	// CLProvenanceSourceCardLadder and migration 000041. "" for both means
+	// this purchase predates the column (provenance unknown). CLCardConfidenceAtPurchase
+	// is CardLadder's own per-card comp confidence (resp.Confidence) -- distinct
+	// from CLPolicyConfidenceMinAtPurchase below, which is the campaign's configured
+	// policy minimum, not an observation about the card.
+	CLValueAtPurchaseObservedAt string `json:"clValueAtPurchaseObservedAt,omitempty"`
+	CLValueAtPurchaseSource     string `json:"clValueAtPurchaseSource,omitempty"`
+	CLCardConfidenceAtPurchase  *int   `json:"clCardConfidenceAtPurchase,omitempty"`
+
 	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
-	CLConfidenceAtPurchase   *int     `json:"clConfidenceAtPurchase,omitempty"`
-	PopulationAtPurchase     *int     `json:"populationAtPurchase,omitempty"`
-	DHConfidenceAtPurchase   *float64 `json:"dhConfidenceAtPurchase,omitempty"`
-	SourceCountAtPurchase    *int     `json:"sourceCountAtPurchase,omitempty"`
-	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
-	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
+	CLConfidenceAtPurchase          *int     `json:"clConfidenceAtPurchase,omitempty"`          // MISNAMED: this is the campaign's policy floor (ParseCLConfidenceMin), not card confidence. Superseded by CLPolicyConfidenceMinAtPurchase; kept only for the deploy-N/N+1 API compatibility window (see migration 000042). The Go field goes away in deploy N+1 and the DB column, which outlives it by one deploy, is dropped in deploy N+2 -- both in SLA-106.
+	CLPolicyConfidenceMinAtPurchase *int     `json:"clPolicyConfidenceMinAtPurchase,omitempty"` // The campaign's configured CL-confidence policy minimum at purchase time (ParseCLConfidenceMin(campaign.CLConfidence)). NOT the card's real CardLadder confidence -- see CLCardConfidenceAtPurchase for that.
+	PopulationAtPurchase            *int     `json:"populationAtPurchase,omitempty"`
+	DHConfidenceAtPurchase          *float64 `json:"dhConfidenceAtPurchase,omitempty"`
+	SourceCountAtPurchase           *int     `json:"sourceCountAtPurchase,omitempty"`
+	ActiveListingsAtPurchase        *int     `json:"activeListingsAtPurchase,omitempty"`
+	SalesLast30dAtPurchase          *int     `json:"salesLast30dAtPurchase,omitempty"`
 
 	// --- Campaign attribution provenance ---
 	PSACampaignName   string `json:"psaCampaignName,omitempty"`   // raw campaign name PSA reported, verbatim

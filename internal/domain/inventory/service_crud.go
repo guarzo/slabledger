@@ -77,20 +77,72 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	// so these pointers are attacker-controllable; clearing them here ensures the
 	// freeze logic below can only ever set SERVER-derived values.
 	p.CLConfidenceAtPurchase = nil
+	p.CLPolicyConfidenceMinAtPurchase = nil
 	p.PopulationAtPurchase = nil
 	p.DHConfidenceAtPurchase = nil
 	p.SourceCountAtPurchase = nil
 	p.ActiveListingsAtPurchase = nil
 	p.SalesLast30dAtPurchase = nil
 
+	// The same discard, for the CL snapshot the store's create-time freeze
+	// DERIVES. Clearing that freeze's two inputs is not enough: these four are
+	// the freeze's outputs, they carry JSON tags, and the freeze only writes
+	// them when it fires (p.CLValueAtPurchaseCents == 0 && p.CLValueCents > 0).
+	// HandleCreatePurchase zeroes CLValueCents, so on the HTTP create path the
+	// freeze never fires at all and anything the body carried here would reach
+	// the INSERT verbatim -- a forged clValueAtPurchaseSource pulls a fabricated
+	// row straight into the provenance study, whose inclusion predicate is
+	// cl_value_at_purchase_source <> "". Unlike CLValueCents these can be
+	// cleared at this choke point rather than in the handler, because no
+	// legitimate caller of this method supplies them: their only non-test
+	// writers are the store's own freeze (which runs after this, on the
+	// repository call below) and UpdatePurchaseCLValue, which runs later from
+	// the CardLadder scheduler.
+	p.CLValueAtPurchaseCents = 0
+	p.CLValueAtPurchaseObservedAt = ""
+	p.CLValueAtPurchaseSource = ""
+	p.CLCardConfidenceAtPurchase = nil
+
+	// CLValueUpdatedAt is the sole discriminator the store's create-time freeze
+	// (purchase_store.go) uses to decide whether the freeze's provenance source
+	// is "cardladder" or "intake" -- a forged value here earns a false
+	// "cardladder" label, which is what pulls a fabricated row into the
+	// provenance study. Cleared unconditionally, at this single choke point
+	// covering every caller of this method (HTTP create, QuickAdd, PSA/CSV
+	// import, ...), because no legitimate caller ever sets it: it has exactly
+	// one legitimate writer, UpdatePurchaseCLValue, which runs later from the
+	// CardLadder scheduler. CLValueCents cannot be cleared here the same way --
+	// QuickAddPurchase legitimately supplies it through this exact method as the
+	// operator's manually-entered CL value at intake -- so that half of the
+	// clear stays in HandleCreatePurchase (campaigns_purchases.go), which has no
+	// way to tell a QuickAdd value from a forged HTTP body apart from the path
+	// it arrived on. A future handler that decodes a request body straight into
+	// Purchase must clear CLValueCents itself the same way; this comment is the
+	// warning for it.
+	p.CLValueUpdatedAt = ""
+
 	// (a) creation-time facts, set-once.
 	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
+		policyMin := c // distinct backing var: one shared address would couple the two fields
 		p.CLConfidenceAtPurchase = &c
+		p.CLPolicyConfidenceMinAtPurchase = &policyMin
 	}
-	if p.Population > 0 {
-		pop := p.Population
-		p.PopulationAtPurchase = &pop
-	}
+	// PopulationAtPurchase is deliberately NOT frozen here (D2). It used to be
+	// set from p.Population whenever positive, but that branch was dead on
+	// every legitimate path: the only intake path that sets Population at
+	// create time (cert-entry import, service_cert_entry_import.go) calls the
+	// repository's CreatePurchase directly and never reaches this service
+	// method, and the campaign path does not know Population yet at create
+	// time. Worse than dead on the one path that could reach it:
+	// HandleCreatePurchase (campaigns_purchases.go) decodes the raw request
+	// body straight into Purchase without clearing Population, so this
+	// branch's only reachable effect was freezing a client-supplied number as
+	// an at-purchase fact.
+	// The freeze now happens in PurchaseStore.UpdatePurchaseCLValue, under the
+	// same write-time lateness guard as the CL value freeze; that clause
+	// echoes the row's own already-stored population back — correctly timed,
+	// not a fresh at-purchase observation (see spec D2). Do not re-add this
+	// branch; it would silently reintroduce the forgery hole.
 
 	// Skip synchronous market snapshot when the caller has flagged the purchase
 	// for asynchronous background enrichment (e.g. during bulk PSA import).
@@ -177,9 +229,9 @@ func (s *service) QuickAddPurchase(ctx context.Context, campaignID string, req Q
 // FreezeSaleProvenance validates and defaults SaleReason, validates PriceSource
 // (defaulting is left to each call site, since the correct default differs by
 // intake path), then overwrites the derived, server-authoritative provenance
-// fields (CLValueAtSaleCents, ChannelFeePctAtSale, ForcedLiquidation) at
-// sale-creation time. SaleReason and PriceSource are legitimate client input
-// and are preserved when valid.
+// fields (CLValueAtSaleCents, CLValueAtSaleObservedAt, CLValueAtSaleSource,
+// ChannelFeePctAtSale, ForcedLiquidation) at sale-creation time. SaleReason
+// and PriceSource are legitimate client input and are preserved when valid.
 func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forced bool) error {
 	if sa.SaleReason != "" && !ValidSaleReason(sa.SaleReason) {
 		return ErrInvalidSaleReason
@@ -196,6 +248,37 @@ func FreezeSaleProvenance(sa *Sale, purchase *Purchase, campaign *Campaign, forc
 	}
 	// Server-authoritative: overwrite any client-supplied values.
 	sa.CLValueAtSaleCents = purchase.CLValueCents
+	// Label the CL-at-sale snapshot the same way D5 labels the CL-at-purchase
+	// snapshot: cl_value_cents has a second writer, the Shopify external import
+	// (purchase_price_store.go UpdateExternalPurchaseFields, 339 production rows),
+	// which never calls CardLadder. cl_value_updated_at is the only predicate with
+	// exactly one writer (UpdatePurchaseCLValue) and is therefore the sole reliable
+	// signal that CardLadder actually answered — see the comments at
+	// pricing_diagnostics.go:91-95 and cl_coverage_store.go:161-166.
+	//
+	// observed_at matters more than source: a value labelled "cardladder" but
+	// observed three months before this sale is not a CL-at-sale snapshot, it is a
+	// stale number wearing the label. Only the timestamp exposes that gap, so both
+	// fields are set together and neither is trustworthy read alone.
+	// Every branch assigns both fields unconditionally -- HandleCreateSale
+	// decodes the request body straight into inventory.Sale with no scrub, so
+	// a client-forged CLValueAtSaleSource/CLValueAtSaleObservedAt must not
+	// survive on any branch, not just the one that happens to set a value.
+	switch {
+	case purchase.CLValueUpdatedAt != "":
+		sa.CLValueAtSaleObservedAt = purchase.CLValueUpdatedAt
+		sa.CLValueAtSaleSource = CLProvenanceSourceCardLadder
+	case purchase.CLValueCents > 0:
+		// A positive value with no CardLadder update stamp: unambiguously the
+		// intake-time figure (Shopify import or manual entry), not an observation.
+		sa.CLValueAtSaleObservedAt = ""
+		sa.CLValueAtSaleSource = CLProvenanceSourceIntake
+	default:
+		// No CL value at all: leave both empty rather than writing a label for
+		// data that was never observed.
+		sa.CLValueAtSaleObservedAt = ""
+		sa.CLValueAtSaleSource = ""
+	}
 	pct := EffectiveChannelFeePct(sa.SaleChannel, campaign)
 	sa.ChannelFeePctAtSale = &pct
 	// Keep the plain boolean in sync with the reason (app-maintained; not generated).

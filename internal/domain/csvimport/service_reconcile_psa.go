@@ -91,11 +91,13 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 			continue
 		}
 
+		conf := clConfidenceForReattribution(p.PurchaseDate, campaign)
 		err = s.purchases.ReattributePurchase(ctx, p.ID, inventory.Reattribution{
-			CampaignID:             campaignID,
-			PSACampaignName:        row.PSACampaignName,
-			PSASourcingFeeCents:    campaign.PSASourcingFeeCents,
-			CLConfidenceAtPurchase: clConfidenceForReattribution(p.PurchaseDate, campaign),
+			CampaignID:                      campaignID,
+			PSACampaignName:                 row.PSACampaignName,
+			PSASourcingFeeCents:             campaign.PSASourcingFeeCents,
+			CLConfidenceAtPurchase:          conf,
+			CLPolicyConfidenceMinAtPurchase: conf,
 		})
 		switch {
 		case errors.Is(err, inventory.ErrPurchaseHasSale):

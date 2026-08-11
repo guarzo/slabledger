@@ -25,7 +25,8 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	card_player, card_variation, card_category, cl_synced_at, cl_last_error, dh_last_synced_at,
 	mid_price_cents, last_sold_date, dh_unlisted_detected_at,
 	cl_value_at_purchase_cents,
-	cl_confidence_at_purchase, population_at_purchase, dh_confidence_at_purchase,
+	cl_value_at_purchase_observed_at, cl_value_at_purchase_source, cl_card_confidence_at_purchase,
+	cl_confidence_at_purchase, cl_policy_confidence_min_at_purchase, population_at_purchase, dh_confidence_at_purchase,
 	source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
 	psa_campaign_name, attribution_source`
 
@@ -47,7 +48,8 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 		p.card_player, p.card_variation, p.card_category, p.cl_synced_at, p.cl_last_error, p.dh_last_synced_at,
 		p.mid_price_cents, p.last_sold_date, p.dh_unlisted_detected_at,
 		p.cl_value_at_purchase_cents,
-		p.cl_confidence_at_purchase, p.population_at_purchase, p.dh_confidence_at_purchase,
+		p.cl_value_at_purchase_observed_at, p.cl_value_at_purchase_source, p.cl_card_confidence_at_purchase,
+		p.cl_confidence_at_purchase, p.cl_policy_confidence_min_at_purchase, p.population_at_purchase, p.dh_confidence_at_purchase,
 		p.source_count_at_purchase, p.active_listings_at_purchase, p.sales_last_30d_at_purchase,
 		p.psa_campaign_name, p.attribution_source`
 
@@ -63,7 +65,7 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
 	was_cracked, order_id, forced_liquidation, sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale,
-	their_comp_cents, price_source`
+	their_comp_cents, price_source, cl_value_at_sale_observed_at, cl_value_at_sale_source`
 
 // saleColumnsAliased is saleColumns with the "s." table alias, for LEFT JOIN
 // queries. Derived rather than hand-maintained: the two lists had drifted by six
@@ -93,37 +95,39 @@ type scanner interface {
 // paths use it: the direct SELECT (scanSale) and the LEFT JOIN (scanPurchaseWithSale),
 // where every column is NULL for a purchase with no sale.
 type saleNulls struct {
-	id                     sql.NullString
-	purchaseID             sql.NullString
-	saleChannel            sql.NullString
-	salePriceCents         sql.NullInt64
-	saleFeeCents           sql.NullInt64
-	saleDate               sql.NullString
-	daysToSell             sql.NullInt64
-	netProfitCents         sql.NullInt64
-	createdAt              sql.NullTime
-	updatedAt              sql.NullTime
-	lastSoldCents          sql.NullInt64
-	lowestListCents        sql.NullInt64
-	conservativeCents      sql.NullInt64
-	medianCents            sql.NullInt64
-	activeListings         sql.NullInt64
-	salesLast30d           sql.NullInt64
-	trend30d               sql.NullFloat64
-	snapshotDate           sql.NullString
-	snapshotJSON           sql.NullString
-	originalListPriceCents sql.NullInt64
-	priceReductions        sql.NullInt64
-	daysListed             sql.NullInt64
-	soldAtAskingPrice      sql.NullBool
-	wasCracked             sql.NullBool
-	orderID                sql.NullString
-	forcedLiquidation      sql.NullBool
-	saleReason             sql.NullString
-	clValueAtSaleCents     sql.NullInt64
-	channelFeePctAtSale    sql.NullFloat64
-	theirCompCents         sql.NullInt64
-	priceSource            sql.NullString
+	id                      sql.NullString
+	purchaseID              sql.NullString
+	saleChannel             sql.NullString
+	salePriceCents          sql.NullInt64
+	saleFeeCents            sql.NullInt64
+	saleDate                sql.NullString
+	daysToSell              sql.NullInt64
+	netProfitCents          sql.NullInt64
+	createdAt               sql.NullTime
+	updatedAt               sql.NullTime
+	lastSoldCents           sql.NullInt64
+	lowestListCents         sql.NullInt64
+	conservativeCents       sql.NullInt64
+	medianCents             sql.NullInt64
+	activeListings          sql.NullInt64
+	salesLast30d            sql.NullInt64
+	trend30d                sql.NullFloat64
+	snapshotDate            sql.NullString
+	snapshotJSON            sql.NullString
+	originalListPriceCents  sql.NullInt64
+	priceReductions         sql.NullInt64
+	daysListed              sql.NullInt64
+	soldAtAskingPrice       sql.NullBool
+	wasCracked              sql.NullBool
+	orderID                 sql.NullString
+	forcedLiquidation       sql.NullBool
+	saleReason              sql.NullString
+	clValueAtSaleCents      sql.NullInt64
+	channelFeePctAtSale     sql.NullFloat64
+	theirCompCents          sql.NullInt64
+	priceSource             sql.NullString
+	clValueAtSaleObservedAt sql.NullString
+	clValueAtSaleSource     sql.NullString
 }
 
 // saleScanDests returns the ordered scan destinations for a Sale.
@@ -138,6 +142,7 @@ func saleScanDests(n *saleNulls) []any {
 		&n.wasCracked, &n.orderID, &n.forcedLiquidation,
 		&n.saleReason, &n.clValueAtSaleCents, &n.channelFeePctAtSale,
 		&n.theirCompCents, &n.priceSource,
+		&n.clValueAtSaleObservedAt, &n.clValueAtSaleSource,
 	}
 }
 
@@ -146,27 +151,29 @@ func saleScanDests(n *saleNulls) []any {
 // (see the Sale struct's note on the two "unknown" encodings).
 func (n *saleNulls) sale() inventory.Sale {
 	s := inventory.Sale{
-		ID:                     n.id.String,
-		PurchaseID:             n.purchaseID.String,
-		SaleChannel:            inventory.SaleChannel(n.saleChannel.String),
-		SalePriceCents:         int(n.salePriceCents.Int64),
-		SaleFeeCents:           int(n.saleFeeCents.Int64),
-		SaleDate:               n.saleDate.String,
-		DaysToSell:             int(n.daysToSell.Int64),
-		NetProfitCents:         int(n.netProfitCents.Int64),
-		CreatedAt:              n.createdAt.Time,
-		UpdatedAt:              n.updatedAt.Time,
-		OrderID:                n.orderID.String,
-		OriginalListPriceCents: int(n.originalListPriceCents.Int64),
-		PriceReductions:        int(n.priceReductions.Int64),
-		DaysListed:             int(n.daysListed.Int64),
-		SoldAtAskingPrice:      n.soldAtAskingPrice.Bool,
-		WasCracked:             n.wasCracked.Bool,
-		ForcedLiquidation:      n.forcedLiquidation.Bool,
-		SaleReason:             n.saleReason.String,
-		CLValueAtSaleCents:     int(n.clValueAtSaleCents.Int64),
-		TheirCompCents:         int(n.theirCompCents.Int64),
-		PriceSource:            n.priceSource.String,
+		ID:                      n.id.String,
+		PurchaseID:              n.purchaseID.String,
+		SaleChannel:             inventory.SaleChannel(n.saleChannel.String),
+		SalePriceCents:          int(n.salePriceCents.Int64),
+		SaleFeeCents:            int(n.saleFeeCents.Int64),
+		SaleDate:                n.saleDate.String,
+		DaysToSell:              int(n.daysToSell.Int64),
+		NetProfitCents:          int(n.netProfitCents.Int64),
+		CreatedAt:               n.createdAt.Time,
+		UpdatedAt:               n.updatedAt.Time,
+		OrderID:                 n.orderID.String,
+		OriginalListPriceCents:  int(n.originalListPriceCents.Int64),
+		PriceReductions:         int(n.priceReductions.Int64),
+		DaysListed:              int(n.daysListed.Int64),
+		SoldAtAskingPrice:       n.soldAtAskingPrice.Bool,
+		WasCracked:              n.wasCracked.Bool,
+		ForcedLiquidation:       n.forcedLiquidation.Bool,
+		SaleReason:              n.saleReason.String,
+		CLValueAtSaleCents:      int(n.clValueAtSaleCents.Int64),
+		TheirCompCents:          int(n.theirCompCents.Int64),
+		PriceSource:             n.priceSource.String,
+		CLValueAtSaleObservedAt: n.clValueAtSaleObservedAt.String,
+		CLValueAtSaleSource:     n.clValueAtSaleSource.String,
 	}
 	s.LastSoldCents = int(n.lastSoldCents.Int64)
 	s.LowestListCents = int(n.lowestListCents.Int64)
@@ -217,7 +224,8 @@ func purchaseScanDests(p *inventory.Purchase, psaCampaignName, attributionSource
 		&p.CardPlayer, &p.CardVariation, &p.CardCategory, &p.CLSyncedAt, &p.CLLastError, &p.DHLastSyncedAt,
 		&p.MidPriceCents, &p.LastSoldDate, &p.DHUnlistedDetectedAt,
 		&p.CLValueAtPurchaseCents,
-		&p.CLConfidenceAtPurchase, &p.PopulationAtPurchase, &p.DHConfidenceAtPurchase,
+		&p.CLValueAtPurchaseObservedAt, &p.CLValueAtPurchaseSource, &p.CLCardConfidenceAtPurchase,
+		&p.CLConfidenceAtPurchase, &p.CLPolicyConfidenceMinAtPurchase, &p.PopulationAtPurchase, &p.DHConfidenceAtPurchase,
 		&p.SourceCountAtPurchase, &p.ActiveListingsAtPurchase, &p.SalesLast30dAtPurchase,
 		psaCampaignName, attributionSource,
 	}

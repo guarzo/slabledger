@@ -470,13 +470,20 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		certNumber     string
-		population     int
-		wantPopulation *int
+		name       string
+		certNumber string
+		population int
 	}{
-		{name: "positive population is frozen", certNumber: "88888881", population: 50, wantPopulation: func() *int { v := 50; return &v }()},
-		{name: "zero population freezes to nil", certNumber: "88888882", population: 0, wantPopulation: nil},
+		// PopulationAtPurchase is no longer frozen at create time (D2): the one
+		// intake path that sets Population at create time (cert-entry import)
+		// calls the repository directly and bypasses this service method, and
+		// the campaign path does not know Population until CL enrichment lands
+		// later. The freeze now happens in PurchaseStore.UpdatePurchaseCLValue,
+		// under the same write-time lateness guard as the CL value freeze — so
+		// both cases here must leave PopulationAtPurchase nil regardless of the
+		// incoming Population value.
+		{name: "positive population is not frozen at create time", certNumber: "88888881", population: 50},
+		{name: "zero population is not frozen at create time", certNumber: "88888882", population: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -492,16 +499,46 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 			if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
 				t.Errorf("CLConfidenceAtPurchase = %v, want 2", p.CLConfidenceAtPurchase)
 			}
-			if tt.wantPopulation == nil {
-				if p.PopulationAtPurchase != nil {
-					t.Errorf("PopulationAtPurchase = %v, want nil for Population:0", p.PopulationAtPurchase)
-				}
-				return
-			}
-			if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != *tt.wantPopulation {
-				t.Errorf("PopulationAtPurchase = %v, want %v", p.PopulationAtPurchase, *tt.wantPopulation)
+			if p.PopulationAtPurchase != nil {
+				t.Errorf("PopulationAtPurchase = %v, want nil (D2: no longer frozen at create time)", p.PopulationAtPurchase)
 			}
 		})
+	}
+}
+
+// TestCreatePurchase_DualWritesPolicyConfidence proves CreatePurchase writes
+// the same server-derived value into both CLConfidenceAtPurchase (the
+// misnamed legacy field) and CLPolicyConfidenceMinAtPurchase (its replacement)
+// for the duration of the deploy-N/N+1 API compatibility window (migration
+// 000042). SLA-106 removes the legacy field once production confirms nothing
+// depends on it.
+func TestCreatePurchase_DualWritesPolicyConfidence(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "")))
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", CLConfidence: "2.5-4"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	p := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Test Card", CertNumber: "88888884",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+	}
+	if err := svc.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("CreatePurchase: %v", err)
+	}
+
+	if p.CLConfidenceAtPurchase == nil {
+		t.Fatal("CLConfidenceAtPurchase = nil, want non-nil")
+	}
+	if p.CLPolicyConfidenceMinAtPurchase == nil {
+		t.Fatal("CLPolicyConfidenceMinAtPurchase = nil, want non-nil")
+	}
+	if *p.CLConfidenceAtPurchase != *p.CLPolicyConfidenceMinAtPurchase {
+		t.Errorf("CLConfidenceAtPurchase = %d, CLPolicyConfidenceMinAtPurchase = %d, want equal",
+			*p.CLConfidenceAtPurchase, *p.CLPolicyConfidenceMinAtPurchase)
 	}
 }
 
@@ -549,11 +586,110 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 	if p.SalesLast30dAtPurchase != nil {
 		t.Errorf("SalesLast30dAtPurchase = %v, want nil (capture failed)", p.SalesLast30dAtPurchase)
 	}
-	if p.PopulationAtPurchase == nil || *p.PopulationAtPurchase != 50 {
-		t.Errorf("PopulationAtPurchase = %v, want 50 (real value)", p.PopulationAtPurchase)
+	if p.PopulationAtPurchase != nil {
+		t.Errorf("PopulationAtPurchase = %v, want nil (client-forged value discarded)", p.PopulationAtPurchase)
 	}
 	if p.CLConfidenceAtPurchase == nil || *p.CLConfidenceAtPurchase != 2 {
 		t.Errorf("CLConfidenceAtPurchase = %v, want 2 (derived from campaign)", p.CLConfidenceAtPurchase)
+	}
+}
+
+// TestCreatePurchase_ClearsForgedCLSnapshot proves service.CreatePurchase
+// discards a client-supplied CL-at-purchase snapshot. These four fields are the
+// OUTPUTS of the store's create-time freeze rather than its inputs, so clearing
+// clValueCents/clValueUpdatedAt does not cover them: on the HTTP create path
+// HandleCreatePurchase zeroes clValueCents, which means the freeze's guard never
+// fires and anything the body carried would reach the INSERT verbatim. A forged
+// clValueAtPurchaseSource would pull a fabricated row into the provenance study,
+// whose inclusion predicate is cl_value_at_purchase_source <> "".
+func TestCreatePurchase_ClearsForgedCLSnapshot(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers())
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	forgedConfidence := 99
+	p := &inventory.Purchase{
+		CampaignID: c.ID, CardName: "Charizard", CertNumber: "33333331",
+		GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+		CLValueAtPurchaseCents:      1234567,
+		CLValueAtPurchaseObservedAt: "2020-01-01T00:00:00Z",
+		CLValueAtPurchaseSource:     inventory.CLProvenanceSourceCardLadder,
+		CLCardConfidenceAtPurchase:  &forgedConfidence,
+	}
+	if err := svc.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("CreatePurchase: %v", err)
+	}
+
+	if p.CLValueAtPurchaseCents != 0 {
+		t.Errorf("CLValueAtPurchaseCents = %d, want 0 (client-forged value discarded)", p.CLValueAtPurchaseCents)
+	}
+	if p.CLValueAtPurchaseObservedAt != "" {
+		t.Errorf("CLValueAtPurchaseObservedAt = %q, want \"\" (client-forged value discarded)", p.CLValueAtPurchaseObservedAt)
+	}
+	if p.CLValueAtPurchaseSource != "" {
+		t.Errorf("CLValueAtPurchaseSource = %q, want \"\" (client-forged value discarded)", p.CLValueAtPurchaseSource)
+	}
+	if p.CLCardConfidenceAtPurchase != nil {
+		t.Errorf("CLCardConfidenceAtPurchase = %v, want nil (client-forged value discarded)", p.CLCardConfidenceAtPurchase)
+	}
+}
+
+// TestCreatePurchase_ClearsCLValueUpdatedAt proves service.CreatePurchase
+// unconditionally discards a supplied CLValueUpdatedAt before the create-time
+// freeze runs, regardless of caller. This is the single choke point covering
+// every caller of the service method (HandleCreatePurchase's raw body decode,
+// QuickAddPurchase, PSA/CSV import, ...), unlike CLValueCents, which QuickAdd
+// legitimately supplies here as the operator's manually-entered CL value at
+// intake and so cannot be cleared at this layer (see
+// HandleCreatePurchase in campaigns_purchases.go for that half of the clear).
+func TestCreatePurchase_ClearsCLValueUpdatedAt(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers())
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup CreateCampaign: %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		certNumber       string
+		clValueCents     int
+		clValueUpdatedAt string
+	}{
+		{name: "forged cardladder marker with value", certNumber: "22222221", clValueCents: 4200, clValueUpdatedAt: "2026-08-10T00:00:00Z"},
+		{name: "marker only, no value", certNumber: "22222222", clValueCents: 0, clValueUpdatedAt: "2026-08-10T00:00:00Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &inventory.Purchase{
+				CampaignID:       c.ID,
+				CardName:         "Charizard",
+				CertNumber:       tt.certNumber,
+				GradeValue:       10,
+				BuyCostCents:     10000,
+				PurchaseDate:     "2026-08-10",
+				CLValueCents:     tt.clValueCents,
+				CLValueUpdatedAt: tt.clValueUpdatedAt,
+			}
+			if err := svc.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("create: %v", err)
+			}
+			if p.CLValueUpdatedAt != "" {
+				t.Errorf("CLValueUpdatedAt = %q, want empty (service must clear it unconditionally)", p.CLValueUpdatedAt)
+			}
+			// CLValueCents must survive: QuickAddPurchase relies on this same
+			// service method to carry an operator's legitimate intake value.
+			if p.CLValueCents != tt.clValueCents {
+				t.Errorf("CLValueCents = %d, want %d (must survive; only CLValueUpdatedAt is cleared here)", p.CLValueCents, tt.clValueCents)
+			}
+		})
 	}
 }
 

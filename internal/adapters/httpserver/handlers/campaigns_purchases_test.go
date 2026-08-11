@@ -208,6 +208,67 @@ func TestHandleCreatePurchase_POST_DiscardsClientAttribution(t *testing.T) {
 	}
 }
 
+// TestHandleCreatePurchase_POST_DiscardsClientCLValue proves the handler discards
+// a client-supplied clValueCents/clValueUpdatedAt pair before it reaches the
+// service. Both fields decode straight off the request body into
+// inventory.Purchase (see clValueCents/clValueUpdatedAt JSON tags on
+// core_types.go), and the store's create-time freeze
+// (internal/adapters/storage/postgres/purchase_store.go) derives a provenance
+// source from them: a non-empty clValueUpdatedAt earns "cardladder", a bare
+// clValueCents earns "intake". Either one, forged, would pull a fabricated row
+// into the provenance study, whose inclusion predicate is
+// cl_value_at_purchase_source <> "". Cleared in the handler rather than the
+// service because QuickAddPurchase legitimately supplies clValueCents (the
+// operator's manually-entered CL value at intake) through the very same
+// service method.
+func TestHandleCreatePurchase_POST_DiscardsClientCLValue(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "forged cardladder marker",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"clValueCents":99999,"clValueUpdatedAt":"2026-08-10T00:00:00Z"}`,
+		},
+		{
+			name: "value only, no marker",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"clValueCents":4200}`,
+		},
+		{
+			name: "marker only, no value",
+			body: `{"cardName":"Charizard","gradeValue":9.5,"clValueUpdatedAt":"2026-08-10T00:00:00Z"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got inventory.Purchase
+			svc := &mocks.MockInventoryService{
+				CreatePurchaseFn: func(_ context.Context, p *inventory.Purchase) error {
+					got = *p
+					return nil
+				},
+			}
+			h := newTestHandler(svc)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/campaigns/c1/purchases", bytes.NewBufferString(tt.body))
+			req.SetPathValue("id", "c1")
+			rec := httptest.NewRecorder()
+			h.HandleCreatePurchase(rec, req)
+
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("expected 201, got %d; body: %s", rec.Code, rec.Body.String())
+			}
+			if got.CLValueCents != 0 {
+				t.Errorf("CLValueCents reaching the service = %d, want 0", got.CLValueCents)
+			}
+			if got.CLValueUpdatedAt != "" {
+				t.Errorf("CLValueUpdatedAt reaching the service = %q, want empty", got.CLValueUpdatedAt)
+			}
+		})
+	}
+}
+
 func TestHandleCreatePurchase_POST_InvalidBody(t *testing.T) {
 	h := newTestHandler(&mocks.MockInventoryService{})
 

@@ -190,10 +190,15 @@ func initializeCampaignsService(
 		PriceLookup:     priceLookupAdapter,
 		CardIDResolver:  cardIDResolver,
 		CertEnrichQueue: certEnrichQueue,
-		DHSoldNotifier:  dhSoldNotifier,
-		PSAResolver:     psaResolver,
-		IDGen:           uuid.NewString,
-		Logger:          logger,
+		// pricingEnrichJob (constructed above, ~line 157) is unconditional and
+		// never nil, unlike certEnrichQueue — it has no PSA-token gate, so there
+		// is no typed-nil hazard here and no interface-holder variable is needed
+		// to guard against one (contrast the certEnrichQueue comment above it).
+		PricingQueue:   pricingEnrichJob,
+		DHSoldNotifier: dhSoldNotifier,
+		PSAResolver:    psaResolver,
+		IDGen:          uuid.NewString,
+		Logger:         logger,
 	})
 
 	arbOpts := []arbitrage.ServiceOption{

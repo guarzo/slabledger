@@ -65,7 +65,7 @@ func (r *stubPurchaseRepo) GetPurchasesByCertNumbers(_ context.Context, _ []stri
 func (r *stubPurchaseRepo) GetPurchasesByDHInventoryIDs(_ context.Context, _ []int) (map[int]*inventory.Purchase, error) {
 	return nil, nil
 }
-func (r *stubPurchaseRepo) UpdatePurchaseCLValue(_ context.Context, _ string, _, _ int) error {
+func (r *stubPurchaseRepo) UpdatePurchaseCLValue(_ context.Context, _ string, _, _ int, _ *int) error {
 	return nil
 }
 func (r *stubPurchaseRepo) UpdatePurchaseCLSyncedAt(_ context.Context, _ string, _ string) error {

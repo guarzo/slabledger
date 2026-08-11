@@ -102,7 +102,20 @@ export interface Purchase {
   trend30d?: number;
   snapshotDate?: string;
   // Decision provenance at time of purchase
+  clValueAtPurchaseCents?: number;
+  clValueAtPurchaseObservedAt?: string;
+  /** Provenance of clValueAtPurchaseCents: 'cardladder' | 'intake'. Absent means unknown. */
+  clValueAtPurchaseSource?: string;
+  /** CardLadder's confidence in THIS card. 0 is a real answer; absent means unknown. */
+  clCardConfidenceAtPurchase?: number;
+  /**
+   * MISNAMED — holds the campaign's configured policy minimum, not card
+   * confidence. Superseded by clPolicyConfidenceMinAtPurchase, which carries the
+   * same value; this key is retained for the rename's transition and goes away
+   * with SLA-106.
+   */
   clConfidenceAtPurchase?: number;
+  clPolicyConfidenceMinAtPurchase?: number;
   populationAtPurchase?: number;
   dhConfidenceAtPurchase?: number;
   sourceCountAtPurchase?: number;
@@ -146,6 +159,9 @@ export interface Sale {
   forcedLiquidation: boolean;
   saleReason?: string;
   clValueAtSaleCents?: number;
+  clValueAtSaleObservedAt?: string;
+  /** Provenance of clValueAtSaleCents: 'cardladder' | 'intake'. Absent means unknown. */
+  clValueAtSaleSource?: string;
   channelFeePctAtSale?: number;
   // Itemized card-show sale provenance (see migration 000040)
   theirCompCents?: number;

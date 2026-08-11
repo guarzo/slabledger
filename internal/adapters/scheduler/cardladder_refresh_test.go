@@ -2,6 +2,11 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,24 +42,26 @@ type clErrorCall struct {
 }
 
 type mockCLValueUpdater struct {
-	UpdateFn      func(ctx context.Context, purchaseID string, clValueCents, population int) error
+	UpdateFn      func(ctx context.Context, purchaseID string, clValueCents, population int, confidence *int) error
 	UpdateErrorFn func(ctx context.Context, purchaseID, reason, reasonAt string) error
 	Calls         []struct {
 		PurchaseID   string
 		CLValueCents int
 		Population   int
+		Confidence   *int
 	}
 	ErrorCalls []clErrorCall
 }
 
-func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int) error {
+func (m *mockCLValueUpdater) UpdatePurchaseCLValue(ctx context.Context, purchaseID string, clValueCents, population int, confidence *int) error {
 	m.Calls = append(m.Calls, struct {
 		PurchaseID   string
 		CLValueCents int
 		Population   int
-	}{purchaseID, clValueCents, population})
+		Confidence   *int
+	}{purchaseID, clValueCents, population, confidence})
 	if m.UpdateFn != nil {
-		return m.UpdateFn(ctx, purchaseID, clValueCents, population)
+		return m.UpdateFn(ctx, purchaseID, clValueCents, population, confidence)
 	}
 	return nil
 }
@@ -359,7 +366,7 @@ func TestWithCLDHPushUpdater_ReEnrollsOnValueChange(t *testing.T) {
 // TestWithCLEventRecorder_WiredAndRecords verifies the WithCLEventRecorder
 // functional option wires up the recorder and that the nil-safe recordEvent
 // helper forwards the call when configured. This is the unit-level guard
-// for the Task 11 re-enrollment site — the emission site is exercised through
+// for the SLA-106 re-enrollment site — the emission site is exercised through
 // the recordEvent path exactly as production does.
 func TestWithCLEventRecorder_WiredAndRecords(t *testing.T) {
 	rec := &mocks.MockEventRecorder{}
@@ -574,4 +581,122 @@ func TestRemoveSoldCards_IdentifySold(t *testing.T) {
 			assert.Equal(t, tt.expectSold, len(sold), "sold count mismatch")
 		})
 	}
+}
+
+func TestFetchCLEstimate_ReturnsValueAndConfidence(t *testing.T) {
+	tests := []struct {
+		name           string
+		estimatedValue float64
+		confidence     int
+	}{
+		{name: "non-zero confidence", estimatedValue: 210, confidence: 72},
+		// 0 is a real CardLadder answer, not "no answer": it must survive the
+		// round trip rather than being normalized away.
+		{name: "zero confidence is preserved", estimatedValue: 50, confidence: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+					"result": cardladder.CardEstimateResponse{
+						EstimatedValue: tt.estimatedValue,
+						Confidence:     tt.confidence,
+					},
+				})
+			}))
+			defer server.Close()
+
+			client := cardladder.NewClient(
+				cardladder.WithFunctionsURL(server.URL),
+				cardladder.WithStaticToken("test-token"),
+			)
+			s := &CardLadderRefreshScheduler{logger: mocks.NewMockLogger()}
+
+			est, err := s.fetchCLEstimate(context.Background(), client, "psa-123", "g8", "Test Card")
+			require.NoError(t, err)
+			assert.Equal(t, tt.estimatedValue, est.value)
+			assert.Equal(t, tt.confidence, est.confidence)
+		})
+	}
+}
+
+// TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies guards two distinct
+// hazards in one run:
+//
+//  1. Cache-shape: p1 and p2 share (gemRateID, condition) "psa-123"/"PSA 8" and
+//     must hit the API once, both getting that estimate's confidence (72).
+//  2. Loop-variable aliasing: p3 uses a DIFFERENT gemRateID ("psa-456") whose
+//     estimate carries a different (and legitimately zero) confidence. If
+//     UpdatePurchaseCLValue's *int argument aliased one shared loop variable
+//     instead of a fresh one per iteration, every recorded pointer would
+//     dereference to whatever value that shared variable held when the loop
+//     finished — p3's 0 — so p1/p2 would incorrectly read 0 instead of 72.
+//     A test with only one shared estimate could not detect this: hoisting
+//     the confidence variable would still pass because every call shares the
+//     same (correct) value.
+func TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies(t *testing.T) {
+	// Atomic because httptest runs every handler invocation on its own
+	// goroutine; a plain int would be a data race the moment applyCLEstimates
+	// stops issuing its calls strictly sequentially.
+	var calls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		var req struct {
+			Data struct {
+				ProfileID string `json:"profileId"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(body, &req))
+
+		resp := cardladder.CardEstimateResponse{EstimatedValue: 210, Confidence: 72}
+		if req.Data.ProfileID == "psa-456" {
+			resp = cardladder.CardEstimateResponse{EstimatedValue: 300, Confidence: 0}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"result": resp}) //nolint:errcheck
+	}))
+	defer server.Close()
+
+	client := cardladder.NewClient(
+		cardladder.WithFunctionsURL(server.URL),
+		cardladder.WithStaticToken("test-token"),
+	)
+
+	valueUpdater := &mockCLValueUpdater{}
+	s := NewCardLadderRefreshScheduler(
+		client, nil,
+		&mockCLPurchaseLister{},
+		valueUpdater,
+		&mockCLGemRateUpdater{},
+		nil,
+		mocks.NewMockLogger(),
+		config.CardLadderConfig{Enabled: true},
+	)
+
+	p1 := &inventory.Purchase{ID: "p1", CertNumber: "CERT-1", CardName: "Charizard"}
+	p2 := &inventory.Purchase{ID: "p2", CertNumber: "CERT-2", CardName: "Charizard"}
+	p3 := &inventory.Purchase{ID: "p3", CertNumber: "CERT-3", CardName: "Blastoise"}
+	resolved := []clResolvedPurchase{
+		{purchase: p1, gemRateID: "psa-123", condition: "PSA 8"},
+		{purchase: p2, gemRateID: "psa-123", condition: "PSA 8"},
+		{purchase: p3, gemRateID: "psa-456", condition: "PSA 8"},
+	}
+	stats := CLRunStats{}
+
+	err := s.applyCLEstimates(context.Background(), client, resolved, &stats)
+	require.NoError(t, err)
+
+	require.Equal(t, int64(2), calls.Load(), "one call per distinct (gemRateID, condition); p2 should hit the cache")
+	require.Len(t, valueUpdater.Calls, 3)
+
+	wantConfidence := map[string]int{"p1": 72, "p2": 72, "p3": 0}
+	for _, call := range valueUpdater.Calls {
+		want, ok := wantConfidence[call.PurchaseID]
+		require.Truef(t, ok, "unexpected purchase ID %q in calls", call.PurchaseID)
+		require.NotNilf(t, call.Confidence, "purchase %s: confidence pointer should not be nil", call.PurchaseID)
+		assert.Equalf(t, want, *call.Confidence, "purchase %s: confidence mismatch", call.PurchaseID)
+	}
+	assert.Equal(t, 3, stats.Updated)
 }

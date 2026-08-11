@@ -129,6 +129,8 @@ func TestCreateSale_Provenance(t *testing.T) {
 		inputPriceSource string
 		forgedCLValue    int
 		forgedFeePct     *float64
+		forgedObservedAt string
+		forgedSource     string
 		wantReason       string
 		wantPriceSource  string
 		wantErr          error
@@ -156,11 +158,13 @@ func TestCreateSale_Provenance(t *testing.T) {
 			wantErr:          inventory.ErrInvalidPriceSource,
 		},
 		{
-			name:            "ignores client-forged provenance",
-			forgedCLValue:   99999999,
-			forgedFeePct:    func() *float64 { v := 0.99; return &v }(),
-			wantReason:      inventory.SaleReasonDiscretionary,
-			wantPriceSource: inventory.PriceSourceManual,
+			name:             "ignores client-forged provenance",
+			forgedCLValue:    99999999,
+			forgedFeePct:     func() *float64 { v := 0.99; return &v }(),
+			forgedObservedAt: "2020-01-01T00:00:00Z",
+			forgedSource:     inventory.CLProvenanceSourceCardLadder,
+			wantReason:       inventory.SaleReasonDiscretionary,
+			wantPriceSource:  inventory.PriceSourceManual,
 		},
 	}
 	for _, tt := range tests {
@@ -172,14 +176,16 @@ func TestCreateSale_Provenance(t *testing.T) {
 			c, p := setupSaleFixture(t, repo, svc)
 
 			s := &inventory.Sale{
-				PurchaseID:          p.ID,
-				SaleChannel:         inventory.SaleChannelEbay,
-				SalePriceCents:      20000,
-				SaleDate:            "2026-06-20",
-				SaleReason:          tt.inputReason,
-				PriceSource:         tt.inputPriceSource,
-				CLValueAtSaleCents:  tt.forgedCLValue,
-				ChannelFeePctAtSale: tt.forgedFeePct,
+				PurchaseID:              p.ID,
+				SaleChannel:             inventory.SaleChannelEbay,
+				SalePriceCents:          20000,
+				SaleDate:                "2026-06-20",
+				SaleReason:              tt.inputReason,
+				PriceSource:             tt.inputPriceSource,
+				CLValueAtSaleCents:      tt.forgedCLValue,
+				ChannelFeePctAtSale:     tt.forgedFeePct,
+				CLValueAtSaleObservedAt: tt.forgedObservedAt,
+				CLValueAtSaleSource:     tt.forgedSource,
 			}
 			err := svc.CreateSale(ctx, s, c, p)
 
@@ -206,6 +212,17 @@ func TestCreateSale_Provenance(t *testing.T) {
 			}
 			if s.ChannelFeePctAtSale == nil || *s.ChannelFeePctAtSale != 0.10 {
 				t.Errorf("ChannelFeePctAtSale = %v, want 0.10 (must be server-derived, not the forged/input value)", s.ChannelFeePctAtSale)
+			}
+			// CLValueAtSaleObservedAt/CLValueAtSaleSource must likewise always
+			// reflect the purchase's real provenance, never client input. The
+			// fixture purchase (CLValueCents 12000, no CLValueUpdatedAt --
+			// CreatePurchase clears it) falls into the "intake" branch in
+			// every case here, forged or not.
+			if s.CLValueAtSaleObservedAt != "" {
+				t.Errorf("CLValueAtSaleObservedAt = %q, want %q (must be server-derived, not the forged/input value)", s.CLValueAtSaleObservedAt, "")
+			}
+			if s.CLValueAtSaleSource != inventory.CLProvenanceSourceIntake {
+				t.Errorf("CLValueAtSaleSource = %q, want %q (must be server-derived, not the forged/input value)", s.CLValueAtSaleSource, inventory.CLProvenanceSourceIntake)
 			}
 		})
 	}
@@ -401,5 +418,58 @@ func TestCreateBulkSales_PriceSourceDefaults(t *testing.T) {
 	}
 	if result.Errors[0].Error != inventory.ErrInvalidPriceSource.Error() {
 		t.Errorf("Errors[0].Error = %q, want %q", result.Errors[0].Error, inventory.ErrInvalidPriceSource.Error())
+	}
+}
+
+func TestFreezeSaleProvenance_CLProvenanceLabel(t *testing.T) {
+	tests := []struct {
+		name             string
+		clValueCents     int
+		clValueUpdatedAt string
+		wantObservedAt   string
+		wantSource       string
+	}{
+		{
+			name:             "cardladder answered: source is cardladder, observed_at is the CL update stamp",
+			clValueCents:     12000,
+			clValueUpdatedAt: "2026-06-15T10:00:00Z",
+			wantObservedAt:   "2026-06-15T10:00:00Z",
+			wantSource:       inventory.CLProvenanceSourceCardLadder,
+		},
+		{
+			name:             "cardladder never answered but a positive value carried from intake: source is intake",
+			clValueCents:     12000,
+			clValueUpdatedAt: "",
+			wantObservedAt:   "",
+			wantSource:       inventory.CLProvenanceSourceIntake,
+		},
+		{
+			name:             "no CL value at all: both fields stay empty",
+			clValueCents:     0,
+			clValueUpdatedAt: "",
+			wantObservedAt:   "",
+			wantSource:       "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			purchase := &inventory.Purchase{
+				CLValueCents:     tt.clValueCents,
+				CLValueUpdatedAt: tt.clValueUpdatedAt,
+			}
+			campaign := &inventory.Campaign{EbayFeePct: 0.10}
+			sa := &inventory.Sale{SaleChannel: inventory.SaleChannelEbay}
+
+			if err := inventory.FreezeSaleProvenance(sa, purchase, campaign, false); err != nil {
+				t.Fatalf("FreezeSaleProvenance: %v", err)
+			}
+
+			if sa.CLValueAtSaleObservedAt != tt.wantObservedAt {
+				t.Errorf("CLValueAtSaleObservedAt = %q, want %q", sa.CLValueAtSaleObservedAt, tt.wantObservedAt)
+			}
+			if sa.CLValueAtSaleSource != tt.wantSource {
+				t.Errorf("CLValueAtSaleSource = %q, want %q", sa.CLValueAtSaleSource, tt.wantSource)
+			}
+		})
 	}
 }

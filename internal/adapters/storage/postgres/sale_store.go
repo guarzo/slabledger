@@ -27,7 +27,7 @@ var _ inventory.SaleRepository = (*SaleStore)(nil)
 func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
 	query := `
 		INSERT INTO campaign_sales (` + saleColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
 	`
 	_, err := ss.db.ExecContext(ctx, query,
 		s.ID, s.PurchaseID, string(s.SaleChannel), s.SalePriceCents,
@@ -38,7 +38,7 @@ func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
 		s.OriginalListPriceCents, s.PriceReductions, s.DaysListed, s.SoldAtAskingPrice,
 		s.WasCracked, s.OrderID, s.ForcedLiquidation,
 		s.SaleReason, s.CLValueAtSaleCents, s.ChannelFeePctAtSale,
-		s.TheirCompCents, s.PriceSource,
+		s.TheirCompCents, s.PriceSource, s.CLValueAtSaleObservedAt, s.CLValueAtSaleSource,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return inventory.ErrDuplicateSale
