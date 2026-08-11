@@ -110,10 +110,9 @@ func TestCreatePurchaseProvenanceRoundTrip(t *testing.T) {
 		{
 			name: "all provenance fields set",
 			set: func(p *inventory.Purchase) {
-				// 85 and 42 are deliberately distinct: these two columns are
+				// 42 and 120 are deliberately distinct: these two columns are
 				// adjacent in the INSERT's parameter list, so equal values
 				// would let a swapped binding pass unnoticed.
-				p.CLConfidenceAtPurchase = intPtr(85)
 				p.CLPolicyConfidenceMinAtPurchase = intPtr(42)
 				p.PopulationAtPurchase = intPtr(120)
 				p.DHConfidenceAtPurchase = floatPtr(0.92)
@@ -141,7 +140,6 @@ func TestCreatePurchaseProvenanceRoundTrip(t *testing.T) {
 				t.Fatalf("get: %v", err)
 			}
 
-			assertIntPtrEqual(t, "CLConfidenceAtPurchase", p.CLConfidenceAtPurchase, got.CLConfidenceAtPurchase)
 			assertIntPtrEqual(t, "CLPolicyConfidenceMinAtPurchase", p.CLPolicyConfidenceMinAtPurchase, got.CLPolicyConfidenceMinAtPurchase)
 			assertIntPtrEqual(t, "PopulationAtPurchase", p.PopulationAtPurchase, got.PopulationAtPurchase)
 			assertFloatPtrEqual(t, "DHConfidenceAtPurchase", p.DHConfidenceAtPurchase, got.DHConfidenceAtPurchase)
@@ -296,9 +294,6 @@ func newStoreWithUnsoldPurchase(t *testing.T) (*PurchaseStore, string) {
 	}
 
 	p := makeTestPurchase()
-	// Distinct seeds so a reattribution that touches only one of the two
-	// adjacent columns cannot be mistaken for one that touches both.
-	p.CLConfidenceAtPurchase = intPtr(50)
 	p.CLPolicyConfidenceMinAtPurchase = intPtr(37)
 	if err := ps.CreatePurchase(ctx, p); err != nil {
 		t.Fatalf("create: %v", err)
@@ -352,18 +347,14 @@ func TestReattributePurchase_NullsCLConfidenceWhenNil(t *testing.T) {
 		CampaignID:                      "campaign-b",
 		PSACampaignName:                 "Modern",
 		PSASourcingFeeCents:             300,
-		CLConfidenceAtPurchase:          nil,
 		CLPolicyConfidenceMinAtPurchase: nil,
 	})
 	if err != nil {
 		t.Fatalf("ReattributePurchase: %v", err)
 	}
 	got := mustGetPurchase(t, ps, purchaseID)
-	if got.CLConfidenceAtPurchase != nil {
-		t.Errorf("CLConfidenceAtPurchase = %v, want nil", *got.CLConfidenceAtPurchase)
-	}
 	// The seed row set this to 37, so nil here proves the UPDATE actually
-	// wrote the new column rather than leaving it untouched.
+	// wrote the column rather than leaving it untouched.
 	if got.CLPolicyConfidenceMinAtPurchase != nil {
 		t.Errorf("CLPolicyConfidenceMinAtPurchase = %v, want nil", *got.CLPolicyConfidenceMinAtPurchase)
 	}
@@ -372,23 +363,18 @@ func TestReattributePurchase_NullsCLConfidenceWhenNil(t *testing.T) {
 	}
 }
 
-// TestReattributePurchase_WritesBothConfidenceColumns is the round-trip half of
-// the expand/contract dual-write: the two columns are adjacent in the UPDATE's
-// parameter list, so the values differ to catch a swapped binding.
-func TestReattributePurchase_WritesBothConfidenceColumns(t *testing.T) {
+func TestReattributePurchase_WritesConfidenceColumn(t *testing.T) {
 	ps, purchaseID := newStoreWithUnsoldPurchase(t)
 	err := ps.ReattributePurchase(context.Background(), purchaseID, inventory.Reattribution{
 		CampaignID:                      "campaign-b",
 		PSACampaignName:                 "Modern",
 		PSASourcingFeeCents:             300,
-		CLConfidenceAtPurchase:          intPtr(61),
 		CLPolicyConfidenceMinAtPurchase: intPtr(24),
 	})
 	if err != nil {
 		t.Fatalf("ReattributePurchase: %v", err)
 	}
 	got := mustGetPurchase(t, ps, purchaseID)
-	assertIntPtrEqual(t, "CLConfidenceAtPurchase", intPtr(61), got.CLConfidenceAtPurchase)
 	assertIntPtrEqual(t, "CLPolicyConfidenceMinAtPurchase", intPtr(24), got.CLPolicyConfidenceMinAtPurchase)
 }
 

@@ -96,7 +96,6 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 			CampaignID:                      campaignID,
 			PSACampaignName:                 row.PSACampaignName,
 			PSASourcingFeeCents:             campaign.PSASourcingFeeCents,
-			CLConfidenceAtPurchase:          conf,
 			CLPolicyConfidenceMinAtPurchase: conf,
 		})
 		switch {

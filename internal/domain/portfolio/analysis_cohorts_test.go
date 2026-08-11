@@ -276,44 +276,29 @@ func TestBuyTermsBucketOrdering(t *testing.T) {
 	}
 }
 
-// TestConfidenceBucketRenameFallback pins the read half of the
-// cl_confidence_at_purchase -> cl_policy_confidence_min_at_purchase
-// expand/contract rename (migration 000042). During the deploy-N rollout an
-// old instance still writes only the legacy field; those rows must bucket by
-// their real value rather than silently collecting in "unknown". The new field
-// wins whenever both are set, so a dual-written row never reads the stale one.
-func TestConfidenceBucketRenameFallback(t *testing.T) {
+// TestConfidenceBucket pins confidenceBucket's behavior: it buckets by the
+// frozen CL policy-confidence minimum at purchase, treating nil (no snapshot
+// captured) as "unknown" and preserving a real zero floor rather than
+// collapsing it into "unknown".
+func TestConfidenceBucket(t *testing.T) {
 	tests := []struct {
 		name     string
 		purchase inventory.Purchase
 		want     string
 	}{
 		{
-			name:     "new field only (post-rollout write)",
+			name:     "value set",
 			purchase: inventory.Purchase{CLPolicyConfidenceMinAtPurchase: intPtr(7)},
 			want:     "7",
 		},
 		{
-			name:     "legacy field only (old instance mid-rollout)",
-			purchase: inventory.Purchase{CLConfidenceAtPurchase: intPtr(4)},
-			want:     "4",
-		},
-		{
-			name: "both set: new field wins",
-			purchase: inventory.Purchase{
-				CLPolicyConfidenceMinAtPurchase: intPtr(7),
-				CLConfidenceAtPurchase:          intPtr(4),
-			},
-			want: "7",
-		},
-		{
-			name:     "neither set",
+			name:     "nil",
 			purchase: inventory.Purchase{},
 			want:     "unknown",
 		},
 		{
-			name:     "legacy zero is a real floor, not absent",
-			purchase: inventory.Purchase{CLConfidenceAtPurchase: intPtr(0)},
+			name:     "zero is a real floor, not absent",
+			purchase: inventory.Purchase{CLPolicyConfidenceMinAtPurchase: intPtr(0)},
 			want:     "0",
 		},
 	}
