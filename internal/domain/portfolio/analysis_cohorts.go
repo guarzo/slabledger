@@ -13,18 +13,8 @@ import (
 // captured. This reads the campaign's targeting policy floor, not the card's
 // real CardLadder confidence -- see inventory.Purchase.CLCardConfidenceAtPurchase
 // for that.
-//
-// It falls back to the pre-rename field because this is the read half of an
-// expand/contract rename spanning three deploys (migration 000042). During the
-// deploy-N rollout, instances of the previous binary are still writing rows
-// that set only the old column; without this fallback every such row would
-// bucket as "unknown" permanently, since nothing later revisits them. The
-// fallback goes away with the field itself in SLA-106.
 func confidenceBucket(p inventory.Purchase) string {
 	v := p.CLPolicyConfidenceMinAtPurchase
-	if v == nil {
-		v = p.CLConfidenceAtPurchase
-	}
 	if v == nil {
 		return "unknown"
 	}

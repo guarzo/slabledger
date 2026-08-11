@@ -108,13 +108,6 @@ export interface Purchase {
   clValueAtPurchaseSource?: string;
   /** CardLadder's confidence in THIS card. 0 is a real answer; absent means unknown. */
   clCardConfidenceAtPurchase?: number;
-  /**
-   * MISNAMED — holds the campaign's configured policy minimum, not card
-   * confidence. Superseded by clPolicyConfidenceMinAtPurchase, which carries the
-   * same value; this key is retained for the rename's transition and goes away
-   * with SLA-106.
-   */
-  clConfidenceAtPurchase?: number;
   clPolicyConfidenceMinAtPurchase?: number;
   populationAtPurchase?: number;
   dhConfidenceAtPurchase?: number;

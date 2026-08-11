@@ -311,7 +311,6 @@ type Purchase struct {
 	CLCardConfidenceAtPurchase  *int   `json:"clCardConfidenceAtPurchase,omitempty"`
 
 	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
-	CLConfidenceAtPurchase          *int     `json:"clConfidenceAtPurchase,omitempty"`          // MISNAMED: this is the campaign's policy floor (ParseCLConfidenceMin), not card confidence. Superseded by CLPolicyConfidenceMinAtPurchase; kept only for the deploy-N/N+1 API compatibility window (see migration 000042). The Go field goes away in deploy N+1 and the DB column, which outlives it by one deploy, is dropped in deploy N+2 -- both in SLA-106.
 	CLPolicyConfidenceMinAtPurchase *int     `json:"clPolicyConfidenceMinAtPurchase,omitempty"` // The campaign's configured CL-confidence policy minimum at purchase time (ParseCLConfidenceMin(campaign.CLConfidence)). NOT the card's real CardLadder confidence -- see CLCardConfidenceAtPurchase for that.
 	PopulationAtPurchase            *int     `json:"populationAtPurchase,omitempty"`
 	DHConfidenceAtPurchase          *float64 `json:"dhConfidenceAtPurchase,omitempty"`

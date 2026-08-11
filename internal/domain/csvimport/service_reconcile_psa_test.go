@@ -377,20 +377,11 @@ func TestReconcilePSAAttribution_CLConfidenceFreezing(t *testing.T) {
 				[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
 				t.Fatalf("ReconcilePSAAttribution: %v", err)
 			}
-			got := repo.Purchases["purchase-1"].CLConfidenceAtPurchase
+			got := repo.Purchases["purchase-1"].CLPolicyConfidenceMinAtPurchase
 			if tt.wantNil && got != nil {
-				t.Errorf("CLConfidenceAtPurchase = %d, want nil", *got)
+				t.Errorf("CLPolicyConfidenceMinAtPurchase = %d, want nil", *got)
 			}
 			if !tt.wantNil && got == nil {
-				t.Error("CLConfidenceAtPurchase = nil, want re-derived value")
-			}
-			// Deploy N dual-writes both names; the old column alone passing
-			// would hide a reattribution that never populated the new one.
-			gotNew := repo.Purchases["purchase-1"].CLPolicyConfidenceMinAtPurchase
-			if tt.wantNil && gotNew != nil {
-				t.Errorf("CLPolicyConfidenceMinAtPurchase = %d, want nil", *gotNew)
-			}
-			if !tt.wantNil && gotNew == nil {
 				t.Error("CLPolicyConfidenceMinAtPurchase = nil, want re-derived value")
 			}
 		})
