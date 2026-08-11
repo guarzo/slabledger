@@ -96,7 +96,11 @@ describe('DHPushConfigCard', () => {
 
     const swing = await screen.findByLabelText('Price Swing %');
     fireEvent.change(swing, { target: { value: '' } });
-    expect(swing).toHaveValue(null);
+    // The draft-state commit is not guaranteed to be flushed to the DOM by the
+    // time fireEvent returns, so read the value through waitFor like every other
+    // assertion here. Asserting synchronously passes on an idle machine and
+    // fails under CI load, reading back the pre-edit 25.
+    await waitFor(() => expect(swing).toHaveValue(null));
   });
 
   it('shows the error message text, not [object Object]', async () => {
