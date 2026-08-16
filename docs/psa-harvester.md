@@ -152,6 +152,33 @@ gives a wide safety margin — a missed run still leaves the reader inside its 2
 ceiling. Between runs the machine sits `stopped`; Fly starts it on schedule, it harvests,
 and it exits 0.
 
+### Alerting: the Healthchecks.io dead-man switch
+
+The cron's staleness gate is the *detector*; a Healthchecks.io check is the *delivery*.
+The workflow pings `$HEALTHCHECK_URL/start` at the top, the bare URL on success, and
+`$HEALTHCHECK_URL/fail` (with the failing reason in the body) on any failure.
+
+This exists because detection alone proved insufficient. On **2026-08-08** SLA-44 made
+`PSA_PUSH_SIGNING_KEY` mandatory in `cmd/psa-harvest/main.go`, but the secret was never
+set on either Fly app. The harvester exited 1 before launching Chromium, and the staleness
+gate correctly went red within ~3 hours — then stayed red **every hour for eight days**
+while the snapshot froze at `2026-08-08T18:41:27Z`, because a failing scheduled workflow
+only produces a GitHub notification email. Nobody read it.
+
+The dead-man half matters independently of the `/fail` pings: it catches the failures the
+workflow cannot report about itself — GitHub disabling the schedule after 60 days of repo
+inactivity, an expired `FLY_API_TOKEN` killing the job before any step runs, an Actions
+outage, or the workflow file being deleted. A workflow that never runs cannot alert you.
+
+```bash
+# Create a check (period 1h, grace 45m) at https://healthchecks.io, then:
+gh secret set HEALTHCHECK_URL --body 'https://hc-ping.com/<uuid>'
+```
+
+Point the check's notification at a channel you actually read. `HEALTHCHECK_URL` being
+unset is a deliberate soft skip — no pings are sent at all, so the check goes down and the
+misconfiguration surfaces through the alerting itself rather than turning the harvest red.
+
 **Keep exactly one scheduled machine.** Two machines with the same schedule both fire every
 hour and double-harvest (harmless — the snapshot is an idempotent singleton upsert — but
 wasteful). List and prune extras:
@@ -212,7 +239,7 @@ four env vars from a Secret.
 | `ENCRYPTION_KEY` | harvester + app | AES key; token encrypted at rest |
 | `DATABASE_URL` | harvester + app | shared Postgres |
 | `PSA_CAMPAIGN_SYNC_ENABLED` | harvester only | gates the campaign snapshot fetch + push-queue drain described above; the app reads/writes the tables regardless but never contacts PSA itself |
-| `PSA_PUSH_SIGNING_KEY` | harvester + app | HMAC key authenticating push approvals; **must be byte-identical on both** or the harvester rejects every approval the app signs. ≥32 chars (`openssl rand -hex 32`). Unset ⇒ `psa-publish` returns 503 |
+| `PSA_PUSH_SIGNING_KEY` | harvester + app | HMAC key authenticating push approvals; **must be byte-identical on both** or the harvester rejects every approval the app signs. ≥32 chars (`openssl rand -hex 32`). **Mandatory since SLA-44: unset on the harvester and it exits 1 before launching Chromium — no harvest at all, not merely no pushes.** Unset on the app ⇒ `psa-publish` returns 503 |
 | `PSA_PUSH_SIGNING_KEY_ID` | harvester + app | opaque label for the key above, for rotation; not a secret. Defaults to `default` |
 
 The **main app** needs `ENCRYPTION_KEY` + `DATABASE_URL` (to decrypt/read the token),

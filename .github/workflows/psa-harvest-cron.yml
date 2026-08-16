@@ -16,6 +16,33 @@
 # harvest worked. On 2026-07-23 the harvester failed for four days while this
 # workflow stayed green, and on 2026-07-28 a total login failure was masked for
 # hours by a still-valid cached token. Only snapshot freshness catches both.
+#
+# Healthchecks.io dead-man switch (HEALTHCHECK_URL secret)
+# --------------------------------------------------------
+# Detection was never the problem. On 2026-08-08 SLA-44 shipped a newly-required
+# PSA_PUSH_SIGNING_KEY that was never set on the Fly apps; the harvester exited 1
+# before launching Chromium and the staleness gate caught it within ~3h. It then
+# stayed red every hour for EIGHT DAYS without anyone noticing, because a failing
+# scheduled workflow only produces a GitHub notification email.
+#
+# So the pings below are about delivery, not detection. Two properties matter:
+#
+#   1. /fail pings alert immediately, out-of-band, with the failing step named.
+#   2. The absence of a success ping alerts on its own after the grace period.
+#      That is the dead-man half, and it covers the failures this workflow
+#      cannot self-report: GitHub disabling the schedule after 60 days of repo
+#      inactivity, an expired FLY_API_TOKEN taking the job down before any step
+#      runs, a GitHub Actions outage, or someone deleting this file. A workflow
+#      that never runs cannot send itself an alert.
+#
+# Configure the check as period 1h / grace 45m to match the cron, and point it at
+# a channel you actually read (not the same email that just failed you for 8 days).
+#
+# A missing HEALTHCHECK_URL is a soft skip, deliberately — unlike PSA_STATUS_URL
+# below, which hard-fails. If the secret is unset no pings are sent at all, so
+# Healthchecks.io reports the check as down and you learn about the misconfigured
+# alerting through the alerting itself. Hard-failing here would instead take the
+# harvest red over a monitoring-only gap.
 
 name: psa-harvest-cron
 
@@ -32,8 +59,22 @@ jobs:
   start-harvester:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+
+      - name: Signal run start
+        # /start lets Healthchecks.io measure run duration and distinguish "never
+        # started" from "started and died". Never fail the harvest because the
+        # monitoring endpoint is unreachable: this is best-effort by design.
+        run: |
+          if [ -z "${HEALTHCHECK_URL:-}" ]; then
+            echo "::warning::HEALTHCHECK_URL is not set; no dead-man alerting for this run"
+            exit 0
+          fi
+          curl -fsS -m 10 --retry 3 --retry-delay 2 "${HEALTHCHECK_URL}/start" || \
+            echo "::warning::could not reach Healthchecks.io /start endpoint"
 
       - name: Start the harvester machine
         env:
@@ -45,6 +86,7 @@ jobs:
           machine_id=$(flyctl machines list -a "$FLY_APP" --json | jq -r '.[0].id // empty')
           if [ -z "$machine_id" ]; then
             echo "::error::no machines found in app $FLY_APP"
+            echo "no machines found in app $FLY_APP" >> "$RUNNER_TEMP/hc_detail.txt"
             exit 1
           fi
           echo "starting machine $machine_id"
@@ -59,7 +101,11 @@ jobs:
           echo "start failed; machine state is '$state'"
           case "$state" in
             started|starting) exit 0 ;;
-            *) echo "::error::machine $machine_id not startable (state '$state')"; exit 1 ;;
+            *)
+              echo "::error::machine $machine_id not startable (state '$state')"
+              echo "machine $machine_id not startable (state '$state')" >> "$RUNNER_TEMP/hc_detail.txt"
+              exit 1
+              ;;
           esac
 
       - name: Verify the snapshot is fresh
@@ -80,9 +126,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${PSA_STATUS_URL:-}" ] || [ -z "${PSA_API_TOKEN:-}" ]; then
-            echo "::error::PSA_STATUS_URL and PSA_API_TOKEN must be set; refusing to report green without verifying snapshot freshness"
+          # Record the reason somewhere the always()-guarded ping step can read
+          # it, so the Healthchecks.io notification carries the actual failure
+          # instead of a bare "a step failed" and a link.
+          fail() {
+            echo "::error::$1"
+            printf '%s\n' "$1" >> "$RUNNER_TEMP/hc_detail.txt"
             exit 1
+          }
+
+          if [ -z "${PSA_STATUS_URL:-}" ] || [ -z "${PSA_API_TOKEN:-}" ]; then
+            fail "PSA_STATUS_URL and PSA_API_TOKEN must be set; refusing to report green without verifying snapshot freshness"
           fi
 
           # The harvest takes ~60-90s from a cold boot; give it room to land
@@ -91,19 +145,19 @@ jobs:
 
           # --fail-with-body: a 4xx/5xx must fail here, not fall through to jq
           # and surface as the misleading "no snapshotFetchedAt" error.
-          body=$(curl -sS --fail-with-body --max-time 30 --retry 3 --retry-delay 10 \
-            -H "Authorization: Bearer $PSA_API_TOKEN" "$PSA_STATUS_URL")
+          if ! body=$(curl -sS --fail-with-body --max-time 30 --retry 3 --retry-delay 10 \
+            -H "Authorization: Bearer $PSA_API_TOKEN" "$PSA_STATUS_URL"); then
+            fail "status endpoint request failed: $(printf '%s' "$body" | head -c 500)"
+          fi
 
           fetched_at=$(printf '%s' "$body" | jq -r '.snapshotFetchedAt // empty')
           if [ -z "$fetched_at" ]; then
-            echo "::error::status response has no snapshotFetchedAt"
             printf '%s\n' "$body" | head -c 2000
-            exit 1
+            fail "status response has no snapshotFetchedAt"
           fi
 
           if ! fetched_epoch=$(date -u -d "$fetched_at" +%s 2>/dev/null); then
-            echo "::error::could not parse snapshotFetchedAt '$fetched_at'"
-            exit 1
+            fail "could not parse snapshotFetchedAt '$fetched_at'"
           fi
 
           # Compare in seconds: integer-dividing to minutes first discards up to
@@ -115,11 +169,41 @@ jobs:
 
           # A future timestamp means clock skew or a bad write — never "fresh".
           if [ "$age_seconds" -lt 0 ]; then
-            echo "::error::snapshotFetchedAt '$fetched_at' is in the future (clock skew or bad data)"
-            exit 1
+            fail "snapshotFetchedAt '$fetched_at' is in the future (clock skew or bad data)"
           fi
 
           if [ "$age_seconds" -ge "$max_seconds" ]; then
-            echo "::error::PSA snapshot is stale: $(( age_seconds / 60 ))m old (max ${MAX_AGE_MINUTES}m). The harvester machine started but produced no fresh data — check 'fly logs -a slabledger-psa-harvest' for login failures."
-            exit 1
+            fail "PSA snapshot is stale: $(( age_seconds / 60 ))m old (max ${MAX_AGE_MINUTES}m). The harvester machine started but produced no fresh data — check 'fly logs -a slabledger-psa-harvest' for login failures."
           fi
+
+      - name: Report result to Healthchecks.io
+        # always(): a failing run MUST still ping /fail, and a cancelled or
+        # timed-out run must leave no success ping behind (silence is what makes
+        # the dead-man half fire). Guarded so monitoring can never itself turn
+        # a green harvest red.
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "${HEALTHCHECK_URL:-}" ]; then
+            echo "HEALTHCHECK_URL unset; skipping ping (absence of pings is itself the alert)"
+            exit 0
+          fi
+
+          detail=$(cat "$RUNNER_TEMP/hc_detail.txt" 2>/dev/null || true)
+          body=$(printf 'status: %s\nrun: %s\n%s\n' "$JOB_STATUS" "$RUN_URL" "$detail")
+
+          if [ "$JOB_STATUS" = "success" ]; then
+            endpoint="$HEALTHCHECK_URL"
+          else
+            endpoint="$HEALTHCHECK_URL/fail"
+          fi
+
+          # Best-effort: a Healthchecks.io outage must not mask the harvest
+          # result. If the success ping is what gets lost, the dead-man switch
+          # fires a false alarm — the safe direction to fail in.
+          curl -fsS -m 10 --retry 3 --retry-delay 2 \
+            --data-raw "$body" "$endpoint" || \
+            echo "::warning::could not reach Healthchecks.io at $endpoint"
+
