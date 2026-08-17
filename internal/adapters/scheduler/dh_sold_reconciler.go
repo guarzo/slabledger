@@ -147,9 +147,12 @@ func (s *DHSoldReconcilerScheduler) reconcile(ctx context.Context) {
 // sweepDH retires items that DH still offers even though we recorded the sale.
 //
 // It trusts local dh_status='sold', which is only ever written alongside a
-// campaign_sales row (the sale paths and the local pass above), so a false
-// positive would require corrupt local state — and is recoverable, since the
-// item can be re-listed. Leaving the drift in place is not: the card stays
+// campaign_sales row (the sale paths and the local pass above). One known false
+// positive exists: GetDHStatusByCertNumber returns an arbitrary row when a cert
+// has several purchases, so a card sold and later re-acquired could match the
+// old sold row and get its new listing retired. No cert currently has more than
+// one purchase, and the outcome is recoverable — the item can simply be
+// re-listed. Leaving the drift in place is not recoverable: the card stays
 // buyable on DH after we have already handed it to someone else.
 func (s *DHSoldReconcilerScheduler) sweepDH(ctx context.Context) {
 	if s.client == nil || s.lookup == nil || s.notifier == nil {
