@@ -263,10 +263,9 @@ func buildDHSoldReconcilerScheduler(cfg *config.Config, deps BuildDeps) *DHSoldR
 		Interval: cfg.DHSoldReconciler.Interval,
 	}
 	var opts []DHSoldReconcilerOption
-	if deps.DHInventoryListClient != nil && deps.PurchaseByCertLookup != nil && deps.DHSoldNotifier != nil {
+	if deps.DHInventoryListClient != nil && deps.DHSoldNotifier != nil {
 		opts = append(opts, WithDHSoldSweep(
 			deps.DHInventoryListClient,
-			deps.PurchaseByCertLookup,
 			deps.PurchaseRepo,
 			deps.DHSoldNotifier,
 		))
