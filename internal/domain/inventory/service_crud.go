@@ -348,7 +348,26 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 		}
 	}
 
+	s.notifyDHSold(ctx, "create sale", sa.PurchaseID, purchase.DHInventoryID)
+
 	return nil
+}
+
+// notifyDHSold retires a sold item on DH so it stops being offered there.
+// Local dh_status alone is bookkeeping: until DH is told, the card stays live
+// on their marketplace and can sell a second time. Best-effort by design — the
+// sale is already committed locally, and a DH outage must not fail it. The
+// dh-sold reconciler sweeps up anything missed here.
+func (s *service) notifyDHSold(ctx context.Context, op, purchaseID string, dhInventoryID int) {
+	if s.dhSoldNotifier == nil || dhInventoryID == 0 {
+		return
+	}
+	if err := s.dhSoldNotifier.MarkInventorySold(ctx, dhInventoryID); err != nil && s.logger != nil {
+		s.logger.Warn(ctx, op+": failed to mark DH inventory as sold",
+			observability.String("purchaseID", purchaseID),
+			observability.Int("dhInventoryID", dhInventoryID),
+			observability.Err(err))
+	}
 }
 
 func (s *service) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error) {
@@ -463,6 +482,8 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 					observability.Err(clearErr))
 			}
 		}
+
+		s.notifyDHSold(ctx, "bulk sale", sa.PurchaseID, purchase.DHInventoryID)
 
 		result.Created++
 	}

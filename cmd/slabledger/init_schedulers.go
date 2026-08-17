@@ -90,6 +90,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.DHClient = deps.DHClient
 		buildDeps.DHOrdersClient = deps.DHClient
 		buildDeps.DHInventoryListClient = deps.DHClient
+		// Lets the sold reconciler retire items DH still offers for a purchase
+		// we have already sold — the DH half of the sold-status reconciliation.
+		if deps.DHClient.EnterpriseAvailable() {
+			buildDeps.DHSoldNotifier = dhlistingadapter.NewInventoryAdapter(deps.DHClient)
+		}
 		// Guard against typed-nil pointers: use individual stores instead of composite repo.
 		if deps.PurchaseStore != nil {
 			buildDeps.DHFieldsUpdater = deps.PurchaseStore
