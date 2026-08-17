@@ -3,6 +3,7 @@ package inventory_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -87,22 +88,97 @@ func TestService_CreateSale_NotifiesDHSold(t *testing.T) {
 }
 
 // CreateBulkSales inlines its own sale creation rather than delegating to
-// CreateSale, so it needs its own coverage — the card-show flow lands here.
+// CreateSale, so it needs its own coverage — the card-show flow lands here,
+// and it is the path that produced the 32 stranded listings.
 func TestService_CreateBulkSales_NotifiesDHSold(t *testing.T) {
-	_, notifier, svc, c, p := newSoldNotifyFixture(t, 7777)
-
-	result, err := svc.CreateBulkSales(context.Background(), c.ID,
-		inventory.SaleChannelInPerson, "2026-07-10",
-		[]inventory.BulkSaleInput{{PurchaseID: p.ID, SalePriceCents: 60000}})
-	if err != nil {
-		t.Fatalf("CreateBulkSales: %v", err)
+	tests := []struct {
+		name string
+		// dhInventoryIDs is one purchase per entry, in order.
+		dhInventoryIDs []int
+		notifyErr      error
+		wantCreated    int
+		wantMarked     []int
+	}{
+		{
+			name:           "single sale retires its item",
+			dhInventoryIDs: []int{7777},
+			wantCreated:    1,
+			wantMarked:     []int{7777},
+		},
+		{
+			// The loop must pass each purchase's own inventory ID, not the
+			// first one or the last one for every item.
+			name:           "each item is retired under its own inventory id",
+			dhInventoryIDs: []int{101, 202, 303},
+			wantCreated:    3,
+			wantMarked:     []int{101, 202, 303},
+		},
+		{
+			name:           "purchase never pushed to DH is skipped",
+			dhInventoryIDs: []int{0},
+			wantCreated:    1,
+			wantMarked:     nil,
+		},
+		{
+			name:           "DH failure does not fail the bulk sale",
+			dhInventoryIDs: []int{7777},
+			notifyErr:      errors.New("dh unavailable"),
+			wantCreated:    1,
+			wantMarked:     []int{7777},
+		},
 	}
-	if result.Created != 1 {
-		t.Fatalf("Created = %d, want 1 (errors: %+v)", result.Created, result.Errors)
-	}
 
-	got := notifier.MarkedSold()
-	if len(got) != 1 || got[0] != 7777 {
-		t.Fatalf("MarkedSold() = %v, want [7777]", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			notifier := &mocks.DHSoldNotifierMock{
+				MarkInventorySoldFn: func(context.Context, int) error { return tt.notifyErr },
+			}
+			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+				withTestIDGen(), inventory.WithDHSoldNotifier(notifier))
+			ctx := context.Background()
+
+			c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: 0.78}
+			if err := svc.CreateCampaign(ctx, c); err != nil {
+				t.Fatalf("setup campaign: %v", err)
+			}
+
+			items := make([]inventory.BulkSaleInput, 0, len(tt.dhInventoryIDs))
+			for i, invID := range tt.dhInventoryIDs {
+				p := &inventory.Purchase{
+					CampaignID: c.ID, CardName: "Charizard",
+					CertNumber: fmt.Sprintf("BULK%04d", i),
+					GradeValue: 9, BuyCostCents: 50000,
+					PurchaseDate:  "2026-06-10",
+					DHInventoryID: invID, DHStatus: inventory.DHStatusListed,
+				}
+				if err := svc.CreatePurchase(ctx, p); err != nil {
+					t.Fatalf("setup purchase %d: %v", i, err)
+				}
+				items = append(items, inventory.BulkSaleInput{
+					PurchaseID: p.ID, SalePriceCents: 60000,
+				})
+			}
+
+			result, err := svc.CreateBulkSales(ctx, c.ID,
+				inventory.SaleChannelInPerson, "2026-07-10", items)
+			if err != nil {
+				t.Fatalf("CreateBulkSales: %v", err)
+			}
+			if result.Created != tt.wantCreated {
+				t.Fatalf("Created = %d, want %d (errors: %+v)",
+					result.Created, tt.wantCreated, result.Errors)
+			}
+
+			got := notifier.MarkedSold()
+			if len(got) != len(tt.wantMarked) {
+				t.Fatalf("MarkedSold() = %v, want %v", got, tt.wantMarked)
+			}
+			for i := range got {
+				if got[i] != tt.wantMarked[i] {
+					t.Fatalf("MarkedSold() = %v, want %v", got, tt.wantMarked)
+				}
+			}
+		})
 	}
 }
