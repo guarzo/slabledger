@@ -267,6 +267,7 @@ func buildDHSoldReconcilerScheduler(cfg *config.Config, deps BuildDeps) *DHSoldR
 		opts = append(opts, WithDHSoldSweep(
 			deps.DHInventoryListClient,
 			deps.PurchaseByCertLookup,
+			deps.PurchaseRepo,
 			deps.DHSoldNotifier,
 		))
 	}

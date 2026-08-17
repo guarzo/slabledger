@@ -36,6 +36,20 @@ func invItem(cert string, invID int) dh.InventoryListItem {
 	return dh.InventoryListItem{CertNumber: cert, DHInventoryID: invID}
 }
 
+// purchaseOwning returns a repo mock whose purchases carry the given DH
+// inventory IDs, so the sweep's ownership check resolves as the test intends.
+func purchaseOwning(byPurchaseID map[string]int) *mocks.PurchaseRepositoryMock {
+	return &mocks.PurchaseRepositoryMock{
+		GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+			invID, ok := byPurchaseID[id]
+			if !ok {
+				return nil, nil
+			}
+			return &inventory.Purchase{ID: id, DHInventoryID: invID}, nil
+		},
+	}
+}
+
 // The SLA-109 shape: cards sold in person, marked sold locally, but still
 // offered on DH. The sweep must retire exactly those and leave the rest alone.
 func TestDHSoldReconciler_SweepDH(t *testing.T) {
@@ -44,6 +58,7 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 		listed     []dh.InventoryListItem
 		mapping    map[string]string // cert -> purchaseID
 		statuses   map[string]string // cert -> local dh_status
+		owns       map[string]int    // purchaseID -> dh_inventory_id it owns
 		notifyErr  error
 		lookupErr  error
 		clientErr  error
@@ -54,6 +69,7 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 			listed:     []dh.InventoryListItem{invItem("111", 5001)},
 			mapping:    map[string]string{"111": "p1"},
 			statuses:   map[string]string{"111": "sold"},
+			owns:       map[string]int{"p1": 5001},
 			wantMarked: []int{5001},
 		},
 		{
@@ -61,6 +77,7 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 			listed:     []dh.InventoryListItem{invItem("222", 5002)},
 			mapping:    map[string]string{"222": "p2"},
 			statuses:   map[string]string{"222": "listed"},
+			owns:       map[string]int{"p2": 5002},
 			wantMarked: nil,
 		},
 		{
@@ -75,6 +92,7 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 			listed:     []dh.InventoryListItem{invItem("444", 0)},
 			mapping:    map[string]string{"444": "p4"},
 			statuses:   map[string]string{"444": "sold"},
+			owns:       map[string]int{"p4": 0},
 			wantMarked: nil,
 		},
 		{
@@ -88,8 +106,19 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 			listed:     []dh.InventoryListItem{invItem("666", 5006)},
 			mapping:    map[string]string{"666": "p6"},
 			statuses:   map[string]string{"666": "sold"},
+			owns:       map[string]int{"p6": 5006},
 			notifyErr:  errors.New("dh 500"),
 			wantMarked: []int{5006},
+		},
+		{
+			name:     "sold row for a re-acquired cert does not pull the new listing",
+			listed:   []dh.InventoryListItem{invItem("777", 5007)},
+			mapping:  map[string]string{"777": "pOld"},
+			statuses: map[string]string{"777": "sold"},
+			// The stale sold purchase owns a different DH item than the one
+			// currently listed under this cert, so it must be left alone.
+			owns:       map[string]int{"pOld": 4004},
+			wantMarked: nil,
 		},
 		{
 			name:       "list failure leaves nothing retired",
@@ -119,7 +148,7 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 			s := NewDHSoldReconcilerScheduler(
 				&mocks.PurchaseRepositoryMock{}, &mocks.PurchaseRepositoryMock{},
 				observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
-				WithDHSoldSweep(client, lookup, notifier),
+				WithDHSoldSweep(client, lookup, purchaseOwning(tt.owns), notifier),
 			)
 
 			s.sweepDH(context.Background())
@@ -157,7 +186,7 @@ func TestDHSoldReconciler_SweepsBothListableStatuses(t *testing.T) {
 		WithDHSoldSweep(client, &mocks.MockPurchaseByCertLookup{
 			Mapping:        map[string]string{"111": "p1", "222": "p2"},
 			DHStatusByCert: map[string]string{"111": "sold", "222": "sold"},
-		}, notifier),
+		}, purchaseOwning(map[string]int{"p1": 1, "p2": 2}), notifier),
 	)
 
 	s.sweepDH(context.Background())
@@ -201,13 +230,19 @@ func TestDHSoldReconciler_LocalPassRunsBeforeSweep(t *testing.T) {
 		dh.InventoryStatusListed: {invItem("111", 9001)},
 	}, nil, &calls)
 
+	// The cert starts stale ('listed' locally despite having a sale). Only the
+	// local pass flips it to 'sold', and the sweep retires nothing unless it
+	// observes that flip — so a retire proves the ordering rather than merely
+	// showing both passes ran.
 	var updated []string
+	localStatus := string(inventory.DHStatusListed)
 	repo := &mocks.PurchaseRepositoryMock{
 		ListStaleDHStatusSoldPurchasesFn: func(context.Context) ([]string, error) {
 			return []string{"p1"}, nil
 		},
-		UpdatePurchaseDHStatusFn: func(_ context.Context, id, _ string) error {
+		UpdatePurchaseDHStatusFn: func(_ context.Context, id, status string) error {
 			updated = append(updated, id)
+			localStatus = status
 			return nil
 		},
 	}
@@ -216,9 +251,10 @@ func TestDHSoldReconciler_LocalPassRunsBeforeSweep(t *testing.T) {
 	s := NewDHSoldReconcilerScheduler(repo, repo,
 		observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
 		WithDHSoldSweep(client, &mocks.MockPurchaseByCertLookup{
-			Mapping:        map[string]string{"111": "p1"},
-			DHStatusByCert: map[string]string{"111": string(inventory.DHStatusSold)},
-		}, notifier),
+			GetDHStatusByCertNumberFn: func(context.Context, string) (string, string, error) {
+				return "p1", localStatus, nil
+			},
+		}, purchaseOwning(map[string]int{"p1": 9001}), notifier),
 	)
 
 	s.reconcile(context.Background())
@@ -227,6 +263,6 @@ func TestDHSoldReconciler_LocalPassRunsBeforeSweep(t *testing.T) {
 		t.Fatalf("local pass did not run: updated = %v", updated)
 	}
 	if len(notifier.MarkedSold()) != 1 || notifier.MarkedSold()[0] != 9001 {
-		t.Fatalf("sweep did not run after local pass: marked = %v", notifier.MarkedSold())
+		t.Fatalf("sweep did not observe the local pass's flip to sold: marked = %v", notifier.MarkedSold())
 	}
 }

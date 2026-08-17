@@ -26,6 +26,12 @@ type DHStatusUpdater interface {
 	UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error
 }
 
+// PurchaseGetter loads a single purchase, so the sweep can confirm the sold
+// purchase it matched actually owns the DH inventory item it is about to retire.
+type PurchaseGetter interface {
+	GetPurchase(ctx context.Context, id string) (*inventory.Purchase, error)
+}
+
 // dhSoldSweepStatuses are the DH-side statuses that mean "DH still believes
 // this item is ours to sell". Anything sold locally but sitting in one of
 // these on DH is drift, and `listed` in particular is live double-sale risk.
@@ -50,6 +56,7 @@ type DHSoldReconcilerScheduler struct {
 	// WithDHSoldSweep, and the sweep is skipped unless all are present.
 	client   DHInventoryListClient
 	lookup   PurchaseByCertLookup
+	getter   PurchaseGetter
 	notifier inventory.DHSoldNotifier
 }
 
@@ -62,11 +69,13 @@ type DHSoldReconcilerOption func(*DHSoldReconcilerScheduler)
 func WithDHSoldSweep(
 	client DHInventoryListClient,
 	lookup PurchaseByCertLookup,
+	getter PurchaseGetter,
 	notifier inventory.DHSoldNotifier,
 ) DHSoldReconcilerOption {
 	return func(s *DHSoldReconcilerScheduler) {
 		s.client = client
 		s.lookup = lookup
+		s.getter = getter
 		s.notifier = notifier
 	}
 }
@@ -125,7 +134,7 @@ func (s *DHSoldReconcilerScheduler) Start(ctx context.Context) {
 
 // sweepEnabled reports whether the optional DH-side dependencies are wired.
 func (s *DHSoldReconcilerScheduler) sweepEnabled() bool {
-	return s.client != nil && s.lookup != nil && s.notifier != nil
+	return s.client != nil && s.lookup != nil && s.getter != nil && s.notifier != nil
 }
 
 func (s *DHSoldReconcilerScheduler) reconcile(ctx context.Context) {
@@ -162,13 +171,10 @@ func (s *DHSoldReconcilerScheduler) reconcile(ctx context.Context) {
 // sweepDH retires items that DH still offers even though we recorded the sale.
 //
 // It trusts local dh_status='sold', which is only ever written alongside a
-// campaign_sales row (the sale paths and the local pass above). One known false
-// positive exists: GetDHStatusByCertNumber returns an arbitrary row when a cert
-// has several purchases, so a card sold and later re-acquired could match the
-// old sold row and get its new listing retired. No cert currently has more than
-// one purchase, and the outcome is recoverable — the item can simply be
-// re-listed. Leaving the drift in place is not recoverable: the card stays
-// buyable on DH after we have already handed it to someone else.
+// campaign_sales row (the sale paths and the local pass above), and retires an
+// item only after confirming that sold purchase owns the DH inventory ID — so a
+// cert with several purchases (sold, then re-acquired and re-listed) cannot lose
+// its live listing to the stale row.
 func (s *DHSoldReconcilerScheduler) sweepDH(ctx context.Context) {
 	if !s.sweepEnabled() {
 		return
@@ -196,6 +202,24 @@ func (s *DHSoldReconcilerScheduler) sweepDH(ctx context.Context) {
 			}
 			// Unknown cert, or one we also believe is still available: not drift.
 			if purchaseID == "" || localStatus != string(inventory.DHStatusSold) {
+				continue
+			}
+			// Confirm the sold purchase actually owns this DH item before
+			// retiring it. GetDHStatusByCertNumber returns an arbitrary row when
+			// a cert has several purchases, so without this a card sold and
+			// later re-acquired could have its new listing pulled.
+			p, getErr := s.getter.GetPurchase(ctx, purchaseID)
+			if getErr != nil {
+				s.logger.Warn(ctx, "dh sold reconciler: purchase load error",
+					observability.String("purchaseID", purchaseID),
+					observability.Err(getErr))
+				continue
+			}
+			if p == nil || p.DHInventoryID != item.DHInventoryID {
+				s.logger.Debug(ctx, "dh sold reconciler: sold purchase does not own this DH item, skipping",
+					observability.String("purchaseID", purchaseID),
+					observability.String("cert", item.CertNumber),
+					observability.Int("dhInventoryID", item.DHInventoryID))
 				continue
 			}
 			if err := s.notifier.MarkInventorySold(ctx, item.DHInventoryID); err != nil {

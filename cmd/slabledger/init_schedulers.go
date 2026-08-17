@@ -207,10 +207,17 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.PSAImporter = deps.ImportService
 	}
 
+	// The purchase repo is not specific to cert enrichment: the DH sold
+	// reconciler needs it too, and gating it on CertLookup meant the reconciler
+	// silently did not exist whenever PSA was unconfigured. Cert enrichment
+	// still checks CertLookup itself in buildCertEnrichScheduler.
+	if deps.PurchaseStore != nil {
+		buildDeps.PurchaseRepo = deps.PurchaseStore
+	}
+
 	// Wire cert enrichment (nil-safe)
 	if deps.CertLookup != nil && deps.PurchaseStore != nil {
 		buildDeps.CertLookup = deps.CertLookup
-		buildDeps.PurchaseRepo = deps.PurchaseStore
 		buildDeps.CampaignService = deps.CampaignsService
 	}
 	// Pass pre-built CertEnrichJob so the scheduler group uses the same instance
