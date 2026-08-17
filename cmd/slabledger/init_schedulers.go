@@ -90,6 +90,11 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.DHClient = deps.DHClient
 		buildDeps.DHOrdersClient = deps.DHClient
 		buildDeps.DHInventoryListClient = deps.DHClient
+		// Lets the sold reconciler retire items DH still offers for a purchase
+		// we have already sold — the DH half of the sold-status reconciliation.
+		if deps.DHClient.EnterpriseAvailable() {
+			buildDeps.DHSoldNotifier = dhlistingadapter.NewInventoryAdapter(deps.DHClient)
+		}
 		// Guard against typed-nil pointers: use individual stores instead of composite repo.
 		if deps.PurchaseStore != nil {
 			buildDeps.DHFieldsUpdater = deps.PurchaseStore
@@ -202,10 +207,17 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.PSAImporter = deps.ImportService
 	}
 
+	// The purchase repo is not specific to cert enrichment: the DH sold
+	// reconciler needs it too, and gating it on CertLookup meant the reconciler
+	// silently did not exist whenever PSA was unconfigured. Cert enrichment
+	// still checks CertLookup itself in buildCertEnrichScheduler.
+	if deps.PurchaseStore != nil {
+		buildDeps.PurchaseRepo = deps.PurchaseStore
+	}
+
 	// Wire cert enrichment (nil-safe)
 	if deps.CertLookup != nil && deps.PurchaseStore != nil {
 		buildDeps.CertLookup = deps.CertLookup
-		buildDeps.PurchaseRepo = deps.PurchaseStore
 		buildDeps.CampaignService = deps.CampaignsService
 	}
 	// Pass pre-built CertEnrichJob so the scheduler group uses the same instance
