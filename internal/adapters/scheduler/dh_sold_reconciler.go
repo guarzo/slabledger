@@ -104,6 +104,16 @@ func (s *DHSoldReconcilerScheduler) Start(ctx context.Context) {
 		return
 	}
 
+	// State the DH sweep's status once at startup. Without this the sweep is
+	// silently absent when DH is unwired, and the local pass still logs a
+	// healthy "reconciler completed" every cycle — so the double-sale hole
+	// would look closed while nothing was actually retiring items on DH.
+	if s.sweepEnabled() {
+		s.logger.Info(ctx, "dh sold reconciler: DH sweep enabled")
+	} else {
+		s.logger.Warn(ctx, "dh sold reconciler: DH sweep disabled, sold items will not be retired on DH")
+	}
+
 	RunLoop(ctx, LoopConfig{
 		Name:     "dh-sold-reconciler",
 		Interval: s.config.Interval,
@@ -111,6 +121,11 @@ func (s *DHSoldReconcilerScheduler) Start(ctx context.Context) {
 		StopChan: s.Done(),
 		Logger:   s.logger,
 	}, s.reconcile)
+}
+
+// sweepEnabled reports whether the optional DH-side dependencies are wired.
+func (s *DHSoldReconcilerScheduler) sweepEnabled() bool {
+	return s.client != nil && s.lookup != nil && s.notifier != nil
 }
 
 func (s *DHSoldReconcilerScheduler) reconcile(ctx context.Context) {
@@ -155,7 +170,7 @@ func (s *DHSoldReconcilerScheduler) reconcile(ctx context.Context) {
 // re-listed. Leaving the drift in place is not recoverable: the card stays
 // buyable on DH after we have already handed it to someone else.
 func (s *DHSoldReconcilerScheduler) sweepDH(ctx context.Context) {
-	if s.client == nil || s.lookup == nil || s.notifier == nil {
+	if !s.sweepEnabled() {
 		return
 	}
 
