@@ -25,6 +25,18 @@ primary_region = 'iad'
 [build]
   dockerfile = 'Dockerfile.harvest'
 
+[[restart]]
+  # Explicitly NO restart-on-failure. Fly's default for a machine is
+  # `on-failure` with retries, which was harmless only while the harvester
+  # exited 0 on a dead session. Once a failed login became a real exit 1, that
+  # default turned one trigger into up to ten full SSO logins in a few minutes
+  # (observed 2026-08-18: ~6 failed logins in 13 minutes against Collectors
+  # SSO). Repeated credential submission is the kind of pattern that gets an
+  # account locked, and a dead session is never fixed by retrying it 90 seconds
+  # later — the next hourly run is the right retry cadence. Persisted here so a
+  # deploy cannot revert a manual `fly machine update --restart no`.
+  policy = 'no'
+
 [[vm]]
   # Chromium needs headroom to render the portal + Cloudflare challenge on a cold
   # boot. Bumped to 2x/2GB after 1x/1GB cold-boot contention was implicated in the
