@@ -56,18 +56,50 @@ func TestBrowserSession_Do_FramesAndCorrelates(t *testing.T) {
 }
 
 func TestReadHandshake(t *testing.T) {
-	in := `{"type":"ready","accessToken":"tok-9","expiresAt":"2099-01-01T00:00:00Z"}` + "\n"
-	sc := bufio.NewScanner(strings.NewReader(in))
-	sc.Buffer(make([]byte, 0, 1024), 1<<20)
-	tok, exp, err := readHandshake(sc)
-	if err != nil {
-		t.Fatalf("readHandshake: %v", err)
+	tests := []struct {
+		name    string
+		in      string
+		wantErr error // nil means expect success
+		wantTok string
+		wantYr  int
+	}{
+		{
+			name:    "valid handshake",
+			in:      `{"type":"ready","accessToken":"tok-9","expiresAt":"2099-01-01T00:00:00Z"}`,
+			wantTok: "tok-9",
+			wantYr:  2099,
+		},
+		{
+			// An already-expired handshake token means the script never completed a
+			// fresh SSO login — it read back the stale cookie we injected and echoed
+			// it as "harvested". Accepting that is how an eight-hour outage kept
+			// reporting a healthy login (2026-08-17).
+			name:    "already-expired token rejected",
+			in:      `{"type":"ready","accessToken":"tok-stale","expiresAt":"2020-01-01T00:00:00Z"}`,
+			wantErr: ErrTokenExpired,
+		},
 	}
-	if tok != "tok-9" {
-		t.Fatalf("tok = %q", tok)
-	}
-	if exp.Year() != 2099 {
-		t.Fatalf("exp = %v", exp)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sc := bufio.NewScanner(strings.NewReader(tt.in + "\n"))
+			sc.Buffer(make([]byte, 0, 1024), 1<<20)
+			tok, exp, err := readHandshake(sc)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("readHandshake err = %v, want %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("readHandshake: %v", err)
+			}
+			if tok != tt.wantTok {
+				t.Fatalf("tok = %q, want %q", tok, tt.wantTok)
+			}
+			if exp.Year() != tt.wantYr {
+				t.Fatalf("exp = %v, want year %d", exp, tt.wantYr)
+			}
+		})
 	}
 }
 
@@ -90,19 +122,6 @@ func TestBrowserSession_Do_PropagatesScriptError(t *testing.T) {
 	_, err := s.Do(context.Background(), FetchRequest{URL: "/x", Method: "GET"})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("err = %v, want to contain boom", err)
-	}
-}
-
-// A handshake token that is already expired means the script never completed a
-// fresh SSO login — it read back the stale cookie we injected and echoed it as
-// "harvested". Accepting that is how an eight-hour outage kept reporting a
-// healthy login (2026-08-17).
-func TestReadHandshake_RejectsExpiredToken(t *testing.T) {
-	in := `{"type":"ready","accessToken":"tok-stale","expiresAt":"2020-01-01T00:00:00Z"}` + "\n"
-	sc := bufio.NewScanner(strings.NewReader(in))
-	sc.Buffer(make([]byte, 0, 1024), 1<<20)
-	if _, _, err := readHandshake(sc); !errors.Is(err, ErrTokenExpired) {
-		t.Fatalf("readHandshake err = %v, want ErrTokenExpired", err)
 	}
 }
 

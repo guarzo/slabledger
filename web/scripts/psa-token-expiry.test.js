@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jwtExpiry, reusableToken } from './psa-token-expiry.mjs';
+import { jwtExpiry, reusableToken, REUSE_MARGIN_MS } from './psa-token-expiry.mjs';
 
 // Builds an unsigned JWT whose `exp` claim is `epochSeconds`. Only the payload
 // segment is read, so a placeholder header/signature is enough.
@@ -34,6 +34,10 @@ describe('reusableToken', () => {
     { name: 'valid with room to spare', token: tokenExpiring(hours(4) / 1000), want: true },
     { name: 'already expired', token: tokenExpiring(hours(-1) / 1000), want: false },
     { name: 'inside the safety margin', token: tokenExpiring((now + 60_000) / 1000), want: false },
+    // Boundary: the reuse check is strictly greater-than, so a token expiring
+    // exactly REUSE_MARGIN_MS from now is not reusable. Mirrors the Go side's
+    // "exactly at the margin is not reusable" case (session_test.go).
+    { name: 'exactly at the safety margin', token: tokenExpiring((now + REUSE_MARGIN_MS) / 1000), want: false },
     { name: 'undecodable token', token: 'nope', want: false },
     { name: 'empty token', token: '', want: false },
   ];
