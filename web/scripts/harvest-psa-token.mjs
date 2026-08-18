@@ -30,6 +30,7 @@
 
 import { chromium } from '@playwright/test';
 import { proxyFromEnv } from './proxy-from-env.mjs';
+import { jwtExpiry, reusableToken, selectAccessToken } from './psa-token-expiry.mjs';
 
 const EMAIL = process.env.PSA_PORTAL_EMAIL;
 const PASSWORD = process.env.PSA_PORTAL_PASSWORD;
@@ -55,17 +56,9 @@ if (!COOKIE_DOMAIN.endsWith('psacard.com')) {
   fail(`PSA_PORTAL_START_URL host "${COOKIE_DOMAIN}" is not a psacard.com host`);
 }
 
-function jwtExpiry(token) {
-  // Returns RFC3339 expiry from the JWT `exp` claim, or null.
-  const parts = token.split('.');
-  if (parts.length < 2) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-    return payload.exp ? new Date(payload.exp * 1000).toISOString() : null;
-  } catch {
-    return null;
-  }
-}
+// Collectors SSO issues the accessToken cookie on its own origin, so the
+// post-login cookie read has to ask for this host as well as the portal host.
+const SSO_ORIGIN = 'https://app.collectors.com';
 
 // firstVisible returns the first locator (from candidates) that becomes visible
 // within timeout, or null. Lets us tolerate small DOM variations in the SSO form.
@@ -163,7 +156,11 @@ const page = await context.newPage();
 
 try {
   // Inject a previously harvested token so a still-valid session skips SSO.
-  if (ACCESS_TOKEN) {
+  // Only when it is actually still valid: injecting an expired cookie does not
+  // authenticate anything, but it does stop the portal from bouncing us to
+  // /signin, so the script would read its own dead cookie back and report a
+  // successful "harvest" while every data fetch 403s (2026-08-17).
+  if (ACCESS_TOKEN && reusableToken(ACCESS_TOKEN)) {
     await context.addCookies([{
       name: 'accessToken',
       value: ACCESS_TOKEN,
@@ -171,6 +168,10 @@ try {
       path: '/',
       secure: true,
     }]);
+  } else if (ACCESS_TOKEN) {
+    console.error(
+      `harvest-psa-token: stored token expired (${jwtExpiry(ACCESS_TOKEN) ?? 'undecodable'}); forcing full SSO login`
+    );
   }
 
   await page.goto(START_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -186,9 +187,26 @@ try {
     await page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 60000 }).catch(() => {});
   }
 
-  // Read the accessToken cookie (set on psacard.com after the SSO round-trip).
-  const cookies = await context.cookies(['https://www.psacard.com']);
-  const at = cookies.find((c) => c.name === 'accessToken');
+  // Read the accessToken cookie. Collectors SSO mints it under collectors.com,
+  // but the reuse fast-path also injects a stored token onto the portal host, so
+  // more than one `accessToken` can be in the jar at once. selectAccessToken
+  // prefers the SSO-minted one and only falls back to a portal cookie when SSO
+  // was skipped — otherwise a name-only match could return our own injection and
+  // re-persist the old token instead of the freshly harvested one (2026-08-17).
+  //
+  // This lookup used to ask only for https://www.psacard.com, so it could never
+  // see a genuine cookie. That went unnoticed for as long as it did because the
+  // script injects the stored token onto the portal host itself and then reads
+  // it straight back — it was finding its own injection, not a real login. When
+  // the stored token finally expired there was nothing to inject, and the read
+  // came back empty for the first time.
+  //
+  // Scope the query rather than taking every cookie in the context: third-party
+  // analytics hosts ride along in this browser (capig.stape.us, sc-static.net,
+  // ...) and a name match against an unrelated `accessToken` would be worse than
+  // finding nothing.
+  const cookies = await context.cookies([START_URL, SSO_ORIGIN, page.url()]);
+  const at = selectAccessToken(cookies);
   if (!at || !at.value) {
     // The two-outcome URL race above assumes we land on /signin or the portal.
     // Include the actual landing URL so an unexpected third page (interstitial,
@@ -205,16 +223,41 @@ try {
     throw new Error('accessToken cookie is not a decodable JWT');
   }
 
+  // An already-expired token here means no fresh login happened — we are about
+  // to hand Go a dead session. Dump the page and fail loudly rather than let it
+  // be persisted and reported as a successful harvest.
+  if (Date.parse(expiresAt) <= Date.now()) {
+    await dumpDebug(page, 'expired-token');
+    throw new Error(`harvested accessToken is already expired (${expiresAt}); login did not complete`);
+  }
+
   // Emit the handshake so Go can persist the token immediately.
   // STDOUT CONTRACT: only NDJSON frames (handshake + per-request replies) may be written to stdout. All logging/debug goes to stderr — a stray stdout write desyncs the Go-side scanner. Never console.log here.
   process.stdout.write(
     JSON.stringify({ type: 'ready', accessToken: at.value, expiresAt }) + '\n'
   );
 
+  // Drop the Cloudflare bot-management cookies before every data request.
+  //
+  // Root cause of the 2026-08-17 outage (isolated 2026-08-18 by cloning cookie
+  // subsets from the logged-in context into pristine contexts, same IP/UA/proxy
+  // held constant): the __cf_bm / cf_clearance cookies Cloudflare mints during
+  // the *automated* SSO login are flagged, and any later request that presents
+  // them is answered with a managed challenge (403 cf-mitigated=challenge, the
+  // "Just a moment..." interstitial headless Chromium cannot solve in place).
+  // The same request carrying the session cookies but NOT the CF cookies passes
+  // and stays authenticated; Cloudflare then issues a fresh, unflagged
+  // __cf_bm on the response. So clear them before each navigation/fetch and let
+  // the edge re-mint a clean pair. This is why the old rate-based GET retry
+  // (below) only ever helped intermittently — it never removed the flagged
+  // cookie, it just waited and re-presented it.
+  const clearCFCookies = () =>
+    context.clearCookies({ name: /^(__cf_bm|cf_clearance|_cfuvid)$/ });
+
   // Serve a persistent NDJSON request loop: read one request per line from
-  // stdin, run it in the browser context (carries cf_clearance + accessToken
-  // cookie), and write back an id-correlated reply. Exit on {"type":"close"}
-  // or stdin EOF.
+  // stdin, run it in the browser context (carries the accessToken cookie plus a
+  // freshly re-minted cf_clearance), and write back an id-correlated reply.
+  // Exit on {"type":"close"} or stdin EOF.
   //
   // GET requests navigate (page.goto) rather than issue a background fetch():
   // through the Fly -> residential-proxy egress path, Cloudflare re-challenges
@@ -253,6 +296,7 @@ try {
         // ~20s+ backoff was observed to return 200. So back off, re-navigate,
         // and only report the 403 if it survives both retries.
         const cfRetryable = new Set([403, 429, 503]);
+        await clearCFCookies();
         let resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         for (let attempt = 1; cfRetryable.has(resp.status()) && attempt <= 2; attempt++) {
           const head = (await resp.text()).slice(0, 200).replace(/\s+/g, ' ');
@@ -260,11 +304,15 @@ try {
             `harvest-psa-token: GET ${absURL} -> ${resp.status()} (attempt ${attempt}/3), body head: ${head}`
           );
           await page.waitForTimeout(15000 * attempt);
+          // Drop any flagged CF cookie re-set by the challenged response before retrying.
+          await clearCFCookies();
           resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         }
         status = resp.status();
         body = await resp.text();
       } else {
+        // POSTs ride the page's cookie jar too — same flagged-CF-cookie risk.
+        await clearCFCookies();
         const result = await page.evaluate(async ({ url, body }) => {
           const opts = { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' } };
           if (body) opts.body = body;
