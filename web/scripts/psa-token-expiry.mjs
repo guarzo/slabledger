@@ -8,6 +8,10 @@
 
 // Refuse to reuse a token this close to its expiry: a harvest run takes a few
 // minutes, and a token that dies mid-run fails the same way an expired one does.
+// Keep in sync with tokenReuseMargin in
+// internal/adapters/clients/psaportal/session.go. The Go side gates before the
+// subprocess spawns; this one re-checks after Chromium has launched, which is
+// where startup drift would show up.
 export const REUSE_MARGIN_MS = 5 * 60 * 1000;
 
 // jwtExpiry returns the RFC3339 expiry from a JWT `exp` claim, or null when the
