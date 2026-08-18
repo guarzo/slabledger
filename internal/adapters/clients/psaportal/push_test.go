@@ -21,7 +21,7 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 	}
 	routes := bundleRoutes()
 	routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
-	routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
+	routes["/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
 	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})
@@ -33,7 +33,7 @@ func TestPushCampaign_MutatesAndPosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PushCampaign: %v", err)
 	}
-	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/abc123/updateCampaign"])
+	payloadStr := extractPayload(t, ff.captured["/_app/remote/abc123/updateCampaign"])
 
 	decoded, err := base64.StdEncoding.DecodeString(payloadStr)
 	if err != nil {
@@ -98,7 +98,7 @@ func TestPushCampaign_ListValuedFieldUsesValueOverNew(t *testing.T) {
 	}
 	routes := bundleRoutes()
 	routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
-	routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
+	routes["/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
 	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})
@@ -109,7 +109,7 @@ func TestPushCampaign_ListValuedFieldUsesValueOverNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PushCampaign: %v", err)
 	}
-	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/abc123/updateCampaign"])
+	payloadStr := extractPayload(t, ff.captured["/_app/remote/abc123/updateCampaign"])
 	decoded, err := base64.StdEncoding.DecodeString(payloadStr)
 	if err != nil {
 		t.Fatalf("base64: %v", err)
@@ -144,7 +144,7 @@ func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 	}
 	routes := bundleRoutes()
 	routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
-	routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
+	routes["/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
 	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})
@@ -156,7 +156,7 @@ func TestPushCampaign_UnknownFieldRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "biddPercentage") {
 		t.Errorf("expected error to mention unknown field name, got: %v", err)
 	}
-	if _, ok := ff.captured["/buyercampaignmanager/_app/remote/abc123/updateCampaign"]; ok {
+	if _, ok := ff.captured["/_app/remote/abc123/updateCampaign"]; ok {
 		t.Error("expected no POST to updateCampaign for unknown field")
 	}
 }
@@ -189,7 +189,7 @@ func TestPushCampaign_ErrorEnvelopeSurfacesBody(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			routes := bundleRoutes()
 			routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
-			routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = tt.response
+			routes["/_app/remote/abc123/updateCampaign"] = tt.response
 			ff := &fakeFetcher{routes: routes}
 
 			c := New(ff, Config{})
@@ -248,13 +248,13 @@ func TestPushCampaign_RefusesStaleChange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			routes := bundleRoutes()
 			routes["/edit/__data.json?x-sveltekit-invalidated=0001"] = string(edit)
-			routes["/buyercampaignmanager/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
+			routes["/_app/remote/abc123/updateCampaign"] = `{"type":"result","result":"[{}]"}`
 			ff := &fakeFetcher{routes: routes}
 
 			err := New(ff, Config{}).PushCampaign(context.Background(),
 				"660a980d-bf1c-4988-9958-1eb2d1853c66", []psacampaign.FieldChange{tt.change})
 
-			_, posted := ff.captured["/buyercampaignmanager/_app/remote/abc123/updateCampaign"]
+			_, posted := ff.captured["/_app/remote/abc123/updateCampaign"]
 			if tt.wantErr == nil {
 				if err != nil {
 					t.Fatalf("PushCampaign: %v", err)

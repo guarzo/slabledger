@@ -139,7 +139,7 @@ func (c *Client) PushCampaign(ctx context.Context, id string, changes []psacampa
 		return fmt.Errorf("psaportal: marshal update request: %w", err)
 	}
 
-	updateURL := fmt.Sprintf("%s/buyercampaignmanager/_app/remote/%s/updateCampaign", c.baseURL(), remoteHash)
+	updateURL := fmt.Sprintf("%s/_app/remote/%s/updateCampaign", c.baseURL(), remoteHash)
 	resp, err := c.fetch.Do(ctx, FetchRequest{URL: updateURL, Method: "POST", Body: string(body)})
 	if err != nil {
 		return fmt.Errorf("psaportal: update campaign: %w", err)

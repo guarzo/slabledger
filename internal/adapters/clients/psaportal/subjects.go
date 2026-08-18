@@ -45,7 +45,7 @@ func (c *Client) FetchSubjects(ctx context.Context, categoryID int) ([]psacampai
 		return nil, fmt.Errorf("psaportal: marshal getSubjects request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/buyercampaignmanager/_app/remote/%s/getSubjects", c.baseURL(), remoteHash)
+	url := fmt.Sprintf("%s/_app/remote/%s/getSubjects", c.baseURL(), remoteHash)
 	resp, err := c.fetch.Do(ctx, FetchRequest{URL: url, Method: "POST", Body: string(body)})
 	if err != nil {
 		return nil, fmt.Errorf("psaportal: get subjects: %w", err)

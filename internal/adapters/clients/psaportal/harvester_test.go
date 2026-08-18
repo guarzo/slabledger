@@ -45,7 +45,7 @@ func (a analyticsFetcher) Do(_ context.Context, req FetchRequest) (FetchResponse
 	if a.err != nil {
 		return FetchResponse{}, a.err
 	}
-	if strings.Contains(req.URL, "/buyercampaignmanager/analytics/__data.json") {
+	if strings.Contains(req.URL, "/analytics/__data.json") {
 		st := a.status
 		if st == 0 {
 			st = 200

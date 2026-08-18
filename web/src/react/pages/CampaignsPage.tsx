@@ -374,7 +374,7 @@ export default function CampaignsPage() {
                 <line x1="10" y1="14" x2="21" y2="3" />
               </svg>
             }
-            onClick={() => window.open('https://www.psacard.com/buyercampaignmanager/', '_blank', 'noopener,noreferrer')}
+            onClick={() => window.open('https://exchange.psacard.com/campaigns', '_blank', 'noopener,noreferrer')}
           >
             PSA
           </Button>
