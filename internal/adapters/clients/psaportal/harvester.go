@@ -80,7 +80,7 @@ func (h *Harvester) Run(ctx context.Context, session Fetcher, token string, expi
 		observability.String("expires_at", expiresAt.Format(time.RFC3339)))
 
 	resp, err := session.Do(ctx, FetchRequest{
-		URL:    "/buyercampaignmanager/analytics/__data.json?x-sveltekit-invalidated=001",
+		URL:    "https://exchange.psacard.com/analytics/__data.json?x-sveltekit-invalidated=001",
 		Method: "GET",
 	})
 	if err != nil {

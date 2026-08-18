@@ -49,7 +49,7 @@ func (c *Client) CreateCampaign(ctx context.Context, fd psacampaign.CampaignForm
 		return "", fmt.Errorf("psaportal: marshal create request: %w", err)
 	}
 
-	createURL := fmt.Sprintf("%s/buyercampaignmanager/_app/remote/%s/createCampaign", c.baseURL(), remoteHash)
+	createURL := fmt.Sprintf("%s/_app/remote/%s/createCampaign", c.baseURL(), remoteHash)
 	resp, err := c.fetch.Do(ctx, FetchRequest{URL: createURL, Method: "POST", Body: string(body)})
 	if err != nil {
 		return "", fmt.Errorf("psaportal: create campaign: %w", err)

@@ -28,7 +28,7 @@ func TestLiveSnapshotChain(t *testing.T) {
 	}
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
-		"https://www.psacard.com/buyercampaignmanager/analytics/__data.json?x-sveltekit-invalidated=001", nil)
+		"https://exchange.psacard.com/analytics/__data.json?x-sveltekit-invalidated=001", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

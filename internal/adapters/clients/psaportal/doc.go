@@ -4,9 +4,9 @@
 package psaportal
 
 const (
-	defaultPSABaseURL       = "https://www.psacard.com"
+	defaultPSABaseURL       = "https://exchange.psacard.com"
 	defaultLightdashBaseURL = "https://collectors.lightdash.cloud"
 	itemizedPurchasesSlug   = "embed-itemized-purchases"
-	campaignsListPath       = "/buyercampaignmanager/__data.json?x-sveltekit-trailing-slash=1&x-sveltekit-invalidated=001"
-	campaignEditPathF       = "/buyercampaignmanager/campaigns/%s/edit/__data.json?x-sveltekit-invalidated=0001"
+	campaignsListPath       = "/campaigns/__data.json?x-sveltekit-invalidated=001"
+	campaignEditPathF       = "/campaigns/%s/edit/__data.json?x-sveltekit-invalidated=0001"
 )

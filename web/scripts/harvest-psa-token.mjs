@@ -177,14 +177,23 @@ try {
   await page.goto(START_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // Authenticated sessions stay on the portal; everyone else bounces to
   // app.collectors.com/signin. Wait for either outcome, then check where we are.
+  //
+  // Post-migration (2026-08-18) the authenticated landing is
+  // exchange.psacard.com/campaigns, not www.psacard.com/buyercampaignmanager:
+  // START_URL (www) 302-redirects there, and SSO returns to the same exchange
+  // URL. Match both the legacy and the current landing so this wait actually
+  // resolves instead of always timing out into the .catch (a ~30-60s tax per
+  // run). The signin check below still runs first, and the signin URL carries
+  // only a URL-*encoded* exchange path (…%2Fcampaigns), so it can't false-match.
+  const LANDING_RE = /psacard\.com\/(buyercampaignmanager|campaigns)/i;
   await Promise.race([
     page.waitForURL(/collectors\.com\/signin/i, { timeout: 30000 }),
-    page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 30000 }),
+    page.waitForURL(LANDING_RE, { timeout: 30000 }),
   ]).catch(() => {});
 
   if (/collectors\.com\/signin/i.test(page.url())) {
     await loginWithPassword(page);
-    await page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 60000 }).catch(() => {});
+    await page.waitForURL(LANDING_RE, { timeout: 60000 }).catch(() => {});
   }
 
   // Read the accessToken cookie. Collectors SSO mints it under collectors.com,

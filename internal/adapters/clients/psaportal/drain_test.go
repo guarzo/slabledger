@@ -47,11 +47,11 @@ func TestDrainPushQueue_PushesApprovedRow(t *testing.T) {
 		t.Fatalf("fixture missing: %v", err)
 	}
 	ff := &fakeFetcher{routes: map[string]string{
-		"/edit/__data.json?x-sveltekit-invalidated=0001":          string(edit),
-		"/buyercampaignmanager/_app/remote/abc123/updateCampaign": `{"type":"result","result":"[{}]"}`,
-		"/buyercampaignmanager":                                   `<html><script src="/buyercampaignmanager/_app/immutable/entry/app.HASH123.js"></script></html>`,
-		"immutable/entry/app.HASH123.js":                          `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
-		"immutable/chunks/REMOTE.js":                              `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
+		"/edit/__data.json?x-sveltekit-invalidated=0001": string(edit),
+		"/_app/remote/abc123/updateCampaign":             `{"type":"result","result":"[{}]"}`,
+		"/campaigns":                                     `<html><script src="/_app/immutable/entry/app.HASH123.js"></script></html>`,
+		"immutable/entry/app.HASH123.js":                 `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
+		"immutable/chunks/REMOTE.js":                     `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
 	}}
 
 	c := New(ff, Config{})
@@ -285,13 +285,13 @@ func TestDrainPushQueue_UpdateTransient403RequeuesApproved(t *testing.T) {
 	}
 	ff := &fakeFetcher{
 		routes: map[string]string{
-			"/edit/__data.json?x-sveltekit-invalidated=0001":          string(edit),
-			"/buyercampaignmanager/_app/remote/abc123/updateCampaign": `{}`,
-			"/buyercampaignmanager":                                   `<html><script src="/buyercampaignmanager/_app/immutable/entry/app.HASH123.js"></script></html>`,
-			"immutable/entry/app.HASH123.js":                          `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
-			"immutable/chunks/REMOTE.js":                              `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
+			"/edit/__data.json?x-sveltekit-invalidated=0001": string(edit),
+			"/_app/remote/abc123/updateCampaign":             `{}`,
+			"/campaigns":                                     `<html><script src="/_app/immutable/entry/app.HASH123.js"></script></html>`,
+			"immutable/entry/app.HASH123.js":                 `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
+			"immutable/chunks/REMOTE.js":                     `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
 		},
-		statusFor: map[string]int{"/buyercampaignmanager/_app/remote/abc123/updateCampaign": 403},
+		statusFor: map[string]int{"/_app/remote/abc123/updateCampaign": 403},
 	}
 	c := New(ff, Config{})
 
@@ -440,17 +440,17 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 			for i, n := range tt.portalNames {
 				items = append(items, campaignItem(fmt.Sprintf("uuid-portal-%d", i), n))
 			}
-			statusFor := map[string]int{"/buyercampaignmanager/_app/remote/abc123/createCampaign": tt.createStatus}
+			statusFor := map[string]int{"/_app/remote/abc123/createCampaign": tt.createStatus}
 			if tt.listStatus != 0 {
-				statusFor["/buyercampaignmanager/__data.json"] = tt.listStatus
+				statusFor["/campaigns/__data.json"] = tt.listStatus
 			}
 			ff := &fakeFetcher{
 				routes: map[string]string{
-					"/buyercampaignmanager/_app/remote/abc123/createCampaign": tt.createBody,
-					"/buyercampaignmanager":                                   `<html><script src="/buyercampaignmanager/_app/immutable/entry/app.HASH123.js"></script></html>`,
-					"/buyercampaignmanager/__data.json":                       string(buildListEnvelope(t, items, 50, len(items))),
-					"immutable/entry/app.HASH123.js":                          `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
-					"immutable/chunks/REMOTE.js":                              `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
+					"/_app/remote/abc123/createCampaign": tt.createBody,
+					"/campaigns":                         `<html><script src="/_app/immutable/entry/app.HASH123.js"></script></html>`,
+					"/campaigns/__data.json":             string(buildListEnvelope(t, items, 50, len(items))),
+					"immutable/entry/app.HASH123.js":     `const __vite__mapDeps=(d=["../chunks/REMOTE.js"]);`,
+					"immutable/chunks/REMOTE.js":         `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign")`,
 				},
 				statusFor: statusFor,
 			}
@@ -505,7 +505,7 @@ func TestDrainPushQueue_CreateRow(t *testing.T) {
 					t.Fatalf("linked %q/%q, want c1/%s", linkedInternal, linkedPSA, wantID)
 				}
 			}
-			portalCalled := ff.captured["/buyercampaignmanager/_app/remote/abc123/createCampaign"] != ""
+			portalCalled := ff.captured["/_app/remote/abc123/createCampaign"] != ""
 			if (tt.missingFD || tt.wantNoPortal) && portalCalled {
 				t.Fatal("portal must not be called (missing formData or already-linked idempotent row)")
 			}

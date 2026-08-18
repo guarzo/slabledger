@@ -9,7 +9,7 @@ import (
 func TestFetchSubjects_PostsCategoryIDAndDecodesResult(t *testing.T) {
 	routes := bundleRoutes()
 	routes["immutable/chunks/REMOTE.js"] = `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign"),z=_t("abc123/getSubjects")`
-	routes["/buyercampaignmanager/_app/remote/abc123/getSubjects"] = `{"type":"result","result":"[[1,2],{\"id\":22210,\"name\":\"Machamp\"},{\"id\":22301,\"name\":\"Charizard\"}]"}`
+	routes["/_app/remote/abc123/getSubjects"] = `{"type":"result","result":"[[1,2],{\"id\":22210,\"name\":\"Machamp\"},{\"id\":22301,\"name\":\"Charizard\"}]"}`
 	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})
@@ -27,7 +27,7 @@ func TestFetchSubjects_PostsCategoryIDAndDecodesResult(t *testing.T) {
 		t.Errorf("got[1] = %+v, want {22301 Charizard}", got[1])
 	}
 
-	payloadStr := extractPayload(t, ff.captured["/buyercampaignmanager/_app/remote/abc123/getSubjects"])
+	payloadStr := extractPayload(t, ff.captured["/_app/remote/abc123/getSubjects"])
 	decoded, err := base64.StdEncoding.DecodeString(payloadStr)
 	if err != nil {
 		t.Fatalf("base64: %v", err)
@@ -40,7 +40,7 @@ func TestFetchSubjects_PostsCategoryIDAndDecodesResult(t *testing.T) {
 func TestFetchSubjects_NonResultEnvelope(t *testing.T) {
 	routes := bundleRoutes()
 	routes["immutable/chunks/REMOTE.js"] = `x=_t("abc123/createCampaign"),y=_t("abc123/updateCampaign"),z=_t("abc123/getSubjects")`
-	routes["/buyercampaignmanager/_app/remote/abc123/getSubjects"] = `{"type":"error","message":"nope"}`
+	routes["/_app/remote/abc123/getSubjects"] = `{"type":"error","message":"nope"}`
 	ff := &fakeFetcher{routes: routes}
 
 	c := New(ff, Config{})

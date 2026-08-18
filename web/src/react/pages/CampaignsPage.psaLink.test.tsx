@@ -52,7 +52,7 @@ it('PSA portal button opens the buyer campaign manager in a new tab', async () =
 
   await user.click(screen.getByRole('button', { name: /PSA Buyer Campaign Manager/i }));
   expect(openSpy).toHaveBeenCalledWith(
-    'https://www.psacard.com/buyercampaignmanager/',
+    'https://exchange.psacard.com/campaigns',
     '_blank',
     'noopener,noreferrer',
   );

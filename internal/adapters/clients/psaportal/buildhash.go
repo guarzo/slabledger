@@ -45,7 +45,7 @@ func (c *Client) fetchRemoteHash(ctx context.Context, fn string) (string, error)
 		return h, nil
 	}
 
-	page, err := c.getText(ctx, c.baseURL()+"/buyercampaignmanager")
+	page, err := c.getText(ctx, c.baseURL()+"/campaigns")
 	if err != nil {
 		return "", fmt.Errorf("psaportal: remote-hash landing page: %w", err)
 	}
@@ -54,7 +54,7 @@ func (c *Client) fetchRemoteHash(ctx context.Context, fn string) (string, error)
 		return "", fmt.Errorf("psaportal: app entry chunk not found on portal page")
 	}
 
-	appJS, err := c.getText(ctx, c.baseURL()+"/buyercampaignmanager/_app/"+entry)
+	appJS, err := c.getText(ctx, c.baseURL()+"/_app/"+entry)
 	if err != nil {
 		return "", fmt.Errorf("psaportal: remote-hash app entry: %w", err)
 	}
@@ -68,7 +68,7 @@ func (c *Client) fetchRemoteHash(ctx context.Context, fn string) (string, error)
 			continue
 		}
 		seen[rel] = true
-		chunk, err := c.getText(ctx, c.baseURL()+"/buyercampaignmanager/_app/immutable/"+rel)
+		chunk, err := c.getText(ctx, c.baseURL()+"/_app/immutable/"+rel)
 		if err != nil {
 			return "", fmt.Errorf("psaportal: remote-hash chunk %s: %w", rel, err)
 		}
