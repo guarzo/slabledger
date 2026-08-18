@@ -56,6 +56,10 @@ if (!COOKIE_DOMAIN.endsWith('psacard.com')) {
   fail(`PSA_PORTAL_START_URL host "${COOKIE_DOMAIN}" is not a psacard.com host`);
 }
 
+// Collectors SSO issues the accessToken cookie on its own origin, so the
+// post-login cookie read has to ask for this host as well as the portal host.
+const SSO_ORIGIN = 'https://app.collectors.com';
+
 // firstVisible returns the first locator (from candidates) that becomes visible
 // within timeout, or null. Lets us tolerate small DOM variations in the SSO form.
 async function firstVisible(scope, candidates, timeout = 15000) {
@@ -183,8 +187,23 @@ try {
     await page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 60000 }).catch(() => {});
   }
 
-  // Read the accessToken cookie (set on psacard.com after the SSO round-trip).
-  const cookies = await context.cookies(['https://www.psacard.com']);
+  // Read the accessToken cookie. It is set by Collectors SSO and scoped to
+  // app.collectors.com — NOT to the portal host. Confirmed 2026-08-18 by
+  // dumping every cookie's scope after a successful login: the only accessToken
+  // in the context was on app.collectors.com.
+  //
+  // This lookup used to ask only for https://www.psacard.com, so it could never
+  // see a genuine cookie. That went unnoticed for as long as it did because the
+  // script injects the stored token onto the portal host itself and then reads
+  // it straight back — it was finding its own injection, not a real login. When
+  // the stored token finally expired there was nothing to inject, and the read
+  // came back empty for the first time.
+  //
+  // Scope the query rather than taking every cookie in the context: third-party
+  // analytics hosts ride along in this browser (capig.stape.us, sc-static.net,
+  // ...) and a name match against an unrelated `accessToken` would be worse than
+  // finding nothing.
+  const cookies = await context.cookies([START_URL, SSO_ORIGIN, page.url()]);
   const at = cookies.find((c) => c.name === 'accessToken');
   if (!at || !at.value) {
     // The two-outcome URL race above assumes we land on /signin or the portal.

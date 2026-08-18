@@ -35,7 +35,7 @@ primary_region = 'iad'
   # account locked, and a dead session is never fixed by retrying it 90 seconds
   # later — the next hourly run is the right retry cadence. Persisted here so a
   # deploy cannot revert a manual `fly machine update --restart no`.
-  policy = 'no'
+  policy = 'never'
 
 [[vm]]
   # Chromium needs headroom to render the portal + Cloudflare challenge on a cold
