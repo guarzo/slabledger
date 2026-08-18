@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -115,6 +116,28 @@ func (s *browserSession) Close() error {
 	return nil
 }
 
+// ErrTokenExpired means the script handed back a token that is already expired.
+// That only happens when no fresh SSO login occurred — the script read back the
+// stale cookie we injected and echoed it as a harvest. Treating it as success is
+// what let a dead portal session masquerade as a healthy one for eight hours
+// (2026-08-17), so it is a hard failure.
+var ErrTokenExpired = errors.New("psaportal: harvested token is already expired")
+
+// tokenReuseMargin is how much life a stored token must have left before it is
+// worth injecting. A harvest run takes a few minutes; a token that expires
+// mid-run fails exactly like one that was expired to begin with.
+const tokenReuseMargin = 5 * time.Minute
+
+// ReusableToken returns token when it is still valid by more than
+// tokenReuseMargin at now, and "" otherwise. An empty return means "log in from
+// scratch", which is always the safe direction.
+func ReusableToken(token string, expiresAt, now time.Time) string {
+	if token == "" || expiresAt.Sub(now) <= tokenReuseMargin {
+		return ""
+	}
+	return token
+}
+
 // readHandshake reads the script's first line and parses the ready frame.
 func readHandshake(sc *bufio.Scanner) (token string, expiresAt time.Time, err error) {
 	if !sc.Scan() {
@@ -137,6 +160,9 @@ func readHandshake(sc *bufio.Scanner) (token string, expiresAt time.Time, err er
 	exp, err := time.Parse(time.RFC3339, hs.ExpiresAt)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("psaportal: handshake expiresAt: %w", err)
+	}
+	if !exp.After(time.Now()) {
+		return "", time.Time{}, fmt.Errorf("%w (expired at %s)", ErrTokenExpired, exp.Format(time.RFC3339))
 	}
 	return hs.AccessToken, exp, nil
 }

@@ -30,6 +30,7 @@
 
 import { chromium } from '@playwright/test';
 import { proxyFromEnv } from './proxy-from-env.mjs';
+import { jwtExpiry, reusableToken } from './psa-token-expiry.mjs';
 
 const EMAIL = process.env.PSA_PORTAL_EMAIL;
 const PASSWORD = process.env.PSA_PORTAL_PASSWORD;
@@ -53,18 +54,6 @@ if (!EMAIL || !PASSWORD) fail('PSA_PORTAL_EMAIL and PSA_PORTAL_PASSWORD are requ
 const COOKIE_DOMAIN = new URL(START_URL).hostname;
 if (!COOKIE_DOMAIN.endsWith('psacard.com')) {
   fail(`PSA_PORTAL_START_URL host "${COOKIE_DOMAIN}" is not a psacard.com host`);
-}
-
-function jwtExpiry(token) {
-  // Returns RFC3339 expiry from the JWT `exp` claim, or null.
-  const parts = token.split('.');
-  if (parts.length < 2) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-    return payload.exp ? new Date(payload.exp * 1000).toISOString() : null;
-  } catch {
-    return null;
-  }
 }
 
 // firstVisible returns the first locator (from candidates) that becomes visible
@@ -163,7 +152,11 @@ const page = await context.newPage();
 
 try {
   // Inject a previously harvested token so a still-valid session skips SSO.
-  if (ACCESS_TOKEN) {
+  // Only when it is actually still valid: injecting an expired cookie does not
+  // authenticate anything, but it does stop the portal from bouncing us to
+  // /signin, so the script would read its own dead cookie back and report a
+  // successful "harvest" while every data fetch 403s (2026-08-17).
+  if (ACCESS_TOKEN && reusableToken(ACCESS_TOKEN)) {
     await context.addCookies([{
       name: 'accessToken',
       value: ACCESS_TOKEN,
@@ -171,6 +164,10 @@ try {
       path: '/',
       secure: true,
     }]);
+  } else if (ACCESS_TOKEN) {
+    console.error(
+      `harvest-psa-token: stored token expired (${jwtExpiry(ACCESS_TOKEN) ?? 'undecodable'}); forcing full SSO login`
+    );
   }
 
   await page.goto(START_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -203,6 +200,14 @@ try {
   if (!expiresAt) {
     await dumpDebug(page, 'bad-jwt');
     throw new Error('accessToken cookie is not a decodable JWT');
+  }
+
+  // An already-expired token here means no fresh login happened — we are about
+  // to hand Go a dead session. Dump the page and fail loudly rather than let it
+  // be persisted and reported as a successful harvest.
+  if (Date.parse(expiresAt) <= Date.now()) {
+    await dumpDebug(page, 'expired-token');
+    throw new Error(`harvested accessToken is already expired (${expiresAt}); login did not complete`);
   }
 
   // Emit the handshake so Go can persist the token immediately.

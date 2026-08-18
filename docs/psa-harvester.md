@@ -60,6 +60,17 @@ stored token as a cookie and, if the session is still accepted, never touches th
 password form. So the scheduler should fire hourly for retry margin against a
 failed login, well inside the snapshot's 26h staleness ceiling.
 
+**"Still has validity" is enforced, not assumed.** Injecting an *expired* token
+is worse than injecting nothing: it does not authenticate, but it does stop the
+portal from bouncing us to `/signin`, so the script reads its own dead cookie
+back and reports it as a fresh harvest while every data fetch 403s. That is
+exactly how the 2026-08-17 outage stayed invisible for eight hours — the token
+row was rewritten hourly with the same already-expired value. Three checks now
+close it: `ReusableToken` (Go) withholds a token inside a 5-minute expiry margin,
+the script skips injection unless the JWT `exp` is still ahead, and both the
+script and `readHandshake` hard-fail on an already-expired handshake token
+(`ErrTokenExpired`) rather than persisting it.
+
 ### Production: Fly.io (current deploy)
 
 Production runs on Fly. The harvester is a **separate Fly app** (`slabledger-psa-harvest`)

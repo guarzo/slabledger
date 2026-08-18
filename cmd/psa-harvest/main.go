@@ -104,8 +104,16 @@ func run(baseline bool, args []string) error {
 	// campaign sync/drain, so every psacard.com call clears Cloudflare. The
 	// writes cannot reach the portal any other way, so a failed session open is
 	// fatal for the run.
-	storedToken, _, _ := store.CurrentToken(ctx) // best-effort; "" just means full SSO
-	session, token, expiresAt, err := psaportal.OpenBrowserSession(ctx, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, storedToken, cfg.PSAPortal.ProxyURL, logger)
+	storedToken, storedExpiry, _ := store.CurrentToken(ctx) // best-effort; "" just means full SSO
+	reusable := psaportal.ReusableToken(storedToken, storedExpiry, time.Now())
+	if storedToken != "" && reusable == "" {
+		// Worth a line: it is the difference between "skipped SSO" and "drove the
+		// whole login", and a token that expires every run points at a login that
+		// is silently failing.
+		logger.Warn(ctx, "psa-harvest: stored portal token is expired or near expiry; forcing full SSO login",
+			observability.String("expires_at", storedExpiry.Format(time.RFC3339)))
+	}
+	session, token, expiresAt, err := psaportal.OpenBrowserSession(ctx, ".", cfg.PSAPortal.Email, cfg.PSAPortal.Password, reusable, cfg.PSAPortal.ProxyURL, logger)
 	if err != nil {
 		return fmt.Errorf("open portal session: %w", err)
 	}

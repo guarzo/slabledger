@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakePeer emulates the .mjs side: reads one request line, echoes a response
@@ -88,5 +90,42 @@ func TestBrowserSession_Do_PropagatesScriptError(t *testing.T) {
 	_, err := s.Do(context.Background(), FetchRequest{URL: "/x", Method: "GET"})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("err = %v, want to contain boom", err)
+	}
+}
+
+// A handshake token that is already expired means the script never completed a
+// fresh SSO login — it read back the stale cookie we injected and echoed it as
+// "harvested". Accepting that is how an eight-hour outage kept reporting a
+// healthy login (2026-08-17).
+func TestReadHandshake_RejectsExpiredToken(t *testing.T) {
+	in := `{"type":"ready","accessToken":"tok-stale","expiresAt":"2020-01-01T00:00:00Z"}` + "\n"
+	sc := bufio.NewScanner(strings.NewReader(in))
+	sc.Buffer(make([]byte, 0, 1024), 1<<20)
+	if _, _, err := readHandshake(sc); !errors.Is(err, ErrTokenExpired) {
+		t.Fatalf("readHandshake err = %v, want ErrTokenExpired", err)
+	}
+}
+
+func TestReusableToken(t *testing.T) {
+	now := time.Date(2026, 8, 17, 22, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name      string
+		token     string
+		expiresAt time.Time
+		want      string
+	}{
+		{"valid with room to spare", "tok", now.Add(4 * time.Hour), "tok"},
+		{"already expired", "tok", now.Add(-1 * time.Minute), ""},
+		{"expires inside the safety margin", "tok", now.Add(tokenReuseMargin / 2), ""},
+		{"exactly at the margin is not reusable", "tok", now.Add(tokenReuseMargin), ""},
+		{"no stored token", "", now.Add(4 * time.Hour), ""},
+		{"zero expiry is never reusable", "tok", time.Time{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ReusableToken(tt.token, tt.expiresAt, now); got != tt.want {
+				t.Errorf("ReusableToken() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
