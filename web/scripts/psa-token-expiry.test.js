@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jwtExpiry, reusableToken, REUSE_MARGIN_MS } from './psa-token-expiry.mjs';
+import { jwtExpiry, reusableToken, selectAccessToken, REUSE_MARGIN_MS } from './psa-token-expiry.mjs';
 
 // Builds an unsigned JWT whose `exp` claim is `epochSeconds`. Only the payload
 // segment is read, so a placeholder header/signature is enough.
@@ -46,4 +46,40 @@ describe('reusableToken', () => {
       expect(reusableToken(c.token, now)).toBe(c.want);
     });
   }
+});
+
+describe('selectAccessToken', () => {
+  const sso = { name: 'accessToken', value: 'sso-tok', domain: 'app.collectors.com' };
+  const ssoParent = { name: 'accessToken', value: 'sso-tok', domain: '.collectors.com' };
+  const injected = { name: 'accessToken', value: 'injected-tok', domain: 'www.psacard.com' };
+  const noise = { name: 'cf_clearance', value: 'x', domain: '.psacard.com' };
+  const thirdParty = { name: 'accessToken', value: 'analytics', domain: '.capig.stape.us' };
+
+  it('prefers the SSO cookie when both SSO and injected portal cookies are present', () => {
+    // Injected cookie first in the jar — the ordering that made a name-only
+    // .find() return the stale injection instead of the fresh SSO token.
+    expect(selectAccessToken([injected, sso])?.value).toBe('sso-tok');
+  });
+
+  it('matches an SSO cookie scoped to the parent .collectors.com domain', () => {
+    expect(selectAccessToken([injected, ssoParent])?.value).toBe('sso-tok');
+  });
+
+  it('falls back to the portal cookie when SSO was skipped (reuse fast-path)', () => {
+    expect(selectAccessToken([injected])?.value).toBe('injected-tok');
+  });
+
+  it('does not treat a third-party analytics accessToken as the SSO cookie', () => {
+    // .capig.stape.us must not match the collectors.com preference; falls back
+    // to first-by-name (still the injected one here).
+    expect(selectAccessToken([injected, thirdParty])?.value).toBe('injected-tok');
+  });
+
+  it('ignores non-accessToken and valueless cookies', () => {
+    expect(selectAccessToken([noise, { name: 'accessToken', value: '', domain: 'app.collectors.com' }])).toBeNull();
+  });
+
+  it('returns null for an empty jar', () => {
+    expect(selectAccessToken([])).toBeNull();
+  });
 });

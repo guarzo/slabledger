@@ -30,7 +30,7 @@
 
 import { chromium } from '@playwright/test';
 import { proxyFromEnv } from './proxy-from-env.mjs';
-import { jwtExpiry, reusableToken } from './psa-token-expiry.mjs';
+import { jwtExpiry, reusableToken, selectAccessToken } from './psa-token-expiry.mjs';
 
 const EMAIL = process.env.PSA_PORTAL_EMAIL;
 const PASSWORD = process.env.PSA_PORTAL_PASSWORD;
@@ -187,10 +187,12 @@ try {
     await page.waitForURL(/psacard\.com\/buyercampaignmanager/i, { timeout: 60000 }).catch(() => {});
   }
 
-  // Read the accessToken cookie. It is set by Collectors SSO and scoped to
-  // app.collectors.com — NOT to the portal host. Confirmed 2026-08-18 by
-  // dumping every cookie's scope after a successful login: the only accessToken
-  // in the context was on app.collectors.com.
+  // Read the accessToken cookie. Collectors SSO mints it under collectors.com,
+  // but the reuse fast-path also injects a stored token onto the portal host, so
+  // more than one `accessToken` can be in the jar at once. selectAccessToken
+  // prefers the SSO-minted one and only falls back to a portal cookie when SSO
+  // was skipped — otherwise a name-only match could return our own injection and
+  // re-persist the old token instead of the freshly harvested one (2026-08-17).
   //
   // This lookup used to ask only for https://www.psacard.com, so it could never
   // see a genuine cookie. That went unnoticed for as long as it did because the
@@ -204,7 +206,7 @@ try {
   // ...) and a name match against an unrelated `accessToken` would be worse than
   // finding nothing.
   const cookies = await context.cookies([START_URL, SSO_ORIGIN, page.url()]);
-  const at = cookies.find((c) => c.name === 'accessToken');
+  const at = selectAccessToken(cookies);
   if (!at || !at.value) {
     // The two-outcome URL race above assumes we land on /signin or the portal.
     // Include the actual landing URL so an unexpected third page (interstitial,
