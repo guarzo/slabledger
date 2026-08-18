@@ -235,10 +235,27 @@ try {
     JSON.stringify({ type: 'ready', accessToken: at.value, expiresAt }) + '\n'
   );
 
+  // Drop the Cloudflare bot-management cookies before every data request.
+  //
+  // Root cause of the 2026-08-17 outage (isolated 2026-08-18 by cloning cookie
+  // subsets from the logged-in context into pristine contexts, same IP/UA/proxy
+  // held constant): the __cf_bm / cf_clearance cookies Cloudflare mints during
+  // the *automated* SSO login are flagged, and any later request that presents
+  // them is answered with a managed challenge (403 cf-mitigated=challenge, the
+  // "Just a moment..." interstitial headless Chromium cannot solve in place).
+  // The same request carrying the session cookies but NOT the CF cookies passes
+  // and stays authenticated; Cloudflare then issues a fresh, unflagged
+  // __cf_bm on the response. So clear them before each navigation/fetch and let
+  // the edge re-mint a clean pair. This is why the old rate-based GET retry
+  // (below) only ever helped intermittently — it never removed the flagged
+  // cookie, it just waited and re-presented it.
+  const clearCFCookies = () =>
+    context.clearCookies({ name: /^(__cf_bm|cf_clearance|_cfuvid)$/ });
+
   // Serve a persistent NDJSON request loop: read one request per line from
-  // stdin, run it in the browser context (carries cf_clearance + accessToken
-  // cookie), and write back an id-correlated reply. Exit on {"type":"close"}
-  // or stdin EOF.
+  // stdin, run it in the browser context (carries the accessToken cookie plus a
+  // freshly re-minted cf_clearance), and write back an id-correlated reply.
+  // Exit on {"type":"close"} or stdin EOF.
   //
   // GET requests navigate (page.goto) rather than issue a background fetch():
   // through the Fly -> residential-proxy egress path, Cloudflare re-challenges
@@ -277,6 +294,7 @@ try {
         // ~20s+ backoff was observed to return 200. So back off, re-navigate,
         // and only report the 403 if it survives both retries.
         const cfRetryable = new Set([403, 429, 503]);
+        await clearCFCookies();
         let resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         for (let attempt = 1; cfRetryable.has(resp.status()) && attempt <= 2; attempt++) {
           const head = (await resp.text()).slice(0, 200).replace(/\s+/g, ' ');
@@ -284,11 +302,15 @@ try {
             `harvest-psa-token: GET ${absURL} -> ${resp.status()} (attempt ${attempt}/3), body head: ${head}`
           );
           await page.waitForTimeout(15000 * attempt);
+          // Drop any flagged CF cookie re-set by the challenged response before retrying.
+          await clearCFCookies();
           resp = await page.goto(absURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         }
         status = resp.status();
         body = await resp.text();
       } else {
+        // POSTs ride the page's cookie jar too — same flagged-CF-cookie risk.
+        await clearCFCookies();
         const result = await page.evaluate(async ({ url, body }) => {
           const opts = { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' } };
           if (body) opts.body = body;
