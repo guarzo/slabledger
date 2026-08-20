@@ -108,25 +108,57 @@ Consumers to update: `service.go` (option + field), `csvimport/service.go`,
 
 ### 2. Idempotency
 
-**Key = `"slabledger-sale-" + sale.ID`.** Sale IDs are UUIDs from `s.idGen()`
-(`service_crud.go`), stable, and ours.
+**Key = `"slabledger-sale-" + <server-generated UUID>`, persisted on the sale row
+as `dh_idempotency_key`.**
 
-This is the load-bearing decision. The sale path and the sweep derive the
-*identical* key for the same sale, so a sweep call after a successful
-`CreateSale` replays (`replayed: true`) rather than disposing inventory twice.
-Double-recording becomes structurally impossible instead of a thing we must
-remember to avoid.
+An earlier draft derived the key from `sale.ID`. That was unsound: `CreateSale`
+only fills a *blank* id (`service_crud.go:290`) and the HTTP handler decodes
+client input straight into a `Sale` (`campaigns_purchases.go:110`), so a client
+can supply its own id — including one belonging to a sale that was later
+un-sold and deleted (`sale_store.go:167`), and including one longer than DH's
+255-character limit. A client-controllable idempotency key is a client-triggerable
+double-disposal.
 
-Void is handled for free: un-sell deletes the `campaign_sales` row, so any
-re-sale draws a fresh UUID and therefore a fresh key. A voided key is never
-reused, which the contract requires.
+Generating the key server-side and persisting it keeps the property that made
+the derived design attractive — the sale path and the sweep read the *same* key
+for the same sale, so a sweep call after a successful `CreateSale` replays
+(`replayed: true`) rather than disposing inventory twice — while grounding it in
+a column we control rather than a field the client can set. It also changes no
+existing API contract; client-supplied sale ids keep working and simply stop
+being load-bearing.
 
-**Corollary rule: the request body MUST be a pure function of the sale row.**
-`Sale.SaleDate` is date-only (`YYYY-MM-DD`), so `sold_at` is derived
-deterministically and clamped into `[purchase_date, now]` *before the first
-send*. Sending an unclamped value, taking a 422 for a future timestamp, then
-retrying with a corrected body would trip `422 idempotency_key_reused` and
-strand that sale permanently.
+**Ordering rule: persist the key before the DH call.** Recording first and
+persisting after leaves a successful remote mutation with no key to replay.
+
+Void is handled as before: un-sell deletes the `campaign_sales` row, taking its
+key with it, so a re-sale draws a fresh row and a fresh key. A voided key is
+never reused, which the contract requires.
+
+**Corollary rule: the request body MUST be a pure function of persisted columns.**
+Nothing in it may read the wall clock. If a first attempt built the body from
+`now` and a retry rebuilt it from a later `now`, the fingerprint would change
+under a fixed key and DH would answer `422 idempotency_key_reused`, stranding
+that sale permanently.
+
+`sold_at` is therefore derived as:
+
+```
+sold_at = clamp(saleDate, lower = purchaseDate, upper = sale.CreatedAt)
+```
+
+- `saleDate` = `Sale.SaleDate` parsed as `YYYY-MM-DD`; **on parse failure, fall
+  back to `sale.CreatedAt`.** Neither `ValidateSale` nor `ValidatePurchase`
+  enforces date *shape* — both check only non-emptiness
+  (`validation.go:216`, `validation.go:223`) — and `CreateSale` silently skips
+  its date logic when parsing fails (`service_crud.go:296`). Malformed dates
+  therefore already exist in the table and can still be written today.
+- `purchaseDate` = `Purchase.PurchaseDate` parsed the same way; **on parse
+  failure, omit the lower clamp** and let DH validate.
+- The upper bound is `sale.CreatedAt`, **not `now`** — `CreatedAt` is persisted
+  and stable across retries, which `now` is not.
+
+Every input is a stored column, so the body is byte-identical on every retry.
+
 
 ### 3. Error taxonomy
 
@@ -169,12 +201,54 @@ it is worth surfacing even at the cost of some noise. Revisit if it proves noisy
 
 One migration:
 
-- `campaign_sales`: `dh_sale_id text`, `dh_sale_recorded_at timestamp`
-  (`dh_sale_id` is the handle void needs)
+- `campaign_sales`: `dh_idempotency_key text`, `dh_sale_id text`,
+  `dh_sale_recorded_at timestamp`
 - `campaign_purchases`: `dh_sale_conflict text`, `dh_sale_conflict_at timestamp`
 
-The idempotency key is deliberately **not** stored. Deriving it from `sale.ID`
-makes it impossible for a stored key and its sale row to disagree.
+`dh_idempotency_key` is written at sale creation, before any DH call.
+`dh_sale_id` is the handle void needs and is written after DH confirms.
+
+An earlier draft derived the key instead of storing it, on the reasoning that a
+stored key could drift from its sale row. That reasoning is inverted: the key
+must be stable against a *client-supplied* sale id, which a derivation cannot
+guarantee. See §2.
+
+### 5a. Recovering a lost sale handle
+
+The window that matters is: **DH recorded and delisted the sale, but persisting
+`dh_sale_id` failed.** The item is now correctly off-market, so it leaves the
+sweep's view entirely — `dhSoldSweepStatuses` covers only `listed` and
+`in_stock` (`dh_sold_reconciler.go:37`) and the sweep acts only on rows DH
+returns (`dh_sold_reconciler.go:181`). Nothing would ever revisit it, and
+without `dh_sale_id` the sale can never be voided.
+
+A second reconciliation pass closes this, scoped by *our* state rather than
+DH's inventory listing:
+
+```sql
+SELECT s.* FROM campaign_sales s
+JOIN campaign_purchases p ON p.id = s.purchase_id
+WHERE s.dh_idempotency_key <> ''
+  AND s.dh_sale_id = ''
+  AND p.dh_inventory_id <> 0
+```
+
+Each row is re-issued with its persisted key and byte-identical body:
+
+- already recorded → `replayed: true` plus the original sale → persist `dh_sale_id`
+- not recorded → recorded now → persist `dh_sale_id`
+
+Either way it converges, and because it keys off local columns it survives the
+item being delisted on DH.
+
+**Ordering:** persist key → call DH → persist `dh_sale_id` → apply any conflict
+flag. A crash at any point leaves a row this pass can finish.
+
+**Concurrent un-sell.** A void needs `dh_sale_id`. If un-sell runs against a
+sale that has a key but no handle, it must first replay to obtain the handle,
+then void — never skip the void and delete the row, which would orphan a
+recorded sale on DH with no way to reverse it.
+
 
 ### 6. Sweep
 
@@ -192,20 +266,69 @@ cleanup.
 The sweep keeps keying on `dh_inventory_id` (PR #682): a cert can match several
 purchases across re-acquisitions, the inventory id cannot.
 
+This DH-scoped sweep and the locally-scoped handle-recovery pass of §5a are
+complementary and both are needed. The sweep catches items DH still offers that
+we believe are sold; the recovery pass catches sales DH has already accepted
+whose handle we failed to store — which by definition are no longer in the
+sweep's window.
+
 ### 7. Un-sell
 
 `DeleteSaleByPurchaseID` (`service_return_inventory.go`) calls
-`VoidInventorySale`, keeps the `dh_inventory_id` linkage, and lets the existing
-push pipeline relist the item.
+`VoidInventorySale` and then puts the purchase into the state the existing
+auto-relist path requires.
 
 Void returns the item to `in_stock` and clears the disposition figures but
 deliberately does **not** relist it; relisting is a separate explicit
-`PATCH {"status":"listed"}`. Routing the relist through the normal push pipeline
-preserves today's user-visible behaviour (un-sell puts the card back on sale)
-while dropping the linkage-clearing workaround the current code needs.
+`PATCH {"status":"listed"}`.
+
+**Keeping `dh_inventory_id` is necessary but not sufficient.** The push
+scheduler selects only rows with `dh_push_status='pending'`
+(`purchase_dh_query_store.go:16`), and for a row that already carries an
+inventory id it takes the auto-relist branch only when *all* of
+`dh_unlisted_detected_at` is set, a relister is wired, `cert_number` is
+non-empty, and `ResolveListingPriceCents(&p) > 0` (`dh_push.go:248`). Otherwise
+it merely marks the row `matched` and the card sits in `in_stock` forever.
+Today's `ResetDHFieldsForRepushDueToDelete` supplies the pending status and the
+unlisted marker as it clears the linkage
+(`purchase_dh_push_store.go:218`); a design that only preserved the linkage
+would supply neither.
+
+So un-sell needs a new sibling of that reset — one atomic `UPDATE`, because a
+partial application strands the row:
+
+```
+dh_push_status        = 'pending'
+dh_unlisted_detected_at = now()
+dh_status             = 'in_stock'
+dh_channels_json      = '[]'
+dh_inventory_id       -- PRESERVED (void kept the DH row alive)
+```
+
+Preserving the id is what distinguishes this from the delete-driven reset:
+after a void the DH inventory row still exists, so a fresh push would create a
+duplicate.
+
+This reuses `dh_unlisted_detected_at` for "we voided a sale on this row" rather
+than its literal meaning of "the reconciler found it missing from DH". That is
+a deliberate semantic stretch: it is the field the auto-relist branch keys on,
+and inventing a parallel flag would mean touching that branch's predicate.
+
+**Behaviour when relisting cannot proceed.** If listings are globally paused, or
+the row has no cert number, or no committed listing price resolves, the
+auto-relist branch is skipped and the card stays `in_stock` and off-market until
+a price is committed. This is a genuine change from today — currently un-sell
+pushes the item as if new — and it must be surfaced in the UI rather than left
+silent, or an un-sold card quietly stops being for sale.
+
+A `404` on void is treated as success-with-a-log: it covers not-found, another
+account's sale, a DH marketplace-mirror deal, and a UI-created deal, none of
+which we can void and none of which should fail an un-sell the user already
+performed locally.
 
 Voiding an already-voided sale returns `200` with `reversed: false, items: []`.
 That is success, not an error.
+
 
 ## Testing
 
@@ -221,10 +344,21 @@ on shipped to production. Replace it with a **contract-enforcing fake** that:
 - can emit each documented error code, with null `sold_at`/`channel` on
   `item_sold_on_channel`, and with unexpected extra/missing fields
 
-Plus table-driven unit tests for key derivation, `sold_at` clamping, retry
-classification, and conflict flagging; and a `dhdiag`-tagged integration test
-exercising record-then-void against live DH (`internal/integration/`, per the
-project rule that integration tests either assert or carry the tag).
+Plus table-driven unit tests for key generation and persistence ordering,
+`sold_at` clamping (including both parse-failure fallbacks and the
+`CreatedAt`-not-`now` upper bound), retry classification, conflict flagging, the
+§5a recovery pass, and the §7 post-void state transition against the
+auto-relist predicate in `dh_push.go:248`. Two cases deserve explicit coverage
+because they are the ones that bite silently:
+
+- a client-supplied `sale.ID` — including a reused one — must not influence the
+  idempotency key
+- a crash between the DH call and persisting `dh_sale_id` must be recoverable by
+  the §5a pass, and must not double-dispose
+
+Plus a `dhdiag`-tagged integration test exercising record-then-void against live
+DH (`internal/integration/`, per the project rule that integration tests either
+assert or carry the tag).
 
 ## Out of scope
 
@@ -241,6 +375,29 @@ project rule that integration tests either assert or carry the tag).
 - The 25 backfill writes to DH's ledger; if anything downstream consumes DH's
   P&L, that is a real mutation.
 - `delisted == false` conflict-flagging is unproven and may be noisy.
+- Un-sell no longer guarantees a relist (§7). When listings are paused or no
+  price resolves, the card returns to `in_stock` and stays off-market. This
+  needs UI surfacing or it will read as a bug.
+- `dh_unlisted_detected_at` now carries two meanings (§7). If a future change
+  splits the auto-relist predicate, both writers must be revisited.
 - An inventory count discrepancy was observed while drafting this (DH reported
   48 listed against our 49 unsold). It may be an unreported channel sale — the
   `item_sold_on_channel` case — and should be reconciled independently.
+
+## Review history
+
+Reviewed against the repository by Codex on 2026-08-20 (verdict: REVISE). Three
+blocking findings and one concern, all confirmed against the code and all folded
+in above:
+
+1. §2 — the original derive-from-`sale.ID` key was client-controllable
+2. §7 — preserving `dh_inventory_id` alone does not satisfy the auto-relist
+   predicate
+3. §5a — no recovery path for a sale recorded on DH whose handle we failed to
+   persist
+4. §2 — date columns are not shape-validated, so the clamp needs parse-failure
+   behaviour
+
+A fifth issue surfaced while applying them: the original clamp used `now` as its
+upper bound, which is not stable across retries and would itself have tripped
+`422 idempotency_key_reused`. Fixed in §2 by clamping to `sale.CreatedAt`.
