@@ -59,8 +59,8 @@ func (s *service) SaveDHPushConfig(ctx context.Context, cfg *DHPushConfig) error
 //
 // Superseded by recordDHSale, which uses the purpose-built sale endpoint
 // instead of this status-PATCH (DH rejects it with 422 "Invalid status
-// 'sold'"). Both are wired during the migration; this one is removed once the
-// recorder has proven itself (Task 12).
+// 'sold'"). No longer called from CreateSale/CreateBulkSales — kept declared,
+// along with dhSoldNotifier/WithDHSoldNotifier, until Task 12 deletes them.
 func (s *service) notifyDHSold(ctx context.Context, op, purchaseID string, dhInventoryID int) {
 	if s.dhSoldNotifier == nil || dhInventoryID == 0 {
 		return

@@ -354,7 +354,6 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 		}
 	}
 
-	s.notifyDHSold(ctx, "create sale", sa.PurchaseID, purchase.DHInventoryID)
 	s.recordDHSale(ctx, "create sale", sa, purchase)
 
 	return nil
@@ -477,7 +476,6 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			}
 		}
 
-		s.notifyDHSold(ctx, "bulk sale", sa.PurchaseID, purchase.DHInventoryID)
 		s.recordDHSale(ctx, "bulk sale", sa, purchase)
 
 		result.Created++
