@@ -108,13 +108,16 @@ func assertRecorded(t *testing.T, got []inventory.DHSaleRequest, want []int) {
 // the rest alone.
 func TestDHSoldReconciler_SweepDH(t *testing.T) {
 	tests := []struct {
-		name       string
-		listed     []dh.InventoryListItem
-		purchases  map[int]inventory.DHStatus // dh_inventory_id -> local dh_status
-		resolveErr error
-		recordErr  error
-		clientErr  error
-		wantMarked []int
+		name              string
+		listed            []dh.InventoryListItem
+		purchases         map[int]inventory.DHStatus // dh_inventory_id -> local dh_status
+		resolveErr        error
+		recordErr         error
+		clientErr         error
+		noSaleRow         bool // omit the sale row the sweep would otherwise seed for a sold purchase
+		checkConflict     bool
+		wantConflictCalls int
+		wantMarked        []int
 	}{
 		{
 			name:       "sold locally but still listed on DH is recorded",
@@ -156,6 +159,19 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 			wantMarked: nil,
 		},
 		{
+			// A sold purchase with no campaign_sales row is a data inconsistency
+			// the sweep cannot repair by guessing a price, so it must skip the
+			// item entirely — no recording attempt, and no conflict flag either
+			// (there is nothing to be a permanent-vs-retryable outcome of).
+			name:              "sold purchase with no sale row is skipped",
+			listed:            []dh.InventoryListItem{invItem("888", 5008)},
+			purchases:         map[int]inventory.DHStatus{5008: inventory.DHStatusSold},
+			noSaleRow:         true,
+			wantMarked:        nil,
+			checkConflict:     true,
+			wantConflictCalls: 0,
+		},
+		{
 			name:       "DH failure is recorded but does not panic",
 			listed:     []dh.InventoryListItem{invItem("666", 5006)},
 			purchases:  map[int]inventory.DHStatus{5006: inventory.DHStatusSold},
@@ -179,7 +195,7 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 			sales := map[string]*inventory.Sale{}
 			store := mocks.NewInMemoryCampaignStore()
 			for id, status := range tt.purchases {
-				if status == inventory.DHStatusSold {
+				if status == inventory.DHStatusSold && !tt.noSaleRow {
 					pid := fmt.Sprintf("p-%d", id)
 					sale := saleFor(pid)
 					sales[pid] = sale
@@ -197,12 +213,19 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 					return &inventory.DHSaleResult{DHSaleID: fmt.Sprintf("dh-%d", req.DHInventoryID), Delisted: true}, nil
 				},
 			}
+			var conflictCalls int
+			conflictSetter := &mocks.PurchaseRepositoryMock{
+				SetDHSaleConflictFn: func(_ context.Context, _, _ string) error {
+					conflictCalls++
+					return nil
+				},
+			}
 
 			s := NewDHSoldReconcilerScheduler(
 				&mocks.PurchaseRepositoryMock{}, &mocks.PurchaseRepositoryMock{},
 				observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
 				WithDHSoldSweep(client, resolverFor(tt.purchases, tt.resolveErr),
-					&stubSalesLister{byPurchaseID: sales}, recorder, store, &mocks.PurchaseRepositoryMock{}),
+					&stubSalesLister{byPurchaseID: sales}, recorder, store, conflictSetter),
 			)
 
 			s.sweepDH(context.Background())
@@ -218,6 +241,96 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 				if gotIDs[i] != tt.wantMarked[i] {
 					t.Fatalf("recorded inventory ids = %v, want %v", gotIDs, tt.wantMarked)
 				}
+			}
+			if tt.checkConflict && conflictCalls != tt.wantConflictCalls {
+				t.Fatalf("SetDHSaleConflict called %d times, want %d", conflictCalls, tt.wantConflictCalls)
+			}
+		})
+	}
+}
+
+// TestDHSoldReconciler_RecordSale_ConflictFlagging exercises recordSale's
+// three conflict-flagging outcomes directly, bypassing sweepDH/recovery so the
+// error-classification branch is asserted in isolation rather than only
+// incidentally through a sweep scenario.
+func TestDHSoldReconciler_RecordSale_ConflictFlagging(t *testing.T) {
+	tests := []struct {
+		name          string
+		recordErr     error
+		result        *inventory.DHSaleResult
+		wantConflict  bool
+		wantConflictN int
+	}{
+		{
+			name:          "non-retryable error flags a conflict",
+			recordErr:     inventory.ErrDHValidation,
+			wantConflict:  true,
+			wantConflictN: 1,
+		},
+		{
+			name:          "idempotency-in-progress is retryable, no conflict",
+			recordErr:     inventory.ErrDHIdempotencyInProgress,
+			wantConflict:  false,
+			wantConflictN: 0,
+		},
+		{
+			name:          "lock contention is retryable, no conflict",
+			recordErr:     inventory.ErrDHLockContention,
+			wantConflict:  false,
+			wantConflictN: 0,
+		},
+		{
+			name:          "success but not delisted flags a conflict",
+			result:        &inventory.DHSaleResult{DHSaleID: "dh-1", Delisted: false},
+			wantConflict:  true,
+			wantConflictN: 1,
+		},
+		{
+			name:          "success and delisted flags nothing",
+			result:        &inventory.DHSaleResult{DHSaleID: "dh-1", Delisted: true},
+			wantConflict:  false,
+			wantConflictN: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := mocks.NewInMemoryCampaignStore()
+			// Give the sale a key already so recordSale skips the minting
+			// branch and goes straight to RecordInventorySale.
+			sale := &inventory.Sale{
+				ID: "s1", PurchaseID: "p1", SalePriceCents: 5000, SaleDate: "2026-07-01",
+				DHIdempotencyKey: "slabledger-sale-existing",
+			}
+			store.Sales[sale.ID] = sale
+			purchase := &inventory.Purchase{ID: "p1", DHInventoryID: 42, PurchaseDate: "2026-06-01"}
+
+			recorder := &mocks.DHSaleRecorderMock{
+				RecordInventorySaleFn: func(context.Context, inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+					if tt.recordErr != nil {
+						return nil, tt.recordErr
+					}
+					return tt.result, nil
+				},
+			}
+			var conflictCalls int
+			conflictSetter := &mocks.PurchaseRepositoryMock{
+				SetDHSaleConflictFn: func(_ context.Context, _, _ string) error {
+					conflictCalls++
+					return nil
+				},
+			}
+
+			s := NewDHSoldReconcilerScheduler(
+				&mocks.PurchaseRepositoryMock{}, &mocks.PurchaseRepositoryMock{},
+				observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
+				WithDHSoldSweep(nil, nil, nil, recorder, store, conflictSetter),
+			)
+
+			_ = s.recordSale(context.Background(), purchase, sale)
+
+			if conflictCalls != tt.wantConflictN {
+				t.Fatalf("SetDHSaleConflict called %d times, want %d", conflictCalls, tt.wantConflictN)
 			}
 		})
 	}
@@ -468,9 +581,19 @@ func TestDHSoldReconciler_RecoveryPass_ReplayDoesNotDoubleRecord(t *testing.T) {
 // scheduler records nothing for a row the lister withheld — i.e. the
 // terminal-state gate (dh_sale_conflict = ”) holds end-to-end, since
 // ListSalesNeedingDHRecord's own predicate excludes conflict-flagged rows.
+//
+// A lister returning no rows and a pass that never calls the lister at all
+// are indistinguishable to a bare "recordCalls == 0" assertion, so this also
+// asserts the lister was actually invoked — proving the pass ran and drove its
+// (empty) result to zero record calls, rather than passing vacuously because
+// nothing happened. Verified non-vacuous: temporarily stubbing
+// recoverDHSaleHandles's body to a no-op made this test fail on the
+// listerCalled assertion (see task-11-report.md), then the stub was reverted.
 func TestDHSoldReconciler_RecoveryPass_SkipsConflictFlaggedSale(t *testing.T) {
 	store := mocks.NewInMemoryCampaignStore()
+	var listerCalled bool
 	store.ListSalesNeedingDHRecordFn = func(context.Context, int) ([]inventory.SaleNeedingDHRecord, error) {
+		listerCalled = true
 		return nil, nil
 	}
 	var recordCalls int
@@ -489,6 +612,9 @@ func TestDHSoldReconciler_RecoveryPass_SkipsConflictFlaggedSale(t *testing.T) {
 
 	s.recoverDHSaleHandles(context.Background())
 
+	if !listerCalled {
+		t.Fatalf("ListSalesNeedingDHRecord was never called — the recovery pass did not run")
+	}
 	if recordCalls != 0 {
 		t.Fatalf("RecordInventorySale called %d times, want 0", recordCalls)
 	}
