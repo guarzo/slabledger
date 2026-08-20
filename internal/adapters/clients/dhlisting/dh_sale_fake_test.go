@@ -42,7 +42,7 @@ func newFakeDHSaleServer(t *testing.T) *fakeDHSaleServer {
 	t.Helper()
 	f := &fakeDHSaleServer{sales: map[string]recordedSale{}, voided: map[string]bool{}}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
-	t.Cleanup(f.Server.Close)
+	t.Cleanup(f.Close)
 	return f
 }
 
@@ -130,7 +130,7 @@ func writeJSONError(w http.ResponseWriter, status int, code, message string) {
 
 func TestInventoryAdapter_RecordInventorySale_ContractFake(t *testing.T) {
 	fake := newFakeDHSaleServer(t)
-	a := adapter.NewInventoryAdapter(dh.NewClient(fake.Server.URL, dh.WithEnterpriseKey("test_key")))
+	a := adapter.NewInventoryAdapter(dh.NewClient(fake.URL, dh.WithEnterpriseKey("test_key")))
 
 	req := inventory.DHSaleRequest{
 		DHInventoryID:  100,
@@ -171,7 +171,7 @@ func TestInventoryAdapter_RecordInventorySale_ContractFake(t *testing.T) {
 
 func TestInventoryAdapter_VoidInventorySale_ContractFake(t *testing.T) {
 	fake := newFakeDHSaleServer(t)
-	a := adapter.NewInventoryAdapter(dh.NewClient(fake.Server.URL, dh.WithEnterpriseKey("test_key")))
+	a := adapter.NewInventoryAdapter(dh.NewClient(fake.URL, dh.WithEnterpriseKey("test_key")))
 
 	result, err := a.RecordInventorySale(context.Background(), inventory.DHSaleRequest{
 		DHInventoryID:  1,
