@@ -1,120 +1,178 @@
-package inventory
+package inventory_test
 
 import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/guarzo/slabledger/internal/domain/inventory"
+	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-func TestDeleteSaleByPurchaseID(t *testing.T) {
-	tests := []struct {
-		name              string
-		seed              func(*mockRepo)
-		wantErr           bool
-		wantSaleGone      bool
-		wantDHReset       bool
-		wantDHStatusAfter DHStatus
-	}{
-		{
-			name: "success deletes sale and clears flag",
-			seed: func(r *mockRepo) {
-				r.purchases["p1"] = &Purchase{ID: "p1", CampaignID: "c1", CertNumber: "111", Grader: "PSA"}
-				r.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
-				r.purchaseSales["p1"] = true
-			},
-			wantErr:      false,
-			wantSaleGone: true,
-		},
-		{
-			name: "no sale returns ErrSaleNotFound",
-			seed: func(r *mockRepo) {
-				r.purchases["p1"] = &Purchase{ID: "p1", CampaignID: "c1", CertNumber: "111", Grader: "PSA"}
-			},
-			wantErr: true,
-		},
-		{
-			name: "sold-on-DH purchase has DH linkage reset so push pipeline can re-enroll it",
-			seed: func(r *mockRepo) {
-				r.purchases["p1"] = &Purchase{
-					ID:                  "p1",
-					CampaignID:          "c1",
-					CertNumber:          "111",
-					Grader:              "PSA",
-					DHInventoryID:       9999,
-					DHStatus:            DHStatusSold,
-					DHListingPriceCents: 5000,
-				}
-				r.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
-				r.purchaseSales["p1"] = true
-			},
-			wantErr:           false,
-			wantSaleGone:      true,
-			wantDHReset:       true,
-			wantDHStatusAfter: "",
-		},
-		{
-			name: "in_stock purchase is left alone (no DH reset)",
-			seed: func(r *mockRepo) {
-				r.purchases["p1"] = &Purchase{
-					ID:            "p1",
-					CampaignID:    "c1",
-					CertNumber:    "111",
-					Grader:        "PSA",
-					DHInventoryID: 1234,
-					DHStatus:      DHStatusInStock,
-				}
-				r.sales["s1"] = &Sale{ID: "s1", PurchaseID: "p1"}
-				r.purchaseSales["p1"] = true
-			},
-			wantErr:           false,
-			wantSaleGone:      true,
-			wantDHReset:       false,
-			wantDHStatusAfter: DHStatusInStock,
+// The ordering IS the thing under test (design §7): void on DH, then reset the
+// purchase, then delete the sale row LAST. Deleting last is what makes the
+// sequence retry-safe — the sale row holds dh_sale_id, the only handle that
+// can void.
+func TestDeleteSaleByPurchaseID_VoidThenResetThenDelete(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	var calls []string
+
+	recorder := &mocks.DHSaleRecorderMock{
+		VoidInventorySaleFn: func(_ context.Context, dhSaleID, _ string) error {
+			calls = append(calls, "void:"+dhSaleID)
+			return nil
 		},
 	}
+	repo.ResetDHFieldsForRelistAfterVoidFn = func(_ context.Context, purchaseID string) error {
+		calls = append(calls, "reset:"+purchaseID)
+		return nil
+	}
+	repo.DeleteSaleByPurchaseIDFn = func(_ context.Context, purchaseID string) error {
+		calls = append(calls, "delete:"+purchaseID)
+		return nil
+	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			repo := newMockRepo()
-			tc.seed(repo)
-			svc := &service{campaigns: repo, purchases: repo, sales: repo, analytics: repo, finance: repo, pricing: repo, dh: repo, idGen: func() string { return "test-id" }}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
 
-			err := svc.DeleteSaleByPurchaseID(context.Background(), "p1")
+	_, p := seedSaleFixture(t, svc, repo)
+	sale := &inventory.Sale{
+		ID: "s1", PurchaseID: p.ID, SalePriceCents: 5000, SaleDate: "2026-07-01",
+		DHIdempotencyKey: "slabledger-sale-abc", DHSaleID: "dh-sale-77",
+	}
+	if err := repo.CreateSale(ctx, sale); err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
 
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				if !errors.Is(err, ErrSaleNotFound) {
-					t.Errorf("expected ErrSaleNotFound, got %v", err)
-				}
-				return
-			}
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err != nil {
+		t.Fatalf("DeleteSaleByPurchaseID: %v", err)
+	}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if _, ok := repo.sales["s1"]; ok {
-				t.Error("sale should have been deleted")
-			}
-			if repo.purchaseSales["p1"] {
-				t.Error("purchaseSales flag should have been cleared")
-			}
-			p, ok := repo.purchases["p1"]
-			if !ok {
-				t.Fatal("purchase should still exist after sale deletion")
-			}
-			if p.DHStatus != tc.wantDHStatusAfter {
-				t.Errorf("dh_status: got %q, want %q", p.DHStatus, tc.wantDHStatusAfter)
-			}
-			if tc.wantDHReset {
-				if p.DHInventoryID != 0 {
-					t.Errorf("dh_inventory_id should have been reset, got %d", p.DHInventoryID)
-				}
-				if p.DHPushStatus != DHPushStatusPending {
-					t.Errorf("dh_push_status: got %q, want %q", p.DHPushStatus, DHPushStatusPending)
-				}
-			}
-		})
+	want := []string{"void:dh-sale-77", "reset:" + p.ID, "delete:" + p.ID}
+	if len(calls) != len(want) {
+		t.Fatalf("calls = %v, want %v", calls, want)
+	}
+	for i := range want {
+		if calls[i] != want[i] {
+			t.Fatalf("calls = %v, want %v", calls, want)
+		}
+	}
+}
+
+// A purchase whose sale never reached DH (no dh_sale_id, no
+// dh_idempotency_key) has nothing to void, so un-sell skips straight to the
+// local reset+delete.
+func TestDeleteSaleByPurchaseID_NoDHHistorySkipsVoid(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{
+		VoidInventorySaleFn: func(context.Context, string, string) error {
+			t.Fatal("VoidInventorySale must not be called for a purchase with no DH history")
+			return nil
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup campaign: %v", err)
+	}
+	p := &inventory.Purchase{CampaignID: c.ID, PurchaseDate: "2026-06-01"} // no DHInventoryID
+	if err := repo.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("setup purchase: %v", err)
+	}
+	if err := repo.CreateSale(ctx, &inventory.Sale{ID: "s1", PurchaseID: p.ID, SalePriceCents: 5000, SaleDate: "2026-07-01"}); err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err != nil {
+		t.Fatalf("DeleteSaleByPurchaseID: %v", err)
+	}
+	if _, err := repo.GetSaleByPurchaseID(ctx, p.ID); !errors.Is(err, inventory.ErrSaleNotFound) {
+		t.Fatalf("sale still present after un-sell: err=%v", err)
+	}
+}
+
+// A failure at the reset step leaves the sale row intact — its dh_sale_id
+// handle survives — so a retry of the whole operation completes cleanly.
+func TestDeleteSaleByPurchaseID_ResetFailureLeavesSaleRowIntact(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{}
+	repo.ResetDHFieldsForRelistAfterVoidFn = func(context.Context, string) error {
+		return errors.New("db timeout")
+	}
+
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	_, p := seedSaleFixture(t, svc, repo)
+	if err := repo.CreateSale(ctx, &inventory.Sale{
+		ID: "s1", PurchaseID: p.ID, SalePriceCents: 5000, SaleDate: "2026-07-01", DHSaleID: "dh-77",
+	}); err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err == nil {
+		t.Fatal("expected an error from the failed reset")
+	}
+
+	got, err := repo.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("sale row was deleted despite the reset failure: %v", err)
+	}
+	if got.DHSaleID != "dh-77" {
+		t.Fatalf("sale row corrupted: DHSaleID = %q, want dh-77", got.DHSaleID)
+	}
+
+	// Retry: reset now succeeds and the delete completes.
+	repo.ResetDHFieldsForRelistAfterVoidFn = nil
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err != nil {
+		t.Fatalf("retry DeleteSaleByPurchaseID: %v", err)
+	}
+	if _, err := repo.GetSaleByPurchaseID(ctx, p.ID); !errors.Is(err, inventory.ErrSaleNotFound) {
+		t.Fatal("sale row should be gone after the successful retry")
+	}
+}
+
+// A sale with a key but no persisted dh_sale_id (the crash window design §5b
+// names) is replayed to obtain a handle before voiding — never skipped.
+func TestDeleteSaleByPurchaseID_ReplaysForMissingHandle(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	var recordedKey, voidedID string
+	recorder := &mocks.DHSaleRecorderMock{
+		RecordInventorySaleFn: func(_ context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+			recordedKey = req.IdempotencyKey
+			return &inventory.DHSaleResult{DHSaleID: "dh-recovered", Replayed: true, Delisted: true}, nil
+		},
+		VoidInventorySaleFn: func(_ context.Context, dhSaleID, _ string) error {
+			voidedID = dhSaleID
+			return nil
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	_, p := seedSaleFixture(t, svc, repo)
+	// Key present (DH confirmed the call) but dh_sale_id never persisted —
+	// the crash window design §5b names.
+	if err := repo.CreateSale(ctx, &inventory.Sale{
+		ID: "s1", PurchaseID: p.ID, SalePriceCents: 5000, SaleDate: "2026-07-01",
+		DHIdempotencyKey: "slabledger-sale-orphan",
+	}); err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err != nil {
+		t.Fatalf("DeleteSaleByPurchaseID: %v", err)
+	}
+	if recordedKey != "slabledger-sale-orphan" {
+		t.Fatalf("replay used key %q, want the persisted key", recordedKey)
+	}
+	if voidedID != "dh-recovered" {
+		t.Fatalf("voided id = %q, want the id obtained from the replay", voidedID)
 	}
 }
