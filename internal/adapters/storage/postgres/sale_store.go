@@ -244,8 +244,8 @@ func (ss *SaleStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID strin
 // window the DH-inventory-scoped sweep can never see, because a successfully
 // recorded sale delists the item and drops it out of that sweep's view.
 //
-// dh_sale_conflict = '' is the terminal-state clause and is load-bearing:
-// only two DH error codes are retryable (spec §3); every other failure is
+// An empty dh_sale_conflict is the terminal-state clause, and it is
+// load-bearing: only two DH error codes are retryable (spec §3); every other failure is
 // permanent. Without this clause, a sale that failed with a permanent error
 // (e.g. 422 idempotency_key_reused) would keep its key, never gain a handle,
 // and be re-attempted every cycle forever — reproducing the hourly-422 noise
@@ -253,7 +253,7 @@ func (ss *SaleStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID strin
 // dh_sale_conflict on the purchase is what re-enrolls the row.
 //
 // Rows with no idempotency key are intentionally included (there is no
-// "key <> ''" clause) — those are the pre-migration legacy sales, including
+// non-empty-key clause) — those are the pre-migration legacy sales, including
 // the 25 from the 2026-08-15 incident, which mint a key on first visit via
 // SetSaleIdempotencyKeyIfAbsent (spec §5a) rather than being skipped.
 func (ss *SaleStore) ListSalesNeedingDHRecord(ctx context.Context, limit int) ([]inventory.SaleNeedingDHRecord, error) {
