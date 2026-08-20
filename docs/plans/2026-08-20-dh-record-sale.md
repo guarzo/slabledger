@@ -32,7 +32,7 @@ Dependencies: 1–3 are foundational. 4–6 (DH client, error classifier, adapte
 
 One forward reference to watch: `inventory.SaleNeedingDHRecord` is declared in Task 8 but consumed by Task 7. Whichever you run first must add the struct.
 
-**Task 12 has an open decision** (csvimport's inline DH notification) that must be answered before it is implemented — see the callout on that task.
+**Task 12** removes csvimport's inline DH notification with no replacement (decided 2026-08-20) — that path is rare and the reconciler now works.
 
 
 ---
@@ -3471,11 +3471,10 @@ git commit -m "feat(dh): record real sales in the sold-reconciler sweep, add the
 
 ### Task 12: Remove the dead path
 
-> **DECISION REQUIRED BEFORE STARTING THIS TASK.** See Step 1: `csvimport`'s
-> `ConfirmOrdersSales` currently attempts an inline (broken) DH notification.
-> Removing `DHSoldNotifier` forces a choice between "rely on the reconciler's
-> next cycle" and "give csvimport its own recorder". This is a real behavioural
-> change, not mechanical cleanup, and must be answered before implementing.
+> **Decided 2026-08-20:** csvimport's inline DH notification is removed with no
+> replacement — that path is rare, and the reconciler now genuinely works. See
+> Step 1.
+
 
 **Files:**
 - Modify: `internal/domain/inventory/service.go` (remove `DHSoldNotifier`, field, `WithDHSoldNotifier`)
@@ -3488,14 +3487,30 @@ git commit -m "feat(dh): record real sales in the sold-reconciler sweep, add the
 **Interfaces:**
 - Consumes: everything from Tasks 2–11. Produces: nothing — terminal task.
 
-- [ ] **Step 1: Resolve the csvimport decision, then apply it**
+- [ ] **Step 1: Remove csvimport's inline DH notification (decision: rely on the reconciler)**
 
-`service_import_orders.go` calls `dhSoldNotifier.MarkInventorySold` inline when confirming order-import sales. Two options:
+`service_import_orders.go` calls `dhSoldNotifier.MarkInventorySold` inline when confirming order-import sales. **Decided 2026-08-20: delete the call and rely on the reconciler.** That path is very rare in practice, and `dh_status` is already flipped to `'sold'` there, so the sweep (Task 11) picks the drift up on its next cycle. The accepted cost is up to `DH_SOLD_RECONCILER_INTERVAL` (default 1h) where the item is sold locally but still live on DH — acceptable given the rarity, and a real improvement on today's behaviour, where the inline call 422s and the drift never resolves at all.
 
-- **(a) Rely on the reconciler.** Delete the notifier block entirely. `dh_status` is already flipped to `'sold'` on that path, so the sweep (Task 11) picks up the drift on its next cycle. Cost: up to `DH_SOLD_RECONCILER_INTERVAL` (default 1h) of exposure where the item is sold locally but still live on DH.
-- **(b) Give csvimport its own recorder.** Add `inventory.DHSaleRecorder` to `csvimport.Deps` and mirror Task 9's mint → record → persist → flag sequence. Costs more code; closes the window immediately.
+Delete the whole notifier block:
 
-Given this whole plan exists because items stayed live on DH for four days, **(b) is the safer default** — but it is the user's call, and option (a) is defensible since the reconciler now genuinely works. Record the decision here before writing code.
+```go
+	if s.dhSoldNotifier != nil && purchase.DHInventoryID != 0 {
+		if err := s.dhSoldNotifier.MarkInventorySold(ctx, purchase.DHInventoryID); err != nil {
+			// ...
+		}
+	}
+```
+
+and replace it with a comment recording why nothing takes its place:
+
+```go
+	// No inline DH call on this path. CreateSale/CreateBulkSales record their
+	// own sales via inventory.WithDHSaleRecorder; this bulk-confirm path is
+	// rare enough that relying on the sold reconciler's next cycle is an
+	// accepted trade (dh_status is already 'sold' above, so both the sweep and
+	// the §5b recovery pass will find it). Decided 2026-08-20.
+```
+
 
 - [ ] **Step 2: Remove `DHSoldNotifier` from the domain**
 
