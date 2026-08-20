@@ -579,3 +579,72 @@ func TestService_CreateSale_DHSaleConflictFlagging(t *testing.T) {
 		})
 	}
 }
+
+// TestService_CreateBulkSales_RecordsDHSales covers the production path
+// behind the SLA-109 incident: an in-person bulk sale of multiple cards that
+// left 25 items live on DH, eBay and Shopify for four days. Each item in the
+// batch must get its own DH sale-record call, with its own DH inventory ID
+// and its own idempotency key — a shared key across two sales is exactly the
+// double-disposal failure the key design exists to prevent.
+func TestService_CreateBulkSales_RecordsDHSales(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{
+		RecordInventorySaleFn: func(_ context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+			return &inventory.DHSaleResult{DHSaleID: "dh-" + req.IdempotencyKey, Delisted: true}, nil
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup campaign: %v", err)
+	}
+
+	purchases := []*inventory.Purchase{
+		{ID: "bulk-purchase-1", CampaignID: c.ID, CertNumber: "BULKDH01", PurchaseDate: "2026-06-01", DHInventoryID: 5001},
+		{ID: "bulk-purchase-2", CampaignID: c.ID, CertNumber: "BULKDH02", PurchaseDate: "2026-06-01", DHInventoryID: 5002},
+	}
+	items := make([]inventory.BulkSaleInput, 0, len(purchases))
+	for _, p := range purchases {
+		if err := repo.CreatePurchase(ctx, p); err != nil {
+			t.Fatalf("setup purchase %s: %v", p.ID, err)
+		}
+		items = append(items, inventory.BulkSaleInput{PurchaseID: p.ID, SalePriceCents: 5000})
+	}
+
+	result, err := svc.CreateBulkSales(ctx, c.ID, inventory.SaleChannelInPerson, "2026-07-01", items)
+	if err != nil {
+		t.Fatalf("CreateBulkSales: %v", err)
+	}
+	if result.Created != len(purchases) {
+		t.Fatalf("Created = %d, want %d (errors: %+v)", result.Created, len(purchases), result.Errors)
+	}
+
+	recorded := recorder.RecordedSales()
+	if len(recorded) != len(purchases) {
+		t.Fatalf("RecordedSales() has %d entries, want %d", len(recorded), len(purchases))
+	}
+
+	gotInventoryIDs := make(map[int]bool, len(recorded))
+	seenKeys := make(map[string]bool, len(recorded))
+	for _, req := range recorded {
+		if req.IdempotencyKey == "" {
+			t.Fatal("RecordInventorySale called with an empty idempotency key")
+		}
+		if !strings.HasPrefix(req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix) {
+			t.Fatalf("idempotency key %q missing prefix %q", req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix)
+		}
+		if seenKeys[req.IdempotencyKey] {
+			t.Fatalf("idempotency key %q reused across sales — two sales must never share a key", req.IdempotencyKey)
+		}
+		seenKeys[req.IdempotencyKey] = true
+		gotInventoryIDs[req.DHInventoryID] = true
+	}
+	for _, p := range purchases {
+		if !gotInventoryIDs[p.DHInventoryID] {
+			t.Errorf("no RecordInventorySale call carried DHInventoryID %d (purchase %s)", p.DHInventoryID, p.ID)
+		}
+	}
+}
