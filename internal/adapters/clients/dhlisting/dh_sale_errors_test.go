@@ -20,6 +20,7 @@ func TestClassifyDHSaleError(t *testing.T) {
 	}{
 		{"409 item_sold_on_channel with values", 409, `{"code":"item_sold_on_channel","sold_at":"2026-08-15T14:22:00Z","channel":"ebay"}`, inventory.ErrDHItemSoldOnChannel},
 		{"409 item_sold_on_channel with nulls", 409, `{"code":"item_sold_on_channel","sold_at":null,"channel":null}`, inventory.ErrDHItemSoldOnChannel},
+		{"409 item_sold_on_channel with malformed sold_at still classifies by code", 409, `{"code":"item_sold_on_channel","sold_at":"not-a-date"}`, inventory.ErrDHItemSoldOnChannel},
 		{"409 item_unavailable", 409, `{"code":"item_unavailable"}`, inventory.ErrDHItemUnavailable},
 		{"409 idempotency_in_progress", 409, `{"code":"idempotency_in_progress"}`, inventory.ErrDHIdempotencyInProgress},
 		{"409 reversal_would_collide", 409, `{"code":"reversal_would_collide"}`, inventory.ErrDHReversalWouldCollide},
@@ -60,6 +61,14 @@ func TestClassifyDHSaleError(t *testing.T) {
 		var channelErr *inventory.DHChannelSaleError
 		require.ErrorAs(t, classifyDHSaleError(upstream), &channelErr)
 		require.Equal(t, time.Date(2026, 8, 15, 14, 22, 0, 0, time.UTC), *channelErr.SoldAt)
+		require.Equal(t, "ebay", *channelErr.Channel)
+	})
+
+	t.Run("item_sold_on_channel with malformed sold_at classifies by code with nil SoldAt", func(t *testing.T) {
+		upstream := &httpx.UpstreamError{StatusCode: 409, Body: `{"code":"item_sold_on_channel","sold_at":"garbage","channel":"ebay"}`}
+		var channelErr *inventory.DHChannelSaleError
+		require.ErrorAs(t, classifyDHSaleError(upstream), &channelErr)
+		require.Nil(t, channelErr.SoldAt)
 		require.Equal(t, "ebay", *channelErr.Channel)
 	})
 

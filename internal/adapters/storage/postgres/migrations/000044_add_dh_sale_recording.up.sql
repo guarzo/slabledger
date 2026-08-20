@@ -49,3 +49,12 @@ ALTER TABLE campaign_sales
 ALTER TABLE campaign_purchases
     ADD COLUMN dh_sale_conflict     TEXT NOT NULL DEFAULT '',
     ADD COLUMN dh_sale_conflict_at  TIMESTAMP;
+
+-- Partial index for the §5b recovery pass (ListSalesNeedingDHRecord), which
+-- runs every reconciler cycle filtering on dh_sale_id = ''. That predicate
+-- matches the column default, so it is not selective until backfill (the
+-- lazy-onboarding compare-and-set in §5a) has worked through the backlog --
+-- a full-table scan every tick until then. No CONCURRENTLY: golang-migrate
+-- wraps each migration in a transaction (see 000039_drop_redundant_indexes).
+CREATE INDEX IF NOT EXISTS idx_campaign_sales_needing_dh_record
+    ON campaign_sales (id) WHERE dh_sale_id = '';

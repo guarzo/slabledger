@@ -13,26 +13,6 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
-// stubSalesLister serves a fixed purchaseID -> sale map, satisfying
-// DHSalesByPurchaseLister.
-type stubSalesLister struct {
-	byPurchaseID map[string]*inventory.Sale
-	err          error
-}
-
-func (l *stubSalesLister) GetSalesByPurchaseIDs(_ context.Context, ids []string) (map[string]*inventory.Sale, error) {
-	if l.err != nil {
-		return nil, l.err
-	}
-	out := make(map[string]*inventory.Sale, len(ids))
-	for _, id := range ids {
-		if s, ok := l.byPurchaseID[id]; ok {
-			out[id] = s
-		}
-	}
-	return out, nil
-}
-
 // listClientByStatus serves inventory items keyed by the requested status, so a
 // test can assert the sweep queries every listable status.
 func listClientByStatus(
@@ -192,13 +172,11 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 				map[string][]dh.InventoryListItem{dh.InventoryStatusListed: tt.listed},
 				tt.clientErr, &calls)
 
-			sales := map[string]*inventory.Sale{}
 			store := mocks.NewInMemoryCampaignStore()
 			for id, status := range tt.purchases {
 				if status == inventory.DHStatusSold && !tt.noSaleRow {
 					pid := fmt.Sprintf("p-%d", id)
 					sale := saleFor(pid)
-					sales[pid] = sale
 					// recordSale mints the idempotency key via the writer, which
 					// (like the real store) requires the sale row to already exist.
 					store.Sales[sale.ID] = sale
@@ -225,7 +203,7 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 				&mocks.PurchaseRepositoryMock{}, &mocks.PurchaseRepositoryMock{},
 				observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
 				WithDHSoldSweep(client, resolverFor(tt.purchases, tt.resolveErr),
-					&stubSalesLister{byPurchaseID: sales}, recorder, store, conflictSetter),
+					store, recorder, store, conflictSetter),
 			)
 
 			s.sweepDH(context.Background())
@@ -356,7 +334,7 @@ func TestDHSoldReconciler_SweepSkipsZeroInventoryIDs(t *testing.T) {
 	s := NewDHSoldReconcilerScheduler(
 		&mocks.PurchaseRepositoryMock{}, &mocks.PurchaseRepositoryMock{},
 		observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
-		WithDHSoldSweep(client, repo, &stubSalesLister{}, &mocks.DHSaleRecorderMock{}, store, &mocks.PurchaseRepositoryMock{}),
+		WithDHSoldSweep(client, repo, store, &mocks.DHSaleRecorderMock{}, store, &mocks.PurchaseRepositoryMock{}),
 	)
 
 	s.sweepDH(context.Background())
@@ -384,16 +362,13 @@ func TestDHSoldReconciler_SweepsBothListableStatuses(t *testing.T) {
 	sale1, sale2 := saleFor("p-1"), saleFor("p-2")
 	store.Sales[sale1.ID] = sale1
 	store.Sales[sale2.ID] = sale2
-	salesLister := &stubSalesLister{byPurchaseID: map[string]*inventory.Sale{
-		"p-1": sale1, "p-2": sale2,
-	}}
 
 	s := NewDHSoldReconcilerScheduler(
 		&mocks.PurchaseRepositoryMock{}, &mocks.PurchaseRepositoryMock{},
 		observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
 		WithDHSoldSweep(client, resolverFor(map[int]inventory.DHStatus{
 			1: inventory.DHStatusSold, 2: inventory.DHStatusSold,
-		}, nil), salesLister, recorder, store, &mocks.PurchaseRepositoryMock{}),
+		}, nil), store, recorder, store, &mocks.PurchaseRepositoryMock{}),
 	)
 
 	s.sweepDH(context.Background())
@@ -461,7 +436,6 @@ func TestDHSoldReconciler_LocalPassRunsBeforeSweep(t *testing.T) {
 	store := mocks.NewInMemoryCampaignStore()
 	sale := saleFor("p1")
 	store.Sales[sale.ID] = sale
-	salesLister := &stubSalesLister{byPurchaseID: map[string]*inventory.Sale{"p1": sale}}
 
 	s := NewDHSoldReconcilerScheduler(repo, repo,
 		observability.NewNoopLogger(), DHSoldReconcilerConfig{Enabled: true},
@@ -471,7 +445,7 @@ func TestDHSoldReconciler_LocalPassRunsBeforeSweep(t *testing.T) {
 					9001: {ID: "p1", DHInventoryID: 9001, DHStatus: inventory.DHStatus(localStatus)},
 				}, nil
 			},
-		}, salesLister, recorder, store, &mocks.PurchaseRepositoryMock{}),
+		}, store, recorder, store, &mocks.PurchaseRepositoryMock{}),
 	)
 
 	s.reconcile(context.Background())

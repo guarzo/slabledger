@@ -997,7 +997,7 @@ func (m *mockRepo) SetSaleDHSaleID(_ context.Context, saleID, dhSaleID string, r
 }
 
 func (m *mockRepo) ListSalesNeedingDHRecord(_ context.Context, limit int) ([]SaleNeedingDHRecord, error) {
-	var result []SaleNeedingDHRecord
+	var candidates []*Sale
 	for _, s := range m.sales {
 		if s.DHSaleID != "" {
 			continue
@@ -1006,9 +1006,23 @@ func (m *mockRepo) ListSalesNeedingDHRecord(_ context.Context, limit int) ([]Sal
 		if !ok || p.DHInventoryID == 0 || p.DHSaleConflict != "" {
 			continue
 		}
+		candidates = append(candidates, s)
+	}
+	// Mirror Postgres: ORDER BY created_at ASC before LIMIT. Sort keys are a
+	// map iteration, so this fake also ties on ID for a stable order.
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].CreatedAt.Equal(candidates[j].CreatedAt) {
+			return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
+		}
+		return candidates[i].ID < candidates[j].ID
+	})
+
+	var result []SaleNeedingDHRecord
+	for _, s := range candidates {
 		if limit > 0 && len(result) >= limit {
 			break
 		}
+		p := m.purchases[s.PurchaseID]
 		result = append(result, SaleNeedingDHRecord{
 			Sale:          *s,
 			DHInventoryID: p.DHInventoryID,
@@ -1045,10 +1059,14 @@ func (m *mockRepo) ResetDHFieldsForRelistAfterVoid(_ context.Context, purchaseID
 		return ErrPurchaseNotFound
 	}
 	p.DHPushStatus = DHPushStatusPending
+	p.DHPushAttempts = 0
 	p.DHStatus = DHStatusInStock
 	p.DHListingPriceCents = 0
 	p.DHChannelsJSON = "[]"
 	p.DHHoldReason = ""
+	now := time.Now()
+	p.DHUnlistedDetectedAt = &now
+	p.UpdatedAt = now
 	return nil
 }
 

@@ -170,11 +170,14 @@ func (m *InMemoryCampaignStore) ResetDHFieldsForRelistAfterVoid(ctx context.Cont
 		return inventory.ErrPurchaseNotFound
 	}
 	p.DHPushStatus = inventory.DHPushStatusPending
+	p.DHPushAttempts = 0
 	p.DHStatus = inventory.DHStatusInStock
 	p.DHListingPriceCents = 0
 	p.DHChannelsJSON = "[]"
 	p.DHHoldReason = ""
-	p.UpdatedAt = time.Now()
+	now := time.Now()
+	p.DHUnlistedDetectedAt = &now
+	p.UpdatedAt = now
 	return nil
 }
 

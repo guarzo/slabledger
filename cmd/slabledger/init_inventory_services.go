@@ -138,7 +138,7 @@ func initializeCampaignsService(
 	// DH sale recorder — records (and, on un-sell, voids) sales on DH via the
 	// purpose-built sale endpoint.
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		campaignOpts = append(campaignOpts, inventory.WithDHSaleRecorder(dhlistingadapter.NewInventoryAdapter(dhClient)))
+		campaignOpts = append(campaignOpts, inventory.WithDHSaleRecorder(dhlistingadapter.NewInventoryAdapter(dhClient).WithLogger(logger)))
 	}
 
 	// DH cert → card_id resolver. Feeds batchResolveCardIDs in the inventory

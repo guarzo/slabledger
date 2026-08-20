@@ -151,7 +151,7 @@ func (m *InMemoryCampaignStore) ListSalesNeedingDHRecord(ctx context.Context, li
 	if m.ListSalesNeedingDHRecordFn != nil {
 		return m.ListSalesNeedingDHRecordFn(ctx, limit)
 	}
-	var result []inventory.SaleNeedingDHRecord
+	var candidates []*inventory.Sale
 	for _, s := range m.Sales {
 		if s.DHSaleID != "" {
 			continue
@@ -160,9 +160,23 @@ func (m *InMemoryCampaignStore) ListSalesNeedingDHRecord(ctx context.Context, li
 		if !ok || p.DHInventoryID == 0 || p.DHSaleConflict != "" {
 			continue
 		}
+		candidates = append(candidates, s)
+	}
+	// Mirror Postgres: ORDER BY created_at ASC before LIMIT. Sort keys are a
+	// map iteration, so this fake also ties on ID for a stable order.
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].CreatedAt.Equal(candidates[j].CreatedAt) {
+			return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
+		}
+		return candidates[i].ID < candidates[j].ID
+	})
+
+	var result []inventory.SaleNeedingDHRecord
+	for _, s := range candidates {
 		if limit > 0 && len(result) >= limit {
 			break
 		}
+		p := m.Purchases[s.PurchaseID]
 		result = append(result, inventory.SaleNeedingDHRecord{
 			Sale:          *s,
 			DHInventoryID: p.DHInventoryID,

@@ -11,6 +11,8 @@ ALTER TABLE campaign_purchases
     DROP COLUMN dh_sale_conflict,
     DROP COLUMN dh_sale_conflict_at;
 
+DROP INDEX IF EXISTS idx_campaign_sales_needing_dh_record;
+
 ALTER TABLE campaign_sales
     DROP COLUMN dh_idempotency_key,
     DROP COLUMN dh_sale_id,

@@ -3,6 +3,7 @@ package dh
 import (
 	"context"
 	"fmt"
+	"net/url"
 )
 
 // InventorySaleRequest is the body for POST .../inventory/:id/sale.
@@ -55,9 +56,11 @@ func (c *Client) RecordInventorySale(ctx context.Context, inventoryID int, idemp
 	return &resp, nil
 }
 
-// VoidInventorySale POSTs .../sales/:sale_id/void.
+// VoidInventorySale POSTs .../sales/:sale_id/void. dhSaleID is opaque
+// upstream data that we persist and replay, so it is path-escaped before
+// interpolation to keep the request on the intended endpoint.
 func (c *Client) VoidInventorySale(ctx context.Context, dhSaleID string, req VoidSaleRequest) (*VoidSaleResponse, error) {
-	fullURL := fmt.Sprintf("%s/api/v1/enterprise/sales/%s/void", c.baseURL, dhSaleID)
+	fullURL := fmt.Sprintf("%s/api/v1/enterprise/sales/%s/void", c.baseURL, url.PathEscape(dhSaleID))
 
 	var resp VoidSaleResponse
 	if err := c.postEnterprise(ctx, fullURL, req, &resp); err != nil {

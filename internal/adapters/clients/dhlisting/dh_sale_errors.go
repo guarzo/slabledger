@@ -16,10 +16,28 @@ import (
 // field here is parsed defensively. A field that is absent, null, malformed,
 // or of the wrong type must never panic or hard-fail — it degrades to
 // classifying purely by HTTP status.
+//
+// SoldAt is decoded as a raw string rather than *time.Time: encoding/json
+// aborts the entire object decode on a time-parsing failure (*time.ParseError
+// is not an UnmarshalTypeError), which would otherwise discard a well-formed
+// Code alongside it. It is parsed separately below and left nil on failure.
 type dhSaleErrorBody struct {
-	Code    string     `json:"code"`
-	SoldAt  *time.Time `json:"sold_at"`
-	Channel *string    `json:"channel"`
+	Code    string  `json:"code"`
+	SoldAt  *string `json:"sold_at"`
+	Channel *string `json:"channel"`
+}
+
+// parsedSoldAt parses body.SoldAt as RFC3339, returning nil if it is absent
+// or malformed rather than failing the whole classification.
+func (b dhSaleErrorBody) parsedSoldAt() *time.Time {
+	if b.SoldAt == nil {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, *b.SoldAt)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 // classifyDHSaleError maps an httpx.UpstreamError to an inventory sentinel
@@ -40,7 +58,7 @@ func classifyDHSaleError(err error) error {
 	case 409:
 		switch body.Code {
 		case "item_sold_on_channel":
-			return &inventory.DHChannelSaleError{SoldAt: body.SoldAt, Channel: body.Channel}
+			return &inventory.DHChannelSaleError{SoldAt: body.parsedSoldAt(), Channel: body.Channel}
 		case "item_unavailable":
 			return fmt.Errorf("%w: %w", inventory.ErrDHItemUnavailable, err)
 		case "idempotency_in_progress":

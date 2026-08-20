@@ -285,13 +285,20 @@ func (ps *PurchaseStore) ClearDHSaleConflict(ctx context.Context, purchaseID str
 // item to that state on DH's side — and dh_unlisted_detected_at is reused
 // (deliberately, per spec §7) as the signal the auto-relist branch in
 // dh_push.go:248 keys on, exactly as the delete-driven reset does.
+// dh_push_attempts, dh_listing_price_cents, and dh_hold_reason are also
+// cleared, as they are on the delete-driven reset: otherwise a purchase with
+// an exhausted retry budget or a stale hold reason re-enters the pending
+// relist path unable to actually relist.
 func (ps *PurchaseStore) ResetDHFieldsForRelistAfterVoid(ctx context.Context, purchaseID string) error {
 	now := time.Now()
 	return ps.execAndExpectRow(ctx, "reset DH fields for relist after void",
 		`UPDATE campaign_purchases
 		 SET dh_push_status = $1,
+		     dh_push_attempts = 0,
 		     dh_status = $2,
+		     dh_listing_price_cents = 0,
 		     dh_channels_json = '[]',
+		     dh_hold_reason = '',
 		     dh_unlisted_detected_at = $3,
 		     updated_at = $4
 		 WHERE id = $5`,

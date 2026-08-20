@@ -49,6 +49,24 @@ func TestClient_RecordInventorySale(t *testing.T) {
 	require.Equal(t, 1500, resp.RealizedProfitCents)
 }
 
+func TestClient_VoidInventorySale_EscapesSaleID(t *testing.T) {
+	var gotRequestURI string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRequestURI = r.RequestURI
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(VoidSaleResponse{Reversed: true})
+	}))
+	defer server.Close()
+
+	c := NewClient(server.URL, WithEnterpriseKey("test_key"))
+	_, err := c.VoidInventorySale(context.Background(), "sale/123", VoidSaleRequest{Reason: "returned"})
+
+	require.NoError(t, err)
+	require.Equal(t, "/api/v1/enterprise/sales/sale%2F123/void", gotRequestURI,
+		"a '/' in dhSaleID must stay escaped, not split into an extra path segment")
+}
+
 func TestClient_VoidInventorySale(t *testing.T) {
 	var gotPath string
 	var gotBody VoidSaleRequest
