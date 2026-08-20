@@ -56,5 +56,16 @@ ALTER TABLE campaign_purchases
 -- lazy-onboarding compare-and-set in §5a) has worked through the backlog --
 -- a full-table scan every tick until then. No CONCURRENTLY: golang-migrate
 -- wraps each migration in a transaction (see 000039_drop_redundant_indexes).
+--
+-- The predicate mirrors the query's own two sale-side clauses, including
+-- order_id = '' which excludes sales that originated at DH. That is not just
+-- symmetry: measured 2026-08-20, 434 of 1584 sales carry an order_id, so
+-- folding it into the index predicate drops ~27% of rows from the index
+-- outright.
+--
+-- Indexed on created_at, not id, because the query is
+-- `ORDER BY s.created_at ASC LIMIT $1`. An id-keyed index would locate the
+-- candidate rows but still force a sort of the whole matching set before the
+-- LIMIT could apply; keying on created_at lets the scan stop at the limit.
 CREATE INDEX IF NOT EXISTS idx_campaign_sales_needing_dh_record
-    ON campaign_sales (id) WHERE dh_sale_id = '';
+    ON campaign_sales (created_at) WHERE dh_sale_id = '' AND order_id = '';
