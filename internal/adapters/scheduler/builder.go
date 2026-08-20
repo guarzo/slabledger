@@ -65,11 +65,6 @@ type BuildDeps struct {
 	PurchaseByCertLookup  PurchaseByCertLookup
 	CampaignService       domainCampaigns.Service
 
-	// DHSoldNotifier lets the sold reconciler retire items on DH that we have
-	// already sold locally (optional; without it the reconciler only repairs
-	// the local dh_status column and DH-side drift persists).
-	DHSoldNotifier domainCampaigns.DHSoldNotifier
-
 	// DHSaleRecorder records sales on DH via the purpose-built sale endpoint
 	// and voids them on un-sell. Optional — enables both reconciler passes.
 	DHSaleRecorder domainCampaigns.DHSaleRecorder

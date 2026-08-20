@@ -359,8 +359,8 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	return nil
 }
 
-// notifyDHSold, recordDHSale, buildDHSaleRequest and flagDHSaleConflict live
-// in service_dh.go alongside the rest of the DH-specific helpers.
+// recordDHSale, buildDHSaleRequest and flagDHSaleConflict live in
+// service_dh.go alongside the rest of the DH-specific helpers.
 
 func (s *service) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error) {
 	return s.sales.ListSalesByCampaign(ctx, campaignID, limit, offset)

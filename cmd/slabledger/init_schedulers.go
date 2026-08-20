@@ -95,7 +95,6 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		// still offers, or whose sale handle we failed to persist.
 		if deps.DHClient.EnterpriseAvailable() {
 			dhSaleAdapter := dhlistingadapter.NewInventoryAdapter(deps.DHClient)
-			buildDeps.DHSoldNotifier = dhSaleAdapter
 			buildDeps.DHSaleRecorder = dhSaleAdapter
 		}
 		// Guard against typed-nil pointers: use individual stores instead of composite repo.

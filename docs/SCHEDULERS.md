@@ -330,10 +330,14 @@ because CSV/orders intake lives in its own package.
 
 **File:** `dh_sold_reconciler.go`
 **Purpose:** Repairs purchases that have a linked sale but whose `dh_status` never
-advanced to `sold`.
+advanced to `sold`, and records those sales properly on DH.
 
 A safety net for the best-effort `dh_status` update inside `CreateSale` — that update
-is deliberately non-fatal to the sale, so something has to catch the misses.
+is deliberately non-fatal to the sale, so something has to catch the misses. Beyond the
+local column repair it runs two DH-side passes: a sweep that records a real sale via the
+DH sale endpoint for anything DH still lists that we have already sold, and a
+handle-recovery pass that finds sales DH already accepted whose `dh_sale_id` we failed
+to persist. See `docs/specs/2026-08-20-dh-record-sale-design.md`.
 
 | Config | Env Var | Default | Description |
 |--------|---------|---------|-------------|

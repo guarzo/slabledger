@@ -108,11 +108,11 @@ func (a *PSAImporterAdapter) ResetPSAKeyRotation() {
 var _ dhlisting.DHPSAImporter = (*PSAImporterAdapter)(nil)
 var _ dhlisting.PSAKeyRotator = (*PSAImporterAdapter)(nil)
 
-// --- DHInventoryLister / DHSoldNotifier adapter ---
+// --- DHInventoryLister / DHSaleRecorder adapter ---
 
 // InventoryAdapter wraps a dh.Client to implement dhlisting.DHInventoryLister
-// and inventory.DHSoldNotifier. It handles both read/list operations and
-// inventory status mutations (listing updates and sold transitions).
+// and inventory.DHSaleRecorder. It handles both read/list operations and
+// inventory status mutations (listing updates and sale recording).
 //
 // When transitioning to "listed" and the underlying client supports
 // dh.PSAKeyRotator, UpdateInventoryStatus will rotate PSA keys on 401/422
@@ -221,13 +221,6 @@ func (a *InventoryAdapter) SyncChannels(ctx context.Context, inventoryID int, ch
 	return err
 }
 
-// MarkInventorySold transitions the DH inventory item to "sold" status,
-// retiring it from the DH platform when a sale is recorded locally.
-func (a *InventoryAdapter) MarkInventorySold(ctx context.Context, inventoryID int) error {
-	_, err := a.client.UpdateInventory(ctx, inventoryID, dh.InventoryUpdate{Status: inventory.DHStatusSold})
-	return err
-}
-
 // RecordInventorySale posts a sale for the given inventory item to DH via the
 // purpose-built sale-recording endpoint, translating between domain and dh
 // wire types and classifying any error into a domain sentinel. sold_at is
@@ -278,7 +271,6 @@ func (a *InventoryAdapter) VoidInventorySale(ctx context.Context, dhSaleID, reas
 }
 
 var _ dhlisting.DHInventoryLister = (*InventoryAdapter)(nil)
-var _ inventory.DHSoldNotifier = (*InventoryAdapter)(nil)
 var _ inventory.DHSaleRecorder = (*InventoryAdapter)(nil)
 var _ dh.PSAKeyRotator = (*InventoryAdapter)(nil)
 var _ dhlisting.PSAKeyRotator = (*InventoryAdapter)(nil)

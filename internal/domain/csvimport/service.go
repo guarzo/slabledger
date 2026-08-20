@@ -59,9 +59,8 @@ type Deps struct {
 	// next daily refresh sweep (D6). Nil-checked at its use site exactly like
 	// CertEnrichQueue, so a caller that has no pricing pipeline wired (e.g.
 	// cmd/psa-harvest, which only reconciles PSA attribution) can omit it.
-	PricingQueue   inventory.PricingEnqueuer
-	DHSoldNotifier inventory.DHSoldNotifier
-	PSAResolver    inventory.PSACampaignResolver
+	PricingQueue inventory.PricingEnqueuer
+	PSAResolver  inventory.PSACampaignResolver
 
 	IDGen  func() string
 	Logger observability.Logger
@@ -80,7 +79,6 @@ type service struct {
 	cardIDResolver  inventory.CardIDResolver
 	certEnrichQueue inventory.CertEnrichEnqueuer
 	pricingQueue    inventory.PricingEnqueuer
-	dhSoldNotifier  inventory.DHSoldNotifier
 	psaResolver     inventory.PSACampaignResolver
 
 	idGen  func() string
@@ -113,7 +111,6 @@ func NewService(d Deps) Service {
 		cardIDResolver:  d.CardIDResolver,
 		certEnrichQueue: d.CertEnrichQueue,
 		pricingQueue:    d.PricingQueue,
-		dhSoldNotifier:  d.DHSoldNotifier,
 		psaResolver:     d.PSAResolver,
 		idGen:           d.IDGen,
 		logger:          d.Logger,

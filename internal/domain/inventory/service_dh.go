@@ -51,28 +51,6 @@ func (s *service) SaveDHPushConfig(ctx context.Context, cfg *DHPushConfig) error
 	return s.dh.SaveDHPushConfig(ctx, cfg)
 }
 
-// notifyDHSold retires a sold item on DH so it stops being offered there.
-// Local dh_status alone is bookkeeping: until DH is told, the card stays live
-// on their marketplace and can sell a second time. Best-effort by design — the
-// sale is already committed locally, and a DH outage must not fail it. The
-// dh-sold reconciler sweeps up anything missed here.
-//
-// Superseded by recordDHSale, which uses the purpose-built sale endpoint
-// instead of this status-PATCH (DH rejects it with 422 "Invalid status
-// 'sold'"). No longer called from CreateSale/CreateBulkSales — kept declared,
-// along with dhSoldNotifier/WithDHSoldNotifier, until Task 12 deletes them.
-func (s *service) notifyDHSold(ctx context.Context, op, purchaseID string, dhInventoryID int) {
-	if s.dhSoldNotifier == nil || dhInventoryID == 0 {
-		return
-	}
-	if err := s.dhSoldNotifier.MarkInventorySold(ctx, dhInventoryID); err != nil && s.logger != nil {
-		s.logger.Warn(ctx, op+": failed to mark DH inventory as sold",
-			observability.String("purchaseID", purchaseID),
-			observability.Int("dhInventoryID", dhInventoryID),
-			observability.Err(err))
-	}
-}
-
 // buildDHSaleRequest builds the DH sale-record body from persisted columns
 // only — never the wall clock (design §2 corollary) — so a retry with the
 // same key issues a byte-identical body.
@@ -86,11 +64,10 @@ func (s *service) buildDHSaleRequest(sa *Sale, purchase *Purchase, key string) D
 }
 
 // recordDHSale records the sale on DH so the item is retired there, via the
-// purpose-built sale endpoint rather than notifyDHSold's status-PATCH, which
-// DH rejects (422 "Invalid status 'sold'. Must be one of: in_stock,
-// listed"). Both are called during the migration; only this one survives
-// Task 12's cleanup. Best-effort by design: the sale is already committed
-// locally and a DH outage must not fail it.
+// purpose-built sale endpoint. The predecessor approach — a status PATCH to
+// "sold" — was rejected by DH with 422 "Invalid status 'sold'. Must be one
+// of: in_stock, listed" and was removed in Task 12. Best-effort by design:
+// the sale is already committed locally and a DH outage must not fail it.
 //
 // A retryable failure is left unflagged for the §5b recovery pass — the key is
 // already persisted, so the next cycle's identical request IS the retry. Any
