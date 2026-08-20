@@ -137,6 +137,54 @@ func TestDeleteSaleByPurchaseID_ResetFailureLeavesSaleRowIntact(t *testing.T) {
 	}
 }
 
+// Un-selling a purchase with no sale row surfaces ErrSaleNotFound, even
+// though the function wraps it with fmt.Errorf("%w") — errors.Is must still
+// see through that wrap.
+func TestDeleteSaleByPurchaseID_NoSaleReturnsErrSaleNotFound(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	_, p := seedSaleFixture(t, svc, repo)
+
+	err := svc.DeleteSaleByPurchaseID(ctx, p.ID)
+	if err == nil {
+		t.Fatal("expected an error for a purchase with no sale row")
+	}
+	if !errors.Is(err, inventory.ErrSaleNotFound) {
+		t.Fatalf("err = %v, want errors.Is match against ErrSaleNotFound", err)
+	}
+}
+
+// A 404 from DH on void (design §7) covers not-found, another account's sale,
+// a marketplace-mirror deal, and a UI-created deal — none voidable by us, none
+// of which should fail an un-sell the user already performed locally.
+func TestDeleteSaleByPurchaseID_VoidNotFoundIsSuccess(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{
+		VoidInventorySaleFn: func(context.Context, string, string) error {
+			return inventory.ErrDHSaleNotFound
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	_, p := seedSaleFixture(t, svc, repo)
+	if err := repo.CreateSale(ctx, &inventory.Sale{
+		ID: "s1", PurchaseID: p.ID, SalePriceCents: 5000, SaleDate: "2026-07-01", DHSaleID: "dh-gone",
+	}); err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err != nil {
+		t.Fatalf("DeleteSaleByPurchaseID: %v", err)
+	}
+	if _, err := repo.GetSaleByPurchaseID(ctx, p.ID); !errors.Is(err, inventory.ErrSaleNotFound) {
+		t.Fatal("sale row should be gone after a 404-treated-as-success void")
+	}
+}
+
 // A sale with a key but no persisted dh_sale_id (the crash window design §5b
 // names) is replayed to obtain a handle before voiding — never skipped.
 func TestDeleteSaleByPurchaseID_ReplaysForMissingHandle(t *testing.T) {
