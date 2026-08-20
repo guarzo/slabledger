@@ -958,7 +958,7 @@ func (ss *SaleStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID strin
 // window the DH-inventory-scoped sweep can never see, because a successfully
 // recorded sale delists the item and drops it out of that sweep's view.
 //
-// dh_sale_conflict = '' is the terminal-state clause and is load-bearing:
+// An empty dh_sale_conflict is the terminal-state clause, and it is
 // only two DH error codes are retryable (spec §3); every other failure is
 // permanent. Without this clause, a sale that failed with a permanent error
 // (e.g. 422 idempotency_key_reused) would keep its key, never gain a handle,
@@ -967,7 +967,7 @@ func (ss *SaleStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID strin
 // dh_sale_conflict on the purchase is what re-enrolls the row.
 //
 // Rows with no idempotency key are intentionally included (there is no
-// "key <> ''" clause) — those are the pre-migration legacy sales, including
+// non-empty-key clause) — those are the pre-migration legacy sales, including
 // the 25 from the 2026-08-15 incident, which mint a key on first visit via
 // SetSaleIdempotencyKeyIfAbsent (spec §5a) rather than being skipped.
 func (ss *SaleStore) ListSalesNeedingDHRecord(ctx context.Context, limit int) ([]inventory.SaleNeedingDHRecord, error) {
@@ -3154,7 +3154,7 @@ func (s *DHSoldReconcilerScheduler) recordSale(ctx context.Context, p *inventory
 	if err != nil {
 		// A conflict flag is what stops a permanently-failed sale from being
 		// retried forever: ListSalesNeedingDHRecord filters on
-		// dh_sale_conflict = '' (§5b). A retryable error is left unflagged —
+		// an empty dh_sale_conflict (§5b). A retryable error is left unflagged —
 		// the key is persisted, so the next cycle's identical request IS the
 		// retry.
 		if !inventory.IsRetryableDHSaleError(err) {
@@ -3352,7 +3352,7 @@ func TestDHSoldReconciler_RecoveryPass_ReplayDoesNotDoubleRecord(t *testing.T) {
 ```go
 func TestDHSoldReconciler_RecoveryPass_SkipsConflictFlaggedSale(t *testing.T) {
 	// ListSalesNeedingDHRecord's own predicate (§5b) excludes rows with
-	// dh_sale_conflict <> ''. This asserts the scheduler records nothing for a
+	// a non-empty dh_sale_conflict. This asserts the scheduler records nothing for a
 	// row the lister withheld — i.e. the terminal-state gate holds end-to-end.
 	store := mocks.NewInMemoryCampaignStore()
 	store.ListSalesNeedingDHRecordFn = func(context.Context, int) ([]inventory.SaleNeedingDHRecord, error) {
