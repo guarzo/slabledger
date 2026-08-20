@@ -42,6 +42,7 @@ type schedulerDeps struct {
 	CardLadderCompRefreshStore *postgres.CompRefreshStore
 	SchedulerStatsStore        *postgres.SchedulerStatsStore
 	DHClient                   *dh.Client
+	SaleStore                  *postgres.SaleStore
 	DHEventStore               *postgres.DHEventStore
 	DHIntelligenceRepo         *postgres.MarketIntelligenceRepository
 	DHSuggestionsRepo          *postgres.DHSuggestionsRepository
@@ -90,10 +91,12 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.DHClient = deps.DHClient
 		buildDeps.DHOrdersClient = deps.DHClient
 		buildDeps.DHInventoryListClient = deps.DHClient
-		// Lets the sold reconciler retire items DH still offers for a purchase
-		// we have already sold — the DH half of the sold-status reconciliation.
+		// Lets the sold reconciler record and recover sales on DH for items it
+		// still offers, or whose sale handle we failed to persist.
 		if deps.DHClient.EnterpriseAvailable() {
-			buildDeps.DHSoldNotifier = dhlistingadapter.NewInventoryAdapter(deps.DHClient)
+			dhSaleAdapter := dhlistingadapter.NewInventoryAdapter(deps.DHClient)
+			buildDeps.DHSoldNotifier = dhSaleAdapter
+			buildDeps.DHSaleRecorder = dhSaleAdapter
 		}
 		// Guard against typed-nil pointers: use individual stores instead of composite repo.
 		if deps.PurchaseStore != nil {
@@ -137,6 +140,9 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	}
 	if deps.DHPriceSyncService != nil {
 		buildDeps.DHPriceSyncService = deps.DHPriceSyncService
+	}
+	if deps.SaleStore != nil {
+		buildDeps.DHSaleStore = deps.SaleStore
 	}
 	if deps.PurchaseStore != nil {
 		buildDeps.DHUnsoldCardLister = deps.PurchaseStore
