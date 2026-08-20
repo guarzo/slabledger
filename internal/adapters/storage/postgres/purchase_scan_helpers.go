@@ -28,7 +28,8 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	cl_value_at_purchase_observed_at, cl_value_at_purchase_source, cl_card_confidence_at_purchase,
 	cl_policy_confidence_min_at_purchase, population_at_purchase, dh_confidence_at_purchase,
 	source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
-	psa_campaign_name, attribution_source`
+	psa_campaign_name, attribution_source,
+	dh_sale_conflict, dh_sale_conflict_at`
 
 // purchaseColumnsAliased is the same column list with the "p." table alias for JOIN queries.
 const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number, p.card_number, p.set_name,
@@ -51,7 +52,8 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 		p.cl_value_at_purchase_observed_at, p.cl_value_at_purchase_source, p.cl_card_confidence_at_purchase,
 		p.cl_policy_confidence_min_at_purchase, p.population_at_purchase, p.dh_confidence_at_purchase,
 		p.source_count_at_purchase, p.active_listings_at_purchase, p.sales_last_30d_at_purchase,
-		p.psa_campaign_name, p.attribution_source`
+		p.psa_campaign_name, p.attribution_source,
+		p.dh_sale_conflict, p.dh_sale_conflict_at`
 
 // saleColumns is the canonical column list for campaign_sales queries (no table alias).
 // It is the single source of truth for the table's column set and order: the
@@ -65,7 +67,8 @@ const saleColumns = `id, purchase_id, sale_channel, sale_price_cents, sale_fee_c
 	active_listings, sales_last_30d, trend_30d, snapshot_date, snapshot_json,
 	original_list_price_cents, price_reductions, days_listed, sold_at_asking_price,
 	was_cracked, order_id, forced_liquidation, sale_reason, cl_value_at_sale_cents, channel_fee_pct_at_sale,
-	their_comp_cents, price_source, cl_value_at_sale_observed_at, cl_value_at_sale_source`
+	their_comp_cents, price_source, cl_value_at_sale_observed_at, cl_value_at_sale_source,
+	dh_idempotency_key, dh_sale_id, dh_sale_recorded_at`
 
 // saleColumnsAliased is saleColumns with the "s." table alias, for LEFT JOIN
 // queries. Derived rather than hand-maintained: the two lists had drifted by six
@@ -128,6 +131,9 @@ type saleNulls struct {
 	priceSource             sql.NullString
 	clValueAtSaleObservedAt sql.NullString
 	clValueAtSaleSource     sql.NullString
+	dhIdempotencyKey        sql.NullString
+	dhSaleID                sql.NullString
+	dhSaleRecordedAt        sql.NullTime
 }
 
 // saleScanDests returns the ordered scan destinations for a Sale.
@@ -143,6 +149,7 @@ func saleScanDests(n *saleNulls) []any {
 		&n.saleReason, &n.clValueAtSaleCents, &n.channelFeePctAtSale,
 		&n.theirCompCents, &n.priceSource,
 		&n.clValueAtSaleObservedAt, &n.clValueAtSaleSource,
+		&n.dhIdempotencyKey, &n.dhSaleID, &n.dhSaleRecordedAt,
 	}
 }
 
@@ -174,6 +181,8 @@ func (n *saleNulls) sale() inventory.Sale {
 		PriceSource:             n.priceSource.String,
 		CLValueAtSaleObservedAt: n.clValueAtSaleObservedAt.String,
 		CLValueAtSaleSource:     n.clValueAtSaleSource.String,
+		DHIdempotencyKey:        n.dhIdempotencyKey.String,
+		DHSaleID:                n.dhSaleID.String,
 	}
 	s.LastSoldCents = int(n.lastSoldCents.Int64)
 	s.LowestListCents = int(n.lowestListCents.Int64)
@@ -187,6 +196,10 @@ func (n *saleNulls) sale() inventory.Sale {
 	if n.channelFeePctAtSale.Valid {
 		v := n.channelFeePctAtSale.Float64
 		s.ChannelFeePctAtSale = &v
+	}
+	if n.dhSaleRecordedAt.Valid {
+		v := n.dhSaleRecordedAt.Time
+		s.DHSaleRecordedAt = &v
 	}
 	return s
 }
@@ -228,6 +241,7 @@ func purchaseScanDests(p *inventory.Purchase, psaCampaignName, attributionSource
 		&p.CLPolicyConfidenceMinAtPurchase, &p.PopulationAtPurchase, &p.DHConfidenceAtPurchase,
 		&p.SourceCountAtPurchase, &p.ActiveListingsAtPurchase, &p.SalesLast30dAtPurchase,
 		psaCampaignName, attributionSource,
+		&p.DHSaleConflict, &p.DHSaleConflictAt,
 	}
 }
 

@@ -27,7 +27,7 @@ var _ inventory.SaleRepository = (*SaleStore)(nil)
 func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
 	query := `
 		INSERT INTO campaign_sales (` + saleColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
 	`
 	_, err := ss.db.ExecContext(ctx, query,
 		s.ID, s.PurchaseID, string(s.SaleChannel), s.SalePriceCents,
@@ -39,6 +39,7 @@ func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
 		s.WasCracked, s.OrderID, s.ForcedLiquidation,
 		s.SaleReason, s.CLValueAtSaleCents, s.ChannelFeePctAtSale,
 		s.TheirCompCents, s.PriceSource, s.CLValueAtSaleObservedAt, s.CLValueAtSaleSource,
+		s.DHIdempotencyKey, s.DHSaleID, s.DHSaleRecordedAt,
 	)
 	if err != nil && isUniqueConstraintError(err) {
 		return inventory.ErrDuplicateSale
@@ -177,4 +178,111 @@ func (ss *SaleStore) DeleteSaleByPurchaseID(ctx context.Context, purchaseID stri
 		return inventory.ErrSaleNotFound
 	}
 	return nil
+}
+
+// SetSaleIdempotencyKeyIfAbsent mints an idempotency key for a sale that has
+// none, via compare-and-set (spec §5a). It always returns the EFFECTIVE key:
+// the one it just wrote, or — if a concurrent caller won the race — the one
+// that caller wrote. Two callers can therefore never send two different keys
+// for the same sale to DH.
+func (ss *SaleStore) SetSaleIdempotencyKeyIfAbsent(ctx context.Context, saleID, key string) (string, error) {
+	var effective string
+	err := ss.db.QueryRowContext(ctx, `
+		UPDATE campaign_sales
+		   SET dh_idempotency_key = $1
+		 WHERE id = $2 AND dh_idempotency_key = ''
+		RETURNING dh_idempotency_key`,
+		key, saleID,
+	).Scan(&effective)
+	if err == nil {
+		return effective, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("set sale idempotency key if absent: %w", err)
+	}
+
+	// Lost the race, or the sale already had a key from an earlier call:
+	// re-read whatever is there now. A genuinely missing sale surfaces as
+	// ErrSaleNotFound rather than handing an empty string to DH.
+	var existing sql.NullString
+	err = ss.db.QueryRowContext(ctx,
+		`SELECT dh_idempotency_key FROM campaign_sales WHERE id = $1`, saleID,
+	).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", inventory.ErrSaleNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("re-read sale idempotency key after lost race: %w", err)
+	}
+	return existing.String, nil
+}
+
+// SetSaleDHSaleID persists the DH-issued sale handle after a successful
+// RecordInventorySale call (or a replay). Without this handle a later void
+// can never reach DH (spec §5b, §7).
+func (ss *SaleStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID string, recordedAt time.Time) error {
+	result, err := ss.db.ExecContext(ctx,
+		`UPDATE campaign_sales SET dh_sale_id = $1, dh_sale_recorded_at = $2, updated_at = $3 WHERE id = $4`,
+		dhSaleID, recordedAt.UTC(), time.Now(), saleID,
+	)
+	if err != nil {
+		return fmt.Errorf("set sale dh sale id: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set sale dh sale id rows affected: %w", err)
+	}
+	if rows == 0 {
+		return inventory.ErrSaleNotFound
+	}
+	return nil
+}
+
+// ListSalesNeedingDHRecord returns sales that need a DH-side sale handle
+// (spec §5b). It is scoped by OUR state, not DH's inventory listing, so it
+// catches sales DH already accepted whose handle we failed to persist — a
+// window the DH-inventory-scoped sweep can never see, because a successfully
+// recorded sale delists the item and drops it out of that sweep's view.
+//
+// dh_sale_conflict = '' is the terminal-state clause and is load-bearing:
+// only two DH error codes are retryable (spec §3); every other failure is
+// permanent. Without this clause, a sale that failed with a permanent error
+// (e.g. 422 idempotency_key_reused) would keep its key, never gain a handle,
+// and be re-attempted every cycle forever — reproducing the hourly-422 noise
+// this design exists to end, just against a new endpoint. A human clearing
+// dh_sale_conflict on the purchase is what re-enrolls the row.
+//
+// Rows with no idempotency key are intentionally included (there is no
+// "key <> ''" clause) — those are the pre-migration legacy sales, including
+// the 25 from the 2026-08-15 incident, which mint a key on first visit via
+// SetSaleIdempotencyKeyIfAbsent (spec §5a) rather than being skipped.
+func (ss *SaleStore) ListSalesNeedingDHRecord(ctx context.Context, limit int) ([]inventory.SaleNeedingDHRecord, error) {
+	query := `
+		SELECT ` + saleColumnsAliased + `, p.dh_inventory_id, p.purchase_date
+		FROM campaign_sales s
+		JOIN campaign_purchases p ON p.id = s.purchase_id
+		WHERE s.dh_sale_id = ''
+		  AND p.dh_inventory_id <> 0
+		  AND p.dh_sale_conflict = ''
+		ORDER BY s.created_at ASC
+		LIMIT $1
+	`
+	rows, err := ss.db.QueryContext(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list sales needing dh record: %w", err)
+	}
+	return scanRows(ctx, rows, func(rs *sql.Rows) (inventory.SaleNeedingDHRecord, error) {
+		var n saleNulls
+		var dhInventoryID int
+		var purchaseDate string
+		dests := append(saleScanDests(&n), &dhInventoryID, &purchaseDate)
+		if err := rs.Scan(dests...); err != nil {
+			return inventory.SaleNeedingDHRecord{}, err
+		}
+		return inventory.SaleNeedingDHRecord{
+			Sale:          n.sale(),
+			DHInventoryID: dhInventoryID,
+			PurchaseDate:  purchaseDate,
+		}, nil
+	})
 }
