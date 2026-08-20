@@ -58,6 +58,12 @@ type stubInventoryClient struct {
 	updates   []dh.InventoryUpdate
 	syncIDs   []int
 	syncArgs  [][]string
+
+	recordSaleFn func(ctx context.Context, inventoryID int, idempotencyKey string, req dh.InventorySaleRequest) (*dh.InventorySaleResponse, error)
+	voidSaleFn   func(ctx context.Context, dhSaleID string, req dh.VoidSaleRequest) (*dh.VoidSaleResponse, error)
+
+	recordSaleCalls []recordSaleCall
+	voidSaleCalls   []voidSaleCall
 }
 
 func (s *stubInventoryClient) UpdateInventory(ctx context.Context, id int, update dh.InventoryUpdate) (*dh.InventoryResult, error) {
@@ -76,6 +82,33 @@ func (s *stubInventoryClient) SyncChannels(ctx context.Context, id int, channels
 		return s.syncFn(ctx, id, channels)
 	}
 	return &dh.ChannelSyncResponse{}, nil
+}
+
+func (s *stubInventoryClient) RecordInventorySale(ctx context.Context, inventoryID int, idempotencyKey string, req dh.InventorySaleRequest) (*dh.InventorySaleResponse, error) {
+	s.recordSaleCalls = append(s.recordSaleCalls, recordSaleCall{inventoryID, idempotencyKey, req})
+	if s.recordSaleFn != nil {
+		return s.recordSaleFn(ctx, inventoryID, idempotencyKey, req)
+	}
+	return &dh.InventorySaleResponse{}, nil
+}
+
+func (s *stubInventoryClient) VoidInventorySale(ctx context.Context, dhSaleID string, req dh.VoidSaleRequest) (*dh.VoidSaleResponse, error) {
+	s.voidSaleCalls = append(s.voidSaleCalls, voidSaleCall{dhSaleID, req})
+	if s.voidSaleFn != nil {
+		return s.voidSaleFn(ctx, dhSaleID, req)
+	}
+	return &dh.VoidSaleResponse{}, nil
+}
+
+type recordSaleCall struct {
+	inventoryID    int
+	idempotencyKey string
+	req            dh.InventorySaleRequest
+}
+
+type voidSaleCall struct {
+	dhSaleID string
+	req      dh.VoidSaleRequest
 }
 
 type rotatingInventoryClient struct {
