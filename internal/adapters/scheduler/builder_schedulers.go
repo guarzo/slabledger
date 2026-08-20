@@ -263,11 +263,22 @@ func buildDHSoldReconcilerScheduler(cfg *config.Config, deps BuildDeps) *DHSoldR
 		Interval: cfg.DHSoldReconciler.Interval,
 	}
 	var opts []DHSoldReconcilerOption
-	if deps.DHInventoryListClient != nil && deps.DHSoldNotifier != nil {
-		opts = append(opts, WithDHSoldSweep(
-			deps.DHInventoryListClient,
+	if deps.DHSaleRecorder != nil && deps.DHSaleStore != nil {
+		if deps.DHInventoryListClient != nil {
+			opts = append(opts, WithDHSoldSweep(
+				deps.DHInventoryListClient,
+				deps.PurchaseRepo,
+				deps.DHSaleStore,
+				deps.DHSaleRecorder,
+				deps.DHSaleStore,
+				deps.PurchaseRepo,
+			))
+		}
+		opts = append(opts, WithDHSaleHandleRecovery(
+			deps.DHSaleStore,
+			deps.DHSaleRecorder,
+			deps.DHSaleStore,
 			deps.PurchaseRepo,
-			deps.DHSoldNotifier,
 		))
 	}
 	return NewDHSoldReconcilerScheduler(

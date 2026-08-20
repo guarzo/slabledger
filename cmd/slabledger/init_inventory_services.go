@@ -135,11 +135,10 @@ func initializeCampaignsService(
 		campaignOpts = append(campaignOpts, inventory.WithEventRecorder(eventRecorder))
 	}
 
-	// DH sold notifier — retires items on DH when a sale is recorded locally.
-	var dhSoldNotifier inventory.DHSoldNotifier
+	// DH sale recorder — records (and, on un-sell, voids) sales on DH via the
+	// purpose-built sale endpoint.
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		dhSoldNotifier = dhlistingadapter.NewInventoryAdapter(dhClient)
-		campaignOpts = append(campaignOpts, inventory.WithDHSoldNotifier(dhSoldNotifier))
+		campaignOpts = append(campaignOpts, inventory.WithDHSaleRecorder(dhlistingadapter.NewInventoryAdapter(dhClient).WithLogger(logger)))
 	}
 
 	// DH cert → card_id resolver. Feeds batchResolveCardIDs in the inventory
@@ -194,11 +193,10 @@ func initializeCampaignsService(
 		// never nil, unlike certEnrichQueue — it has no PSA-token gate, so there
 		// is no typed-nil hazard here and no interface-holder variable is needed
 		// to guard against one (contrast the certEnrichQueue comment above it).
-		PricingQueue:   pricingEnrichJob,
-		DHSoldNotifier: dhSoldNotifier,
-		PSAResolver:    psaResolver,
-		IDGen:          uuid.NewString,
-		Logger:         logger,
+		PricingQueue: pricingEnrichJob,
+		PSAResolver:  psaResolver,
+		IDGen:        uuid.NewString,
+		Logger:       logger,
 	})
 
 	arbOpts := []arbitrage.ServiceOption{

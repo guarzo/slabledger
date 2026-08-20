@@ -3,7 +3,9 @@ package inventory_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -471,5 +473,221 @@ func TestFreezeSaleProvenance_CLProvenanceLabel(t *testing.T) {
 				t.Errorf("CLValueAtSaleSource = %q, want %q", sa.CLValueAtSaleSource, tt.wantSource)
 			}
 		})
+	}
+}
+
+// seedSaleFixture creates a campaign and a DH-linked purchase, returning both.
+func seedSaleFixture(t *testing.T, svc inventory.Service, repo *mocks.InMemoryCampaignStore) (*inventory.Campaign, *inventory.Purchase) {
+	t.Helper()
+	ctx := context.Background()
+	c := &inventory.Campaign{Name: "Test"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup campaign: %v", err)
+	}
+	p := &inventory.Purchase{ID: "purchase-1", CampaignID: c.ID, PurchaseDate: "2026-06-01", DHInventoryID: 4001}
+	if err := repo.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("setup purchase: %v", err)
+	}
+	return c, p
+}
+
+func TestService_CreateSale_MintsIdempotencyKeyBeforeDHCall(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{
+		RecordInventorySaleFn: func(_ context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+			if req.IdempotencyKey == "" {
+				t.Fatal("RecordInventorySale called with an empty idempotency key")
+			}
+			if !strings.HasPrefix(req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix) {
+				t.Fatalf("idempotency key %q missing prefix %q", req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix)
+			}
+			return &inventory.DHSaleResult{DHSaleID: "dh-sale-1", Delisted: true}, nil
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	c, p := seedSaleFixture(t, svc, repo)
+	sa := &inventory.Sale{PurchaseID: p.ID, SaleChannel: inventory.SaleChannelInPerson, SalePriceCents: 5000, SaleDate: "2026-07-01"}
+	if err := svc.CreateSale(ctx, sa, c, p); err != nil {
+		t.Fatalf("CreateSale: %v", err)
+	}
+
+	got, err := repo.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("reload sale: %v", err)
+	}
+	if got.DHIdempotencyKey == "" {
+		t.Fatal("DHIdempotencyKey was not persisted")
+	}
+	if got.DHSaleID != "dh-sale-1" {
+		t.Fatalf("DHSaleID = %q, want dh-sale-1", got.DHSaleID)
+	}
+}
+
+// A client-forged DHSaleID/DHSaleRecordedAt must never survive CreateSale:
+// HandleCreateSale decodes the request body straight into inventory.Sale with
+// no scrub, so these server-owned fields could otherwise hide a sale from
+// ListSalesNeedingDHRecord or target an un-sell's void at an arbitrary DH
+// sale id (final review C1).
+func TestService_CreateSale_ScrubsClientSuppliedDHSaleFields(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c, p := seedSaleFixture(t, svc, repo)
+	forgedAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	sa := &inventory.Sale{
+		PurchaseID:       p.ID,
+		SaleChannel:      inventory.SaleChannelInPerson,
+		SalePriceCents:   5000,
+		SaleDate:         "2026-07-01",
+		DHSaleID:         "forged-dh-sale-id",
+		DHSaleRecordedAt: &forgedAt,
+	}
+	if err := svc.CreateSale(ctx, sa, c, p); err != nil {
+		t.Fatalf("CreateSale: %v", err)
+	}
+	if sa.DHSaleID != "" {
+		t.Fatalf("DHSaleID = %q, want scrubbed to empty", sa.DHSaleID)
+	}
+	if sa.DHSaleRecordedAt != nil {
+		t.Fatalf("DHSaleRecordedAt = %v, want scrubbed to nil", sa.DHSaleRecordedAt)
+	}
+
+	got, err := repo.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("reload sale: %v", err)
+	}
+	if got.DHSaleID != "" {
+		t.Fatalf("persisted DHSaleID = %q, want empty", got.DHSaleID)
+	}
+	if got.DHSaleRecordedAt != nil {
+		t.Fatalf("persisted DHSaleRecordedAt = %v, want nil", got.DHSaleRecordedAt)
+	}
+}
+
+func TestService_CreateSale_DHSaleConflictFlagging(t *testing.T) {
+	tests := []struct {
+		name         string
+		recordErr    error
+		result       *inventory.DHSaleResult
+		wantConflict bool
+		wantSaleDHID string
+	}{
+		{"non-retryable failure flags conflict", inventory.ErrDHItemUnavailable, nil, true, ""},
+		{"retryable in-progress does NOT flag", inventory.ErrDHIdempotencyInProgress, nil, false, ""},
+		{"retryable lock contention does NOT flag", inventory.ErrDHLockContention, nil, false, ""},
+		{"success but not delisted flags conflict", nil, &inventory.DHSaleResult{DHSaleID: "dh-1", Delisted: false}, true, "dh-1"},
+		{"success and delisted flags nothing", nil, &inventory.DHSaleResult{DHSaleID: "dh-2", Delisted: true}, false, "dh-2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			recorder := &mocks.DHSaleRecorderMock{
+				RecordInventorySaleFn: func(context.Context, inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+					if tt.recordErr != nil {
+						return nil, tt.recordErr
+					}
+					return tt.result, nil
+				},
+			}
+			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+				withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+			ctx := context.Background()
+
+			c, p := seedSaleFixture(t, svc, repo)
+			sa := &inventory.Sale{PurchaseID: p.ID, SaleChannel: inventory.SaleChannelInPerson, SalePriceCents: 5000, SaleDate: "2026-07-01"}
+			if err := svc.CreateSale(ctx, sa, c, p); err != nil {
+				t.Fatalf("CreateSale: %v", err)
+			}
+
+			gotP, err := repo.GetPurchase(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("reload purchase: %v", err)
+			}
+			if hasConflict := gotP.DHSaleConflict != ""; hasConflict != tt.wantConflict {
+				t.Fatalf("DHSaleConflict = %q (set=%v), want set=%v", gotP.DHSaleConflict, hasConflict, tt.wantConflict)
+			}
+
+			gotSale, err := repo.GetSaleByPurchaseID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("reload sale: %v", err)
+			}
+			if gotSale.DHSaleID != tt.wantSaleDHID {
+				t.Fatalf("DHSaleID = %q, want %q", gotSale.DHSaleID, tt.wantSaleDHID)
+			}
+		})
+	}
+}
+
+// TestService_CreateBulkSales_RecordsDHSales covers the production path
+// behind the SLA-109 incident: an in-person bulk sale of multiple cards that
+// left 25 items live on DH, eBay and Shopify for four days. Each item in the
+// batch must get its own DH sale-record call, with its own DH inventory ID
+// and its own idempotency key — a shared key across two sales is exactly the
+// double-disposal failure the key design exists to prevent.
+func TestService_CreateBulkSales_RecordsDHSales(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{
+		RecordInventorySaleFn: func(_ context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+			return &inventory.DHSaleResult{DHSaleID: "dh-" + req.IdempotencyKey, Delisted: true}, nil
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	c := &inventory.Campaign{Name: "Test"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup campaign: %v", err)
+	}
+
+	purchases := []*inventory.Purchase{
+		{ID: "bulk-purchase-1", CampaignID: c.ID, CertNumber: "BULKDH01", PurchaseDate: "2026-06-01", DHInventoryID: 5001},
+		{ID: "bulk-purchase-2", CampaignID: c.ID, CertNumber: "BULKDH02", PurchaseDate: "2026-06-01", DHInventoryID: 5002},
+	}
+	items := make([]inventory.BulkSaleInput, 0, len(purchases))
+	for _, p := range purchases {
+		if err := repo.CreatePurchase(ctx, p); err != nil {
+			t.Fatalf("setup purchase %s: %v", p.ID, err)
+		}
+		items = append(items, inventory.BulkSaleInput{PurchaseID: p.ID, SalePriceCents: 5000})
+	}
+
+	result, err := svc.CreateBulkSales(ctx, c.ID, inventory.SaleChannelInPerson, "2026-07-01", items)
+	if err != nil {
+		t.Fatalf("CreateBulkSales: %v", err)
+	}
+	if result.Created != len(purchases) {
+		t.Fatalf("Created = %d, want %d (errors: %+v)", result.Created, len(purchases), result.Errors)
+	}
+
+	recorded := recorder.RecordedSales()
+	if len(recorded) != len(purchases) {
+		t.Fatalf("RecordedSales() has %d entries, want %d", len(recorded), len(purchases))
+	}
+
+	gotInventoryIDs := make(map[int]bool, len(recorded))
+	seenKeys := make(map[string]bool, len(recorded))
+	for _, req := range recorded {
+		if req.IdempotencyKey == "" {
+			t.Fatal("RecordInventorySale called with an empty idempotency key")
+		}
+		if !strings.HasPrefix(req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix) {
+			t.Fatalf("idempotency key %q missing prefix %q", req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix)
+		}
+		if seenKeys[req.IdempotencyKey] {
+			t.Fatalf("idempotency key %q reused across sales — two sales must never share a key", req.IdempotencyKey)
+		}
+		seenKeys[req.IdempotencyKey] = true
+		gotInventoryIDs[req.DHInventoryID] = true
+	}
+	for _, p := range purchases {
+		if !gotInventoryIDs[p.DHInventoryID] {
+			t.Errorf("no RecordInventorySale call carried DHInventoryID %d (purchase %s)", p.DHInventoryID, p.ID)
+		}
 	}
 }

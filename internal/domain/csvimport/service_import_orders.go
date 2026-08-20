@@ -224,18 +224,11 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 			}
 		}
 
-		// Notify DH that this item has sold so it is retired on their platform.
-		// This is best-effort: a failure does not roll back the local sale record.
-		if s.dhSoldNotifier != nil && purchase.DHInventoryID != 0 {
-			if err := s.dhSoldNotifier.MarkInventorySold(ctx, purchase.DHInventoryID); err != nil {
-				if s.logger != nil {
-					s.logger.Warn(ctx, "confirm sales: failed to mark DH inventory as sold",
-						observability.String("purchaseID", purchase.ID),
-						observability.Int("dhInventoryID", purchase.DHInventoryID),
-						observability.Err(err))
-				}
-			}
-		}
+		// No inline DH call on this path. CreateSale/CreateBulkSales record their
+		// own sales via inventory.WithDHSaleRecorder; this bulk-confirm path is
+		// rare enough that relying on the sold reconciler's next cycle is an
+		// accepted trade (dh_status is already 'sold' above, so both the sweep and
+		// the §5b recovery pass will find it). Decided 2026-08-20.
 
 		result.Created++
 	}

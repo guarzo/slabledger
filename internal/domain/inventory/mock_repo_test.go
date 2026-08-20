@@ -974,6 +974,107 @@ func (m *mockRepo) SaveDHPushConfig(_ context.Context, cfg *DHPushConfig) error 
 	return nil
 }
 
+func (m *mockRepo) SetSaleIdempotencyKeyIfAbsent(_ context.Context, saleID, key string) (string, error) {
+	s, ok := m.sales[saleID]
+	if !ok {
+		return "", ErrSaleNotFound
+	}
+	if s.DHIdempotencyKey == "" {
+		s.DHIdempotencyKey = key
+	}
+	return s.DHIdempotencyKey, nil
+}
+
+func (m *mockRepo) SetSaleDHSaleID(_ context.Context, saleID, dhSaleID string, recordedAt time.Time) error {
+	s, ok := m.sales[saleID]
+	if !ok {
+		return ErrSaleNotFound
+	}
+	s.DHSaleID = dhSaleID
+	t := recordedAt
+	s.DHSaleRecordedAt = &t
+	return nil
+}
+
+func (m *mockRepo) ListSalesNeedingDHRecord(_ context.Context, limit int) ([]SaleNeedingDHRecord, error) {
+	var candidates []*Sale
+	for _, s := range m.sales {
+		if s.DHSaleID != "" {
+			continue
+		}
+		// Mirror Postgres: a non-empty order_id means the sale ORIGINATED at
+		// DH, so recording it would report their own sale back to them.
+		if s.OrderID != "" {
+			continue
+		}
+		p, ok := m.purchases[s.PurchaseID]
+		if !ok || p.DHInventoryID == 0 || p.DHSaleConflict != "" {
+			continue
+		}
+		candidates = append(candidates, s)
+	}
+	// Mirror Postgres: ORDER BY created_at ASC before LIMIT. Sort keys are a
+	// map iteration, so this fake also ties on ID for a stable order.
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].CreatedAt.Equal(candidates[j].CreatedAt) {
+			return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
+		}
+		return candidates[i].ID < candidates[j].ID
+	})
+
+	var result []SaleNeedingDHRecord
+	for _, s := range candidates {
+		if limit > 0 && len(result) >= limit {
+			break
+		}
+		p := m.purchases[s.PurchaseID]
+		result = append(result, SaleNeedingDHRecord{
+			Sale:          *s,
+			DHInventoryID: p.DHInventoryID,
+			PurchaseDate:  p.PurchaseDate,
+		})
+	}
+	return result, nil
+}
+
+func (m *mockRepo) SetDHSaleConflict(_ context.Context, purchaseID, reason string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	now := time.Now()
+	p.DHSaleConflict = reason
+	p.DHSaleConflictAt = &now
+	return nil
+}
+
+func (m *mockRepo) ClearDHSaleConflict(_ context.Context, purchaseID string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHSaleConflict = ""
+	p.DHSaleConflictAt = nil
+	return nil
+}
+
+func (m *mockRepo) ResetDHFieldsForRelistAfterVoid(_ context.Context, purchaseID string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHPushStatus = DHPushStatusPending
+	p.DHPushAttempts = 0
+	p.DHStatus = DHStatusInStock
+	p.DHListingPriceCents = 0
+	p.DHChannelsJSON = "[]"
+	p.DHHoldReason = ""
+	now := time.Now()
+	p.DHUnlistedDetectedAt = &now
+	p.UpdatedAt = now
+	return nil
+}
+
 // testLogger is a recording observability.Logger for tests. It records levels
 // rather than discarding them, so a Warn/Error split can be asserted directly
 // instead of being silently swallowed by a no-op logger.

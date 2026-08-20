@@ -291,6 +291,20 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 		sa.ID = s.idGen()
 	}
 
+	// Mint the idempotency key at creation, before any DH call (design §5a).
+	// The row does not exist yet, so no compare-and-set is needed here — a
+	// legacy sale predating this column mints lazily instead, via the §5b
+	// recovery pass (Task 11).
+	sa.DHIdempotencyKey = NewDHIdempotencyKey(s.idGen)
+	// HandleCreateSale decodes the client request body straight into this
+	// struct with no scrub. DHSaleID/DHSaleRecordedAt are server-owned: they
+	// must only ever be set by recordDHSale after a confirmed DH response.
+	// Leaving a client-forged value in place would let a client hide a sale
+	// from ListSalesNeedingDHRecord and would target an un-sell's void at an
+	// arbitrary DH sale id.
+	sa.DHSaleID = ""
+	sa.DHSaleRecordedAt = nil
+
 	sa.SaleFeeCents = CalculateSaleFee(sa.SaleChannel, sa.SalePriceCents, campaign)
 
 	purchaseDate, err := time.Parse("2006-01-02", purchase.PurchaseDate)
@@ -348,27 +362,13 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 		}
 	}
 
-	s.notifyDHSold(ctx, "create sale", sa.PurchaseID, purchase.DHInventoryID)
+	s.recordDHSale(ctx, "create sale", sa, purchase)
 
 	return nil
 }
 
-// notifyDHSold retires a sold item on DH so it stops being offered there.
-// Local dh_status alone is bookkeeping: until DH is told, the card stays live
-// on their marketplace and can sell a second time. Best-effort by design — the
-// sale is already committed locally, and a DH outage must not fail it. The
-// dh-sold reconciler sweeps up anything missed here.
-func (s *service) notifyDHSold(ctx context.Context, op, purchaseID string, dhInventoryID int) {
-	if s.dhSoldNotifier == nil || dhInventoryID == 0 {
-		return
-	}
-	if err := s.dhSoldNotifier.MarkInventorySold(ctx, dhInventoryID); err != nil && s.logger != nil {
-		s.logger.Warn(ctx, op+": failed to mark DH inventory as sold",
-			observability.String("purchaseID", purchaseID),
-			observability.Int("dhInventoryID", dhInventoryID),
-			observability.Err(err))
-	}
-}
+// recordDHSale, buildDHSaleRequest and flagDHSaleConflict live in
+// service_dh.go alongside the rest of the DH-specific helpers.
 
 func (s *service) ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error) {
 	return s.sales.ListSalesByCampaign(ctx, campaignID, limit, offset)
@@ -433,6 +433,12 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 		}
 
 		sa.ID = s.idGen()
+		sa.DHIdempotencyKey = NewDHIdempotencyKey(s.idGen)
+		// sa is built above from BulkSaleInput, which carries no DH fields, so
+		// these are already zero -- set explicitly to keep the invariant
+		// visible at the call site rather than relying on struct-literal luck.
+		sa.DHSaleID = ""
+		sa.DHSaleRecordedAt = nil
 		sa.SaleFeeCents = CalculateSaleFee(sa.SaleChannel, sa.SalePriceCents, campaign)
 
 		purchaseDate, parseErr := time.Parse("2006-01-02", purchase.PurchaseDate)
@@ -483,7 +489,7 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 			}
 		}
 
-		s.notifyDHSold(ctx, "bulk sale", sa.PurchaseID, purchase.DHInventoryID)
+		s.recordDHSale(ctx, "bulk sale", sa, purchase)
 
 		result.Created++
 	}

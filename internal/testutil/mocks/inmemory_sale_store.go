@@ -3,6 +3,7 @@ package mocks
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
@@ -112,6 +113,81 @@ func (m *InMemoryCampaignStore) ListSalesByCampaign(ctx context.Context, campaig
 	result = result[offset:]
 	if limit > 0 && limit < len(result) {
 		result = result[:limit]
+	}
+	return result, nil
+}
+
+func (m *InMemoryCampaignStore) SetSaleIdempotencyKeyIfAbsent(ctx context.Context, saleID, key string) (string, error) {
+	if m.SetSaleIdempotencyKeyIfAbsentFn != nil {
+		return m.SetSaleIdempotencyKeyIfAbsentFn(ctx, saleID, key)
+	}
+	s, ok := m.Sales[saleID]
+	if !ok {
+		return "", inventory.ErrSaleNotFound
+	}
+	// Mirror the store's compare-and-set: only the first caller's key sticks,
+	// and every caller receives the effective key.
+	if s.DHIdempotencyKey == "" {
+		s.DHIdempotencyKey = key
+	}
+	return s.DHIdempotencyKey, nil
+}
+
+func (m *InMemoryCampaignStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID string, recordedAt time.Time) error {
+	if m.SetSaleDHSaleIDFn != nil {
+		return m.SetSaleDHSaleIDFn(ctx, saleID, dhSaleID, recordedAt)
+	}
+	s, ok := m.Sales[saleID]
+	if !ok {
+		return inventory.ErrSaleNotFound
+	}
+	s.DHSaleID = dhSaleID
+	t := recordedAt
+	s.DHSaleRecordedAt = &t
+	return nil
+}
+
+func (m *InMemoryCampaignStore) ListSalesNeedingDHRecord(ctx context.Context, limit int) ([]inventory.SaleNeedingDHRecord, error) {
+	if m.ListSalesNeedingDHRecordFn != nil {
+		return m.ListSalesNeedingDHRecordFn(ctx, limit)
+	}
+	var candidates []*inventory.Sale
+	for _, s := range m.Sales {
+		if s.DHSaleID != "" {
+			continue
+		}
+		// Mirror Postgres: a non-empty order_id means the sale ORIGINATED at
+		// DH, so DH already knows about it and recording it would report their
+		// own sale back to them.
+		if s.OrderID != "" {
+			continue
+		}
+		p, ok := m.Purchases[s.PurchaseID]
+		if !ok || p.DHInventoryID == 0 || p.DHSaleConflict != "" {
+			continue
+		}
+		candidates = append(candidates, s)
+	}
+	// Mirror Postgres: ORDER BY created_at ASC before LIMIT. Sort keys are a
+	// map iteration, so this fake also ties on ID for a stable order.
+	sort.Slice(candidates, func(i, j int) bool {
+		if !candidates[i].CreatedAt.Equal(candidates[j].CreatedAt) {
+			return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
+		}
+		return candidates[i].ID < candidates[j].ID
+	})
+
+	var result []inventory.SaleNeedingDHRecord
+	for _, s := range candidates {
+		if limit > 0 && len(result) >= limit {
+			break
+		}
+		p := m.Purchases[s.PurchaseID]
+		result = append(result, inventory.SaleNeedingDHRecord{
+			Sale:          *s,
+			DHInventoryID: p.DHInventoryID,
+			PurchaseDate:  p.PurchaseDate,
+		})
 	}
 	return result, nil
 }

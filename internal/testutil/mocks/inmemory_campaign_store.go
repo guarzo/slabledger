@@ -44,6 +44,9 @@ type InMemoryCampaignStore struct {
 	DeleteSaleFn                        func(ctx context.Context, saleID string) error
 	DeleteSaleByPurchaseIDFn            func(ctx context.Context, purchaseID string) error
 	UpdateSaleReasonFn                  func(ctx context.Context, campaignID, saleID, reason string, forcedLiquidation bool) error
+	SetSaleIdempotencyKeyIfAbsentFn     func(ctx context.Context, saleID, key string) (string, error)
+	SetSaleDHSaleIDFn                   func(ctx context.Context, saleID, dhSaleID string, recordedAt time.Time) error
+	ListSalesNeedingDHRecordFn          func(ctx context.Context, limit int) ([]inventory.SaleNeedingDHRecord, error)
 	GetCampaignPNLFn                    func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error)
 	GetPNLByChannelFn                   func(ctx context.Context, campaignID string) ([]inventory.ChannelPNL, error)
 	GetDailySpendFn                     func(ctx context.Context, campaignID string, days int) ([]inventory.DailySpend, error)
@@ -79,6 +82,9 @@ type InMemoryCampaignStore struct {
 	ApproveHeldPurchaseFn               func(ctx context.Context, purchaseID string) error
 	ResetDHFieldsForRepushFn            func(ctx context.Context, purchaseID string) error
 	ResetDHFieldsForRepushDueToDeleteFn func(ctx context.Context, purchaseID string) error
+	SetDHSaleConflictFn                 func(ctx context.Context, purchaseID, reason string) error
+	ClearDHSaleConflictFn               func(ctx context.Context, purchaseID string) error
+	ResetDHFieldsForRelistAfterVoidFn   func(ctx context.Context, purchaseID string) error
 	UpdatePurchaseDHPriceSyncFn         func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
 	UnmatchPurchaseDHFn                 func(ctx context.Context, purchaseID string, pushStatus string) error
 	ListDHPriceDriftFn                  func(ctx context.Context) ([]inventory.Purchase, error)

@@ -276,6 +276,7 @@ func (w *wiring) schedulerDeps(cfg *config.Config, logger observability.Logger) 
 		CardLadderCompRefreshStore: w.clCompRefreshStore,
 		SchedulerStatsStore:        w.schedulerStatsStore,
 		DHClient:                   w.dhClient,
+		SaleStore:                  w.campaignsInit.saleStore,
 		DHEventStore:               w.eventStore,
 		DHIntelligenceRepo:         w.intelRepo,
 		DHSuggestionsRepo:          w.suggestionsRepo,

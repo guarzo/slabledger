@@ -201,3 +201,269 @@ func TestSaleStoreUpdateSaleReason(t *testing.T) {
 		})
 	}
 }
+
+func TestSetSaleIdempotencyKeyIfAbsent(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ss := NewSaleStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		seedSale   bool // whether a sale row exists before the calls
+		saleID     string
+		calls      []string // successive keys passed to SetSaleIdempotencyKeyIfAbsent
+		wantValues []string // expected return value per call
+		wantErr    error
+	}{
+		{
+			name:       "mints on first call, subsequent calls return the effective first key",
+			seedSale:   true,
+			calls:      []string{"key-one", "key-two"},
+			wantValues: []string{"key-one", "key-one"},
+		},
+		{
+			name:    "missing sale returns ErrSaleNotFound",
+			saleID:  "sale-does-not-exist",
+			calls:   []string{"some-key"},
+			wantErr: inventory.ErrSaleNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			saleID := tt.saleID
+			if tt.seedSale {
+				p := makeTestPurchase()
+				if err := ps.CreatePurchase(ctx, p); err != nil {
+					t.Fatalf("create purchase: %v", err)
+				}
+				s := makeTestSale(p.ID)
+				if err := ss.CreateSale(ctx, s); err != nil {
+					t.Fatalf("create sale: %v", err)
+				}
+				saleID = s.ID
+			}
+
+			for i, key := range tt.calls {
+				got, err := ss.SetSaleIdempotencyKeyIfAbsent(ctx, saleID, key)
+				if tt.wantErr != nil {
+					if !errors.Is(err, tt.wantErr) {
+						t.Fatalf("call %d: error = %v, want %v", i, err, tt.wantErr)
+					}
+					continue
+				}
+				if err != nil {
+					t.Fatalf("call %d: SetSaleIdempotencyKeyIfAbsent: %v", i, err)
+				}
+				if got != tt.wantValues[i] {
+					t.Fatalf("call %d = %q, want %q", i, got, tt.wantValues[i])
+				}
+			}
+		})
+	}
+}
+
+func TestSetSaleDHSaleID_Roundtrip(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ss := NewSaleStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	p := makeTestPurchase()
+	if err := ps.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("create purchase: %v", err)
+	}
+	s := makeTestSale(p.ID)
+	if err := ss.CreateSale(ctx, s); err != nil {
+		t.Fatalf("create sale: %v", err)
+	}
+
+	recordedAt := time.Now().UTC().Truncate(time.Microsecond)
+	if err := ss.SetSaleDHSaleID(ctx, s.ID, "dh-sale-123", recordedAt); err != nil {
+		t.Fatalf("SetSaleDHSaleID: %v", err)
+	}
+
+	got, err := ss.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get sale: %v", err)
+	}
+	if got.DHSaleID != "dh-sale-123" {
+		t.Errorf("DHSaleID = %q, want %q", got.DHSaleID, "dh-sale-123")
+	}
+	if got.DHSaleRecordedAt == nil || !got.DHSaleRecordedAt.Equal(recordedAt) {
+		t.Errorf("DHSaleRecordedAt = %v, want %v", got.DHSaleRecordedAt, recordedAt)
+	}
+}
+
+func TestListSalesNeedingDHRecord(t *testing.T) {
+	db := setupTestDB(t)
+	logger := mocks.NewMockLogger()
+	ps := NewPurchaseStore(db.DB, logger)
+	ss := NewSaleStore(db.DB, logger)
+	ctx := context.Background()
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO campaigns (id, name, phase, created_at, updated_at)
+		 VALUES ('camp-1', 'Test Campaign', 'pending', NOW(), NOW())
+		 ON CONFLICT (id) DO NOTHING`)
+	if err != nil {
+		t.Fatalf("seed campaign: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		// setup seeds a purchase/sale pair and returns the sale ID plus
+		// whether ListSalesNeedingDHRecord must include it.
+		setup     func(t *testing.T) (saleID string, wantIncluded bool)
+		wantCheck func(t *testing.T, found inventory.SaleNeedingDHRecord)
+	}{
+		{
+			name: "eligible: blank dh_sale_id, dh_inventory_id set, blank conflict",
+			setup: func(t *testing.T) (string, bool) {
+				purchase := makeTestPurchase()
+				purchase.DHInventoryID = 111
+				purchase.PurchaseDate = "2026-02-02"
+				if err := ps.CreatePurchase(ctx, purchase); err != nil {
+					t.Fatalf("create eligible purchase: %v", err)
+				}
+				sale := makeTestSale(purchase.ID)
+				if err := ss.CreateSale(ctx, sale); err != nil {
+					t.Fatalf("create eligible sale: %v", err)
+				}
+				return sale.ID, true
+			},
+			wantCheck: func(t *testing.T, found inventory.SaleNeedingDHRecord) {
+				if found.DHInventoryID != 111 {
+					t.Errorf("DHInventoryID = %d, want 111", found.DHInventoryID)
+				}
+				if found.PurchaseDate != "2026-02-02" {
+					t.Errorf("PurchaseDate = %q, want %q", found.PurchaseDate, "2026-02-02")
+				}
+			},
+		},
+		{
+			name: "excluded: conflict flagged on the purchase",
+			setup: func(t *testing.T) (string, bool) {
+				purchase := makeTestPurchase()
+				purchase.DHInventoryID = 222
+				if err := ps.CreatePurchase(ctx, purchase); err != nil {
+					t.Fatalf("create conflict purchase: %v", err)
+				}
+				sale := makeTestSale(purchase.ID)
+				if err := ss.CreateSale(ctx, sale); err != nil {
+					t.Fatalf("create conflict sale: %v", err)
+				}
+				if err := ps.SetDHSaleConflict(ctx, purchase.ID, "permanent error"); err != nil {
+					t.Fatalf("SetDHSaleConflict: %v", err)
+				}
+				return sale.ID, false
+			},
+		},
+		{
+			name: "excluded: dh_sale_id already set",
+			setup: func(t *testing.T) (string, bool) {
+				purchase := makeTestPurchase()
+				purchase.DHInventoryID = 333
+				if err := ps.CreatePurchase(ctx, purchase); err != nil {
+					t.Fatalf("create recorded purchase: %v", err)
+				}
+				sale := makeTestSale(purchase.ID)
+				if err := ss.CreateSale(ctx, sale); err != nil {
+					t.Fatalf("create recorded sale: %v", err)
+				}
+				if err := ss.SetSaleDHSaleID(ctx, sale.ID, "dh-sale-already", time.Now().UTC()); err != nil {
+					t.Fatalf("SetSaleDHSaleID: %v", err)
+				}
+				return sale.ID, false
+			},
+		},
+		{
+			// A DH-native sale: imported by the orders poller, so DH already
+			// knows about it. Recording it would report their own sale back to
+			// them — a 409 that conflict-flags a healthy row, or a duplicate
+			// disposal. Measured 2026-08-20: these are the MAJORITY of new
+			// sales (69 of 101 in August), so without this exclusion the
+			// recovery pass misclassifies the primary sales channel and the
+			// conflict flag drowns in false positives.
+			name: "excluded: sale originated at DH (order_id set)",
+			setup: func(t *testing.T) (string, bool) {
+				purchase := makeTestPurchase()
+				purchase.DHInventoryID = 444
+				if err := ps.CreatePurchase(ctx, purchase); err != nil {
+					t.Fatalf("create dh-native purchase: %v", err)
+				}
+				sale := makeTestSale(purchase.ID)
+				sale.OrderID = "dh-order-9001"
+				if err := ss.CreateSale(ctx, sale); err != nil {
+					t.Fatalf("create dh-native sale: %v", err)
+				}
+				return sale.ID, false
+			},
+		},
+		{
+			// A legacy sale: no idempotency key set (the zero value), matching the
+			// 25 sales from the 2026-08-15 incident. Must still appear.
+			name: "included: legacy sale with no idempotency key",
+			setup: func(t *testing.T) (string, bool) {
+				purchase := makeTestPurchase()
+				purchase.DHInventoryID = 444
+				if err := ps.CreatePurchase(ctx, purchase); err != nil {
+					t.Fatalf("create purchase: %v", err)
+				}
+				sale := makeTestSale(purchase.ID)
+				if err := ss.CreateSale(ctx, sale); err != nil {
+					t.Fatalf("create sale: %v", err)
+				}
+				if sale.DHIdempotencyKey != "" {
+					t.Fatalf("test fixture already has a key: %q", sale.DHIdempotencyKey)
+				}
+				return sale.ID, true
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			saleID, wantIncluded := tt.setup(t)
+
+			got, err := ss.ListSalesNeedingDHRecord(ctx, 10)
+			if err != nil {
+				t.Fatalf("ListSalesNeedingDHRecord: %v", err)
+			}
+
+			var found *inventory.SaleNeedingDHRecord
+			for i := range got {
+				if got[i].ID == saleID {
+					found = &got[i]
+				}
+			}
+			switch {
+			case wantIncluded && found == nil:
+				t.Fatalf("sale %q not found in result, want included", saleID)
+			case !wantIncluded && found != nil:
+				t.Fatalf("sale %q found in result, want excluded", saleID)
+			}
+			if found != nil && tt.wantCheck != nil {
+				tt.wantCheck(t, *found)
+			}
+		})
+	}
+}

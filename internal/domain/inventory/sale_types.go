@@ -65,6 +65,17 @@ type Sale struct {
 
 	// Market snapshot at time of sale (best-effort, may be zero)
 	MarketSnapshotData
+
+	// DHIdempotencyKey/DHSaleID/DHSaleRecordedAt track this sale's DH
+	// inventory-sale recording (docs/specs/2026-08-20-dh-record-sale-design.md).
+	// DHIdempotencyKey is minted server-side (never from Sale.ID -- see
+	// DHIdempotencyKeyPrefix) either at creation or lazily by the §5a
+	// compare-and-set. DHSaleID is DH's handle, needed to void, and is
+	// written only after DH confirms. Both TEXT columns default to '' for
+	// pre-migration rows; DHSaleRecordedAt is nil until DH confirms.
+	DHIdempotencyKey string     `json:"dhIdempotencyKey,omitempty"`
+	DHSaleID         string     `json:"dhSaleId,omitempty"`
+	DHSaleRecordedAt *time.Time `json:"dhSaleRecordedAt,omitempty"`
 }
 
 // BulkSaleInput represents a single item in a bulk sale request.

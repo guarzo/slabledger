@@ -391,6 +391,14 @@ type Purchase struct {
 
 	// Market snapshot at time of purchase (best-effort, may be zero)
 	MarketSnapshotData
+
+	// DHSaleConflict/DHSaleConflictAt flag a purchase whose DH sale recording
+	// failed permanently or looked incomplete (delisted == false on an
+	// apparent success). §5b's recovery pass treats DHSaleConflict == ""
+	// as its terminal predicate: a flagged row is skipped until a human
+	// clears it, which is also how a resolved conflict is re-driven.
+	DHSaleConflict   string     `json:"dhSaleConflict,omitempty"`
+	DHSaleConflictAt *time.Time `json:"dhSaleConflictAt,omitempty"`
 }
 
 // ToCardIdentity returns a CardIdentity populated from this purchase's card metadata.

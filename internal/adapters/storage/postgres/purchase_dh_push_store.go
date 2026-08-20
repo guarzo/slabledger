@@ -252,3 +252,56 @@ func (ps *PurchaseStore) ClearDHUnlistedDetectedAt(ctx context.Context, purchase
 		time.Now(), purchaseID,
 	)
 }
+
+// SetDHSaleConflict flags a purchase for human review after a non-retryable
+// DH sale-recording error, or an apparent success with delisted == false
+// (spec §4). ListSalesNeedingDHRecord excludes flagged purchases until the
+// flag is cleared, which is also how a resolved conflict is re-driven.
+func (ps *PurchaseStore) SetDHSaleConflict(ctx context.Context, purchaseID, reason string) error {
+	now := time.Now()
+	return ps.execAndExpectRow(ctx, "set dh sale conflict",
+		`UPDATE campaign_purchases
+		 SET dh_sale_conflict = $1, dh_sale_conflict_at = $2, updated_at = $3
+		 WHERE id = $4`,
+		reason, now, now, purchaseID,
+	)
+}
+
+// ClearDHSaleConflict clears a previously flagged conflict, re-enrolling the
+// row in ListSalesNeedingDHRecord on the next recovery pass.
+func (ps *PurchaseStore) ClearDHSaleConflict(ctx context.Context, purchaseID string) error {
+	return ps.execAndExpectRow(ctx, "clear dh sale conflict",
+		`UPDATE campaign_purchases
+		 SET dh_sale_conflict = '', dh_sale_conflict_at = NULL, updated_at = $1
+		 WHERE id = $2`,
+		time.Now(), purchaseID,
+	)
+}
+
+// ResetDHFieldsForRelistAfterVoid mirrors ResetDHFieldsForRepushDueToDelete
+// (spec §7) but PRESERVES dh_inventory_id: a void keeps the DH inventory row
+// alive, so a fresh push here would create a duplicate rather than relisting
+// the same row. dh_status is set to in_stock — the void already returned the
+// item to that state on DH's side — and dh_unlisted_detected_at is reused
+// (deliberately, per spec §7) as the signal the auto-relist branch in
+// dh_push.go:248 keys on, exactly as the delete-driven reset does.
+// dh_push_attempts, dh_listing_price_cents, and dh_hold_reason are also
+// cleared, as they are on the delete-driven reset: otherwise a purchase with
+// an exhausted retry budget or a stale hold reason re-enters the pending
+// relist path unable to actually relist.
+func (ps *PurchaseStore) ResetDHFieldsForRelistAfterVoid(ctx context.Context, purchaseID string) error {
+	now := time.Now()
+	return ps.execAndExpectRow(ctx, "reset DH fields for relist after void",
+		`UPDATE campaign_purchases
+		 SET dh_push_status = $1,
+		     dh_push_attempts = 0,
+		     dh_status = $2,
+		     dh_listing_price_cents = 0,
+		     dh_channels_json = '[]',
+		     dh_hold_reason = '',
+		     dh_unlisted_detected_at = $3,
+		     updated_at = $4
+		 WHERE id = $5`,
+		inventory.DHPushStatusPending, inventory.DHStatusInStock, now, now, purchaseID,
+	)
+}

@@ -147,13 +147,6 @@ type PricingEnqueuer interface {
 	Enqueue(certNumber string)
 }
 
-// DHSoldNotifier is called when a purchase is confirmed as sold locally.
-// It updates the corresponding DH inventory item to sold status so the item is
-// retired on the DH platform. Implementations should be idempotent.
-type DHSoldNotifier interface {
-	MarkInventorySold(ctx context.Context, dhInventoryID int) error
-}
-
 // CertInfo contains card details resolved from a PSA certificate number.
 type CertInfo struct {
 	CertNumber string  `json:"certNumber"`
@@ -243,9 +236,9 @@ type service struct {
 	// inventory gets priced without waiting for the daily scheduler.
 	pricingQueue PricingEnqueuer
 
-	// dhSoldNotifier notifies DH when a purchase is sold locally so the item is
-	// retired on the DH platform. Optional — if nil, no DH call is made on sale.
-	dhSoldNotifier DHSoldNotifier
+	// dhSaleRecorder records (and, on un-sell, voids) sales on DH via the
+	// purpose-built sale endpoint.
+	dhSaleRecorder DHSaleRecorder
 
 	// disableBackgroundWorkers is a test-only flag to prevent background workers from running.
 	disableBackgroundWorkers bool
@@ -329,10 +322,11 @@ func WithPendingItemRepository(r PendingItemRepository) ServiceOption {
 	return func(s *service) { s.pendingItemRepo = r }
 }
 
-// WithDHSoldNotifier injects a DH sold notifier so that when a purchase is
-// confirmed as sold locally, the corresponding DH inventory item is retired.
-func WithDHSoldNotifier(n DHSoldNotifier) ServiceOption {
-	return func(s *service) { s.dhSoldNotifier = n }
+// WithDHSaleRecorder injects a DH sale recorder so a local sale is also
+// recorded (and, on un-sell, voided) on DH. Optional — if nil, no DH sale
+// call is made and the sale still commits locally.
+func WithDHSaleRecorder(r DHSaleRecorder) ServiceOption {
+	return func(s *service) { s.dhSaleRecorder = r }
 }
 
 // WithEventRecorder enables dh_state_events recording for enrollment and

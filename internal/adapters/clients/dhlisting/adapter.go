@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/domain/dhlisting"
@@ -107,11 +108,11 @@ func (a *PSAImporterAdapter) ResetPSAKeyRotation() {
 var _ dhlisting.DHPSAImporter = (*PSAImporterAdapter)(nil)
 var _ dhlisting.PSAKeyRotator = (*PSAImporterAdapter)(nil)
 
-// --- DHInventoryLister / DHSoldNotifier adapter ---
+// --- DHInventoryLister / DHSaleRecorder adapter ---
 
 // InventoryAdapter wraps a dh.Client to implement dhlisting.DHInventoryLister
-// and inventory.DHSoldNotifier. It handles both read/list operations and
-// inventory status mutations (listing updates and sold transitions).
+// and inventory.DHSaleRecorder. It handles both read/list operations and
+// inventory status mutations (listing updates and sale recording).
 //
 // When transitioning to "listed" and the underlying client supports
 // dh.PSAKeyRotator, UpdateInventoryStatus will rotate PSA keys on 401/422
@@ -120,6 +121,8 @@ type InventoryAdapter struct {
 	client interface {
 		UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
 		SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
+		RecordInventorySale(ctx context.Context, inventoryID int, idempotencyKey string, req dh.InventorySaleRequest) (*dh.InventorySaleResponse, error)
+		VoidInventorySale(ctx context.Context, dhSaleID string, req dh.VoidSaleRequest) (*dh.VoidSaleResponse, error)
 	}
 	rotator dh.PSAKeyRotator     // optional; inferred from client if it implements the interface
 	logger  observability.Logger // optional; defaults to noop
@@ -130,6 +133,8 @@ type InventoryAdapter struct {
 func NewInventoryAdapter(client interface {
 	UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
 	SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
+	RecordInventorySale(ctx context.Context, inventoryID int, idempotencyKey string, req dh.InventorySaleRequest) (*dh.InventorySaleResponse, error)
+	VoidInventorySale(ctx context.Context, dhSaleID string, req dh.VoidSaleRequest) (*dh.VoidSaleResponse, error)
 }) *InventoryAdapter {
 	a := &InventoryAdapter{client: client, logger: observability.NewNoopLogger()}
 	if r, ok := client.(dh.PSAKeyRotator); ok {
@@ -216,15 +221,57 @@ func (a *InventoryAdapter) SyncChannels(ctx context.Context, inventoryID int, ch
 	return err
 }
 
-// MarkInventorySold transitions the DH inventory item to "sold" status,
-// retiring it from the DH platform when a sale is recorded locally.
-func (a *InventoryAdapter) MarkInventorySold(ctx context.Context, inventoryID int) error {
-	_, err := a.client.UpdateInventory(ctx, inventoryID, dh.InventoryUpdate{Status: inventory.DHStatusSold})
-	return err
+// RecordInventorySale posts a sale for the given inventory item to DH via the
+// purpose-built sale-recording endpoint, translating between domain and dh
+// wire types and classifying any error into a domain sentinel. sold_at is
+// always sent UTC-normalised RFC3339 (design §2): the request body must be a
+// pure function of persisted columns so a retry under the same idempotency
+// key is byte-identical.
+func (a *InventoryAdapter) RecordInventorySale(ctx context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+	dhReq := dh.InventorySaleRequest{
+		SalePriceCents:   req.SalePriceCents,
+		SoldAt:           req.SoldAt.UTC().Format(time.RFC3339),
+		CounterpartyName: req.CounterpartyName,
+		Notes:            req.Notes,
+	}
+
+	resp, err := a.client.RecordInventorySale(ctx, req.DHInventoryID, req.IdempotencyKey, dhReq)
+	if err != nil {
+		return nil, classifyDHSaleError(err)
+	}
+
+	return &inventory.DHSaleResult{
+		DHSaleID:            resp.SaleID,
+		SoldInventoryID:     resp.SoldInventoryID,
+		Delisted:            resp.Delisted,
+		ItemStatus:          resp.ItemStatus,
+		Replayed:            resp.Replayed,
+		RealizedProfitCents: resp.RealizedProfitCents,
+	}, nil
+}
+
+// VoidInventorySale voids a previously-recorded DH sale. DH returns 404 for a
+// sale it cannot find under our credentials — not found, another account's
+// sale, a marketplace-mirror deal, or a UI-created deal (design §7) — none of
+// which we can reverse and none of which should fail an un-sell the user
+// already performed locally, so it is logged and treated as success.
+func (a *InventoryAdapter) VoidInventorySale(ctx context.Context, dhSaleID, reason string) error {
+	_, err := a.client.VoidInventorySale(ctx, dhSaleID, dh.VoidSaleRequest{Reason: reason})
+	if err == nil {
+		return nil
+	}
+
+	classified := classifyDHSaleError(err)
+	if errors.Is(classified, inventory.ErrDHSaleNotFound) {
+		a.logger.Info(ctx, "dh: void target not found, treating as already voided",
+			observability.String("dh_sale_id", dhSaleID))
+		return nil
+	}
+	return classified
 }
 
 var _ dhlisting.DHInventoryLister = (*InventoryAdapter)(nil)
-var _ inventory.DHSoldNotifier = (*InventoryAdapter)(nil)
+var _ inventory.DHSaleRecorder = (*InventoryAdapter)(nil)
 var _ dh.PSAKeyRotator = (*InventoryAdapter)(nil)
 var _ dhlisting.PSAKeyRotator = (*InventoryAdapter)(nil)
 

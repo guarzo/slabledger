@@ -58,6 +58,12 @@ type stubInventoryClient struct {
 	updates   []dh.InventoryUpdate
 	syncIDs   []int
 	syncArgs  [][]string
+
+	recordSaleFn func(ctx context.Context, inventoryID int, idempotencyKey string, req dh.InventorySaleRequest) (*dh.InventorySaleResponse, error)
+	voidSaleFn   func(ctx context.Context, dhSaleID string, req dh.VoidSaleRequest) (*dh.VoidSaleResponse, error)
+
+	recordSaleCalls []recordSaleCall
+	voidSaleCalls   []voidSaleCall
 }
 
 func (s *stubInventoryClient) UpdateInventory(ctx context.Context, id int, update dh.InventoryUpdate) (*dh.InventoryResult, error) {
@@ -76,6 +82,33 @@ func (s *stubInventoryClient) SyncChannels(ctx context.Context, id int, channels
 		return s.syncFn(ctx, id, channels)
 	}
 	return &dh.ChannelSyncResponse{}, nil
+}
+
+func (s *stubInventoryClient) RecordInventorySale(ctx context.Context, inventoryID int, idempotencyKey string, req dh.InventorySaleRequest) (*dh.InventorySaleResponse, error) {
+	s.recordSaleCalls = append(s.recordSaleCalls, recordSaleCall{inventoryID, idempotencyKey, req})
+	if s.recordSaleFn != nil {
+		return s.recordSaleFn(ctx, inventoryID, idempotencyKey, req)
+	}
+	return &dh.InventorySaleResponse{}, nil
+}
+
+func (s *stubInventoryClient) VoidInventorySale(ctx context.Context, dhSaleID string, req dh.VoidSaleRequest) (*dh.VoidSaleResponse, error) {
+	s.voidSaleCalls = append(s.voidSaleCalls, voidSaleCall{dhSaleID, req})
+	if s.voidSaleFn != nil {
+		return s.voidSaleFn(ctx, dhSaleID, req)
+	}
+	return &dh.VoidSaleResponse{}, nil
+}
+
+type recordSaleCall struct {
+	inventoryID    int
+	idempotencyKey string
+	req            dh.InventorySaleRequest
+}
+
+type voidSaleCall struct {
+	dhSaleID string
+	req      dh.VoidSaleRequest
 }
 
 type rotatingInventoryClient struct {
@@ -507,44 +540,12 @@ func TestInventoryAdapter_WithLogger(t *testing.T) {
 	})
 }
 
-// --- InventoryAdapter.MarkInventorySold / SyncChannels ---
-
-func TestInventoryAdapter_MarkInventorySold(t *testing.T) {
-	t.Run("sends the sold transition", func(t *testing.T) {
-		client := &stubInventoryClient{}
-
-		require.NoError(t, adapter.NewInventoryAdapter(client).MarkInventorySold(context.Background(), 314))
-
-		require.Equal(t, []int{314}, client.updateIDs)
-		require.Equal(t, dh.InventoryUpdate{Status: inventory.DHStatusSold}, client.updates[0])
-	})
-
-	t.Run("propagates the client error", func(t *testing.T) {
-		wantErr := errors.New("dh 500")
-		client := &stubInventoryClient{
-			updateFn: func(context.Context, int, dh.InventoryUpdate) (*dh.InventoryResult, error) {
-				return nil, wantErr
-			},
-		}
-
-		err := adapter.NewInventoryAdapter(client).MarkInventorySold(context.Background(), 1)
-
-		require.ErrorIs(t, err, wantErr)
-	})
-
-	t.Run("does not rotate keys", func(t *testing.T) {
-		// The sold transition bypasses UpdateInventoryWithRotation entirely.
-		client := &rotatingInventoryClient{rotateBudget: 1}
-		client.updateFn = func(context.Context, int, dh.InventoryUpdate) (*dh.InventoryResult, error) {
-			return nil, errPSARateLimit
-		}
-
-		err := adapter.NewInventoryAdapter(client).MarkInventorySold(context.Background(), 1)
-
-		require.ErrorIs(t, err, errPSARateLimit)
-		require.Zero(t, client.rotateCalls)
-	})
-}
+// --- InventoryAdapter.SyncChannels ---
+//
+// MarkInventorySold and its coverage were removed in Task 12: it asserted
+// against a permissive stub that accepted any payload, which is exactly why
+// the DH-rejected status PATCH shipped undetected. Sale recording is now
+// covered by the contract-enforcing fakeDHSaleServer in dh_sale_fake_test.go.
 
 func TestInventoryAdapter_SyncChannels(t *testing.T) {
 	t.Run("forwards id and channels", func(t *testing.T) {

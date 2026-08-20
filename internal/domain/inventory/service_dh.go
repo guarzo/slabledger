@@ -50,3 +50,72 @@ func (s *service) SaveDHPushConfig(ctx context.Context, cfg *DHPushConfig) error
 	}
 	return s.dh.SaveDHPushConfig(ctx, cfg)
 }
+
+// buildDHSaleRequest builds the DH sale-record body from persisted columns
+// only — never the wall clock (design §2 corollary) — so a retry with the
+// same key issues a byte-identical body.
+func (s *service) buildDHSaleRequest(sa *Sale, purchase *Purchase, key string) DHSaleRequest {
+	return DHSaleRequest{
+		DHInventoryID:  purchase.DHInventoryID,
+		IdempotencyKey: key,
+		SalePriceCents: sa.SalePriceCents,
+		SoldAt:         DeriveDHSoldAt(sa.SaleDate, purchase.PurchaseDate, sa.CreatedAt),
+	}
+}
+
+// recordDHSale records the sale on DH so the item is retired there, via the
+// purpose-built sale endpoint. The predecessor approach — a status PATCH to
+// "sold" — was rejected by DH with 422 "Invalid status 'sold'. Must be one
+// of: in_stock, listed" and was removed in Task 12. Best-effort by design:
+// the sale is already committed locally and a DH outage must not fail it.
+//
+// A retryable failure is left unflagged for the §5b recovery pass — the key is
+// already persisted, so the next cycle's identical request IS the retry. Any
+// other failure, or a success that leaves the item not delisted, is flagged on
+// the purchase for human review. A 409 item_sold_on_channel is never turned
+// into a synthesized sale row: DH supplies no price, and both sold_at and
+// channel may be nil (design §4).
+func (s *service) recordDHSale(ctx context.Context, op string, sa *Sale, purchase *Purchase) {
+	if s.dhSaleRecorder == nil || purchase.DHInventoryID == 0 {
+		return
+	}
+
+	req := s.buildDHSaleRequest(sa, purchase, sa.DHIdempotencyKey)
+	result, err := s.dhSaleRecorder.RecordInventorySale(ctx, req)
+	if err != nil {
+		if IsRetryableDHSaleError(err) {
+			if s.logger != nil {
+				s.logger.Warn(ctx, op+": dh sale record retryable failure, deferring to recovery pass",
+					observability.String("purchaseID", sa.PurchaseID),
+					observability.Err(err))
+			}
+			return
+		}
+		s.flagDHSaleConflict(ctx, op, purchase.ID, err.Error())
+		return
+	}
+
+	if setErr := s.sales.SetSaleDHSaleID(ctx, sa.ID, result.DHSaleID, time.Now()); setErr != nil && s.logger != nil {
+		s.logger.Warn(ctx, op+": failed to persist dh_sale_id",
+			observability.String("purchaseID", sa.PurchaseID),
+			observability.String("dhSaleID", result.DHSaleID),
+			observability.Err(setErr))
+	}
+
+	// delisted == false means an ask may still be live — the exact failure
+	// mode of the 2026-08-15 incident — so it is surfaced, not assumed benign.
+	if !result.Delisted {
+		s.flagDHSaleConflict(ctx, op, purchase.ID, "dh sale recorded but item not delisted")
+	}
+}
+
+// flagDHSaleConflict records a purchase-level conflict for human review.
+// Best-effort: a failure to write the flag is logged, not propagated — the
+// sale already committed and the DH call already resolved either way.
+func (s *service) flagDHSaleConflict(ctx context.Context, op, purchaseID, reason string) {
+	if err := s.purchases.SetDHSaleConflict(ctx, purchaseID, reason); err != nil && s.logger != nil {
+		s.logger.Warn(ctx, op+": failed to flag dh sale conflict",
+			observability.String("purchaseID", purchaseID),
+			observability.Err(err))
+	}
+}
