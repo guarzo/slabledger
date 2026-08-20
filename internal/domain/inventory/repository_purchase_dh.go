@@ -92,4 +92,18 @@ type PurchaseDHRepository interface {
 	// (dh_listing_price_cents). Excludes dismissed/held push statuses.
 	// Ordered oldest-synced first so stale items sync first.
 	ListDHPriceDrift(ctx context.Context) ([]Purchase, error)
+	// SetDHSaleConflict flags a purchase for human review after a
+	// non-retryable DH sale-recording error, or an apparent success with
+	// delisted == false (spec §4). A flagged purchase is excluded from
+	// ListSalesNeedingDHRecord until the flag is cleared.
+	SetDHSaleConflict(ctx context.Context, purchaseID, reason string) error
+	// ClearDHSaleConflict clears a previously flagged conflict, re-enrolling
+	// the row in the next §5b recovery pass.
+	ClearDHSaleConflict(ctx context.Context, purchaseID string) error
+	// ResetDHFieldsForRelistAfterVoid mirrors ResetDHFieldsForRepushDueToDelete
+	// but PRESERVES dh_inventory_id (the DH row is still alive after a void)
+	// and sets dh_status to in_stock. Used by the un-sell path (spec §7) to
+	// route a voided sale back through the push pipeline's auto-relist branch
+	// without creating a duplicate DH inventory row.
+	ResetDHFieldsForRelistAfterVoid(ctx context.Context, purchaseID string) error
 }

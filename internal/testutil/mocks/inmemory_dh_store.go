@@ -132,6 +132,52 @@ func (m *InMemoryCampaignStore) ResetDHFieldsForRepushDueToDelete(ctx context.Co
 	return nil
 }
 
+func (m *InMemoryCampaignStore) SetDHSaleConflict(ctx context.Context, purchaseID, reason string) error {
+	if m.SetDHSaleConflictFn != nil {
+		return m.SetDHSaleConflictFn(ctx, purchaseID, reason)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	now := time.Now()
+	p.DHSaleConflict = reason
+	p.DHSaleConflictAt = &now
+	p.UpdatedAt = now
+	return nil
+}
+
+func (m *InMemoryCampaignStore) ClearDHSaleConflict(ctx context.Context, purchaseID string) error {
+	if m.ClearDHSaleConflictFn != nil {
+		return m.ClearDHSaleConflictFn(ctx, purchaseID)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	p.DHSaleConflict = ""
+	p.DHSaleConflictAt = nil
+	p.UpdatedAt = time.Now()
+	return nil
+}
+
+func (m *InMemoryCampaignStore) ResetDHFieldsForRelistAfterVoid(ctx context.Context, purchaseID string) error {
+	if m.ResetDHFieldsForRelistAfterVoidFn != nil {
+		return m.ResetDHFieldsForRelistAfterVoidFn(ctx, purchaseID)
+	}
+	p, ok := m.Purchases[purchaseID]
+	if !ok {
+		return inventory.ErrPurchaseNotFound
+	}
+	p.DHPushStatus = inventory.DHPushStatusPending
+	p.DHStatus = inventory.DHStatusInStock
+	p.DHListingPriceCents = 0
+	p.DHChannelsJSON = "[]"
+	p.DHHoldReason = ""
+	p.UpdatedAt = time.Now()
+	return nil
+}
+
 func (m *InMemoryCampaignStore) UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error {
 	if m.UpdatePurchaseDHPriceSyncFn != nil {
 		return m.UpdatePurchaseDHPriceSyncFn(ctx, id, listingPriceCents, syncedAt)

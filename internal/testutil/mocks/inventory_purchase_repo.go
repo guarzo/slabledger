@@ -64,6 +64,9 @@ type PurchaseRepositoryMock struct {
 	ListDHPriceDriftFn                   func(ctx context.Context) ([]inventory.Purchase, error)
 	ReattributePurchaseFn                func(ctx context.Context, purchaseID string, r inventory.Reattribution) error
 	UpdatePurchaseAttributionNameFn      func(ctx context.Context, purchaseID, psaName, source string) error
+	SetDHSaleConflictFn                  func(ctx context.Context, purchaseID, reason string) error
+	ClearDHSaleConflictFn                func(ctx context.Context, purchaseID string) error
+	ResetDHFieldsForRelistAfterVoidFn    func(ctx context.Context, purchaseID string) error
 }
 
 var _ inventory.PurchaseRepository = (*PurchaseRepositoryMock)(nil)
@@ -449,6 +452,27 @@ func (m *PurchaseRepositoryMock) ReattributePurchase(ctx context.Context, purcha
 func (m *PurchaseRepositoryMock) UpdatePurchaseAttributionName(ctx context.Context, purchaseID, psaName, source string) error {
 	if m.UpdatePurchaseAttributionNameFn != nil {
 		return m.UpdatePurchaseAttributionNameFn(ctx, purchaseID, psaName, source)
+	}
+	return nil
+}
+
+func (m *PurchaseRepositoryMock) SetDHSaleConflict(ctx context.Context, purchaseID, reason string) error {
+	if m.SetDHSaleConflictFn != nil {
+		return m.SetDHSaleConflictFn(ctx, purchaseID, reason)
+	}
+	return nil
+}
+
+func (m *PurchaseRepositoryMock) ClearDHSaleConflict(ctx context.Context, purchaseID string) error {
+	if m.ClearDHSaleConflictFn != nil {
+		return m.ClearDHSaleConflictFn(ctx, purchaseID)
+	}
+	return nil
+}
+
+func (m *PurchaseRepositoryMock) ResetDHFieldsForRelistAfterVoid(ctx context.Context, purchaseID string) error {
+	if m.ResetDHFieldsForRelistAfterVoidFn != nil {
+		return m.ResetDHFieldsForRelistAfterVoidFn(ctx, purchaseID)
 	}
 	return nil
 }

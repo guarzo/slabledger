@@ -974,6 +974,84 @@ func (m *mockRepo) SaveDHPushConfig(_ context.Context, cfg *DHPushConfig) error 
 	return nil
 }
 
+func (m *mockRepo) SetSaleIdempotencyKeyIfAbsent(_ context.Context, saleID, key string) (string, error) {
+	s, ok := m.sales[saleID]
+	if !ok {
+		return "", ErrSaleNotFound
+	}
+	if s.DHIdempotencyKey == "" {
+		s.DHIdempotencyKey = key
+	}
+	return s.DHIdempotencyKey, nil
+}
+
+func (m *mockRepo) SetSaleDHSaleID(_ context.Context, saleID, dhSaleID string, recordedAt time.Time) error {
+	s, ok := m.sales[saleID]
+	if !ok {
+		return ErrSaleNotFound
+	}
+	s.DHSaleID = dhSaleID
+	t := recordedAt
+	s.DHSaleRecordedAt = &t
+	return nil
+}
+
+func (m *mockRepo) ListSalesNeedingDHRecord(_ context.Context, limit int) ([]SaleNeedingDHRecord, error) {
+	var result []SaleNeedingDHRecord
+	for _, s := range m.sales {
+		if s.DHSaleID != "" {
+			continue
+		}
+		p, ok := m.purchases[s.PurchaseID]
+		if !ok || p.DHInventoryID == 0 || p.DHSaleConflict != "" {
+			continue
+		}
+		if limit > 0 && len(result) >= limit {
+			break
+		}
+		result = append(result, SaleNeedingDHRecord{
+			Sale:          *s,
+			DHInventoryID: p.DHInventoryID,
+			PurchaseDate:  p.PurchaseDate,
+		})
+	}
+	return result, nil
+}
+
+func (m *mockRepo) SetDHSaleConflict(_ context.Context, purchaseID, reason string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	now := time.Now()
+	p.DHSaleConflict = reason
+	p.DHSaleConflictAt = &now
+	return nil
+}
+
+func (m *mockRepo) ClearDHSaleConflict(_ context.Context, purchaseID string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHSaleConflict = ""
+	p.DHSaleConflictAt = nil
+	return nil
+}
+
+func (m *mockRepo) ResetDHFieldsForRelistAfterVoid(_ context.Context, purchaseID string) error {
+	p, ok := m.purchases[purchaseID]
+	if !ok {
+		return ErrPurchaseNotFound
+	}
+	p.DHPushStatus = DHPushStatusPending
+	p.DHStatus = DHStatusInStock
+	p.DHListingPriceCents = 0
+	p.DHChannelsJSON = "[]"
+	p.DHHoldReason = ""
+	return nil
+}
+
 // testLogger is a recording observability.Logger for tests. It records levels
 // rather than discarding them, so a Warn/Error split can be asserted directly
 // instead of being silently swallowed by a no-op logger.
