@@ -3,6 +3,7 @@ package inventory_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -469,6 +470,111 @@ func TestFreezeSaleProvenance_CLProvenanceLabel(t *testing.T) {
 			}
 			if sa.CLValueAtSaleSource != tt.wantSource {
 				t.Errorf("CLValueAtSaleSource = %q, want %q", sa.CLValueAtSaleSource, tt.wantSource)
+			}
+		})
+	}
+}
+
+// seedSaleFixture creates a campaign and a DH-linked purchase, returning both.
+func seedSaleFixture(t *testing.T, svc inventory.Service, repo *mocks.InMemoryCampaignStore) (*inventory.Campaign, *inventory.Purchase) {
+	t.Helper()
+	ctx := context.Background()
+	c := &inventory.Campaign{Name: "Test"}
+	if err := svc.CreateCampaign(ctx, c); err != nil {
+		t.Fatalf("setup campaign: %v", err)
+	}
+	p := &inventory.Purchase{ID: "purchase-1", CampaignID: c.ID, PurchaseDate: "2026-06-01", DHInventoryID: 4001}
+	if err := repo.CreatePurchase(ctx, p); err != nil {
+		t.Fatalf("setup purchase: %v", err)
+	}
+	return c, p
+}
+
+func TestService_CreateSale_MintsIdempotencyKeyBeforeDHCall(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{
+		RecordInventorySaleFn: func(_ context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+			if req.IdempotencyKey == "" {
+				t.Fatal("RecordInventorySale called with an empty idempotency key")
+			}
+			if !strings.HasPrefix(req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix) {
+				t.Fatalf("idempotency key %q missing prefix %q", req.IdempotencyKey, inventory.DHIdempotencyKeyPrefix)
+			}
+			return &inventory.DHSaleResult{DHSaleID: "dh-sale-1", Delisted: true}, nil
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	c, p := seedSaleFixture(t, svc, repo)
+	sa := &inventory.Sale{PurchaseID: p.ID, SaleChannel: inventory.SaleChannelInPerson, SalePriceCents: 5000, SaleDate: "2026-07-01"}
+	if err := svc.CreateSale(ctx, sa, c, p); err != nil {
+		t.Fatalf("CreateSale: %v", err)
+	}
+
+	got, err := repo.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("reload sale: %v", err)
+	}
+	if got.DHIdempotencyKey == "" {
+		t.Fatal("DHIdempotencyKey was not persisted")
+	}
+	if got.DHSaleID != "dh-sale-1" {
+		t.Fatalf("DHSaleID = %q, want dh-sale-1", got.DHSaleID)
+	}
+}
+
+func TestService_CreateSale_DHSaleConflictFlagging(t *testing.T) {
+	tests := []struct {
+		name         string
+		recordErr    error
+		result       *inventory.DHSaleResult
+		wantConflict bool
+		wantSaleDHID string
+	}{
+		{"non-retryable failure flags conflict", inventory.ErrDHItemUnavailable, nil, true, ""},
+		{"retryable in-progress does NOT flag", inventory.ErrDHIdempotencyInProgress, nil, false, ""},
+		{"retryable lock contention does NOT flag", inventory.ErrDHLockContention, nil, false, ""},
+		{"success but not delisted flags conflict", nil, &inventory.DHSaleResult{DHSaleID: "dh-1", Delisted: false}, true, "dh-1"},
+		{"success and delisted flags nothing", nil, &inventory.DHSaleResult{DHSaleID: "dh-2", Delisted: true}, false, "dh-2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			recorder := &mocks.DHSaleRecorderMock{
+				RecordInventorySaleFn: func(context.Context, inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+					if tt.recordErr != nil {
+						return nil, tt.recordErr
+					}
+					return tt.result, nil
+				},
+			}
+			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+				withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+			ctx := context.Background()
+
+			c, p := seedSaleFixture(t, svc, repo)
+			sa := &inventory.Sale{PurchaseID: p.ID, SaleChannel: inventory.SaleChannelInPerson, SalePriceCents: 5000, SaleDate: "2026-07-01"}
+			if err := svc.CreateSale(ctx, sa, c, p); err != nil {
+				t.Fatalf("CreateSale: %v", err)
+			}
+
+			gotP, err := repo.GetPurchase(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("reload purchase: %v", err)
+			}
+			if hasConflict := gotP.DHSaleConflict != ""; hasConflict != tt.wantConflict {
+				t.Fatalf("DHSaleConflict = %q (set=%v), want set=%v", gotP.DHSaleConflict, hasConflict, tt.wantConflict)
+			}
+
+			gotSale, err := repo.GetSaleByPurchaseID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("reload sale: %v", err)
+			}
+			if gotSale.DHSaleID != tt.wantSaleDHID {
+				t.Fatalf("DHSaleID = %q, want %q", gotSale.DHSaleID, tt.wantSaleDHID)
 			}
 		})
 	}

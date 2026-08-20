@@ -247,6 +247,12 @@ type service struct {
 	// retired on the DH platform. Optional — if nil, no DH call is made on sale.
 	dhSoldNotifier DHSoldNotifier
 
+	// dhSaleRecorder records (and, on un-sell, voids) sales on DH via the
+	// purpose-built sale endpoint. It supersedes dhSoldNotifier's status-PATCH
+	// approach, which DH rejects (422 "Invalid status 'sold'"). Both are wired
+	// during the migration; only this one survives Task 12's cleanup.
+	dhSaleRecorder DHSaleRecorder
+
 	// disableBackgroundWorkers is a test-only flag to prevent background workers from running.
 	disableBackgroundWorkers bool
 
@@ -333,6 +339,13 @@ func WithPendingItemRepository(r PendingItemRepository) ServiceOption {
 // confirmed as sold locally, the corresponding DH inventory item is retired.
 func WithDHSoldNotifier(n DHSoldNotifier) ServiceOption {
 	return func(s *service) { s.dhSoldNotifier = n }
+}
+
+// WithDHSaleRecorder injects a DH sale recorder so a local sale is also
+// recorded (and, on un-sell, voided) on DH. Optional — if nil, no DH sale
+// call is made and the sale still commits locally.
+func WithDHSaleRecorder(r DHSaleRecorder) ServiceOption {
+	return func(s *service) { s.dhSaleRecorder = r }
 }
 
 // WithEventRecorder enables dh_state_events recording for enrollment and
