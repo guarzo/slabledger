@@ -256,12 +256,36 @@ func (ss *SaleStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID strin
 // non-empty-key clause) — those are the pre-migration legacy sales, including
 // the 25 from the 2026-08-15 incident, which mint a key on first visit via
 // SetSaleIdempotencyKeyIfAbsent (spec §5a) rather than being skipped.
+//
+// An empty order_id excludes sales that ORIGINATED at DH. The DH orders poller
+// imports those via ConfirmOrdersSales, which writes the row through the
+// repository and so never mints a key — leaving them indistinguishable, by the
+// other three clauses alone, from a sale of ours that DH has not been told
+// about. Recording one would report DH's own sale back to them: either a 409
+// item_sold_on_channel that conflict-flags a perfectly healthy row, or a
+// duplicate disposal in their ledger.
+//
+// This is not a migration-hygiene edge case. Measured 2026-08-20: 434 of 1584
+// existing sales carry an order_id, and DH-native sales are now the MAJORITY of
+// new ones (69 of 101 in August). Without this clause the recovery pass would
+// misclassify the primary sales channel every cycle, and the conflict flag —
+// which exists to surface real drift — would drown in false positives.
+//
+// Only the two DH order paths set order_id (dh_orders_poll.go,
+// service_import_orders.go); nothing in CreateSale/CreateBulkSales does, so it
+// is a sound origin discriminator.
+//
+// Consequence, accepted deliberately: a DH-native sale never gains a
+// dh_sale_id, so un-selling one cannot void it on DH. That matches the
+// pre-branch status quo (nothing voided at all) and cannot be closed until DH
+// exposes the sale id at order-import time.
 func (ss *SaleStore) ListSalesNeedingDHRecord(ctx context.Context, limit int) ([]inventory.SaleNeedingDHRecord, error) {
 	query := `
 		SELECT ` + saleColumnsAliased + `, p.dh_inventory_id, p.purchase_date
 		FROM campaign_sales s
 		JOIN campaign_purchases p ON p.id = s.purchase_id
 		WHERE s.dh_sale_id = ''
+		  AND s.order_id = ''
 		  AND p.dh_inventory_id <> 0
 		  AND p.dh_sale_conflict = ''
 		ORDER BY s.created_at ASC

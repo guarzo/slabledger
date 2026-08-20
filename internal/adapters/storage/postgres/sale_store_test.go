@@ -396,6 +396,29 @@ func TestListSalesNeedingDHRecord(t *testing.T) {
 			},
 		},
 		{
+			// A DH-native sale: imported by the orders poller, so DH already
+			// knows about it. Recording it would report their own sale back to
+			// them — a 409 that conflict-flags a healthy row, or a duplicate
+			// disposal. Measured 2026-08-20: these are the MAJORITY of new
+			// sales (69 of 101 in August), so without this exclusion the
+			// recovery pass misclassifies the primary sales channel and the
+			// conflict flag drowns in false positives.
+			name: "excluded: sale originated at DH (order_id set)",
+			setup: func(t *testing.T) (string, bool) {
+				purchase := makeTestPurchase()
+				purchase.DHInventoryID = 444
+				if err := ps.CreatePurchase(ctx, purchase); err != nil {
+					t.Fatalf("create dh-native purchase: %v", err)
+				}
+				sale := makeTestSale(purchase.ID)
+				sale.OrderID = "dh-order-9001"
+				if err := ss.CreateSale(ctx, sale); err != nil {
+					t.Fatalf("create dh-native sale: %v", err)
+				}
+				return sale.ID, false
+			},
+		},
+		{
 			// A legacy sale: no idempotency key set (the zero value), matching the
 			// 25 sales from the 2026-08-15 incident. Must still appear.
 			name: "included: legacy sale with no idempotency key",

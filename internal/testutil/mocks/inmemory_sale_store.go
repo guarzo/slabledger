@@ -156,6 +156,12 @@ func (m *InMemoryCampaignStore) ListSalesNeedingDHRecord(ctx context.Context, li
 		if s.DHSaleID != "" {
 			continue
 		}
+		// Mirror Postgres: a non-empty order_id means the sale ORIGINATED at
+		// DH, so DH already knows about it and recording it would report their
+		// own sale back to them.
+		if s.OrderID != "" {
+			continue
+		}
 		p, ok := m.Purchases[s.PurchaseID]
 		if !ok || p.DHInventoryID == 0 || p.DHSaleConflict != "" {
 			continue

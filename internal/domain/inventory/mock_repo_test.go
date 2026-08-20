@@ -1002,6 +1002,11 @@ func (m *mockRepo) ListSalesNeedingDHRecord(_ context.Context, limit int) ([]Sal
 		if s.DHSaleID != "" {
 			continue
 		}
+		// Mirror Postgres: a non-empty order_id means the sale ORIGINATED at
+		// DH, so recording it would report their own sale back to them.
+		if s.OrderID != "" {
+			continue
+		}
 		p, ok := m.purchases[s.PurchaseID]
 		if !ok || p.DHInventoryID == 0 || p.DHSaleConflict != "" {
 			continue

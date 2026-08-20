@@ -63,7 +63,7 @@ func resolverFor(byInventoryID map[int]inventory.DHStatus, err error) *mocks.Pur
 }
 
 // saleFor builds a minimal sale for a purchase, so a sweep test can populate
-// the stubSalesLister for purchases it expects the sweep to record.
+// store.Sales for purchases it expects the sweep to record.
 func saleFor(purchaseID string) *inventory.Sale {
 	return &inventory.Sale{ID: "s-" + purchaseID, PurchaseID: purchaseID, SalePriceCents: 12345, SaleDate: "2026-07-01"}
 }
