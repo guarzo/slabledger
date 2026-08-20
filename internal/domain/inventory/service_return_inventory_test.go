@@ -185,6 +185,90 @@ func TestDeleteSaleByPurchaseID_VoidNotFoundIsSuccess(t *testing.T) {
 	}
 }
 
+// A legacy sale -- no dh_sale_id, no dh_idempotency_key, e.g. every sale row
+// that predates this feature -- on a DH-linked purchase that still reads as
+// sold must still get its DH fields reset, or it never re-enrols in the push
+// pipeline (final review C2).
+func TestDeleteSaleByPurchaseID_LegacySaleStillResetsDHLinkedPurchase(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	var resetCalled bool
+	recorder := &mocks.DHSaleRecorderMock{
+		VoidInventorySaleFn: func(context.Context, string, string) error {
+			t.Fatal("VoidInventorySale must not be called when there is no dh_sale_id or dh_idempotency_key")
+			return nil
+		},
+	}
+	repo.ResetDHFieldsForRelistAfterVoidFn = func(_ context.Context, purchaseID string) error {
+		resetCalled = true
+		return nil
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	_, p := seedSaleFixture(t, svc, repo) // DHInventoryID: 4001
+	if err := repo.UpdatePurchaseDHStatus(ctx, p.ID, inventory.DHStatusSold); err != nil {
+		t.Fatalf("setup: mark purchase sold: %v", err)
+	}
+	// Legacy sale row: neither DH field ever populated.
+	if err := repo.CreateSale(ctx, &inventory.Sale{ID: "s1", PurchaseID: p.ID, SalePriceCents: 5000, SaleDate: "2026-07-01"}); err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err != nil {
+		t.Fatalf("DeleteSaleByPurchaseID: %v", err)
+	}
+	if !resetCalled {
+		t.Fatal("ResetDHFieldsForRelistAfterVoid was not called for a legacy sale on a DH-linked, sold purchase")
+	}
+	if _, err := repo.GetSaleByPurchaseID(ctx, p.ID); !errors.Is(err, inventory.ErrSaleNotFound) {
+		t.Fatal("sale row should be gone after un-sell")
+	}
+}
+
+// A DH-side failure (here, recovering the void handle) must not permanently
+// block the local un-sell: the sale is already committed locally and that is
+// what the user asked for. The failure is flagged for review and the sequence
+// falls through to the local reset+delete (final review I2).
+func TestDeleteSaleByPurchaseID_DHFailureDoesNotBlockLocalUnsell(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	recorder := &mocks.DHSaleRecorderMock{
+		RecordInventorySaleFn: func(context.Context, inventory.DHSaleRequest) (*inventory.DHSaleResult, error) {
+			return nil, errors.New("dh unreachable")
+		},
+	}
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo,
+		withTestIDGen(), inventory.WithDHSaleRecorder(recorder))
+	ctx := context.Background()
+
+	_, p := seedSaleFixture(t, svc, repo) // DHInventoryID: 4001
+	if err := repo.UpdatePurchaseDHStatus(ctx, p.ID, inventory.DHStatusSold); err != nil {
+		t.Fatalf("setup: mark purchase sold: %v", err)
+	}
+	// Key present but no persisted dh_sale_id -- ensureDHSaleHandle must
+	// replay, and the replay fails here.
+	if err := repo.CreateSale(ctx, &inventory.Sale{
+		ID: "s1", PurchaseID: p.ID, SalePriceCents: 5000, SaleDate: "2026-07-01",
+		DHIdempotencyKey: "slabledger-sale-orphan",
+	}); err != nil {
+		t.Fatalf("seed sale: %v", err)
+	}
+
+	if err := svc.DeleteSaleByPurchaseID(ctx, p.ID); err != nil {
+		t.Fatalf("DeleteSaleByPurchaseID must succeed locally despite the dh failure: %v", err)
+	}
+	if _, err := repo.GetSaleByPurchaseID(ctx, p.ID); !errors.Is(err, inventory.ErrSaleNotFound) {
+		t.Fatal("sale row should be gone after un-sell")
+	}
+	got, err := repo.GetPurchase(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("reload purchase: %v", err)
+	}
+	if got.DHSaleConflict == "" {
+		t.Fatal("purchase should be flagged with a dh sale conflict after the dh failure")
+	}
+}
+
 // A sale with a key but no persisted dh_sale_id (the crash window design §5b
 // names) is replayed to obtain a handle before voiding — never skipped.
 func TestDeleteSaleByPurchaseID_ReplaysForMissingHandle(t *testing.T) {

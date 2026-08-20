@@ -296,6 +296,14 @@ func (s *service) CreateSale(ctx context.Context, sa *Sale, campaign *Campaign, 
 	// legacy sale predating this column mints lazily instead, via the §5b
 	// recovery pass (Task 11).
 	sa.DHIdempotencyKey = NewDHIdempotencyKey(s.idGen)
+	// HandleCreateSale decodes the client request body straight into this
+	// struct with no scrub. DHSaleID/DHSaleRecordedAt are server-owned: they
+	// must only ever be set by recordDHSale after a confirmed DH response.
+	// Leaving a client-forged value in place would let a client hide a sale
+	// from ListSalesNeedingDHRecord and would target an un-sell's void at an
+	// arbitrary DH sale id.
+	sa.DHSaleID = ""
+	sa.DHSaleRecordedAt = nil
 
 	sa.SaleFeeCents = CalculateSaleFee(sa.SaleChannel, sa.SalePriceCents, campaign)
 
@@ -426,6 +434,11 @@ func (s *service) CreateBulkSales(ctx context.Context, campaignID string, channe
 
 		sa.ID = s.idGen()
 		sa.DHIdempotencyKey = NewDHIdempotencyKey(s.idGen)
+		// sa is built above from BulkSaleInput, which carries no DH fields, so
+		// these are already zero -- set explicitly to keep the invariant
+		// visible at the call site rather than relying on struct-literal luck.
+		sa.DHSaleID = ""
+		sa.DHSaleRecordedAt = nil
 		sa.SaleFeeCents = CalculateSaleFee(sa.SaleChannel, sa.SalePriceCents, campaign)
 
 		purchaseDate, parseErr := time.Parse("2006-01-02", purchase.PurchaseDate)

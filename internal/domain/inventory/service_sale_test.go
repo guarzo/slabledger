@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -522,6 +523,48 @@ func TestService_CreateSale_MintsIdempotencyKeyBeforeDHCall(t *testing.T) {
 	}
 	if got.DHSaleID != "dh-sale-1" {
 		t.Fatalf("DHSaleID = %q, want dh-sale-1", got.DHSaleID)
+	}
+}
+
+// A client-forged DHSaleID/DHSaleRecordedAt must never survive CreateSale:
+// HandleCreateSale decodes the request body straight into inventory.Sale with
+// no scrub, so these server-owned fields could otherwise hide a sale from
+// ListSalesNeedingDHRecord or target an un-sell's void at an arbitrary DH
+// sale id (final review C1).
+func TestService_CreateSale_ScrubsClientSuppliedDHSaleFields(t *testing.T) {
+	repo := mocks.NewInMemoryCampaignStore()
+	svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen())
+	ctx := context.Background()
+
+	c, p := seedSaleFixture(t, svc, repo)
+	forgedAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	sa := &inventory.Sale{
+		PurchaseID:       p.ID,
+		SaleChannel:      inventory.SaleChannelInPerson,
+		SalePriceCents:   5000,
+		SaleDate:         "2026-07-01",
+		DHSaleID:         "forged-dh-sale-id",
+		DHSaleRecordedAt: &forgedAt,
+	}
+	if err := svc.CreateSale(ctx, sa, c, p); err != nil {
+		t.Fatalf("CreateSale: %v", err)
+	}
+	if sa.DHSaleID != "" {
+		t.Fatalf("DHSaleID = %q, want scrubbed to empty", sa.DHSaleID)
+	}
+	if sa.DHSaleRecordedAt != nil {
+		t.Fatalf("DHSaleRecordedAt = %v, want scrubbed to nil", sa.DHSaleRecordedAt)
+	}
+
+	got, err := repo.GetSaleByPurchaseID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("reload sale: %v", err)
+	}
+	if got.DHSaleID != "" {
+		t.Fatalf("persisted DHSaleID = %q, want empty", got.DHSaleID)
+	}
+	if got.DHSaleRecordedAt != nil {
+		t.Fatalf("persisted DHSaleRecordedAt = %v, want nil", got.DHSaleRecordedAt)
 	}
 }
 

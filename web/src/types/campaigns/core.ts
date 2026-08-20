@@ -86,6 +86,13 @@ export interface Purchase {
    * "Re-list (removed from DH)" row badge.
    */
   dhUnlistedDetectedAt?: string;
+  /**
+   * Flagged when a DH sale recording failed permanently or looked incomplete
+   * (delisted === false on an apparent success). Cleared by a human once
+   * resolved, which re-enrols the purchase in the §5b recovery pass.
+   */
+  dhSaleConflict?: string;
+  dhSaleConflictAt?: string;
   gemRateId?: string;
   psaSpecId?: number;
   clSyncedAt?: string;
@@ -160,6 +167,11 @@ export interface Sale {
   theirCompCents?: number;
   /** One of 'itemized' | 'estimated' | 'manual' | 'unknown'; mirrors Go's inventory.PriceSource. */
   priceSource?: string;
+  // DoubleHolo sale-recording tracking (see migration 000044); server-owned,
+  // never set from a client request.
+  dhIdempotencyKey?: string;
+  dhSaleId?: string;
+  dhSaleRecordedAt?: string;
 }
 
 export interface CreateCampaignInput {
