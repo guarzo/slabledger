@@ -30,6 +30,11 @@ func newTestClient(t *testing.T, serverURL string, tokens ...string) *Client {
 	cfg := httpx.DefaultConfig("PSA-test")
 	cfg.DefaultTimeout = 5 * time.Second
 	c.httpClient = httpx.NewClient(cfg)
+	// Images run on their own breaker in production; point it at the same test
+	// server so image-path tests get the fast client too.
+	imagesCfg := httpx.DefaultConfig("PSA-images-test")
+	imagesCfg.DefaultTimeout = 5 * time.Second
+	c.imagesHTTP = httpx.NewClient(imagesCfg)
 	return c
 }
 

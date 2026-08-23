@@ -47,7 +47,20 @@ type CertInfo struct {
 // Supports multiple API tokens for higher throughput — when one token is
 // rejected or exhausts its daily quota, the client rotates to the next.
 type Client struct {
+	// httpClient serves cert lookup; imagesHTTP serves the images endpoint.
+	// They are deliberately separate so they carry separate circuit breakers.
+	//
+	// PSA answers a deterministic HTTP 500 from GetImagesByCertNumber for
+	// certain older slabs while GetByCertNumber serves those same certs
+	// normally. On a shared breaker the background image backfill tripped the
+	// provider-wide breaker and took cert lookup down with it, so every card
+	// scan returned "Internal server error" (2026-08-23). A broken endpoint
+	// must not be able to disable a healthy one.
+	//
+	// The token pool and request pacing stay shared: PSA quota is per key
+	// across endpoints, so rotation and spacing are provider-wide concerns.
 	httpClient *httpx.Client
+	imagesHTTP *httpx.Client
 	baseURL    string
 	pool       *tokenPool
 	logger     observability.Logger
@@ -68,8 +81,11 @@ func NewClient(token string, logger observability.Logger) *Client {
 	}
 	httpCfg := httpx.DefaultConfig("PSA")
 	httpCfg.DefaultTimeout = 15 * time.Second
+	imagesCfg := httpx.DefaultConfig("PSA-images")
+	imagesCfg.DefaultTimeout = 15 * time.Second
 	return &Client{
 		httpClient: httpx.NewClient(httpCfg),
+		imagesHTTP: httpx.NewClient(imagesCfg),
 		baseURL:    defaultBaseURL,
 		pool:       newTokenPool(tokens),
 		logger:     logger,
@@ -94,7 +110,7 @@ func (c *Client) exhaustedError() error {
 
 // doRequest handles the shared logic for PSA API calls: token selection,
 // request pacing, rotation on 401/403/429, and response reading.
-func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string) (*httpx.Response, error) {
+func (c *Client) doRequest(ctx context.Context, hc *httpx.Client, opName, path, certNumber string) (*httpx.Response, error) {
 	total, _, _ := c.pool.stats()
 	if total == 0 {
 		return nil, apperrors.ConfigMissing("PSA API token", "PSA_API_TOKENS")
@@ -143,7 +159,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 
 		// httpx returns both (*Response, error) on HTTP 4xx/5xx, allowing us
 		// to inspect the status code even when err != nil.
-		resp, err := c.httpClient.Get(ctx, url, headers, 0)
+		resp, err := hc.Get(ctx, url, headers, 0)
 		if err == nil {
 			// Any success clears the token's consecutive-401 count, so a token
 			// is only retired for a genuine unbroken run of rejections.
@@ -237,7 +253,7 @@ func (c *Client) doRequest(ctx context.Context, opName, path, certNumber string)
 
 // GetCert looks up a PSA certificate by number.
 func (c *Client) GetCert(ctx context.Context, certNumber string) (*CertInfo, error) {
-	resp, err := c.doRequest(ctx, "cert lookup", "cert/GetByCertNumber", certNumber)
+	resp, err := c.doRequest(ctx, c.httpClient, "cert lookup", "cert/GetByCertNumber", certNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +290,7 @@ type ImageInfo struct {
 
 // GetImages fetches slab images for a PSA certificate.
 func (c *Client) GetImages(ctx context.Context, certNumber string) ([]ImageInfo, error) {
-	resp, err := c.doRequest(ctx, "image fetch", "cert/GetImagesByCertNumber", certNumber)
+	resp, err := c.doRequest(ctx, c.imagesHTTP, "image fetch", "cert/GetImagesByCertNumber", certNumber)
 	if err != nil {
 		return nil, err
 	}
