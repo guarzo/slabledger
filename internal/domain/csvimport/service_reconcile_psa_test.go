@@ -372,14 +372,23 @@ func TestReconcilePSAAttribution_BuyTermsFreezing(t *testing.T) {
 		name              string
 		purchaseDate      string
 		campaignUpdatedAt time.Time
-		wantNil           bool
+		// zeroTerms leaves the target campaign at buy_terms_cl_pct = 0, the
+		// NOT NULL default. That is "unconfigured", not a terms level, and must
+		// re-derive as NULL even when the campaign is otherwise vouchable --
+		// a stored 0 would divide by zero in (buy_cost - fee) / terms.
+		zeroTerms bool
+		wantNil   bool
 	}{
-		{"campaign untouched since purchase", "2026-08-01", mustTime("2026-07-01"), false},
-		{"campaign written after purchase", "2026-07-01", mustTime("2026-08-01"), true},
+		{name: "campaign untouched since purchase", purchaseDate: "2026-08-01", campaignUpdatedAt: mustTime("2026-07-01")},
+		{name: "campaign written after purchase", purchaseDate: "2026-07-01", campaignUpdatedAt: mustTime("2026-08-01"), wantNil: true},
+		{name: "vouchable campaign with unconfigured terms", purchaseDate: "2026-08-01", campaignUpdatedAt: mustTime("2026-07-01"), zeroTerms: true, wantNil: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newReconcileFixtureWithDates(t, tt.purchaseDate, tt.campaignUpdatedAt)
+			if tt.zeroTerms {
+				repo.Campaigns["camp-a"].BuyTermsCLPct = 0
+			}
 			if _, err := svc.ReconcilePSAAttribution(context.Background(),
 				[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
 				t.Fatalf("ReconcilePSAAttribution: %v", err)
