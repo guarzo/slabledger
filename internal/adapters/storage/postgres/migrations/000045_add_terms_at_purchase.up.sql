@@ -1,0 +1,108 @@
+-- Freeze the campaign's buy terms at purchase time (ledger R-037, wishlist 34).
+--
+-- Every PSA campaign purchase satisfies, exactly:
+--
+--     buy_cost_cents = round(buy_terms_cl_pct * PSA_CLV_cents) + psa_sourcing_fee_cents
+--
+-- which makes the CardLadder value PSA actually bid against exactly recoverable
+-- as (buy_cost - fee) / terms -- but ONLY if we know the terms level that was in
+-- force when the row was written. Nothing stores it. campaigns.buy_terms_cl_pct
+-- holds only today's value, and it has drifted: recovery against current terms
+-- succeeds on 435/777 sold rows and fails on the rest.
+--
+-- This matters because cl_value_at_purchase_cents is NOT the bid anchor on ~36%
+-- of rows (16 of 44 unsold rows carrying a CL-at-buy disagree with it, clustered
+-- by campaign). The recovered CLV is the cleanest denominator available for
+-- re-deriving R-032's break-evens, which currently rest on that contaminated
+-- column. One additive column converts an inference into an exact measurement,
+-- for every row written from here on.
+--
+-- Type matches the source column: campaigns.buy_terms_cl_pct is
+-- double precision NOT NULL DEFAULT 0.
+--
+-- NULLABLE, not NOT NULL DEFAULT 0. 0 is not a legitimate terms value, so it
+-- could double as its own sentinel -- but this column is read by studies whose
+-- inclusion predicate must be unambiguous, and `IS NOT NULL` is a clearer
+-- contract than `> 0` for a float. This follows 000041's reasoning for
+-- cl_card_confidence_at_purchase, which reasoned the choice out per column
+-- rather than defaulting to a convention. Note the trap 000041 documented: the
+-- *_cents columns are BIGINT NOT NULL DEFAULT 0, so `IS NOT NULL` is
+-- tautological on THOSE -- that pattern must not be copied here.
+--
+-- NO BACKFILL, and the temptation here is sharper than usual. Because the
+-- identity is invertible, it is possible to SOLVE for historical terms -- grid
+-- 0.60-0.95, keep whatever value yields a round-dollar CLV -- and fill the
+-- column with the result. Do not. Three reasons, in order of severity:
+--
+--   1. It cannot be validated. The round-dollar test is what IDENTIFIES a fit;
+--      using it to both find and confirm the value is circular. With 36 grid
+--      points a coincidental round-dollar hit is likely enough (~30% for a
+--      random row) that a fitted column would be substantially wrong while
+--      looking clean.
+--   2. It has no answer for 126/777 rows (16%), which admit no fit at any terms.
+--   3. A fitted value is indistinguishable from a frozen one once written,
+--      which is exactly the failure mode 000041 exists to prevent.
+--
+-- 000041 states the governing principle: a column named `*_at_purchase` must
+-- contain a value observed near the purchase, or nothing at all. It is better to
+-- leave a hole than to fill it with today's number wearing a purchase-time
+-- label, because the second is undetectable afterwards and silently corrupts
+-- every later analysis. Historical rows stay NULL; a study wanting recovered CLV
+-- filters on `buy_terms_cl_pct_at_purchase IS NOT NULL` and accepts the smaller,
+-- honest cohort.
+--
+-- FREEZE LATENCY -- read this before using the column as a denominator.
+--
+-- The freeze is unconditional at create time (service_crud.go), matching its
+-- sibling cl_policy_confidence_min_at_purchase. Two intake paths create rows
+-- with a HISTORICAL purchase_date -- PSA CSV import (service_import_psa.go,
+-- date from the export) and PSA pending-item assign (psa_sync_handler.go) --
+-- so on those rows the stored terms are the campaign's value as of the WRITE,
+-- not as of the purchase. If the campaign's terms moved in between, the value
+-- is wrong.
+--
+-- This is deliberately NOT gated the way the reattribution path is, for two
+-- reasons. First, campaigns.updated_at bumps on ANY campaign write (UpdateCampaign
+-- is one full-row UPDATE: phase, name, targeting axes, sourcing fee), and phase
+-- is mirrored to the PSA portal routinely -- so an "untouched since purchase"
+-- gate would null this column on a large fraction of rows, mostly for edits
+-- that never touched terms, starving a cohort that is already small. Second,
+-- and decisively: unlike the case 000041 legislated for, the staleness here is
+-- MEASURABLE after the fact. created_at is the write time (never backdated,
+-- service_crud.go), so created_at - purchase_date IS the freeze latency, and
+-- campaigns.updated_at is joinable. 000041's rule exists because a stale value
+-- is "undetectable afterwards"; that rationale does not bite when the
+-- discriminator survives on the row. Keeping the value is strictly more
+-- informative than nulling it: a study can always discard what a gate would
+-- have discarded, but it cannot recover what a gate threw away. This is the
+-- same call 000041 itself made -- it did not null ambiguous
+-- cl_value_at_purchase_cents rows, it added the provenance to filter them.
+--
+-- So the column's contract is IS NOT NULL *plus a latency bound*, not
+-- IS NOT NULL alone. The house window is clFreezeMaxAgeDays = 7
+-- (cl_freeze.go), the same bound the CL freeze uses:
+--
+--     WHERE buy_terms_cl_pct_at_purchase IS NOT NULL
+--       AND purchase_date ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])'
+--       AND left(purchase_date, 10) >= to_char(created_at::date - 7, 'YYYY-MM-DD')
+--       AND left(purchase_date, 10) <= to_char(created_at::date, 'YYYY-MM-DD')
+--
+-- Note the shape regex and the LEXICOGRAPHIC comparison. purchase_date is TEXT
+-- (migration 000001) and is validated for non-emptiness only, so it can hold
+-- calendar-invalid text like 2026-02-30; a ::date cast on it raises
+-- "date/time field value out of range", and Postgres does not guarantee WHERE
+-- clause evaluation order, so a preceding shape check does NOT reliably guard a
+-- cast. cl_freeze.go documents this trap at length -- do not "simplify" the
+-- predicate above into a cast.
+--
+-- The diagnostic in the task brief must be latency-aware for the same reason: a
+-- row where the identity does not close and the recovered CLV is not round is
+-- only a bug in THIS column once freeze latency is ruled out.
+
+-- No rollback-window trigger, for the same reason 000041 and 000040 gave: a
+-- legacy-image INSERT (the previous binary, mid-rollback, has no notion of this
+-- column) lands NULL, and NULL means exactly "terms unknown" -- the correct,
+-- honest outcome for a row written by code that predates the column. There is
+-- nothing to derive it into.
+ALTER TABLE campaign_purchases
+    ADD COLUMN buy_terms_cl_pct_at_purchase DOUBLE PRECISION;

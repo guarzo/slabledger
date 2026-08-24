@@ -496,11 +496,67 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 				t.Fatalf("CreatePurchase: %v", err)
 			}
 
+			if p.BuyTermsCLPctAtPurchase == nil || *p.BuyTermsCLPctAtPurchase != 0.78 {
+				t.Errorf("BuyTermsCLPctAtPurchase = %v, want 0.78", p.BuyTermsCLPctAtPurchase)
+			}
 			if p.CLPolicyConfidenceMinAtPurchase == nil || *p.CLPolicyConfidenceMinAtPurchase != 2 {
 				t.Errorf("CLPolicyConfidenceMinAtPurchase = %v, want 2", p.CLPolicyConfidenceMinAtPurchase)
 			}
 			if p.PopulationAtPurchase != nil {
 				t.Errorf("PopulationAtPurchase = %v, want nil (D2: no longer frozen at create time)", p.PopulationAtPurchase)
+			}
+		})
+	}
+}
+
+// The freeze guards on campaign.BuyTermsCLPct > 0 because 0 is
+// campaigns.buy_terms_cl_pct's NOT NULL default, not a terms level a campaign
+// could legitimately buy at -- and validation.go:96 admits 0, so an
+// unconfigured campaign is a reachable state. The distinction is load-bearing:
+// studies recover the bid anchor as (buy_cost - fee) / terms, so a stored 0
+// divides by zero, while a NULL is excluded by the column's IS NOT NULL
+// contract. Unknown and zero must not collapse into each other.
+func TestCreatePurchase_FreezesBuyTerms(t *testing.T) {
+	tests := []struct {
+		name          string
+		campaignTerms float64
+		certNumber    string
+		wantNil       bool
+		want          float64
+	}{
+		{name: "configured terms freeze", campaignTerms: 0.78, certNumber: "88888891", want: 0.78},
+		{name: "unconfigured terms freeze as NULL, not 0", campaignTerms: 0, certNumber: "88888892", wantNil: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			svc := inventory.NewService(repo, repo, repo, repo, repo, repo, repo, withTestIDGen(), withDisabledBackgroundWorkers(), inventory.WithPriceLookup(newDefaultPriceLookup(t, "")))
+			ctx := context.Background()
+
+			c := &inventory.Campaign{Name: "Test", BuyTermsCLPct: tt.campaignTerms, CLConfidence: "2.5-4"}
+			if err := svc.CreateCampaign(ctx, c); err != nil {
+				t.Fatalf("setup CreateCampaign: %v", err)
+			}
+			p := &inventory.Purchase{
+				CampaignID: c.ID, CardName: "Charizard", CertNumber: tt.certNumber,
+				GradeValue: 9, BuyCostCents: 50000, PurchaseDate: "2026-01-15",
+			}
+			if err := svc.CreatePurchase(ctx, p); err != nil {
+				t.Fatalf("CreatePurchase: %v", err)
+			}
+
+			got := p.BuyTermsCLPctAtPurchase
+			if tt.wantNil {
+				if got != nil {
+					t.Errorf("BuyTermsCLPctAtPurchase = %v, want nil (0 is the column default, not a terms level)", *got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("BuyTermsCLPctAtPurchase = nil, want frozen value")
+			}
+			if *got != tt.want {
+				t.Errorf("BuyTermsCLPctAtPurchase = %v, want %v", *got, tt.want)
 			}
 		})
 	}
@@ -533,6 +589,7 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 		SourceCountAtPurchase:           &junkInt,
 		ActiveListingsAtPurchase:        &junkInt,
 		SalesLast30dAtPurchase:          &junkInt,
+		BuyTermsCLPctAtPurchase:         &junkFloat,
 	}
 	if err := svc.CreatePurchase(ctx, p); err != nil {
 		t.Fatalf("CreatePurchase: %v", err)
@@ -552,6 +609,13 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 	}
 	if p.PopulationAtPurchase != nil {
 		t.Errorf("PopulationAtPurchase = %v, want nil (client-forged value discarded)", p.PopulationAtPurchase)
+	}
+	// junkFloat is 0.99; the campaign's real terms are 0.78. A body-supplied
+	// value must be discarded and re-derived from the campaign, not passed
+	// through -- a forged terms level silently falsifies the recovered CLV that
+	// this column exists to make exact (R-037).
+	if p.BuyTermsCLPctAtPurchase == nil || *p.BuyTermsCLPctAtPurchase != 0.78 {
+		t.Errorf("BuyTermsCLPctAtPurchase = %v, want 0.78 (derived from campaign, not the forged 0.99)", p.BuyTermsCLPctAtPurchase)
 	}
 	if p.CLPolicyConfidenceMinAtPurchase == nil || *p.CLPolicyConfidenceMinAtPurchase != 2 {
 		t.Errorf("CLPolicyConfidenceMinAtPurchase = %v, want 2 (derived from campaign)", p.CLPolicyConfidenceMinAtPurchase)

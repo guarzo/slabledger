@@ -99,6 +99,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			cl_value_at_purchase_observed_at, cl_value_at_purchase_source, cl_card_confidence_at_purchase,
 			cl_policy_confidence_min_at_purchase, population_at_purchase, dh_confidence_at_purchase,
 			source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
+			buy_terms_cl_pct_at_purchase,
 			-- attribution
 			psa_campaign_name, attribution_source
 		) VALUES (
@@ -130,8 +131,9 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			$55,
 			$56, $57, $58,
 			$59, $60, $61, $62, $63, $64,
+			$65,
 			-- attribution
-			$65, $66
+			$66, $67
 		)
 	`
 	_, err := ps.db.ExecContext(ctx, query,
@@ -154,6 +156,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 		p.CLValueAtPurchaseObservedAt, p.CLValueAtPurchaseSource, p.CLCardConfidenceAtPurchase,
 		p.CLPolicyConfidenceMinAtPurchase, p.PopulationAtPurchase, p.DHConfidenceAtPurchase,
 		p.SourceCountAtPurchase, p.ActiveListingsAtPurchase, p.SalesLast30dAtPurchase,
+		p.BuyTermsCLPctAtPurchase,
 		p.PSACampaignName, p.AttributionSource,
 	)
 	if err != nil && isUniqueConstraintError(err) {
@@ -435,12 +438,14 @@ func (ps *PurchaseStore) ReattributePurchase(ctx context.Context, purchaseID str
 		 SET campaign_id = $1,
 		     psa_sourcing_fee_cents = $2,
 		     cl_policy_confidence_min_at_purchase = $3,
-		     psa_campaign_name = $4,
-		     attribution_source = $5,
-		     updated_at = $6
-		 WHERE id = $7
-		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $8)`,
+		     buy_terms_cl_pct_at_purchase = $4,
+		     psa_campaign_name = $5,
+		     attribution_source = $6,
+		     updated_at = $7
+		 WHERE id = $8
+		   AND NOT EXISTS (SELECT 1 FROM campaign_sales WHERE purchase_id = $9)`,
 		r.CampaignID, r.PSASourcingFeeCents, r.CLPolicyConfidenceMinAtPurchase,
+		r.BuyTermsCLPctAtPurchase,
 		r.PSACampaignName, inventory.AttributionSourcePSA, time.Now(), purchaseID, purchaseID,
 	)
 	if err != nil {

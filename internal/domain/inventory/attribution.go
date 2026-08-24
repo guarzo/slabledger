@@ -14,11 +14,13 @@ const (
 )
 
 // Reattribution carries a PSA-authoritative campaign correction for an unsold
-// purchase. CLPolicyConfidenceMinAtPurchase is nil when the value cannot be
-// vouched for and must be stored as NULL rather than guessed.
+// purchase. CLPolicyConfidenceMinAtPurchase and BuyTermsCLPctAtPurchase are nil
+// when the value cannot be vouched for and must be stored as NULL rather than
+// guessed.
 type Reattribution struct {
 	CampaignID                      string
 	PSACampaignName                 string
 	PSASourcingFeeCents             int
 	CLPolicyConfidenceMinAtPurchase *int
+	BuyTermsCLPctAtPurchase         *float64
 }

@@ -482,6 +482,7 @@ func (m *mockRepo) ReattributePurchase(_ context.Context, purchaseID string, r R
 	p.CampaignID = r.CampaignID
 	p.PSASourcingFeeCents = r.PSASourcingFeeCents
 	p.CLPolicyConfidenceMinAtPurchase = r.CLPolicyConfidenceMinAtPurchase
+	p.BuyTermsCLPctAtPurchase = r.BuyTermsCLPctAtPurchase
 	p.PSACampaignName = r.PSACampaignName
 	p.AttributionSource = AttributionSourcePSA
 	return nil
