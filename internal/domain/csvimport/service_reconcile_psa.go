@@ -92,11 +92,13 @@ func (s *service) ReconcilePSAAttribution(ctx context.Context, rows []PSAExportR
 		}
 
 		conf := clConfidenceForReattribution(p.PurchaseDate, campaign)
+		terms := buyTermsForReattribution(p.PurchaseDate, campaign)
 		err = s.purchases.ReattributePurchase(ctx, p.ID, inventory.Reattribution{
 			CampaignID:                      campaignID,
 			PSACampaignName:                 row.PSACampaignName,
 			PSASourcingFeeCents:             campaign.PSASourcingFeeCents,
 			CLPolicyConfidenceMinAtPurchase: conf,
+			BuyTermsCLPctAtPurchase:         terms,
 		})
 		switch {
 		case errors.Is(err, inventory.ErrPurchaseHasSale):
@@ -162,6 +164,36 @@ func clConfidenceForReattribution(purchaseDate string, campaign *inventory.Campa
 		return nil
 	}
 	return &c
+}
+
+// buyTermsForReattribution returns the campaign's current buy terms only when it
+// is provably the value that was in force at purchase time. It mirrors
+// clConfidenceForReattribution exactly, and for the same reason: the campaigns
+// table carries no parameter history, only an updated_at that bumps on any
+// write, so the one sound predicate is "the campaign has not been written at all
+// since the purchase".
+//
+// Reattribution is the one path where the frozen terms would otherwise describe
+// the WRONG campaign, and a fabricated anachronistic value is worse than a hole
+// here than anywhere else: the whole point of the column is that
+// (buy_cost - fee) / terms is an EXACT inverse, so a terms value that was never
+// actually applied does not produce a visibly wrong CLV -- it produces a
+// plausible one. NULL is visible; a wrong denominator is not.
+func buyTermsForReattribution(purchaseDate string, campaign *inventory.Campaign) *float64 {
+	d, err := time.Parse("2006-01-02", purchaseDate)
+	if err != nil {
+		return nil
+	}
+	// Compare against end-of-day so a same-day write does not falsely disqualify.
+	if campaign.UpdatedAt.After(d.AddDate(0, 0, 1)) {
+		return nil
+	}
+	// 0 is campaigns.buy_terms_cl_pct's NOT NULL default, not a terms level.
+	if campaign.BuyTermsCLPct <= 0 {
+		return nil
+	}
+	terms := campaign.BuyTermsCLPct
+	return &terms
 }
 
 func (s *service) recordUnresolvedAttribution(ctx context.Context, pendingByCert map[string]string, p *inventory.Purchase, psaName string) error {

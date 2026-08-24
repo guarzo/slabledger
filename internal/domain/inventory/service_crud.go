@@ -77,6 +77,7 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	// so these pointers are attacker-controllable; clearing them here ensures the
 	// freeze logic below can only ever set SERVER-derived values.
 	p.CLPolicyConfidenceMinAtPurchase = nil
+	p.BuyTermsCLPctAtPurchase = nil
 	p.PopulationAtPurchase = nil
 	p.DHConfidenceAtPurchase = nil
 	p.SourceCountAtPurchase = nil
@@ -124,6 +125,23 @@ func (s *service) CreatePurchase(ctx context.Context, p *Purchase) error {
 	if c, ok := ParseCLConfidenceMin(campaign.CLConfidence); ok {
 		p.CLPolicyConfidenceMinAtPurchase = &c
 	}
+	// The campaign's buy terms, frozen for the same reason as the line above:
+	// campaigns carries no parameter history, so the current value cannot answer
+	// what we bid against at decision time. Guarded on > 0 because
+	// campaigns.buy_terms_cl_pct is NOT NULL DEFAULT 0 and 0 is not a legitimate
+	// terms level -- a campaign that never configured terms yields NULL (unknown)
+	// rather than a stored 0 that would divide-by-zero any recovery study.
+	if campaign.BuyTermsCLPct > 0 {
+		terms := campaign.BuyTermsCLPct
+		p.BuyTermsCLPctAtPurchase = &terms
+	}
+	// The campaign's buy terms, frozen for the same reason as the line above:
+	// campaigns carries no parameter history, so the current value cannot answer
+	// what we bid against at decision time. Guarded on > 0 because
+	// campaigns.buy_terms_cl_pct is NOT NULL DEFAULT 0 and 0 is not a legitimate
+	// terms level -- a campaign that never configured terms yields NULL (unknown)
+	// rather than a stored 0 that would divide-by-zero any recovery study.
+
 	// PopulationAtPurchase is deliberately NOT frozen here (D2). It used to be
 	// set from p.Population whenever positive, but that branch was dead on
 	// every legitimate path: the only intake path that sets Population at

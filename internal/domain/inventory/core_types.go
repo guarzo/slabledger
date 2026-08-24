@@ -311,12 +311,21 @@ type Purchase struct {
 	CLCardConfidenceAtPurchase  *int   `json:"clCardConfidenceAtPurchase,omitempty"`
 
 	// --- Decision-time provenance (frozen once at CreatePurchase; server-derived only) ---
-	CLPolicyConfidenceMinAtPurchase *int     `json:"clPolicyConfidenceMinAtPurchase,omitempty"` // The campaign's configured CL-confidence policy minimum at purchase time (ParseCLConfidenceMin(campaign.CLConfidence)). NOT the card's real CardLadder confidence -- see CLCardConfidenceAtPurchase for that.
-	PopulationAtPurchase            *int     `json:"populationAtPurchase,omitempty"`
-	DHConfidenceAtPurchase          *float64 `json:"dhConfidenceAtPurchase,omitempty"`
-	SourceCountAtPurchase           *int     `json:"sourceCountAtPurchase,omitempty"`
-	ActiveListingsAtPurchase        *int     `json:"activeListingsAtPurchase,omitempty"`
-	SalesLast30dAtPurchase          *int     `json:"salesLast30dAtPurchase,omitempty"`
+	CLPolicyConfidenceMinAtPurchase *int `json:"clPolicyConfidenceMinAtPurchase,omitempty"` // The campaign's configured CL-confidence policy minimum at purchase time (ParseCLConfidenceMin(campaign.CLConfidence)). NOT the card's real CardLadder confidence -- see CLCardConfidenceAtPurchase for that.
+	// BuyTermsCLPctAtPurchase is the campaign's buy_terms_cl_pct in force when
+	// this row was created. It exists because the buy price is an exact function
+	// of it: buy_cost_cents = round(terms * CLV_cents) + psa_sourcing_fee_cents,
+	// so (BuyCostCents - PSASourcingFeeCents) / terms recovers the CardLadder
+	// value PSA actually bid against -- which CLValueAtPurchaseCents disagrees
+	// with on ~36% of rows (R-037). nil means the terms were not knowable at
+	// write time and MUST NOT be inferred from the campaign's current value; see
+	// migration 000045 for why a fitted value is worse than a hole.
+	BuyTermsCLPctAtPurchase  *float64 `json:"buyTermsCLPctAtPurchase,omitempty"`
+	PopulationAtPurchase     *int     `json:"populationAtPurchase,omitempty"`
+	DHConfidenceAtPurchase   *float64 `json:"dhConfidenceAtPurchase,omitempty"`
+	SourceCountAtPurchase    *int     `json:"sourceCountAtPurchase,omitempty"`
+	ActiveListingsAtPurchase *int     `json:"activeListingsAtPurchase,omitempty"`
+	SalesLast30dAtPurchase   *int     `json:"salesLast30dAtPurchase,omitempty"`
 
 	// --- Campaign attribution provenance ---
 	PSACampaignName   string `json:"psaCampaignName,omitempty"`   // raw campaign name PSA reported, verbatim

@@ -291,7 +291,7 @@ Top-level acquisition campaigns defining buying parameters and strategy.
 | `grade_range` | TEXT | NOT NULL DEFAULT '' | e.g. 'PSA 8-10' |
 | `price_range` | TEXT | NOT NULL DEFAULT '' | e.g. '$50-$500' |
 | `cl_confidence` | REAL | NOT NULL DEFAULT 0 | Min CL confidence threshold |
-| `buy_terms_cl_pct` | REAL | NOT NULL DEFAULT 0 | Target buy price as % of CL value |
+| `buy_terms_cl_pct` | DOUBLE PRECISION | NOT NULL DEFAULT 0 | Target buy price as % of CL value. Frozen per-row at purchase into `campaign_purchases.buy_terms_cl_pct_at_purchase` (migration 000045); this column holds only TODAY's value and has drifted |
 | `daily_spend_cap_cents` | INTEGER | NOT NULL DEFAULT 0 | Max daily spend |
 | `inclusion_list` | TEXT | NOT NULL DEFAULT '' | Legacy substring filter. Kept as a derived, write-only mirror of `subjects`/`subject_filter_mode` for one release (nothing reads it) — see migration 000024 |
 | `exclusion_mode` | INTEGER | NOT NULL DEFAULT 0 | Legacy polarity flag mirroring `subject_filter_mode == 'Exclude'`. Same write-only status as `inclusion_list` |
@@ -438,6 +438,7 @@ Individual graded cards bought under a campaign.
 | `cl_value_at_purchase_observed_at` | TEXT | NOT NULL DEFAULT '' | ISO datetime the CL value in `cl_value_at_purchase_cents` was observed; ''=unknown provenance; added migration 000041 |
 | `cl_value_at_purchase_source` | TEXT | NOT NULL DEFAULT '' | Which writer produced `cl_value_at_purchase_cents`: `intake` or `cardladder`. ''=unknown provenance (pre-000041 rows, never backfilled) — provenance studies filter on `cl_value_at_purchase_source <> ''`; CHECK-constrained; added migration 000041 |
 | `cl_card_confidence_at_purchase` | SMALLINT | NULL | The card's **real** CardLadder comp confidence at purchase — the observation the since-dropped `cl_confidence_at_purchase` was mistaken for. NULL=not captured (0 is a legitimate CL answer, so it cannot double as the sentinel); added migration 000041 |
+| `buy_terms_cl_pct_at_purchase` | DOUBLE PRECISION | NULL | The campaign's `buy_terms_cl_pct` in force at purchase. Makes the bid anchor exactly recoverable as `(buy_cost_cents - psa_sourcing_fee_cents) / buy_terms_cl_pct_at_purchase`, since `buy_cost_cents = round(terms x CLV) + fee` holds exactly (R-037) — `cl_value_at_purchase_cents` disagrees with that anchor on ~36% of rows. NULL=unknown; **never backfilled** and never to be solved for, since a fitted value is indistinguishable from a frozen one (see the migration comment). Frozen unconditionally at create, so on backdated intake (PSA CSV import, pending-item assign) it is the campaign's value as of the WRITE, not the purchase. The latency is measurable -- `created_at` is the write time -- so studies filter on `IS NOT NULL` **plus a latency bound** (house window `clFreezeMaxAgeDays` = 7), never `IS NOT NULL` alone; see the migration comment for the cast-free predicate and why `purchase_date::date` must not be used; added migration 000045 |
 | `cl_policy_confidence_min_at_purchase` | SMALLINT | NULL | The campaign's configured CL policy minimum at purchase. Correctly-named replacement for the misnamed `cl_confidence_at_purchase` (added 000022, backfilled from it by 000042, dropped by 000043 after the expand/contract rename window closed); added migration 000042 |
 
 **Unique:** `(grader, cert_number)`

@@ -142,6 +142,7 @@ func (m *InMemoryCampaignStore) ReattributePurchase(ctx context.Context, purchas
 	p.CampaignID = r.CampaignID
 	p.PSASourcingFeeCents = r.PSASourcingFeeCents
 	p.CLPolicyConfidenceMinAtPurchase = r.CLPolicyConfidenceMinAtPurchase
+	p.BuyTermsCLPctAtPurchase = r.BuyTermsCLPctAtPurchase
 	p.PSACampaignName = r.PSACampaignName
 	p.AttributionSource = inventory.AttributionSourcePSA
 	return nil

@@ -496,6 +496,9 @@ func TestCreatePurchase_FreezesCreationFacts(t *testing.T) {
 				t.Fatalf("CreatePurchase: %v", err)
 			}
 
+			if p.BuyTermsCLPctAtPurchase == nil || *p.BuyTermsCLPctAtPurchase != 0.78 {
+				t.Errorf("BuyTermsCLPctAtPurchase = %v, want 0.78", p.BuyTermsCLPctAtPurchase)
+			}
 			if p.CLPolicyConfidenceMinAtPurchase == nil || *p.CLPolicyConfidenceMinAtPurchase != 2 {
 				t.Errorf("CLPolicyConfidenceMinAtPurchase = %v, want 2", p.CLPolicyConfidenceMinAtPurchase)
 			}
@@ -533,6 +536,7 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 		SourceCountAtPurchase:           &junkInt,
 		ActiveListingsAtPurchase:        &junkInt,
 		SalesLast30dAtPurchase:          &junkInt,
+		BuyTermsCLPctAtPurchase:         &junkFloat,
 	}
 	if err := svc.CreatePurchase(ctx, p); err != nil {
 		t.Fatalf("CreatePurchase: %v", err)
@@ -552,6 +556,13 @@ func TestCreatePurchase_IgnoresClientForgedProvenance(t *testing.T) {
 	}
 	if p.PopulationAtPurchase != nil {
 		t.Errorf("PopulationAtPurchase = %v, want nil (client-forged value discarded)", p.PopulationAtPurchase)
+	}
+	// junkFloat is 0.99; the campaign's real terms are 0.78. A body-supplied
+	// value must be discarded and re-derived from the campaign, not passed
+	// through -- a forged terms level silently falsifies the recovered CLV that
+	// this column exists to make exact (R-037).
+	if p.BuyTermsCLPctAtPurchase == nil || *p.BuyTermsCLPctAtPurchase != 0.78 {
+		t.Errorf("BuyTermsCLPctAtPurchase = %v, want 0.78 (derived from campaign, not the forged 0.99)", p.BuyTermsCLPctAtPurchase)
 	}
 	if p.CLPolicyConfidenceMinAtPurchase == nil || *p.CLPolicyConfidenceMinAtPurchase != 2 {
 		t.Errorf("CLPolicyConfidenceMinAtPurchase = %v, want 2 (derived from campaign)", p.CLPolicyConfidenceMinAtPurchase)

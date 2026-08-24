@@ -116,6 +116,8 @@ export interface Purchase {
   /** CardLadder's confidence in THIS card. 0 is a real answer; absent means unknown. */
   clCardConfidenceAtPurchase?: number;
   clPolicyConfidenceMinAtPurchase?: number;
+  /** The campaign's buy_terms_cl_pct in force at purchase. Absent means unknown — it must never be inferred from the campaign's current terms (migration 000045). */
+  buyTermsCLPctAtPurchase?: number;
   populationAtPurchase?: number;
   dhConfidenceAtPurchase?: number;
   sourceCountAtPurchase?: number;

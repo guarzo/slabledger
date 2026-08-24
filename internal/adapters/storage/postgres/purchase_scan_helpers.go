@@ -28,6 +28,7 @@ const purchaseColumns = `id, campaign_id, card_name, cert_number, card_number, s
 	cl_value_at_purchase_observed_at, cl_value_at_purchase_source, cl_card_confidence_at_purchase,
 	cl_policy_confidence_min_at_purchase, population_at_purchase, dh_confidence_at_purchase,
 	source_count_at_purchase, active_listings_at_purchase, sales_last_30d_at_purchase,
+	buy_terms_cl_pct_at_purchase,
 	psa_campaign_name, attribution_source,
 	dh_sale_conflict, dh_sale_conflict_at`
 
@@ -52,6 +53,7 @@ const purchaseColumnsAliased = `p.id, p.campaign_id, p.card_name, p.cert_number,
 		p.cl_value_at_purchase_observed_at, p.cl_value_at_purchase_source, p.cl_card_confidence_at_purchase,
 		p.cl_policy_confidence_min_at_purchase, p.population_at_purchase, p.dh_confidence_at_purchase,
 		p.source_count_at_purchase, p.active_listings_at_purchase, p.sales_last_30d_at_purchase,
+		p.buy_terms_cl_pct_at_purchase,
 		p.psa_campaign_name, p.attribution_source,
 		p.dh_sale_conflict, p.dh_sale_conflict_at`
 
@@ -240,6 +242,7 @@ func purchaseScanDests(p *inventory.Purchase, psaCampaignName, attributionSource
 		&p.CLValueAtPurchaseObservedAt, &p.CLValueAtPurchaseSource, &p.CLCardConfidenceAtPurchase,
 		&p.CLPolicyConfidenceMinAtPurchase, &p.PopulationAtPurchase, &p.DHConfidenceAtPurchase,
 		&p.SourceCountAtPurchase, &p.ActiveListingsAtPurchase, &p.SalesLast30dAtPurchase,
+		&p.BuyTermsCLPctAtPurchase,
 		psaCampaignName, attributionSource,
 		&p.DHSaleConflict, &p.DHSaleConflictAt,
 	}

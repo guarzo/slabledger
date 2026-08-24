@@ -119,6 +119,10 @@ func TestCreatePurchaseProvenanceRoundTrip(t *testing.T) {
 				p.SourceCountAtPurchase = intPtr(4)
 				p.ActiveListingsAtPurchase = intPtr(7)
 				p.SalesLast30dAtPurchase = intPtr(3)
+				// 0.78 is deliberately distinct from DHConfidenceAtPurchase's
+				// 0.92 above: both are DOUBLE PRECISION and adjacent-ish in the
+				// INSERT list, so equal values would hide a swapped binding.
+				p.BuyTermsCLPctAtPurchase = floatPtr(0.78)
 			},
 		},
 		{
@@ -146,6 +150,7 @@ func TestCreatePurchaseProvenanceRoundTrip(t *testing.T) {
 			assertIntPtrEqual(t, "SourceCountAtPurchase", p.SourceCountAtPurchase, got.SourceCountAtPurchase)
 			assertIntPtrEqual(t, "ActiveListingsAtPurchase", p.ActiveListingsAtPurchase, got.ActiveListingsAtPurchase)
 			assertIntPtrEqual(t, "SalesLast30dAtPurchase", p.SalesLast30dAtPurchase, got.SalesLast30dAtPurchase)
+			assertFloatPtrEqual(t, "BuyTermsCLPctAtPurchase", p.BuyTermsCLPctAtPurchase, got.BuyTermsCLPctAtPurchase)
 		})
 	}
 }

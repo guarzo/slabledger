@@ -140,6 +140,7 @@ func newReconcileFixtureWithDates(t *testing.T, purchaseDate string, campaignUpd
 	campA := &inventory.Campaign{
 		ID: "camp-a", Name: "camp-a", Sport: "Pokemon",
 		Phase: inventory.PhaseActive, GradeRange: "8-10", CLConfidence: "2.5-4",
+		BuyTermsCLPct: 0.78,
 	}
 	if err := inv.CreateCampaign(ctx, campA); err != nil {
 		t.Fatalf("CreateCampaign(camp-a): %v", err)
@@ -357,6 +358,45 @@ func TestReconcilePSAAttribution_ResolverErrorHardStops(t *testing.T) {
 	}
 	if repo.Purchases["purchase-1"].CampaignID != "camp-b" {
 		t.Errorf("CampaignID = %q, want unchanged camp-b", repo.Purchases["purchase-1"].CampaignID)
+	}
+}
+
+// Reattribution moves an unsold purchase to a different campaign, at which
+// point the terms frozen at create time describe the WRONG campaign. The only
+// sound predicate is the one clConfidenceForReattribution already uses: re-derive
+// from the target campaign when it has not been written since the purchase,
+// otherwise NULL. A wrong terms value does not produce a visibly wrong recovered
+// CLV -- it produces a plausible one -- so the NULL matters more here.
+func TestReconcilePSAAttribution_BuyTermsFreezing(t *testing.T) {
+	tests := []struct {
+		name              string
+		purchaseDate      string
+		campaignUpdatedAt time.Time
+		wantNil           bool
+	}{
+		{"campaign untouched since purchase", "2026-08-01", mustTime("2026-07-01"), false},
+		{"campaign written after purchase", "2026-07-01", mustTime("2026-08-01"), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newReconcileFixtureWithDates(t, tt.purchaseDate, tt.campaignUpdatedAt)
+			if _, err := svc.ReconcilePSAAttribution(context.Background(),
+				[]csvimport.PSAExportRow{{CertNumber: "123", PSACampaignName: "Modern"}}); err != nil {
+				t.Fatalf("ReconcilePSAAttribution: %v", err)
+			}
+			got := repo.Purchases["purchase-1"].BuyTermsCLPctAtPurchase
+			if tt.wantNil && got != nil {
+				t.Errorf("BuyTermsCLPctAtPurchase = %v, want nil", *got)
+			}
+			if !tt.wantNil {
+				if got == nil {
+					t.Fatal("BuyTermsCLPctAtPurchase = nil, want re-derived value")
+				}
+				if *got != 0.78 {
+					t.Errorf("BuyTermsCLPctAtPurchase = %v, want 0.78 (camp-a's terms)", *got)
+				}
+			}
+		})
 	}
 }
 
