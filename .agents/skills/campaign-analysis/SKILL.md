@@ -1,8 +1,6 @@
 ---
 name: campaign-analysis
 description: Analyze graded-card campaign performance — portfolio health, P&L, liquidation planning, tuning, capital position, coverage gaps, DH marketplace, and new campaign design. Use whenever the user asks about campaign status, what to liquidate, whether to tune parameters, or any follow-up about their card-resale operation — even if they don't say "campaign-analysis" explicitly.
-argument-hint: "(usually empty — conversational flow handles it)"
-allowed-tools: ["Bash", "Read", "Glob", "Grep", "Edit", "Write"]
 ---
 
 # Campaign Analysis
@@ -19,11 +17,11 @@ The **Strategy lane** hypotheses are the one exception: they must be sourced fro
 
 ## The flow
 
-A default `/campaign-analysis` invocation runs Steps 0–3 and ends. Steps 4–6 are reached only through conversational follow-up.
+A default `/skill:campaign-analysis` invocation runs Steps 0–3 and ends. Steps 4–6 are reached only through conversational follow-up.
 
 ### Step 0 — Load
 
-Read these files in order. Do NOT read scattered `~/.claude/projects/-workspace/memory/feedback_*.md` files — everything load-bearing migrated to the ledger and to `references/field-semantics.md`.
+Read these files in order. Do NOT read legacy agent memory or feedback files — everything load-bearing migrated to the ledger and to `references/field-semantics.md`.
 
 1. `docs/private/campaign-analysis-config.md` — operator identity, production URL, canonical 1-11 campaign numbering, capital summary conventions. If missing, see `references/config-schema.md` for the expected shape, then proceed with generic analysis and note the gap.
 2. `docs/private/campaign-analysis-ledger.md` — full file (~11 Rules). ⭐ rules are gates checked at Step 2.

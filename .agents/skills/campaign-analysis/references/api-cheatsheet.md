@@ -12,8 +12,8 @@ The old "endpoints silently truncate" warning is **obsolete** as of the 2026-07 
 
 **Postgres escape hatch** (ad-hoc full-population only):
 ```bash
-# Connection string is in /workspace/.env
-DBURL=$(grep -E "^SUPABASE_DB_URL=" /workspace/.env | cut -d= -f2- | tr -d '"')
+# Run from the repository root; the connection string is in .env
+DBURL=$(grep -E "^SUPABASE_DB_URL=" .env | cut -d= -f2- | tr -d '"')
 psql "$DBURL" -c "select count(*) from campaign_sales"
 ```
 Key tables: `campaign_sales` (purchase_id, sale_channel, sale_price_cents, net_profit_cents, sale_date, forced_liquidation), `campaign_purchases` (id, card_player ← clean character name, buy_cost_cents, cl_value_cents, cl_value_at_purchase_cents, card_year [text], grade_value). Join `campaign_sales.purchase_id = campaign_purchases.id`. `campaign_sales` includes External-import sales — exclude `campaign_id='external'` for standard-campaign economics.
@@ -44,7 +44,7 @@ jq '{purchases: [.purchasesThisWeek, .purchasesLastWeek],
 
 ## /portfolio/analysis — the default-session endpoint
 
-**This is the one required call for a default `/campaign-analysis` session.**
+**This is the one required call for a default `/skill:campaign-analysis` session.**
 
 ```bash
 curl -s -H "Authorization: Bearer $LOCAL_API_TOKEN" \
@@ -391,8 +391,8 @@ Returns a **flat array** (empty `[]` when no opportunities exist). NOT `{candida
 Strategy-lane external sources, called directly against DH (not via slabledger). Auth: the env key is deliberately named `DO_NOT_USE_DH_ENTERPRISE_API_KEY` — the label means **have an explicit conversation with the operator before first use in a session** (authorized precedent: 2026-07-07). Always send `-A "slabledger/1.0"` + `Authorization: Bearer <key>`.
 
 ```bash
-KEY=$(grep -E "^DO_NOT_USE_DH_ENTERPRISE_API_KEY=" /workspace/.env | cut -d= -f2- | tr -d '"')
-BASE=$(grep -E "^DH_API_BASE_URL=" /workspace/.env | cut -d= -f2- | tr -d '"')
+KEY=$(grep -E "^DO_NOT_USE_DH_ENTERPRISE_API_KEY=" .env | cut -d= -f2- | tr -d '"')
+BASE=$(grep -E "^DH_API_BASE_URL=" .env | cut -d= -f2- | tr -d '"')
 curl -s -A "slabledger/1.0" -H "Authorization: Bearer $KEY" "$BASE/api/v1/enterprise/market/demand_signals/top_characters?limit=50"
 ```
 
