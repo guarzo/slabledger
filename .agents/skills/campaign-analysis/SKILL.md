@@ -40,10 +40,11 @@ If none apply, skip Step 0a. No "ledger looks healthy" filler.
 
 ### Step 0b — Auth & reachability
 
-Determine the API token, in order:
-1. `LOCAL_API_TOKEN` env var → `-H "Authorization: Bearer $LOCAL_API_TOKEN"`
-2. `session_id` cookie pasted by the operator → `-b "session_id=VALUE"`
-3. If neither is set: *"The API requires auth. Either export `LOCAL_API_TOKEN` in your shell or paste a `session_id` cookie from the browser."* and stop.
+Determine API authentication in order:
+1. Non-empty `LOCAL_API_TOKEN` env var → `-H "Authorization: Bearer $LOCAL_API_TOKEN"`.
+2. Otherwise, if `~/.config/slabledger/agent-api-token` is a readable, non-empty file, read its raw contents into a shell variable and use that variable in the same Bearer header. Never print, log, or include the token in tool output.
+3. Otherwise, a `session_id` cookie pasted by the operator → `-b "session_id=VALUE"`.
+4. If none is available: *"The API requires auth. Set `LOCAL_API_TOKEN`, create `~/.config/slabledger/agent-api-token` containing only the token, or paste a `session_id` cookie from the browser."* and stop.
 
 Then check production reachability using the base URL from `campaign-analysis-config.md`. If both local and production are unreachable, stop with a clear error.
 
