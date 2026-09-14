@@ -95,6 +95,28 @@ describe('show preparation in the existing inventory', () => {
     expect(requests.find(r => r.url.endsWith('/items'))?.body).toEqual({ items: [{ purchaseId, evaluationVersion: 'eval-1' }] });
   });
 
+  it('clears successful-add feedback only when the actual target list changes', async () => {
+    const otherListId = '66666666-6666-4666-8666-666666666666';
+    const qc = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Show selection' }));
+    await waitFor(() => expect(screen.getByText('2 cards shown')).toBeVisible());
+    await waitFor(() => expect(screen.getByLabelText('Show list')).toBeEnabled());
+    await act(async () => { qc.setQueryData(showPrepKeys.lists, [detail().list, { ...detail().list, id: otherListId, name: 'Other show' }]); });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select 12345678' }));
+    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected to show (1)' }));
+    const link = await screen.findByRole('link', { name: 'Open packing list →' });
+    expect(link).toHaveAttribute('href', `/shows?list=${listId}`);
+    expect(screen.getByText('0 selected for show')).toBeVisible();
+    // List invalidation and selection clearing after add must preserve feedback.
+    await act(async () => { qc.setQueryData(showPrepKeys.lists, [detail().list, { ...detail().list, id: otherListId, name: 'Other show' }]); });
+    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
+    expect(screen.getByText(/Added 1 selected cards/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: otherListId } });
+    expect(screen.queryByText(/Added 1 selected cards/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open packing list →' })).not.toBeInTheDocument();
+  });
+
   it('keeps missing evidence manually selectable and retains selection on a stale add conflict', async () => {
     addFails = true; mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Show selection' }));
@@ -180,7 +202,8 @@ describe('show preparation in the existing inventory', () => {
     let batches = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (!url.endsWith('/evaluate')) return new Response(JSON.stringify({ evaluation: values[0], sales: [] }));
-      return ++batches === 1 ? pending : new Response(JSON.stringify({ evaluations: values }));
+      // Keep both the initial read and the detail-triggered replacement pending.
+      return ++batches <= 2 ? pending : new Response(JSON.stringify({ evaluations: values }));
     }));
     const qc = mount();
     try {
@@ -192,7 +215,7 @@ describe('show preparation in the existing inventory', () => {
       expect(retry).toBeEnabled();
       expect(screen.getByRole('alert')).toHaveTextContent('2 evaluations unavailable');
       fireEvent.click(retry);
-      await waitFor(() => expect(batches).toBe(2));
+      await waitFor(() => expect(batches).toBe(3));
       await waitFor(() => expect(screen.queryByText(/Evaluation unavailable:/)).not.toBeInTheDocument());
       expect(screen.queryByRole('button', { name: 'Retry evaluation' })).not.toBeInTheDocument();
     } finally {

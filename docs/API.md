@@ -1908,8 +1908,13 @@ List detail contains `list`, `items`, and `summary`. Each item includes its stab
 membership `id`, original `purchaseId`, saved card identity, `addedAt`, `packedAt`
 (empty when unpacked), integer `version`, `acknowledgedPriceCents`,
 `acknowledgedStatus`, current `evaluation`, `priceChanged`, and `supportChanged`.
-Pack/ack operations must send both the observed item version and evaluation
-version. Unpacking remains possible when a purchase becomes unavailable.
+New pack/ack operations must send both the observed item version and evaluation
+version. An exact retry of the most recently applied command returns current list
+detail without repacking, re-acknowledging, or incrementing the item version, even
+if price/evidence/availability changed or the purchase is locked. Current warnings
+remain visible. An intervening different item command supersedes that replay;
+other stale intents still conflict. Unpacking remains possible when a purchase
+becomes unavailable.
 
 The summary contains `totalCount`, `packedCount`, `notReceivedCount`,
 `unavailableCount`, `knownValueCents`, `missingPriceCount`, and

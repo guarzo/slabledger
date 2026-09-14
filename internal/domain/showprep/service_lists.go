@@ -172,6 +172,15 @@ func (s *Service) UpdateItem(ctx context.Context, list, id string, cmd UpdateIte
 		if item.ID == "" {
 			return ErrNotFound
 		}
+		fingerprint := Fingerprint(cmd)
+		if item.Version != cmd.Version {
+			// A completed intent is not a request to acknowledge today's inputs.
+			// Return current detail below without changing its saved packing history.
+			if item.LastCommand == fingerprint {
+				return nil
+			}
+			return ErrConflict
+		}
 		var e Evaluation
 		if needsReview {
 			if err := tx.LockPurchases(ctx, []string{item.PurchaseID}); err != nil {
@@ -185,13 +194,6 @@ func (s *Service) UpdateItem(ctx context.Context, list, id string, cmd UpdateIte
 			if e.Version != cmd.EvaluationVersion {
 				return ErrConflict
 			}
-		}
-		fingerprint := Fingerprint(cmd)
-		if item.Version != cmd.Version {
-			if item.LastCommand == fingerprint {
-				return nil
-			}
-			return ErrConflict
 		}
 		if cmd.Packed != nil && *cmd.Packed && !e.CanPack {
 			return ErrConflict

@@ -19,10 +19,10 @@ export default function ShowListPicker({ value, onChange, allowRename = false, d
   async function createList() {
     const trimmed = name.trim();
     if (!validName(trimmed)) { setError('Use a name of 1–120 characters.'); return; }
-    // Retain the caller UUID across an explicit retry of the same intent too.
-    if (attempt.current?.name !== trimmed) attempt.current = { id: crypto.randomUUID(), name: trimmed };
     setError('');
     try {
+      // Retain the caller UUID across an explicit retry of the same intent too.
+      if (attempt.current?.name !== trimmed) attempt.current = { id: crypto.randomUUID(), name: trimmed };
       const list = await create.mutateAsync(attempt.current!);
       onChange(list.id); setName(''); attempt.current = null;
     } catch (err) { setError(showError(err)); }

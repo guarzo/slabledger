@@ -182,6 +182,57 @@ breakage. The final implementation is ready for integration, not deployed.
 - Add independent evidence-health fields rather than duplicate refresh outcomes;
   every Go/TS producer, boundary check, fixture and consumer was updated together.
 
+## User-approved CodeRabbit follow-up
+
+CodeRabbit reviewed the committed feature through `d0fccf47` against `fe8ad267`:
+17 raw findings reduced to 12 distinct items. Read-only validation established
+four fixes, which the user approved before push/PR:
+
+- **Later-batch cache ordering:** removed aggregate-wide reference ordering. A
+  changed detail interrupts overlapping reads, awaits cancellation settlement,
+  checks cancellation again, publishes its observation, and revalidates those
+  reads. The 805-card regression proves a later batch's server C replaces detail B;
+  unchanged detail does not create refetch loops. This may reread local evaluation
+  batches; it does not initiate additional marketplace refreshes.
+- **Resolved retryer edge:** independent review caught that synchronous abort is
+  insufficient once a retryer resolves but before its cache write. Awaiting
+  settlement prevents old data from overwriting the detail or clearing a pending
+  replacement's fetching state. Tests cover 22 microtask alignments and cancellation
+  during settlement, alongside the existing streamed-body and remount regressions.
+- **Applied intent replay:** the persisted exact-command check now precedes
+  purchase locks and reevaluation, without bypassing preliminary ambiguity
+  observation. Ten real PostgreSQL pack/ack cases prove replay after price changes,
+  refund, deletion, purchase locking, and new collisions returns current warnings
+  without changing packing, acknowledgment or version. Different or superseded
+  stale intents still conflict. All ten cases failed before the fix.
+- **Success destination and UUID errors:** changing the actual target list clears
+  stale add-success feedback. Secure UUID creation is inside the existing catch;
+  failures remain visible and same-name creation retries retain their UUID.
+
+Scoped polish and independent re-review approved the corrected changes. CodeRabbit's
+final fix-slice review reported only two overlapping trivial suggestions about a
+scheduling-specific test assertion; that assertion was removed while keeping the
+matrix-wide ordering/fetch-status checks and independent 805-card revalidation test.
+The earlier source-leader cancellation tradeoff and optional cleanups were not part
+of the four approved fixes and remain unchanged; no detached source context was added.
+
+Fresh verification for this follow-up:
+
+- `POSTGRES_TEST_URL= go test -race -count=1 -timeout 10m ./...`: PASS.
+- Explicit disposable `showprep_test` URL, full PostgreSQL package with
+  `-race -count=1 -timeout 10m`: PASS, 141.946 seconds. Focused new replay cases:
+  PASS, 8.692 seconds, after the ten-case failing run.
+- `npm test`: PASS, 73 files / 661 tests after the final test-only cleanup.
+- `npm run typecheck`, `npm run lint`, `npm run build`: PASS.
+- Five existing Chromium show-preparation workflows: PASS on the final production
+  code, including mobile/tablet/desktop and independent no-price evidence health.
+- Compatible-toolchain `make check`: PASS, zero lint issues; diff checks PASS.
+
+The real browser/API/database smoke documented above was not repeated for this
+follow-up. Replay behavior was exercised against real PostgreSQL; cache/feedback
+changes used real hooks/components and controlled HTTP boundaries. Existing global
+header, jsdom, Vite and source-size warnings remain unchanged.
+
 ## Remaining operational notes
 
 - First-time CardLadder configuration in a running process requires one restart

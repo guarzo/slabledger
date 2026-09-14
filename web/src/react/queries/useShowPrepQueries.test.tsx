@@ -11,8 +11,9 @@ it('resumes an interrupted initial 201-card aggregate after detail publication a
   const ids = [purchaseId, ...Array.from({ length: 200 }, (_, i) => `90000000-0000-4000-8000-${String(i).padStart(12, '0')}`)];
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let batches = 0;
-  let aborted = false;
+  let aborted = 0;
   let observed = false;
+  let remounted = false;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
     if (url.includes('/evidence/')) {
       observed = true;
@@ -20,9 +21,10 @@ it('resumes an interrupted initial 201-card aggregate after detail publication a
     }
     const { purchaseIds } = JSON.parse(String(options.body));
     batches++;
-    if (batches === 2) return new Promise<Response>((_resolve, reject) => {
+    // Both the original read and its coordinated replacement remain partial.
+    if (!remounted && batches % 2 === 0) return new Promise<Response>((_resolve, reject) => {
       options.signal!.addEventListener('abort', () => {
-        aborted = true;
+        aborted++;
         reject(new DOMException('Aborted', 'AbortError'));
       });
     });
@@ -38,10 +40,12 @@ it('resumes an interrupted initial 201-card aggregate after detail publication a
   await waitFor(() => expect(first.result.current.summary.data?.evaluations[purchaseId].version).toBe('eval-2'));
   expect(Object.keys(first.result.current.summary.data!.evaluations)).toHaveLength(1);
   expect(first.result.current.summary.isFetching).toBe(true);
+  expect(batches).toBe(4);
   first.unmount();
-  await waitFor(() => expect(aborted).toBe(true));
+  await waitFor(() => expect(aborted).toBe(2));
+  remounted = true;
   const second = renderHook(() => useShowEvaluations(ids), { wrapper });
-  await waitFor(() => expect(batches).toBe(4));
+  await waitFor(() => expect(batches).toBe(6));
   await waitFor(() => expect(second.result.current.isFetching).toBe(false));
   expect(Object.keys(second.result.current.data!.evaluations)).toHaveLength(201);
   expect(second.result.current.data?.evaluations[purchaseId].version).toBe('eval-2');
@@ -58,14 +62,19 @@ it.each([true, false])('does not let an older in-flight batch replace a newer de
   const lastBatch = new Promise<Response>(resolve => { release = resolve; });
   let batches = 0;
   let rechecking = false;
+  let observed = false;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
-    if (url.includes('/evidence/')) return new Response(JSON.stringify({
-      evaluation: evaluation({ version: 'eval-2', status: 'below_target', listedPriceCents: 35000 }), sales: [],
-    }));
+    if (url.includes('/evidence/')) {
+      observed = true;
+      return new Response(JSON.stringify({
+        evaluation: evaluation({ version: 'eval-2', status: 'below_target', listedPriceCents: 35000 }), sales: [],
+      }));
+    }
     const { purchaseIds } = JSON.parse(String(options.body));
     batches++;
     if (!rechecking && batches === 2) return lastBatch;
     return new Response(JSON.stringify({ evaluations: purchaseIds.map((id: string) => evaluation({ purchaseId: id,
+      ...(id === purchaseId && observed ? { version: 'eval-2', status: 'below_target', listedPriceCents: 35000 } : {}),
       ...(rechecking && id === purchaseId ? { version: 'eval-3', status: 'thin_evidence', compCount: 1 } : {}),
     })) }));
   }));
@@ -76,8 +85,8 @@ it.each([true, false])('does not let an older in-flight batch replace a newer de
   await waitFor(() => expect(batches).toBe(2));
   rerender({ open: true });
   await waitFor(() => expect(result.current.detail.data?.evaluation.version).toBe('eval-2'));
-  // The first HTTP batch already captured v1, but the aggregate is still waiting
-  // for a different card. Finish that old read only after v2 was observed.
+  // The first HTTP batch already captured v1. The cancelled transport may
+  // still finish late; it cannot replace v2 from detail or its replacement read.
   await act(async () => { release(new Response(JSON.stringify({ evaluations: [evaluation({ purchaseId: ids[200] })] }))); });
   await waitFor(() => expect(result.current.summary.isFetching).toBe(false));
   expect(result.current.summary.data?.evaluations[purchaseId].version).toBe('eval-2');

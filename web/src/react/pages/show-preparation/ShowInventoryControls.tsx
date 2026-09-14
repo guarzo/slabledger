@@ -61,7 +61,7 @@ export function ShowSelectionActions({ selected, selectedVersions, evaluations, 
     <div className="show-actions"><strong className="tabular-nums">{ids.length} selected for show</strong>
       {ids.length > 0 && <Button variant="ghost" size="sm" disabled={disabled || add.isPending} onClick={onClear}>Clear selection</Button>}
     </div>
-    <ShowListPicker value={listId} onChange={setListId} disabled={disabled || add.isPending} />
+    <ShowListPicker value={listId} onChange={id => { if (id !== listId) setSuccess(''); setListId(id); }} disabled={disabled || add.isPending} />
     <div className="show-actions">
       <Button size="sm" disabled={disabled || add.isPending || !listId || ids.length === 0 || ids.length > 200 || unavailable.length > 0 || needsReselection.length > 0} onClick={() => void addSelected()}>{add.isPending ? 'Adding…' : `Add selected to show (${ids.length})`}</Button>
       <ShowRefresh purchaseIds={ids} disabled={disabled || add.isPending} />
