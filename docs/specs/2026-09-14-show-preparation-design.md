@@ -44,6 +44,8 @@ The operational details below are proposed conservative defaults for written rev
 | `web/src/react/pages/campaign-detail/inventory/useInventorySelection.ts` keeps selection in component state. | Reuse transient selection, but persist show membership separately. |
 | `internal/domain/inventory/core_types.go` exposes `DHListingPriceCents` and `DHLastSyncedAt`. | Use the synced listing value and display synchronization time. |
 | `internal/domain/inventory/listing_price.go` resolves the latest operator-committed reviewed/override price, deliberately excluding CL valuation. | Use this only to detect a local-versus-DH mismatch, not as a fallback evaluation price. |
+| `internal/adapters/scheduler/dh_inventory_poll.go` associates DH updates by cert alone; `internal/adapters/storage/postgres/purchase_cert_store.go` documents arbitrary selection when certs collide across graders. | A synced DH price needs an unambiguous purchase association before it can support a classification. |
+| `internal/adapters/storage/postgres/purchase_psa_store.go` can update refund state without clearing receipt; `internal/adapters/storage/postgres/purchase_store.go` has different campaign-closure filters and does not exclude refunds from unsold reads. | Define show availability explicitly instead of treating an existing unsold reader as the complete eligibility policy. |
 | `internal/adapters/storage/postgres/cl_sales_store.go` calculates current summary counts and medians over 90 days. | Do not relabel or change existing `compSummary`; introduce an independent 30-day evaluation. |
 | `internal/adapters/scheduler/cardladder_gap_fill.go` fetches page 0 with limit 100 and hardcodes PSA. | Existing stored history is not proof of complete coverage or correct non-PSA matching. |
 | `internal/adapters/clients/cardladder/client.go` supports paged sales queries filtered by profile, condition, and grader. | Reuse the client, but verify pagination/order semantics before certifying a complete window. |
@@ -68,6 +70,21 @@ A missing/non-positive DH price produces `No listed price`. Do not substitute a
 reviewed price, override, recommendation, cost basis, or CardLadder valuation.
 If the operator-committed price differs, show a non-blocking mismatch warning.
 Missing synchronization time is displayed as unknown, not replaced with today.
+
+A positive stored price is evaluable only when its association with this purchase
+is unambiguous. The existing DH poll looks up purchases by cert alone, while the
+schema permits the same cert under different graders. Check for collisions across
+the entire purchase ledger, including sold, refunded, and closed-campaign rows,
+not just the inventory currently displayed. A recent sync timestamp or an exact
+CL comp match does not establish that DH updated the correct slab.
+
+If that association is ambiguous, return `Needs review` with reason **DH price
+association unclear**. Retain the stored price for inspection, labeled unverified,
+but do not classify against it or include it in known listed-value totals. Clear
+a known ambiguity only with identity-safe verification of the DH association;
+filtering out the competing purchase or refreshing the same cert-only lookup is
+not verification. This is a guard on the new feature's read boundary, not a DH
+synchronization repair or a change to the approved price source.
 
 ### Comparable-sale identity and window
 
@@ -105,7 +122,7 @@ Apply status precedence in this order:
 | Status | Rule |
 |---|---|
 | `No listed price` | No positive DH listing price. |
-| `Needs review` | Matching, source availability, freshness, or window completeness is not established. Include a specific reason. |
+| `Needs review` | DH price association, comp matching, source availability, freshness, or window completeness is not established. Include a specific reason. |
 | `No recent comps` | A successfully completed, current lookup found zero eligible sales in the window. |
 | `Below target` | At least one sale exists, and the median is below 90% of DH listed price. |
 | `Thin evidence` | Exactly one sale exists, at or above 90% of DH listed price. |
@@ -152,9 +169,9 @@ filters, even where current search paths bypass legacy tabs. Do not refactor
 unrelated inventory filtering. Counts must describe the actual filtered set.
 Pending evaluations are shown as loading, not classified as missing comps.
 
-Entering show selection defaults to received and unsold purchases. The operator
-can include unreceived unsold cards as planning candidates, but these are marked
-`Not received` and cannot be packed. General inventory browsing is not otherwise
+Entering show selection defaults to purchases classified as `Ready to pack` by
+the availability policy below. The operator can opt into `Not received` planning
+candidates, but cannot pack them. General inventory browsing is not otherwise
 restricted by this feature.
 
 Reuse the existing selection controls for **Add to show shortlist**, allowing
@@ -166,10 +183,12 @@ Changing filters must not silently add or remove saved members.
 
 Provide a compact saved-list view reachable from inventory. Each row contains
 card identity, cert, DH listed price, shared evidence status/details, and an
-explicit **Packed** checkbox. Display total members, packed count, unavailable
-count, and the current known listed value of available members. Report missing
-prices separately; do not substitute zero as a known value or reuse CL-valued
-selection totals.
+explicit **Packed** checkbox. Display total members, packed count, not-received
+count, unavailable count, and the current known listed value of `Ready to pack`
+members. Report missing and ambiguous DH prices separately and exclude them from
+that value; do not substitute zero as a known price or reuse CL-valued selection
+totals. Packed count describes recorded packing checks, including retained history
+on now-unavailable members; pair those rows with the availability warning.
 
 Support creating/naming a list, adding/removing members, and setting packed state.
 The same slab may belong to multiple planning lists; membership is not a
@@ -187,21 +206,58 @@ or **Support changed** without clearing membership or packed history. In particu
 a price change after packing prompts the operator to check the physical sticker.
 Do not flag a change solely because a refresh timestamp advanced.
 
-A sold, deleted, or otherwise unavailable purchase remains visible as unavailable,
-with its saved identity and packing history. Exclude it from available listed-value
-totals and reject new pack actions. Removing a row is always an explicit action.
-An existing unavailable row may still be unpacked or removed.
+A member that no longer qualifies under the availability policy remains visible
+with its specific reason, saved identity, and packing history. Removing a row is
+always an explicit action. Existing unavailable or not-received rows may still
+be unpacked or removed.
 
 Use existing product styling and inline expansion, not a new visual system.
 Status labels must work without color. Packing controls and evidence disclosure
 must be keyboard accessible and usable on the existing mobile layout.
+
+### Availability policy
+
+The `showprep` domain owns one policy used for show-selection candidates, member
+reads, count/value calculations, and transactional packing validation. Evaluate
+the following rows in order; lower rows apply only if no earlier row matches.
+Retain existing membership and packing history in every state.
+
+| First matching condition | Availability label | Add new member? | Set packed to true? | Include in available listed value? |
+|---|---|---|---|---|
+| Purchase or its campaign no longer exists | `Unavailable: record removed` | No | No | No |
+| A sale row exists for the purchase | `Unavailable: sold` | No | No | No |
+| Purchase has `WasRefunded = true` | `Unavailable: refunded` | No | No | No |
+| Campaign phase is `closed` | `Unavailable: campaign closed` | No | No | No |
+| `receivedAt` is absent | `Not received` | Yes, by opting into planning candidates | No | No |
+| Purchase exists, is received, has no sale/refund, and campaign is not closed | `Ready to pack` | Yes | Yes | Yes, if DH price is positive and unambiguously associated |
+
+Campaign closure is an administrative exclusion from this workflow, not a claim
+that the physical slab is gone. Reopening the campaign causes reevaluation; it
+does not re-add or repack anything. A paused (`pending`) campaign remains eligible
+under the same rules as an `active` campaign. A refunded purchase is ineligible
+even if its old receipt is still present. If any eligibility input cannot be read,
+show `Availability unknown`, exclude it from available value, and reject new add/
+pack actions rather than guessing; existing rows remain visible and removable.
+
+Evidence quality and physical eligibility are separate. A `Ready to pack` card can
+have weak, missing, or ambiguous price evidence and still be deliberately selected
+and packed. Missing/ambiguous DH prices affect known-value totals, not physical
+eligibility. A refund or campaign closure after selection produces an availability
+warning even if the comp-support status did not change.
+
+Use unfiltered-by-availability purchase/campaign reads for existing list members;
+the global unsold reader must not hide a sold, refunded, or closed-campaign member.
+Do not change general inventory readers or campaign semantics to implement this
+show-specific policy.
 
 ## Architecture and persistence
 
 Introduce a focused `showprep` domain sibling owning the support evaluator and
 shortlist lifecycle. It may depend on the inventory hub and leaf packages, but
 not on `liquidation`, `export`, or other inventory siblings. Define narrow ports
-for reading purchase/availability data, detailed evidence, and saved lists.
+for reading purchase/availability data, DH price-association evidence, detailed
+sale evidence, and saved lists. Purchase reads must expose the existence, sale,
+refund, receipt, and campaign state needed by the shared availability policy.
 Compose adapters and service wiring in the application layer.
 
 Both inventory and shortlist views request the same server-side evaluator.
@@ -239,9 +295,12 @@ Keep lists within the existing shared authenticated ledger; no new tenant or
 public-sharing model. Validate IDs, non-empty bounded names, batch limits, and
 membership/availability at the server boundary. Packing and acknowledgment use
 explicit values plus stale-version checks, not non-idempotent toggles. New pack
-actions must atomically validate current receipt/unsold state and save the packing
-update, rather than relying on the browser's earlier inventory read. A sale
-committed later still marks the retained member unavailable on the next read.
+actions must atomically validate the complete availability policy (purchase and
+campaign existence, sale absence, refund state, receipt, and non-closed campaign)
+and save the packing update, rather than relying on the browser's earlier read.
+Use the same policy to validate new membership. A sale, refund, receipt removal,
+or campaign closure committed later changes the retained member's availability
+on the next read without erasing membership or packing history.
 
 Apply the repository's service-role-only RLS/revoke migration pattern, including
 guards for roles absent from local PostgreSQL. No public evidence or shortlist
@@ -264,7 +323,8 @@ reasons in the UI; do not require logs to explain why a card needs review.
 
 - Automated packing rankings, margin optimization, popularity scoring, or carrying limits.
 - New show prices, repricing, price publication, delisting, reservations, or sale recording.
-- Changing existing 90-day analytics, acquisition/campaign rules, or liquidation pricing.
+- Changing existing 90-day analytics, acquisition/campaign rules, liquidation pricing,
+  or repairing the DH cert-association synchronization pipeline.
 - Manually editing/excluding unfavorable comps, substituting adjacent grades, or
   fabricating prices from missing evidence.
 - New sales-data providers, general grader expansion, exports/print templates,
@@ -281,18 +341,29 @@ Implementation acceptance checks:
 
 1. Table-driven evaluator tests cover all statuses, precedence, exactly 90%, one
    cent below, above-list comps, odd/even medians, zero price, missing data, and
-   injected-clock date boundaries (including future dates).
+   injected-clock date boundaries (including future dates). Separately test every
+   availability-table row, precedence, unreadable inputs, and independence from
+   comp-support status.
 2. Adapter tests cover exact variant/grader/grade checks, duplicate IDs, more than
    100 sales, repeated/missing pages, pagination exhaustion, empty successful
    lookups, malformed amounts/dates, stale snapshots, and partial/failed refreshes.
+   Add cross-grader cert-collision cases with different DH prices, including a
+   competing sold/refunded/closed-campaign purchase. Fresh timestamps and correct
+   CL evidence must not turn an ambiguous DH association into `Supported`.
 3. PostgreSQL tests cover unique list membership, persistence across reload,
-   snapshot publication, optimistic conflicts, removed purchases, and sold-state
-   races. Verify migration security with and without Supabase roles present.
+   snapshot publication, optimistic conflicts, removed purchases/campaigns, and
+   packing races with sale, refund, receipt removal, and campaign closure. Verify
+   migration security with and without Supabase roles present.
 4. API tests cover authentication, input/batch validation, coherent summary/detail
-   versions, bounded refresh results, unavailable packing, and idempotent retries.
+   versions, bounded refresh results, and idempotent retries. Verify that new-add
+   and packing decisions use the shared availability policy, retain members after
+   refunds/closure, permit unpack/remove actions, and allow pending campaigns.
 5. Frontend tests cover intersecting filters/counts, lazy evidence disclosure,
-   partial loading, saved selection, no-price totals, packing persistence, and
-   changed-price/support and sold-card warnings. Verify keyboard and mobile use.
+   partial loading, saved selection, missing/ambiguous-price totals, planning-only
+   candidates, packing persistence, and price/support/availability warnings. A
+   received but refunded member and a newly closed-campaign member must remain
+   visible but leave available-value totals and reject new packing. Verify that
+   reopening reevaluates rather than repacks. Verify keyboard and mobile use.
 6. Explicitly prove that shortlist and refresh operations cannot mutate listing
    prices, listing status, reservations, or sales.
 7. Run `go test -race -timeout 10m ./...`, applicable PostgreSQL integration tests,
