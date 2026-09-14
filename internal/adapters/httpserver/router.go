@@ -20,6 +20,7 @@ import (
 
 // Router configures all HTTP routes and returns the configured handler
 type Router struct {
+	showPrepHandler           *handlers.ShowPrepHandler
 	handler                   *handlers.Handler
 	healthHandler             *handlers.HealthHandler
 	apiStatusHandler          *handlers.APIStatusHandler
@@ -54,6 +55,7 @@ type Router struct {
 
 // RouterConfig holds configuration for creating a new Router
 type RouterConfig struct {
+	ShowPrepHandler           *handlers.ShowPrepHandler
 	Handler                   *handlers.Handler
 	HealthHandler             *handlers.HealthHandler
 	APIStatusHandler          *handlers.APIStatusHandler
@@ -91,6 +93,7 @@ type RouterConfig struct {
 // NewRouter creates a new router with the given configuration
 func NewRouter(cfg RouterConfig) *Router {
 	rt := &Router{
+		showPrepHandler:  cfg.ShowPrepHandler,
 		handler:          cfg.Handler,
 		healthHandler:    cfg.HealthHandler,
 		apiStatusHandler: cfg.APIStatusHandler,
@@ -227,6 +230,7 @@ func (rt *Router) Setup() http.Handler {
 	mux.HandleFunc("/pricing", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/login", rt.spaHandler.HandleIndex)
 	mux.HandleFunc("/campaigns", rt.spaHandler.HandleIndex)
+	mux.HandleFunc("/shows", rt.spaHandler.HandleIndex)
 
 	// Authentication routes
 	if rt.authHandler != nil {
@@ -265,6 +269,7 @@ func (rt *Router) Setup() http.Handler {
 
 	// Liquidation pricing routes
 	rt.registerLiquidationRoutes(mux)
+	rt.registerShowPrepRoutes(mux)
 
 	return mux
 }

@@ -135,7 +135,7 @@ export default function DesktopRow(props: DesktopRowProps) {
       data-just-saved={justSaved || undefined}
     >
       <div className="glass-table-td flex-shrink-0 !px-1" style={{ width: '28px' }} onClick={e => e.stopPropagation()}>
-        <input type="checkbox" checked={selected} onChange={onToggle} onKeyDown={e => e.stopPropagation()} className="rounded accent-[var(--brand-500)]" />
+        <input type="checkbox" aria-label={`Select ${item.purchase.certNumber || item.purchase.cardName}`} checked={selected} onChange={onToggle} onKeyDown={e => e.stopPropagation()} className="rounded accent-[var(--brand-500)]" />
       </div>
 
       {/* Card */}

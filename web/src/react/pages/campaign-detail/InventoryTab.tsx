@@ -1,5 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import type { ShowEvaluation, SupportStatus } from '../../../types/showprep';
+import { useShowEvaluations } from '../../queries/useShowPrepQueries';
+import ShowEvidenceDisclosure from '../show-preparation/ShowEvidence';
+import { ShowInventoryFilters, ShowSelectionActions } from '../show-preparation/ShowInventoryControls';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
 import PokeballLoader from '../../PokeballLoader';
@@ -22,6 +26,9 @@ import InventoryHeader from './inventory/InventoryHeader';
 import InventorySelectionBar from './inventory/InventorySelectionBar';
 import { ACTIONS_COLUMN_WIDTH } from './inventory/columnWidths';
 
+const EMPTY_EVALUATIONS: Record<string, ShowEvaluation> = {};
+const EMPTY_SELECTION: ReadonlySet<string> = new Set();
+
 export interface InventoryTabProps {
   items: AgingItem[];
   isLoading: boolean;
@@ -31,7 +38,18 @@ export interface InventoryTabProps {
 
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const state = useInventoryState(items, campaignId);
+  const [support, setSupport] = useState<SupportStatus | 'all'>('all');
+  const [selecting, setSelecting] = useState(false);
+  const [includeNotReceived, setIncludeNotReceived] = useState(false);
+  const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
+  // Virtual rows unmount offscreen. Keep evidence disclosure intent with inventory,
+  // not the measured row, so scrolling or resizing cannot silently close it.
+  const [evidenceExpandedId, setEvidenceExpandedId] = useState<string | null>(null);
+  const purchaseIds = useMemo(() => items.map(item => item.purchase.id), [items]);
+  const evaluationsQuery = useShowEvaluations(purchaseIds);
+  const evaluations = evaluationsQuery.data?.evaluations ?? EMPTY_EVALUATIONS;
+  const showFilters = useMemo(() => ({ support, selecting, includeNotReceived, evaluations }), [support, selecting, includeNotReceived, evaluations]);
+  const state = useInventoryState(items, campaignId, showFilters);
   const {
     scrollContainerRef, mobileScrollRef,
     selected, setSelected, expandedId,
@@ -57,6 +75,28 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     () => items.filter(i => selected.has(i.purchase.id)),
     [items, selected],
   );
+
+  // Capture only explicit selection intent. A hidden card's background recheck
+  // must not advance the version that adding it would acknowledge.
+  function captureSelection(ids: string[], adding: boolean) {
+    setSelectedVersions(prev => {
+      const next = { ...prev };
+      for (const id of ids) {
+        if (!adding) delete next[id];
+        else if (!selected.has(id)) next[id] = evaluations[id]?.version ?? '';
+      }
+      return next;
+    });
+  }
+  function toggleCard(id: string) {
+    captureSelection([id], !selected.has(id));
+    toggleSelect(id);
+  }
+  function toggleVisible() {
+    const ids = filteredAndSortedItems.map(item => item.purchase.id);
+    captureSelection(ids, !ids.every(id => selected.has(id)));
+    toggleAll();
+  }
 
   // Keep in sync with the conditional modal renders below — every overlay
   // that traps focus or occludes the selection bar belongs here.
@@ -92,7 +132,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   // the expanded row changes so cached sizes are flushed.
   useEffect(() => {
     rowVirtualizer.measure();
-  }, [expandedId, rowVirtualizer]);
+    mobileVirtualizer.measure();
+  }, [expandedId, evidenceExpandedId, rowVirtualizer, mobileVirtualizer]);
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
@@ -129,16 +170,29 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         setPriceBand={setPriceBand}
         priceBandCounts={priceBandCounts}
         debouncedSearch={debouncedSearch}
-        selected={selected}
+        selected={selecting ? EMPTY_SELECTION : selected}
+        showFiltering={selecting || support !== 'all'}
         onDeselectMissingCL={handleDeselectMissingCL}
         onHighlightMissingCL={handleHighlightMissingCL}
       />
 
+      <ShowInventoryFilters filters={showFilters} setSupport={setSupport}
+        setSelecting={value => { setSelecting(value); if (value) { setIncludeNotReceived(false); setFilterTab('all'); } }}
+        setIncludeNotReceived={setIncludeNotReceived} count={filteredAndSortedItems.length}
+        pending={evaluationsQuery.isFetching} fetching={evaluationsQuery.isFetching}
+        failed={Object.keys(evaluationsQuery.data?.errors ?? {}).length + (evaluationsQuery.isFetching ? 0 : evaluationsQuery.unresolvedCount)}
+        onRetry={() => { void evaluationsQuery.refetch(); }} />
+      {selecting && <ShowSelectionActions selected={selected} selectedVersions={selectedVersions} evaluations={evaluations}
+        includeNotReceived={includeNotReceived} disabled={anyModalOpen || evaluationsQuery.isFetching}
+        onClear={() => setSelected(new Set())} onAdded={ids => setSelected(prev => {
+          const next = new Set(prev); for (const id of ids) next.delete(id); return next;
+        })} />}
+
       {isMobile ? (
         <div className="space-y-3">
           <label htmlFor="select-all-mobile" className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1">
-            <input id="select-all-mobile" type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
-              onChange={toggleAll} className="rounded" />
+            <input id="select-all-mobile" aria-label="Select all visible cards" type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
+              onChange={toggleVisible} className="rounded" />
             Select all
           </label>
           {filteredAndSortedItems.length === 0 && (
@@ -164,7 +218,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                     <MobileCard
                       item={item}
                       selected={selected.has(item.purchase.id)}
-                      onToggle={() => toggleSelect(item.purchase.id)}
+                      onToggle={() => toggleCard(item.purchase.id)}
                       onRecordSale={() => openSaleModal([item])}
                       onFixPricing={() => handleFixPricing(item.purchase)}
                       onFixDHMatch={() => handleFixDHMatch(item.purchase)}
@@ -179,6 +233,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                       showCampaignColumn={showCampaignColumn}
                     />
+                    <ShowEvidenceDisclosure purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
+                      expanded={evidenceExpandedId === item.purchase.id} onExpandedChange={open => setEvidenceExpandedId(open ? item.purchase.id : null)}
+                      evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching}
+                      error={evaluationsQuery.data?.errors[item.purchase.id]} />
                   </div>
                 );
               })}
@@ -191,7 +249,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           <div className="glass-table-header flex items-center sticky top-0 z-10" style={{ paddingLeft: '3px' }}>
             <div className="glass-table-th flex-shrink-0 !px-1 print-hide-actions" style={{ width: '28px' }}>
               <input type="checkbox" aria-label="Select all visible cards" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
-                onChange={toggleAll} className="rounded accent-[var(--brand-500)]" />
+                onChange={toggleVisible} className="rounded accent-[var(--brand-500)]" />
             </div>
             <SortableHeader label="Card" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="flex-1 min-w-[260px]" />
             <SortableHeader label="Gr" sortKey="grade" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} className="text-center flex-shrink-0" style={{ width: '56px' }} />
@@ -234,7 +292,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       <DesktopRow
                         item={item}
                         selected={isSelected}
-                        onToggle={() => toggleSelect(item.purchase.id)}
+                        onToggle={() => toggleCard(item.purchase.id)}
                         onExpand={() => toggleExpand(item.purchase.id)}
                         onRecordSale={() => startInlineSale(item)}
                         onFixPricing={() => handleFixPricing(item.purchase)}
@@ -252,6 +310,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         showCampaignColumn={showCampaignColumn}
                       />
                     </div>
+                    <ShowEvidenceDisclosure purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
+                      expanded={evidenceExpandedId === item.purchase.id} onExpandedChange={open => setEvidenceExpandedId(open ? item.purchase.id : null)}
+                      evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching}
+                      error={evaluationsQuery.data?.errors[item.purchase.id]} />
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} recordingSale={inlineSaleId === item.purchase.id} onCancelInlineSale={cancelInlineSale} onInlineSaleSuccess={handleInlineSaleSuccess} />}
                   </div>
                 );
@@ -330,13 +392,13 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         />
       )}
 
-      <InventorySelectionBar
+      {!selecting && <InventorySelectionBar
         selectedItems={selectedItems}
         onRecordSale={() => openSaleModal(selectedItems)}
         onListOnDH={() => handleBulkListOnDH(selectedItems.map(i => i.purchase.id))}
         onClear={() => setSelected(new Set())}
         disabled={anyModalOpen}
-      />
+      />}
     </div>
   );
 }
