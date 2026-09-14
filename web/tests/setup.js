@@ -56,7 +56,13 @@ const localStorageMock = {
   clear: vi.fn(),
 };
 
-global.localStorage = localStorageMock;
+// Override jsdom's getter-only property and keep this shared mock installed when
+// individual tests restore their own globals with vi.unstubAllGlobals().
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  writable: true,
+  value: localStorageMock,
+});
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {
