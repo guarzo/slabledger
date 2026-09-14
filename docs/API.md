@@ -1936,6 +1936,8 @@ handlers return JSON errors; shared authentication middleware can return a
 plain-text `401 Unauthorized`. Refresh failures must not be mistaken for
 `no_recent_comps`. After a conflict, read the current state before resubmitting;
 do not silently acknowledge a price or evidence change the operator has not seen.
+When preparation is configured, unknown paths under `/api/show-prep/` require
+authentication and return a JSON `404`, rather than falling through to the SPA.
 
 ---
 

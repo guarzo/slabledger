@@ -233,6 +233,23 @@ follow-up. Replay behavior was exercised against real PostgreSQL; cache/feedback
 changes used real hooks/components and controlled HTTP boundaries. Existing global
 header, jsdom, Vite and source-size warnings remain unchanged.
 
+## PR feedback: API-prefix containment
+
+The user approved the authenticated JSON-404 fallback after triaging CodeRabbit's
+PR comments. Configured show-preparation routes now claim their whole API prefix;
+unknown paths cannot fall through to the public SPA shell. Known endpoint handlers,
+missing-auth behavior, and missing-service 503 responses remain unchanged. This
+corrects an API-contract defect, not demonstrated leakage of protected ledger data.
+
+`TestShowPrepAPIPrefixIsolation` exercises eleven actual-router cases: missing/wrong
+credentials, authenticated unknown GET/POST/root/nested paths, known routes, absent
+auth configuration, and absent service. Six unknown-path cases returned 200 before
+the fix; all eleven pass afterward. Focused handler/router race tests, the full
+`POSTGRES_TEST_URL= go test -race -count=1 -timeout 10m ./...` suite, compatible-toolchain
+`make check` (zero lint issues), and diff checks passed. Database-backed and frontend
+suites were not repeated for this routing-only follow-up; their prior results are
+recorded above. Remaining optional PR comments were triaged, not silently applied.
+
 ## Remaining operational notes
 
 - First-time CardLadder configuration in a running process requires one restart

@@ -25,6 +25,11 @@ func (rt *Router) registerShowPrepRoutes(mux *http.ServeMux) {
 		})))
 		return
 	}
+	mux.Handle("/api/show-prep/", rt.authMW.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"show preparation endpoint not found"}`))
+	})))
 	h := rt.showPrepHandler
 	for _, route := range []struct {
 		pattern string
