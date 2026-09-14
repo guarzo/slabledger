@@ -24,20 +24,24 @@
 - Follow Go table-driven tests and central mocks in `internal/testutil/mocks/`. Write failing behavior tests before implementation. Record actual red/green commands in task reports.
 - Fresh race checks before commits; PostgreSQL checks always use `-count=1` and explicitly reset the new independent tables per test. Controller owns commits while file-disjoint backend/frontend work runs concurrently, so neither worker commits the other's incomplete files.
 
-## Pre-implementation source gate
+## Source integration and development access
 
-**2026-09-14: blocked; no application code written.** Production inventory and CL
-status endpoints returned 200, and authorized credential retrieval/token exchange
-succeeded. The first authenticated CardLadder sales query returned 403. A separate
-header-only request confirmed `cf-mitigated: challenge`: Cloudflare is requesting
-a browser challenge, not providing a sales response. No live sales, pagination,
-USD/accepted-offer, or shipping semantics were verified. One of the eight allowed
-sample requests was used; no production records or credentials were changed.
+**2026-09-14: implementation may proceed.** The operator confirms CardLadder works
+from the production instance. The 403/`cf-mitigated: challenge` response occurred
+on the agent's direct development-environment request, not on SlabLedger's
+production integration. Treating it as a production failure or release blocker
+was incorrect. No production records or credentials were changed.
 
-Execution is paused for the operator's choice: restore source access first, or
-proceed with fail-closed feature implementation while retaining live source
-verification as a release blocker. Do not certify existing 90-day aggregates or
-assume a successful future HTTP response establishes unverified price semantics.
+Reuse the existing configured CardLadder client, authentication, and source-reported
+price conventions. Inspect production's stored sales through authorized read-only
+access and test the new 30-day calculation, identity checks, pagination, and failure
+handling with deterministic fixtures. A successful direct CardLadder call from this
+development environment is not a prerequisite for implementation or release.
+
+Keep actual per-card data-quality checks: a 90-day aggregate is not a 30-day median,
+and a truncated or failed fetch is not a complete window. Those checks determine a
+card's status from its actual evidence; do not introduce a global unverified-source
+switch or disable valid production evidence because a local probe was challenged.
 
 ## Execution and file ownership
 
@@ -176,7 +180,7 @@ The UI keeps `timeoutMs: 120000` as a transport ceiling, not a server budget. Ex
 - `internal/adapters/httpserver/routes_showprep.go` and `showprep_deadline_test.go` for real-server timeout coverage; Modify `internal/adapters/httpserver/router.go` to add optional handler wiring and register routes.
 - Modify `cmd/slabledger/handlers.go` and `cmd/slabledger/server.go` to inject the DB-backed service and optional existing CL client. Extract helper wiring to `cmd/slabledger/showprep.go` rather than enlarging already-large functions.
 
-- [ ] **Step 1: Read source preflight result and pin domain behavior with failing tests.** Record unresolved upstream facts in implementation notes; do not certify unsupported semantics. Use the approved availability decision table and wire contract as assertions. Test even-median arithmetic without floats:
+- [ ] **Step 1: Read the source-integration note and pin domain behavior with failing tests.** Reuse the working production integration and document the local probe limitation separately from actual per-card evidence problems. Use the approved availability decision table and wire contract as assertions. Test even-median arithmetic without floats:
 
 ```go
 // For sorted integer-cent prices:
@@ -229,7 +233,7 @@ The helper's explicit reset is test-only; do not introduce production cascade-de
 
 For atomic pack eligibility, lock the campaign row and purchase row in a consistent order, re-read sale/refund/receipt/phase after locking, and update the list item only if both expected versions match. PostgreSQL's sale foreign key must participate in the purchase lock so an insertion cannot interleave between validation and commit; prove with a concurrency test rather than changing sale writers speculatively. Batch add validates every new candidate within its transaction and retains existing members unchanged. Unpack/remove remain possible after source records disappear. Execute only against the controller-provided disposable `POSTGRES_TEST_URL`, never `DATABASE_URL`.
 
-- [ ] **Step 4: Add failing httptest-backed CL adapter tests, then implement bounded refresh.** Check profile, normalized grader and condition on every record; reject missing/contradictory identity, nonfinite/nonpositive/unverified-currency prices and malformed/future dates. Parse source timestamps into UTC dates. Deduplicate IDs, verify date ordering across pages and stable pagination bounds, detect repeated pages, and establish exhaustion or verified cutoff coverage. More than five pages produces partial evidence. No existing unqualified CL rows are automatically trusted. Implement the shared deadline hierarchy: source work receives the shorter context, while attempt/result persistence receives the reserved context. Test unavailable credentials, zero hits, source timeout with successful failure-state persistence, client cancellation leaving an incomplete attempt, malformed records, failed subsequent refresh retaining older evidence, and two concurrent refresh attempts. Log bounded per-identity failures without credentials.
+- [ ] **Step 4: Add failing httptest-backed CL adapter tests, then implement bounded refresh.** Check profile, normalized grader and condition on every record; reject missing/contradictory identity, nonfinite/nonpositive prices, explicitly unsupported currency, and malformed/future dates. Reuse the existing USD price conversion and source-reported sale conventions; do not require a new global source-certification flag. Parse source timestamps into UTC dates. Deduplicate IDs, verify date ordering across pages and stable pagination bounds, detect repeated pages, and establish exhaustion or verified cutoff coverage. More than five pages produces partial evidence. No existing unqualified CL rows are automatically trusted. Implement the shared deadline hierarchy: source work receives the shorter context, while attempt/result persistence receives the reserved context. Test unavailable credentials, zero hits, source timeout with successful failure-state persistence, client cancellation leaving an incomplete attempt, malformed records, failed subsequent refresh retaining older evidence, and two concurrent refresh attempts. Log bounded per-identity failures without credentials.
 
 - [ ] **Step 5: Add handler/router tests, then implement and wire API.** Use existing JSON/error helpers, `RequireAuth`, a safe disabled response when auth/client is unavailable, and method-specific mux routes. Add a SPA `/shows` route for the new frontend while keeping all data endpoints authenticated. Service construction is independent of CL availability so saved lists and missing-evidence browsing still work. Wire the actual server write timeout into refresh deadlines without changing the server's global timeout. Handler tests must cover transport contract, 400/401/404/409, stale acknowledgement and state, duplicate requests, and source failures returning explicit per-card evaluations.
 
@@ -284,7 +288,7 @@ Test behavior rather than just mocks in component tests: applying support plus s
 **Owner:** controller and independently dispatched reviewers. **Files:** `docs/API.md`, `docs/USER_GUIDE.md`, `implementation-notes.md`, plus explicitly assigned fixes in reviewed files.
 
 - [ ] **Step 1: Review backend and frontend slices against spec and quality.** Hand each reviewer the fixed wire contract, task report, and scoped diff. Resolve material findings with original implementers and rerun focused tests. Check public DTO parity explicitly rather than relying solely on each side's isolated tests. Record findings/resolutions in the ledger.
-- [ ] **Step 2: Document the real shipped API and workflow.** Add endpoint request/response/limits to API docs, and inventory/show steps plus needs-review/no-comp distinction to the user guide. Update implementation notes with actual source verification, unavailable capabilities and deviations. Do not label the feature fully supported if the upstream evidence gate is unresolved.
+- [ ] **Step 2: Document the real shipped API and workflow.** Add endpoint request/response/limits to API docs, and inventory/show steps plus needs-review/no-comp distinction to the user guide. Update implementation notes with actual source/data checks, unavailable capabilities and deviations. Distinguish development-only direct-access limitations from actual production refresh failures; report missing user-visible capabilities without treating the local 403 as a release gate.
 - [ ] **Step 3: Exercise local real backend + disposable PostgreSQL.** Never connect the test runner to developer or production databases. Seed only disposable fixtures, start backend with local-only auth token, and call evaluate/list/add/pack/read/unpack/remove endpoints. Verify auth denial, surviving sale/refund/deletion states, snapshot/price mismatch behavior and no financial mutations. Inspect screenshots from frontend viewport tests; fix material defects and rerun.
 - [ ] **Step 4: Run `polish-core --fix` against the implementation base `ae5b9e10`, inspect its edits, and request one independent whole-branch review.** Prioritize evidence correctness, API/DB concurrency, source assumptions, and UI contract. Apply approved high-confidence fixes and rerun affected verification.
 - [ ] **Step 5: Fresh final gates and commit.** Run `go test -race -count=1 -timeout 10m ./...`, the explicit `POSTGRES_TEST_URL="${SHOWPREP_TEST_URL:?controller must supply the verified disposable database URL}" go test -race -count=1 -timeout 10m ./internal/adapters/storage/postgres/...` command from Task 1, frontend tests/typecheck/build, focused Playwright, `make check`, and `git diff --check`. Confirm the DB run is uncached and exercises independent-table cleanup and deletion-retention cases; include the real-server deadline regression and durable price-hold regression in the results. Review final diff and status for unrelated files/placeholders. Commit only reviewed work; do not push/merge without user authorization. Final explanation states what works, exact checks, local branch/worktree, and any remaining source/runtime limits.

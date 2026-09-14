@@ -109,11 +109,12 @@ market-sale count. Do not remove low prices as statistical outliers. Invalid
 prices/dates or identity contradictions must be disclosed and prevent treating
 an affected, unresolved window as complete.
 
-Use source-reported sold amounts, not asking prices or seller net proceeds.
-Currency and the source's treatment of accepted offers/shipping must be verified
-before an adapter certifies the evidence as comparable USD sale prices. Unknown
-semantics produce `Needs review`; this feature does not invent conversion rules
-or promise independently verified transaction settlement.
+Use CardLadder's source-reported sold amounts and the existing integration's USD
+conversion, not asking prices or seller net proceeds. Preserve source links and
+listing type for review; do not invent adjustments for offers, shipping, or fees,
+or claim independently verified transaction settlement. Invalid amounts or an
+explicitly unsupported currency are per-record data-quality problems, not a
+reason to require recertification of the working production integration.
 
 ### Status evaluation
 
@@ -332,10 +333,13 @@ reasons in the UI; do not require logs to explain why a card needs review.
 
 ## Verification and acceptance
 
-Before implementation, exercise the source client's live pagination/order and
-sale-field semantics on bounded samples. If a source assumption fails, preserve
-`Needs review` and revisit the adapter design; do not weaken the approved rule.
-No tests have yet established those external guarantees.
+Reuse the working production CardLadder integration. Verify new behavior through
+deterministic client/adapter tests and authorized read-only inspection of stored
+production sales. The operator confirmed that production access works; a browser
+challenge on the agent's direct development-side request is not a production
+failure or an implementation/release blocker. Assess actual per-card identity,
+window coverage, freshness, and errors before classifying support; do not relabel
+90-day aggregates or truncated histories as complete 30-day evidence.
 
 Implementation acceptance checks:
 
