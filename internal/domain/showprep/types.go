@@ -97,6 +97,7 @@ type Evaluation struct {
 	RefreshedAt             string       `json:"refreshedAt"`
 	EvidenceVersion         string       `json:"evidenceVersion"`
 	Version                 string       `json:"version"`
+	Readiness               *Readiness   `json:"readiness,omitempty"`
 }
 
 type Evidence struct {

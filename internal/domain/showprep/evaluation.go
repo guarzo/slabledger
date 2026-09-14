@@ -102,5 +102,8 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 		Purchase   Purchase
 		Evaluation Evaluation
 	}{p, e})
+	// Hash the exact legacy business projection first. The absent optional field
+	// is omitted from JSON, so scheduling transitions cannot invalidate selection.
+	e.Readiness = deriveReadiness(p.Identity(), s, now, invalid)
 	return e
 }
