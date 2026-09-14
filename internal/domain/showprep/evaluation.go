@@ -49,6 +49,32 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 		}
 		e.MedianCents = int((twice + 1) / 2)
 	}
+	// Evidence health is independent of DH price quality. Validate once so price
+	// precedence cannot hide failed attempts or mislabel healthy retained sales.
+	switch {
+	case !p.Identity().Valid():
+		e.EvidenceReason = "Comparable identity unresolved"
+	case s == nil:
+		e.EvidenceReason = "No verified CardLadder evidence"
+	case s.Source != "cardladder" && s.AttemptState == "complete":
+		e.EvidenceReason = "No verified CardLadder source provenance"
+	case s.Identity != p.Identity():
+		e.EvidenceReason = "Comparable identity mismatch"
+	case s.AttemptState != "complete":
+		e.EvidenceReason = s.AttemptError
+		if e.EvidenceReason == "" {
+			e.EvidenceReason = "Refresh incomplete"
+		}
+	case invalid:
+		e.EvidenceReason = "Invalid comparable records"
+	case !s.Complete:
+		e.EvidenceReason = "Incomplete source window"
+	case s.WindowStart != start || s.WindowEnd != end:
+		e.EvidenceReason = "Evidence does not cover current 30-day window"
+	case s.RefreshedAt.IsZero() || s.RefreshedAt.After(now) || now.Sub(s.RefreshedAt) > 24*time.Hour:
+		e.EvidenceReason = "Evidence is stale"
+	}
+	e.EvidenceNeedsReview = e.EvidenceReason != ""
 	e.Status = NeedsReview
 	switch {
 	case p.ListedPriceCents <= 0:
@@ -56,27 +82,8 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 		e.Reason = "No positive DH listed price"
 	case p.PriceAssociationUnclear:
 		e.Reason = "DH price association unclear"
-	case !p.Identity().Valid():
-		e.Reason = "Comparable identity unresolved"
-	case s == nil:
-		e.Reason = "No verified CardLadder evidence"
-	case s.Source != "cardladder" && s.AttemptState == "complete":
-		e.Reason = "No verified CardLadder source provenance"
-	case s.Identity != p.Identity():
-		e.Reason = "Comparable identity mismatch"
-	case s.AttemptState != "complete":
-		e.Reason = s.AttemptError
-		if e.Reason == "" {
-			e.Reason = "Refresh incomplete"
-		}
-	case invalid:
-		e.Reason = "Invalid comparable records"
-	case !s.Complete:
-		e.Reason = "Incomplete source window"
-	case s.WindowStart != start || s.WindowEnd != end:
-		e.Reason = "Evidence does not cover current 30-day window"
-	case s.RefreshedAt.IsZero() || s.RefreshedAt.After(now) || now.Sub(s.RefreshedAt) > 24*time.Hour:
-		e.Reason = "Evidence is stale"
+	case e.EvidenceNeedsReview:
+		e.Reason = e.EvidenceReason
 	case len(prices) == 0:
 		e.Status = NoRecentComps
 		e.Reason = "Complete lookup found no recent matching sales"

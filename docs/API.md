@@ -1840,14 +1840,16 @@ integer cents, matching the inventory API.
 
 Evaluate and evidence reads use stored data. Refresh explicitly requests bounded
 source work; opening inventory does not automatically trigger an upstream scan.
-Individual source failures are represented as evaluation reasons, not successful
-empty windows. A source refresh can be partial; inspect every returned status.
+Individual source failures are represented by `evidenceNeedsReview` and
+`evidenceReason`, not successful empty windows. A source refresh can be partial;
+inspect evidence health independently of the price-support status.
 Show preparation binds the configured CardLadder client at startup. If the first
 CardLadder configuration is saved while the process is running, restart once to
 attach that client; saved lists and missing-evidence evaluation remain available.
 
 Each evaluation identifies the purchase, card/cert/grader/grade, `status`, `reason`,
-`availability`, `canAdd`, `canPack`, `listedPriceCents`, `localPriceCents`,
+`evidenceNeedsReview` (boolean), `evidenceReason` (string), `availability`, `canAdd`,
+`canPack`, `listedPriceCents`, `localPriceCents`,
 `priceMismatch`, `priceAssociationUnclear`, `listingSyncedAt`, `medianCents`,
 `compCount`, `latestSaleDate`, `windowStart`, `windowEnd`, `refreshedAt`,
 `evidenceVersion`, and `version`. `version` identifies the evaluated input state
@@ -1863,12 +1865,26 @@ fresh token merely because the evaluation was read again.
 | `needs_review` | Identity, DH price association, freshness, or coverage is unresolved. See `reason`. |
 | `no_listed_price` | No positive DH listing price is available. |
 
+The required evidence-health fields are assessed independently of DH price.
+`evidenceNeedsReview: true` includes a specific `evidenceReason` for missing,
+failed/running, partial, stale, invalid, or identity/source-mismatched evidence.
+Healthy complete evidence returns `false` and `""`, including complete empty
+windows and purchases with missing or ambiguous DH prices. Price precedence is
+unchanged: a missing DH price remains `no_listed_price` with reason
+`No positive DH listed price`, even after a failed refresh. Prior readable sales
+remain visible, but health drives refresh review counts and detail warnings.
+A `needs_review` status due only to DH price ambiguity does not imply bad evidence.
+
 The window is 30 UTC calendar dates including today. All eligible matching sales
 are considered, not only favorable sales. A complete snapshot must be no older
 than 24 hours and cover that date range. Even-count medians are compared without
 rounding; `medianCents` is the display-rounded result. Each sale has `id`, `date`,
 `priceCents`, `platform`, `url`, and `listingType`. Missing source links remain
-empty rather than being fabricated.
+empty rather than being fabricated. Coverage also requires verified paging:
+identical sale IDs within one page are deduplicated, but overlap between pages
+makes coverage uncertain even with stable `totalHits` and matching dates.
+Inspectable partial records are retained; overlapping pages never certify a
+complete window. Contradictory duplicate records are rejected.
 
 ### Saved lists
 

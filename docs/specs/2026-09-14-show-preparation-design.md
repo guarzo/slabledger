@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-14
 
-**Status:** Workflow approved in conversation; written specification awaiting user review.
+**Status:** Approved and implemented; verification recorded in `implementation-notes.md`.
 
 **Scope:** Inventory price-support filtering plus saved show shortlists and packing checks.
 
@@ -128,6 +128,11 @@ Apply status precedence in this order:
 | `Below target` | At least one sale exists, and the median is below 90% of DH listed price. |
 | `Thin evidence` | Exactly one sale exists, at or above 90% of DH listed price. |
 | `Supported` | At least two sales exist, and their median is at or above 90% of DH listed price. |
+
+Return evidence health independently as `evidenceNeedsReview` and `evidenceReason`.
+`No listed price` retains its precedence without hiding a failed, partial, or stale
+refresh or the warning on retained sales. Healthy complete evidence has no evidence
+error even when the listed price is absent or its association is ambiguous.
 
 `Supported` describes observed price evidence, not a guarantee of demand, margin,
 or a sale at the show. Sales above listed price count as support.

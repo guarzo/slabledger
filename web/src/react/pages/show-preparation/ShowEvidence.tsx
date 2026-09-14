@@ -21,6 +21,7 @@ export function EvidenceDetails({ data }: { data: Evidence }) {
   const e = data.evaluation;
   return <div className="show-evidence">
     {e.reason && <p className="text-[var(--warning)]">{e.reason}</p>}
+    {e.evidenceNeedsReview && e.evidenceReason !== e.reason && <p className="text-[var(--warning)]">{e.evidenceReason}</p>}
     <dl className="show-evidence-meta">
       <div><dt>Matching identity</dt><dd>{e.cardName} · {e.grader} {e.grade} · Cert {e.certNumber}</dd></div>
       <div><dt>30 UTC calendar dates</dt><dd>{e.windowStart || 'Unknown'} to {e.windowEnd || 'Unknown'} (inclusive)</dd></div>
@@ -28,7 +29,7 @@ export function EvidenceDetails({ data }: { data: Evidence }) {
       <div><dt>DH last synced</dt><dd>{showTime(e.listingSyncedAt)}</dd></div>
     </dl>
     <p className="text-[var(--text-muted)]">Support: median ≥90% of DH listed price, at least two matching sales. Complete evidence must cover the current window and be no older than 24 hours.</p>
-    {e.status === 'needs_review' && <p className="text-[var(--warning)]">Stored sales may be partial or stale. They are not a verified current window.</p>}
+    {e.evidenceNeedsReview && <p className="text-[var(--warning)]">Stored sales may be partial or stale. They are not a verified current window.</p>}
     {data.sales.length > 0 ? <ul className="show-sales" aria-label="Individual matching sales">
       {data.sales.map(sale => {
         const url = safeSourceURL(sale.url);
@@ -38,7 +39,7 @@ export function EvidenceDetails({ data }: { data: Evidence }) {
           <span className="text-[var(--text-muted)]">{sale.listingType || 'Listing type unknown'}</span>
         </li>;
       })}
-    </ul> : <p>{e.status === 'no_recent_comps' ? 'Complete current lookup: no matching sales in this window.' : 'No detailed sales available. This does not establish no recent comps.'}</p>}
+    </ul> : <p>{!e.evidenceNeedsReview ? 'Complete current lookup: no matching sales in this window.' : 'No detailed sales available. This does not establish no recent comps.'}</p>}
     <p className="text-[var(--text-muted)]">CardLadder source-reported USD sold amounts, not asking prices or independently verified settlement. All returned eligible sales are shown.</p>
   </div>;
 }

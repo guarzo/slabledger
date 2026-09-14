@@ -18,7 +18,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 }));
 const secondId = '44444444-4444-4444-8444-444444444444';
 const thirdId = '55555555-5555-4555-8555-555555555555';
-const values = [evaluation(), evaluation({ purchaseId: secondId, certNumber: '87654321', status: 'needs_review', reason: 'Source unavailable' }),
+const values = [evaluation(), evaluation({ purchaseId: secondId, certNumber: '87654321', status: 'needs_review', reason: 'Source unavailable', evidenceNeedsReview: true, evidenceReason: 'Source unavailable' }),
   evaluation({ purchaseId: thirdId, cardName: 'Charizard', certNumber: '99999999', availability: 'not_received', canPack: false })];
 const items = values.map((e, i) => inventoryItem(e, i === 2 ? { receivedAt: '', dhStatus: '' } : {}));
 let requests: { url: string; body: Record<string, unknown> }[];
@@ -166,7 +166,7 @@ describe('show preparation in the existing inventory', () => {
     try {
       fireEvent.click(screen.getByRole('button', { name: /^All\d/ }));
       fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
-      await screen.findByText(/No detailed sales available/);
+      await screen.findByText(/Complete current lookup/);
       expect(screen.getAllByText('Loading price support…')).toHaveLength(2);
       expect(screen.queryByText(/Evaluation unavailable:/)).not.toBeInTheDocument();
     } finally {
@@ -186,7 +186,7 @@ describe('show preparation in the existing inventory', () => {
     try {
       fireEvent.click(screen.getByRole('button', { name: /^All\d/ }));
       fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
-      await screen.findByText(/No detailed sales available/);
+      await screen.findByText(/Complete current lookup/);
       await act(async () => { await qc.cancelQueries({ queryKey: showPrepKeys.evaluations }); });
       const retry = await screen.findByRole('button', { name: 'Retry evaluation' });
       expect(retry).toBeEnabled();

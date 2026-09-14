@@ -77,6 +77,7 @@ func (s *ShowPrepSource) fetch(ctx context.Context, id sp.Identity, now time.Tim
 	consumed := 0
 	previousDate := ""
 	seen := map[string]sp.Sale{}
+	firstSeenPage := map[string]int{}
 	pages := map[string]bool{}
 	for page := 0; page < 5; page++ {
 		if err := ctx.Err(); err != nil {
@@ -109,6 +110,7 @@ func (s *ShowPrepSource) fetch(ctx context.Context, id sp.Identity, now time.Tim
 		}
 		pages[pageKey] = true
 		crossedCutoff := false
+		overlap := false
 		for _, record := range response.Hits {
 			sale, reason := qualifiedShowSale(record, id, end)
 			if reason != "" {
@@ -122,14 +124,23 @@ func (s *ShowPrepSource) fetch(ctx context.Context, id sp.Identity, now time.Tim
 				if old != sale {
 					return fail("Contradictory duplicate CardLadder sale", nil)
 				}
+				if firstSeenPage[sale.ID] != page {
+					overlap = true
+				}
 				continue
 			}
 			seen[sale.ID] = sale
+			firstSeenPage[sale.ID] = page
 			if sale.Date < start {
 				crossedCutoff = true
 				continue
 			}
 			snapshot.Sales = append(snapshot.Sales, sale)
+		}
+		// Keep this page's inspectable records, but overlapping page boundaries
+		// cannot prove coverage even when raw row counts reach totalHits.
+		if overlap {
+			return fail("Overlapping CardLadder pages; coverage uncertain", nil)
 		}
 		consumed += len(response.Hits)
 		if consumed == total || crossedCutoff {

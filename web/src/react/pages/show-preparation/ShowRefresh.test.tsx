@@ -13,7 +13,7 @@ it('refreshes only explicit selection, in sequential batches of ten, reporting p
   const calls: string[][] = [];
   vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
     const { purchaseIds } = JSON.parse(options.body); calls.push(purchaseIds);
-    return new Response(JSON.stringify({ evaluations: purchaseIds.map((purchaseId: string) => evaluation({ purchaseId, status: purchaseId === 'id-2' ? 'needs_review' : 'supported', reason: purchaseId === 'id-2' ? 'Source failed' : '' })) }));
+    return new Response(JSON.stringify({ evaluations: purchaseIds.map((purchaseId: string) => evaluation({ purchaseId, status: purchaseId === 'id-2' ? 'needs_review' : 'supported', reason: purchaseId === 'id-2' ? 'Source failed' : '', evidenceNeedsReview: purchaseId === 'id-2', evidenceReason: purchaseId === 'id-2' ? 'Source failed' : '' })) }));
   }));
   mount(Array.from({ length: 23 }, (_, i) => `id-${i}`));
   expect(calls).toHaveLength(0);
@@ -23,6 +23,21 @@ it('refreshes only explicit selection, in sequential batches of ten, reporting p
   expect(screen.getByText(/1 need review/)).toBeVisible();
   expect(screen.getByText(/Source failed/)).toBeVisible();
 });
+it.each([
+  { name: 'failed evidence', evidenceNeedsReview: true, evidenceReason: 'CardLadder refresh failed', count: 1 },
+  { name: 'healthy complete evidence', evidenceNeedsReview: false, evidenceReason: '', count: 0 },
+])('reports evidence health despite no listed price: $name', async ({ evidenceNeedsReview, evidenceReason, count }) => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ evaluations: [evaluation({
+    purchaseId: 'id-1', status: 'no_listed_price', reason: 'No positive DH listed price', listedPriceCents: 0,
+    evidenceNeedsReview, evidenceReason,
+  })] }))));
+  mount(['id-1']);
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh selected evidence (1)' }));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(`1 of 1 checked · ${count} need review`));
+  if (evidenceNeedsReview) expect(screen.getByText(/CardLadder refresh failed/)).toBeVisible();
+  else expect(screen.queryByRole('list')).not.toBeInTheDocument();
+});
+
 it('offers explicit retry after failure, without automatic replay', async () => {
   const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Refresh failed' }), { status: 500 }));
   vi.stubGlobal('fetch', fetcher); mount(['id-1']);

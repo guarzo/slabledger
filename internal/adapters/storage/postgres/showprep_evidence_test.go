@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/require"
@@ -54,6 +56,54 @@ func TestShowPrepEvidenceGenerationAndRetention(t *testing.T) {
 	require.Empty(t, snapshots[identity].Sales)
 	require.Equal(t, "complete", snapshots[identity].AttemptState)
 }
+func TestShowPrepNoPriceRefreshHealthAndRetainedEvidence(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		failed bool
+		reason string
+	}{{"failed recheck", true, "CardLadder refresh failed"}, {"complete recheck", false, ""}} {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupShowPrepTestDB(t)
+			ctx := context.Background()
+			seedShowPurchase(t, db, showPurchase, "camp-show", "cert", "PSA")
+			_, err := db.ExecContext(ctx, `UPDATE campaign_purchases SET dh_listing_price_cents=0 WHERE id=$1`, showPurchase)
+			require.NoError(t, err)
+			store := NewShowPrepStore(db.DB)
+			seedShowEvidence(t, store)
+			source := &mocks.ShowPrepSourceMock{FetchFn: func(_ context.Context, id sp.Identity, now time.Time) (sp.Snapshot, error) {
+				if tt.failed {
+					return sp.Snapshot{}, errors.New("source failed")
+				}
+				start, end := sp.Window(now)
+				return sp.Snapshot{Identity: id, Source: "cardladder", Complete: true, WindowStart: start, WindowEnd: end, RefreshedAt: now, Sales: []sp.Sale{{ID: "a", Date: end, PriceCents: 27000}, {ID: "b", Date: end, PriceCents: 27000}}}, nil
+			}}
+			svc := sp.NewService(store, source, time.Now)
+			before, err := svc.Evidence(ctx, showPurchase)
+			require.NoError(t, err)
+			refreshed, err := svc.Refresh(ctx, []string{showPurchase}, time.Now().Add(time.Second), time.Now().Add(2*time.Second))
+			require.NoError(t, err)
+			require.Len(t, refreshed, 1)
+			// Reconstruct the service to prove the health derives from saved attempts.
+			after, err := sp.NewService(store, nil, time.Now).Evidence(ctx, showPurchase)
+			require.NoError(t, err)
+			require.Len(t, after.Sales, 2)
+			if tt.failed {
+				require.Equal(t, before.Sales, after.Sales)
+			}
+			for _, e := range []sp.Evaluation{refreshed[0], after.Evaluation} {
+				require.Equal(t, sp.NoListedPrice, e.Status)
+				require.Equal(t, "No positive DH listed price", e.Reason)
+				encoded, err := json.Marshal(e)
+				require.NoError(t, err)
+				var wire map[string]any
+				require.NoError(t, json.Unmarshal(encoded, &wire))
+				require.Equal(t, tt.failed, wire["evidenceNeedsReview"])
+				require.Equal(t, tt.reason, wire["evidenceReason"])
+			}
+		})
+	}
+}
+
 func TestShowPrepConcurrentRefreshPublishesNewestAttempt(t *testing.T) {
 	db := setupShowPrepTestDB(t)
 	ctx := context.Background()

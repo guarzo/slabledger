@@ -32,7 +32,9 @@ export default function ShowRefresh({ purchaseIds, disabled = false }: { purchas
         const result = await showPrepAPI.refresh(batch, abort.signal);
         for (const id of batch) {
           const value = result.evaluations.find(e => e?.purchaseId === id);
-          if (!value || value.status === 'needs_review') review.push(`${value?.certNumber || id}: ${value?.reason || 'Evaluation missing from refresh response'}`);
+          if (!value || value.evidenceNeedsReview || value.status === 'needs_review') {
+            review.push(`${value?.certNumber || id}: ${value?.evidenceReason || value?.reason || 'Evaluation missing from refresh response'}`);
+          }
         }
         done += batch.length;
         retryIds.current = selected.slice(i + 10);

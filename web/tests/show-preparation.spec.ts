@@ -6,6 +6,51 @@ const planningId = '44444444-4444-4444-8444-444444444444';
 const ambiguousId = '55555555-5555-4555-8555-555555555555';
 const widths = [{ name: 'mobile', width: 390, height: 844 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'desktop', width: 1440, height: 1000 }];
 
+for (const failed of [true, false]) {
+  test(`no DH price preserves independent refresh health (failed=${failed})`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    let current = evaluation({ status: 'no_listed_price', reason: 'No positive DH listed price', listedPriceCents: 0 });
+    let refreshes = 0;
+    await page.route(url => url.pathname.startsWith('/api/'), async route => {
+      const path = new URL(route.request().url()).pathname;
+      let response: unknown;
+      if (path === '/api/auth/user') response = { id: 1, username: 'Show operator', email: 'show@example.test', avatar_url: '', is_admin: false, last_login_at: null };
+      else if (path === '/api/inventory') response = { items: [inventoryItem(current)], warnings: [] };
+      else if (path === '/api/show-prep/lists') response = { lists: [] };
+      else if (path === '/api/show-prep/evaluate') response = { evaluations: [current] };
+      else if (path === '/api/show-prep/refresh') {
+        refreshes++;
+        expect(route.request().postDataJSON()).toEqual({ purchaseIds: [purchaseId] });
+        current = { ...current, version: 'eval-2', evidenceNeedsReview: failed, evidenceReason: failed ? 'CardLadder refresh failed' : '' };
+        response = { evaluations: [current] };
+      } else if (path === `/api/show-prep/evidence/${purchaseId}`) response = { evaluation: current, sales: [
+        { id: 'sale-1', date: '2026-09-13', priceCents: 27000, platform: 'eBay', url: 'https://example.test/sale/1', listingType: 'Auction' },
+        { id: 'sale-2', date: '2026-09-12', priceCents: 29000, platform: 'eBay', url: 'https://example.test/sale/2', listingType: 'BestOffer' },
+      ] };
+      else { await route.fulfill({ status: 404, json: { error: 'Unexpected intercepted API' } }); return; }
+      await route.fulfill({ json: response });
+    });
+    await page.goto('/inventory');
+    await page.getByRole('button', { name: 'Show selection', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Select 12345678', exact: true }).check();
+    await page.getByRole('button', { name: 'Refresh selected evidence (1)' }).click();
+    const actions = page.getByRole('region', { name: 'Show selection actions' });
+    await expect(actions.getByRole('status')).toHaveText(`1 of 1 checked · ${failed ? 1 : 0} need review`);
+    if (failed) await expect(actions.getByText(/12345678: CardLadder refresh failed/)).toBeVisible();
+    await page.getByRole('button', { name: 'Show 30-day evidence 12345678' }).click();
+    const evidence = page.getByRole('region', { name: '30-day evidence 12345678' });
+    await expect(page.getByText('No listed price', { exact: true }).last()).toBeVisible();
+    await expect(evidence.getByText('No positive DH listed price', { exact: true })).toBeVisible();
+    await expect(evidence.getByRole('list', { name: 'Individual matching sales' }).getByRole('listitem')).toHaveCount(2);
+    if (failed) {
+      await expect(evidence.getByText('CardLadder refresh failed', { exact: true })).toBeVisible();
+      await expect(evidence.getByText(/Stored sales may be partial or stale/)).toBeVisible();
+    } else await expect(evidence.getByText(/Stored sales may be partial or stale/)).toHaveCount(0);
+    expect(refreshes).toBe(1);
+    await page.screenshot({ path: testInfo.outputPath(`no-price-health-${failed ? 'failed' : 'complete'}.png`), fullPage: true });
+  });
+}
+
 for (const viewport of widths) {
   test(`show preparation workflow and retained warnings: ${viewport.name}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);

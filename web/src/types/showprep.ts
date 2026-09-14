@@ -9,6 +9,8 @@ export interface ShowEvaluation {
   grade: number;
   status: SupportStatus;
   reason: string;
+  evidenceNeedsReview: boolean;
+  evidenceReason: string;
   availability: Availability;
   canAdd: boolean;
   canPack: boolean;

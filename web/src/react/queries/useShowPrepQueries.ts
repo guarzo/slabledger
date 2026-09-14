@@ -60,6 +60,7 @@ export function useShowEvidence(id: string, enabled: boolean, evaluationVersion 
     queryKey: [...showPrepKeys.evidence(id), evaluationVersion], enabled, staleTime: 30000, retry: false,
     queryFn: async ({ signal }) => {
       const data = await showPrepAPI.evidence(id, { signal });
+      signal.throwIfAborted();
       if (data.evaluation.version !== evaluationVersion) {
         qc.setQueryData([...showPrepKeys.evidence(id), data.evaluation.version], data);
       }

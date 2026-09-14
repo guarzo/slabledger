@@ -38,7 +38,7 @@ func TestShowPrepHTTPContract(t *testing.T) {
 				}
 				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 				require.Len(t, body.Evaluations, 1)
-				for _, key := range []string{"purchaseId", "cardName", "certNumber", "grader", "grade", "status", "reason", "availability", "canAdd", "canPack", "listedPriceCents", "localPriceCents", "priceMismatch", "priceAssociationUnclear", "listingSyncedAt", "medianCents", "compCount", "latestSaleDate", "windowStart", "windowEnd", "refreshedAt", "evidenceVersion", "version"} {
+				for _, key := range []string{"purchaseId", "cardName", "certNumber", "grader", "grade", "status", "reason", "evidenceNeedsReview", "evidenceReason", "availability", "canAdd", "canPack", "listedPriceCents", "localPriceCents", "priceMismatch", "priceAssociationUnclear", "listingSyncedAt", "medianCents", "compCount", "latestSaleDate", "windowStart", "windowEnd", "refreshedAt", "evidenceVersion", "version"} {
 					require.Contains(t, body.Evaluations[0], key)
 				}
 			}

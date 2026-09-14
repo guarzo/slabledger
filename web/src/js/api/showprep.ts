@@ -15,8 +15,8 @@ export function isShowEvaluation(value: ShowEvaluation | undefined): value is Sh
   return ['supported', 'thin_evidence', 'below_target', 'no_recent_comps', 'needs_review', 'no_listed_price'].includes(value.status)
     && ['ready', 'not_received', 'sold', 'refunded', 'campaign_closed', 'removed', 'unknown'].includes(value.availability)
     && [value.listedPriceCents, value.localPriceCents, value.medianCents, value.compCount].every(Number.isSafeInteger)
-    && [value.canAdd, value.canPack, value.priceMismatch, value.priceAssociationUnclear].every(flag => typeof flag === 'boolean')
-    && typeof value.reason === 'string';
+    && [value.canAdd, value.canPack, value.priceMismatch, value.priceAssociationUnclear, value.evidenceNeedsReview].every(flag => typeof flag === 'boolean')
+    && typeof value.reason === 'string' && typeof value.evidenceReason === 'string';
 }
 async function evaluations(response: Promise<{ evaluations: ShowEvaluation[] }>) {
   const result = await response;

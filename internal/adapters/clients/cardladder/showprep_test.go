@@ -25,6 +25,23 @@ func TestShowPrepVerifiedSource(t *testing.T) {
 	}{
 		{"empty", 0, nil, true, 0}, {"two", 2, nil, true, 2}, {"all pages", 111, nil, true, 111}, {"five pages", 500, nil, true, 500}, {"over budget", 600, nil, false, 500},
 		{"deduplicated", 2, func(_ int, h []map[string]any) []map[string]any { h[1]["itemId"] = h[0]["itemId"]; return h }, true, 1},
+		{"contradictory duplicate", 2, func(_ int, h []map[string]any) []map[string]any {
+			h[1]["itemId"] = h[0]["itemId"]
+			h[1]["price"] = 271.0
+			return h
+		}, false, 1},
+		{"disjoint full pages 1 to 200", 200, func(p int, h []map[string]any) []map[string]any {
+			for i := range h {
+				h[i]["itemId"] = fmt.Sprintf("ebay-%d", p*100+i+1)
+			}
+			return h
+		}, true, 200},
+		{"overlapping full pages 1 to 100 and 100 to 199", 200, func(p int, h []map[string]any) []map[string]any {
+			for i := range h {
+				h[i]["itemId"] = fmt.Sprintf("ebay-%d", p*99+i+1)
+			}
+			return h
+		}, false, 199},
 		{"wrong profile", 2, func(_ int, h []map[string]any) []map[string]any { h[0]["profileId"] = "wrong"; return h }, false, 0},
 		{"wrong grader", 2, func(_ int, h []map[string]any) []map[string]any { h[0]["gradingCompany"] = "BGS"; return h }, false, 0},
 		{"missing grader", 2, func(_ int, h []map[string]any) []map[string]any { delete(h[0], "gradingCompany"); return h }, false, 0},

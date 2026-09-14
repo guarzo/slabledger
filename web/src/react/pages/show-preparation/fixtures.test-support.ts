@@ -7,6 +7,7 @@ export function evaluation(overrides: Partial<ShowEvaluation> = {}): ShowEvaluat
   return {
     purchaseId, cardName: 'Pikachu Special Illustration Rare with a very long variant title',
     certNumber: '12345678', grader: 'PSA', grade: 10, status: 'supported', reason: '',
+    evidenceNeedsReview: false, evidenceReason: '',
     availability: 'ready', canAdd: true, canPack: true, listedPriceCents: 30000,
     localPriceCents: 30000, priceMismatch: false, priceAssociationUnclear: false,
     listingSyncedAt: '2026-09-14T08:00:00Z', medianCents: 28000, compCount: 2,

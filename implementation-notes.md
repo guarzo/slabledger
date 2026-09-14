@@ -96,6 +96,92 @@ Both task slices received spec and quality approval after scoped re-review.
 - Screenshots inspected at mobile, tablet and desktop widths, plus the real-backend
   packing page. Browser test artifacts remain under ignored `web/test-results/`.
 
+## Final coordinated fix wave after `76d3a2a2`
+
+The three deduplicated final-review findings were reproduced with failing tests
+and fixed without reopening the feature design:
+
+- A cancelled evidence-detail request now calls `signal.throwIfAborted()` after
+  awaiting the parsed response and before any cache write/invalidation. The
+  regression uses the actual APIClient and native fetch against a loopback HTTP
+  server that sends headers before releasing the JSON body. It preserves the
+  newer below-target/price observation, creates no stale evidence alias, and
+  does not invalidate a newer list. The global client remains unchanged.
+- Required `evidenceNeedsReview` / `evidenceReason` fields expose evidence health
+  independently of DH price. The evaluator runs the existing checks once, then
+  applies the unchanged price-support precedence. No price remains
+  `no_listed_price` with its original reason; failed/stale/partial/missing evidence
+  still drives refresh review counts and detail warnings. Healthy complete
+  evidence, including empty windows or ambiguous DH price, is not described as
+  failed evidence. Go/TS contracts, strict boundary checks and fixtures agree.
+  Health enters the existing evaluation fingerprint; no stored schema changes or
+  duplicate refresh-outcomes model were needed. A real PostgreSQL regression
+  proves failed rechecks retain readable sales and health after service reload.
+- The CardLadder traversal tracks each sale ID's first-seen page. Cross-page
+  overlap retains inspectable records but prevents completion, even with stable
+  totals and identical dates. The exact 1–100 / 100–199 fixture retains 199 partial
+  sales; disjoint 1–100 / 101–200 remains complete. Within-page identical dedup and
+  contradictory duplicate rejection remain covered.
+
+Final-wave verification (separate from the earlier controller checks):
+
+- `POSTGRES_TEST_URL= go test -race -count=1 -timeout 10m ./...`: PASS; DB fixtures
+  skipped in this command and exercised separately below.
+- Explicit authorized disposable `showprep_test` URL on 127.0.0.1:55439,
+  `go test -race -count=1 -timeout 10m ./internal/adapters/storage/postgres/...`:
+  PASS, uncached, 134.038 seconds. No fixture use of the separate smoke database.
+- `npm test`: PASS, 72 files / 633 tests. `npm run typecheck`, `npm run lint`,
+  `npm run build`: PASS.
+- `CI= npx playwright test tests/show-preparation.spec.ts --project=chromium --workers=1`:
+  PASS, five workflows including failed/healthy no-price evidence and the prior
+  mobile/tablet/desktop selection/packing/retention coverage. Requests intercepted;
+  test-owned Vite used port 5173, not the controller's preview or API.
+- `make check` with `/tmp/slabledger-showprep-tools` and the installed Go/Node
+  directories prefixed in PATH: PASS, zero lint issues. `git diff --check`: PASS.
+- Scoped local `polish-core --fix` review: no unresolved requested findings;
+  fixture-health consistency and existing loading waits updated. No subagents.
+- Intermediate verification failures were resolved: two prior loading tests were
+  waiting on the old healthy-empty text, and the first concurrent `make check`
+  encountered Playwright deleting `web/test-results` during Go package discovery.
+  The unchanged checks passed after correcting the waits and avoiding that race.
+
+Full paths, red/green commands, browser artifact paths and handoff details are in
+`.superpowers/sdd/2026-09-14-show-preparation/final-fix-report.md` (local report).
+The fixing agent made no staging/commits, production work, credential changes,
+dependency changes, or controller smoke-server/preview interactions.
+
+## Final controller verification and review
+
+After the final fix, the controller reran the root uncached Go race suite and the
+explicit disposable PostgreSQL race suite (117.279 seconds), all 633 frontend tests,
+typecheck, lint, build, five Chromium workflows, and `make check` (zero lint issues).
+These commands ran sequentially to avoid generated-browser-artifact deletion racing
+Go package discovery. Both working-tree and staged diff checks passed.
+
+The rebuilt real local Go API passed the lifecycle/identity/price smoke again.
+The real browser/API/PostgreSQL workflow also verified a failed refresh after the
+DH price disappears: `No listed price` remained, progress counted one review issue,
+and the actual failure reason plus retained sale rows stayed visible. Only local
+OAuth identity was stubbed; the local client intentionally had no source credentials
+for that failure test. No production state was changed.
+
+Final independent whole-range review found the three issues above; one scoped
+re-review verified each fix and returned **SHIP**, with no new Important/Critical
+breakage. The final implementation is ready for integration, not deployed.
+
+## Recorded implementation decisions
+
+- Separate backend/frontend ownership allowed parallel implementation; the fixed
+  wire contract and real integration exercise controlled interface-drift risk.
+- Reuse the working production CardLadder integration without a successful local
+  direct call as a gate; actual per-card source failures remain visible/reviewable.
+- Align purchase-before-campaign locks with existing deletion and use `NOWAIT`;
+  the tradeoff is an explicit 409/retry under contention rather than a deadlock.
+- Document one restart after first-time runtime source configuration instead of
+  adding a separate hot-reload mechanism; already-configured deployments are unaffected.
+- Add independent evidence-health fields rather than duplicate refresh outcomes;
+  every Go/TS producer, boundary check, fixture and consumer was updated together.
+
 ## Remaining operational notes
 
 - First-time CardLadder configuration in a running process requires one restart

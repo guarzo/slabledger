@@ -79,6 +79,8 @@ type Evaluation struct {
 	Grade                   float64      `json:"grade"`
 	Status                  Status       `json:"status"`
 	Reason                  string       `json:"reason"`
+	EvidenceNeedsReview     bool         `json:"evidenceNeedsReview"`
+	EvidenceReason          string       `json:"evidenceReason"`
 	Availability            Availability `json:"availability"`
 	CanAdd                  bool         `json:"canAdd"`
 	CanPack                 bool         `json:"canPack"`

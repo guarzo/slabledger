@@ -60,6 +60,21 @@ describe('show preparation transport', () => {
     expect(result.errors[purchaseId]).toMatch(/missing|invalid/i);
   });
 
+  it.each([
+    { evidenceNeedsReview: undefined, evidenceReason: '' },
+    { evidenceNeedsReview: false, evidenceReason: undefined },
+    { evidenceNeedsReview: 'false', evidenceReason: '' },
+    { evidenceNeedsReview: false, evidenceReason: null },
+  ])('rejects missing or incorrectly typed evidence health: %j', async health => {
+    const value = { ...evaluation(), ...health };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => json(url.includes('/evidence/')
+      ? { evaluation: value, sales: [] } : { evaluations: [value] })));
+    const result = await evaluateInventory([purchaseId]);
+    expect(result.evaluations[purchaseId]).toBeUndefined();
+    expect(result.errors[purchaseId]).toMatch(/missing|invalid/i);
+    await expect(showPrepAPI.evidence(purchaseId)).rejects.toThrow(/invalid/i);
+  });
+
   it('rejects malformed arrays instead of calling them empty evidence', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ evaluations: null })));
     const result = await evaluateInventory([purchaseId]);

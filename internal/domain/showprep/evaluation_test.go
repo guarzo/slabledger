@@ -1,7 +1,9 @@
 package showprep
 
 import (
+	"encoding/json"
 	"github.com/stretchr/testify/require"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -48,6 +50,63 @@ func TestEvaluate(t *testing.T) {
 	}
 	p := Purchase{ID: "missing", ListedPriceCents: 30000}
 	require.Equal(t, NeedsReview, Evaluate(p, nil, now).Status)
+}
+
+func TestEvidenceHealthIndependentOfListedPrice(t *testing.T) {
+	now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	for _, tt := range []struct {
+		name   string
+		change func(*Purchase, **Snapshot)
+		reason string
+	}{
+		{"healthy", func(*Purchase, **Snapshot) {}, ""},
+		{"healthy empty", func(_ *Purchase, s **Snapshot) { (*s).Sales = nil }, ""},
+		{"healthy with ambiguous price", func(p *Purchase, _ **Snapshot) { p.PriceAssociationUnclear = true }, ""},
+		{"unresolved identity", func(p *Purchase, _ **Snapshot) { p.ProfileID = "" }, "Comparable identity unresolved"},
+		{"missing", func(_ *Purchase, s **Snapshot) { *s = nil }, "No verified CardLadder evidence"},
+		{"unverified source", func(_ *Purchase, s **Snapshot) { (*s).Source = "legacy" }, "No verified CardLadder source provenance"},
+		{"identity mismatch", func(_ *Purchase, s **Snapshot) { (*s).Identity.Grader = "BGS" }, "Comparable identity mismatch"},
+		{"failed retained sales", func(_ *Purchase, s **Snapshot) {
+			(*s).AttemptState = "failed"
+			(*s).AttemptError = "CardLadder source timeout"
+		}, "CardLadder source timeout"},
+		{"ambiguous price and failed evidence", func(p *Purchase, s **Snapshot) {
+			p.PriceAssociationUnclear = true
+			(*s).AttemptState = "failed"
+			(*s).AttemptError = "CardLadder refresh failed"
+		}, "CardLadder refresh failed"},
+		{"running", func(_ *Purchase, s **Snapshot) { (*s).AttemptState = "running" }, "Refresh incomplete"},
+		{"partial", func(_ *Purchase, s **Snapshot) { (*s).Complete = false }, "Incomplete source window"},
+		{"invalid record", func(_ *Purchase, s **Snapshot) { (*s).Sales[0].PriceCents = 0 }, "Invalid comparable records"},
+		{"window rollover", func(_ *Purchase, s **Snapshot) { (*s).WindowEnd = "2026-09-13" }, "Evidence does not cover current 30-day window"},
+		{"stale", func(_ *Purchase, s **Snapshot) { (*s).RefreshedAt = now.Add(-25 * time.Hour) }, "Evidence is stale"},
+	} {
+		for _, listed := range []int{0, 30000} {
+			t.Run(tt.name+"/listed="+strconv.Itoa(listed), func(t *testing.T) {
+				p := Purchase{ID: "p", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: listed}
+				s := &Snapshot{Identity: p.Identity(), Source: "cardladder", Complete: true, WindowStart: "2026-08-16", WindowEnd: "2026-09-14", RefreshedAt: now, AttemptState: "complete", Sales: []Sale{{ID: "a", Date: "2026-09-14", PriceCents: 30000}, {ID: "b", Date: "2026-09-14", PriceCents: 30000}}}
+				tt.change(&p, &s)
+				e := Evaluate(p, s, now)
+				// Assert the required wire fields, including false/empty healthy values.
+				encoded, err := json.Marshal(e)
+				require.NoError(t, err)
+				var wire map[string]any
+				require.NoError(t, json.Unmarshal(encoded, &wire))
+				require.Equal(t, tt.reason != "", wire["evidenceNeedsReview"])
+				require.Equal(t, tt.reason, wire["evidenceReason"])
+				if listed == 0 {
+					require.Equal(t, NoListedPrice, e.Status)
+					require.Equal(t, "No positive DH listed price", e.Reason)
+				} else if p.PriceAssociationUnclear {
+					require.Equal(t, NeedsReview, e.Status)
+					require.Equal(t, "DH price association unclear", e.Reason)
+				} else if tt.reason != "" {
+					require.Equal(t, NeedsReview, e.Status)
+					require.Equal(t, tt.reason, e.Reason)
+				}
+			})
+		}
+	}
 }
 
 func TestShowPrepVersionsTrackObservedInputs(t *testing.T) {
