@@ -279,6 +279,51 @@ number, the Card Ladder value recorded at purchase, and days held.
 
 Cards held longer than 30 days are treated as deeply stale in the sell signals.
 
+### Show Preparation
+
+Use inventory's price-support controls to find cards whose recent sales support
+their sticker price, then add selected slabs to a named show shortlist. Saved
+lists are available at `/shows` and retain selection and packing checks across
+reloads.
+
+Price support compares the **last-synced DH listing price** with exact-match sales
+from the last 30 UTC calendar dates, including today:
+
+| Status | Meaning |
+|---|---|
+| **Supported** | At least two matching sales, with a median at least 90% of listed price. |
+| **Thin evidence** | One matching sale meets that threshold. |
+| **Below target** | The median is below the threshold. |
+| **No recent comps** | A current, complete lookup found no matching sales. |
+| **Needs review** | Matching, price association, freshness, or coverage is uncertain. |
+| **No listed price** | No known positive DH listing price is available. |
+
+For example, a $300 listing needs a median of at least $270. All eligible matching
+sales count, including lower sales; the tool does not cherry-pick supporting comps.
+Open the evidence details to see sale dates, amounts, platforms, source links,
+and the actual date range. An unavailable or partial lookup is not proof that a
+card has no recent sales. Refresh is explicit, and refresh failures remain visible.
+If CardLadder is configured for the first time while the server is running,
+restart the server once to enable show-preparation refresh. Already-configured
+installations require no additional setup.
+
+Show selection starts with received, unsold, non-refunded cards from non-closed
+campaigns. Unreceived cards can be included as planning candidates, but cannot be
+packed. Paused campaigns remain eligible. You can deliberately bring a physically
+eligible card with weak evidence; a support label is advice, not a packing rule.
+
+On the saved list, check **Packed** as you load each slab. Price/support changes
+are flagged for review rather than silently acknowledged. A price change after
+packing is a reminder to check the physical sticker. Sold, refunded, removed, or
+closed-campaign members stay visible with their packing history; they are excluded
+from available value and cannot be newly packed. You can still unpack or remove
+them explicitly.
+
+Known listed-value totals exclude missing and ambiguous DH prices rather than
+substituting CardLadder values. Adding or packing cards **does not** change prices,
+delist online inventory, reserve a card, or record a sale. Continue recording sales
+through the existing sales workflow.
+
 ### Market Direction
 
 For each unsold card, the system compares the most recent sold price against the Card Ladder valuation recorded at purchase:

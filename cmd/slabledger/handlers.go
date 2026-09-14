@@ -240,8 +240,8 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	}
 	dhTombstonesHandler := handlers.NewDHTombstonesHandler(dhTombstoneRepo, logger)
 
-	// Assemble ServerDependencies
 	deps := ServerDependencies{
+		ShowPrepHandler:           buildShowPrepHandler(in),
 		Config:                    in.Cfg,
 		Logger:                    logger,
 		PriceProv:                 in.PriceProvImpl,

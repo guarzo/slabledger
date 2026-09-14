@@ -7,13 +7,14 @@ import { queryKeys } from '../../../queries/queryKeys';
 import { api } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
 import type { SortKey, SortDir } from './utils';
-import { computeInventoryMeta, computeTotals, filterAndSortItems, applySearchAndTab, computePriceBandCounts } from './inventoryCalcs';
+import { computeInventoryMeta, computeTotals, filterAndSortItems, applySearchAndTab, computePriceBandCounts, matchesPriceBand } from './inventoryCalcs';
+import type { ShowFilters } from '../../show-preparation/ShowInventoryControls';
 import type { FilterTab, PriceBand } from './inventoryCalcs';
 import { useInventorySelection } from './useInventorySelection';
 import { useDHActions } from './useDHActions';
 import { usePricingActions } from './usePricingActions';
 
-export function useInventoryState(items: AgingItem[], campaignId?: string) {
+export function useInventoryState(items: AgingItem[], campaignId?: string, showFilters?: ShowFilters) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const selection = useInventorySelection();
@@ -77,11 +78,25 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     [items],
   );
 
-  // Price-band badge counts are scoped to the active tab + search so each `$`
-  // pill's number equals the rows clicking it would produce in the current view.
+  const showFiltering = !!showFilters && (showFilters.selecting || showFilters.support !== 'all');
+  const showItems = useMemo(() => {
+    if (!showFiltering || !showFilters) return items;
+    return items.filter(item => {
+      const e = showFilters.evaluations[item.purchase.id];
+      if (showFilters.support !== 'all' && e?.status !== showFilters.support) return false;
+      if (!showFilters.selecting) return true;
+      return !!e?.canAdd && (e.availability === 'ready' || (showFilters.includeNotReceived && e.availability === 'not_received'));
+    });
+  }, [items, showFilters, showFiltering]);
+  // Only the show feature tightens legacy search's tab-bypass behavior.
+  const showSearchItems = useMemo(() => applySearchAndTab(showItems, debouncedSearch, 'all'), [showItems, debouncedSearch]);
+  const showBaseItems = useMemo(() => applySearchAndTab(showSearchItems, '', filterTab), [showSearchItems, filterTab]);
+  const visibleTabCounts = useMemo(() => showFiltering
+    ? computeInventoryMeta(showSearchItems.filter(i => matchesPriceBand(i, priceBand))).tabCounts
+    : tabCounts, [showFiltering, showSearchItems, priceBand, tabCounts]);
   const priceBandCounts = useMemo(
-    () => computePriceBandCounts(applySearchAndTab(items, debouncedSearch, filterTab)),
-    [items, debouncedSearch, filterTab],
+    () => computePriceBandCounts(showFiltering ? showBaseItems : applySearchAndTab(items, debouncedSearch, filterTab)),
+    [items, debouncedSearch, filterTab, showFiltering, showBaseItems],
   );
 
   // Smart default tab: needs_attention if > 0, else all
@@ -120,15 +135,15 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
   }, [sortKey, sortDir, debouncedSearch, filterTab, priceBand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredAndSortedItems = useMemo(
-    () => filterAndSortItems(items, {
-      debouncedSearch,
-      filterTab,
+    () => filterAndSortItems(showFiltering ? showBaseItems.filter(i => matchesPriceBand(i, priceBand)) : items, {
+      debouncedSearch: showFiltering ? '' : debouncedSearch,
+      filterTab: showFiltering ? 'all' : filterTab,
       sortKey,
       sortDir,
       pinnedIds: selection.pinnedIds,
       priceBand,
     }),
-    [items, debouncedSearch, sortKey, sortDir, filterTab, selection.pinnedIds, priceBand],
+    [items, debouncedSearch, sortKey, sortDir, filterTab, selection.pinnedIds, priceBand, showFiltering, showBaseItems],
   );
 
   const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
@@ -205,7 +220,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
     filterTab, setFilterTab: chooseFilterTab,
     priceBand, setPriceBand,
     debouncedSearch,
-    reviewStats, tabCounts, priceBandCounts,
+    reviewStats, tabCounts: visibleTabCounts, priceBandCounts,
     filteredAndSortedItems,
     totalCost, totalMarket, totalPL, fullInventoryTotals,
     handleSort, handleReviewed,

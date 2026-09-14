@@ -24,6 +24,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const GlobalInventoryPage = lazy(() => import('./pages/GlobalInventoryPage'));
+const ShowPreparationPage = lazy(() => import('./pages/ShowPreparationPage'));
 const ScanPage = lazy(() => import('./pages/ScanPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
 
@@ -86,6 +87,9 @@ function AppContent() {
                     <GlobalInventoryPage />
                   </PageTransition>
                 </ProtectedRoute>
+              } />
+              <Route path="/shows" element={
+                <ProtectedRoute><PageTransition><ShowPreparationPage /></PageTransition></ProtectedRoute>
               } />
               {/* Invoices */}
               <Route path="/invoices" element={

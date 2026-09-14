@@ -54,8 +54,8 @@ export default function MobileCard(props: MobileCardProps) {
   return (
     <div className={`p-3 bg-[var(--surface-1)] rounded-xl border ${selected ? 'border-[var(--brand-500)]' : 'border-[var(--surface-2)]'}`}>
       <div className="flex items-start justify-between mb-2">
-        <div className="flex items-start gap-2">
-          <input type="checkbox" checked={selected} onChange={onToggle} className="rounded mt-0.5" />
+        <div className="flex items-start gap-2 min-w-0">
+          <input type="checkbox" aria-label={`Select ${item.purchase.certNumber || item.purchase.cardName}`} checked={selected} onChange={onToggle} className="rounded mt-0.5" />
           {item.purchase.frontImageUrl && (
             <img
               src={item.purchase.frontImageUrl}
@@ -64,7 +64,7 @@ export default function MobileCard(props: MobileCardProps) {
               loading="lazy"
             />
           )}
-          <div>
+          <div className="min-w-0 break-words">
             <div className="text-sm font-medium text-[var(--text)]">
               {hotSeller && <span className="text-amber-400 mr-1" title="High demand">★</span>}
               <TruncatedCardName name={item.purchase.cardName} className="text-[var(--text)] font-medium" />

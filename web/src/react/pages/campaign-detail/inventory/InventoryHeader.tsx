@@ -22,6 +22,7 @@ export interface InventoryHeaderProps {
   priceBandCounts: PriceBandCounts;
   debouncedSearch: string;
   selected: ReadonlySet<string>;
+  showFiltering?: boolean;
   onDeselectMissingCL: (purchaseIds: string[]) => void;
   onHighlightMissingCL: (purchaseIds: string[]) => void;
 }
@@ -33,7 +34,7 @@ export default function InventoryHeader({
   searchQuery, setSearchQuery,
   filterTab, setFilterTab,
   tabCounts, priceBand, setPriceBand, priceBandCounts, debouncedSearch,
-  selected,
+  selected, showFiltering = false,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -53,14 +54,14 @@ export default function InventoryHeader({
   const primary = useMemo(() => [
     { key: 'needs_attention' as const, label: 'Needs Attention', count: tabCounts.needs_attention, alwaysShow: true },
     { key: 'ready_to_list' as const, label: 'Pending DH Listing', count: tabCounts.ready_to_list, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
+  ].filter(t => t.alwaysShow || t.count > 0 || showFiltering), [tabCounts, showFiltering]);
   const secondary = useMemo(() => [
     { key: 'all' as const, label: 'All', count: tabCounts.all, alwaysShow: true },
     { key: 'dh_listed' as const, label: 'DH Listed', count: tabCounts.dh_listed, alwaysShow: false },
     { key: 'pending_dh_match' as const, label: 'Pending DH Match', count: tabCounts.pending_dh_match, alwaysShow: false },
     { key: 'pending_price' as const, label: 'Pending Price', count: tabCounts.pending_price, alwaysShow: false },
     { key: 'skipped' as const, label: 'Skipped on DH Listing', count: tabCounts.skipped, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0), [tabCounts]);
+  ].filter(t => t.alwaysShow || t.count > 0 || showFiltering), [tabCounts, showFiltering]);
 
   const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
     const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums';

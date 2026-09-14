@@ -1823,6 +1823,101 @@ Generates a global sell sheet across all active campaigns.
 
 ---
 
+## Show Preparation
+
+Show preparation evaluates recent sale evidence against the last-synced DH listing
+price and stores named packing lists. These operations do not reprice, delist,
+reserve, or sell purchases. All endpoints require authentication. Money remains in
+integer cents, matching the inventory API.
+
+### Evidence operations
+
+| Method and route | Body | Response |
+|---|---|---|
+| `POST /api/show-prep/evaluate` | `{ "purchaseIds": ["uuid"] }`, 1–200 IDs | `{ "evaluations": [...] }` |
+| `GET /api/show-prep/evidence/{purchaseID}` | None | `{ "evaluation": {...}, "sales": [...] }` |
+| `POST /api/show-prep/refresh` | `{ "purchaseIds": ["uuid"] }`, 1–10 IDs | `{ "evaluations": [...] }` |
+
+Evaluate and evidence reads use stored data. Refresh explicitly requests bounded
+source work; opening inventory does not automatically trigger an upstream scan.
+Individual source failures are represented as evaluation reasons, not successful
+empty windows. A source refresh can be partial; inspect every returned status.
+Show preparation binds the configured CardLadder client at startup. If the first
+CardLadder configuration is saved while the process is running, restart once to
+attach that client; saved lists and missing-evidence evaluation remain available.
+
+Each evaluation identifies the purchase, card/cert/grader/grade, `status`, `reason`,
+`availability`, `canAdd`, `canPack`, `listedPriceCents`, `localPriceCents`,
+`priceMismatch`, `priceAssociationUnclear`, `listingSyncedAt`, `medianCents`,
+`compCount`, `latestSaleDate`, `windowStart`, `windowEnd`, `refreshedAt`,
+`evidenceVersion`, and `version`. `version` identifies the evaluated input state
+and is required when acknowledging evidence or packing a member. It is not a
+fresh token merely because the evaluation was read again.
+
+| `status` | Meaning |
+|---|---|
+| `supported` | At least two matching sales; median is at least 90% of the DH listed price. |
+| `thin_evidence` | One matching sale meets that price threshold. |
+| `below_target` | The recent median is below the threshold. |
+| `no_recent_comps` | A current, complete lookup found no matching sales. |
+| `needs_review` | Identity, DH price association, freshness, or coverage is unresolved. See `reason`. |
+| `no_listed_price` | No positive DH listing price is available. |
+
+The window is 30 UTC calendar dates including today. All eligible matching sales
+are considered, not only favorable sales. A complete snapshot must be no older
+than 24 hours and cover that date range. Even-count medians are compared without
+rounding; `medianCents` is the display-rounded result. Each sale has `id`, `date`,
+`priceCents`, `platform`, `url`, and `listingType`. Missing source links remain
+empty rather than being fabricated.
+
+### Saved lists
+
+| Method and route | Body | Response |
+|---|---|---|
+| `GET /api/show-prep/lists` | None | `{ "lists": [...] }` |
+| `POST /api/show-prep/lists` | `{ "id": "caller-generated-uuid", "name": "Atlanta show" }` | List metadata |
+| `GET /api/show-prep/lists/{listID}` | None | List detail |
+| `PUT /api/show-prep/lists/{listID}` | `{ "name": "New name" }` | List metadata |
+| `POST /api/show-prep/lists/{listID}/items` | `{ "items": [{ "purchaseId": "uuid", "evaluationVersion": "observed-version" }] }`, 1–200 items | List detail |
+| `PUT /api/show-prep/lists/{listID}/items/{itemID}` | `{ "version": 1, "evaluationVersion": "observed-version", "packed": true }` or an explicit `acknowledge: true` operation | List detail |
+| `DELETE /api/show-prep/lists/{listID}/items/{itemID}` | None | `{ "removed": true }` |
+
+List metadata contains `id`, `name`, `createdAt`, and `updatedAt`. Names are trimmed,
+non-empty, and at most 120 Unicode characters. Repeating list creation with the
+same caller-generated ID/name returns the existing list; reusing the ID with a
+different name conflicts. Adding an existing member does not reset its packing
+state or silently acknowledge new evidence.
+
+List detail contains `list`, `items`, and `summary`. Each item includes its stable
+membership `id`, original `purchaseId`, saved card identity, `addedAt`, `packedAt`
+(empty when unpacked), integer `version`, `acknowledgedPriceCents`,
+`acknowledgedStatus`, current `evaluation`, `priceChanged`, and `supportChanged`.
+Pack/ack operations must send both the observed item version and evaluation
+version. Unpacking remains possible when a purchase becomes unavailable.
+
+The summary contains `totalCount`, `packedCount`, `notReceivedCount`,
+`unavailableCount`, `knownValueCents`, `missingPriceCount`, and
+`ambiguousPriceCount`. Known value includes only ready-to-pack members with a
+positive, unambiguously associated DH price. Packing history is retained even
+when a member is no longer available.
+
+Availability values are `ready`, `not_received`, `sold`, `refunded`,
+`campaign_closed`, `removed`, and `unknown`. Sold/refunded/removed/closed members
+remain visible but cannot be newly packed. Unreceived cards can be planning
+members but cannot be packed. Pending campaigns remain eligible. Weak comp
+support does not itself prevent physical packing.
+
+**Errors:** `400` invalid input; `401` unauthenticated; `404` missing resource;
+`409` stale/conflicting state, concurrent inventory-write contention, or an
+unavailable membership/packing mutation;
+`500` internal storage failure; `503` preparation service unavailable. Feature
+handlers return JSON errors; shared authentication middleware can return a
+plain-text `401 Unauthorized`. Refresh failures must not be mistaken for
+`no_recent_comps`. After a conflict, read the current state before resubmitting;
+do not silently acknowledge a price or evidence change the operator has not seen.
+
+---
+
 ## Global Purchase Operations
 
 ### `POST /api/purchases/sync-psa-sheets`

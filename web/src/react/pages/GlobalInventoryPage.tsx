@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useGlobalInventory } from '../queries/useCampaignQueries';
 import { SectionErrorBoundary } from '../ui';
 import InventoryTab from './campaign-detail/InventoryTab';
@@ -19,6 +20,7 @@ export default function GlobalInventoryPage() {
         >
           {isFetching ? 'Retrying…' : 'Retry'}
         </button>
+        <Link to="/shows" className="block text-sm text-[var(--brand-300)] py-3 mt-3">Show preparation →</Link>
       </div>
     );
   }
@@ -36,6 +38,7 @@ export default function GlobalInventoryPage() {
               </span>
             )}
           </div>
+          <Link to="/shows" className="text-sm text-[var(--brand-300)] py-3">Show preparation →</Link>
         </div>
       </div>
 

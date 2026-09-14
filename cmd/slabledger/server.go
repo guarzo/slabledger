@@ -31,6 +31,7 @@ import (
 
 // ServerDependencies bundles all dependencies required by startWebServer.
 type ServerDependencies struct {
+	ShowPrepHandler           *handlers.ShowPrepHandler
 	Config                    *config.Config
 	Logger                    observability.Logger
 	PriceProv                 domainPricing.PriceProvider
@@ -179,6 +180,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 
 	// Create router and setup routes
 	router := httpserver.NewRouter(httpserver.RouterConfig{
+		ShowPrepHandler:           deps.ShowPrepHandler,
 		Handler:                   handler,
 		HealthHandler:             healthHandler,
 		APIStatusHandler:          apiStatusHandler,
