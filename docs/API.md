@@ -1838,8 +1838,11 @@ integer cents, matching the inventory API.
 | `GET /api/show-prep/evidence/{purchaseID}` | None | `{ "evaluation": {...}, "sales": [...] }` |
 | `POST /api/show-prep/refresh` | `{ "purchaseIds": ["uuid"] }`, 1–10 IDs | `{ "evaluations": [...] }` |
 
-Evaluate and evidence reads use stored data. Refresh explicitly requests bounded
-source work; opening inventory does not automatically trigger an upstream scan.
+Evaluate, evidence and list reads use stored data; none initiates source acquisition.
+Refresh requests bounded source work. The inventory client dispatches it automatically
+only when show selection or a non-All Support filter is active; ordinary inventory
+and opening an evidence disclosure remain read-only. Legacy 90-day comps are not
+certified show evidence, so an upgraded database can legitimately be `not_checked`.
 Individual source failures are represented by `evidenceNeedsReview` and
 `evidenceReason`, not successful empty windows. A source refresh can be partial;
 inspect evidence health independently of the price-support status.
@@ -1885,6 +1888,94 @@ identical sale IDs within one page are deduplicated, but overlap between pages
 makes coverage uncertain even with stable `totalHits` and matching dates.
 Inspectable partial records are retained; overlapping pages never certify a
 complete window. Contradictory duplicate records are rejected.
+
+### Readiness metadata and client policy
+
+Every evaluation response (evaluate, evidence, refresh and list detail) additionally
+contains optional `readiness`. This is scheduling metadata, not another support
+status. It is attached after the business `version` fingerprint is computed, so a
+read or running-to-interrupted transition alone does not invalidate selection.
+A real window, evidence generation, price or availability change still can.
+
+```json
+{
+  "readiness": {
+    "state": "current",
+    "refreshEligibility": "not_needed",
+    "identityKey": "<normalized identity fingerprint>",
+    "expiresAt": "2026-09-16T00:00:00Z",
+    "retryAt": ""
+  }
+}
+```
+
+| `state` | `refreshEligibility` | Meaning |
+|---|---|---|
+| `not_checked` | `needed` | Valid identity, no verified snapshot. Not a zero-sale lookup. |
+| `current` | `not_needed` | Complete, current-window evidence, including zero sales. |
+| `stale` | `needed` | Previously verified evidence needs the current window or age renewal. |
+| `running` | `wait` | Valid persisted attempt younger than 120 seconds. |
+| `interrupted` | `retry_only` | Persisted running attempt reached its 120-second observation bound. |
+| `failed` | `retry_only` | Failed/partial attempt or incomplete coverage; retained sales remain inspectable. |
+| `invalid` | `retry_only` | Invalid provenance, records, coverage or attempt timestamps. |
+| `unavailable` | `unavailable` | Unresolved identity or unreadable required data. |
+
+`identityKey` coalesces normalized profile/grader/grade, not purchase IDs. It can be
+empty only when identity is unavailable. Applicable timestamps are UTC RFC3339Nano;
+inapplicable fields are empty strings. `expiresAt` is the earlier of verified
+refresh + 24 hours and midnight after the snapshot's UTC window end. The existing
+age rule allows exactly 24 hours; expired/equal timestamps require a bounded reread,
+not a tight timer loop. `retryAt` is attempt start + 120 seconds and remains present
+for interrupted attempts. Missing/future attempt starts fail closed. Reads neither
+change persisted attempt state nor infer provider configuration health.
+
+Old responses without valid optional readiness remain displayable and manually
+usable; automatic acquisition is disabled for those evaluations. A retryAt wakeup
+is **read-only**, never permission to replay a source request. Active inventory
+show workflows (show selection or a non-All Support filter) reread on
+visibility/focus, UTC rollover and applicable expiry/attempt boundaries;
+unresolved early observations have a 30-second follow-up cooldown. Hidden tabs do
+not replay missed timers. Saved packing lists do not mount this observer: they use
+explicit **Update list status** and invalidation after actions, not these timers.
+Server evaluations, not browser time, authorize support.
+The feature-local evaluate transport keeps its 30-second per-attempt timeout and
+cancellation through success/error bodies. Retryable network/429/5xx reads retain
+three attempts with 1s/2s backoff; cancellation, timeout, and invalid success JSON
+are not replayed. Failed reads expose explicit read retry and cannot publish late
+Supported results. An open disclosure uses the latest readiness observation for
+the same business version without refetching detailed sales or changing intent.
+
+The browser shares one runner per QueryClient/tab: at most 10 IDs/request, one
+representative per normalized identity, at most 200 automatic identities and 20
+automatic requests per current UTC window, and five minutes per run. Only positive
+DH-price, refreshable identities in the current campaign/inventory, search, tab,
+price-band and availability scope are acquired; Support and selection do not narrow
+that acquisition cohort. Manual checks share concurrency, batch and time limits but
+bypass the automatic quota. The client lives above pathname error boundaries for
+one verified authenticated identity: SPA navigation preserves its budget, stops,
+and write leases; route authentication and non-show fresh-on-entry reads remain.
+An identity change clears the old cache. Reload creates a new tab budget; this is
+not a global or durable quota. The existing source client limiter/retry policy and five-page
+traversal bound remain unchanged; the browser does not replay refresh POSTs.
+
+Cancel, full-body transport timeout (120 seconds), run deadline, exhausted budget,
+invalid responses and source failure/partial results stop automatic continuation.
+The UI offers explicit Retry/Continue, with authoritative readback because the
+server may already have committed evidence. A late response cannot report success
+or dispatch another batch. Cancellation does not promise rollback. Manual list
+retry keeps the originating list and failed/undispatched IDs; changing list or
+selection does not retarget that command. Busy and terminal guards remain shared.
+
+First selection pauses later automatic batches, not the active batch. Clearing
+selection can resume eligible work unless a terminal stop requires explicit action.
+Captured versions never advance automatically. Selected row membership/order stays
+stable against background evidence updates, but unavailable or changed-version rows
+immediately become non-addable. Explicit view changes still apply. Add/pack and
+other local conflicting writes cannot overlap the shared refresh runner. Editor
+visibility blockers end when the form disappears; asynchronous sale, price-override,
+AI-price, price-hint, and DH-match write leases last through full promise settlement,
+including after page unmount. No checking
+operation creates a list, packs, acknowledges, reprices, reserves, delists or sells.
 
 ### Saved lists
 

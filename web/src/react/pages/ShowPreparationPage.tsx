@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useShowList } from '../queries/useShowPrepQueries';
+import { useShowList, useShowLists } from '../queries/useShowPrepQueries';
 import { Button } from '../ui';
 import { formatCents } from '../utils/formatters';
 import ShowListPicker from './show-preparation/ShowListPicker';
@@ -17,8 +17,8 @@ function PackingList({ listId }: { listId: string }) {
   const refreshIds = (data?.items ?? []).filter(item => selected.has(item.purchaseId)).map(item => item.purchaseId);
   return <section aria-label="Packing list" className="mt-4">
     <div className="show-actions">
-      <Button variant="secondary" size="sm" disabled={query.isFetching} onClick={() => query.refetch()}>Recheck list</Button>
-      <span className="text-xs text-[var(--text-muted)]">Rechecks saved prices and availability. No source refresh.</span>
+      <Button variant="secondary" size="sm" disabled={query.isFetching} onClick={() => query.refetch()}>Update list status</Button>
+      <span className="text-xs text-[var(--text-muted)]">Reads saved prices and availability, not new comps.</span>
     </div>
     {query.isFetching && <p role="status" className="mt-3">Loading packing list…</p>}
     {query.isError && <p role="alert" className="text-[var(--danger)] mt-3">Could not recheck list: {showError(query.error)}. {data ? 'Showing the last read; new packing and acknowledgement are disabled.' : ''} <button className="show-link" disabled={query.isFetching} onClick={() => query.refetch()}>Retry packing list</button></p>}
@@ -39,7 +39,7 @@ function PackingList({ listId }: { listId: string }) {
           selected={selected.has(item.purchaseId)} onSelect={() => setSelected(prev => {
             const next = new Set(prev); if (next.has(item.purchaseId)) next.delete(item.purchaseId); else next.add(item.purchaseId); return next;
           })} />)}
-        <div className="mt-4"><ShowRefresh purchaseIds={refreshIds} disabled={query.isFetching} /></div>
+        <div className="mt-4"><ShowRefresh scope={`list:${listId}`} evaluations={Object.fromEntries(data.items.flatMap(item => item.evaluation ? [[item.purchaseId, item.evaluation]] : []))} purchaseIds={refreshIds} disabled={query.isFetching} /></div>
       </>}
     </>}
   </section>;
@@ -48,12 +48,13 @@ function PackingList({ listId }: { listId: string }) {
 export default function ShowPreparationPage() {
   const [params, setParams] = useSearchParams();
   const listId = params.get('list') || '';
+  const lists = useShowLists();
   return <div className="show-prep-page">
     <header>
-      <div className="show-actions justify-between"><h1 className="page-title">Show preparation</h1><Link className="show-link" to="/inventory">Inventory →</Link></div>
-      <p className="text-sm text-[var(--text-muted)]">Saved slab shortlists and packing checks. No repricing, delisting, reservations, or sales.</p>
+      <div className="show-actions justify-between"><h1 className="page-title">Shows</h1><Link className="show-link" to="/inventory">Inventory →</Link></div>
+      <p className="text-sm text-[var(--text-muted)]">Shortlist slabs, then pack. Lists do not change prices, listings, or sales.</p>
     </header>
     <ShowListPicker value={listId} onChange={id => setParams(id ? { list: id } : {})} allowRename />
-    {listId ? <PackingList key={listId} listId={listId} /> : <p className="text-sm text-[var(--text-muted)] py-8">Choose a saved list or create one, then add selected slabs from inventory.</p>}
+    {listId ? <PackingList key={listId} listId={listId} /> : !!lists.data?.length && <p className="text-sm text-[var(--text-muted)] py-8">Choose a show list to review and pack its slabs.</p>}
   </div>;
 }

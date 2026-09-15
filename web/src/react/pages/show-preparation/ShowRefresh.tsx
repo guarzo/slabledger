@@ -1,63 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { showPrepAPI } from '../../../js/api/showprep';
-import { showPrepKeys } from '../../queries/useShowPrepQueries';
+import { useEffect, useState } from 'react';
+import type { ShowEvaluation } from '../../../types/showprep';
+import { useShowRefreshState } from '../../queries/useShowReadiness';
 import { Button } from '../../ui';
-import { showError } from './showPrepLabels';
 
-export default function ShowRefresh({ purchaseIds, disabled = false }: { purchaseIds: string[]; disabled?: boolean }) {
-  const qc = useQueryClient();
-  const controller = useRef<AbortController | null>(null);
-  const retryIds = useRef<string[]>([]);
-  const [progress, setProgress] = useState<{ done: number; total: number; review: string[] } | null>(null);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => () => controller.current?.abort(), []);
-  async function refresh(ids: string[]) {
-    if (controller.current) return;
-    const selected = [...new Set(ids)];
-    if (selected.length === 0) return;
-    retryIds.current = selected;
-    const abort = new AbortController(); controller.current = abort;
-    setRunning(true); setError('');
-    let done = 0;
-    const review: string[] = [];
-    setProgress({ done, total: selected.length, review });
-    try {
-      // Sequential batches keep upstream pressure bounded and make cancellation
-      // meaningful: cancelling does not leave a queue of source writes running.
-      for (let i = 0; i < selected.length; i += 10) {
-        if (abort.signal.aborted) throw new Error('Cancelled');
-        const batch = selected.slice(i, i + 10);
-        const result = await showPrepAPI.refresh(batch, abort.signal);
-        for (const id of batch) {
-          const value = result.evaluations.find(e => e?.purchaseId === id);
-          if (!value || value.evidenceNeedsReview || value.status === 'needs_review') {
-            review.push(`${value?.certNumber || id}: ${value?.evidenceReason || value?.reason || 'Evaluation missing from refresh response'}`);
-          }
-        }
-        done += batch.length;
-        retryIds.current = selected.slice(i + 10);
-        setProgress({ done, total: selected.length, review: [...review] });
-        void qc.invalidateQueries({ queryKey: showPrepKeys.all });
-      }
-    } catch (err) {
-      setError(abort.signal.aborted ? 'Cancelled. Completed batches remain saved; unfinished evidence needs review.' : showError(err));
-    } finally {
-      controller.current = null; setRunning(false);
-      void qc.invalidateQueries({ queryKey: showPrepKeys.all });
-    }
-  }
+export default function ShowRefresh({ purchaseIds, disabled = false, evaluations = {}, compact = false, scope }: {
+  purchaseIds: string[]; disabled?: boolean; evaluations?: Record<string, ShowEvaluation>; compact?: boolean; scope?: string;
+}) {
+  const { coordinator, busy, blocked, phase, done, total, review, error, remaining, retryScope } = useShowRefreshState();
+  const [owner] = useState(() => Symbol('manual-show-refresh'));
+  useEffect(() => { coordinator.attach(owner); return () => coordinator.detach(owner); }, [coordinator, owner]);
+  const refresh = (ids: string[]) => coordinator.check(ids.map(purchaseId => evaluations[purchaseId] ?? { purchaseId }), owner, false, scope ?? owner);
+  const ownsRetry = retryScope === (scope ?? owner);
   return <div className="text-sm">
     <div className="show-actions">
-      <Button variant="secondary" size="sm" disabled={disabled || running || purchaseIds.length === 0} onClick={() => void refresh(purchaseIds)}>
-        Refresh selected evidence ({purchaseIds.length})
+      <Button variant="secondary" size="sm" disabled={disabled || busy || blocked || purchaseIds.length === 0} onClick={() => void refresh(purchaseIds)}>
+        {compact ? `Check selected (${purchaseIds.length})` : `Refresh selected evidence (${purchaseIds.length})`}
       </Button>
-      {running && <Button variant="ghost" size="sm" onClick={() => controller.current?.abort()}>Cancel refresh</Button>}
-      {error && !running && <Button variant="secondary" size="sm" disabled={disabled || retryIds.current.length === 0} onClick={() => void refresh(retryIds.current)}>Retry refresh</Button>}
+      {busy && <Button variant="ghost" size="sm" onClick={() => coordinator.cancel()}>Cancel refresh</Button>}
+      {ownsRetry && error && !busy && <Button variant="secondary" size="sm" disabled={disabled || blocked || remaining.length === 0} onClick={() => void refresh(remaining)}>Retry refresh</Button>}
     </div>
-    {progress && <p role="status" className="mt-2 text-[var(--text-muted)] tabular-nums">{progress.done} of {progress.total} checked{running ? ', refreshing…' : ''} · {progress.review.length} need review</p>}
-    {progress && progress.review.length > 0 && <ul className="text-[var(--warning)] mt-1">{progress.review.map(message => <li key={message}>{message}</li>)}</ul>}
-    {error && <p role="alert" className="text-[var(--danger)] mt-2">{error}</p>}
+    {!compact && ownsRetry && phase !== 'idle' && <p role="status" className="mt-2 text-[var(--text-muted)] tabular-nums">{done} of {total} checked{busy ? ', refreshing…' : ''} · {review.length} need review</p>}
+    {!compact && ownsRetry && review.length > 0 && <ul className="text-[var(--warning)] mt-1">{review.map((message, index) => <li key={index}>{message}</li>)}</ul>}
+    {!compact && ownsRetry && error && <p role="alert" className="text-[var(--danger)] mt-2">{error}</p>}
   </div>;
 }

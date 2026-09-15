@@ -19,11 +19,17 @@ it('cannot publish or invalidate when evidence is cancelled during aggregate can
   let evidenceBody!: (body: unknown) => void;
   let batches = 0;
   vi.stubGlobal('fetch', async (url: string) => {
-    const body = new Promise(resolve => {
-      if (url.includes('/evidence/')) evidenceBody = resolve;
-      else { batches++; aggregateBody = resolve; }
-    });
-    return { ok: true, json: () => body };
+    let cancelled = false;
+    return new Response(new ReadableStream({
+      start(stream) {
+        const complete = (body: unknown) => {
+          if (!cancelled) { stream.enqueue(new TextEncoder().encode(JSON.stringify(body))); stream.close(); }
+        };
+        if (url.includes('/evidence/')) evidenceBody = complete;
+        else { batches++; aggregateBody = complete; }
+      },
+      cancel() { cancelled = true; },
+    }));
   });
   let cancelledDuringSettlement = false;
   const newer = evaluation({ version: 'eval-3', status: 'below_target' });

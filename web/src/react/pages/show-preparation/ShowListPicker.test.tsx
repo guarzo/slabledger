@@ -5,6 +5,24 @@ import ShowListPicker from './ShowListPicker';
 import { detail } from './fixtures.test-support';
 
 afterEach(() => vi.unstubAllGlobals());
+it.each([0, 1, 4])('offers create-first only for zero lists, not a nonexistent choice (%s lists)', async count => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ lists: Array.from({ length: count }, (_, i) => ({ ...detail().list, id: `list-${i}`, name: `Show ${i}` })) }))));
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={qc}><ShowListPicker value="" onChange={() => {}} /></QueryClientProvider>);
+  await waitFor(() => expect(screen.queryByText('Loading saved lists…')).not.toBeInTheDocument());
+  if (!count) {
+    expect(screen.queryByLabelText('Show list')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('New show name')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Create show list' })).toBeDisabled();
+  } else {
+    expect(screen.getByLabelText('Show list')).toBeVisible();
+    expect(screen.queryByLabelText('New show name')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'New list' }));
+    expect(screen.getByLabelText('New show name')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel new list' }));
+    expect(screen.queryByLabelText('New show name')).not.toBeInTheDocument();
+  }
+});
 
 it.each(['unavailable', 'throwing'])('shows a recoverable creation error when randomUUID is %s', async failure => {
   const nativeCrypto = globalThis.crypto;
@@ -18,7 +36,7 @@ it.each(['unavailable', 'throwing'])('shows a recoverable creation error when ra
   const onChange = vi.fn();
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={qc}><ShowListPicker value="" onChange={onChange} /></QueryClientProvider>);
-  fireEvent.change(screen.getByLabelText('New show name'), { target: { value: 'Retry securely' } });
+  fireEvent.change(await screen.findByLabelText('New show name'), { target: { value: 'Retry securely' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create show list' }));
   expect(await screen.findByRole('alert')).not.toBeEmptyDOMElement();
   expect(screen.getByLabelText('New show name')).toHaveValue('Retry securely');
@@ -42,7 +60,7 @@ it('reuses the caller UUID when an operator retries the same failed creation', a
   const onChange = vi.fn();
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={qc}><ShowListPicker value="" onChange={onChange} /></QueryClientProvider>);
-  fireEvent.change(screen.getByLabelText('New show name'), { target: { value: '  Retry show  ' } });
+  fireEvent.change(await screen.findByLabelText('New show name'), { target: { value: '  Retry show  ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create show list' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Temporary conflict');
   expect(onChange).not.toHaveBeenCalled();

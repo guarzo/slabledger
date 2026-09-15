@@ -1,4 +1,5 @@
-import type { Availability, SupportStatus } from '../../../types/showprep';
+import { getShowReadiness } from '../../../js/api/showprep';
+import type { Availability, ReadinessState, ShowEvaluation, SupportStatus } from '../../../types/showprep';
 
 export const supportLabels: Record<SupportStatus, string> = {
   supported: 'Supported', thin_evidence: 'Thin evidence', below_target: 'Below target',
@@ -9,6 +10,27 @@ export const availabilityLabels: Record<Availability, string> = {
   refunded: 'Unavailable: refunded', campaign_closed: 'Unavailable: campaign closed',
   removed: 'Unavailable: record removed', unknown: 'Availability unknown',
 };
+const readinessLabels: Record<ReadinessState, string> = {
+  not_checked: 'Not checked', current: 'Current comps', stale: 'Stale comps', running: 'Checking',
+  interrupted: 'Check interrupted', failed: 'Check failed', invalid: 'Evidence needs review', unavailable: 'Evidence unavailable',
+};
+export function evidenceLabel(e: ShowEvaluation): string {
+  const readiness = getShowReadiness(e);
+  if (readiness && readiness.state !== 'current') return readinessLabels[readiness.state];
+  return supportLabels[e.status] ?? 'Needs review';
+}
+export function supportIndicator(e: ShowEvaluation): { label: string; tone: string } {
+  if (!e.canAdd && e.availability !== 'ready' && e.availability !== 'not_received') return { label: 'Unavailable', tone: 'muted' };
+  const label = e.status === 'no_listed_price' ? supportLabels.no_listed_price : evidenceLabel(e);
+  const state = getShowReadiness(e)?.state;
+  const tone = label === 'Supported' ? 'success' : state === 'failed' ? 'danger'
+    : ['Not checked', 'Checking', 'Unavailable'].includes(label) ? 'muted' : 'warning';
+  return { label, tone };
+}
+export function listingTypeLabel(value: string): string {
+  const words = value.trim().replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase();
+  return words ? words[0].toUpperCase() + words.slice(1) : 'Listing type unknown';
+}
 export function showError(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed. Retry when ready.';
 }

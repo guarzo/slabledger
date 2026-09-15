@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { getShowRefreshCoordinator } from './queries/showRefreshCoordinator';
 import type { PriceHint } from '../types/pricing';
 import { api } from '../js/api';
 import { useToast } from './contexts/ToastContext';
@@ -23,19 +25,20 @@ export default function PriceHintDialog({
   const [externalId, setExternalId] = useState('');
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const coordinator = getShowRefreshCoordinator(useQueryClient());
   const externalIdRef = useRef<HTMLInputElement>(null);
 
   const handleSave = useCallback(async () => {
     if (!externalId.trim()) return;
     setSaving(true);
     try {
-      await api.savePriceHint({
+      await coordinator.write(() => api.savePriceHint({
         cardName,
         setName,
         cardNumber,
         provider,
         externalId: externalId.trim(),
-      });
+      }));
       toast.success('Price hint saved');
       onSaved();
       onClose();
@@ -44,7 +47,7 @@ export default function PriceHintDialog({
     } finally {
       setSaving(false);
     }
-  }, [cardName, setName, cardNumber, provider, externalId, onClose, onSaved, toast]);
+  }, [cardName, setName, cardNumber, provider, externalId, onClose, onSaved, toast, coordinator]);
 
   return (
     <Modal title="Fix Pricing" onClose={onClose} busy={saving} initialFocusRef={externalIdRef}>

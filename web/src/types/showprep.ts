@@ -1,6 +1,18 @@
 export type SupportStatus = 'supported' | 'thin_evidence' | 'below_target' | 'no_recent_comps' | 'needs_review' | 'no_listed_price';
 export type Availability = 'ready' | 'not_received' | 'sold' | 'refunded' | 'campaign_closed' | 'removed' | 'unknown';
 
+export type ReadinessState = 'not_checked' | 'current' | 'stale' | 'running' | 'interrupted' | 'failed' | 'invalid' | 'unavailable';
+export type RefreshEligibility = 'needed' | 'not_needed' | 'wait' | 'retry_only' | 'unavailable';
+export interface ShowReadiness {
+  state: ReadinessState;
+  refreshEligibility: RefreshEligibility;
+  identityKey: string;
+  /** UTC RFC3339Nano boundary, or empty when inapplicable. */
+  expiresAt: string;
+  /** Read-only observation boundary; never permission to retry automatically. */
+  retryAt: string;
+}
+
 export interface ShowEvaluation {
   purchaseId: string;
   cardName: string;
@@ -27,6 +39,8 @@ export interface ShowEvaluation {
   refreshedAt: string;
   evidenceVersion: string;
   version: string;
+  /** Untrusted additive metadata: consume only through getShowReadiness. */
+  readiness?: unknown;
 }
 export interface ShowSale {
   id: string;

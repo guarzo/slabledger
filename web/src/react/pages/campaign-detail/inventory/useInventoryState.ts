@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { getShowRefreshCoordinator } from '../../../queries/showRefreshCoordinator';
 import type { AgingItem } from '../../../../types/campaigns';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { useToast } from '../../../contexts/ToastContext';
@@ -18,11 +19,34 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   const queryClient = useQueryClient();
   const toast = useToast();
   const selection = useInventorySelection();
+  const coordinator = getShowRefreshCoordinator(queryClient);
+  const [writeOwner] = useState(() => Symbol('inventory-editor'));
+  const allowEditor = () => {
+    if (!coordinator.getSnapshot().busy) return true;
+    toast.error('Comps are being checked. Cancel or wait before changing this data.'); return false;
+  };
+  function coordinate<A extends unknown[]>(operation: (...args: A) => Promise<void>, propagate = false) {
+    return async (...args: A) => {
+      let started = false;
+      try { await coordinator.write(() => { started = true; return operation(...args); }); }
+      catch (error) {
+        // The rethrowing inline-price action reports its own operation errors.
+        // A refusal occurs before it starts and still needs the wrapper's toast.
+        if (!started || !propagate) toast.error(getErrorMessage(error, 'Write blocked'));
+        if (propagate) throw error;
+      }
+    };
+  }
+  function openEditor<A extends unknown[]>(operation: (...args: A) => void) {
+    return (...args: A) => { if (allowEditor()) operation(...args); };
+  }
+
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [priceBand, setPriceBand] = useState<PriceBand>('all');
+  const [revealedView, setRevealedView] = useState<string | null>(null);
   const userTabChosenRef = useRef(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -66,6 +90,10 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     invalidateInventory,
     onReviewed: handleReviewed,
   });
+  useEffect(() => {
+    coordinator.block(writeOwner, saleModalOpen || !!pricingActions.priceTarget || !!pricingActions.flagTarget || !!pricingActions.hintTarget || !!dhActions.fixMatchTarget);
+    return () => coordinator.block(writeOwner, false);
+  }, [coordinator, writeOwner, saleModalOpen, pricingActions.priceTarget, pricingActions.flagTarget, pricingActions.hintTarget, dhActions.fixMatchTarget]);
   // Stale pinnedIds fix
   useEffect(() => {
     if (selection.selected.size === 0 || items.length === 0) {
@@ -79,6 +107,18 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   );
 
   const showFiltering = !!showFilters && (showFilters.selecting || showFilters.support !== 'all');
+  // This cohort deliberately precedes Support filtering and selection. A cold
+  // Supported-first view still has identities to check inside the operator's scope.
+  const showCohortItems = useMemo(() => {
+    const searched = applySearchAndTab(items, debouncedSearch, 'all');
+    return applySearchAndTab(searched, '', filterTab).filter(item => {
+      if (!matchesPriceBand(item, priceBand)) return false;
+      if (!showFilters?.selecting) return true;
+      const e = showFilters.evaluations[item.purchase.id];
+      return !!e?.canAdd && (e.availability === 'ready' || (showFilters.includeNotReceived && e.availability === 'not_received'));
+    });
+  }, [items, debouncedSearch, filterTab, priceBand, showFilters]);
+  const showCohortIds = useMemo(() => showCohortItems.map(item => item.purchase.id), [showCohortItems]);
   const showItems = useMemo(() => {
     if (!showFiltering || !showFilters) return items;
     return items.filter(item => {
@@ -134,7 +174,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     mobileScrollRef.current?.scrollTo({ top: 0 });
   }, [sortKey, sortDir, debouncedSearch, filterTab, priceBand]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredAndSortedItems = useMemo(
+  const liveFilteredItems = useMemo(
     () => filterAndSortItems(showFiltering ? showBaseItems.filter(i => matchesPriceBand(i, priceBand)) : items, {
       debouncedSearch: showFiltering ? '' : debouncedSearch,
       filterTab: showFiltering ? 'all' : filterTab,
@@ -146,6 +186,23 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     [items, debouncedSearch, sortKey, sortDir, filterTab, selection.pinnedIds, priceBand, showFiltering, showBaseItems],
   );
 
+  // Pin membership/order only, never purchase objects or evaluation versions.
+  // Explicit view changes rebuild the presentation; live deleted rows disappear.
+  const viewKey = JSON.stringify([debouncedSearch, filterTab, priceBand, sortKey, sortDir, showFilters?.support, showFilters?.selecting, showFilters?.includeNotReceived]);
+  const presentation = useRef<{ key: string; ids: string[] }>({ key: '', ids: [] });
+  if (!showFiltering || selection.selected.size === 0 || presentation.current.key !== viewKey) {
+    presentation.current = { key: viewKey, ids: liveFilteredItems.map(item => item.purchase.id) };
+  }
+  const byId = new Map(items.map(item => [item.purchase.id, item]));
+  const showingSelected = revealedView === viewKey && selection.selected.size > 0;
+  const filteredAndSortedItems = showingSelected ? items.filter(item => selection.selected.has(item.purchase.id)) : showFiltering && selection.selected.size > 0
+    ? presentation.current.ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []) : liveFilteredItems;
+
+  // Inline intent cannot keep blocking once its owning row is closed/filtered out.
+  // The mounted form owns its presentation blocker; submitted writes own a lease.
+  useEffect(() => {
+    if (inlineSaleId && (expandedId !== inlineSaleId || !filteredAndSortedItems.some(item => item.purchase.id === inlineSaleId))) setInlineSaleId(null);
+  }, [inlineSaleId, expandedId, filteredAndSortedItems]);
   const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
 
   function toggleAll() {
@@ -163,6 +220,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   }
 
   function openSaleModal(saleItems: AgingItem[]) {
+    if (!allowEditor()) return;
     setSaleModalItems(saleItems);
     setSaleModalOpen(true);
   }
@@ -175,13 +233,14 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   // Single-item inline sale: expand the row in place and switch its
   // expanded panel into "recording sale" mode.
   function startInlineSale(saleItem: AgingItem) {
+    if (!allowEditor()) return;
     selection.setExpandedId(saleItem.purchase.id);
     setInlineSaleId(saleItem.purchase.id);
   }
 
-  function cancelInlineSale() {
+  const cancelInlineSale = useCallback(() => {
     setInlineSaleId(null);
-  }
+  }, []);
 
   function handleInlineSaleSuccess() {
     setInlineSaleId(null);
@@ -221,26 +280,27 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     priceBand, setPriceBand,
     debouncedSearch,
     reviewStats, tabCounts: visibleTabCounts, priceBandCounts,
-    filteredAndSortedItems,
+    filteredAndSortedItems, showCohortIds, showingSelected,
+    revealSelected: () => setRevealedView(viewKey), hideSelected: () => setRevealedView(null),
     totalCost, totalMarket, totalPL, fullInventoryTotals,
     handleSort, handleReviewed,
-    handleResolveFlag: pricingActions.handleResolveFlag,
-    handleApproveDHPush: dhActions.handleApproveDHPush,
-    handleDismiss: dhActions.handleDismiss, handleUndismiss: dhActions.handleUndismiss,
-    handleListOnDH: dhActions.handleListOnDH,
+    handleResolveFlag: coordinate(pricingActions.handleResolveFlag),
+    handleApproveDHPush: coordinate(dhActions.handleApproveDHPush),
+    handleDismiss: coordinate(dhActions.handleDismiss), handleUndismiss: coordinate(dhActions.handleUndismiss),
+    handleListOnDH: coordinate(dhActions.handleListOnDH),
     dhListingInFlight: dhActions.dhListingInFlight, dhListedOptimistic: dhActions.dhListedOptimistic,
-    handleBulkListOnDH: dhActions.handleBulkListOnDH,
-    handleFlagSubmit: pricingActions.handleFlagSubmit,
-    handleDelete,
+    handleBulkListOnDH: coordinate(dhActions.handleBulkListOnDH),
+    handleFlagSubmit: coordinate(pricingActions.handleFlagSubmit),
+    handleDelete: coordinate(handleDelete),
     toggleSelect: selection.toggleSelect, toggleAll, toggleExpand: selection.toggleExpand,
     openSaleModal, closeSaleModal,
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
-    handleFixPricing: pricingActions.handleFixPricing,
-    handleFixDHMatch: dhActions.handleFixDHMatch, handleFixDHMatchSaved: dhActions.handleFixDHMatchSaved,
-    handleUnmatchDH: dhActions.handleUnmatchDH, handleRetryDHMatch: dhActions.handleRetryDHMatch,
+    handleFixPricing: openEditor(pricingActions.handleFixPricing),
+    handleFixDHMatch: openEditor(dhActions.handleFixDHMatch), handleFixDHMatchSaved: dhActions.handleFixDHMatchSaved,
+    handleUnmatchDH: coordinate(dhActions.handleUnmatchDH), handleRetryDHMatch: coordinate(dhActions.handleRetryDHMatch),
     dhRetryInFlight: dhActions.dhRetryInFlight,
-    handleSetPrice: pricingActions.handleSetPrice, handlePriceSaved: pricingActions.handlePriceSaved,
-    handleInlinePriceSave: pricingActions.handleInlinePriceSave, handleHintSaved: pricingActions.handleHintSaved,
+    handleSetPrice: openEditor(pricingActions.handleSetPrice), handlePriceSaved: pricingActions.handlePriceSaved,
+    handleInlinePriceSave: coordinate(pricingActions.handleInlinePriceSave, true), handleHintSaved: pricingActions.handleHintSaved,
     pinnedIds: selection.pinnedIds, handleDeselectMissingCL: selection.handleDeselectMissingCL, handleHighlightMissingCL: selection.handleHighlightMissingCL,
     toast,
   };

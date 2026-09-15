@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ShowListItem } from '../../../types/showprep';
 import { isShowEvaluation } from '../../../js/api/showprep';
+import { useShowRefreshState } from '../../queries/useShowReadiness';
 import { useShowListWrites } from '../../queries/useShowPrepQueries';
 import { Button, GradeBadge } from '../../ui';
 import { formatCents } from '../../utils/formatters';
@@ -13,7 +14,9 @@ export default function ShowMember({ item, listId, selected, onSelect, stale }: 
   const { update, remove } = useShowListWrites();
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const busy = update.isPending || remove.isPending;
+  const refresh = useShowRefreshState();
+  const saving = update.isPending || remove.isPending;
+  const busy = saving || refresh.busy;
   const e = isShowEvaluation(item.evaluation) ? item.evaluation : undefined;
   const packed = !!item.packedAt;
   const available = e?.availability === 'ready';
@@ -54,7 +57,7 @@ export default function ShowMember({ item, listId, selected, onSelect, stale }: 
       actions={<label className="show-check text-[var(--text-muted)]"><input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Refresh evidence for ${item.certNumber}`} />Select for evidence refresh</label>} />
     {(item.priceChanged || item.supportChanged) && <Button variant="secondary" size="sm" aria-label={`Acknowledge changes ${item.certNumber}`}
       disabled={busy || stale || !e?.version} onClick={() => void change({ acknowledge: true })}>Acknowledge changes</Button>}
-    {busy && <p role="status">Saving…</p>}
+    {saving && <p role="status">Saving…</p>}
     {error && <p role="alert" className="text-[var(--danger)]">{error}</p>}
     {message && <p role="status" className="text-[var(--text-muted)]">{message}</p>}
   </article>;

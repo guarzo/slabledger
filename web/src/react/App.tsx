@@ -5,7 +5,7 @@
  * All pages are now React components - no more vanilla JS pages.
  * Uses lazy loading for route-based code splitting.
  */
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -117,14 +117,15 @@ function AppContent() {
 
 function AppWithErrorBoundary() {
   const location = useLocation();
+  const [sessionKey, setSessionKey] = useState<number | null>(null);
   return (
-    <ErrorBoundary key={location.pathname}>
-      <QueryProvider>
-        <AuthProvider>
+    <QueryProvider sessionKey={sessionKey} routeKey={location.pathname}>
+      <ErrorBoundary key={location.pathname}>
+        <AuthProvider onIdentityChange={setSessionKey}>
           <AppContent />
         </AuthProvider>
-      </QueryProvider>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </QueryProvider>
   );
 }
 

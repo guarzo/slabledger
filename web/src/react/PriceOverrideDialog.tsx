@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { getShowRefreshCoordinator } from './queries/showRefreshCoordinator';
 import { api, isAPIError } from '../js/api';
 import { useToast } from './contexts/ToastContext';
 import { Modal } from './ui';
@@ -33,6 +35,7 @@ export default function PriceOverrideDialog({
   const [source, setSource] = useState<string>(currentOverrideSource || 'manual');
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const coordinator = getShowRefreshCoordinator(useQueryClient());
   const priceInputRef = useRef<HTMLInputElement>(null);
 
   const markupPrice = Math.round(costBasisCents * 1.12);
@@ -50,7 +53,7 @@ export default function PriceOverrideDialog({
   const handleAcceptAI = useCallback(async () => {
     setSaving(true);
     try {
-      await api.acceptAISuggestion(purchaseId);
+      await coordinator.write(() => api.acceptAISuggestion(purchaseId));
       toast.success('AI suggestion accepted');
       onSaved();
       onClose();
@@ -59,12 +62,12 @@ export default function PriceOverrideDialog({
     } finally {
       setSaving(false);
     }
-  }, [purchaseId, onClose, onSaved, toast]);
+  }, [purchaseId, onClose, onSaved, toast, coordinator]);
 
   const handleDismissAI = useCallback(async () => {
     setSaving(true);
     try {
-      await api.dismissAISuggestion(purchaseId);
+      await coordinator.write(() => api.dismissAISuggestion(purchaseId));
       toast.success('AI suggestion dismissed');
       onSaved();
       onClose();
@@ -73,14 +76,14 @@ export default function PriceOverrideDialog({
     } finally {
       setSaving(false);
     }
-  }, [purchaseId, onClose, onSaved, toast]);
+  }, [purchaseId, onClose, onSaved, toast, coordinator]);
 
   const handleSave = useCallback(async () => {
     const cents = Math.round(parseFloat(priceInput) * 100);
     if (isNaN(cents) || cents <= 0) return;
     setSaving(true);
     try {
-      await api.setPriceOverride(purchaseId, cents, source);
+      await coordinator.write(() => api.setPriceOverride(purchaseId, cents, source));
       toast.success('Price override saved');
       onSaved();
       onClose();
@@ -89,12 +92,12 @@ export default function PriceOverrideDialog({
     } finally {
       setSaving(false);
     }
-  }, [purchaseId, priceInput, source, onClose, onSaved, toast]);
+  }, [purchaseId, priceInput, source, onClose, onSaved, toast, coordinator]);
 
   const handleClear = useCallback(async () => {
     setSaving(true);
     try {
-      await api.clearPriceOverride(purchaseId);
+      await coordinator.write(() => api.clearPriceOverride(purchaseId));
       toast.success('Price override cleared');
       onSaved();
       onClose();
@@ -103,7 +106,7 @@ export default function PriceOverrideDialog({
     } finally {
       setSaving(false);
     }
-  }, [purchaseId, onClose, onSaved, toast]);
+  }, [purchaseId, onClose, onSaved, toast, coordinator]);
 
   const parsedCents = Math.round(parseFloat(priceInput) * 100);
   const isValid = !isNaN(parsedCents) && parsedCents > 0;

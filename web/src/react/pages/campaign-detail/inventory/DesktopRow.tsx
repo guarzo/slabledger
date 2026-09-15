@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AgingItem } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor } from '../../../utils/formatters';
 import { GradeBadge, StatusPill } from '../../../ui';
@@ -59,6 +59,7 @@ interface DesktopRowProps extends RowActionHandlers, RowActionFlags {
   onInlinePriceSave?: (purchaseId: string, priceCents: number) => Promise<void>;
   dhListedOverride?: boolean;
   showCampaignColumn?: boolean;
+  priceSupport?: ReactNode;
 }
 
 export default function DesktopRow(props: DesktopRowProps) {
@@ -247,6 +248,7 @@ export default function DesktopRow(props: DesktopRowProps) {
               </span>
             )
           )}
+          {props.priceSupport}
         </div>
       </div>
 

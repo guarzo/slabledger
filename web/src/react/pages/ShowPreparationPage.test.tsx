@@ -9,9 +9,9 @@ import type { Availability, ShowListDetail } from '../../types/showprep';
 let saved: ShowListDetail;
 let calls: { url: string; method: string; body: Record<string, unknown> }[];
 let conflict: boolean;
-function mount() {
+function mount(entry = `/shows?list=${listId}`) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><MemoryRouter initialEntries={[`/shows?list=${listId}`]}><ShowPreparationPage /></MemoryRouter></QueryClientProvider>);
+  return render(<QueryClientProvider client={qc}><MemoryRouter initialEntries={[entry]}><ShowPreparationPage /></MemoryRouter></QueryClientProvider>);
 }
 beforeEach(() => {
   saved = detail(); calls = []; conflict = false;
@@ -40,6 +40,25 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('saved show preparation', () => {
+  it('starts an empty Shows page with one creation path, then opens the new list', async () => {
+    let created = false;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
+      if (url.endsWith('/lists') && options.method === 'POST') {
+        saved.list = { ...saved.list, ...JSON.parse(String(options.body)) }; created = true;
+        return new Response(JSON.stringify(saved.list));
+      }
+      return new Response(JSON.stringify(url.endsWith('/lists') ? { lists: created ? [saved.list] : [] } : { ...saved, items: [] }));
+    }));
+    mount('/shows');
+    expect(await screen.findByRole('heading', { name: 'No show lists yet' })).toBeVisible();
+    expect(screen.queryByLabelText('Show list')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Choose a saved list or create one/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('New show name'), { target: { value: 'September packing' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create show list' }));
+    expect(await screen.findByRole('link', { name: 'Select cards from inventory →' })).toHaveAttribute('href', '/inventory');
+    expect(screen.getByLabelText('Show list')).toHaveValue(saved.list.id);
+    expect(screen.queryByLabelText('New show name')).not.toBeInTheDocument();
+  });
   it('persists explicit packing and reloads from server; mutations contain displayed versions', async () => {
     const first = mount();
     const packed = await screen.findByRole('checkbox', { name: 'Packed 12345678' });
@@ -111,7 +130,7 @@ describe('saved show preparation', () => {
     const packed = await screen.findByRole('checkbox', { name: 'Packed 12345678' });
     expect(packed).toBeDisabled(); expect(packed).not.toBeChecked();
     saved.items[0].evaluation = evaluation({ version: 'reopened-version' });
-    fireEvent.click(screen.getByRole('button', { name: 'Recheck list' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Update list status' }));
     await waitFor(() => expect(packed).toBeEnabled());
     expect(packed).not.toBeChecked();
     expect(calls.some(c => c.method === 'PUT')).toBe(false);
@@ -119,6 +138,7 @@ describe('saved show preparation', () => {
 
   it('creates named lists, selects them, and renames with trimmed names', async () => {
     mount(); await screen.findByRole('checkbox', { name: 'Packed 12345678' });
+    fireEvent.click(screen.getByRole('button', { name: 'New list' }));
     fireEvent.change(screen.getByLabelText('New show name'), { target: { value: '  October show  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create show list' }));
     await waitFor(() => expect(screen.getByLabelText('Show list')).not.toHaveValue(listId));

@@ -58,10 +58,21 @@ func evaluateBatch(ctx context.Context, r evaluationReader, ids []string, now ti
 		if evidenceErr != nil {
 			snapshot = &Snapshot{Identity: identity, AttemptError: "Evidence storage unavailable"}
 		}
-		out = append(out, Evaluate(p, snapshot, now))
+		out = append(out, evaluateRead(p, snapshot, now, evidenceErr))
 	}
 	return out, nil
 }
+
+// Keep the legacy business result/fingerprint for an unreadable snapshot, but
+// derive scheduling availability from the typed read outcome, never error text.
+func evaluateRead(p Purchase, snapshot *Snapshot, now time.Time, readErr error) Evaluation {
+	e := Evaluate(p, snapshot, now)
+	if readErr != nil {
+		e.Readiness = unavailableReadiness(p.Identity())
+	}
+	return e
+}
+
 func (s *Service) Evaluate(ctx context.Context, ids []string) ([]Evaluation, error) {
 	return evaluateBatch(ctx, s.store, ids, s.now(), false)
 }
@@ -83,7 +94,7 @@ func (s *Service) Evidence(ctx context.Context, id string) (Evidence, error) {
 		snap = &Snapshot{Identity: p.Identity(), AttemptError: "Evidence storage unavailable"}
 	}
 	now := s.now()
-	e := Evidence{Evaluation: Evaluate(p, snap, now), Sales: []Sale{}}
+	e := Evidence{Evaluation: evaluateRead(p, snap, now, err), Sales: []Sale{}}
 	if snap != nil {
 		start, end := Window(now)
 		seen := map[string]bool{}

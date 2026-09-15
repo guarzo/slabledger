@@ -269,3 +269,261 @@ recorded above. Remaining optional PR comments were triaged, not silently applie
 3. Which observed versions protect hidden selections and packing acknowledgment?
 4. How do the new locks avoid the existing campaign-deletion inversion?
 5. Why does a failed refresh retain readable evidence but not a Supported status?
+
+## Readiness repair: local upgrade verification (2026-09-15)
+
+The approved amendment is `docs/plans/2026-09-14-show-preparation-readiness.md`.
+Tasks 1–4 add derived readiness outside business fingerprints, one bounded tab
+coordinator, full-body refresh cancellation/deadlines, read-only expiry/retryAt
+observation, selection-safe renewal, compact inventory evidence and progressive
+show destinations. The original qualification/money/availability/history rules
+remain unchanged. Ordinary inventory/evidence/list reads do not acquire comps.
+
+Task 5 adds no production code, migration or application dependency. Its committed
+Go `_test.go` composition and browser driver live alongside existing app-wiring
+and browser tests. Reproduction, safety, exact URLs and a separate two-tab preview
+mode are documented in `web/tests/show-readiness-real.md`.
+
+Unlike the earlier warmed/snapshot-seeded smoke above, this regression migrates to
+45, seeds a real ledger and legacy comps, then upgrades through migration 46 with
+**empty** verified evidence. Chromium uses the real Go router, auth service and
+LocalAPIToken middleware, inventory/show services, PostgreSQL stores and CardLadder
+source adapter. Only CardLadder's remote HTTP response, fixture clock and logging
+are controlled. No inventory/evaluate/refresh/list/packing response is stubbed.
+No scheduler, live business API, external credential or production ledger is used.
+
+Verified real-wire behaviors:
+
+- Cold Supported-first makes real source calls before selection/list creation;
+  24 scoped purchases share 12 normalized identities and acquire in 10+2 batches.
+- Actual source-reported $270/$290 sales persist and render Supported at a $300
+  DH listed price. The $999 legacy comp never masquerades as verified evidence.
+- Ordinary reads, fresh reload, and reconstruction of router/auth/inventory/show
+  services, source client, stores and SQL pool do not reacquire current evidence.
+- UTC rollover returns stale/Needs review on real reads, retains selected intent
+  and disables Add. Clearing selection renews the new 30-date window. Packed
+  membership/acknowledgment remains unchanged without an explicit list operation.
+- Definitive source HTTP 401 and incomplete-page responses persist failed/partial
+  attempts and retain readable verified sales. Focus, reload and selection clear
+  do not retry them; explicit Retry recovers.
+- Full campaigns/purchases/sales/legacy-comp rows remain byte-for-byte identical,
+  covering every stored price and DH listing field. Only explicit create/add/pack
+  changes show membership. Final counts: 27 source GETs, seven refresh POSTs,
+  three list writes. No financial HTTP writes or ambiguity holds occur.
+
+The new regression was first demonstrated RED by temporarily disabling only the
+existing automatic coordinator invocation (the original explicit-only cold-init
+path): expected one real source request, received zero after 12 seconds. Restoring
+that line yielded GREEN against real persisted data; no production fix was needed.
+This was a targeted mutation check, not a claim to have run the entire historical
+application at an old SHA.
+
+Local resources: owned PostgreSQL `slabledger-show-readiness-01a09dd6`, loopback
+44620; e2e `showprep_readiness_e2e`, destructive adapter suite separately
+`showprep_readiness_test`. The test rejects any other e2e URL before connecting.
+API/source/control servers use ephemeral loopback ports and stop after testing.
+The interactive preview mode runs separately, with test-only controls and an
+emitted `fixture.json` for the parent's independent tabs. PG remains owner-managed.
+
+Fresh local gates: full `TZ=UTC DATABASE_URL= POSTGRES_TEST_URL=
+SHOW_READINESS_E2E_URL= go test -race -count=1 -timeout 10m ./...` passed; explicit
+isolated PostgreSQL race suite passed (86.113s); frontend 82 files/838 tests,
+typecheck/lint/build passed. Real-browser race runs passed, including desktop,
+390×844 mobile and 768×1024 tablet captures (final real-wire race run 53.651s).
+Compatible-toolchain `make check` passed with zero lint issues, including import,
+file-size, documentation-path and Playwright-version gates. A separate two-tab
+preview launch and SIGTERM cleanup passed. Local Task 5 report records exact
+addresses, artifacts and cleanup. Existing late-body,
+five-minute, retryAt, observed-version and 805-card regression tests remain intact.
+
+Limits: the fixture service/source clock follows real elapsed time and shifts to
+the next UTC midnight on command; source completion retains real wall time. Browser
+clock values are set from that fixture. The regression waits up to two minutes if
+launched immediately before real midnight; interactive mode does not wait. It does
+not simulate weeks of aging. A test-only regression also prevents a frozen preview
+clock from invalidating later genuine source completion timestamps. Fixture clock
+advancement uses the same wall clock as the real source adapter: an observed host
+clock correction made a monotonic-anchored prototype lag by about one second and
+conservatively invalidate its newest result. That test-only clock was corrected,
+not the business freshness guard. The source
+client's pre-existing transient-HTTP retry policy is unchanged (an initial 503
+fixture exercised those retries); the deterministic failure case uses a definitive
+401. The browser never replays refresh POSTs. Real provider latency/credential
+configuration and cross-tab global quotas are not verified here. The fixture omits
+the unrelated API-status handler, so its header status warning is not a production
+source-health result. The existing tablet global-header overlap remains visible.
+
+**Production rollout remains pending:** separately authorized controlled
+production verification with a missing/stale identity and a fresh identity, with
+no financial mutations. Local final review and verification are recorded below. No deployment, push,
+merge, production warming or production operation was authorized or performed.
+
+## Final readiness fix wave after `631c4854`
+
+All ten final findings (F1–F7 and N1–N3) were reproduced and repaired in one
+combined wave, without reopening the approved design or changing backend
+qualification, fingerprints, holds, history, or authorization. A configured turn
+limit interrupted the first verification pass; the same agent resumed and
+completed the remaining gates. No additional review agents were used.
+
+- **F1, actual tab/session lifetime:** QueryProvider is above the pathname-keyed
+  error boundary. Route authentication still remounts/revalidates; the QueryClient
+  survives only while verified identity is unchanged. Identity changes cancel and
+  clear the old cache; abandoned auth responses cannot reset a newer session.
+  Non-show queries are invalidated on navigation to preserve fresh-on-entry reads.
+  Budgets, stops, and pending writes survive real SPA navigation; logout still
+  hard-navigates. There is no process-global shared user cache.
+- **F2, bounded evaluation reads:** evaluate shares the feature-local full-body
+  stream consumer, retaining cancellation and its 30-second per-attempt timeout
+  through success/error bodies. Network/429/5xx reads retain three attempts and
+  1s/2s backoff; cancel, timeout and invalid success JSON are not replayed.
+  Aggregate cancellation checks prevent late publication. Observation failure
+  releases its gate and exposes explicit read retry. Inactive old cohort errors
+  do not poison current reads. The global APIClient is unchanged.
+- **F3, retry origin:** manual packing-list retry retains the originating list
+  and failed/undispatched IDs. Moving A→B cannot offer A's retry; returning to A
+  does. Changed selection cannot retarget that old command. Busy/terminal guards
+  remain shared across the tab.
+- **F4–F7, compact presentation:** retaining stable-key measured virtual-row
+  heights fixes collapse overlap without inflating estimates. Show-context badges
+  explicitly identify the actual DH price on desktop/mobile, separately from
+  local reviewed and CL/Market values. Missing/unavailable/unverified prices stay
+  labeled. Accessible button names include visible status, cert and disclosure
+  action; readiness summaries use singular card where appropriate.
+- **N1–N2, editor versus request lifetime:** the mounted sale form owns its
+  presentation blocker; closing/filtering/mobile layout clears abandoned inline
+  intent. Async sale, override save/clear, AI accept/dismiss, price hint and DH
+  match requests hold coordinator leases through full promise settlement, even
+  after form/page unmount. Existing payloads and callbacks are retained.
+- **N3, readiness-only observation:** an open disclosure uses incoming aggregate
+  readiness for the same business version, retaining detailed sales and existing
+  different-version/cache-ordering precedence. No fingerprint, selection version,
+  acknowledgment or detail-query key changes were introduced.
+
+Correct-seam RED/GREEN tests cover actual App/BrowserRouter/provider lifetimes,
+streamed evaluate success/error bodies, pending dialog operations across real
+route navigation/unmount, A→B list retry, visible inline forms, and same-version
+open summaries. The existing cancellation-settlement test now supplies a genuine
+streamed Response rather than a JSON-only fake; its ordering assertions remain.
+The real-wire fixture now seeds reviewed $400, DH $300 and source sales $270/$290
+(median $280), while full-ledger immutability assertions remain intact.
+
+Fresh final verification:
+
+- `cd web && npm test && npm run typecheck && npm run lint && npm run build`:
+  **86 files / 876 tests passed**, TypeScript/ESLint clean, Vite 373 modules.
+  Lint was repeated after the final browser-harness changes and remained clean.
+- `TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= SHOW_READINESS_E2E_URL=
+  go test -race -count=1 -timeout 10m ./...`: **PASS**, uncached.
+- Explicit `POSTGRES_TEST_URL` targeting only local
+  `showprep_readiness_test` on 127.0.0.1:44620, with DATABASE_URL and the e2e URL
+  empty, `go test -race -count=1 -timeout 10m ./internal/adapters/storage/postgres/...`:
+  **PASS, 56.986s**. Preflight confirmed zero other sessions.
+- `make check` with `/tmp/slabledger-showprep-tools` plus installed Go1.26.5/Node
+  paths: **PASS, zero lint issues**, including architecture, file-size,
+  documentation-path and Playwright-version checks. No tool installation or
+  hook bypass. Diff/file-size/doc-path checks also ran explicitly.
+- `node --test web/tests/show-readiness-browser-checks.cjs`: **4 passed**.
+  Focused Go restart/clock race regressions: **PASS, 1.068s**.
+- Final real-wire test against only the pinned `showprep_readiness_e2e` database:
+  **PASS, 64.02s** (package 65.052s), with the rebuilt production frontend and
+  real router/auth/service/PG/source adapter. Counts remain 27 source GETs,
+  7 refresh POSTs and 3 explicit list writes; financial ledger unchanged.
+  Actual SPA links, repeated disclosure collapse, scrolling, breakpoints and
+  fine→coarse pointer changes are exercised. **37 geometry observations / 476
+  adjacent pairs, minimum gap 0px**, no overlap or horizontal overflow; trigger
+  heights 22px fine and 44px coarse. Final fine/coarse/mobile/desktop-return PNGs
+  were opened and inspected, not inferred solely from DOM tests.
+
+Authoritative final browser artifacts are in
+`/tmp/show-readiness-final-completion-verified/`; exact per-finding commands,
+RED/GREEN logs, exports and screenshots are recorded in the local SDD
+`final-fix-report.md`. Geometry screenshots use unclipped CDP viewport capture:
+Chromium's full-page/clipped capture was proven to reset pointer emulation and
+produce a misleading coarse-labeled image. New assertions verify pointer mode and
+button height survive capture. This was a harness correction, not a UI workaround.
+
+Earlier runs encountered two unchanged flaky tests: DHPushConfigCard's cleared
+input test and PSA's TestDoRequest_TransientUnauthorizedKeyKept. Both passed
+focused reruns without unrelated edits, and the final full suites passed. Existing
+jsdom scrollTo, Vite configuration-loader, six unrelated file-size guideline
+warnings and the global tablet-header overlap remain disclosed. The temporary
+auth-cleanup lint warning was corrected; final ESLint output is clean.
+
+All owned fixture servers and test browsers closed; known fixture ports were
+checked closed and both fixture DBs had no lingering test sessions. After final
+verification, the parent removed only the identity-checked disposable PostgreSQL
+container `slabledger-show-readiness-01a09dd6` and confirmed port 44620 closed.
+No production, credentials, dependencies, permissions, push, merge or deployment
+changes. Shared-browser assessment tabs and the feature worktree were preserved.
+
+Final independent scoped review of `631c4854..190b9aea` returned **SHIP**: all ten
+findings addressed, no new Critical/Important regression found. The reviewer
+inspected the complete fix diff, actual App/transport/dialog/virtualizer callers,
+four final screenshots, and independently recalculated the 476 adjacent pairs.
+The parent also inspected fine/coarse/mobile images and freshly reran all
+876 frontend tests, TypeScript, ESLint, compatible `make check`, and the full-range
+whitespace check. All passed. The official cached Impeccable CLI again returned
+zero findings for the show-preparation directory and InventoryTab; this is a
+regex-based source scan, not a visual guarantee. The official browser detector
+remained unavailable (`config_missing`); no detector overlay or browser pass is
+claimed. Separately authorized production verification and integration remain
+pending.
+
+## PR706: three approved pre-ready follow-ups
+
+Follow-up base: `285ab864098592bdd7d51200f540126eaf9f0573`; same feature branch and
+linked worktree, without rebase/merge. Only the three approved findings changed:
+
+- HTTP fixture handlers now return contextual errors through a shared test-only
+  HTTP500/nonfatal-reporting boundary. The real browser fixture supplies `t.Errorf`,
+  so an unexpected source/control error fails the owning Go test even when Chromium
+  tolerates or retries the response. Ledger and row queries use request contexts;
+  baseline/final assertions remain fatal only in the test goroutine. The shared
+  state response checks all four whole-row ledgers before reading evidence, lists,
+  items and holds. Controlled source 401/partial responses, gates and cleanup stay
+  intact. No speculative final-pool locking/lifecycle change was made.
+- The inventory coordinating wrapper distinguishes refusal-before-start from an
+  operation that ran. Its inline-price action still owns the operation-error toast
+  and rethrows the original API rejection; the wrapper reports its own refusal
+  once. Other coordinated actions and pending-write lease behavior are unchanged.
+- API/user documentation scopes focus/visibility, UTC, expiry and retryAt observation
+  to active inventory show workflows (selection or non-All Support filter). Saved
+  lists retain explicit **Update list status** and action invalidation, not timers.
+
+Behavioral REDs were observed before fixes: malformed source parameters and three
+real-PostgreSQL control failures (ledger mismatch, ledger read, persisted-row read)
+ended with EOF rather than HTTP500. Shared-path HTTP regressions now assert useful
+responses, independent error recording, restored valid reads, lock release and
+cleanup. The real inventory hook/ToastProvider/APIClient regression observed two
+notifications before the fix; afterward it verifies exactly one, the identical
+APIError rejection, cents payload, success invalidation, refusal without dispatch,
+lease retention through a streamed error body and a non-rethrowing coordinated action.
+
+Fresh verification for this follow-up:
+
+- Full uncached `TZ=UTC go test -race -count=1 -timeout 10m ./...`, with
+  `DATABASE_URL`, `POSTGRES_TEST_URL` and `SHOW_READINESS_E2E_URL` unset: PASS.
+- Focused source/control/restart/clock race tests against only the pinned disposable
+  e2e URI: PASS (3.066s). No separate storage-adapter suite was needed or run.
+- Frontend `npm test`: PASS, **87 files / 881 tests**; `npm run typecheck`,
+  `npm run lint`, `npm run build`: PASS (373 modules).
+- `PATH=/tmp/slabledger-showprep-tools:$PATH make check`: PASS, zero lint issues.
+- `node --test web/tests/show-readiness-browser-checks.cjs`: **4 passed**.
+- Rebuilt real-wire browser regression with the explicit pinned e2e URI: PASS,
+  **64.31s** (package 65.348s), **27 source GETs / 7 refresh POSTs / 3 explicit list
+  writes**, ledger unchanged. Artifacts: `/tmp/pr706-fixes-real-wire/`.
+- Scoped local `polish-core --fix` against the follow-up base, including new and
+  uncommitted files: no unresolved correctness findings; only safe prose wrapping/
+  whitespace cleanup. No subagents. Final diff checks passed.
+
+The parent-provisioned container is `slabledger-readiness-pr706-fixes`, full ID
+`586dc9f18f746c844fe33d99c81bbce16a0e484bbbe157c978e13167dc45a53e`,
+`postgres:17-alpine`, loopback44620, database `showprep_readiness_e2e` only. The real
+app/source/control used ports45495/46279/44943; all were confirmed closed afterward,
+and the e2e database had zero other sessions. Test browsers and servers closed;
+PG remains running for the parent's cleanup. No external source calls, production
+operations, credentials, dependencies, push or ready-state changes were made.
+Existing jsdom scrollTo, Vite-loader and six file-size guideline warnings remain.
+No unrelated test flake occurred in the final gates. The broader stalled non-show
+mutation transport limitation and optional findings remain deliberately unchanged.
