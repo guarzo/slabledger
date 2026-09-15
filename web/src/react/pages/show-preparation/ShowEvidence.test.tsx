@@ -43,6 +43,19 @@ it.each([
   expect(screen.getByText(label)).toBeVisible();
   expect(screen.queryByText(/0 sales/)).not.toBeInTheDocument();
 });
+it.each([
+  { name: 'resolved storage failure', identityKey: 'a'.repeat(64), label: 'Data unavailable' },
+  { name: 'unresolved identity', identityKey: '', label: 'Needs matching' },
+])('labels unavailable evidence without conflating $name', ({ identityKey, label }) => {
+  const e = evaluation({ status: 'needs_review', evidenceNeedsReview: true,
+    evidenceReason: identityKey ? 'Evidence storage unavailable' : 'Card identity unresolved',
+    readiness: { state: 'unavailable', refreshEligibility: 'unavailable', identityKey, expiresAt: '', retryAt: '' },
+  });
+  render(<><ShowSupport evaluation={e} /><ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678" evaluation={e} expanded={false} onClick={() => {}} /></>);
+  expect(screen.getByRole('button', { name: `Show 30-day evidence 12345678: ${label}` })).toBeVisible();
+  expect(screen.getAllByText(label, { selector: 'strong' })).toHaveLength(2);
+  expect(screen.queryByText(identityKey ? 'Needs matching' : 'Data unavailable')).not.toBeInTheDocument();
+});
 it('does not color a supported explanation as a warning and formats source listing enums', () => {
   render(<EvidenceDetails data={{ evaluation: evaluation({ reason: 'Median supports listed price' }), sales: [
     { id: 'a', date: '2026-09-13', priceCents: 27000, platform: 'eBay', url: '', listingType: 'BestOffer' },

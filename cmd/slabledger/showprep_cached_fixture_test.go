@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -9,6 +10,41 @@ import (
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReadinessCachedSeedAtUTCMidnight(t *testing.T) {
+	raw := os.Getenv("SHOW_READINESS_E2E_URL")
+	if raw == "" {
+		t.Skip("requires the explicitly owned disposable e2e database")
+	}
+	db := readinessDB(t, raw)
+	defer func() { require.NoError(t, db.Close()) }()
+	now := time.Date(2026, 9, 16, 0, 0, 30, 0, time.UTC)
+	seedReadinessUpgrade(t, db, now)
+	seedReadinessCached(t, db, now)
+	store := postgres.NewShowPrepStore(db.DB)
+	currentID := sp.Identity{ProfileID: "psa-1", Grader: "PSA", Grade: 10}
+	staleID := sp.Identity{ProfileID: "cached-28", Grader: "PSA", Grade: 10}
+	snapshots, err := store.ReadSnapshots(t.Context(), []sp.Identity{currentID, staleID})
+	require.NoError(t, err)
+	require.Equal(t, "2026-08-18", snapshots[currentID].WindowStart)
+	require.Equal(t, "2026-09-16", snapshots[currentID].WindowEnd)
+	require.Equal(t, "2026-09-14", snapshots[staleID].WindowEnd)
+	service := sp.NewService(store, nil, func() time.Time { return now })
+	for _, tc := range []struct {
+		index  int
+		state  sp.ReadinessState
+		status sp.Status
+	}{
+		{1, sp.ReadinessCurrent, sp.Supported},
+		{28, sp.ReadinessStale, sp.NeedsReview},
+	} {
+		evidence, err := service.Evidence(t.Context(), readinessPurchase(tc.index))
+		require.NoError(t, err)
+		require.Equal(t, tc.state, evidence.Evaluation.Readiness.State)
+		require.Equal(t, tc.status, evidence.Evaluation.Status)
+		require.Len(t, evidence.Sales, 2)
+	}
+}
 
 // PRECONDITION for cached-use acceptance, deliberately not a worker test.
 // Publish verified snapshots directly through the real store, without a provider.
@@ -44,7 +80,7 @@ func seedReadinessCached(t *testing.T, db *postgres.DB, now time.Time) {
 			profile = "no-price"
 		}
 		identity := sp.Identity{ProfileID: profile, Grader: "PSA", Grade: 10}
-		collected := now.Add(-time.Minute)
+		collected := now
 		if i == 28 {
 			collected = now.AddDate(0, 0, -2)
 		}

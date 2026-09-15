@@ -12,11 +12,12 @@ export const availabilityLabels: Record<Availability, string> = {
 };
 const readinessLabels: Record<ReadinessState, string> = {
   not_checked: 'No comp data', current: 'Current evidence', stale: 'Out of date', running: 'Data unavailable',
-  interrupted: 'Data unavailable', failed: 'Data unavailable', invalid: 'Data unavailable', unavailable: 'Needs matching',
+  interrupted: 'Data unavailable', failed: 'Data unavailable', invalid: 'Data unavailable', unavailable: 'Data unavailable',
 };
 export function evidenceLabel(e: ShowEvaluation): string {
   if (e.priceAssociationUnclear) return 'Price association unclear';
   const readiness = getShowReadiness(e);
+  if (readiness?.state === 'unavailable' && !readiness.identityKey && (e.availability === 'ready' || e.availability === 'not_received')) return 'Needs matching';
   if (readiness && readiness.state !== 'current') return readinessLabels[readiness.state];
   return supportLabels[e.status] ?? 'Needs review';
 }

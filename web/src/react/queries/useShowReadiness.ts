@@ -9,8 +9,13 @@ export function useShowReadiness(ids: string[], evaluations: Record<string, Show
   const counts: Record<ReadinessState | 'unknown', number> = {
     not_checked: 0, current: 0, stale: 0, running: 0, interrupted: 0, failed: 0, invalid: 0, unavailable: 0, unknown: 0,
   };
-  for (const value of values) counts[getShowReadiness(value)?.state ?? 'unknown']++;
-  return { ...observation, cohortCount: ids.length, currentCount: counts.current,
+  let needsMatchingCount = 0;
+  for (const value of values) {
+    const readiness = getShowReadiness(value);
+    counts[readiness?.state ?? 'unknown']++;
+    if (readiness?.state === 'unavailable' && !readiness.identityKey && (value.availability === 'ready' || value.availability === 'not_received')) needsMatchingCount++;
+  }
+  return { ...observation, cohortCount: ids.length, currentCount: counts.current, needsMatchingCount,
     incomplete: counts.current < ids.length, counts,
     missingPriceCount: values.filter(e => e && e.listedPriceCents <= 0).length };
 }
