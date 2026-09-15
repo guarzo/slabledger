@@ -1,6 +1,6 @@
 # Show-preparation readiness and inventory integration plan
 
-**Status:** Tasks 1–4 implemented and approved. Task 5 local real-wire upgrade regression and documentation implemented; local gate results are recorded in `implementation-notes.md`. Parent final polish/independent critique and review remain pending. Controlled production verification, deployment and merge still require separate authorization.
+**Status:** All five tasks implemented and approved. Final polish, independent critique, corrective work and local verification are complete; the final scoped independent review returned **SHIP** for `190b9aea`. Results and remaining limitations are recorded in `implementation-notes.md`. Controlled production verification, push, deployment and merge still require separate authorization.
 
 **Goal:** Opening the show-preparation workflow produces useful price-support results without a manual cache-initialization ritual, while inventory keeps its existing compact layout and safe selection behavior.
 

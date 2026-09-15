@@ -353,9 +353,9 @@ configuration and cross-tab global quotas are not verified here. The fixture omi
 the unrelated API-status handler, so its header status warning is not a production
 source-health result. The existing tablet global-header overlap remains visible.
 
-**Rollout remains pending:** parent final polish/independent critique and review,
-then separately authorized controlled production verification with a missing/stale
-identity and a fresh identity, with no financial mutations. No deployment, push,
+**Production rollout remains pending:** separately authorized controlled
+production verification with a missing/stale identity and a fresh identity, with
+no financial mutations. Local final review and verification are recorded below. No deployment, push,
 merge, production warming or production operation was authorized or performed.
 
 ## Final readiness fix wave after `631c4854`
@@ -450,8 +450,22 @@ jsdom scrollTo, Vite configuration-loader, six unrelated file-size guideline
 warnings and the global tablet-header overlap remain disclosed. The temporary
 auth-cleanup lint warning was corrected; final ESLint output is clean.
 
-All owned fixture servers and browsers closed; known fixture ports were checked
-closed and both fixture DBs had no lingering test sessions. Parent-owned PostgreSQL
-container `slabledger-show-readiness-01a09dd6` remains running. No production,
-credentials, dependencies, permissions, push, merge or deployment changes.
-Parent's one scoped rereview and separately authorized rollout remain pending.
+All owned fixture servers and test browsers closed; known fixture ports were
+checked closed and both fixture DBs had no lingering test sessions. After final
+verification, the parent removed only the identity-checked disposable PostgreSQL
+container `slabledger-show-readiness-01a09dd6` and confirmed port 44620 closed.
+No production, credentials, dependencies, permissions, push, merge or deployment
+changes. Shared-browser assessment tabs and the feature worktree were preserved.
+
+Final independent scoped review of `631c4854..190b9aea` returned **SHIP**: all ten
+findings addressed, no new Critical/Important regression found. The reviewer
+inspected the complete fix diff, actual App/transport/dialog/virtualizer callers,
+four final screenshots, and independently recalculated the 476 adjacent pairs.
+The parent also inspected fine/coarse/mobile images and freshly reran all
+876 frontend tests, TypeScript, ESLint, compatible `make check`, and the full-range
+whitespace check. All passed. The official cached Impeccable CLI again returned
+zero findings for the show-preparation directory and InventoryTab; this is a
+regex-based source scan, not a visual guarantee. The official browser detector
+remained unavailable (`config_missing`); no detector overlay or browser pass is
+claimed. Separately authorized production verification and integration remain
+pending.
