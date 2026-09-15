@@ -199,9 +199,12 @@ func (w *EvidenceWorker) collect(run, work context.Context, lease WorkerLease, s
 	// the evaluator's provenance/record checks rather than invent weaker success.
 	snap.AttemptState = "complete"
 	candidate := WorkerCandidate{Identity: id, Snapshot: &snap}
-	classification := candidate.Classification(w.now())
+	finished := w.now()
+	classification := candidate.Classification(finished)
 	start, end := Window(now)
-	if sourceErr != nil || timedOut || snap.WindowStart != start || snap.WindowEnd != end || (classification != "current" && classification != "stale") {
+	// A lookup may finish across UTC midnight, but its acquisition must still
+	// satisfy the age bound independently of the now-stale captured window.
+	if sourceErr != nil || timedOut || snap.WindowStart != start || snap.WindowEnd != end || finished.Sub(snap.RefreshedAt) > 24*time.Hour || (classification != "current" && classification != "stale") {
 		snap.Complete = false
 	}
 	snap.AttemptError = ""

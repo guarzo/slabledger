@@ -13,50 +13,88 @@ func (s *ShowPrepWorkerStore) Candidates(ctx context.Context) ([]sp.WorkerCandid
 	return showWorkerCandidates(ctx, s.db, nil)
 }
 func showWorkerCandidates(ctx context.Context, q showPrepQuery, id *sp.Identity) ([]sp.WorkerCandidate, error) {
-	query := `WITH candidates AS (
- SELECT btrim(p.gem_rate_id) AS profile,upper(btrim(p.grader)) AS grader,p.grade_value AS grade,count(*) AS cards
- FROM campaign_purchases p JOIN campaigns c ON c.id=p.campaign_id
- WHERE NOT p.was_refunded AND c.phase<>'closed'
- AND NOT EXISTS(SELECT 1 FROM campaign_sales sale WHERE sale.purchase_id=p.id)
- GROUP BY btrim(p.gem_rate_id),upper(btrim(p.grader)),p.grade_value
- ) SELECT c.profile,c.grader,c.grade,c.cards,e.payload,COALESCE(e.attempt,0),COALESCE(e.attempt_state,''),
- COALESCE(e.attempt_error,''),e.attempt_started_at,COALESCE(e.retry_window,''),COALESCE(e.retry_attempts,0),e.retry_not_before,COALESCE(e.retry_reset_epoch,0)
- FROM candidates c LEFT JOIN showprep_evidence e ON e.profile_id=c.profile AND e.grader=c.grader AND e.grade=c.grade`
-	var args []any
-	if id != nil {
-		query += ` WHERE c.profile=$1 AND c.grader=$2 AND c.grade=$3`
-		args = []any{id.ProfileID, id.Grader, id.Grade}
+	candidates, err := showWorkerInventory(ctx, q, id)
+	if err != nil {
+		return nil, err
 	}
-	rows, err := q.QueryContext(ctx, query, args...)
+	out := make([]sp.WorkerCandidate, 0, len(candidates))
+	if len(candidates) == 0 {
+		return out, nil
+	}
+	keys := make([]string, 0, len(candidates))
+	for key := range candidates {
+		keys = append(keys, key)
+	}
+	// Inventory rows are closed before this second query, including when q is
+	// the fenced transaction's single connection. Load only canonical keys.
+	rows, err := q.QueryContext(ctx, `SELECT identity_key,payload,attempt,attempt_state,attempt_error,attempt_started_at,
+ retry_window,retry_attempts,retry_not_before,retry_reset_epoch FROM showprep_evidence WHERE identity_key=ANY($1::text[])`, keys)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	out := []sp.WorkerCandidate{}
 	for rows.Next() {
-		var c sp.WorkerCandidate
+		var key, state, msg, window string
 		var payload []byte
-		var attempt int64
-		var state, msg string
-		var started, notBefore sql.NullTime
-		if err := rows.Scan(&c.Identity.ProfileID, &c.Identity.Grader, &c.Identity.Grade, &c.Cards, &payload, &attempt, &state, &msg, &started, &c.RetryWindow, &c.Attempts, &notBefore, &c.ResetEpoch); err != nil {
+		var attempt, reset int64
+		var attempts int
+		var started time.Time
+		var notBefore sql.NullTime
+		if err := rows.Scan(&key, &payload, &attempt, &state, &msg, &started, &window, &attempts, &notBefore, &reset); err != nil {
 			return nil, err
 		}
-		c.NotBefore = notBefore.Time
-		if attempt > 0 {
-			c.Snapshot = &sp.Snapshot{}
-			if len(payload) > 0 {
-				if err := json.Unmarshal(payload, c.Snapshot); err != nil {
-					return nil, err
-				}
+		c := candidates[key]
+		c.RetryWindow, c.Attempts, c.NotBefore, c.ResetEpoch = window, attempts, notBefore.Time, reset
+		c.Snapshot = &sp.Snapshot{}
+		if len(payload) > 0 {
+			if err := json.Unmarshal(payload, c.Snapshot); err != nil {
+				return nil, err
 			}
-			c.Snapshot.Identity = c.Identity
-			c.Snapshot.Attempt = attempt
-			c.Snapshot.AttemptState = state
-			c.Snapshot.AttemptError = msg
-			c.Snapshot.AttemptStartedAt = started.Time
 		}
-		out = append(out, c)
+		c.Snapshot.Identity = c.Identity
+		c.Snapshot.Attempt = attempt
+		c.Snapshot.AttemptState = state
+		c.Snapshot.AttemptError = msg
+		c.Snapshot.AttemptStartedAt = started
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, c := range candidates {
+		out = append(out, *c)
+	}
+	return out, nil
+}
+
+func showWorkerInventory(ctx context.Context, q showPrepQuery, only *sp.Identity) (map[string]*sp.WorkerCandidate, error) {
+	rows, err := q.QueryContext(ctx, `SELECT p.gem_rate_id,p.grader,p.grade_value,count(*)
+ FROM campaign_purchases p JOIN campaigns c ON c.id=p.campaign_id
+ WHERE NOT p.was_refunded AND c.phase<>'closed'
+ AND NOT EXISTS(SELECT 1 FROM campaign_sales sale WHERE sale.purchase_id=p.id)
+ GROUP BY p.gem_rate_id,p.grader,p.grade_value`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]*sp.WorkerCandidate{}
+	for rows.Next() {
+		var purchase sp.Purchase
+		var cards int
+		if err := rows.Scan(&purchase.ProfileID, &purchase.Grader, &purchase.Grade, &cards); err != nil {
+			return nil, err
+		}
+		// Reuse the cached reader's authoritative Unicode/case normalization.
+		// SQL groups raw values only to reduce the finite inventory projection;
+		// spelling variants are merged here, including during dispatch rechecks.
+		identity := purchase.Identity()
+		if only != nil && identity != *only {
+			continue
+		}
+		key := identity.Key()
+		if out[key] == nil {
+			out[key] = &sp.WorkerCandidate{Identity: identity}
+		}
+		out[key].Cards += cards
 	}
 	return out, rows.Err()
 }
