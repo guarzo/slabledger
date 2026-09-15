@@ -6,7 +6,7 @@
 
 **Dark-mode only.** Light mode was explicitly removed. The page lives on a layered radial+linear background — `radial-gradient(ellipse at top, #131b2e, transparent)`, `radial-gradient(ellipse at bottom, #0a0f1a, transparent)`, and a vertical fade from `#0f172a` to `#0b1120`, all `background-attachment: fixed`. Content scrolls; the bg does not.
 
-The product feel is *operator terminal, not consumer SaaS.* Dense tabular data, tabular-num everywhere, hairline row dividers, indigo for interaction, gold for PSA 10. Glass appears on exactly two surfaces: the sticky header and the login card. Pokémon-themed gradients exist as tokens but are reserved for premium moments — recommendation badges, the occasional gold-glow PSA 10 — never decorative section fills.
+The product feel is *operator terminal, not consumer SaaS.* Dense tabular data, tabular-num everywhere, hairline row dividers, copper for interaction, gold for PSA 10. Glass appears on exactly two surfaces: the sticky header and the login card. Pokémon-themed gradients exist as tokens but are reserved for premium moments — recommendation badges, the occasional gold-glow PSA 10 — never decorative section fills.
 
 Mood sentence: *the operator opens this at 7am with coffee, glances at ROI on a 27-inch monitor, and acts on three things before standing up.*
 
@@ -14,19 +14,21 @@ Mood sentence: *the operator opens this at 7am with coffee, glances at ROI on a 
 
 OKLCH was not used in the source; the existing palette is sRGB hex. Tint-toward-brand is implicit in the surface ramp (cool blue-gray neutrals).
 
-**Strategy: Restrained.** Tinted neutrals carry ~85% of the surface; indigo (`--brand-500`) is the single accent for interaction; semantic green/yellow/red carry money-state meaning; grade ramp + channel hues are the one piece of branded polychrome — and only used functionally, never decoratively.
+**Strategy: Restrained.** Tinted neutrals carry ~85% of the surface; copper (`--brand-500`, `#b87333`) is the single accent for interaction; semantic green/yellow/red carry money-state meaning; grade ramp + channel hues are the one piece of branded polychrome — and only used functionally, never decoratively.
 
 ### Brand
 
 ```
---brand-50  #eef2ff   --brand-500 #5a5de8  ← interaction color
---brand-100 #e0e7ff   --brand-600 #4f46e5
---brand-200 #c7d2fe   --brand-700 #4338ca
---brand-300 #a5b4fc   --brand-800 #3730a3
---brand-400 #818cf8   --brand-900 #312e81
+--brand-50  #fdf8f1   --brand-500 #b87333  ← interaction color
+--brand-100 #f8ecd8   --brand-600 #9a5d28
+--brand-200 #efd5a8   --brand-700 #7a4a20
+--brand-300 #e2b574   --brand-800 #5a3718
+--brand-400 #d09349   --brand-900 #3d2510
 ```
 
-`--primary: #2563eb` is the richer blue used on primary CTA fills. `--brand-500` is the atmospheric/glow indigo (focus rings, selected tabs, links, login orbs). Both are valid — pick per surface.
+`--primary` aliases `--brand-500`; `--primary-hover` aliases `--brand-600`.
+`--accent` and `--color-focus` use `--brand-400`. Match the existing copper
+inventory controls; do not introduce an indigo show-preparation theme.
 
 ### Surfaces (elevation ramp, dark)
 
@@ -137,13 +139,17 @@ confidence    high #10b981   medium #f59e0b     low #ef4444
 
 ## Typography
 
-**No webfonts.** Platform UI stack only.
+**Existing webfonts:** Fraunces for display headings and JetBrains Mono for
+numeric data; body/UI labels retain the platform sans stack. Public font resources
+are loaded by the existing app entry point, not by show preparation.
 
 ```
 --font-sans  ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
              "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif
 --font-mono  ui-monospace, "SF Mono", Menlo, Monaco, "Cascadia Code",
              "Roboto Mono", Consolas, "Courier New", monospace
+--font-display "Fraunces", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif
+--font-numeric "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, "Roboto Mono", Consolas, monospace
 ```
 
 ### Scale (Tailwind-aligned)
@@ -179,7 +185,9 @@ UPPERCASE + `tracking-wider` (0.05em) at `2xs/xs` is the stat-label / table-head
 
 ### Tabular numerals
 
-`font-variant-numeric: tabular-nums` on every price, percentage, count, and cert. Class: `.tabular-nums`.
+`font-variant-numeric: tabular-nums` on every price, percentage, count, and cert.
+`.tabular-nums` also selects `--font-numeric`; `.num` provides the same numeric
+face without changing body/UI labels. Page titles use `--font-display`.
 
 ### Hero ROI
 
@@ -347,7 +355,7 @@ Default padding `--space-5` (20px). Default radius `--radius-lg` (18px). Interac
 `--btn-radius 10px`. Sizes `sm 8px / lg 12px`. Top-highlight inset, bottom-edge shadow, variant-specific glow. Ripple on press.
 
 Variants by glow token:
-- **Primary** (indigo): `--btn-glow-brand` → `-h` on hover.
+- **Primary** (copper): `--btn-glow-brand` → `-h` on hover.
 - **Success** (green): `--btn-glow-success`.
 - **Gold** (PSA 10 / premium): `--btn-glow-gold` + `--btn-gold-edge`.
 - **AI** (violet): `--btn-glow-ai`.

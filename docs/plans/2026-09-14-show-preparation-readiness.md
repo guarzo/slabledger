@@ -1,6 +1,6 @@
 # Show-preparation readiness and inventory integration plan
 
-**Status:** Approved for implementation, including both independent-review amendments. User authorized execution; deployment and merge still require separate authorization.
+**Status:** Tasks 1–4 implemented and approved. Task 5 local real-wire upgrade regression and documentation implemented; local gate results are recorded in `implementation-notes.md`. Parent final polish/independent critique and review remain pending. Controlled production verification, deployment and merge still require separate authorization.
 
 **Goal:** Opening the show-preparation workflow produces useful price-support results without a manual cache-initialization ritual, while inventory keeps its existing compact layout and safe selection behavior.
 
@@ -162,6 +162,11 @@ Implement create-first empty state, progressive list creation/rename, accurate r
 **Gate:** no-list/one-list/many-list states, add-to-list success, retry/conflict, packing/unpacking/acknowledgment/history, and no regression in ordinary inventory selection.
 
 ### Task 5: Upgrade-shaped integration and production verification
+
+**Local implementation complete; rollout gate pending.** The committed test and
+separate fixture-server command are documented in `web/tests/show-readiness-real.md`.
+The browser uses real router/service/storage/source-adapter responses, never
+intercepted evaluate/refresh/list answers. Production operations were not run.
 
 Build an isolated test path with legacy comps and purchases present, migration 46 applied, and verified evidence empty. Use the real Go router/service/storage/source adapter against a controlled local CardLadder HTTP server and disposable PostgreSQL; the browser must not stub evaluate/refresh results.
 

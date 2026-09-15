@@ -13,6 +13,11 @@ selection-safe renewal, and integration into the existing compact inventory UI.
 The original qualification, availability, price-association, integer-cent, and
 retained-history guarantees remain unchanged. Ordinary reads still do not acquire
 source data; acquisition remains a bounded refresh request, not detached work.
+The amendment is locally implemented and upgrade-tested against real Go HTTP,
+PostgreSQL and a controlled CardLadder HTTP source; see
+`web/tests/show-readiness-real.md`. Final parent review and separately authorized
+production missing/stale-plus-fresh verification remain pending. Local integration
+is not deployment or production rollout approval.
 
 **Repository baseline:** `fe8ad267` (`fix(skills): load campaign analysis token file (#700)`).
 

@@ -269,3 +269,91 @@ recorded above. Remaining optional PR comments were triaged, not silently applie
 3. Which observed versions protect hidden selections and packing acknowledgment?
 4. How do the new locks avoid the existing campaign-deletion inversion?
 5. Why does a failed refresh retain readable evidence but not a Supported status?
+
+## Readiness repair: local upgrade verification (2026-09-15)
+
+The approved amendment is `docs/plans/2026-09-14-show-preparation-readiness.md`.
+Tasks 1–4 add derived readiness outside business fingerprints, one bounded tab
+coordinator, full-body refresh cancellation/deadlines, read-only expiry/retryAt
+observation, selection-safe renewal, compact inventory evidence and progressive
+show destinations. The original qualification/money/availability/history rules
+remain unchanged. Ordinary inventory/evidence/list reads do not acquire comps.
+
+Task 5 adds no production code, migration or application dependency. Its committed
+Go `_test.go` composition and browser driver live alongside existing app-wiring
+and browser tests. Reproduction, safety, exact URLs and a separate two-tab preview
+mode are documented in `web/tests/show-readiness-real.md`.
+
+Unlike the earlier warmed/snapshot-seeded smoke above, this regression migrates to
+45, seeds a real ledger and legacy comps, then upgrades through migration 46 with
+**empty** verified evidence. Chromium uses the real Go router, auth service and
+LocalAPIToken middleware, inventory/show services, PostgreSQL stores and CardLadder
+source adapter. Only CardLadder's remote HTTP response, fixture clock and logging
+are controlled. No inventory/evaluate/refresh/list/packing response is stubbed.
+No scheduler, live business API, external credential or production ledger is used.
+
+Verified real-wire behaviors:
+
+- Cold Supported-first makes real source calls before selection/list creation;
+  24 scoped purchases share 12 normalized identities and acquire in 10+2 batches.
+- Actual source-reported $270/$290 sales persist and render Supported at a $300
+  DH listed price. The $999 legacy comp never masquerades as verified evidence.
+- Ordinary reads, fresh reload, and reconstruction of router/auth/inventory/show
+  services, source client, stores and SQL pool do not reacquire current evidence.
+- UTC rollover returns stale/Needs review on real reads, retains selected intent
+  and disables Add. Clearing selection renews the new 30-date window. Packed
+  membership/acknowledgment remains unchanged without an explicit list operation.
+- Definitive source HTTP 401 and incomplete-page responses persist failed/partial
+  attempts and retain readable verified sales. Focus, reload and selection clear
+  do not retry them; explicit Retry recovers.
+- Full campaigns/purchases/sales/legacy-comp rows remain byte-for-byte identical,
+  covering every stored price and DH listing field. Only explicit create/add/pack
+  changes show membership. Final counts: 27 source GETs, seven refresh POSTs,
+  three list writes. No financial HTTP writes or ambiguity holds occur.
+
+The new regression was first demonstrated RED by temporarily disabling only the
+existing automatic coordinator invocation (the original explicit-only cold-init
+path): expected one real source request, received zero after 12 seconds. Restoring
+that line yielded GREEN against real persisted data; no production fix was needed.
+This was a targeted mutation check, not a claim to have run the entire historical
+application at an old SHA.
+
+Local resources: owned PostgreSQL `slabledger-show-readiness-01a09dd6`, loopback
+44620; e2e `showprep_readiness_e2e`, destructive adapter suite separately
+`showprep_readiness_test`. The test rejects any other e2e URL before connecting.
+API/source/control servers use ephemeral loopback ports and stop after testing.
+The interactive preview mode runs separately, with test-only controls and an
+emitted `fixture.json` for the parent's independent tabs. PG remains owner-managed.
+
+Fresh local gates: full `TZ=UTC DATABASE_URL= POSTGRES_TEST_URL=
+SHOW_READINESS_E2E_URL= go test -race -count=1 -timeout 10m ./...` passed; explicit
+isolated PostgreSQL race suite passed (86.113s); frontend 82 files/838 tests,
+typecheck/lint/build passed. Real-browser race runs passed, including desktop,
+390×844 mobile and 768×1024 tablet captures (final real-wire race run 53.651s).
+Compatible-toolchain `make check` passed with zero lint issues, including import,
+file-size, documentation-path and Playwright-version gates. A separate two-tab
+preview launch and SIGTERM cleanup passed. Local Task 5 report records exact
+addresses, artifacts and cleanup. Existing late-body,
+five-minute, retryAt, observed-version and 805-card regression tests remain intact.
+
+Limits: the fixture service/source clock follows real elapsed time and shifts to
+the next UTC midnight on command; source completion retains real wall time. Browser
+clock values are set from that fixture. The regression waits up to two minutes if
+launched immediately before real midnight; interactive mode does not wait. It does
+not simulate weeks of aging. A test-only regression also prevents a frozen preview
+clock from invalidating later genuine source completion timestamps. Fixture clock
+advancement uses the same wall clock as the real source adapter: an observed host
+clock correction made a monotonic-anchored prototype lag by about one second and
+conservatively invalidate its newest result. That test-only clock was corrected,
+not the business freshness guard. The source
+client's pre-existing transient-HTTP retry policy is unchanged (an initial 503
+fixture exercised those retries); the deterministic failure case uses a definitive
+401. The browser never replays refresh POSTs. Real provider latency/credential
+configuration and cross-tab global quotas are not verified here. The fixture omits
+the unrelated API-status handler, so its header status warning is not a production
+source-health result. The existing tablet global-header overlap remains visible.
+
+**Rollout remains pending:** parent final polish/independent critique and review,
+then separately authorized controlled production verification with a missing/stale
+identity and a fresh identity, with no financial mutations. No deployment, push,
+merge, production warming or production operation was authorized or performed.
