@@ -1,10 +1,38 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ShowEvidenceDisclosure, { EvidenceDetails } from './ShowEvidence';
+import ShowEvidenceDisclosure, { EvidenceDetails, ShowSupport } from './ShowEvidence';
 import { evaluation, purchaseId } from './fixtures.test-support';
 
 afterEach(() => vi.unstubAllGlobals());
+it.each([
+  ['not_checked', 'needed', 'Not checked'], ['running', 'wait', 'Checking'], ['stale', 'needed', 'Stale comps'],
+  ['interrupted', 'retry_only', 'Check interrupted'], ['failed', 'retry_only', 'Check failed'], ['invalid', 'retry_only', 'Evidence needs review'],
+])('distinguishes %s evidence from a verified zero-sale window', (state, refreshEligibility, label) => {
+  render(<ShowSupport evaluation={evaluation({ status: 'needs_review', compCount: 0, evidenceNeedsReview: true,
+    readiness: { state, refreshEligibility, identityKey: 'a'.repeat(64),
+      expiresAt: state === 'stale' ? '2026-09-14T00:00:00Z' : '', retryAt: ['running', 'interrupted'].includes(state) ? '2026-09-14T12:00:00Z' : '' },
+  })} />);
+  expect(screen.getByText(label)).toBeVisible();
+  expect(screen.queryByText(/0 sales/)).not.toBeInTheDocument();
+});
+it('does not color a supported explanation as a warning and formats source listing enums', () => {
+  render(<EvidenceDetails data={{ evaluation: evaluation({ reason: 'Median supports listed price' }), sales: [
+    { id: 'a', date: '2026-09-13', priceCents: 27000, platform: 'eBay', url: '', listingType: 'BestOffer' },
+    { id: 'b', date: '2026-09-13', priceCents: 28000, platform: 'eBay', url: '', listingType: 'FixedPrice' },
+  ] }} />);
+  expect(screen.getByText('Median supports listed price')).not.toHaveClass('text-[var(--warning)]');
+  expect(screen.getByText('Best offer')).toBeVisible();
+  expect(screen.getByText('Fixed price')).toBeVisible();
+});
+it('keeps missing listed price separate from a failed check', () => {
+  render(<ShowSupport evaluation={evaluation({ status: 'no_listed_price', listedPriceCents: 0, compCount: 0, evidenceNeedsReview: true,
+    readiness: { state: 'failed', refreshEligibility: 'retry_only', identityKey: 'a'.repeat(64), expiresAt: '', retryAt: '' },
+  })} />);
+  expect(screen.getByText('No listed price')).toBeVisible();
+  expect(screen.getByText('Check failed')).toBeVisible();
+  expect(screen.queryByText(/0 sales/)).not.toBeInTheDocument();
+});
 it('does not revive an older supported detail after a newer evaluation arrives', async () => {
   let current = evaluation();
   const fetcher = vi.fn(async () => new Response(JSON.stringify({ evaluation: current, sales: [

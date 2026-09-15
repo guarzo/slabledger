@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { AgingItem, ExpectedValue } from '../../../../types/campaigns';
 import { formatCents, daysHeldColor, signalLabel, signalBgColor } from '../../../utils/formatters';
 import { TrendArrow, ConfidenceIndicator, GradeBadge, StatusPill } from '../../../ui';
@@ -24,6 +25,8 @@ interface MobileCardProps extends RowActionHandlers, RowActionFlags {
   dhListedOverride?: boolean;
   ev?: ExpectedValue;
   showCampaignColumn?: boolean;
+  priceSupport?: ReactNode;
+  children?: ReactNode;
 }
 
 export default function MobileCard(props: MobileCardProps) {
@@ -52,10 +55,10 @@ export default function MobileCard(props: MobileCardProps) {
     : 'Awaiting intake';
 
   return (
-    <div className={`p-3 bg-[var(--surface-1)] rounded-xl border ${selected ? 'border-[var(--brand-500)]' : 'border-[var(--surface-2)]'}`}>
+    <article aria-label={`Inventory card ${item.purchase.certNumber || item.purchase.cardName}`} className={`inventory-mobile-card p-3 bg-[var(--surface-1)] rounded-xl border ${selected ? 'border-[var(--brand-500)]' : 'border-[var(--surface-2)]'}`}>
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-start gap-2 min-w-0">
-          <input type="checkbox" aria-label={`Select ${item.purchase.certNumber || item.purchase.cardName}`} checked={selected} onChange={onToggle} className="rounded mt-0.5" />
+          <label className="inventory-mobile-select"><input type="checkbox" aria-label={`Select ${item.purchase.certNumber || item.purchase.cardName}`} checked={selected} onChange={onToggle} className="rounded" /></label>
           {item.purchase.frontImageUrl && (
             <img
               src={item.purchase.frontImageUrl}
@@ -188,6 +191,7 @@ export default function MobileCard(props: MobileCardProps) {
       </div>
       <div className="mt-3 ml-6 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
+          {props.priceSupport}
           {wasUnlistedFromDH(item) && (
             <StatusPill
               tone="warning"
@@ -211,6 +215,7 @@ export default function MobileCard(props: MobileCardProps) {
         </div>
         <RowActions primary={primary} fallbackPrimary={fallbackPrimary} overflow={overflow} variant="mobile" />
       </div>
-    </div>
+      {props.children}
+    </article>
   );
 }

@@ -4,7 +4,7 @@ import type { ShowEvaluation, SupportStatus } from '../../../types/showprep';
 import { useShowReadiness } from '../../queries/useShowReadiness';
 import ShowReadinessLine from '../show-preparation/ShowReadinessLine';
 import { useShowEvaluations } from '../../queries/useShowPrepQueries';
-import ShowEvidenceDisclosure from '../show-preparation/ShowEvidence';
+import ShowEvidenceDisclosure, { ShowEvidenceButton } from '../show-preparation/ShowEvidence';
 import { ShowInventoryFilters, ShowSelectionActions } from '../show-preparation/ShowInventoryControls';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
@@ -44,6 +44,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [selecting, setSelecting] = useState(false);
   const [includeNotReceived, setIncludeNotReceived] = useState(false);
   const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
+  const [selectionBarHeight, setSelectionBarHeight] = useState(0);
   // Virtual rows unmount offscreen. Keep evidence disclosure intent with inventory,
   // not the measured row, so scrolling or resizing cannot silently close it.
   const [evidenceExpandedId, setEvidenceExpandedId] = useState<string | null>(null);
@@ -171,8 +172,21 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const getOnRetryDHMatch = (purchase: Purchase) =>
     purchase.dhPushStatus === 'unmatched' && !dhRetryInFlight.has(purchase.id) ? () => handleRetryDHMatch(purchase) : undefined;
 
+  const evidenceButton = (item: AgingItem) => <ShowEvidenceButton purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
+    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} expanded={evidenceExpandedId === item.purchase.id}
+    onClick={() => setEvidenceExpandedId(evidenceExpandedId === item.purchase.id ? null : item.purchase.id)} />;
+  const evidencePanel = (item: AgingItem) => evidenceExpandedId === item.purchase.id && <ShowEvidenceDisclosure
+    purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''} detailsOnly expanded
+    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} error={evaluationsQuery.data?.errors[item.purchase.id]} />;
+  const emptyMatches = <div className="show-empty-matches">
+    <p>{support !== 'all' && readiness.incomplete ? 'No matches yet. The comp check is incomplete.'
+      : support !== 'all' ? 'No cards match this price support filter.'
+      : debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}</p>
+    {support !== 'all' && <button className="show-link" onClick={() => setSupport('all')}>Clear price support filter</button>}
+  </div>;
+
   return (
-    <div>
+    <div className="show-inventory">
       <InventoryHeader
         items={items}
         filteredCount={filteredAndSortedItems.length}
@@ -199,10 +213,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         setIncludeNotReceived={setIncludeNotReceived} count={filteredAndSortedItems.length}
         pending={evaluationsQuery.isFetching} fetching={evaluationsQuery.isFetching}
         failed={Object.keys(evaluationsQuery.data?.errors ?? {}).length + (evaluationsQuery.isFetching ? 0 : evaluationsQuery.unresolvedCount)}
-        onRetry={() => { void evaluationsQuery.refetch(); }} />
-      {(selecting || support !== 'all') && <ShowReadinessLine readiness={readiness} selectedCount={selected.size} />}
+        onRetry={() => { void evaluationsQuery.refetch(); }}>
+        {(selecting || support !== 'all') && <ShowReadinessLine readiness={readiness} selectedCount={selected.size} />}
+      </ShowInventoryFilters>
       {selecting && <ShowSelectionActions selected={selected} selectedVersions={selectedVersions} evaluations={evaluations}
-        includeNotReceived={includeNotReceived} disabled={anyModalOpen || evaluationsQuery.isFetching || readiness.busy}
+        includeNotReceived={includeNotReceived} disabled={anyModalOpen || evaluationsQuery.isFetching || readiness.busy} onHeightChange={setSelectionBarHeight}
         outsideView={outsideView} onReveal={revealSelected} showingSelected={state.showingSelected} onHideSelected={state.hideSelected} modalOpen={anyModalOpen}
         onClear={() => setSelected(new Set())} onAdded={ids => setSelected(prev => {
           const next = new Set(prev); for (const id of ids) next.delete(id); return next;
@@ -210,16 +225,12 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
       {isMobile ? (
         <div className="space-y-3">
-          <label htmlFor="select-all-mobile" className="flex items-center gap-2 text-xs text-[var(--text-muted)] px-1">
+          <label htmlFor="select-all-mobile" className="show-check flex items-center gap-2 text-xs text-[var(--text-muted)] px-1">
             <input id="select-all-mobile" aria-label="Select all visible cards" type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
               onChange={toggleVisible} className="rounded" />
             Select all
           </label>
-          {filteredAndSortedItems.length === 0 && (
-            <div className="py-10 text-center text-[var(--text-muted)] text-sm">
-              {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
-            </div>
-          )}
+          {filteredAndSortedItems.length === 0 && emptyMatches}
           <div ref={mobileScrollRef} className="max-h-[calc(100vh-280px)] max-h-[calc(100dvh-280px)] overflow-y-auto scrollbar-dark overscroll-contain touch-pan-y">
             <div style={{ height: `${mobileVirtualizer.getTotalSize()}px`, position: 'relative' }}>
               {mobileVirtualizer.getVirtualItems().map(virtualRow => {
@@ -252,11 +263,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                       dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                       showCampaignColumn={showCampaignColumn}
-                    />
-                    <ShowEvidenceDisclosure purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
-                      expanded={evidenceExpandedId === item.purchase.id} onExpandedChange={open => setEvidenceExpandedId(open ? item.purchase.id : null)}
-                      evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching}
-                      error={evaluationsQuery.data?.errors[item.purchase.id]} />
+                      priceSupport={evidenceButton(item)}
+                    >{evidencePanel(item)}</MobileCard>
                   </div>
                 );
               })}
@@ -280,11 +288,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
             <div className="glass-table-th flex-shrink-0 text-center print-hide-actions normal-case" style={{ width: ACTIONS_COLUMN_WIDTH }}>Actions</div>
           </div>
           {/* Rows */}
-          {filteredAndSortedItems.length === 0 && (
-            <div className="py-10 text-center text-[var(--text-muted)] text-sm">
-              {debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}
-            </div>
-          )}
+          {filteredAndSortedItems.length === 0 && emptyMatches}
           <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto overflow-x-auto scrollbar-dark">
             <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
               {rowVirtualizer.getVirtualItems().map(virtualRow => {
@@ -328,12 +332,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         dhListingLoading={dhListingInFlight.has(item.purchase.id)}
                         dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                         showCampaignColumn={showCampaignColumn}
+                        priceSupport={evidenceButton(item)}
                       />
                     </div>
-                    <ShowEvidenceDisclosure purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
-                      expanded={evidenceExpandedId === item.purchase.id} onExpandedChange={open => setEvidenceExpandedId(open ? item.purchase.id : null)}
-                      evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching}
-                      error={evaluationsQuery.data?.errors[item.purchase.id]} />
+                    {evidencePanel(item)}
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} recordingSale={inlineSaleId === item.purchase.id} onCancelInlineSale={cancelInlineSale} onInlineSaleSuccess={handleInlineSaleSuccess} />}
                   </div>
                 );
@@ -342,6 +344,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
           </div>
         </div>
       )}
+
+      {selecting && selected.size > 0 && <div aria-hidden="true" style={{ height: selectionBarHeight + 32 }} />}
 
       {saleModalItems.length === 1 ? (
         <RecordSaleModal

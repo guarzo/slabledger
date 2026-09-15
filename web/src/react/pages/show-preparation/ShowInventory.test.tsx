@@ -28,6 +28,11 @@ function mount() {
   render(<QueryClientProvider client={qc}><MemoryRouter><ToastProvider><InventoryTab items={items} isLoading={false} /></ToastProvider></MemoryRouter></QueryClientProvider>);
   return qc;
 }
+async function chooseList(id = listId) {
+  if (!screen.queryByRole('combobox', { name: 'Show list' })) fireEvent.click(screen.getByRole('button', { name: /^Add selected to show/ }));
+  await waitFor(() => expect(screen.getByLabelText('Show list')).toBeEnabled());
+  fireEvent.change(screen.getByLabelText('Show list'), { target: { value: id } });
+}
 beforeEach(() => {
   requests = []; addFails = false;
   vi.stubGlobal('scrollTo', vi.fn());
@@ -49,13 +54,36 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('show preparation in the existing inventory', () => {
+  it('does not introduce empty pending queues when entering show selection', async () => {
+    mount();
+    await screen.findAllByText('Supported', { selector: 'strong' });
+    fireEvent.click(screen.getByRole('button', { name: 'Show selection' }));
+    await screen.findByText('2 cards shown');
+    expect(screen.queryByRole('button', { name: /^Pending DH Listing/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Pending DH Match/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^DH Listed/ })).toBeVisible();
+  });
+  it('keeps one compact price-area disclosure and no permanent evidence footer in either selection mode', async () => {
+    mount();
+    const trigger = await screen.findByRole('button', { name: 'Show 30-day evidence 12345678' });
+    expect(trigger.closest('[role="row"]')).not.toBeNull();
+    expect(screen.queryByText(/30d median/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show selection' }));
+    expect(screen.queryByRole('region', { name: 'Show selection actions' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/30d median/)).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    const region = await screen.findByRole('region', { name: '30-day evidence 12345678' });
+    expect(trigger).toHaveAttribute('aria-controls', region.id);
+    expect(await within(region).findByText('$270.00')).toBeVisible();
+    expect(screen.getAllByRole('button', { name: /30-day evidence 12345678/ })).toHaveLength(1);
+  });
   it('keeps failed or missing evaluations distinct from no comps, with an explicit retry', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ evaluations: [values[0]] }))));
     mount();
     expect(await screen.findByRole('alert')).toHaveTextContent('2 evaluations unavailable');
     fireEvent.click(screen.getByRole('button', { name: /^All\d/ }));
     expect(screen.queryByText('No recent comps', { selector: 'strong' })).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Evaluation unavailable:/)).toHaveLength(2);
+    expect(screen.getAllByText('Evaluation unavailable', { selector: 'strong' })).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Show selection' }));
     expect(await screen.findByText('1 card shown')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Retry evaluation' })).toBeEnabled();
@@ -89,7 +117,7 @@ describe('show preparation in the existing inventory', () => {
     await waitFor(() => expect(screen.getByText('1 card shown')).toBeVisible());
     fireEvent.click(screen.getByRole('button', { name: /^DH Listed\d/ }));
     expect(screen.getByText('0 cards shown')).toBeVisible();
-    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
+    await chooseList();
     fireEvent.click(screen.getByRole('button', { name: 'Add selected to show (1)' }));
     await waitFor(() => expect(requests.some(r => r.url.endsWith('/items'))).toBe(true));
     expect(requests.find(r => r.url.endsWith('/items'))?.body).toEqual({ items: [{ purchaseId, evaluationVersion: 'eval-1' }] });
@@ -100,20 +128,21 @@ describe('show preparation in the existing inventory', () => {
     const qc = mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Show selection' }));
     await waitFor(() => expect(screen.getByText('2 cards shown')).toBeVisible());
-    await waitFor(() => expect(screen.getByLabelText('Show list')).toBeEnabled());
     await act(async () => { qc.setQueryData(showPrepKeys.lists, [detail().list, { ...detail().list, id: otherListId, name: 'Other show' }]); });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select 12345678' }));
-    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
+    await chooseList();
     fireEvent.click(screen.getByRole('button', { name: 'Add selected to show (1)' }));
     const link = await screen.findByRole('link', { name: 'Open packing list →' });
     expect(link).toHaveAttribute('href', `/shows?list=${listId}`);
-    expect(screen.getByText('0 selected for show')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Show selection actions' })).not.toBeInTheDocument();
     // List invalidation and selection clearing after add must preserve feedback.
     await act(async () => { qc.setQueryData(showPrepKeys.lists, [detail().list, { ...detail().list, id: otherListId, name: 'Other show' }]); });
-    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
-    expect(screen.getByText(/Added 1 selected cards/)).toBeVisible();
-    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: otherListId } });
-    expect(screen.queryByText(/Added 1 selected cards/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Added 1 card/)).toBeVisible();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select 12345678' }));
+    await chooseList();
+    expect(screen.getByText(/Added 1 card/)).toBeVisible();
+    await chooseList(otherListId);
+    expect(screen.queryByText(/Added 1 card/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open packing list →' })).not.toBeInTheDocument();
   });
 
@@ -124,7 +153,7 @@ describe('show preparation in the existing inventory', () => {
     fireEvent.change(screen.getByLabelText('Price support'), { target: { value: 'needs_review' } });
     await waitFor(() => expect(screen.getByText('1 card shown')).toBeVisible());
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all visible cards' }));
-    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
+    await chooseList();
     fireEvent.click(screen.getByRole('button', { name: 'Add selected to show (1)' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/changed/i);
     expect(screen.getByText('1 selected for show')).toBeVisible();
@@ -153,6 +182,8 @@ describe('show preparation in the existing inventory', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: selectionMethod === 'row' ? 'Select 12345678' : 'Select all visible cards' }));
     fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: 'Charizard' } });
     await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Select 12345678' })).not.toBeInTheDocument());
+    await chooseList();
+    fireEvent.click(screen.getByRole('button', { name: 'New list' }));
     fireEvent.change(screen.getByLabelText('New show name'), { target: { value: 'Changed while hidden' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create show list' }));
     await waitFor(() => expect(screen.getByLabelText('Show list')).toHaveValue(created.id));
@@ -170,12 +201,13 @@ describe('show preparation in the existing inventory', () => {
     fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: '' } });
     const row = await screen.findByRole('checkbox', { name: 'Select 12345678' });
     expect(row).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
     expect(screen.getByText('$350.00', { selector: 'b' })).toBeVisible();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all visible cards' }));
     expect(screen.getByRole('button', { name: 'Add selected to show (2)' })).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select 87654321' }));
     fireEvent.click(row); fireEvent.click(row);
-    fireEvent.change(screen.getByLabelText('Show list'), { target: { value: created.id } });
+    await chooseList(created.id);
     fireEvent.click(screen.getByRole('button', { name: 'Add selected to show (1)' }));
     await waitFor(() => expect(requests.find(r => r.url.endsWith('/items'))?.body).toEqual({ items: [{ purchaseId, evaluationVersion: 'eval-2' }] }));
   });
@@ -296,7 +328,7 @@ it('reveals a now-unavailable selected row without making it addable; Escape ret
   expect(await screen.findByRole('checkbox', { name: 'Select 12345678' })).toBeChecked();
   expect(screen.getByRole('button', { name: 'Add selected to show (1)' })).toBeDisabled();
   fireEvent.keyDown(window, { key: 'Escape' });
-  expect(screen.getByText('0 selected for show')).toBeVisible();
+  expect(screen.queryByRole('region', { name: 'Show selection actions' })).not.toBeInTheDocument();
 });
 
 it('revalidates changed live purchases without acknowledging the selected evaluation version', async () => {
@@ -308,7 +340,7 @@ it('revalidates changed live purchases without acknowledging the selected evalua
   fireEvent.click(screen.getByRole('button', { name: 'Show selection' }));
   await screen.findByText('1 card shown');
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select 12345678' }));
-  fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
+  await chooseList();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Add selected to show (1)' })).toBeEnabled());
   current = evaluation({ listedPriceCents: 35000, version: 'live-price-change' });
   view.rerender(page([inventoryItem(current)]));

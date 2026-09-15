@@ -2,6 +2,11 @@ import { expect, test } from '@playwright/test';
 import { detail, evaluation, inventoryItem, listId, member, purchaseId } from '../src/react/pages/show-preparation/fixtures.test-support';
 import type { ShowListDetail, ShowListItem } from '../src/types/showprep';
 
+test.beforeEach(async ({ page, baseURL }) => {
+  // Local fixture exercise only, including third-party fonts and thumbnails.
+  await page.route(url => url.origin !== new URL(baseURL!).origin, route => route.abort());
+});
+
 const planningId = '44444444-4444-4444-8444-444444444444';
 const ambiguousId = '55555555-5555-4555-8555-555555555555';
 const widths = [{ name: 'mobile', width: 390, height: 844 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'desktop', width: 1440, height: 1000 }];
@@ -33,10 +38,10 @@ for (const failed of [true, false]) {
     await page.goto('/inventory');
     await page.getByRole('button', { name: 'Show selection', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Select 12345678', exact: true }).check();
-    await page.getByRole('button', { name: 'Refresh selected evidence (1)' }).click();
+    await page.getByRole('button', { name: 'Check selected (1)' }).click();
     const actions = page.getByRole('region', { name: 'Show selection actions' });
-    await expect(actions.getByRole('status')).toHaveText(`1 of 1 checked · ${failed ? 1 : 0} need review`);
-    if (failed) await expect(actions.getByText(/12345678: CardLadder refresh failed/)).toBeVisible();
+    await expect(actions.getByText(/Review and reselect/)).toContainText('12345678');
+    await expect(actions.getByRole('button', { name: 'Add selected to show (1)' })).toBeDisabled();
     await page.getByRole('button', { name: 'Show 30-day evidence 12345678' }).click();
     const evidence = page.getByRole('region', { name: '30-day evidence 12345678' });
     await expect(page.getByText('No listed price', { exact: true }).last()).toBeVisible();
@@ -132,9 +137,10 @@ for (const viewport of widths) {
     await page.screenshot({ path: testInfo.outputPath(`inventory-${viewport.name}.png`), fullPage: true });
     await expect(evidence.getByText('$270.00', { exact: true })).toBeVisible();
     await page.getByRole('checkbox', { name: 'Select all visible cards' }).check();
+    await page.getByRole('button', { name: 'Add selected to show (1)' }).click();
     await page.getByRole('combobox', { name: 'Show list', exact: true }).selectOption(listId);
     await page.getByRole('button', { name: 'Add selected to show (1)' }).click();
-    await expect(page.getByText('0 selected for show')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Show selection actions' })).toHaveCount(0);
     await page.getByLabel('Price support').selectOption('all');
     await page.getByLabel('Search cards').fill('');
     await page.getByRole('button', { name: /^All\s*\d+$/ }).click();
@@ -142,7 +148,9 @@ for (const viewport of widths) {
     await page.getByRole('checkbox', { name: 'Select 87654321', exact: true }).check();
     await page.getByRole('checkbox', { name: 'Select 99999999', exact: true }).check();
     await page.getByRole('button', { name: 'Add selected to show (2)' }).click();
-    await expect(page.getByText('0 selected for show')).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Show list', exact: true })).toHaveValue(listId);
+    await page.getByRole('button', { name: 'Add selected to show (2)' }).click();
+    await expect(page.getByRole('region', { name: 'Show selection actions' })).toHaveCount(0);
     await page.getByRole('link', { name: 'Open packing list →' }).click();
     await expect(page).toHaveURL(new RegExp(`/shows\\?list=${listId}`));
     const packed = page.getByRole('checkbox', { name: 'Packed 12345678', exact: true });
@@ -161,12 +169,12 @@ for (const viewport of widths) {
     await expect(page.getByRole('button', { name: /record sale|reprice|delist/i })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(page.getByRole('heading', { name: 'Show preparation', exact: true })).toBeInViewport();
+    await expect(page.getByRole('heading', { name: 'Shows', exact: true })).toBeInViewport();
     await page.screenshot({ path: testInfo.outputPath(`packing-${viewport.name}.png`), fullPage: true });
     const changed: ShowListItem = saved.items[0];
     changed.evaluation = evaluation({ listedPriceCents: 35000, availability: 'refunded', canAdd: false, canPack: false, status: 'below_target', version: 'eval-2' });
     changed.priceChanged = true; changed.supportChanged = true;
-    await page.getByRole('button', { name: 'Recheck list' }).click();
+    await page.getByRole('button', { name: 'Update list status' }).click();
     await expect(page.getByText(/Price changed: check the physical sticker/)).toBeVisible();
     await expect(page.getByText('Unavailable: refunded', { exact: true })).toBeVisible();
     await expect(packed).toBeChecked();
