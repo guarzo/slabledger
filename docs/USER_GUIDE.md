@@ -336,11 +336,16 @@ to continue. An interrupted server attempt becomes retryable after a read at its
 refresh** repeats the failed selection from that list, even if you change selection.
 Switching to another list does not offer or retarget that previous-list retry.
 
-At UTC midnight, or earlier freshness expiry, the mounted workflow rereads status
-and renews eligible evidence within the same limits. Returning to a hidden tab
-performs one reread, not a catch-up loop. Old sales remain inspectable while stale;
-a green badge is not authoritative forever. Evaluation reads have a full-response
-30-second timeout per attempt. A stalled or failed read ends with unavailable
+While an inventory show workflow is active (show selection or a non-All Support
+filter), UTC midnight or earlier freshness expiry triggers a status reread and
+renewal of eligible evidence within the same limits. Focus or returning to a
+hidden tab performs a reread, not a catch-up loop; interrupted-attempt boundaries
+trigger only a read, not an automatic source retry. Saved packing lists do not use
+these focus/visibility or time-bound observers: use **Update list status** to
+reread saved data; list actions also invalidate the status. Old sales remain
+inspectable while stale; a green badge is not authoritative forever.
+Evaluation reads have a full-response 30-second timeout per attempt.
+A stalled or failed read ends with unavailable
 status and **Retry price support read**, rather than checking forever. This retry
 reads stored evaluations; it is not a source-refresh replay.
 

@@ -27,8 +27,14 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   };
   function coordinate<A extends unknown[]>(operation: (...args: A) => Promise<void>, propagate = false) {
     return async (...args: A) => {
-      try { await coordinator.write(() => operation(...args)); }
-      catch (error) { toast.error(getErrorMessage(error, 'Write blocked')); if (propagate) throw error; }
+      let started = false;
+      try { await coordinator.write(() => { started = true; return operation(...args); }); }
+      catch (error) {
+        // The rethrowing inline-price action reports its own operation errors.
+        // A refusal occurs before it starts and still needs the wrapper's toast.
+        if (!started || !propagate) toast.error(getErrorMessage(error, 'Write blocked'));
+        if (propagate) throw error;
+      }
     };
   }
   function openEditor<A extends unknown[]>(operation: (...args: A) => void) {

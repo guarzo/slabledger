@@ -469,3 +469,61 @@ regex-based source scan, not a visual guarantee. The official browser detector
 remained unavailable (`config_missing`); no detector overlay or browser pass is
 claimed. Separately authorized production verification and integration remain
 pending.
+
+## PR706: three approved pre-ready follow-ups
+
+Follow-up base: `285ab864098592bdd7d51200f540126eaf9f0573`; same feature branch and
+linked worktree, without rebase/merge. Only the three approved findings changed:
+
+- HTTP fixture handlers now return contextual errors through a shared test-only
+  HTTP500/nonfatal-reporting boundary. The real browser fixture supplies `t.Errorf`,
+  so an unexpected source/control error fails the owning Go test even when Chromium
+  tolerates or retries the response. Ledger and row queries use request contexts;
+  baseline/final assertions remain fatal only in the test goroutine. The shared
+  state response checks all four whole-row ledgers before reading evidence, lists,
+  items and holds. Controlled source 401/partial responses, gates and cleanup stay
+  intact. No speculative final-pool locking/lifecycle change was made.
+- The inventory coordinating wrapper distinguishes refusal-before-start from an
+  operation that ran. Its inline-price action still owns the operation-error toast
+  and rethrows the original API rejection; the wrapper reports its own refusal
+  once. Other coordinated actions and pending-write lease behavior are unchanged.
+- API/user documentation scopes focus/visibility, UTC, expiry and retryAt observation
+  to active inventory show workflows (selection or non-All Support filter). Saved
+  lists retain explicit **Update list status** and action invalidation, not timers.
+
+Behavioral REDs were observed before fixes: malformed source parameters and three
+real-PostgreSQL control failures (ledger mismatch, ledger read, persisted-row read)
+ended with EOF rather than HTTP500. Shared-path HTTP regressions now assert useful
+responses, independent error recording, restored valid reads, lock release and
+cleanup. The real inventory hook/ToastProvider/APIClient regression observed two
+notifications before the fix; afterward it verifies exactly one, the identical
+APIError rejection, cents payload, success invalidation, refusal without dispatch,
+lease retention through a streamed error body and a non-rethrowing coordinated action.
+
+Fresh verification for this follow-up:
+
+- Full uncached `TZ=UTC go test -race -count=1 -timeout 10m ./...`, with
+  `DATABASE_URL`, `POSTGRES_TEST_URL` and `SHOW_READINESS_E2E_URL` unset: PASS.
+- Focused source/control/restart/clock race tests against only the pinned disposable
+  e2e URI: PASS (3.066s). No separate storage-adapter suite was needed or run.
+- Frontend `npm test`: PASS, **87 files / 881 tests**; `npm run typecheck`,
+  `npm run lint`, `npm run build`: PASS (373 modules).
+- `PATH=/tmp/slabledger-showprep-tools:$PATH make check`: PASS, zero lint issues.
+- `node --test web/tests/show-readiness-browser-checks.cjs`: **4 passed**.
+- Rebuilt real-wire browser regression with the explicit pinned e2e URI: PASS,
+  **64.31s** (package 65.348s), **27 source GETs / 7 refresh POSTs / 3 explicit list
+  writes**, ledger unchanged. Artifacts: `/tmp/pr706-fixes-real-wire/`.
+- Scoped local `polish-core --fix` against the follow-up base, including new and
+  uncommitted files: no unresolved correctness findings; only safe prose wrapping/
+  whitespace cleanup. No subagents. Final diff checks passed.
+
+The parent-provisioned container is `slabledger-readiness-pr706-fixes`, full ID
+`586dc9f18f746c844fe33d99c81bbce16a0e484bbbe157c978e13167dc45a53e`,
+`postgres:17-alpine`, loopback44620, database `showprep_readiness_e2e` only. The real
+app/source/control used ports45495/46279/44943; all were confirmed closed afterward,
+and the e2e database had zero other sessions. Test browsers and servers closed;
+PG remains running for the parent's cleanup. No external source calls, production
+operations, credentials, dependencies, push or ready-state changes were made.
+Existing jsdom scrollTo, Vite-loader and six file-size guideline warnings remain.
+No unrelated test flake occurred in the final gates. The broader stalled non-show
+mutation transport limitation and optional findings remain deliberately unchanged.

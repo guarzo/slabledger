@@ -16,11 +16,12 @@ others before connecting:
 postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable
 ```
 
-The owned disposable PostgreSQL 17 container is
-`slabledger-show-readiness-01a09dd6`. Provision its `showprep_readiness_e2e` database
-before running. The separately owned `showprep_readiness_test` database is for the
-destructive storage-adapter suite only. Never substitute DATABASE_URL, a developer
-ledger, or production. Never use `make screenshots` (production DB pull) or the
+For the PR706 follow-up verification, the parent-provisioned disposable PostgreSQL
+container is `slabledger-readiness-pr706-fixes` (ID prefix `586dc9f18f746`), with
+`showprep_readiness_e2e` on the pinned port. The earlier
+`slabledger-show-readiness-01a09dd6` container was removed. Confirm ownership before
+running; only this disposable e2e database may be reset by this fixture. Never
+substitute DATABASE_URL, a developer ledger, or production. Never use `make screenshots` (production DB pull) or the
 default `make test-postgres` target for this fixture.
 
 Requires the repository's Go 1.26, Node, installed web dependencies and matching
@@ -51,14 +52,34 @@ Harness failure-path checks need no PostgreSQL or running fixture:
 ```bash
 node --test web/tests/show-readiness-browser-checks.cjs
 TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= SHOW_READINESS_E2E_URL= \
-go test -race -count=1 ./cmd/slabledger -run 'TestReadinessRestartFailureReleasesRequests|TestReadinessFixtureClockAdvances'
+go test -race -count=1 ./cmd/slabledger -run 'TestReadiness(Restart|ConcurrentRestart|FixtureClock|Source)'
 ```
 
 These use real Chromium/failed artifact writes and a separate loopback HTTP server
 to prove original-error preservation, independent diagnostics, browser closure,
 failed-restart lock release, continued requests/shutdown, and whole-row clearance.
 They do not reset or access the preview database. The Node checks are deliberately
-outside Vitest discovery and run explicitly with Node's test runner.
+outside Vitest discovery and run explicitly with Node's test runner. Source HTTP
+checks additionally prove malformed parameters return useful HTTP 500 responses,
+record unexpected fixture errors, and allow subsequent valid requests and cleanup;
+intentional 401/partial responses remain controlled outcomes.
+
+The shared control-state HTTP regression requires only the pinned disposable DB,
+not Chromium. Run sequentially with the browser regression because it resets the
+same e2e schema, temporarily changes ledger/table data, then restores it:
+
+```bash
+TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= \
+SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
+go test -race -count=1 -timeout 1m ./cmd/slabledger -run TestReadinessControlErrors
+```
+
+It verifies ledger mismatch, ledger-query and persisted-row-query failures through
+the same state handler used by the browser fixture: diagnostic HTTP 500, independent
+error recording, lock release, subsequent successful reads and server shutdown.
+Both fixture servers report unexpected errors nonfatally against the owning Go
+test, so browser tolerance/retries cannot hide fixture failures. Fatal ledger and
+browser assertions remain in the test goroutine.
 
 The test asserts:
 

@@ -1931,10 +1931,13 @@ change persisted attempt state nor infer provider configuration health.
 
 Old responses without valid optional readiness remain displayable and manually
 usable; automatic acquisition is disabled for those evaluations. A retryAt wakeup
-is **read-only**, never permission to replay a source request. Mounted workflows
-reread on visibility/focus, UTC rollover and applicable expiry/attempt boundaries;
+is **read-only**, never permission to replay a source request. Active inventory
+show workflows (show selection or a non-All Support filter) reread on
+visibility/focus, UTC rollover and applicable expiry/attempt boundaries;
 unresolved early observations have a 30-second follow-up cooldown. Hidden tabs do
-not replay missed timers. Server evaluations, not browser time, authorize support.
+not replay missed timers. Saved packing lists do not mount this observer: they use
+explicit **Update list status** and invalidation after actions, not these timers.
+Server evaluations, not browser time, authorize support.
 The feature-local evaluate transport keeps its 30-second per-attempt timeout and
 cancellation through success/error bodies. Retryable network/429/5xx reads retain
 three attempts with 1s/2s backoff; cancellation, timeout, and invalid success JSON

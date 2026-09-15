@@ -134,22 +134,20 @@ func (f *readinessSourceFixture) setMode(mode string) {
 		f.gate = make(chan struct{})
 	}
 }
-func (f *readinessSourceFixture) serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
-	t.Helper()
+func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) error {
 	if r.Header.Get("Authorization") != "Bearer source-fixture" {
-		http.Error(w, "fixture token required", http.StatusUnauthorized)
-		return
+		return fmt.Errorf("source fixture token required")
 	}
 	q := r.URL.Query()
-	require.Equal(t, "salesarchive", q.Get("index"))
-	require.Equal(t, "date", q.Get("sort"))
-	require.Equal(t, "desc", q.Get("direction"))
-	require.Equal(t, "100", q.Get("limit"))
-	require.Equal(t, "0", q.Get("page"))
+	for key, want := range map[string]string{"index": "salesarchive", "sort": "date", "direction": "desc", "limit": "100", "page": "0"} {
+		if q.Get(key) != want {
+			return fmt.Errorf("source parameter %s: got %q, want %q", key, q.Get(key), want)
+		}
+	}
 	parts := strings.Split(q.Get("filters"), "|")
-	require.Len(t, parts, 3)
-	require.Equal(t, "condition:g10", parts[0])
-	require.Equal(t, "gradingCompany:psa", parts[2])
+	if len(parts) != 3 || parts[0] != "condition:g10" || parts[2] != "gradingCompany:psa" || !strings.HasPrefix(parts[1], "profileId:") || parts[1] == "profileId:" {
+		return fmt.Errorf("source filters: got %q, want condition:g10|profileId:<id>|gradingCompany:psa", q.Get("filters"))
+	}
 	profile := strings.TrimPrefix(parts[1], "profileId:")
 	f.mu.Lock()
 	f.calls = append(f.calls, q)
@@ -159,12 +157,12 @@ func (f *readinessSourceFixture) serve(t *testing.T, w http.ResponseWriter, r *h
 		select {
 		case <-gate:
 		case <-r.Context().Done():
-			return
+			return nil
 		}
 	}
 	if mode == "failed" {
 		http.Error(w, "controlled source authorization failure", http.StatusUnauthorized)
-		return
+		return nil
 	}
 	hits := []map[string]any{}
 	for i := 0; i < 2; i++ {
@@ -177,7 +175,10 @@ func (f *readinessSourceFixture) serve(t *testing.T, w http.ResponseWriter, r *h
 		total = 3
 	} // Real adapter detects an incomplete page, not a fabricated evaluation.
 	w.Header().Set("Content-Type", "application/json")
-	require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"hits": hits, "totalHits": total}))
+	if err := json.NewEncoder(w).Encode(map[string]any{"hits": hits, "totalHits": total}); err != nil {
+		return fmt.Errorf("encode source response for %s: %w", profile, err)
+	}
+	return nil
 }
 
 func readinessRouter(db *postgres.DB, f *readinessSourceFixture, sourceURL string) http.Handler {
@@ -199,27 +200,29 @@ func readinessRouter(db *postgres.DB, f *readinessSourceFixture, sourceURL strin
 
 // Whole persisted rows catch changes to every price/purchase/DH field, not just
 // the few columns the UI happens to display. Ordering is explicit and stable.
-func readinessLedger(t *testing.T, db *postgres.DB) map[string]string {
-	t.Helper()
+func readinessLedger(ctx context.Context, db *postgres.DB) (map[string]string, error) {
 	out := map[string]string{}
 	for _, table := range []string{"campaigns", "campaign_purchases", "campaign_sales", "cl_sales_comps"} {
 		var value string
-		require.NoError(t, db.QueryRowContext(context.Background(), `SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]'::jsonb)::text FROM `+table+` t`).Scan(&value))
+		if err := db.QueryRowContext(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]'::jsonb)::text FROM `+table+` t`).Scan(&value); err != nil {
+			return nil, fmt.Errorf("read fixture ledger %s: %w", table, err)
+		}
 		out[table] = value
 	}
-	return out
+	return out, nil
 }
 
-func readinessRows(t *testing.T, db *postgres.DB, table string) json.RawMessage {
-	t.Helper()
+func readinessRows(ctx context.Context, db *postgres.DB, table string) (json.RawMessage, error) {
 	var value string
-	require.NoError(t, db.QueryRowContext(context.Background(), `SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb)::text FROM `+table+` t`).Scan(&value))
-	return json.RawMessage(value)
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(t)),'[]'::jsonb)::text FROM `+table+` t`).Scan(&value); err != nil {
+		return nil, fmt.Errorf("read fixture rows %s: %w", table, err)
+	}
+	return json.RawMessage(value), nil
 }
 
 func startReadinessSource(t *testing.T, f *readinessSourceFixture) *httptest.Server {
 	t.Helper()
-	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { f.serve(t, w, r) }))
+	source := httptest.NewServer(readinessHandler(t.Errorf, f.serve))
 	t.Cleanup(source.Close)
 	t.Cleanup(func() { f.setMode("complete") })
 	return source
