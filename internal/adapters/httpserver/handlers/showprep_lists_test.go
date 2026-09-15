@@ -20,7 +20,7 @@ func TestShowPrepHTTPPackingRetriesAndStaleAcknowledgment(t *testing.T) {
 		return map[string]sp.Purchase{showTestID: p}, nil
 	}, GetItemsFn: func(context.Context, string) ([]sp.Item, error) { return []sp.Item{item}, nil }, SaveItemFn: func(_ context.Context, _ string, saved sp.Item) error { item = saved; writes++; return nil }}
 	svc := sp.NewService(store, nil, time.Now)
-	h := NewShowPrepHandler(svc, time.Second, mocks.NewMockLogger())
+	h := NewShowPrepHandler(svc, mocks.NewMockLogger())
 	es, err := svc.Evaluate(context.Background(), []string{showTestID})
 	require.NoError(t, err)
 	yes, no := true, false
@@ -64,11 +64,11 @@ func TestShowPrepHTTPBoundedInputs(t *testing.T) {
 	}{
 		{"oversized body", `{"purchaseIds":["` + strings.Repeat("a", 128<<10) + `"]}`, false, 400},
 		{"evaluate oversized batch", `{"purchaseIds":[` + strings.TrimSuffix(strings.Repeat(`"`+showTestID+`",`, 201), ",") + `]}`, false, 400},
-		{"refresh oversized batch", `{"purchaseIds":[` + strings.TrimSuffix(strings.Repeat(`"`+showTestID+`",`, 11), ",") + `]}`, true, 400},
+		{"refresh retired regardless of batch", `{"purchaseIds":[` + strings.TrimSuffix(strings.Repeat(`"`+showTestID+`",`, 11), ",") + `]}`, true, 410},
 		{"duplicate IDs deduplicate", `{"purchaseIds":["` + showTestID + `","` + showTestID + `"]}`, false, 200},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewShowPrepHandler(sp.NewService(&mocks.ShowPrepStoreMock{}, nil, time.Now), time.Second, mocks.NewMockLogger())
+			h := NewShowPrepHandler(sp.NewService(&mocks.ShowPrepStoreMock{}, nil, time.Now), mocks.NewMockLogger())
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest("POST", "/api/show-prep/evaluate", strings.NewReader(tt.body))
 			if tt.refresh {
@@ -92,7 +92,7 @@ func TestShowPrepHTTPBoundedInputs(t *testing.T) {
 	}{{" ", 400}, {strings.Repeat("界", 121), 400}, {strings.Repeat("界", 120), 200}} {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &mocks.ShowPrepStoreMock{CreateListFn: func(_ context.Context, id, name string) (sp.List, error) { return sp.List{ID: id, Name: name}, nil }}
-			h := NewShowPrepHandler(sp.NewService(store, nil, time.Now), time.Second, mocks.NewMockLogger())
+			h := NewShowPrepHandler(sp.NewService(store, nil, time.Now), mocks.NewMockLogger())
 			body, _ := json.Marshal(map[string]string{"id": showTestID, "name": tt.name})
 			w := httptest.NewRecorder()
 			h.HandleCreateList(w, httptest.NewRequest("POST", "/api/show-prep/lists", strings.NewReader(string(body))))

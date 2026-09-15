@@ -22,20 +22,6 @@ describe('show preparation transport', () => {
     ]);
   });
 
-  it.each(['network', '500', 'timeout'])('never replays a failed explicit refresh: %s', async failure => {
-    vi.useFakeTimers();
-    const fetcher = vi.fn().mockImplementation((_url, options) => {
-      if (failure === 'network') return Promise.reject(new TypeError('Network failed'));
-      if (failure === '500') return Promise.resolve(json({ error: 'Source failed' }, 500));
-      return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
-    });
-    vi.stubGlobal('fetch', fetcher);
-    const result = showPrepAPI.refresh([purchaseId]).catch((e: Error) => e);
-    await vi.advanceTimersByTimeAsync(120000);
-    expect(await result).toBeInstanceOf(Error);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-  });
-
   it('batches evaluations at 200 with at most three concurrent reads and records missing results', async () => {
     const ids = Array.from({ length: 805 }, (_, i) => `id-${i}`);
     let active = 0; let peak = 0;

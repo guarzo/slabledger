@@ -5,7 +5,7 @@ import { useShowReadiness } from '../../queries/useShowReadiness';
 import ShowReadinessLine from '../show-preparation/ShowReadinessLine';
 import { useShowEvaluations } from '../../queries/useShowPrepQueries';
 import ShowEvidenceDisclosure, { ShowEvidenceButton } from '../show-preparation/ShowEvidence';
-import { ShowInventoryFilters, ShowSelectionActions } from '../show-preparation/ShowInventoryControls';
+import { ShowInventoryFilters } from '../show-preparation/ShowInventoryControls';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
 import PokeballLoader from '../../PokeballLoader';
@@ -29,7 +29,6 @@ import InventorySelectionBar from './inventory/InventorySelectionBar';
 import { ACTIONS_COLUMN_WIDTH } from './inventory/columnWidths';
 
 const EMPTY_EVALUATIONS: Record<string, ShowEvaluation> = {};
-const EMPTY_SELECTION: ReadonlySet<string> = new Set();
 
 export interface InventoryTabProps {
   items: AgingItem[];
@@ -41,8 +40,6 @@ export interface InventoryTabProps {
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [support, setSupport] = useState<SupportStatus | 'all'>('all');
-  const [selecting, setSelecting] = useState(false);
-  const [includeNotReceived, setIncludeNotReceived] = useState(false);
   const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
   const [selectionBarHeight, setSelectionBarHeight] = useState(0);
   // Virtual rows unmount offscreen. Keep evidence disclosure intent with inventory,
@@ -60,7 +57,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     void recheckEvaluations({ cancelRefetch: false });
   }, [items, recheckEvaluations]);
   const evaluations = evaluationsQuery.data?.evaluations ?? EMPTY_EVALUATIONS;
-  const showFilters = useMemo(() => ({ support, selecting, includeNotReceived, evaluations }), [support, selecting, includeNotReceived, evaluations]);
+  const showFilters = useMemo(() => ({ support, evaluations }), [support, evaluations]);
   const state = useInventoryState(items, campaignId, showFilters);
   const {
     scrollContainerRef, mobileScrollRef,
@@ -83,8 +80,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
   } = state;
 
-  const readiness = useShowReadiness({ active: selecting || support !== 'all', cohortIds: state.showCohortIds,
-    evaluations, fetching: evaluationsQuery.isFetching, selectedCount: selected.size });
+  const readiness = useShowReadiness(purchaseIds, evaluations);
   const outsideView = [...selected].filter(id => !filteredAndSortedItems.some(item => item.purchase.id === id)).length;
   const revealSelected = state.revealSelected;
 
@@ -106,13 +102,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     });
   }
   function toggleCard(id: string) {
-    if (!selected.has(id)) readiness.pauseSelection(true);
     captureSelection([id], !selected.has(id));
     toggleSelect(id);
   }
   function toggleVisible() {
     const ids = filteredAndSortedItems.map(item => item.purchase.id);
-    if (!ids.every(id => selected.has(id))) readiness.pauseSelection(true);
     captureSelection(ids, !ids.every(id => selected.has(id)));
     toggleAll();
   }
@@ -169,15 +163,15 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     purchase.dhPushStatus === 'unmatched' && !dhRetryInFlight.has(purchase.id) ? () => handleRetryDHMatch(purchase) : undefined;
 
   const evidenceButton = (item: AgingItem) => <ShowEvidenceButton purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
-    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} showListedPrice={selecting || support !== 'all'} expanded={evidenceExpandedId === item.purchase.id}
+    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} showListedPrice expanded={evidenceExpandedId === item.purchase.id}
     onClick={() => setEvidenceExpandedId(evidenceExpandedId === item.purchase.id ? null : item.purchase.id)} />;
   const evidencePanel = (item: AgingItem) => evidenceExpandedId === item.purchase.id && <ShowEvidenceDisclosure
     purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''} detailsOnly expanded
     evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} error={evaluationsQuery.data?.errors[item.purchase.id]} />;
   const emptyMatches = <div className="show-empty-matches">
-    <p>{support !== 'all' && readiness.incomplete ? 'No matches yet. The comp check is incomplete.'
-      : support !== 'all' ? 'No cards match this price support filter.'
+    <p>{support !== 'all' ? 'No current matches under these filters.'
       : debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}</p>
+    {support !== 'all' && readiness.incomplete && <p>Comp data coverage is incomplete. Missing or out-of-date evidence is not a current match.</p>}
     {support !== 'all' && <button className="show-link" onClick={() => setSupport('all')}>Clear price support filter</button>}
   </div>;
 
@@ -198,26 +192,19 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         setPriceBand={setPriceBand}
         priceBandCounts={priceBandCounts}
         debouncedSearch={debouncedSearch}
-        selected={selecting ? EMPTY_SELECTION : selected}
-        showFiltering={selecting || support !== 'all'}
+        selected={selected}
+        showFiltering={support !== 'all'}
         onDeselectMissingCL={handleDeselectMissingCL}
         onHighlightMissingCL={handleHighlightMissingCL}
       />
 
       <ShowInventoryFilters filters={showFilters} setSupport={setSupport}
-        setSelecting={value => { setSelecting(value); if (value) { setIncludeNotReceived(false); setFilterTab('all'); } }}
-        setIncludeNotReceived={setIncludeNotReceived} count={filteredAndSortedItems.length}
+        count={filteredAndSortedItems.length}
         pending={evaluationsQuery.isFetching} fetching={evaluationsQuery.isFetching}
         failed={Object.keys(evaluationsQuery.data?.errors ?? {}).length + (evaluationsQuery.isFetching ? 0 : evaluationsQuery.unresolvedCount)}
         onRetry={() => { void evaluationsQuery.refetch(); }}>
-        {(selecting || support !== 'all') && <ShowReadinessLine readiness={readiness} selectedCount={selected.size} />}
+        <ShowReadinessLine readiness={readiness} />
       </ShowInventoryFilters>
-      {selecting && <ShowSelectionActions selected={selected} selectedVersions={selectedVersions} evaluations={evaluations}
-        includeNotReceived={includeNotReceived} disabled={anyModalOpen || evaluationsQuery.isFetching || readiness.busy} onHeightChange={setSelectionBarHeight}
-        outsideView={outsideView} onReveal={revealSelected} showingSelected={state.showingSelected} onHideSelected={state.hideSelected} modalOpen={anyModalOpen}
-        onClear={() => setSelected(new Set())} onAdded={ids => setSelected(prev => {
-          const next = new Set(prev); for (const id of ids) next.delete(id); return next;
-        })} />}
 
       {isMobile ? (
         <div className="space-y-3">
@@ -341,7 +328,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         </div>
       )}
 
-      {selecting && selected.size > 0 && <div aria-hidden="true" style={{ height: selectionBarHeight + 32 }} />}
+      {selected.size > 0 && <div aria-hidden="true" style={{ height: selectionBarHeight + 32 }} />}
 
       {saleModalItems.length === 1 ? (
         <RecordSaleModal
@@ -412,13 +399,16 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         />
       )}
 
-      {!selecting && <InventorySelectionBar
-        selectedItems={selectedItems}
+      <InventorySelectionBar
+        selectedItems={selectedItems} selected={selected} selectedVersions={selectedVersions} evaluations={evaluations}
+        onHeightChange={setSelectionBarHeight} outsideView={outsideView} onReveal={revealSelected}
+        showingSelected={state.showingSelected} onHideSelected={state.hideSelected}
+        onAdded={ids => setSelected(prev => { const next = new Set(prev); for (const id of ids) next.delete(id); return next; })}
         onRecordSale={() => openSaleModal(selectedItems)}
         onListOnDH={() => handleBulkListOnDH(selectedItems.map(i => i.purchase.id))}
         onClear={() => setSelected(new Set())}
-        disabled={anyModalOpen || readiness.busy}
-      />}
+        disabled={anyModalOpen}
+      />
     </div>
   );
 }

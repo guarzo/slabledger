@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog } from 'radix-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { getShowRefreshCoordinator } from '../../queries/showRefreshCoordinator';
 import type { AgingItem, SaleChannel, BulkSaleItemInput } from '../../../types/campaigns';
 import { api } from '../../../js/api';
 import { formatCents, localToday, getErrorMessage, dollarsToCents } from '../../utils/formatters';
@@ -131,12 +130,11 @@ export default function BulkRecordSaleModal({ open, onClose, onSuccess, items }:
       }
 
       const groupEntries = Array.from(groups.entries());
-      // Navigation can unmount the editor while multiple campaigns still write.
-      const results = await getShowRefreshCoordinator(queryClient).write(() => Promise.allSettled(
+      const results = await Promise.allSettled(
         groupEntries.map(([cid, groupItems]) =>
           api.createBulkSales(cid, channel, saleDate, groupItems)
         )
-      ));
+      );
 
       let totalCreated = 0;
       let totalFailed = 0;

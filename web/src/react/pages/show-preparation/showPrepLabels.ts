@@ -3,7 +3,7 @@ import type { Availability, ReadinessState, ShowEvaluation, SupportStatus } from
 
 export const supportLabels: Record<SupportStatus, string> = {
   supported: 'Supported', thin_evidence: 'Thin evidence', below_target: 'Below target',
-  no_recent_comps: 'No recent comps', needs_review: 'Needs review', no_listed_price: 'No listed price',
+  no_recent_comps: 'No recent sales', needs_review: 'Needs review', no_listed_price: 'No DH price',
 };
 export const availabilityLabels: Record<Availability, string> = {
   ready: 'Ready to pack', not_received: 'Not received', sold: 'Unavailable: sold',
@@ -11,10 +11,11 @@ export const availabilityLabels: Record<Availability, string> = {
   removed: 'Unavailable: record removed', unknown: 'Availability unknown',
 };
 const readinessLabels: Record<ReadinessState, string> = {
-  not_checked: 'Not checked', current: 'Current comps', stale: 'Stale comps', running: 'Checking',
-  interrupted: 'Check interrupted', failed: 'Check failed', invalid: 'Evidence needs review', unavailable: 'Evidence unavailable',
+  not_checked: 'No comp data', current: 'Current evidence', stale: 'Out of date', running: 'Data unavailable',
+  interrupted: 'Data unavailable', failed: 'Data unavailable', invalid: 'Data unavailable', unavailable: 'Needs matching',
 };
 export function evidenceLabel(e: ShowEvaluation): string {
+  if (e.priceAssociationUnclear) return 'Price association unclear';
   const readiness = getShowReadiness(e);
   if (readiness && readiness.state !== 'current') return readinessLabels[readiness.state];
   return supportLabels[e.status] ?? 'Needs review';
@@ -24,7 +25,7 @@ export function supportIndicator(e: ShowEvaluation): { label: string; tone: stri
   const label = e.status === 'no_listed_price' ? supportLabels.no_listed_price : evidenceLabel(e);
   const state = getShowReadiness(e)?.state;
   const tone = label === 'Supported' ? 'success' : state === 'failed' ? 'danger'
-    : ['Not checked', 'Checking', 'Unavailable'].includes(label) ? 'muted' : 'warning';
+    : ['No comp data', 'Unavailable'].includes(label) ? 'muted' : 'warning';
   return { label, tone };
 }
 export function listingTypeLabel(value: string): string {

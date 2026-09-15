@@ -26,6 +26,7 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 		t.Skip("set SHOW_READINESS_E2E_URL to the owned disposable e2e database explicitly")
 	}
 	require.Equal(t, readinessDBURL, raw, "refusing unspecified/developer/production database")
+	require.Equal(t, "cached", os.Getenv("SHOW_READINESS_MODE"), "old browser warm-up scenario retired; select cached mode explicitly")
 	t.Chdir("../..") // Match the executable's normal repository-root static asset lookup.
 	_, err := os.Stat("web/dist/index.html")
 	require.NoError(t, err, "run cd web && npm run build first")
@@ -47,6 +48,8 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 	started := time.Now()
 	f := &readinessSourceFixture{now: started.UTC(), started: started}
 	seedReadinessUpgrade(t, db, f.clock())
+	seedReadinessCached(t, db, f.clock()) // PRECONDITION, not evidence-worker population.
+	f.setMode("blocked")
 	baseline, err := readinessLedger(t.Context(), db)
 	require.NoError(t, err)
 	source := startReadinessSource(t, f)
@@ -148,6 +151,10 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 	output, err := cmd.CombinedOutput()
 	t.Logf("browser output:\n%s\nartifacts=%s", output, artifacts)
 	require.NoError(t, err)
+	f.mu.Lock()
+	calls := len(f.calls)
+	f.mu.Unlock()
+	require.Zero(t, calls, "cached operator workflow must never call the provider")
 	finalLedger, err := readinessLedger(t.Context(), db)
 	require.NoError(t, err)
 	require.Equal(t, baseline, finalLedger)

@@ -5,7 +5,7 @@ import { showPrepAPI } from './showprep';
 import { evaluation, purchaseId } from '../../react/pages/show-preparation/fixtures.test-support';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
-it.each([200, 503])('retains Cancel through a stalled real HTTP body (%s)', async status => {
+it.each([200, 503])('cancels evaluation through a stalled real HTTP body (%s)', async status => {
   const server = createServer((_req, res) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.write(status === 200 ? '{"evaluations":[' : '{"error":"');
@@ -25,7 +25,7 @@ it.each([200, 503])('retains Cancel through a stalled real HTTP body (%s)', asyn
   vi.stubGlobal('fetch', fetcher);
   const abort = new AbortController();
   let settled = false;
-  const result = showPrepAPI.refresh([purchaseId], abort.signal).catch(error => error).finally(() => { settled = true; });
+  const result = showPrepAPI.evaluate([purchaseId], { signal: abort.signal }).catch(error => error).finally(() => { settled = true; });
   try {
     await received; await Promise.resolve(); abort.abort();
     await new Promise(resolve => setTimeout(resolve, 30));
@@ -47,8 +47,8 @@ it.each([200, 503])('times out stalled streamed success/error JSON without repla
   const fetcher = vi.fn(async () => new Response(body, { status }));
   vi.stubGlobal('fetch', fetcher);
   let settled = false;
-  const result = showPrepAPI.refresh([purchaseId]).catch(error => error).finally(() => { settled = true; });
-  await vi.advanceTimersByTimeAsync(120000);
+  const result = showPrepAPI.evaluate([purchaseId]).catch(error => error).finally(() => { settled = true; });
+  await vi.advanceTimersByTimeAsync(30000);
   expect(settled).toBe(true);
   expect(await result).toMatchObject({ code: 'TIMEOUT' });
   expect(cancelled).toBe(true);
@@ -56,8 +56,8 @@ it.each([200, 503])('times out stalled streamed success/error JSON without repla
 });
 
 it('preserves structured server errors and valid success JSON', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'Credentials missing', code: 'SOURCE', details: { provider: 'CardLadder' } }), { status: 503 })));
-  await expect(showPrepAPI.refresh([purchaseId])).rejects.toMatchObject({ status: 503, code: 'SOURCE', data: { details: { provider: 'CardLadder' } } });
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'Credentials missing', code: 'SOURCE', details: { provider: 'CardLadder' } }), { status: 400 })));
+  await expect(showPrepAPI.evaluate([purchaseId])).rejects.toMatchObject({ status: 400, code: 'SOURCE', data: { details: { provider: 'CardLadder' } } });
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ evaluations: [evaluation()] }))));
-  expect((await showPrepAPI.refresh([purchaseId])).evaluations).toEqual([evaluation()]);
+  expect((await showPrepAPI.evaluate([purchaseId])).evaluations).toEqual([evaluation()]);
 });

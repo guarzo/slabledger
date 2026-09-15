@@ -1,12 +1,15 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { useShowReadiness } from '../../queries/useShowReadiness';
 import ShowReadinessLine from './ShowReadinessLine';
 
-it.each([0, 1, 12])('does not offer a no-op source check with %s cards and no incomplete work', count => {
-  const readiness = { busy: false, incomplete: false, currentCount: count, cohortCount: count,
-    counts: { running: 0, unknown: 0, interrupted: 0 }, missingPriceCount: 0, error: '', check: vi.fn() } as unknown as ReturnType<typeof useShowReadiness>;
-  render(<ShowReadinessLine readiness={readiness} selectedCount={0} />);
-  expect(screen.queryByRole('button', { name: 'Check comps' })).not.toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent(count ? `Check complete · ${count} ${count === 1 ? 'card' : 'cards'} current` : 'No cards in check scope');
+it('distinguishes coverage gaps without acquisition controls or manual-price prompts', () => {
+  const readiness = { observing: false, observationError: '', currentCount: 2, cohortCount: 8,
+    counts: { current: 2, not_checked: 1, stale: 1, failed: 1, running: 0, interrupted: 0, invalid: 0, unknown: 1, unavailable: 2 },
+    missingPriceCount: 1 } as ReturnType<typeof useShowReadiness>;
+  render(<ShowReadinessLine readiness={readiness} />);
+  expect(screen.getByLabelText('Comp data coverage')).toHaveTextContent('2/8 cards with current evidence');
+  for (const label of ['1 no comp data', '1 out of date', '1 data unavailable', '1 no DH price']) expect(screen.getByText(label)).toBeVisible();
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  expect(screen.queryByText(/select.*manually/i)).not.toBeInTheDocument();
 });

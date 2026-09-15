@@ -135,6 +135,14 @@ func (f *readinessSourceFixture) setMode(mode string) {
 	}
 }
 func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) error {
+	f.mu.Lock()
+	f.calls = append(f.calls, r.URL.Query())
+	blocked := f.mode == "blocked"
+	f.mu.Unlock()
+	if blocked {
+		http.Error(w, "provider access blocked during cached use", http.StatusServiceUnavailable)
+		return nil
+	}
 	if r.Header.Get("Authorization") != "Bearer source-fixture" {
 		return fmt.Errorf("source fixture token required")
 	}
@@ -150,7 +158,6 @@ func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) e
 	}
 	profile := strings.TrimPrefix(parts[1], "profileId:")
 	f.mu.Lock()
-	f.calls = append(f.calls, q)
 	now, mode, gate := time.Now().UTC().Add(f.now.Sub(f.started)), f.mode, f.gate
 	f.mu.Unlock()
 	if gate != nil {
@@ -193,7 +200,7 @@ func readinessRouter(db *postgres.DB, f *readinessSourceFixture, sourceURL strin
 	// OAuth transport is never called: actual LocalAPIToken middleware resolves
 	// the fixture user through the real auth service and PostgreSQL repository.
 	auth := google.NewOAuthService(postgres.NewAuthRepository(db.DB, nil), logger, "", "", "", nil)
-	return httpserver.NewRouter(httpserver.RouterConfig{ShowPrepHandler: handlers.NewShowPrepHandler(service, 90*time.Second, logger),
+	return httpserver.NewRouter(httpserver.RouterConfig{ShowPrepHandler: handlers.NewShowPrepHandler(service, logger),
 		CampaignsService: campaigns, AuthService: auth, LocalAPIToken: readinessToken, GoogleOAuthEnv: "development",
 		Logger: logger, SPAHandler: handlers.NewSPAHandler(logger), HealthHandler: handlers.NewHealthHandler(nil, nil, logger)}).Setup()
 }

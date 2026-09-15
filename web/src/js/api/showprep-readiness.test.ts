@@ -74,7 +74,7 @@ describe('validated optional show readiness', () => {
     expect(inventory.errors).toEqual({});
     expect(inventory.evaluations[purchaseId].status).toBe('supported');
     expect((await api.showPrepAPI.evidence(purchaseId)).evaluation.status).toBe('supported');
-    expect((await api.showPrepAPI.refresh([purchaseId])).evaluations[0].status).toBe('supported');
+    expect((await api.showPrepAPI.evaluate([purchaseId])).evaluations[0].status).toBe('supported');
     expect((await api.showPrepAPI.detail(listId)).items[0].evaluation.status).toBe('supported');
     await api.showPrepAPI.addItems(listId, [{ purchaseId, evaluationVersion: value.version }]);
     expect(fetcher).toHaveBeenLastCalledWith(`/api/show-prep/lists/${listId}/items`, expect.objectContaining({
