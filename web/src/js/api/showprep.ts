@@ -1,5 +1,5 @@
 import { APIClient, type APIRequestOptions } from './client';
-import { refreshShowEvidence } from './showRefreshTransport';
+import { evaluateShowEvidence, refreshShowEvidence } from './showRefreshTransport';
 import type { ShowEvaluation, ShowEvidence, ShowList, ShowListDetail, ShowItemAdd, ShowItemUpdate, ShowReadiness, ReadinessState, RefreshEligibility } from '../../types/showprep';
 
 const client = new APIClient('/api/show-prep');
@@ -61,7 +61,7 @@ async function listDetail(response: Promise<ShowListDetail>) {
 }
 
 export const showPrepAPI = {
-  evaluate: (purchaseIds: string[], options?: APIRequestOptions) => evaluations(client.post('/evaluate', { purchaseIds }, options)),
+  evaluate: (purchaseIds: string[], options?: APIRequestOptions) => evaluations(evaluateShowEvidence(purchaseIds, options)),
   refresh: (purchaseIds: string[], signal?: AbortSignal) => evaluations(refreshShowEvidence(purchaseIds, signal)),
   evidence: async (purchaseId: string, options?: APIRequestOptions): Promise<ShowEvidence> => {
     const result = await client.get<ShowEvidence>(`/evidence/${encodeURIComponent(purchaseId)}`, options);
@@ -96,16 +96,19 @@ export async function evaluateInventory(purchaseIds: string[], signal?: AbortSig
       const batch = batches[next++];
       try {
         const response = await showPrepAPI.evaluate(batch, { signal });
+        signal?.throwIfAborted();
         for (const id of batch) {
           const value = response.evaluations.find(e => e.purchaseId === id);
           if (value) result.evaluations[id] = value;
           else result.errors[id] = 'Evaluation missing from response. Retry evaluation.';
         }
       } catch (error) {
+        signal?.throwIfAborted();
         for (const id of batch) result.errors[id] = error instanceof Error ? error.message : 'Evaluation failed';
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(3, batches.length) }, worker));
+  signal?.throwIfAborted();
   return result;
 }

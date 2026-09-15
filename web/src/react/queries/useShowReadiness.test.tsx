@@ -46,6 +46,28 @@ it('does not auto-check malformed metadata, fresh evidence, or missing listed pr
   expect(hook.result.current.readiness.missingPriceCount).toBe(1);
   hook.unmount(); hook.qc.clear();
 });
+it('settles a stalled expiry observation, removes cached Supported, and offers a read retry', async () => {
+  const hook = mount([ready(1, 'current')]); await flush();
+  vi.stubGlobal('fetch', async () => new Response(new ReadableStream({ start(s) { s.enqueue(new TextEncoder().encode('{')); } })));
+  act(() => window.dispatchEvent(new Event('focus'))); await flush();
+  await act(async () => { await vi.advanceTimersByTimeAsync(30001); }); await flush();
+  expect(hook.result.current.query.isFetching).toBe(false);
+  expect(hook.result.current.readiness.currentCount).toBe(0);
+  expect(hook.result.current.readiness.observationError).toMatch(/read|timed out/i);
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ evaluations: [ready(1, 'current')] })));
+  await act(async () => { await hook.result.current.readiness.retryObservation(); }); await flush();
+  expect(hook.result.current.readiness.observationError).toBe('');
+  expect(hook.result.current.readiness.currentCount).toBe(1);
+  hook.unmount(); hook.qc.clear();
+});
+it('does not let an inactive older cohort error poison a successful current observation', async () => {
+  const hook = mount([ready(1, 'current')]); await flush();
+  hook.qc.setQueryData(['show-prep', 'evaluations', ['id-1', 'old-card']], { evaluations: {}, errors: { 'id-1': 'old timeout' } });
+  act(() => window.dispatchEvent(new Event('focus'))); await flush();
+  expect(hook.result.current.readiness.observationError).toBe('');
+  expect(hook.result.current.readiness.currentCount).toBe(1);
+  hook.unmount(); hook.qc.clear();
+});
 function running(retryAt: string) {
   return ready(1, 'not_checked', { readiness: { state: 'running', refreshEligibility: 'wait', identityKey: '1'.padStart(64, '0'), expiresAt: '', retryAt } });
 }

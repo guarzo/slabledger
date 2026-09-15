@@ -1,10 +1,37 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ShowEvidenceDisclosure, { EvidenceDetails, ShowSupport } from './ShowEvidence';
+import ShowEvidenceDisclosure, { EvidenceDetails, ShowSupport, ShowEvidenceButton } from './ShowEvidence';
 import { evaluation, purchaseId } from './fixtures.test-support';
 
 afterEach(() => vi.unstubAllGlobals());
+it('includes visible support, cert and expanded relationship in the compact button name', () => {
+  render(<ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678" evaluation={evaluation()} expanded={false} onClick={() => {}} />);
+  const button = screen.getByRole('button', { name: /Supported.*12345678|12345678.*Supported/ });
+  expect(button).toHaveAttribute('aria-expanded', 'false');
+  expect(button).toHaveAttribute('aria-controls', `show-evidence-${purchaseId}`);
+});
+it.each([
+  { listedPriceCents: 30000, priceAssociationUnclear: false, label: 'DH listed $300.00' },
+  { listedPriceCents: 0, priceAssociationUnclear: false, label: 'DH listed Missing' },
+  { listedPriceCents: 30000, priceAssociationUnclear: true, label: 'DH listed $300.00 (unverified)' },
+])('identifies the exact evaluated price in compact show context: $label', ({ label, ...values }) => {
+  render(<ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678" evaluation={evaluation({ ...values, localPriceCents: 40000 })} showListedPrice expanded={false} onClick={() => {}} />);
+  expect(screen.getByText(label)).toBeVisible();
+});
+it('updates an open summary from a readiness-only observation without changing detail keys or selection versions', async () => {
+  const running = evaluation({ status: 'needs_review', evidenceNeedsReview: true, readiness: { state: 'running', refreshEligibility: 'wait', identityKey: 'a'.repeat(64), expiresAt: '', retryAt: '2026-09-14T12:00:00Z' } });
+  const fetcher = vi.fn(async () => new Response(JSON.stringify({ evaluation: running, sales: [] })));
+  vi.stubGlobal('fetch', fetcher);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const tree = (e = running) => <QueryClientProvider client={qc}><ShowEvidenceDisclosure purchaseId={purchaseId} certNumber="12345678" expanded evaluation={e} /></QueryClientProvider>;
+  const view = render(tree()); await screen.findByText(/No detailed sales available/);
+  await waitFor(() => expect(screen.queryByText('Loading sale evidence…')).not.toBeInTheDocument());
+  view.rerender(tree({ ...running, readiness: { ...(running.readiness as object), state: 'interrupted', refreshEligibility: 'retry_only' } }));
+  expect(screen.getByText('Check interrupted', { selector: 'strong' })).toBeVisible();
+  expect(screen.queryByText('Checking', { selector: 'strong' })).not.toBeInTheDocument();
+  expect(fetcher).toHaveBeenCalledOnce();
+});
 it.each([
   ['not_checked', 'needed', 'Not checked'], ['running', 'wait', 'Checking'], ['stale', 'needed', 'Stale comps'],
   ['interrupted', 'retry_only', 'Check interrupted'], ['failed', 'retry_only', 'Check failed'], ['invalid', 'retry_only', 'Evidence needs review'],

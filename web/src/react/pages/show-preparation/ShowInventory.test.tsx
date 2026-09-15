@@ -65,7 +65,7 @@ describe('show preparation in the existing inventory', () => {
   });
   it('keeps one compact price-area disclosure and no permanent evidence footer in either selection mode', async () => {
     mount();
-    const trigger = await screen.findByRole('button', { name: 'Show 30-day evidence 12345678' });
+    const trigger = await screen.findByRole('button', { name: /Show 30-day evidence 12345678/ });
     expect(trigger.closest('[role="row"]')).not.toBeNull();
     expect(screen.queryByText(/30d median/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Show selection' }));
@@ -201,7 +201,7 @@ describe('show preparation in the existing inventory', () => {
     fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: '' } });
     const row = await screen.findByRole('checkbox', { name: 'Select 12345678' });
     expect(row).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
+    fireEvent.click(screen.getByRole('button', { name: /Show 30-day evidence 12345678/ }));
     expect(screen.getByText('$350.00', { selector: 'b' })).toBeVisible();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all visible cards' }));
     expect(screen.getByRole('button', { name: 'Add selected to show (2)' })).toBeDisabled();
@@ -219,7 +219,7 @@ describe('show preparation in the existing inventory', () => {
     mount();
     try {
       fireEvent.click(screen.getByRole('button', { name: /^All\d/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
+      fireEvent.click(screen.getByRole('button', { name: /Show 30-day evidence 12345678/ }));
       await screen.findByText(/Complete current lookup/);
       expect(screen.getAllByText('Loading price support…')).toHaveLength(2);
       expect(screen.queryByText(/Evaluation unavailable:/)).not.toBeInTheDocument();
@@ -240,7 +240,7 @@ describe('show preparation in the existing inventory', () => {
     const qc = mount();
     try {
       fireEvent.click(screen.getByRole('button', { name: /^All\d/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
+      fireEvent.click(screen.getByRole('button', { name: /Show 30-day evidence 12345678/ }));
       await screen.findByText(/Complete current lookup/);
       await act(async () => { await qc.cancelQueries({ queryKey: showPrepKeys.evaluations }); });
       const retry = await screen.findByRole('button', { name: 'Retry evaluation' });
@@ -259,7 +259,7 @@ describe('show preparation in the existing inventory', () => {
     mount();
     await waitFor(() => expect(screen.getAllByText('Supported', { selector: 'strong' }).length).toBeGreaterThan(0));
     expect(requests.some(r => r.url.includes('/evidence/'))).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
+    fireEvent.click(screen.getByRole('button', { name: /Show 30-day evidence 12345678/ }));
     const evidence = await screen.findByRole('region', { name: '30-day evidence 12345678' });
     expect(await within(evidence).findByText('$270.00')).toBeVisible();
     expect(within(evidence).getByText('$290.00')).toBeVisible();

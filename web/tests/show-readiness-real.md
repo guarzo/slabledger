@@ -80,6 +80,15 @@ The test asserts:
   comps remain byte-for-byte equal. Only the three explicit create/add/pack
   requests change lists/items. The packed row remains identical through renewal
   and failed checks; no financial HTTP writes occur.
+- Actual SPA links navigate inventory → Shows → inventory without reloading the
+  QueryClient. The App/provider regression suite separately exercises budget,
+  Cancel, pending dialog writes, identity changes and abandoned auth responses.
+- Reviewed price $400, evaluated DH listing $300, median $280: compact DH price
+  context remains visible on desktop/mobile without replacing CL/Market valuation.
+- Adjacent virtual-row bounds after three repeated evidence open/close cycles,
+  middle/end/start scrolls, desktop → mobile → desktop resizing, and an actual
+  fine → coarse pointer transition. CDP pointer:none is not called fine; both
+  media-query values and coarse-trigger 44px heights are asserted.
 - Desktop/tablet/mobile rendered states, keyboard pack/Escape/focus return,
   progressive destination, inline evidence, virtualized final-row clearance and
   horizontal overflow. Existing unit/stream tests retain budget, late-body,
@@ -102,7 +111,9 @@ advancing, so it remains usable beyond a brief screenshot session.
 The definitive failure case uses HTTP 401; transient 503s have existing internal
 CardLadder/httpx retries. Do not confuse those with browser refresh-POST replay.
 
-Artifacts: full-page and viewport PNGs, `metrics.json`, `wire-snapshots.json`
+Artifacts: full-page and viewport PNGs (geometry/pointer states use viewport-only
+CDP captures so clipped/full-page capture cannot reset live pointer emulation),
+`metrics.json`, `wire-snapshots.json`
 (persisted rows, request paths, refresh bodies), and `fixture.json` (ephemeral
 server addresses and fixture-only auth token). Diagnostic failures cannot replace
 a primary exercise failure or prevent browser closure; later diagnostics are still

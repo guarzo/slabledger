@@ -1935,6 +1935,12 @@ is **read-only**, never permission to replay a source request. Mounted workflows
 reread on visibility/focus, UTC rollover and applicable expiry/attempt boundaries;
 unresolved early observations have a 30-second follow-up cooldown. Hidden tabs do
 not replay missed timers. Server evaluations, not browser time, authorize support.
+The feature-local evaluate transport keeps its 30-second per-attempt timeout and
+cancellation through success/error bodies. Retryable network/429/5xx reads retain
+three attempts with 1s/2s backoff; cancellation, timeout, and invalid success JSON
+are not replayed. Failed reads expose explicit read retry and cannot publish late
+Supported results. An open disclosure uses the latest readiness observation for
+the same business version without refetching detailed sales or changing intent.
 
 The browser shares one runner per QueryClient/tab: at most 10 IDs/request, one
 representative per normalized identity, at most 200 automatic identities and 20
@@ -1942,22 +1948,30 @@ automatic requests per current UTC window, and five minutes per run. Only positi
 DH-price, refreshable identities in the current campaign/inventory, search, tab,
 price-band and availability scope are acquired; Support and selection do not narrow
 that acquisition cohort. Manual checks share concurrency, batch and time limits but
-bypass the automatic quota. Reload creates a new tab budget; this is not a global
-or durable quota. The existing source client limiter/retry policy and five-page
+bypass the automatic quota. The client lives above pathname error boundaries for
+one verified authenticated identity: SPA navigation preserves its budget, stops,
+and write leases; route authentication and non-show fresh-on-entry reads remain.
+An identity change clears the old cache. Reload creates a new tab budget; this is
+not a global or durable quota. The existing source client limiter/retry policy and five-page
 traversal bound remain unchanged; the browser does not replay refresh POSTs.
 
 Cancel, full-body transport timeout (120 seconds), run deadline, exhausted budget,
 invalid responses and source failure/partial results stop automatic continuation.
 The UI offers explicit Retry/Continue, with authoritative readback because the
 server may already have committed evidence. A late response cannot report success
-or dispatch another batch. Cancellation does not promise rollback.
+or dispatch another batch. Cancellation does not promise rollback. Manual list
+retry keeps the originating list and failed/undispatched IDs; changing list or
+selection does not retarget that command. Busy and terminal guards remain shared.
 
 First selection pauses later automatic batches, not the active batch. Clearing
 selection can resume eligible work unless a terminal stop requires explicit action.
 Captured versions never advance automatically. Selected row membership/order stays
 stable against background evidence updates, but unavailable or changed-version rows
 immediately become non-addable. Explicit view changes still apply. Add/pack and
-other local conflicting writes cannot overlap the shared refresh runner. No checking
+other local conflicting writes cannot overlap the shared refresh runner. Editor
+visibility blockers end when the form disappears; asynchronous sale, price-override,
+AI-price, price-hint, and DH-match write leases last through full promise settlement,
+including after page unmount. No checking
 operation creates a list, packs, acknowledges, reprices, reserves, delists or sells.
 
 ### Saved lists

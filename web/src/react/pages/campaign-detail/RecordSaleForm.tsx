@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getShowRefreshCoordinator } from '../../queries/showRefreshCoordinator';
 import type { AgingItem, SaleChannel } from '../../../types/campaigns';
@@ -28,6 +28,12 @@ function prefillPrice(item: AgingItem): number {
 export default function RecordSaleForm({ item, onSuccess, onCancel, hideItemHeader, title }: RecordSaleFormProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const coordinator = getShowRefreshCoordinator(queryClient);
+  const [editorOwner] = useState(() => Symbol('visible-sale-editor'));
+  useEffect(() => {
+    coordinator.block(editorOwner, true);
+    return () => coordinator.block(editorOwner, false);
+  }, [coordinator, editorOwner]);
 
   const [channel, setChannel] = useState<SaleChannel>(DEFAULT_SALE_CHANNEL);
   const [saleDate, setSaleDate] = useState(localToday());

@@ -304,7 +304,11 @@ Open the evidence details to see sale dates, amounts, platforms, source links,
 and the actual date range. An unavailable or partial lookup is not proof that a
 card has no recent sales. **Not checked**, **Checking**, stale/interrupted and failed
 checks are distinct from completed support results. A fresh complete zero-sale
-lookup alone establishes **No recent comps**.
+lookup alone establishes **No recent comps**. In show selection or a Support-filtered
+view, the compact indicator names the evaluated **DH listed** price on both desktop
+and mobile. It does not support a different local reviewed price or CL/Market
+valuation; those ordinary inventory values keep their existing meaning. Missing
+and unverified DH prices stay explicitly labeled.
 
 Choose **Supported** even on a new installation, or open **Show selection**, to
 start bounded comp checking. No card selection or saved list is needed first.
@@ -317,8 +321,10 @@ Automatic checking skips identities already current and cards without a positive
 DH price. Missing-price cards remain manually checkable through **Check selected**.
 One tab runs one request at a time, coalescing copies of the same card/grade: up to
 10 IDs/request, 200 automatic identities and 20 requests per UTC date, and five
-minutes per run. Reload starts a new tab budget; multiple tabs have separate limits.
-These are not a global provider quota.
+minutes per run. Navigating within the app preserves the current session's budget,
+stops, and pending-write exclusion. Reload or a change of authenticated identity
+starts a new client lifetime; multiple tabs have separate limits. These are not a
+global provider quota.
 
 Use **Cancel checking** to stop. Failed/partial checks, cancellation, time limits
 and budget stops offer explicit **Retry / Continue checking** rather than retrying
@@ -326,12 +332,17 @@ on their own. Retained sales may still be shown but are not a verified current
 window. A cancelled request may already have saved data; the page rereads it and
 does not promise rollback. Retry after resolving the source problem or when ready
 to continue. An interrupted server attempt becomes retryable after a read at its
-120-second boundary, not an automatic source retry.
+120-second boundary, not an automatic source retry. On a packing list, **Retry
+refresh** repeats the failed selection from that list, even if you change selection.
+Switching to another list does not offer or retarget that previous-list retry.
 
 At UTC midnight, or earlier freshness expiry, the mounted workflow rereads status
 and renews eligible evidence within the same limits. Returning to a hidden tab
 performs one reread, not a catch-up loop. Old sales remain inspectable while stale;
-a green badge is not authoritative forever.
+a green badge is not authoritative forever. Evaluation reads have a full-response
+30-second timeout per attempt. A stalled or failed read ends with unavailable
+status and **Retry price support read**, rather than checking forever. This retry
+reads stored evaluations; it is not a source-refresh replay.
 
 If CardLadder is configured for the first time while the server is running,
 restart the server once to enable show-preparation refresh. Already-configured
@@ -347,6 +358,9 @@ If selected data changes, rows stay identifiable and Add is blocked until you
 explicitly review/reselect; the application never silently acknowledges new prices
 or evidence. **Reveal selected** recovers cards outside your current view. Clearing
 selection resumes eligible work unless you cancelled or reached a stop condition.
+Closing or hiding an inline sale editor releases its presentation pause, but any
+submitted sale, price, hint, or DH-match request still blocks checking until it
+settles, including after navigation.
 
 The contextual selection bar appears only after selection. Choose **Add selected
 to show** to reveal a destination, then choose a saved list or name a new one.

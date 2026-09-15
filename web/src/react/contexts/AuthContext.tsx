@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { api } from '../../js/api';
 import { reportError } from '../../js/errors';
 
@@ -23,29 +23,39 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
+  onIdentityChange?: (id: number | null) => void;
 }
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onIdentityChange }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   const fetchCurrentUser = useCallback(async () => {
+    const request = ++requestId.current;
     try {
       const userData = await api.get<User>('/auth/user');
+      if (request !== requestId.current) return;
+      onIdentityChange?.(userData.id);
       setUser(userData);
     } catch (error) {
+      if (request !== requestId.current) return;
       if (error instanceof Error && 'status' in error && (error as { status: number }).status !== 401) {
         reportError('AuthContext/currentUser', error);
       }
+      onIdentityChange?.(null);
       setUser(null);
     } finally {
-      setLoading(false);
+      if (request === requestId.current) setLoading(false);
     }
-  }, []);
+  }, [onIdentityChange]);
 
+  const discardPendingUser = useCallback(() => { requestId.current++; }, []);
   useEffect(() => {
     fetchCurrentUser();
-  }, [fetchCurrentUser]);
+    // Route auth still remounts; an old response must not reset the tab's new session.
+    return discardPendingUser;
+  }, [fetchCurrentUser, discardPendingUser]);
 
   const login = () => {
     window.location.href = '/auth/google/login';
@@ -54,6 +64,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       await api.post('/auth/logout');
+      onIdentityChange?.(null);
       setUser(null);
     } catch {
       // Logout failure is non-critical; user is redirected regardless

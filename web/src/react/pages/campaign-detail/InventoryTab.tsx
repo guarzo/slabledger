@@ -126,6 +126,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     flagTarget != null ||
     fixMatchTarget != null;
 
+  // Preserve unchanged stable-key heights on collapse. ResizeObserver measures
+  // changed/resized rows; clearing all sizes would restore unmeasured estimates.
   const rowVirtualizer = useVirtualizer({
     count: filteredAndSortedItems.length,
     getScrollElement: () => scrollContainerRef.current,
@@ -145,14 +147,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     getItemKey: (index) => filteredAndSortedItems[index]?.purchase.id ?? index,
   });
 
-  // When a row collapses or expands, the rendered height changes but
-  // ResizeObserver/measureElement can lag, leaving subsequent rows overlapping
-  // the (now-shorter) previously-expanded row. Force a re-measure pass when
-  // the expanded row changes so cached sizes are flushed.
-  useEffect(() => {
-    rowVirtualizer.measure();
-    mobileVirtualizer.measure();
-  }, [expandedId, evidenceExpandedId, rowVirtualizer, mobileVirtualizer]);
+  // Mobile uses a sale modal, so the hidden desktop inline intent is abandoned.
+  useEffect(() => { if (isMobile) cancelInlineSale(); }, [isMobile, cancelInlineSale]);
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
@@ -173,7 +169,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     purchase.dhPushStatus === 'unmatched' && !dhRetryInFlight.has(purchase.id) ? () => handleRetryDHMatch(purchase) : undefined;
 
   const evidenceButton = (item: AgingItem) => <ShowEvidenceButton purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
-    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} expanded={evidenceExpandedId === item.purchase.id}
+    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} showListedPrice={selecting || support !== 'all'} expanded={evidenceExpandedId === item.purchase.id}
     onClick={() => setEvidenceExpandedId(evidenceExpandedId === item.purchase.id ? null : item.purchase.id)} />;
   const evidencePanel = (item: AgingItem) => evidenceExpandedId === item.purchase.id && <ShowEvidenceDisclosure
     purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''} detailsOnly expanded

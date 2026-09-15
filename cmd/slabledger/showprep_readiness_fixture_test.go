@@ -76,8 +76,8 @@ func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) {
 		}
 		_, err = db.ExecContext(ctx, `INSERT INTO campaign_purchases
 		(id,campaign_id,card_name,cert_number,grader,grade_value,purchase_date,received_at,gem_rate_id,
-		buy_cost_cents,cl_value_cents,override_price_cents,dh_card_id,dh_inventory_id,dh_status,dh_push_status,dh_listing_price_cents,dh_channels_json)
-		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,29000,$6,$6,'listed','synced',$7,'["ebay"]')`,
+		buy_cost_cents,cl_value_cents,override_price_cents,reviewed_price_cents,dh_card_id,dh_inventory_id,dh_status,dh_push_status,dh_listing_price_cents,dh_channels_json)
+		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,29000,40000,$6,$6,'listed','synced',$7,'["ebay"]')`,
 			readinessPurchase(i), name, fmt.Sprintf("910000%02d", i), now.AddDate(0, 0, -10).Format(time.DateOnly), profile, 1000+i, price)
 		require.NoError(t, err)
 	}

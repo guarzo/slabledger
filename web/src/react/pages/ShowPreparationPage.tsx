@@ -39,7 +39,7 @@ function PackingList({ listId }: { listId: string }) {
           selected={selected.has(item.purchaseId)} onSelect={() => setSelected(prev => {
             const next = new Set(prev); if (next.has(item.purchaseId)) next.delete(item.purchaseId); else next.add(item.purchaseId); return next;
           })} />)}
-        <div className="mt-4"><ShowRefresh evaluations={Object.fromEntries(data.items.flatMap(item => item.evaluation ? [[item.purchaseId, item.evaluation]] : []))} purchaseIds={refreshIds} disabled={query.isFetching} /></div>
+        <div className="mt-4"><ShowRefresh scope={`list:${listId}`} evaluations={Object.fromEntries(data.items.flatMap(item => item.evaluation ? [[item.purchaseId, item.evaluation]] : []))} purchaseIds={refreshIds} disabled={query.isFetching} /></div>
       </>}
     </>}
   </section>;

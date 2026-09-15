@@ -6,6 +6,7 @@ const { chromium, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { withFixtureCleanup, assertLastRowClearance } = require('./show-readiness-browser-helpers.cjs');
+const { assertRowsSeparated, exerciseGeometry } = require('./show-readiness-geometry.cjs');
 
 const app = process.env.SHOW_READINESS_APP;
 const control = process.env.SHOW_READINESS_CONTROL;
@@ -64,10 +65,18 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
       } catch { await route.abort(); }
     } else await route.abort();
   });
-  async function capture(name) {
+  async function capture(name, cdp) {
     await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({ path: path.join(artifacts, `${name}.png`), fullPage: true });
-    await page.screenshot({ path: path.join(artifacts, `${name}-viewport.png`) });
+    if (cdp) {
+      // Chromium's clipped/full-page capture resets live pointer emulation.
+      // Geometry evidence uses an un-clipped viewport capture and verifies that
+      // the measured pointer mode and trigger size survive taking the image.
+      const viewport = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+      await fs.writeFile(path.join(artifacts, `${name}-viewport.png`), Buffer.from(viewport.data, 'base64'));
+    } else {
+      await page.screenshot({ path: path.join(artifacts, `${name}.png`), fullPage: true });
+      await page.screenshot({ path: path.join(artifacts, `${name}-viewport.png`) });
+    }
     metrics.push({ name, ...await page.evaluate(() => {
       const box = selector => { const e = document.querySelector(selector); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; };
       return { width: innerWidth, height: innerHeight, overflow: document.documentElement.scrollWidth > innerWidth,
@@ -99,7 +108,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     await page.setViewportSize({ width: 390, height: 844 });
     await capture('mobile-empty-shows');
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(`${app}/inventory`);
+    await page.getByRole('link', { name: 'Inventory →', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Inventory', exact: true })).toBeVisible();
     await scope();
     await page.getByRole('button', { name: `Show 30-day evidence ${cert}` }).click();
@@ -110,7 +119,8 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     await pause(600);
     expect((await state()).calls).toHaveLength(0);
     await capture('desktop-cold-read-only');
-    await page.getByRole('button', { name: `Hide 30-day evidence ${cert}` }).click();
+    await page.getByRole('button', { name: new RegExp(`Hide 30-day evidence ${cert}`) }).click();
+    await assertRowsSeparated(page, 'desktop-cold-collapse', metrics);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture('mobile-normal');
@@ -140,6 +150,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     const initialVersion = e.evaluation.version;
     const initialWindow = e.evaluation.windowEnd;
     await capture('desktop-current');
+    await exerciseGeometry(page, context, capture, metrics, cert);
     await page.getByLabel('Price support', { exact: true }).selectOption('below_target');
     await expect(page.getByText('No cards match this price support filter.', { exact: true })).toBeVisible();
     await capture('desktop-complete-empty-filter');
@@ -181,7 +192,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     const listID = s.lists[0].id;
     await capture('desktop-packed');
 
-    await page.goto(`${app}/inventory`); await scope();
+    await page.getByRole('link', { name: 'Inventory →', exact: true }).click(); await scope();
     await page.getByLabel('Price support', { exact: true }).selectOption('supported');
     await page.getByRole('button', { name: 'Show selection', exact: true }).click();
     await checkbox().check();

@@ -11,6 +11,7 @@ export interface ShowRefreshState {
   done: number;
   total: number;
   remaining: string[];
+  retryScope: string | symbol | null;
   review: string[];
   error: string;
 }
@@ -25,7 +26,7 @@ export function getShowRefreshCoordinator(qc: QueryClient): ShowRefreshCoordinat
 
 /** A tab-lifetime ledger, not a background worker. Mounted pages own all runs. */
 class ShowRefreshCoordinator {
-  private state: ShowRefreshState = { phase: 'idle', busy: false, blocked: false, done: 0, total: 0, remaining: [], review: [], error: '' };
+  private state: ShowRefreshState = { phase: 'idle', busy: false, blocked: false, done: 0, total: 0, remaining: [], retryScope: null, review: [], error: '' };
   private listeners = new Set<() => void>();
   private owners = new Set<symbol>();
   private paused = new Set<symbol>();
@@ -77,7 +78,7 @@ class ShowRefreshCoordinator {
   }
   private stop(phase: RefreshPhase, error: string) { this.stopped = true; this.publish({ phase, error }); }
 
-  async check(values: Candidate[], owner: symbol, automatic: boolean): Promise<void> {
+  async check(values: Candidate[], owner: symbol, automatic: boolean, retryScope: string | symbol = owner): Promise<void> {
     if (this.active || this.writes || this.blockers.size || !this.owners.has(owner) || (automatic && (this.stopped || this.paused.size))) return;
     if (this.window !== utcWindow()) { this.window = utcWindow(); this.attempted.clear(); this.requests = 0; }
     const unique = new Map<string, Candidate>();
@@ -98,7 +99,7 @@ class ShowRefreshCoordinator {
     this.stopped = false;
     const run = { owner, controller: new AbortController(), deadline: Date.now() + 300000, window: utcWindow() };
     this.active = run;
-    this.publish({ phase: 'checking', busy: true, done: 0, total: entries.length, remaining: entries.map(([, e]) => e.purchaseId), review: [], error: '' });
+    this.publish({ phase: 'checking', busy: true, retryScope, done: 0, total: entries.length, remaining: entries.map(([, e]) => e.purchaseId), review: [], error: '' });
     const timer = setTimeout(() => this.cancel('deadline'), 300000);
     let dispatched = false;
     try {

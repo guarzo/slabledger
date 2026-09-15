@@ -34,6 +34,8 @@
 .show-tone-warning { color: var(--warning); }
 .show-tone-danger { color: var(--danger); }
 .show-tone-muted { color: var(--text-muted); }
+.show-price-support { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0.125rem; }
+.show-listed-price { color: var(--text-muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
 .show-evidence-trigger {
   display: inline-flex;
   align-items: center;

@@ -85,9 +85,9 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     onReviewed: handleReviewed,
   });
   useEffect(() => {
-    coordinator.block(writeOwner, saleModalOpen || !!inlineSaleId || !!pricingActions.priceTarget || !!pricingActions.flagTarget || !!pricingActions.hintTarget || !!dhActions.fixMatchTarget);
+    coordinator.block(writeOwner, saleModalOpen || !!pricingActions.priceTarget || !!pricingActions.flagTarget || !!pricingActions.hintTarget || !!dhActions.fixMatchTarget);
     return () => coordinator.block(writeOwner, false);
-  }, [coordinator, writeOwner, saleModalOpen, inlineSaleId, pricingActions.priceTarget, pricingActions.flagTarget, pricingActions.hintTarget, dhActions.fixMatchTarget]);
+  }, [coordinator, writeOwner, saleModalOpen, pricingActions.priceTarget, pricingActions.flagTarget, pricingActions.hintTarget, dhActions.fixMatchTarget]);
   // Stale pinnedIds fix
   useEffect(() => {
     if (selection.selected.size === 0 || items.length === 0) {
@@ -192,6 +192,11 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   const filteredAndSortedItems = showingSelected ? items.filter(item => selection.selected.has(item.purchase.id)) : showFiltering && selection.selected.size > 0
     ? presentation.current.ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []) : liveFilteredItems;
 
+  // Inline intent cannot keep blocking once its owning row is closed/filtered out.
+  // The mounted form owns its presentation blocker; submitted writes own a lease.
+  useEffect(() => {
+    if (inlineSaleId && (expandedId !== inlineSaleId || !filteredAndSortedItems.some(item => item.purchase.id === inlineSaleId))) setInlineSaleId(null);
+  }, [inlineSaleId, expandedId, filteredAndSortedItems]);
   const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
 
   function toggleAll() {
@@ -227,9 +232,9 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     setInlineSaleId(saleItem.purchase.id);
   }
 
-  function cancelInlineSale() {
+  const cancelInlineSale = useCallback(() => {
     setInlineSaleId(null);
-  }
+  }, []);
 
   function handleInlineSaleSuccess() {
     setInlineSaleId(null);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getShowReadiness } from '../../js/api/showprep';
+import { getShowReadiness, type InventoryEvaluations } from '../../js/api/showprep';
 import type { ShowEvaluation } from '../../types/showprep';
 import { getShowRefreshCoordinator } from './showRefreshCoordinator';
 import { showPrepKeys } from './showPrepKeys';
@@ -13,6 +13,7 @@ export function useShowReadinessObservation(active: boolean, ids: string[], eval
   const qc = useQueryClient();
   const coordinator = getShowRefreshCoordinator(qc);
   const [observing, setObserving] = useState(false);
+  const [observationError, setObservationError] = useState('');
   const [revision, setRevision] = useState(0);
   const pending = useRef(false);
   const alive = useRef(false);
@@ -57,7 +58,12 @@ export function useShowReadinessObservation(active: boolean, ids: string[], eval
     for (const b of elapsed) coordinator.boundaryRecheckAt.set(b.key, Date.now() + BOUNDARY_RECHECK_MS);
     try {
       // Coincident observation reads join the aggregate rather than canceling it.
-      await qc.invalidateQueries({ queryKey: showPrepKeys.evaluations }, { cancelRefetch: false });
+      await qc.invalidateQueries({ queryKey: showPrepKeys.evaluations }, { cancelRefetch: false, throwOnError: true });
+      const failed = qc.getQueriesData<InventoryEvaluations>({ queryKey: showPrepKeys.evaluations, type: 'active' })
+        .some(([, data]) => latest.current.ids.some(id => data?.errors[id]));
+      if (alive.current) setObservationError(failed ? 'Could not read current price support. Retry the read.' : '');
+    } catch {
+      if (alive.current) setObservationError('Could not read current price support. Retry the read.');
     } finally {
       // A browser ahead of the server can read the same running/current value.
       // Follow up at a bounded cadence until metadata resolves or supersedes it.
@@ -82,5 +88,5 @@ export function useShowReadinessObservation(active: boolean, ids: string[], eval
     const timer = setTimeout(() => { void read(next.retry ? 'retry' : 'expiry', next.retry ? next.identityKey : undefined); }, Math.max(1000, Math.min(86400000, next.at - Date.now())));
     return () => clearTimeout(timer);
   }, [active, ids, evaluations, revision, observing, boundaries, coordinator, read]);
-  return { observing, revision, pending };
+  return { observing, revision, pending, observationError, retryObservation: () => read('activation') };
 }

@@ -47,16 +47,19 @@ export function EvidenceDetails({ data }: { data: Evidence }) {
   </div>;
 }
 
-export function ShowEvidenceButton({ purchaseId, certNumber, evaluation, loading, expanded, onClick }: {
-  purchaseId: string; certNumber: string; evaluation?: ShowEvaluation; loading?: boolean; expanded: boolean; onClick: () => void;
+export function ShowEvidenceButton({ purchaseId, certNumber, evaluation, loading, expanded, onClick, showListedPrice = false }: {
+  purchaseId: string; certNumber: string; evaluation?: ShowEvaluation; loading?: boolean; expanded: boolean; onClick: () => void; showListedPrice?: boolean;
 }) {
   const indicator = evaluation ? supportIndicator(evaluation) : { label: loading ? 'Loading price support…' : 'Evaluation unavailable', tone: 'muted' };
-  return <button type="button" className={`show-evidence-trigger show-tone-${indicator.tone}`}
+  const listedPrice = !evaluation ? 'Unavailable' : evaluation.listedPriceCents > 0 ? formatCents(evaluation.listedPriceCents) : 'Missing';
+  return <span className="show-price-support">
+    {showListedPrice && <span className="show-listed-price">DH listed {listedPrice}{evaluation?.priceAssociationUnclear && ' (unverified)'}</span>}
+    <button type="button" className={`show-evidence-trigger show-tone-${indicator.tone}`}
     aria-expanded={expanded} aria-controls={`show-evidence-${purchaseId}`}
-    aria-label={`${expanded ? 'Hide' : 'Show'} 30-day evidence ${certNumber}`}
+    aria-label={`${expanded ? 'Hide' : 'Show'} 30-day evidence ${certNumber}: ${indicator.label}`}
     title={`${indicator.label}: 30-day price support`} onClick={event => { event.stopPropagation(); onClick(); }}>
     <strong>{indicator.label}</strong><span aria-hidden="true">{expanded ? '▴' : '▾'}</span>
-  </button>;
+  </button></span>;
 }
 
 export default function ShowEvidenceDisclosure({ purchaseId, certNumber, evaluation, loading, error, actions, expanded, onExpandedChange, detailsOnly = false }: {
@@ -69,7 +72,10 @@ export default function ShowEvidenceDisclosure({ purchaseId, certNumber, evaluat
   const localRegionId = useId();
   const regionId = detailsOnly ? `show-evidence-${purchaseId}` : localRegionId;
   const query = useShowEvidence(purchaseId, open, evaluation?.version);
-  const e = open && query.data && !query.isFetching && !query.isError ? query.data.evaluation : evaluation;
+  const detail = open && query.data && !query.isFetching && !query.isError ? query.data.evaluation : undefined;
+  // Readiness can change without changing the business fingerprint. Use the
+  // latest aggregate observation for that version, retaining the detailed sales.
+  const e = detail && detail.version !== evaluation?.version ? detail : evaluation;
   return <div className="show-disclosure">
     {e ? <ShowSupport evaluation={e} /> : <p className="text-[var(--text-muted)]">{loading ? 'Loading price support…' : `Evaluation unavailable: ${error || 'missing result'}`}</p>}
     {!detailsOnly && <div className="show-actions"><button type="button" className="show-link" aria-expanded={open} aria-controls={regionId}

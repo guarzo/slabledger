@@ -24,7 +24,7 @@ export function useShowReadiness({ active, cohortIds, evaluations, fetching, sel
   const { coordinator, busy, blocked } = refresh;
   const [owner] = useState(() => Symbol('show-readiness'));
   const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
-  const { observing, revision, pending } = useShowReadinessObservation(active, cohortIds, evaluations);
+  const { observing, revision, pending, observationError, retryObservation } = useShowReadinessObservation(active, cohortIds, evaluations);
   useEffect(() => { coordinator.attach(owner); return () => coordinator.detach(owner); }, [coordinator, owner]);
   useEffect(() => {
     coordinator.pause(owner, selectedCount > 0 || !visible || observing);
@@ -56,7 +56,7 @@ export function useShowReadiness({ active, cohortIds, evaluations, fetching, sel
   for (const value of values) counts[getShowReadiness(value)?.state ?? 'unknown']++;
   const current = counts.current;
   const retry = values.some(e => getShowReadiness(e)?.refreshEligibility === 'retry_only');
-  return { ...refresh, cohortCount: cohortIds.length, currentCount: current,
+  return { ...refresh, observing, observationError, retryObservation, cohortCount: cohortIds.length, currentCount: current,
     incomplete: current < cohortIds.length, retry, counts,
     missingPriceCount: values.filter(e => e && e.listedPriceCents <= 0).length,
     cancel: () => coordinator.cancel(),
