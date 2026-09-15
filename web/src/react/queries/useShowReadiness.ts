@@ -24,7 +24,7 @@ export function useShowReadiness({ active, cohortIds, evaluations, fetching, sel
   const { coordinator, busy, blocked } = refresh;
   const [owner] = useState(() => Symbol('show-readiness'));
   const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
-  const { observing, revision, pending, allowAutomatic } = useShowReadinessObservation(active, cohortIds, evaluations);
+  const { observing, revision, pending } = useShowReadinessObservation(active, cohortIds, evaluations);
   useEffect(() => { coordinator.attach(owner); return () => coordinator.detach(owner); }, [coordinator, owner]);
   useEffect(() => {
     coordinator.pause(owner, selectedCount > 0 || !visible || observing);
@@ -46,9 +46,9 @@ export function useShowReadiness({ active, cohortIds, evaluations, fetching, sel
   }, [active, cohortIds, evaluations, coordinator, owner]);
 
   useEffect(() => {
-    if (!active || fetching || observing || pending.current || busy || blocked || selectedCount || !visible || document.visibilityState === 'hidden' || !allowAutomatic.current) return;
+    if (!active || fetching || observing || pending.current || busy || blocked || selectedCount || !visible || document.visibilityState === 'hidden') return;
     void coordinator.check(cohortIds.flatMap(id => evaluations[id] ? [evaluations[id]] : []), owner, true);
-  }, [active, fetching, observing, busy, blocked, selectedCount, visible, cohortIds, evaluations, coordinator, owner, revision, pending, allowAutomatic]);
+  }, [active, fetching, observing, busy, blocked, selectedCount, visible, cohortIds, evaluations, coordinator, owner, revision, pending]);
   const values = cohortIds.map(id => evaluations[id]);
   const counts: Record<ReadinessState | 'unknown', number> = {
     not_checked: 0, current: 0, stale: 0, running: 0, interrupted: 0, failed: 0, invalid: 0, unavailable: 0, unknown: 0,

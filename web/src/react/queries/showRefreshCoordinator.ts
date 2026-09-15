@@ -37,8 +37,10 @@ class ShowRefreshCoordinator {
   private requests = 0;
   private writes = 0;
   private blockers = new Set<symbol>();
-  // Observed scheduling boundaries survive remount; metadata changes replace keys.
-  readonly observedBoundaries = new Set<string>();
+  // Observation cooldowns survive remount without retiring unresolved server state.
+  readonly boundaryRecheckAt = new Map<string, number>();
+  // A retry-bound observation is not authority to reacquire that identity.
+  readonly readOnlyIdentities = new Set<string>();
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private publish(update: Partial<ShowRefreshState>) {
@@ -82,7 +84,7 @@ class ShowRefreshCoordinator {
     for (const value of values) {
       const metadata = getShowReadiness(value);
       const key = metadata?.identityKey || value.purchaseId;
-      if (automatic && (!metadata || metadata.refreshEligibility !== 'needed' || !(Number(value.listedPriceCents) > 0) || this.attempted.has(key))) continue;
+      if (automatic && (!metadata || metadata.refreshEligibility !== 'needed' || !(Number(value.listedPriceCents) > 0) || this.attempted.has(key) || this.readOnlyIdentities.has(key))) continue;
       if (!unique.has(key)) unique.set(key, value);
     }
     const entries = [...unique.entries()];
@@ -109,9 +111,11 @@ class ShowRefreshCoordinator {
         const slice = entries.slice(index, index + available);
         const scope = automatic ? this.cohorts.get(owner) : undefined;
         const batch = slice.filter(([, value]) => {
-          if (!scope) return true;
-          const latest = scope.get(value.purchaseId);
-          return latest && getShowReadiness(latest)?.refreshEligibility === 'needed' && Number(latest.listedPriceCents) > 0;
+          if (!automatic) return true;
+          const latest = scope ? scope.get(value.purchaseId) : value;
+          const metadata = getShowReadiness(latest);
+          return latest && metadata?.refreshEligibility === 'needed' && Number(latest.listedPriceCents) > 0
+            && !this.readOnlyIdentities.has(metadata.identityKey);
         });
         if (batch.length !== slice.length) this.publish({ total: this.state.total - (slice.length - batch.length) });
         this.guard(run);

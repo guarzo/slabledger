@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { getShowRefreshCoordinator } from '../../queries/showRefreshCoordinator';
 import type { AgingItem, SaleChannel } from '../../../types/campaigns';
 import { api } from '../../../js/api';
 import { formatCents, localToday, getErrorMessage, dollarsToCents } from '../../utils/formatters';
@@ -53,7 +54,8 @@ export default function RecordSaleForm({ item, onSuccess, onCancel, hideItemHead
     }
     setSubmitting(true);
     try {
-      await api.createSale(item.purchase.campaignId, {
+      // The request may outlive modal dismissal or navigation; its lease must too.
+      await getShowRefreshCoordinator(queryClient).write(() => api.createSale(item.purchase.campaignId, {
         purchaseId: item.purchase.id,
         saleChannel: channel,
         salePriceCents: effectivePrices[item.purchase.id] ?? 0,
@@ -63,7 +65,7 @@ export default function RecordSaleForm({ item, onSuccess, onCancel, hideItemHead
         ...(daysListed ? { daysListed: parseInt(daysListed, 10) || 0 } : {}),
         ...(soldAtAskingPrice ? { soldAtAskingPrice: true } : {}),
         ...(saleReason ? { saleReason } : {}),
-      });
+      }));
       toast.success('Sale recorded');
       invalidateAfterSale(queryClient, [item.purchase.campaignId]);
       onSuccess?.();

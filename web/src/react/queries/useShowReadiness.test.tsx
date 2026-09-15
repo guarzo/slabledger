@@ -21,11 +21,12 @@ function mount(initial: ShowEvaluation[], active = true) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
   const ids = initial.map(e => e.purchaseId);
-  const hook = renderHook(({ enabled, selected }) => {
+  const initialProps: { enabled: boolean; selected: number; cohort?: string[] } = { enabled: active, selected: 0 };
+  const hook = renderHook(({ enabled, selected, cohort }) => {
     const query = useShowEvaluations(ids);
-    const readiness = useShowReadiness({ active: enabled, cohortIds: ids, evaluations: query.data?.evaluations ?? {}, fetching: query.isFetching, selectedCount: selected });
+    const readiness = useShowReadiness({ active: enabled, cohortIds: cohort ?? ids, evaluations: query.data?.evaluations ?? {}, fetching: query.isFetching, selectedCount: selected });
     return { query, readiness };
-  }, { wrapper, initialProps: { enabled: active, selected: 0 } });
+  }, { wrapper, initialProps });
   return { ...hook, values, calls, qc };
 }
 it('keeps normal reads source-free; cold workflow activation checks identities, publishes readback', async () => {
@@ -160,5 +161,114 @@ it('pauses future automatic batches while hidden, and resumes only after a visib
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   act(() => document.dispatchEvent(new Event('visibilitychange'))); await flush();
   expect(sourceIds.map(ids => ids.length)).toEqual([10, 2]);
+  hook.unmount(); hook.qc.clear();
+});
+
+
+it.each(['current', 'interrupted'])('follows up an early retryAt observation until the server reports %s, without POST retry', async state => {
+  const bound = '2026-09-14T12:02:00Z';
+  const hook = mount([running(bound)]); await flush();
+  // Browser crosses the timestamp before the server does: same running attempt
+  // is a legitimate read result, not permission to retire its observation.
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000); }); await flush();
+  expect(hook.calls).toHaveLength(2);
+  expect(hook.result.current.readiness.counts.running).toBe(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(29999); }); await flush();
+  expect(hook.calls).toHaveLength(2);
+  hook.values.set('id-1', state === 'current' ? ready(1, 'current') : { ...running(bound), readiness: { ...(running(bound).readiness as object), state: 'interrupted', refreshEligibility: 'retry_only' } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); }); await flush();
+  expect(hook.result.current.readiness.counts[state as 'current' | 'interrupted']).toBe(1);
+  expect(hook.calls.map(c => c.url)).toEqual(Array(3).fill('/api/show-prep/evaluate'));
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000); }); await flush();
+  expect(hook.calls).toHaveLength(3);
+  hook.unmount(); hook.qc.clear();
+});
+it('follows up current-at-exact-expiry evidence and sees stale without focus, but does not poll resolved stale evidence', async () => {
+  const current = ready(1, 'current', { readiness: { state: 'current', refreshEligibility: 'not_needed', identityKey: '1'.padStart(64, '0'), expiresAt: '2026-09-14T12:00:00Z', retryAt: '' } });
+  const hook = mount([current]); await flush(); hook.rerender({ enabled: true, selected: 1 });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); }); await flush();
+  expect(hook.calls).toHaveLength(2);
+  const stale = { ...current, readiness: { ...(current.readiness as object), state: 'stale', refreshEligibility: 'needed' } };
+  hook.values.set('id-1', stale);
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000); }); await flush();
+  expect(hook.result.current.readiness.counts.stale).toBe(1);
+  expect(hook.calls.map(c => c.url)).toEqual(Array(3).fill('/api/show-prep/evaluate'));
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000); }); await flush();
+  expect(hook.calls).toHaveLength(3);
+  hook.unmount(); hook.qc.clear();
+});
+
+
+it.each(['selection clear', 'cohort expansion'])('retry observation does not prevent unrelated needed identities after %s, or authorize retry of the observed identity', async resume => {
+  const waiting = running('2026-09-14T12:00:02Z');
+  const stale = ready(1, 'not_checked', { readiness: { state: 'stale', refreshEligibility: 'needed', identityKey: '1'.padStart(64, '0'), expiresAt: '2026-09-14T11:00:00Z', retryAt: '' } });
+  const alias = { ...stale, purchaseId: 'id-9' };
+  const hook = mount([waiting, ready(2), alias], false); await flush();
+  const initial = resume === 'selection clear' ? { enabled: true, selected: 1 } : { enabled: true, selected: 0, cohort: ['id-1'] };
+  hook.rerender(initial); await flush();
+  hook.values.set('id-1', stale);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush();
+  expect(hook.result.current.query.data?.evaluations['id-1'].readiness).toMatchObject({ state: 'stale' });
+  expect(hook.calls.filter(c => c.url.endsWith('/refresh'))).toHaveLength(0);
+  hook.rerender({ enabled: true, selected: 0, cohort: ['id-1', 'id-2', 'id-9'] }); await flush();
+  expect(hook.calls.filter(c => c.url.endsWith('/refresh')).map(c => c.ids)).toEqual([['id-2']]);
+  await act(async () => { await vi.advanceTimersByTimeAsync(60000); }); await flush();
+  expect(hook.calls.filter(c => c.url.endsWith('/refresh')).map(c => c.ids)).toEqual([['id-2']]);
+  // Explicit checking still permits the operator to renew the observed identity;
+  // its duplicate purchase does not cause another source call.
+  await act(async () => { await hook.result.current.readiness.check(); }); await flush();
+  expect(hook.calls.filter(c => c.url.endsWith('/refresh')).map(c => c.ids)).toEqual([['id-2'], ['id-1']]);
+  hook.unmount(); hook.qc.clear();
+});
+
+it.each([true, false])('coincident expiry/retry observations renew only the expiry identity (expiry first=%s)', async expiryFirst => {
+  const bound = '2026-09-14T12:02:00Z';
+  const current = ready(2, 'current', { readiness: { state: 'current', refreshEligibility: 'not_needed', identityKey: '2'.padStart(64, '0'), expiresAt: bound, retryAt: '' } });
+  const hook = mount(expiryFirst ? [current, running(bound)] : [running(bound), current]); await flush();
+  for (const id of [1, 2]) hook.values.set(`id-${id}`, ready(id, 'not_checked', { readiness: {
+    state: 'stale', refreshEligibility: 'needed', identityKey: String(id).padStart(64, '0'), expiresAt: bound, retryAt: '',
+  } }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000); }); await flush();
+  expect(hook.calls.filter(c => c.url.endsWith('/refresh')).map(c => c.ids)).toEqual([['id-2']]);
+  hook.unmount(); hook.qc.clear();
+});
+
+it('keeps unresolved follow-ups rate-bounded across remount and observes completion after several early reads', async () => {
+  const bound = '2026-09-14T12:02:00Z';
+  const hook = mount([running(bound)]); await flush();
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000); }); await flush();
+  expect(hook.calls).toHaveLength(2);
+  hook.unmount();
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={hook.qc}>{children}</QueryClientProvider>;
+  const ids = ['id-1'];
+  const remount = renderHook(() => {
+    const query = useShowEvaluations(ids);
+    return useShowReadiness({ active: true, cohortIds: ids, evaluations: query.data?.evaluations ?? {}, fetching: query.isFetching, selectedCount: 0 });
+  }, { wrapper });
+  await flush(); expect(hook.calls).toHaveLength(3); // independent activation read
+  for (let reads = 4; reads <= 6; reads++) {
+    await act(async () => { await vi.advanceTimersByTimeAsync(29999); }); await flush();
+    expect(hook.calls).toHaveLength(reads - 1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); }); await flush();
+    expect(hook.calls).toHaveLength(reads);
+  }
+  hook.values.set('id-1', ready(1, 'current'));
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000); }); await flush();
+  expect(remount.result.current.counts.current).toBe(1);
+  expect(hook.calls.map(c => c.url)).toEqual(Array(7).fill('/api/show-prep/evaluate'));
+  remount.unmount(); hook.qc.clear();
+});
+it('new attempt metadata supersedes an elapsed-boundary follow-up, rather than retaining the old cooldown timer', async () => {
+  const hook = mount([running('2026-09-14T12:02:00Z')]); await flush();
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000); }); await flush();
+  hook.values.set('id-1', running('2026-09-14T12:03:00Z'));
+  await act(async () => { await hook.result.current.query.refetch(); }); await flush();
+  expect(hook.calls).toHaveLength(3);
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000); }); await flush();
+  expect(hook.calls).toHaveLength(3); // old attempt's follow-up was replaced
+  hook.values.set('id-1', ready(1, 'current'));
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000); }); await flush();
+  expect(hook.result.current.readiness.counts.current).toBe(1);
+  expect(hook.calls.map(c => c.url)).toEqual(Array(4).fill('/api/show-prep/evaluate'));
   hook.unmount(); hook.qc.clear();
 });

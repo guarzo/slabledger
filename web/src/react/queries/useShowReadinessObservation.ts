@@ -6,6 +6,7 @@ import { getShowRefreshCoordinator } from './showRefreshCoordinator';
 import { showPrepKeys } from './showPrepKeys';
 
 type Observation = 'activation' | 'focus' | 'expiry' | 'retry';
+const BOUNDARY_RECHECK_MS = 30000;
 
 /** Read-only show-scoped clock/visibility observation. No refresh POST here. */
 export function useShowReadinessObservation(active: boolean, ids: string[], evaluations: Record<string, ShowEvaluation>) {
@@ -14,32 +15,53 @@ export function useShowReadinessObservation(active: boolean, ids: string[], eval
   const [observing, setObserving] = useState(false);
   const [revision, setRevision] = useState(0);
   const pending = useRef(false);
-  const allowAutomatic = useRef(true);
   const alive = useRef(false);
   const lastRead = useRef(-Infinity);
   const latest = useRef({ ids, evaluations }); latest.current = { ids, evaluations };
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const boundaries = useCallback(() => {
     const midnight = new Date(); midnight.setUTCHours(24, 0, 0, 0);
-    const result = [{ key: `utc:${midnight.toISOString()}`, at: midnight.getTime(), retry: false }];
+    const result = [{ key: `utc:${midnight.toISOString()}`, at: midnight.getTime(), retry: false, identityKey: '' }];
     for (const id of latest.current.ids) {
       const r = getShowReadiness(latest.current.evaluations[id]);
-      if (!r) continue;
-      // Interrupted retains retryAt for explanation, not another wakeup.
-      const time = r.state === 'running' ? r.retryAt : r.expiresAt;
-      if (time) result.push({ key: `${r.identityKey}:${time}`, at: Date.parse(time), retry: r.state === 'running' });
+      if (!r || (r.state !== 'running' && r.state !== 'current')) continue;
+      // Stale/interrupted are observed outcomes, not unresolved boundaries.
+      const retry = r.state === 'running';
+      const time = retry ? r.retryAt : r.expiresAt;
+      result.push({ key: `${retry ? 'retry' : 'expiry'}:${r.identityKey}:${time}`, at: Date.parse(time), retry, identityKey: r.identityKey });
     }
     return result;
   }, []);
-  const read = useCallback(async (reason: Observation) => {
+  const read = useCallback(async (reason: Observation, retryIdentity?: string) => {
     if (document.visibilityState === 'hidden' || pending.current || (reason === 'focus' && Date.now() - lastRead.current < 1000)) return;
     if (reason !== 'activation') lastRead.current = Date.now();
-    pending.current = true; allowAutomatic.current = reason !== 'retry'; setObserving(true);
-    if (reason !== 'activation') for (const b of boundaries()) if (b.at <= Date.now()) coordinator.observedBoundaries.add(b.key);
+    pending.current = true; setObserving(true);
+    const due = boundaries().filter(b => b.at <= Date.now());
+    if (reason !== 'retry') {
+      // Independent activation/focus/expiry reads can reconsider this cohort.
+      // Selection/cohort changes alone do not authorize the observed identity.
+      for (const id of latest.current.ids) {
+        const r = getShowReadiness(latest.current.evaluations[id]);
+        if (r) coordinator.readOnlyIdentities.delete(r.identityKey);
+      }
+    } else {
+      // A coincident peer expiry is still permission to renew that peer only.
+      for (const b of due) if (!b.retry) coordinator.readOnlyIdentities.delete(b.identityKey);
+    }
+    if (reason === 'retry' || reason === 'expiry') {
+      if (retryIdentity) coordinator.readOnlyIdentities.add(retryIdentity);
+      // Protect all due attempts, irrespective of which coincident timer won.
+      for (const b of due) if (b.retry) coordinator.readOnlyIdentities.add(b.identityKey);
+    }
+    const elapsed = reason === 'activation' ? [] : due;
+    for (const b of elapsed) coordinator.boundaryRecheckAt.set(b.key, Date.now() + BOUNDARY_RECHECK_MS);
     try {
       // Coincident observation reads join the aggregate rather than canceling it.
       await qc.invalidateQueries({ queryKey: showPrepKeys.evaluations }, { cancelRefetch: false });
     } finally {
+      // A browser ahead of the server can read the same running/current value.
+      // Follow up at a bounded cadence until metadata resolves or supersedes it.
+      for (const b of elapsed) coordinator.boundaryRecheckAt.set(b.key, Date.now() + BOUNDARY_RECHECK_MS);
       pending.current = false;
       if (alive.current) { setObserving(false); setRevision(value => value + 1); }
     }
@@ -53,12 +75,12 @@ export function useShowReadinessObservation(active: boolean, ids: string[], eval
   }, [active, read]);
   useEffect(() => {
     if (!active || observing || document.visibilityState === 'hidden') return;
-    const next = boundaries().filter(b => !coordinator.observedBoundaries.has(b.key)).sort((a, b) => a.at - b.at)[0];
+    const next = boundaries().map(b => ({ ...b, at: Math.max(b.at, coordinator.boundaryRecheckAt.get(b.key) ?? 0) })).sort((a, b) => a.at - b.at)[0];
     if (!next) return;
-    // Current-at-exact-expiry and skewed past bounds get one delayed observation,
-    // never an immediate timer loop. New attempt metadata supersedes old timers.
-    const timer = setTimeout(() => { void read(next.retry ? 'retry' : 'expiry'); }, Math.max(1000, Math.min(86400000, next.at - Date.now())));
+    // Never spin on past bounds or catch up missed ticks. New attempt metadata
+    // supersedes old timers; unresolved state gets a cooldown, not permanent retirement.
+    const timer = setTimeout(() => { void read(next.retry ? 'retry' : 'expiry', next.retry ? next.identityKey : undefined); }, Math.max(1000, Math.min(86400000, next.at - Date.now())));
     return () => clearTimeout(timer);
   }, [active, ids, evaluations, revision, observing, boundaries, coordinator, read]);
-  return { observing, revision, pending, allowAutomatic };
+  return { observing, revision, pending };
 }
