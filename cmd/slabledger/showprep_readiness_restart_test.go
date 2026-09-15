@@ -29,6 +29,12 @@ func restartReadiness(mu *sync.RWMutex, closeCurrent, reopen func() error) error
 	return nil
 }
 
+// Capture the instance slot, not its current receiver. The returned callback
+// resolves the instance only when restartReadiness invokes it under the lock.
+func readinessCurrentCloser[T io.Closer](current *T) func() error {
+	return func() error { return (*current).Close() }
+}
+
 func TestReadinessConcurrentRestartClosesCurrentInstance(t *testing.T) {
 	const restarts = 16
 	var mu sync.RWMutex
@@ -47,10 +53,9 @@ func TestReadinessConcurrentRestartClosesCurrentInstance(t *testing.T) {
 	mu.Lock()
 	for range restarts {
 		go func() {
-			// Mirror the caller's close binding. All callbacks are constructed
-			// before any restart may replace current, making early binding fail
-			// deterministically rather than relying on the race detector alone.
-			closeCurrent := func() error { return current.Close() }
+			// Use the actual HTTP caller's binding helper, with every callback
+			// constructed before any restart can replace the current instance.
+			closeCurrent := readinessCurrentCloser(&current)
 			ready <- struct{}{}
 			results <- restartReadiness(&mu, func() error {
 				if err := closeCurrent(); err != nil {

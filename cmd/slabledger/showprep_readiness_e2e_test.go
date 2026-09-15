@@ -88,7 +88,7 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 				// router, auth/inventory/show service, source client, and store.
 				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 				defer cancel()
-				err := restartReadiness(&mu, func() error { return db.Close() }, func() error {
+				err := restartReadiness(&mu, readinessCurrentCloser(&db), func() error {
 					next, err := openReadinessDB(ctx, raw)
 					if err != nil {
 						return err
