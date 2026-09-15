@@ -46,6 +46,20 @@ Without `SHOW_READINESS_E2E_URL`, ordinary Go discovery skips this test. Run bro
 Go discovery and browser artifact generation sequentially. Explicitly unset the
 e2e variable for the full Go suite and for the separate PostgreSQL adapter suite.
 
+Harness failure-path checks need no PostgreSQL or running fixture:
+
+```bash
+node --test web/tests/show-readiness-browser-checks.cjs
+TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= SHOW_READINESS_E2E_URL= \
+go test -race -count=1 ./cmd/slabledger -run 'TestReadinessRestartFailureReleasesRequests|TestReadinessFixtureClockAdvances'
+```
+
+These use real Chromium/failed artifact writes and a separate loopback HTTP server
+to prove original-error preservation, independent diagnostics, browser closure,
+failed-restart lock release, continued requests/shutdown, and whole-row clearance.
+They do not reset or access the preview database. The Node checks are deliberately
+outside Vitest discovery and run explicitly with Node's test runner.
+
 The test asserts:
 
 - Missing/wrong auth is rejected by actual middleware. Ordinary inventory,
@@ -90,8 +104,12 @@ CardLadder/httpx retries. Do not confuse those with browser refresh-POST replay.
 
 Artifacts: full-page and viewport PNGs, `metrics.json`, `wire-snapshots.json`
 (persisted rows, request paths, refresh bodies), and `fixture.json` (ephemeral
-server addresses and fixture-only auth token). All test servers and browsers close
-on normal completion. This is local integration evidence, not production rollout.
+server addresses and fixture-only auth token). Diagnostic failures cannot replace
+a primary exercise failure or prevent browser closure; later diagnostics are still
+attempted. A failed restart returns HTTP 500 without retaining the application lock,
+so another request/restart and shutdown can complete. If reopening failed after the
+old pool closed, data reads may return errors until a successful restart.
+All test servers and browsers close on normal completion. This is local integration evidence, not production rollout.
 
 ## Separate fixture server for two-tab critique
 

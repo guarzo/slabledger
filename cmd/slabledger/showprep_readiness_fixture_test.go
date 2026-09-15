@@ -39,9 +39,16 @@ func readinessDB(t *testing.T, raw string) *postgres.DB {
 	require.Equal(t, readinessDBURL, raw, "refusing any database except the owned e2e fixture")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	db, err := postgres.Open(ctx, raw, mocks.NewMockLogger())
+	db, err := openReadinessDB(ctx, raw)
 	require.NoError(t, err)
 	return db
+}
+
+func openReadinessDB(ctx context.Context, raw string) (*postgres.DB, error) {
+	if raw != readinessDBURL {
+		return nil, fmt.Errorf("refusing any database except the owned e2e fixture")
+	}
+	return postgres.Open(ctx, raw, mocks.NewMockLogger())
 }
 
 func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) {

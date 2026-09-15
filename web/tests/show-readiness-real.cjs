@@ -5,6 +5,7 @@
 const { chromium, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { withFixtureCleanup, assertLastRowClearance } = require('./show-readiness-browser-helpers.cjs');
 
 const app = process.env.SHOW_READINESS_APP;
 const control = process.env.SHOW_READINESS_CONTROL;
@@ -30,11 +31,15 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, extraHTTPHeaders: headers });
-  const page = await context.newPage();
-  const errors = [];
+  let page;
+  const metrics = [];
+  const snapshots = {};
   const refreshBodies = [];
   const refreshReplies = [];
+  await withFixtureCleanup(async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, extraHTTPHeaders: headers });
+  page = await context.newPage();
+  const errors = [];
   page.on('response', async response => {
     if (new URL(response.url()).pathname === '/api/show-prep/refresh') {
       try { refreshReplies.push(await response.json()); } catch { /* Cancellation may prevent a body. */ }
@@ -44,8 +49,6 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   page.on('request', request => {
     if (new URL(request.url()).pathname === '/api/show-prep/refresh') refreshBodies.push(request.postDataJSON());
   });
-  const metrics = [];
-  const snapshots = {};
   const fontCache = new Map();
   await context.route(url => url.origin !== new URL(app).origin, async route => {
     const url = route.request().url();
@@ -84,7 +87,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     await expect(page.getByText('24 of 26 cards', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Sort by Card', exact: true }).click();
   }
-  try {
+  {
     let s = await state();
     expect(s.evidence).toEqual([]); expect(s.lists).toEqual([]); expect(s.items).toEqual([]); expect(s.calls).toEqual([]);
     expect((await fetch(`${app}/api/show-prep/lists`)).status).toBe(401);
@@ -262,10 +265,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
         await pause(180);
       }
       const last = page.getByRole('checkbox', { name: 'Select 91000024', exact: true });
-      await expect(last).toBeVisible();
-      const lastBox = await last.boundingBox();
-      const endBar = await page.getByRole('region', { name: 'Show selection actions' }).boundingBox();
-      expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(endBar.y);
+      await assertLastRowClearance(last, page.getByRole('region', { name: 'Show selection actions' }));
       await capture(`${viewport.name}-last-row-clearance`);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('region', { name: 'Show selection actions' })).toHaveCount(0);
@@ -285,10 +285,10 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     const unexpectedWrites = s.requests.filter(r => !['GET', 'HEAD'].includes(r.method) && !r.path.startsWith('/api/show-prep/'));
     expect(unexpectedWrites).toEqual([]); expect(errors).toEqual([]);
     console.log('PASS real-wire cold upgrade, 12 coalesced identities/2 batches, reload/restart, UTC rollover/selection, list/packing, failed+partial retained evidence, explicit retry; 27 source GETs, 7 refresh POSTs, 3 explicit list writes; ledger unchanged');
-  } finally {
-    await fs.writeFile(path.join(artifacts, 'metrics.json'), JSON.stringify(metrics, null, 2));
-    await fs.writeFile(path.join(artifacts, 'wire-snapshots.json'), JSON.stringify({ snapshots, refreshBodies, refreshReplies, lastEvidence: await evidence(), lastState: await state() }, null, 2));
-    await page.screenshot({ path: path.join(artifacts, 'last-view.png'), fullPage: true }).catch(() => {});
-    await browser.close();
   }
+  }, [
+    () => fs.writeFile(path.join(artifacts, 'metrics.json'), JSON.stringify(metrics, null, 2)),
+    async () => fs.writeFile(path.join(artifacts, 'wire-snapshots.json'), JSON.stringify({ snapshots, refreshBodies, refreshReplies, lastEvidence: await evidence(), lastState: await state() }, null, 2)),
+    () => page?.screenshot({ path: path.join(artifacts, 'last-view.png'), fullPage: true }),
+  ], () => browser.close());
 })().catch(error => { console.error(error); process.exitCode = 1; });

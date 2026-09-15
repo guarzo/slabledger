@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -85,11 +86,21 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 			case "/restart":
 				// Drain requests, close the old SQL pool, and build a completely new
 				// router, auth/inventory/show service, source client, and store.
-				mu.Lock()
-				require.NoError(t, db.Close())
-				db = readinessDB(t, raw)
-				router = readinessRouter(db, f, source.URL)
-				mu.Unlock()
+				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+				defer cancel()
+				err := restartReadiness(&mu, db.Close, func() error {
+					next, err := openReadinessDB(ctx, raw)
+					if err != nil {
+						return err
+					}
+					db = next
+					router = readinessRouter(db, f, source.URL)
+					return nil
+				})
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 			default:
 				http.NotFound(w, r)
 				return
