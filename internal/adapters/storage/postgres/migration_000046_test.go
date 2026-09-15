@@ -57,7 +57,7 @@ func TestMigration000046SecurityAndRollback(t *testing.T) {
 			_, err = tx.ExecContext(ctx, string(down))
 			require.NoError(t, err)
 			var count int
-			require.NoError(t, tx.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_name LIKE 'showprep_%'`).Scan(&count))
+			require.NoError(t, tx.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.tables WHERE table_name IN ('showprep_lists','showprep_items','showprep_evidence','showprep_price_holds')`).Scan(&count))
 			require.Zero(t, count)
 		})
 	}

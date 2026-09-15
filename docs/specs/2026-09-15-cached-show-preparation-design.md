@@ -113,7 +113,7 @@ Packing remains the existing saved-list workflow. No new pricing system, reserva
 
 Reuse the existing Admin integrations surface and scheduler-stat storage, adding a **separate evidence-worker status** rather than presenting CL pricing success as evidence success.
 
-Show enabled/unconfigured/idle/running/failed state, current/eligible identity counts, missing/stale/failed/unresolved counts, last sweep finish, and retry due time. Report completed-with-errors honestly. A recent success for one card is not complete inventory coverage.
+Show enabled/unconfigured/idle/running/failed state; eligible/current/missing/stale/failed **identity** counts; eligible/current/unresolved **card** counts; last sweep finish; and retry due time. Eligible identities count resolved normalized identities, while eligible cards include unresolved inventory. Never mix these denominators. Report completed-with-errors honestly. A recent success for one card is not complete inventory coverage.
 
 An admin-only **Run now** action wakes this same leased worker and respects due-state limits. It accepts no selected-card cohort, returns promptly, and does not invoke the full CL price/collection refresh. An explicit **Retry failed** action may reset exhausted retry/backoff state for one bounded sweep after an operational repair; it does not enable a retry loop or refresh already-current identities. These are new worker-specific capabilities, not claims that the current admin refresh already does this.
 

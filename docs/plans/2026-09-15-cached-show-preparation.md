@@ -19,7 +19,8 @@
 - Worker: immediate startup scan, one-minute tick, one identity at a time, existing shared client/pacing and five-page bound, five-minute sweep budget, fair oldest-due continuation.
 - Three automatic attempted/failed acquisitions per identity/window maximum; retries after 15 minutes then 60 minutes. Charge a started attempt so process death cannot bypass the limit. Current successful entries need no further same-window attempts. Admin Retry failed permits one explicit bounded reset/sweep.
 - Source attempt budget <=60 seconds with 5 seconds reserved for persistence, both within the worker run. Lease TTL30 seconds, renewal every10 seconds; database time owns lease validity. Cancellation/lease loss prevents publication and subsequent acquisition.
-- Persist job-level authentication hold until explicit credential configuration change or admin retry. Never cycle through the fleet on an auth error. No secret/error URL persistence or exposure.
+- Persist job-level authentication hold until explicit credential configuration change or admin retry. Never cycle through the fleet on an auth error. No secret/error URL persistence or exposure. Explicit repair advances the lease epoch so late old-credential auth/status/publication cannot re-block the repaired configuration; normal run intent survives heartbeat and health updates.
+- Coverage units are explicit: eligible/current/missing/stale/failed **identities**, and eligible/current/unresolved **cards**. Eligible identities are resolved normalized identities; eligible cards include unresolved physically scoped inventory. Never mix these denominators.
 - New/changed persisted identities become due independently of UI. Include unsold non-refunded/non-closed-campaign inventory, even without DH price or receipt; unresolved identities remain honestly unavailable.
 - Retire authenticated `POST /api/show-prep/refresh` with JSON410, no source work. Admin actions enqueue/wake the worker, never attach its lifetime to an HTTP request.
 - Domain cannot import adapters or another inventory sibling. Source ideally <500 lines, hard limit600. No unrelated refactor, global transport fix, repricing, legacy ingest replacement or re-theme.
@@ -75,12 +76,14 @@ expect(acquisitionRequests).toEqual([]);
 type SourceProvider func(context.Context) (Source, error)
 type WorkerStatus struct {
     State string `json:"state"`
-    Eligible int `json:"eligible"`
-    Current int `json:"current"`
-    Missing int `json:"missing"`
-    Stale int `json:"stale"`
-    Failed int `json:"failed"`
-    Unresolved int `json:"unresolved"`
+    EligibleIdentities int `json:"eligibleIdentities"`
+    CurrentIdentities int `json:"currentIdentities"`
+    MissingIdentities int `json:"missingIdentities"`
+    StaleIdentities int `json:"staleIdentities"`
+    FailedIdentities int `json:"failedIdentities"`
+    EligibleCards int `json:"eligibleCards"`
+    CurrentCards int `json:"currentCards"`
+    UnresolvedCards int `json:"unresolvedCards"`
     LastSweepAt string `json:"lastSweepAt"`
     RetryAt string `json:"retryAt"`
     Error string `json:"error"`
