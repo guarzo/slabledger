@@ -9,7 +9,7 @@ function mount(ids: string[]) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(<QueryClientProvider client={qc}><ShowRefresh purchaseIds={ids} /></QueryClientProvider>);
 }
-it('refreshes only explicit selection, in sequential batches of ten, reporting per-card failures', async () => {
+it('refreshes explicit selection in batches of ten, stopping partial results for explicit retry', async () => {
   const calls: string[][] = [];
   vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
     const { purchaseIds } = JSON.parse(options.body); calls.push(purchaseIds);
@@ -18,10 +18,13 @@ it('refreshes only explicit selection, in sequential batches of ten, reporting p
   mount(Array.from({ length: 23 }, (_, i) => `id-${i}`));
   expect(calls).toHaveLength(0);
   fireEvent.click(screen.getByRole('button', { name: 'Refresh selected evidence (23)' }));
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('23 of 23 checked'));
-  expect(calls.map(c => c.length)).toEqual([10, 10, 3]);
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('10 of 23 checked'));
+  expect(calls.map(c => c.length)).toEqual([10]);
   expect(screen.getByText(/1 need review/)).toBeVisible();
   expect(screen.getByText(/Source failed/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry refresh' }));
+  await waitFor(() => expect(calls).toHaveLength(2));
+  expect(calls[1]).toEqual(['id-2', ...Array.from({ length: 9 }, (_, i) => `id-${i + 10}`)]);
 });
 it.each([
   { name: 'failed evidence', evidenceNeedsReview: true, evidenceReason: 'CardLadder refresh failed', count: 1 },

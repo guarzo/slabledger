@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ShowEvaluation, SupportStatus } from '../../../types/showprep';
+import { useShowReadiness } from '../../queries/useShowReadiness';
+import ShowReadinessLine from '../show-preparation/ShowReadinessLine';
 import { useShowEvaluations } from '../../queries/useShowPrepQueries';
 import ShowEvidenceDisclosure from '../show-preparation/ShowEvidence';
 import { ShowInventoryFilters, ShowSelectionActions } from '../show-preparation/ShowInventoryControls';
@@ -47,6 +49,15 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [evidenceExpandedId, setEvidenceExpandedId] = useState<string | null>(null);
   const purchaseIds = useMemo(() => items.map(item => item.purchase.id), [items]);
   const evaluationsQuery = useShowEvaluations(purchaseIds);
+  const previousItems = useRef(items);
+  const { refetch: recheckEvaluations } = evaluationsQuery;
+  useEffect(() => {
+    if (previousItems.current === items) return;
+    previousItems.current = items;
+    // Inventory reads may reveal sold/price/identity changes before the cached
+    // show evaluation. Re-read without acknowledging captured selection intent.
+    void recheckEvaluations({ cancelRefetch: false });
+  }, [items, recheckEvaluations]);
   const evaluations = evaluationsQuery.data?.evaluations ?? EMPTY_EVALUATIONS;
   const showFilters = useMemo(() => ({ support, selecting, includeNotReceived, evaluations }), [support, selecting, includeNotReceived, evaluations]);
   const state = useInventoryState(items, campaignId, showFilters);
@@ -71,6 +82,11 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
   } = state;
 
+  const readiness = useShowReadiness({ active: selecting || support !== 'all', cohortIds: state.showCohortIds,
+    evaluations, fetching: evaluationsQuery.isFetching, selectedCount: selected.size });
+  const outsideView = [...selected].filter(id => !filteredAndSortedItems.some(item => item.purchase.id === id)).length;
+  const revealSelected = state.revealSelected;
+
   const selectedItems = useMemo(
     () => items.filter(i => selected.has(i.purchase.id)),
     [items, selected],
@@ -89,11 +105,13 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     });
   }
   function toggleCard(id: string) {
+    if (!selected.has(id)) readiness.pauseSelection(true);
     captureSelection([id], !selected.has(id));
     toggleSelect(id);
   }
   function toggleVisible() {
     const ids = filteredAndSortedItems.map(item => item.purchase.id);
+    if (!ids.every(id => selected.has(id))) readiness.pauseSelection(true);
     captureSelection(ids, !ids.every(id => selected.has(id)));
     toggleAll();
   }
@@ -182,8 +200,10 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         pending={evaluationsQuery.isFetching} fetching={evaluationsQuery.isFetching}
         failed={Object.keys(evaluationsQuery.data?.errors ?? {}).length + (evaluationsQuery.isFetching ? 0 : evaluationsQuery.unresolvedCount)}
         onRetry={() => { void evaluationsQuery.refetch(); }} />
+      {(selecting || support !== 'all') && <ShowReadinessLine readiness={readiness} selectedCount={selected.size} />}
       {selecting && <ShowSelectionActions selected={selected} selectedVersions={selectedVersions} evaluations={evaluations}
-        includeNotReceived={includeNotReceived} disabled={anyModalOpen || evaluationsQuery.isFetching}
+        includeNotReceived={includeNotReceived} disabled={anyModalOpen || evaluationsQuery.isFetching || readiness.busy}
+        outsideView={outsideView} onReveal={revealSelected} showingSelected={state.showingSelected} onHideSelected={state.hideSelected} modalOpen={anyModalOpen}
         onClear={() => setSelected(new Set())} onAdded={ids => setSelected(prev => {
           const next = new Set(prev); for (const id of ids) next.delete(id); return next;
         })} />}
@@ -397,7 +417,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         onRecordSale={() => openSaleModal(selectedItems)}
         onListOnDH={() => handleBulkListOnDH(selectedItems.map(i => i.purchase.id))}
         onClear={() => setSelected(new Set())}
-        disabled={anyModalOpen}
+        disabled={anyModalOpen || readiness.busy}
       />}
     </div>
   );

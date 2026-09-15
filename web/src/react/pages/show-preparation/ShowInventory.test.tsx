@@ -57,7 +57,7 @@ describe('show preparation in the existing inventory', () => {
     expect(screen.queryByText('No recent comps', { selector: 'strong' })).not.toBeInTheDocument();
     expect(screen.getAllByText(/Evaluation unavailable:/)).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Show selection' }));
-    expect(screen.getByText('1 card shown')).toBeVisible();
+    expect(await screen.findByText('1 card shown')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Retry evaluation' })).toBeEnabled();
   });
 
@@ -236,4 +236,83 @@ describe('show preparation in the existing inventory', () => {
     expect(evidence).toHaveTextContent('2026-08-16');
     expect(requests.some(r => r.url.endsWith('/refresh'))).toBe(false);
   });
+});
+
+
+it('Supported-first checks the cold pre-Support cohort, not unrelated search/tab/price inventory', async () => {
+  const cold = values.map((e, index) => ({ ...e, status: 'needs_review', evidenceNeedsReview: true,
+    readiness: { state: 'not_checked', refreshEligibility: 'needed', identityKey: (index + 1).toString().padStart(64, '0'), expiresAt: '', retryAt: '' } }));
+  const calls: { url: string; ids: string[] }[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
+    const ids: string[] = options.body ? JSON.parse(String(options.body)).purchaseIds ?? [] : [];
+    calls.push({ url, ids });
+    if (url.endsWith('/refresh')) ids.forEach(id => {
+      const e = cold.find(value => value.purchaseId === id)!;
+      e.status = 'supported'; e.evidenceNeedsReview = false;
+      e.readiness = { ...e.readiness, state: 'current', refreshEligibility: 'not_needed', expiresAt: '2099-01-01T00:00:00Z' };
+    });
+    return new Response(JSON.stringify(url.endsWith('/lists') ? { lists: [] } : { evaluations: cold.filter(e => ids.includes(e.purchaseId)) }));
+  }));
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: /^DH Listed/ }));
+  fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: '12345678' } });
+  await waitFor(() => expect(screen.getByText('1 card shown')).toBeVisible());
+  fireEvent.change(screen.getByLabelText('Price support'), { target: { value: 'supported' } });
+  await waitFor(() => expect(calls.filter(c => c.url.endsWith('/refresh')).map(c => c.ids)).toEqual([[purchaseId]]));
+  await waitFor(() => expect(screen.getByText('1 card shown')).toBeVisible());
+  expect(screen.getByRole('checkbox', { name: 'Select 12345678' })).toBeInTheDocument();
+});
+
+it('keeps selected-view membership stable on evidence updates, but uses live versions and explicit filters', async () => {
+  const qc = mount();
+  fireEvent.click(await screen.findByRole('button', { name: 'Show selection' }));
+  fireEvent.change(screen.getByLabelText('Price support'), { target: { value: 'supported' } });
+  await waitFor(() => expect(screen.getByText('1 card shown')).toBeVisible());
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select 12345678' }));
+  await act(async () => {
+    qc.setQueriesData<InventoryEvaluations>({ queryKey: showPrepKeys.evaluations }, old => ({ evaluations: { ...old?.evaluations,
+      [purchaseId]: evaluation({ status: 'below_target', version: 'changed' }) }, errors: {} }));
+  });
+  expect(await screen.findByText(/Review and reselect/)).toHaveTextContent('12345678');
+  expect(screen.getByRole('checkbox', { name: 'Select 12345678' })).toBeChecked();
+  fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: 'Charizard' } });
+  await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Select 12345678' })).not.toBeInTheDocument());
+  expect(screen.getByText(/1 selected outside this view/)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Reveal selected' }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select 12345678' })).toBeChecked());
+  expect(screen.getByRole('button', { name: 'Add selected to show (1)' })).toBeDisabled();
+});
+
+it('reveals a now-unavailable selected row without making it addable; Escape retains modal priority', async () => {
+  const qc = mount(); fireEvent.click(await screen.findByRole('button', { name: 'Show selection' }));
+  await waitFor(() => expect(screen.getByText('2 cards shown')).toBeVisible());
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select 12345678' }));
+  await act(async () => { qc.setQueriesData<InventoryEvaluations>({ queryKey: showPrepKeys.evaluations }, old => ({ evaluations: { ...old?.evaluations,
+    [purchaseId]: evaluation({ availability: 'sold', canAdd: false, version: 'sold' }) }, errors: {} })); });
+  await screen.findByText(/Review and reselect/);
+  fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: 'Charizard' } });
+  await screen.findByText(/1 selected outside this view/);
+  fireEvent.click(screen.getByRole('button', { name: 'Reveal selected' }));
+  expect(await screen.findByRole('checkbox', { name: 'Select 12345678' })).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Add selected to show (1)' })).toBeDisabled();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(screen.getByText('0 selected for show')).toBeVisible();
+});
+
+it('revalidates changed live purchases without acknowledging the selected evaluation version', async () => {
+  let current = values[0];
+  vi.stubGlobal('fetch', async (url: string) => new Response(JSON.stringify(url.endsWith('/lists') ? { lists: [detail().list] } : { evaluations: [current] })));
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = (liveItems: ReturnType<typeof inventoryItem>[]) => <QueryClientProvider client={qc}><MemoryRouter><ToastProvider><InventoryTab items={liveItems} isLoading={false} /></ToastProvider></MemoryRouter></QueryClientProvider>;
+  const view = render(page([inventoryItem(current)]));
+  fireEvent.click(screen.getByRole('button', { name: 'Show selection' }));
+  await screen.findByText('1 card shown');
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select 12345678' }));
+  fireEvent.change(screen.getByLabelText('Show list'), { target: { value: listId } });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Add selected to show (1)' })).toBeEnabled());
+  current = evaluation({ listedPriceCents: 35000, version: 'live-price-change' });
+  view.rerender(page([inventoryItem(current)]));
+  expect(await screen.findByText(/Review and reselect/)).toHaveTextContent('12345678');
+  expect(screen.getByRole('button', { name: 'Add selected to show (1)' })).toBeDisabled();
+  view.unmount(); qc.clear();
 });

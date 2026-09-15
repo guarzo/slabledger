@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ShowEvaluation, SupportStatus } from '../../../types/showprep';
 import { useShowListWrites } from '../../queries/useShowPrepQueries';
@@ -35,14 +35,22 @@ export function ShowInventoryFilters({ filters, setSupport, setSelecting, setInc
   </div>;
 }
 
-export function ShowSelectionActions({ selected, selectedVersions, evaluations, includeNotReceived, onClear, onAdded, disabled = false }: {
+export function ShowSelectionActions({ selected, selectedVersions, evaluations, includeNotReceived, onClear, onAdded, disabled = false, outsideView = 0, onReveal, showingSelected, onHideSelected, modalOpen = false }: {
   selected: ReadonlySet<string>; selectedVersions: Readonly<Record<string, string>>; evaluations: Record<string, ShowEvaluation>; includeNotReceived: boolean;
-  onClear: () => void; onAdded: (ids: string[]) => void; disabled?: boolean;
+  onClear: () => void; onAdded: (ids: string[]) => void; disabled?: boolean; outsideView?: number; onReveal?: () => void; showingSelected?: boolean; onHideSelected?: () => void; modalOpen?: boolean;
 }) {
   const [listId, setListId] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const { add } = useShowListWrites();
+  useEffect(() => {
+    if (!selected.size || modalOpen || add.isPending) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('[role="dialog"], [role="alertdialog"]')) onClear();
+    };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [selected.size, modalOpen, add.isPending, onClear]);
   const ids = [...selected];
   const unavailable = ids.filter(id => {
     const e = evaluations[id];
@@ -59,12 +67,14 @@ export function ShowSelectionActions({ selected, selectedVersions, evaluations, 
   }
   return <section className="show-selection" aria-label="Show selection actions">
     <div className="show-actions"><strong className="tabular-nums">{ids.length} selected for show</strong>
-      {ids.length > 0 && <Button variant="ghost" size="sm" disabled={disabled || add.isPending} onClick={onClear}>Clear selection</Button>}
+      {ids.length > 0 && <Button variant="ghost" size="sm" disabled={modalOpen || add.isPending} onClick={onClear}>Clear selection</Button>}
     </div>
+    {showingSelected && <p>Showing selected cards. <Button variant="ghost" size="sm" onClick={onHideSelected}>Back to matches</Button></p>}
+    {outsideView > 0 && <p>{outsideView} selected outside this view. <Button variant="ghost" size="sm" onClick={onReveal}>Reveal selected</Button></p>}
     <ShowListPicker value={listId} onChange={id => { if (id !== listId) setSuccess(''); setListId(id); }} disabled={disabled || add.isPending} />
     <div className="show-actions">
       <Button size="sm" disabled={disabled || add.isPending || !listId || ids.length === 0 || ids.length > 200 || unavailable.length > 0 || needsReselection.length > 0} onClick={() => void addSelected()}>{add.isPending ? 'Adding…' : `Add selected to show (${ids.length})`}</Button>
-      <ShowRefresh purchaseIds={ids} disabled={disabled || add.isPending} />
+      <ShowRefresh purchaseIds={ids} evaluations={evaluations} disabled={disabled || add.isPending} />
     </div>
     {ids.length > 200 && <p className="text-[var(--warning)]">Select at most 200 cards per add. Selection is unchanged.</p>}
     {unavailable.length > 0 && <p className="text-[var(--warning)]">{unavailable.length} selected cards are unavailable, not evaluated, or require “Include not received”. Selection is retained; review before adding.</p>}

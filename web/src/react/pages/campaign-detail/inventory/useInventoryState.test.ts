@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -62,6 +62,7 @@ vi.mock('./inventoryCalcs', async (importOriginal) => {
 });
 
 // Imports after vi.mock declarations receive the mocked modules.
+import { getShowRefreshCoordinator } from '../../../queries/showRefreshCoordinator';
 import { useInventoryState } from './useInventoryState';
 import { api, APIError } from '../../../../js/api';
 import type { AgingItem } from '../../../../types/campaigns';
@@ -334,4 +335,28 @@ describe('useInventoryState — default filter tab', () => {
       expect(result.current.filterTab).toBe('needs_attention');
     });
   });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+it('rejects a conflicting inventory deletion and price-editor opening while comps refresh is active', async () => {
+  const { wrapper, queryClient } = makeWrapper();
+  const hook = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+  const coordinator = getShowRefreshCoordinator(queryClient); const owner = Symbol(); coordinator.attach(owner);
+  vi.stubGlobal('fetch', async () => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{')); } })));
+  const task = coordinator.check([{ purchaseId: 'p1' }], owner, false);
+  vi.mocked(api.deletePurchase).mockClear();
+  await act(async () => { await hook.result.current.handleDelete(mockItem({ id: 'p1', campaignId: 'camp-1' })); });
+  expect(api.deletePurchase).not.toHaveBeenCalled();
+  act(() => hook.result.current.openSaleModal([mockItem({ id: 'p1' })]));
+  expect(hook.result.current.saleModalOpen).toBe(false);
+  coordinator.cancel(); await task; hook.unmount(); queryClient.clear();
+});
+
+it('a rejected editor opening cannot leave an invisible acquisition blocker', () => {
+  const { wrapper, queryClient } = makeWrapper();
+  const hook = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+  act(() => hook.result.current.handleFixPricing(mockItem({ id: 'p1' }).purchase));
+  expect(hook.result.current.hintTarget).toBeNull();
+  expect(getShowRefreshCoordinator(queryClient).getSnapshot().blocked).toBe(false);
+  hook.unmount(); queryClient.clear();
 });

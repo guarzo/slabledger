@@ -1,10 +1,8 @@
 import { APIClient, type APIRequestOptions } from './client';
+import { refreshShowEvidence } from './showRefreshTransport';
 import type { ShowEvaluation, ShowEvidence, ShowList, ShowListDetail, ShowItemAdd, ShowItemUpdate, ShowReadiness, ReadinessState, RefreshEligibility } from '../../types/showprep';
 
 const client = new APIClient('/api/show-prep');
-const refreshClient = new APIClient('/api/show-prep');
-// Refresh is an explicit upstream operation: transport failures must not replay it.
-refreshClient.maxRetries = 1;
 
 function requireArray<T>(value: T[], label: string): T[] {
   if (!Array.isArray(value)) throw new Error(`Invalid ${label} response. Retry the read.`);
@@ -64,7 +62,7 @@ async function listDetail(response: Promise<ShowListDetail>) {
 
 export const showPrepAPI = {
   evaluate: (purchaseIds: string[], options?: APIRequestOptions) => evaluations(client.post('/evaluate', { purchaseIds }, options)),
-  refresh: (purchaseIds: string[], signal?: AbortSignal) => evaluations(refreshClient.post('/refresh', { purchaseIds }, { signal, timeoutMs: 120000 })),
+  refresh: (purchaseIds: string[], signal?: AbortSignal) => evaluations(refreshShowEvidence(purchaseIds, signal)),
   evidence: async (purchaseId: string, options?: APIRequestOptions): Promise<ShowEvidence> => {
     const result = await client.get<ShowEvidence>(`/evidence/${encodeURIComponent(purchaseId)}`, options);
     requireArray(result.sales, 'evidence sales');

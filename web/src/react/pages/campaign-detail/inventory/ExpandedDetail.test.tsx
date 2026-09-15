@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { getShowRefreshCoordinator } from '../../../queries/showRefreshCoordinator';
 import ExpandedDetail from './ExpandedDetail';
 import { ToastProvider } from '../../../contexts/ToastContext';
 import type { AgingItem } from '../../../../types/campaigns';
@@ -114,4 +115,17 @@ describe('ExpandedDetail combined set-and-list', () => {
     await waitFor(() => expect(api.setReviewedPrice).toHaveBeenCalledWith('pur-1', expect.any(Number), expect.any(String)));
     expect(api.listPurchaseOnDH).not.toHaveBeenCalled();
   });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+it('cannot submit an expanded price decision while a shared comps check is active', async () => {
+  const { api } = await import('../../../../js/api'); vi.mocked(api.setReviewedPrice).mockClear();
+  const client = new QueryClient();
+  const coordinator = getShowRefreshCoordinator(client); const owner = Symbol(); coordinator.attach(owner);
+  vi.stubGlobal('fetch', async () => new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{')); } })));
+  const task = coordinator.check([{ purchaseId: 'pur-1' }], owner, false);
+  const view = render(<QueryClientProvider client={client}><ToastProvider><ExpandedDetail item={makeItem()} combineWithList /></ToastProvider></QueryClientProvider>);
+  await userEvent.click(view.getByRole('button', { name: /list on dh/i }));
+  expect(api.setReviewedPrice).not.toHaveBeenCalled();
+  await act(async () => { coordinator.cancel(); await task; }); view.unmount(); client.clear();
 });
