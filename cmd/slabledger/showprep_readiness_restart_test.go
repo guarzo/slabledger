@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +27,70 @@ func restartReadiness(mu *sync.RWMutex, closeCurrent, reopen func() error) error
 		return fmt.Errorf("reopen fixture application: %w", err)
 	}
 	return nil
+}
+
+func TestReadinessConcurrentRestartClosesCurrentInstance(t *testing.T) {
+	const restarts = 16
+	var mu sync.RWMutex
+	directory := t.TempDir()
+	current, err := os.CreateTemp(directory, "instance-")
+	require.NoError(t, err)
+	instances := []*os.File{current}
+	closes := map[*os.File]int{}
+	t.Cleanup(func() {
+		for _, instance := range instances {
+			_ = instance.Close()
+		}
+	})
+	ready := make(chan struct{}, restarts)
+	results := make(chan error, restarts)
+	mu.Lock()
+	for range restarts {
+		go func() {
+			// Mirror the caller's close binding. All callbacks are constructed
+			// before any restart may replace current, making early binding fail
+			// deterministically rather than relying on the race detector alone.
+			closeCurrent := func() error { return current.Close() }
+			ready <- struct{}{}
+			results <- restartReadiness(&mu, func() error {
+				if err := closeCurrent(); err != nil {
+					return err
+				}
+				closes[current]++
+				return nil
+			}, func() error {
+				next, err := os.CreateTemp(directory, "instance-")
+				if err != nil {
+					return err
+				}
+				current = next
+				instances = append(instances, next)
+				return nil
+			})
+		}()
+	}
+	for range restarts {
+		<-ready
+	}
+	mu.Unlock()
+	// Drain all workers before assertions/cleanup touch shared instance state.
+	errs := make([]error, restarts)
+	for i := range errs {
+		errs[i] = <-results
+	}
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+	require.Len(t, instances, restarts+1)
+	for _, prior := range instances[:restarts] {
+		require.Equal(t, 1, closes[prior], "each displaced instance must close exactly once")
+		_, err := prior.WriteString("closed")
+		require.ErrorIs(t, err, os.ErrClosed)
+	}
+	require.Same(t, instances[restarts], current)
+	require.Zero(t, closes[current], "the last installed instance must remain open")
+	_, err = current.WriteString("still current")
+	require.NoError(t, err)
 }
 
 func TestReadinessRestartFailureReleasesRequests(t *testing.T) {
