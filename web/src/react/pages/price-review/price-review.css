@@ -1,4 +1,5 @@
 .price-review {
+  --price-review-sticky-top: var(--space-4);
   color-scheme: dark;
   color: var(--text);
   font-size: var(--font-size-sm);
@@ -43,6 +44,7 @@
 .price-review-detail { display: none; padding: var(--space-4); }
 /* The integrated route has sticky app navigation above mobile focus targets. */
 .show-inventory .price-review-detail { scroll-margin-top: 5.5rem; }
+.show-inventory .price-review { --price-review-sticky-top: calc(var(--app-header-height) + var(--space-4)); }
 .price-review-detail-nav { justify-content: space-between; margin-bottom: var(--space-5); }
 .price-review-detail-nav button { min-width: 44px; min-height: 44px; }
 .price-review-detail-nav .price-review-back { flex-basis: 100%; }
@@ -78,7 +80,7 @@
 }
 @media (min-width: 900px) {
   .price-review-columns { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; }
-  .price-review-detail { display: block; padding: var(--space-5); position: sticky; top: var(--space-4); max-height: calc(100dvh - 2rem); overflow: auto; }
+  .price-review-detail { display: block; padding: var(--space-5); position: sticky; top: var(--price-review-sticky-top); max-height: calc(100dvh - var(--price-review-sticky-top) - var(--space-4)); overflow: auto; }
   .price-review-detail-nav .price-review-back { display: none; }
   .price-review[data-mobile-detail="true"] .price-review-list { display: block; }
   .price-review[data-mobile-detail="true"] .price-review-controls { display: grid; }

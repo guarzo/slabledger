@@ -298,6 +298,9 @@
   --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
+  /* Desktop shell: 32px avatar + 12px button padding + 20px row padding + border. */
+  --app-header-height: calc(4rem + 1px);
+
   /* ===================================
      Z-INDEX LAYERS
      =================================== */

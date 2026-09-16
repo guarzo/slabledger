@@ -29,15 +29,10 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
   const evidence = useShowEvidence(purchaseId, !!item, aggregate?.version);
   const detail = !evidence.isFetching && !evidence.isError ? evidence.data?.evaluation : undefined;
   const readError = evaluationError || (!aggregate && evidence.isError ? getErrorMessage(evidence.error) : undefined);
-  // A query-fresh cache entry is not a new observation. After aggregate failure,
-  // retain detail as inspectable facts only; a successful read clears that error
-  // through the shared hook's publication, never by comparing fingerprints.
-  // Unknown versions can recur after recovery, so their cached known detail
-  // cannot override the latest unknown aggregate either. A new detail read
-  // publishes its known evaluation to the aggregate before it can certify again.
-  const e = aggregate?.availability === 'unknown' ? aggregate
-    : readError ? aggregate ?? evidence.data?.evaluation
-    : detail && detail.version !== aggregate?.version ? detail : aggregate;
+  // The latest aggregate observation wins over cached detail for every outcome.
+  // Fingerprints do not order reads. A genuinely successful detail read publishes
+  // into the aggregate through useShowEvidence; cache reuse cannot certify again.
+  const e = aggregate ?? (readError ? evidence.data?.evaluation : detail);
   const unknownAsking = e?.availability === 'unknown';
   const currentAssessment = !readError && !unknownAsking;
   const savedCents = e?.localPriceCents ?? 0;
@@ -185,7 +180,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
           <div><dt>Evidence</dt><dd>{evidenceLabel(e)}{e.evidenceReason && ` · ${e.evidenceReason}`}</dd></div>
           <div><dt>Physical availability</dt><dd>{availabilityLabels[e.availability]}{!e.canPack && ' · Not eligible to pack'}</dd></div>
           <div><dt>CardLadder refreshed</dt><dd>{showTime(e.refreshedAt)}</dd></div>
-          <div><dt>Stored DH listed price</dt><dd>{e.listedPriceCents > 0 ? formatCents(e.listedPriceCents) : 'Not set'}{e.priceMismatch && ' · Differs from asking'}{e.priceAssociationUnclear && ' · Association unverified'}</dd></div>
+          <div><dt>Stored DH listed price</dt><dd>{unknownAsking ? 'Unknown' : e.listedPriceCents > 0 ? formatCents(e.listedPriceCents) : 'Not set'}{e.priceMismatch && ' · Differs from asking'}{e.priceAssociationUnclear && ' · Association unverified'}</dd></div>
           <div><dt>DH last synced</dt><dd>{showTime(e.listingSyncedAt)}</dd></div>
           <div><dt>Assessment policy</dt><dd>{e.policyVersion}</dd></div>
         </dl> : <p>Evaluation unavailable. Retry the evidence read.</p>}

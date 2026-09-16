@@ -71,7 +71,9 @@ it('does not recertify initially unversioned cached detail after failed midnight
   expect(screen.getAllByRole('link', { name: /Auction house sale/ })[0]).toBeVisible();
   expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,400.00');
   await advance(60000); assertUnavailable();
-  click('Inventory'); click('Price review'); await flush(); assertUnavailable();
+  click('Inventory');
+  expect(screen.getByRole('link', { name: /Review price 00000001/ })).toHaveAttribute('title', 'SlabLedger asking Unavailable');
+  click('Price review'); await flush(); assertUnavailable();
   fail = false;
   current = { ...current, version: 'recovered', readiness: { ...current.readiness!, expiresAt: '2026-09-18T00:00:00Z' } };
   const recoveryStart = requests.length;
@@ -135,6 +137,63 @@ it('does not let a recovered detail cache override a repeated unknown aggregate 
   expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
 });
 
+it.each(['snapshot failure', 'healthy changed assessment'] as const)('keeps the latest %s aggregate authoritative over query-fresh recovered detail until a new read publishes', async outcome => {
+  const snapshotFailure = outcome === 'snapshot failure';
+  const fallback = evaluation(snapshotFailure ? {
+    status: 'needs_review', reason: 'Evidence storage unavailable', evidenceNeedsReview: true, evidenceReason: 'Evidence storage unavailable',
+    version: 'deterministic-snapshot-failure', evidenceVersion: 'unreadable-snapshot', compCount: 0, medianCents: 0, latestSaleDate: '', refreshedAt: '',
+    recent: { ...evaluation().recent, saleIds: [], count: 0, medianCents: 0, latestSaleDate: '', latestSaleCount: 0, latestSaleMinCents: 0, latestSaleMaxCents: 0, gapPct: null },
+    readiness: { state: 'unavailable', refreshEligibility: 'unavailable', identityKey: 'a'.repeat(64), expiresAt: '', retryAt: '' },
+  } : { version: 'deterministic-above-comps' });
+  let detail = fallback;
+  let detailReads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/inventory') return Response.json({ items: [inventoryItem(fallback)], warnings: [] });
+    if (url.endsWith('/evaluate')) return Response.json({ evaluations: [fallback] });
+    if (url.includes('/evidence/')) {
+      detailReads++;
+      return Response.json({ evaluation: detail, sales: detail.evidenceNeedsReview ? [] : sales });
+    }
+    throw new Error(`Unexpected ${url}`);
+  }));
+  mount(); await flush(); await advance(100);
+  expect(saved().getByText(snapshotFailure ? 'Evidence unavailable' : 'Asking above comps', { exact: true })).toBeVisible();
+  const fallbackKey = [...showPrepKeys.evidence(purchaseId), fallback.version];
+  detail = evaluation({ status: 'supported', reason: 'New read supports asking', version: 'recovered-first', recent: { ...evaluation().recent, gapPct: 0 } });
+  await act(async () => { await qc.refetchQueries({ queryKey: fallbackKey, exact: true }); }); await advance(100);
+  expect(saved().getByText('Supported', { exact: true })).toBeVisible();
+  expect(qc.getQueryData<ShowEvidence>(fallbackKey)?.evaluation.version).toBe('recovered-first');
+  fireEvent.click(selected());
+  const input = screen.getByRole('textbox', { name: 'Asking price' });
+  fireEvent.change(input, { target: { value: 'unfinished draft' } }); input.focus();
+  const readsBeforeRepeat = detailReads;
+  await act(async () => { await qc.invalidateQueries({ queryKey: showPrepKeys.evaluations }); }); await advance(100);
+  expect(qc.getQueryData<InventoryEvaluations>([...showPrepKeys.evaluations, [purchaseId]])?.evaluations[purchaseId]).toEqual(fallback);
+  expect(detailReads).toBe(readsBeforeRepeat); // Fresh recovered detail under the repeated fallback key, not a new observation.
+  expect(screen.getByRole('button', { name: snapshotFailure ? 'Unavailable 1' : 'Above comps 1' })).toBeVisible();
+  expect(saved().queryByText('Supported', { exact: true })).toBeNull();
+  expect(saved().queryByText('New read supports asking', { exact: true })).toBeNull();
+  expect(saved().getByText(snapshotFailure ? 'Evidence unavailable' : 'Asking above comps', { exact: true })).toBeVisible();
+  expect(saved().queryByText('At asking', { exact: true })).toBeNull();
+  if (snapshotFailure) expect(saved().queryByText(/\d.*%.*asking|Below asking/)).toBeNull();
+  expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,800.00');
+  expect(input).toHaveValue('unfinished draft'); expect(input).toHaveFocus(); expect(selected()).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  // Elapsed freshness alone is not recovery. Remounting stale detail actually reads again.
+  await advance(31000);
+  expect(detailReads).toBe(readsBeforeRepeat);
+  expect(saved().queryByText('Supported', { exact: true })).toBeNull();
+  detail = { ...detail, version: 'recovered-subsequent' };
+  click('Inventory'); click('Price review'); await flush(); await advance(100);
+  expect(detailReads).toBeGreaterThan(readsBeforeRepeat);
+  expect(qc.getQueryData<InventoryEvaluations>([...showPrepKeys.evaluations, [purchaseId]])?.evaluations[purchaseId].version).toBe('recovered-subsequent');
+  expect(saved().getByText('Supported', { exact: true })).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
+  expect(selected()).toBeChecked(); expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  fireEvent.click(selected()); fireEvent.click(selected());
+  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
+});
+
 it.each(['current', 'legacy'] as const)('presents the %s failed-purchase-read DTO as unavailable, never a known missing asking', async shape => {
   const unknown = { ...unknownPurchase, ...(shape === 'legacy' ? { status: 'no_listed_price', reason: 'No positive SlabLedger asking price', version: '6207014479ee05a1c6edf8f7e97cf87d78352e2b33299c39ca4873dc46235e6d' } : {}) } as ShowEvaluation;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -153,6 +212,10 @@ it.each(['current', 'legacy'] as const)('presents the %s failed-purchase-read DT
   expect(screen.getByRole('button', { name: 'Review Aurora Dragon' })).not.toHaveTextContent(/No asking price|Not set/);
   expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
   fireEvent.click(selected()); expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  fireEvent.click(screen.getByText('Source diagnostics'));
+  expect(screen.getByText('Stored DH listed price').nextElementSibling).toHaveTextContent('Unknown');
+  click('Inventory');
+  expect(screen.getByRole('link', { name: /Review price 00000001/ })).toHaveAttribute('title', 'SlabLedger asking Unknown');
 });
 
 it.each(['healthy', 'failed snapshot', 'failed detail'] as const)('retains genuinely unpriced semantics with %s evidence', async outcome => {
@@ -174,4 +237,6 @@ it.each(['healthy', 'failed snapshot', 'failed detail'] as const)('retains genui
   expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('Not set');
   expect(screen.getByRole('textbox', { name: 'Asking price' })).toBeEnabled();
   expect(saved().queryByText(/Stored sales may be partial or stale/) !== null).toBe(unhealthy);
+  click('Inventory');
+  expect(screen.getByRole('link', { name: /Review price 00000001/ })).toHaveAttribute('title', 'SlabLedger asking not set');
 });

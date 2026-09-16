@@ -212,7 +212,7 @@ export default function Header() {
       `}
       role="banner"
     >
-      <div className="flex items-center justify-between gap-4 px-6 py-2.5 max-w-[1920px] mx-auto">
+      <div className="flex items-center justify-between gap-4 px-6 py-2.5 md:h-[calc(var(--app-header-height)-1px)] max-w-[1920px] mx-auto">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 group relative">
           <img

@@ -220,7 +220,10 @@ Cap at 65–75ch on prose surfaces. Almost no surface in this app is prose; this
 ```
 
 Card padding tiers: `sm 14px / default 20px / lg 28px`.
-Header chrome: `py-2.5 px-6` (10×24).
+Header chrome: `py-2.5 px-6` (10×24). Desktop total height uses
+`--app-header-height: calc(4rem + 1px)` (65px at the default root size), including
+the bottom border. Price review's desktop sticky offset and available height use
+that same token; mobile retains its natural header height.
 Page content: `max-w-6xl mx-auto px-4 py-8`.
 Top chrome max-width: `1920px`.
 

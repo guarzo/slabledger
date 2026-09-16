@@ -11,10 +11,10 @@ export function ShowSupport({ evaluation: e }: { evaluation: ShowEvaluation }) {
   return <div className="show-support tabular-nums">
     <strong className={`show-tone-${indicator.tone}`}>{indicator.label}</strong>
     {lifecycle !== indicator.label && <span>{lifecycle}</span>}
-    <span>SlabLedger asking <b>{e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'Missing'}</b></span>
+    <span>SlabLedger asking <b>{e.availability === 'unknown' ? 'Unknown' : e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'Missing'}</b></span>
     {!e.evidenceNeedsReview && <span>Recent median <b>{e.recent.count > 0 ? formatCents(e.recent.medianCents) : 'No matching sales'}</b> · {e.recent.count} sales</span>}
     {!e.evidenceNeedsReview && e.recent.latestSaleDate && <span>Newest sale date {e.recent.latestSaleDate}</span>}
-    <span>Stored DH listed <b>{e.listedPriceCents > 0 ? formatCents(e.listedPriceCents) : 'Missing'}</b>{e.priceAssociationUnclear && ' (unverified)'}</span>
+    <span>Stored DH listed <b>{e.availability === 'unknown' ? 'Unknown' : e.listedPriceCents > 0 ? formatCents(e.listedPriceCents) : 'Missing'}</b>{e.priceAssociationUnclear && ' (unverified)'}</span>
     <span>{availabilityLabels[e.availability] ?? availabilityLabels.unknown}</span>
     {e.priceAssociationUnclear && <span className="text-[var(--warning)]">DH price association unclear; asking assessment is independent</span>}
     {e.priceMismatch && <span className="text-[var(--warning)]">Stored DH price differs from SlabLedger asking</span>}
@@ -54,7 +54,7 @@ export function ShowEvidenceButton({ purchaseId, certNumber, evaluation, loading
   purchaseId: string; certNumber: string; evaluation?: ShowEvaluation; loading?: boolean; expanded: boolean; onClick: () => void; showListedPrice?: boolean;
 }) {
   const indicator = evaluation ? supportIndicator(evaluation) : { label: loading ? 'Loading price support…' : 'Evaluation unavailable', tone: 'muted' };
-  const askingPrice = !evaluation ? 'Unavailable' : evaluation.localPriceCents > 0 ? formatCents(evaluation.localPriceCents) : 'Missing';
+  const askingPrice = !evaluation ? 'Unavailable' : evaluation.availability === 'unknown' ? 'Unknown' : evaluation.localPriceCents > 0 ? formatCents(evaluation.localPriceCents) : 'Missing';
   return <span className="show-price-support">
     {showListedPrice && <span className="show-listed-price">SlabLedger asking {askingPrice}</span>}
     <button type="button" className={`show-evidence-trigger show-tone-${indicator.tone}`}

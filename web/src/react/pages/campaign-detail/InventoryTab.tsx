@@ -194,7 +194,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     const indicator = e ? supportIndicator(e) : { label: evaluationsQuery.isFetching ? 'Loading price support…' : 'Evaluation unavailable', tone: 'muted' };
     return <Link to={`/inventory?${reviewURL(item.purchase.id)}`} className={`show-evidence-trigger show-tone-${indicator.tone}`}
       aria-label={`Review price ${item.purchase.certNumber}: ${indicator.label}`}
-      title={`SlabLedger asking ${e && e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'not set'}`}
+      title={`SlabLedger asking ${!e ? 'Unavailable' : e.availability === 'unknown' ? 'Unknown' : e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'not set'}`}
       onClick={event => event.stopPropagation()}><strong>{indicator.label}</strong><span aria-hidden="true">→</span></Link>;
   };
   const unavailableEvaluations = Object.keys(evaluationsQuery.data?.errors ?? {}).length + evaluationsQuery.unresolvedCount;

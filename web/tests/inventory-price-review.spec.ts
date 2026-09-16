@@ -55,6 +55,49 @@ test('mobile history reopens visible card details with retained drafts after ret
   await writeFile(info.outputPath('history-requests.json'), JSON.stringify({ requests, pageErrors, queueScroll }, null, 2));
 });
 
+for (const width of [1440, 1024]) {
+  test(`scrolled desktop price navigation stays below the shell and within the viewport at ${width}`, async ({ page, baseURL }, info) => {
+    await page.setViewportSize({ width, height: 800 });
+    const values = Array.from({ length: 24 }, (_, i) => evaluation({
+      purchaseId: `11111111-1111-4111-8111-${String(i + 1).padStart(12, '0')}`, cardName: `Fixture card ${i + 1}`,
+    }));
+    const requests: string[] = [];
+    const pageErrors: string[] = []; page.on('pageerror', error => pageErrors.push(error.message));
+    await page.route(url => url.origin !== new URL(baseURL!).origin, route => route.abort());
+    await page.route(url => url.pathname.startsWith('/api/'), async route => {
+      const path = new URL(route.request().url()).pathname; requests.push(path);
+      if (path === '/api/auth/user') return route.fulfill({ json: { id: 1, username: 'Operator', is_admin: false } });
+      if (path === '/api/inventory') return route.fulfill({ json: { items: values.map(e => inventoryItem(e)), warnings: [] } });
+      if (path.endsWith('/evaluate')) return route.fulfill({ json: { evaluations: values } });
+      if (path.includes('/evidence/')) return route.fulfill({ json: { evaluation: values.find(e => path.endsWith(e.purchaseId)), sales } });
+      return route.fulfill({ status: 400, json: { error: 'Unexpected fixture request' } });
+    });
+    await page.goto('/inventory?view=pricing');
+    const details = page.getByRole('region', { name: 'Price details', exact: true });
+    await expect(details.getByRole('heading', { name: 'Fixture card 1', exact: true })).toBeVisible();
+    await page.evaluate(() => window.scrollTo({ top: 950, behavior: 'instant' }));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(900);
+    const banner = (await page.getByRole('banner').boundingBox())!;
+    const navigation = (await details.locator('.price-review-detail-nav').boundingBox())!;
+    const panel = (await details.boundingBox())!;
+    await page.screenshot({ path: info.outputPath(`scrolled-desktop-${width}.png`) });
+    await writeFile(info.outputPath('geometry.json'), JSON.stringify({ banner, navigation, panel, requests, pageErrors }, null, 2));
+    expect(navigation.y).toBeGreaterThanOrEqual(banner.y + banner.height);
+    expect(panel.y).toBeGreaterThanOrEqual(banner.y + banner.height);
+    expect(panel.y + panel.height).toBeLessThanOrEqual(800);
+    expect(panel.height).toBeLessThanOrEqual(800 - banner.height - 32);
+    const next = details.getByRole('button', { name: 'Next card', exact: true });
+    expect(await next.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    })).toBe(true);
+    await next.click();
+    await expect(details.getByRole('heading', { name: 'Fixture card 2', exact: true })).toBeVisible();
+    expect(pageErrors).toEqual([]);
+    expect(requests.some(path => /preview|refresh|review-price|override/.test(path))).toBe(false);
+  });
+}
+
 for (const width of [1440, 390]) {
   test(`normal/review integration and read-only save recovery at ${width}`, async ({ page, baseURL }, info) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });

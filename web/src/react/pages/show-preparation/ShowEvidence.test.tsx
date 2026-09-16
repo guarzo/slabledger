@@ -19,6 +19,16 @@ it.each([
   render(<ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678" evaluation={evaluation(values)} showListedPrice expanded={false} onClick={() => {}} />);
   expect(screen.getByText(label)).toBeVisible();
 });
+it.each([0, 40000])('does not label unreadable purchase prices as missing or known (%s retained cents)', cents => {
+  const unknown = evaluation({ availability: 'unknown', status: 'needs_review', evidenceNeedsReview: true,
+    localPriceCents: cents, listedPriceCents: cents });
+  render(<><ShowSupport evaluation={unknown} /><ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678"
+    evaluation={unknown} showListedPrice expanded={false} onClick={() => {}} /></>);
+  expect(screen.getAllByText(/^SlabLedger asking/)).toHaveLength(2);
+  for (const asking of screen.getAllByText(/^SlabLedger asking/)) expect(asking).toHaveTextContent('SlabLedger asking Unknown');
+  expect(screen.getByText(/^Stored DH listed/)).toHaveTextContent('Stored DH listed Unknown');
+  expect(screen.queryByText(/Missing|\$400.00/)).not.toBeInTheDocument();
+});
 it('shows canonical support independently of a DH association warning', () => {
   render(<ShowSupport evaluation={evaluation({ listedPriceCents: 90000, localPriceCents: 30000, priceMismatch: true, priceAssociationUnclear: true })} />);
   expect(screen.getByText('Supported', { selector: 'strong' })).toBeVisible();

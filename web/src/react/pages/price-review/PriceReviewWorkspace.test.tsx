@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AgingItem } from '../../../types/campaigns';
 import type { ShowEvaluation } from '../../../types/showprep';
-import { showPrepAPI } from '../../../js/api/showprep';
+import { showPrepKeys } from '../../queries/showPrepKeys';
+import { type InventoryEvaluations, showPrepAPI } from '../../../js/api/showprep';
 import { priceReviewAPI } from '../../../js/api/priceReview';
 import { PriceReviewWorkspace } from './PriceReviewWorkspace';
 import { usePriceReviewState } from './usePriceReviewState';
@@ -27,7 +28,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); qc.clear(); vi.restoreAllMocks(); });
 const save = vi.fn(async (_id: string, _cents: number) => {});
-function Harness({ items = initialItems, evaluations = initialEvaluations }: { items?: AgingItem[]; evaluations?: Record<string, ShowEvaluation> }) {
+function Harness({ items = initialItems, evaluations: observation }: { items?: AgingItem[]; evaluations?: Record<string, ShowEvaluation> }) {
+  // Keep the aggregate subscribed across workspace remounts, like InventoryTab.
+  const { data } = useQuery<InventoryEvaluations>({ queryKey: [...showPrepKeys.evaluations, [purchaseId, otherId]],
+    initialData: { evaluations: initialEvaluations, errors: {} }, enabled: false });
+  const evaluations = observation ?? data!.evaluations;
   const review = usePriceReviewState(items, evaluations, '');
   const [selected, setSelected] = useState(new Set<string>());
   const [visible, setVisible] = useState(true);
