@@ -1,8 +1,9 @@
 # Inventory price review
 
 Date: 2026-09-16
-Status: Approved direction and assessment policy; written design awaiting review before implementation.
+Status: Approved for implementation planning. The operator approved the assessment policy, B-style focused Price review view, and preservation of existing price-save/DH synchronization/eligible auto-listing behavior.
 Baseline: `6ca4b420` (merged PR #707).
+Independent review: Claude Opus 5 reviewed this design at `c05b78f6`: SHIP, no findings. This approval update records the subsequently confirmed save behavior; it does not change the reviewed technical design.
 
 ## 1. Purpose and approved scope
 
