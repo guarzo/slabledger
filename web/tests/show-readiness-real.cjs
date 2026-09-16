@@ -7,7 +7,7 @@
 const { chromium, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { withFixtureCleanup, assertLastRowClearance } = require('./show-readiness-browser-helpers.cjs');
+const { withFixtureCleanup, assertLastRowClearance, assertTouchTargetHeights } = require('./show-readiness-browser-helpers.cjs');
 const { exerciseGeometry } = require('./show-readiness-geometry.cjs');
 const app = process.env.SHOW_READINESS_APP;
 const control = process.env.SHOW_READINESS_CONTROL;
@@ -73,11 +73,12 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
           }),
         overflow: document.documentElement.scrollWidth > innerWidth,
         controls: [...document.querySelectorAll('.show-toolbar select, .show-toolbar button, .show-selection-bar:not([hidden]) button')]
-          .filter(e => e.getClientRects().length).map(e => ({ text: e.textContent, height: e.getBoundingClientRect().height })),
+          .filter(e => e.getClientRects().length).map(e => ({ text: e.textContent, height: e.getBoundingClientRect().height,
+            computedHeight: window.getComputedStyle(e).height, layoutHeight: e.offsetHeight, transform: window.getComputedStyle(e).transform })),
       }));
       metrics.push({ name, ...geometry }); expect(geometry.overflow, name).toBe(false);
       expect(geometry.renderedFonts.every(f => f.loaded), `${name} rendered webfonts loaded`).toBe(true);
-      if (geometry.width <= 768) expect(geometry.controls.every(c => c.height >= 44), `${name} touch targets`).toBe(true);
+      if (geometry.width <= 768) assertTouchTargetHeights(geometry.controls, name);
     }
     const checkbox = i => page.getByRole('checkbox', { name: `Select ${cert(i)}`, exact: true });
     const add = n => page.getByRole('button', { name: `Add to show (${n})`, exact: true });

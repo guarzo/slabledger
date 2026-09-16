@@ -30,4 +30,15 @@ async function assertLastRowClearance(last, bar) {
   expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(barBox.y);
 }
 
-module.exports = { withFixtureCleanup, assertLastRowClearance };
+// The requirement remains 44 CSS px. Chromium can report 43.99993896484375
+// for a 44px button at the tail of its transform transition. Permit only this
+// measurement-scale residual: 0.0001px is far below a 1/64px layout unit, not
+// a layout allowance. Keep raw rects in artifacts and reject real undersizing.
+const TOUCH_TARGET_RECT_EPSILON_PX = 0.0001;
+function assertTouchTargetHeights(controls, name) {
+  for (const control of controls) {
+    expect(control.height, `${name} ${control.text} touch target height`).toBeGreaterThanOrEqual(44 - TOUCH_TARGET_RECT_EPSILON_PX);
+  }
+}
+
+module.exports = { withFixtureCleanup, assertLastRowClearance, assertTouchTargetHeights };
