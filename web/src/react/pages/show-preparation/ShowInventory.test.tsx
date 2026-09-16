@@ -172,11 +172,12 @@ describe('cached show preparation in the existing inventory', () => {
     view.unmount(); qc.clear();
   });
   it.each([false, true])('keeps unfinished cards honest when detail interrupts an initial aggregate (cancel=%s)', async cancel => {
-    let release!: (value: Response) => void;
-    const pending = new Promise<Response>(resolve => { release = resolve; }); let batches = 0;
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; }); let batches = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (!url.endsWith('/evaluate')) return new Response(JSON.stringify({ evaluation: values[0], sales: [] }));
-      return ++batches <= 2 ? pending : new Response(JSON.stringify({ evaluations: values }));
+      if (++batches <= 2) await pending;
+      return new Response(JSON.stringify({ evaluations: values }));
     }));
     const qc = mount();
     try {
@@ -184,6 +185,7 @@ describe('cached show preparation in the existing inventory', () => {
       fireEvent.click(screen.getByRole('button', { name: /Show 30-day evidence 12345678/ }));
       await screen.findByText(/Complete current lookup/);
       expect(screen.getAllByText('Loading price support…')).toHaveLength(2);
+      expect(batches).toBe(2);
       if (cancel) {
         await act(async () => qc.cancelQueries({ queryKey: showPrepKeys.evaluations }));
         const retry = await screen.findByRole('button', { name: 'Retry evaluation' });
@@ -191,7 +193,17 @@ describe('cached show preparation in the existing inventory', () => {
         await waitFor(() => expect(batches).toBe(3));
         await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry evaluation' })).not.toBeInTheDocument());
       }
-    } finally { await act(async () => release(new Response(JSON.stringify({ evaluations: values })))); }
+      await act(async () => release());
+      await waitFor(() => expect(qc.isFetching()).toBe(0));
+      expect(batches).toBe(cancel ? 3 : 2);
+      expect(qc.getQueriesData<InventoryEvaluations>({ queryKey: showPrepKeys.evaluations })[0][1]).toEqual({
+        evaluations: Object.fromEntries(values.map(value => [value.purchaseId, value])), errors: {},
+      });
+      expect(screen.queryByText('Loading price support…')).not.toBeInTheDocument();
+      expect(screen.queryByText('Evaluation unavailable', { selector: 'strong' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry evaluation' })).not.toBeInTheDocument();
+    } finally { await act(async () => release()); }
   });
   it('loads one compact stored evidence disclosure only on intent, showing every sale and safe links', async () => {
     mount(); const trigger = await screen.findByRole('button', { name: /Show 30-day evidence 12345678/ });

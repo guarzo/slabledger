@@ -73,11 +73,17 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 	sourceBaseline, providerBaseline := len(f.calls), len(f.providerRequests)
 	f.mu.Unlock()
 	// Disabled production composition also supplies the real coverage/admin API.
+	var mu sync.RWMutex
+	mu.Lock()
 	result, stopRuntime := readinessRuntime(t, db, source.URL, false)
-	defer func() { stopRuntime() }()
+	mu.Unlock()
+	defer func() {
+		mu.Lock()
+		defer mu.Unlock()
+		stopRuntime()
+	}()
 	baseline, err := readinessLedger(t.Context(), db)
 	require.NoError(t, err)
-	var mu sync.RWMutex
 	router := readinessRouter(db, f, result)
 	var requestsMu sync.Mutex
 	requests := []map[string]string{}
@@ -137,8 +143,10 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 				router = readinessRouter(db, f, result)
 				mu.Unlock()
 			case "/publication-stop":
+				mu.Lock()
 				stopRuntime()
 				f.setMode("blocked")
+				mu.Unlock()
 			case "/source":
 				mode := r.URL.Query().Get("mode")
 				if mode != "hold" && mode != "complete" && mode != "failed" && mode != "partial" {
@@ -157,8 +165,11 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 				// router, auth/inventory/show service, source client, and store.
 				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 				defer cancel()
-				stopRuntime() // Join before closing the old pool; remain disabled after restart.
-				err := restartReadiness(&mu, readinessCurrentCloser(&db), func() error {
+				closeCurrent := readinessCurrentCloser(&db)
+				err := restartReadiness(&mu, func() error {
+					stopRuntime() // Join under the lifecycle lock before closing the current pool.
+					return closeCurrent()
+				}, func() error {
 					next, err := openReadinessDB(ctx, raw)
 					if err != nil {
 						return err

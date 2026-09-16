@@ -78,7 +78,11 @@ func TestShowPrepRuntimeRealStartupFirstSaveAndCrossInstance(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(cl.FirebaseRefreshResponse{IDToken: "current-id", RefreshToken: "rotated-token", ExpiresIn: "3600"})
 		case "/search":
 			searchCalls.Add(1)
-			require.Equal(t, "Bearer current-id", r.Header.Get("Authorization"))
+			if r.Header.Get("Authorization") != "Bearer current-id" {
+				t.Errorf("search request used unexpected authorization")
+				http.Error(w, "fixture token required", http.StatusUnauthorized)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"hits": []any{}, "totalHits": 0})
 		default:
 			t.Errorf("unexpected provider endpoint %s", r.URL.Path)

@@ -107,18 +107,25 @@ func TestShowPrepRequestOnlyRecordsIntentAndCoalesces(t *testing.T) {
 }
 
 func TestShowPrepDisabledAndStatusNeverAcquire(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
-		t.Run(map[bool]string{false: "disabled", true: "unconfigured"}[enabled], func(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		enabled   bool
+		wantState string
+	}{
+		{"disabled", false, "disabled"},
+		{"unconfigured", true, "unconfigured"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			var sourceCalls atomic.Int32
 			worker := sp.NewEvidenceWorker(&mocks.ShowPrepWorkerStoreMock{}, func(context.Context) (sp.Source, error) { sourceCalls.Add(1); return nil, nil }, nil, nil)
-			s := NewShowPrepRefreshScheduler(worker, nil, mocks.NewMockLogger(), enabled)
+			s := NewShowPrepRefreshScheduler(worker, nil, mocks.NewMockLogger(), tc.enabled)
 			status, err := s.Status(context.Background())
 			require.NoError(t, err)
-			require.Equal(t, enabled, status.Enabled)
+			require.Equal(t, tc.enabled, status.Enabled)
 			require.False(t, status.Configured)
-			require.Equal(t, map[bool]string{false: "disabled", true: "unconfigured"}[enabled], status.State)
+			require.Equal(t, tc.wantState, status.State)
 			require.Zero(t, sourceCalls.Load())
-			if !enabled {
+			if !tc.enabled {
 				s.Start(context.Background())
 				require.Zero(t, sourceCalls.Load())
 			}

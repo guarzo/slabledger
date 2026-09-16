@@ -45,11 +45,19 @@ func showWorkerCandidates(ctx context.Context, q showPrepQuery, id *sp.Identity)
 }
 
 func showWorkerInventory(ctx context.Context, q showPrepQuery, only *sp.Identity) (map[string]*sp.WorkerCandidate, error) {
-	rows, err := q.QueryContext(ctx, `SELECT p.gem_rate_id,p.grader,p.grade_value,count(*)
+	query := `SELECT p.gem_rate_id,p.grader,p.grade_value,count(*)
  FROM campaign_purchases p JOIN campaigns c ON c.id=p.campaign_id
  WHERE NOT p.was_refunded AND c.phase<>'closed'
- AND NOT EXISTS(SELECT 1 FROM campaign_sales sale WHERE sale.purchase_id=p.id)
- GROUP BY p.gem_rate_id,p.grader,p.grade_value`)
+ AND NOT EXISTS(SELECT 1 FROM campaign_sales sale WHERE sale.purchase_id=p.id)`
+	var args []any
+	if only != nil {
+		// Purchase graders are CHECK-constrained to canonical values. Profiles
+		// still need the authoritative Go Unicode normalization below.
+		query += ` AND p.grader=$1 AND p.grade_value=$2`
+		args = []any{only.Grader, only.Grade}
+	}
+	query += ` GROUP BY p.gem_rate_id,p.grader,p.grade_value`
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
