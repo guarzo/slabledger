@@ -72,6 +72,10 @@ func TestPriceReviewRealBrowser(t *testing.T) {
 	require.NoError(t, err)
 	archiveReadiness(t, artifacts, "price-review-initial", initial)
 	var failedReads atomic.Bool
+	var unmarkedMobileReads atomic.Int32
+	if os.Getenv("PRICE_REVIEW_UNMARKED_MOBILE_PROBE") == "1" {
+		unmarkedMobileReads.Store(1)
+	}
 	var requestMu sync.Mutex
 	requests := []map[string]string{}
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +84,14 @@ func TestPriceReviewRealBrowser(t *testing.T) {
 		requestMu.Unlock()
 		// Precisely attributed server-side read fault; all other requests reach the
 		// real router/auth/service/PG. No browser interception of application APIs.
+		if r.Method == "GET" && r.URL.Path == "/api/inventory" && r.Header.Get("X-Price-Review-Browser-Context") == "mobile" && unmarkedMobileReads.CompareAndSwap(1, 0) {
+			// Negative control: recover on retry, but never mark this as allowed.
+			t.Log("injected one UNMARKED mobile inventory503; retry reaches real router")
+			http.Error(w, `{"error":"unmarked mobile failure probe"}`, http.StatusServiceUnavailable)
+			return
+		}
 		if r.Method == "GET" && r.URL.Path == "/api/inventory" && failedReads.Load() {
+			w.Header().Set("X-Price-Review-Controlled-Fault", "inventory-read")
 			http.Error(w, `{"error":"controlled inventory read failure"}`, http.StatusServiceUnavailable)
 			return
 		}
@@ -191,6 +202,7 @@ func TestPriceReviewRealBrowser(t *testing.T) {
 	output, runErr := command.CombinedOutput()
 	t.Logf("browser output:\n%s", output)
 	handler.WaitBackground()
+	require.Zero(t, unmarkedMobileReads.Load(), "negative probe must reach the mobile application request")
 	require.NoError(t, runErr)
 	phaseMu.Lock()
 	defer phaseMu.Unlock()

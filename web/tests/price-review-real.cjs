@@ -5,13 +5,16 @@ const { chromium, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { withFixtureCleanup } = require('./show-readiness-browser-helpers.cjs');
+const { createPriceReviewObserver } = require('./price-review-browser-observer.cjs');
 const app = process.env.SHOW_READINESS_APP;
 const control = process.env.SHOW_READINESS_CONTROL;
 const artifacts = process.env.SHOW_READINESS_ARTIFACTS;
 const headers = { Authorization: `Bearer ${process.env.SHOW_READINESS_TOKEN}`, 'Content-Type': 'application/json' };
 const id = i => `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`;
 for (const url of [app, control]) if (new URL(url).hostname !== '127.0.0.1') throw Error('owned loopback fixture required');
-const wire = [], snapshots = {}, errors = [], failures = [];
+const observer = createPriceReviewObserver(app);
+const { wire, errors, failures } = observer;
+const snapshots = {};
 async function json(url, method = 'GET', body, status = 200) {
   const response = await fetch(url, { method, headers, body: body && JSON.stringify(body), signal: AbortSignal.timeout(15000) });
   wire.push({ method, url, status: response.status, body });
@@ -23,16 +26,12 @@ const command = route => json(`${control}/${route}`, 'POST');
 const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
 (async () => {
   const browser = await chromium.launch({ headless: true });
-  let page;
+  let page; let exerciseCompleted = false;
   await withFixtureCleanup(async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, extraHTTPHeaders: headers });
+    observer.observe(context, 'desktop');
     await context.route(url => url.origin !== new URL(app).origin, route => route.abort());
     page = await context.newPage();
-    page.on('pageerror', error => errors.push(error.message));
-    page.on('response', response => {
-      if (response.url().startsWith(app) && response.status() >= 400) failures.push({ url: response.url(), status: response.status() });
-    });
-    page.on('request', request => wire.push({ method: request.method(), url: request.url(), body: request.postData() }));
     const saved = () => page.getByRole('region', { name: 'Saved price assessment' });
     const trial = () => page.getByRole('region', { name: 'Trial price assessment' });
     const filters = () => page.getByRole('group', { name: 'Price assessment filters' });
@@ -165,10 +164,10 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     await capture('packed-authoritative-price');
     // Fresh context has no in-memory drafts. The real deep link opens the
     // saved identity on mobile; Back restores the queue's explicit control.
-    const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, extraHTTPHeaders: headers });
+    const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, extraHTTPHeaders: { ...headers, 'X-Price-Review-Browser-Context': 'mobile' } });
+    observer.observe(mobile, 'mobile');
     await mobile.route(url => url.origin !== new URL(app).origin, route => route.abort());
     const desktop = page; page = await mobile.newPage();
-    page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${app}/inventory?view=pricing&review=${id(1)}&retained=price-review`);
     await expect(page.getByRole('heading', { name: 'Declining fixture', exact: true })).toBeVisible();
     await expect(page.getByLabel('Saved asking price')).toHaveText('$2,400.00');
@@ -177,17 +176,30 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     await page.getByRole('button', { name: 'Back to inventory list', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Review Declining fixture', exact: true })).toBeFocused();
     expect(page.url()).toContain('retained=price-review'); await capture('mobile-return-queue');
+    snapshots.mobileRecovered = { savedAsking: await page.getByLabel('Saved asking price').textContent(),
+      queueFocus: await page.evaluate(() => document.activeElement.getAttribute('aria-label')) };
+    console.log('PASS mobile UI recovered: authoritative saved asking240000 and queue return focus');
     await mobile.close(); page = desktop;
     snapshots.final = await state();
     for (const [table, rows] of Object.entries(snapshots.saved.rows)) if (!['showprep_items','showprep_lists'].includes(table)) expect(snapshots.final.rows[table], table).toBe(rows);
     expect(snapshots.final.sourceCalls).toBe(0); expect(snapshots.final.providerRequests).toBe(0);
-    expect(failures.length).toBeGreaterThan(0);
-    expect(failures.every(f => new URL(f.url).pathname === '/api/inventory' && f.status === 503)).toBe(true);
-    expect(errors).toEqual([]);
     expect(snapshots.final.requests.filter(r => !['GET','HEAD'].includes(r.method) && !r.path.startsWith('/api/show-prep/') && !r.path.endsWith('/review-price'))).toEqual([]);
-    console.log('PASS seven-case cached real-wire price review: whole-row immutable navigation/trials; controlled background+503; three explicit reviewed saves; real DH sync/list results and persisted effects; stale Add/Pack409, explicit packing, mobile deep link/focus; provider acquisition=0');
+    exerciseCompleted = true;
   }, [
-    () => fs.writeFile(path.join(artifacts, 'price-review-wire.json'), JSON.stringify({ wire, snapshots, errors, failures }, null, 2)),
-    () => page?.screenshot({ path: path.join(artifacts, 'last-view.png'), fullPage: true }),
+    () => page && !page.isClosed() && page.screenshot({ path: path.join(artifacts, 'last-view.png'), fullPage: true }),
+    async () => {
+      // Stop every response producer, then join even observers triggered during
+      // shutdown. A successful UI retry must not hide a prior HTTP failure.
+      await observer.drain(); await browser.close(); await observer.drain();
+    },
+    async () => {
+      await observer.drain();
+      await fs.writeFile(path.join(artifacts, 'price-review-wire.json'), JSON.stringify({ wire, snapshots, errors, failures }, null, 2));
+    },
+    () => {
+      observer.assertNoUnexpected();
+      expect(failures.some(failure => failure.controlled), 'marked inventory read fault exercised').toBe(true);
+      if (exerciseCompleted) console.log('PASS seven-case cached real-wire price review: whole-row immutable navigation/trials; controlled background+503; three explicit reviewed saves; real DH sync/list results and persisted effects; stale Add/Pack409, explicit packing, mobile deep link/focus; provider acquisition=0; all-context HTTP observers drained');
+    },
   ], () => browser.close());
 })().catch(error => { console.error(error); process.exitCode = 1; });
