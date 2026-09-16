@@ -1,7 +1,7 @@
 # Inventory price review
 
 Date: 2026-09-16
-Status: Approved for implementation planning. The operator approved the assessment policy, B-style focused Price review view, and preservation of existing price-save/DH synchronization/eligible auto-listing behavior.
+Status: Implemented and verified on `investigate/price-support-705-707`; not merged or deployed. The operator approved the assessment policy, B-style focused Price review view, and preservation of existing price-save/DH synchronization/eligible auto-listing behavior. Final implementation evidence and review corrections are recorded in `implementation-notes.md`.
 Baseline: `6ca4b420` (merged PR #707).
 Independent review: Claude Opus 5 reviewed this design at `c05b78f6`: SHIP, no findings. This approval update records the subsequently confirmed save behavior; it does not change the reviewed technical design.
 

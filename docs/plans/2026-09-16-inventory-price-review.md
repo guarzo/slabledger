@@ -1,5 +1,14 @@
 # Inventory Price Review Implementation Plan
 
+**Execution status (2026-09-16):** Implemented and independently reviewed on
+`investigate/price-support-705-707`. Final application commit `65affbce`; subsequent
+`e1fca4b1` tightens browser measurement diagnostics. Fresh final verification,
+review-driven corrections and limitations are recorded in `implementation-notes.md`
+under “Inventory price review: final implementation verification”. The original
+checkboxes below remain the planning record, not a claim of pending implementation.
+Private comparison retirement still awaits operator acceptance. No merge, push or
+deployment was performed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Audit committed inventory prices using recent matching sales, then explicitly save a reviewed price from the selected B-style workspace without changing existing DH save behavior.

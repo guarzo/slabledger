@@ -960,3 +960,98 @@ Scoped `polish-core --fix` was performed locally; whole-range polish and indepen
 implementation review are parent-owned after this task commit. No new dependencies,
 production backend changes, migrations, default DB access or external provider
 acquisition occurred in the price-review phase.
+
+## Inventory price review: final implementation verification (2026-09-16)
+
+Implementation is complete on `investigate/price-support-705-707`, based on
+`6ca4b420`. Application changes finish at `65affbce`; `e1fca4b1` subsequently
+changes only browser test measurement/diagnostics. No push, merge, deployment,
+production repricing or backfill was performed.
+
+### What changed and how it works
+
+- Normal Inventory remains the default. `/inventory?view=pricing` opens the
+  focused queue/detail view, with shareable card identity, separate bulk selection,
+  retained per-card drafts, explicit price saves and mobile return/history support.
+- One backend assessor uses canonical SlabLedger asking and the newest five sales
+  within seven UTC dates, retaining all cutoff-date ties. Thirty-day history is
+  context, never a rescue for a recent contradiction. Exact wide-integer products
+  preserve half-cent and strict threshold boundaries without overflow.
+- Preview reads cached purchase/evidence ports and returns no list-mutation token.
+  It does not observe holds, acquire comps, save prices or acknowledge lists.
+  Explicit saves retain the existing reviewed-price/DH-sync/eligible-listing path.
+- Current aggregate observations outrank merely cached differing detail. A hash
+  difference does not order reads. Only genuinely successful detail publication
+  or aggregate recovery restores authority after a failed read. Tests cover UTC
+  expiry, repeated unknown-purchase versions, repeated snapshot-failure versions
+  and healthy changed observations without losing drafts or selection fencing.
+- Unreadable purchases are unavailable, not positively unpriced. Their zero-value
+  fallback cannot fabricate missing-price counts or historical price/status changes.
+  Successfully read unpriced cards remain unpriced even with unhealthy evidence.
+- Confirmed saves remain distinct from failed inventory/evidence reloads. Read
+  retries never replay the financial PATCH. Historical acknowledgments, holds,
+  packing times and exact retries remain intact; stale Add/Pack rejection has
+  immediate persisted-row immutability assertions.
+
+### Decisions and discoveries
+
+Independent task reviews and whole-range polish exposed view-lifetime, mobile
+history/focus, cached-read-authority and fixture-observation gaps. They were fixed
+with regression-first checks and independently re-reviewed. Final source review
+found no remaining Critical/Important findings after the aggregate-authority,
+unknown-label and shared desktop-header/sticky-offset corrections. The shared
+65px desktop header leaves detail navigation below the banner; mobile sizing is
+unchanged. Removed legacy header-retention promises are not represented as tested.
+
+One final worker capture measured a nominal 44px button at
+43.99993896484375px. An owned-Chromium reproduction using the actual button CSS
+confirmed a possible pressed-transition residual while layout/computed height
+stayed 44px. The test-only 0.0001px measurement allowance still rejects 43.9998px,
+a full 1/64px deficit, 43.9px and the actual pressed scale. Raw, computed, layout
+and transform metrics are retained; no application sizing was relaxed.
+
+### Verification actually performed
+
+Fresh parent gates on the final application source:
+
+- Explicit separate owned storage/runtime URLs with
+  `TZ=UTC go test -race -count=1 -timeout 10m ./...`: all 45 tested packages passed;
+  PostgreSQL 66.134s and runtime/cmd 15.961s. No browser opt-in in this package gate.
+- `(cd web && TZ=UTC npm test && npm run typecheck && npm run lint && npm run build)`:
+  95 files / 1,045 tests passed; typecheck/lint/build passed, 379 build modules.
+- Compatible-toolchain `make check`: lint, architecture, source limits, doc paths
+  and Playwright alignment passed. Existing six size warnings remain.
+- Real Go/PostgreSQL/Chromium price-review test: 27.58s; cached 155-card workflow:
+  37.01s. The price-review phase has zero acquisition and exactly bounded intended
+  save/DH effects, not a whole-flow zero-write claim.
+- After the test-only precision correction, the full worker workflow passed
+  179.09s through all later assertions: population 142 searches + one token,
+  operator use +0, separate publication +one search/+one token; financial/history
+  and observed-version checks passed.
+- `node --test web/tests/price-review-observer-checks.cjs web/tests/show-readiness-browser-checks.cjs`:
+  14/14 passed, including unexpected recovered mobile HTTP failure, exact controlled
+  fault markers, asynchronous observation draining, cleanup and geometry boundaries.
+- Implementer production-preview browser checks: 10/10, including desktop
+  1440/1024 scrolled navigation, mobile recovery/history and packing compatibility.
+  These use intercepted HTTP and are separate from the real Go/PG browser proofs.
+
+The earlier untouched DH-sale contract test had one circuit-open failure; its
+unchanged reruns and both fresh parent full-suite runs passed. The mobile precision
+failure above is likewise retained, not relabeled as a pass. Existing jsdom/Vite
+and global-logo notices are documented, not suppressed. Exact commands and raw
+results remain in ignored `.superpowers/sdd/2026-09-16-inventory-price-review/`
+(`final-verify2-*`, `final-verify3-*`, task reports and review artifacts).
+
+The task-owned PostgreSQL container recorded above and its anonymous data volume
+were stopped/removed after final tests and artifact collection. No unrelated
+container/database was touched. The linked worktree and ignored private comparison
+remain for operator acceptance. Live marketplace fulfillment, physical devices and
+remote CI are not claimed verified; saves remain asynchronous and last-writer-wins.
+
+### Reviewer knowledge check
+
+1. Why cannot a differing cached detail fingerprint supersede the latest aggregate observation?
+2. How do cutoff-date ties and exact arithmetic prevent the original false-support result?
+3. Why must preview bypass the hold-observing evidence service and omit list-mutation tokens?
+4. Which save effects are intentional, and which operations remain forbidden during navigation/trials?
+5. How are unknown purchase reads kept distinct from genuinely unpriced cards without rewriting history?
