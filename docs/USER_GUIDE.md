@@ -302,76 +302,68 @@ For example, a $300 listing needs a median of at least $270. All eligible matchi
 sales count, including lower sales; the tool does not cherry-pick supporting comps.
 Open the evidence details to see sale dates, amounts, platforms, source links,
 and the actual date range. An unavailable or partial lookup is not proof that a
-card has no recent sales. **Not checked**, **Checking**, stale/interrupted and failed
-checks are distinct from completed support results. A fresh complete zero-sale
-lookup alone establishes **No recent comps**. In show selection or a Support-filtered
-view, the compact indicator names the evaluated **DH listed** price on both desktop
+card has no recent sales. **No comp data**, **Out of date**, **Data unavailable**,
+and **No DH price** are distinct from completed support results. A fresh complete
+zero-sale lookup alone establishes **No recent sales**. The compact indicator
+names the evaluated **DH listed** price on both desktop
 and mobile. It does not support a different local reviewed price or CL/Market
 valuation; those ordinary inventory values keep their existing meaning. Missing
 and unverified DH prices stay explicitly labeled.
 
-Choose **Supported** even on a new installation, or open **Show selection**, to
-start bounded comp checking. No card selection or saved list is needed first.
-Checking uses your campaign/inventory, search, inventory tab, price band and
-availability scope before applying Support filtering. The compact readiness line
-counts the check scope separately from matching rows and selected slabs. Ordinary
-inventory browsing and opening evidence details do not fetch source comps.
+Inventory loads saved price support. **Supported** filters the loaded results;
+checkboxes select cards immediately without a request. Browsing, filtering,
+selection, opening evidence, adding to lists and packing never collect CardLadder
+comps. There is no separate selection mode or per-card collection control.
 
-Automatic checking skips identities already current and cards without a positive
-DH price. Missing-price cards remain manually checkable through **Check selected**.
-One tab runs one request at a time, coalescing copies of the same card/grade: up to
-10 IDs/request, 200 automatic identities and 20 requests per UTC date, and five
-minutes per run. Navigating within the app preserves the current session's budget,
-stops, and pending-write exclusion. Reload or a change of authenticated identity
-starts a new client lifetime; multiple tabs have separate limits. These are not a
-global provider quota.
+A quiet coverage line appears when data is incomplete. It reports server-counted
+**all-inventory identities** and **cards** separately, including missing/stale/failed
+identities and unresolved cards. Missing DH prices are separately counted for this
+view. An empty Supported view does not start a job or clear other filters.
 
-Use **Cancel checking** to stop. Failed/partial checks, cancellation, time limits
-and budget stops offer explicit **Retry / Continue checking** rather than retrying
-on their own. Retained sales may still be shown but are not a verified current
-window. A cancelled request may already have saved data; the page rereads it and
-does not promise rollback. Retry after resolving the source problem or when ready
-to continue. An interrupted server attempt becomes retryable after a read at its
-120-second boundary, not an automatic source retry. On a packing list, **Retry
-refresh** repeats the failed selection from that list, even if you change selection.
-Switching to another list does not offer or retarget that previous-list retry.
+The server collects missing/due verified evidence on startup and every minute,
+independently of browser activity, DH price, receipt, and CL collection membership.
+`SHOW_PREP_REFRESH_ENABLED` defaults to true and is independent of CL value refresh.
+Unresolved cards wait for existing verified identity enrichment. Complete zero-sale
+windows are current data; yesterday's UTC window is stale until the worker renews it.
 
-While an inventory show workflow is active (show selection or a non-All Support
-filter), UTC midnight or earlier freshness expiry triggers a status reread and
-renewal of eligible evidence within the same limits. Focus or returning to a
-hidden tab performs a reread, not a catch-up loop; interrupted-attempt boundaries
-trigger only a read, not an automatic source retry. Saved packing lists do not use
-these focus/visibility or time-bound observers: use **Update list status** to
-reread saved data; list actions also invalidate the status. Old sales remain
-inspectable while stale; a green badge is not authoritative forever.
-Evaluation reads have a full-response 30-second timeout per attempt.
-A stalled or failed read ends with unavailable
-status and **Retry price support read**, rather than checking forever. This retry
-reads stored evaluations; it is not a source-refresh replay.
+Administrators can inspect **Admin → Integrations → Show evidence** for enabled/
+configured state, coverage, last finished sweep and retry/window timing. **Run now**
+requests a normal due scan; it does not bypass an authentication hold or retry limits.
+**Retry failed** resumes after repair and allows one bounded retry sweep, even if
+an authentication hold remains after its failed card left inventory. Current evidence
+is not refetched. A request accepted message is not a completed fleet refresh.
 
-If CardLadder is configured for the first time while the server is running,
-restart the server once to enable show-preparation refresh. Already-configured
-installations require no additional setup.
+Saving Card Ladder credentials activates the shared client and notifies the worker.
+If the save succeeds but worker notification fails, the UI says credentials were saved
+and directs the administrator to retry activation. Token rotation alone does not
+clear an authentication hold. Disabled/unconfigured workers remain visible; cached
+selection and packing remain usable during outages.
 
-Show selection starts with received, unsold, non-refunded cards from non-closed
-campaigns. Unreceived cards can be included as planning candidates, but cannot be
-packed. Paused campaigns remain eligible. You can deliberately bring a physically
-eligible card with weak evidence; a support label is advice, not a packing rule.
+Inventory rereads stored evaluations on focus, UTC midnight and evidence expiry.
+These reads do not collect comps or change selected versions. Unresolved early
+observations have a bounded follow-up. Evaluation reads retain a full-response
+30-second timeout per attempt and an explicit read retry after failure. Packing
+lists use **Update list status** and invalidation after actions instead of these
+timers. Old successful sales remain inspectable with their acquisition date.
 
-Selecting a card pauses subsequent automatic batches. The active batch may finish.
+Use the existing card checkboxes and choose **Add to show** in the same selected-items
+bar as Record sale and List on DH. Its **CL value** total is a valuation, not the
+DH listed or reviewed price. Choose a saved list or name a new one, then add.
+Escape closes destination details before clearing selection. Successful Add links
+to the submitted packing list. Creating a list alone does not select inventory.
+Unreceived cards can be planned but cannot be packed. Missing or weak comp evidence
+does not prohibit a physically eligible manual shortlist.
+
 If selected data changes, rows stay identifiable and Add is blocked until you
 explicitly review/reselect; the application never silently acknowledges new prices
-or evidence. **Reveal selected** recovers cards outside your current view. Clearing
-selection resumes eligible work unless you cancelled or reached a stop condition.
-Closing or hiding an inline sale editor releases its presentation pause, but any
-submitted sale, price, hint, or DH-match request still blocks checking until it
-settles, including after navigation.
-
-The contextual selection bar appears only after selection. Choose **Add selected
-to show** to reveal a destination, then choose a saved list or name a new one.
-Escape closes destination details before clearing selection. Successful Add links
-to the submitted packing list. The empty **Shows** page offers one create-first path;
-creating a list alone does not select or check inventory.
+or evidence. Existing price-band controls stay in place with current counts (including
+zero) while a filtered selection is held, rather than collapsing above selected rows.
+An existing coverage notice and Needs Attention banner likewise retain their space
+with live counts while selection is held, even when coverage completes or the
+attention count reaches zero. Selecting in an already quiet view adds no notice.
+Explicit view changes or clearing selection restore ordinary quiet/hidden behavior.
+**Reveal selected** recovers cards outside your current view. Financial forms retain
+their own pending states and do not wait for comp collection.
 
 On the saved list, check **Packed** as you load each slab. Price/support changes
 are flagged for review rather than silently acknowledged. A price change after
@@ -384,13 +376,15 @@ Known listed-value totals exclude missing and ambiguous DH prices rather than
 substituting CardLadder values. Adding or packing cards **does not** change prices,
 delist online inventory, reserve a card, or record a sale. Continue recording sales
 through the existing sales workflow. **Update list status** rereads saved prices
-and availability; source acquisition on that page is an explicit comp check.
+and availability; it never requests source acquisition.
 
-Local verification uses a committed real-browser/Go/PostgreSQL upgrade fixture,
-not preseeded show evidence. Maintainer reproduction and isolated two-tab preview
-instructions are in [the real-wire test guide](../web/tests/show-readiness-real.md).
-Production rollout and controlled missing/stale-plus-fresh verification still
-require separate operator authorization.
+Local verification has two real-browser/Go/PostgreSQL modes: explicitly seeded
+cached-use preconditions, and actual server-worker population from an empty verified
+store before any browser starts. Both stop the worker and block all provider endpoints
+for cached operator use, preserving source-request history. A separately counted
+background-publication phase verifies held selections and stale Add/Pack conflicts.
+Reproduction instructions are in [the real-wire test guide](../web/tests/show-readiness-real.md).
+Production access, population and rollout still require separate authorization.
 
 ### Market Direction
 

@@ -1,192 +1,217 @@
-# Show readiness: real-wire upgrade fixture
+# Show preparation: real worker and cached-use proof
 
-`TestShowReadinessRealBrowser` in `cmd/slabledger/showprep_readiness_e2e_test.go`
-starts the real Go router, LocalAPIToken authentication, inventory/show services,
-PostgreSQL stores and CardLadder HTTP adapter. It serves the production frontend
-build directly; no Vite process or port 4173 is involved. The companion
-`web/tests/show-readiness-real.cjs` drives Chromium through those real endpoints.
+`TestShowReadinessRealBrowser` uses the real Go router, LocalAPIToken auth service
+and PostgreSQL auth repository, inventory/show services, worker scheduler and
+production frontend. Its owned Chromium is launched by
+`web/tests/show-readiness-real.cjs`. No application response is intercepted.
+Only external CardLadder/Firebase HTTP and the test business clock are controlled.
+No Vite, port 4173, production API, static-token source bypass or shared CDP.
 
 ## Safety and prerequisites
 
-Run only from a feature worktree. This is an opt-in destructive fixture, **not** a
-production verification command. It accepts exactly this URL and rejects all
-others before connecting:
+Feature worktree only. The fixture **resets public schema** on this exact URL:
 
 ```
 postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable
 ```
 
-For the PR706 follow-up verification, the parent-provisioned disposable PostgreSQL
-container is `slabledger-readiness-pr706-fixes` (ID prefix `586dc9f18f746`), with
-`showprep_readiness_e2e` on the pinned port. The earlier
-`slabledger-show-readiness-01a09dd6` container was removed. Confirm ownership before
-running; only this disposable e2e database may be reset by this fixture. Never
-substitute DATABASE_URL, a developer ledger, or production. Never use `make screenshots` (production DB pull) or the
-default `make test-postgres` target for this fixture.
-
-Requires the repository's Go 1.26, Node, installed web dependencies and matching
-Playwright Chromium. No new application dependencies are needed. The test applies
-migration 45, seeds purchases/a historical sale/legacy CL comps, then applies all
-remaining migrations and proves `showprep_evidence` is empty. Every run resets the
-e2e database's public schema. Do not run another test or preview against it at the
-same time. The fixture leaves its ledger for inspection; the owner cleans up PG.
-
-## Repeatable regression
-
-From the worktree root:
+Verify the owner's resource before running:
 
 ```bash
-cd web && npm run build && cd ..
-TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= \
-SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
-SHOW_READINESS_ARTIFACTS=/tmp/show-readiness-browser \
-go test -race -v -count=1 -timeout 4m ./cmd/slabledger -run TestShowReadinessRealBrowser
+docker inspect slabledger-cached-show-01a09dd6 --format '{{.Id}} {{.State.Running}} {{json .NetworkSettings.Ports}}'
+docker exec slabledger-cached-show-01a09dd6 psql -U showprep -d showprep_readiness_e2e \
+  -c 'SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();'
 ```
 
-Without `SHOW_READINESS_E2E_URL`, ordinary Go discovery skips this test. Run broad
-Go discovery and browser artifact generation sequentially. Explicitly unset the
-e2e variable for the full Go suite and for the separate PostgreSQL adapter suite.
+Expected container ID:
+`d56b5500410d90a5609c98656c2a33b7c9364135f588d3013bbfc34f0b3d496b`, running,
+5432 published only at `127.0.0.1:44620`; database/user/owner are
+`showprep_readiness_e2e`/`showprep`/`showprep`. The harness also verifies the exact
+URL and database/user/owner before reset. Retain this parent-owned container.
 
-Harness failure-path checks need no PostgreSQL or running fixture:
+Use installed Go 1.26 and worktree-lockfile web dependencies with matching
+Playwright Chromium. Build first: `cd web && npm run build && cd ..`.
+Do not substitute a default/developer/production DB or run `make screenshots`.
+Use three separate databases: `showprep_cached_test` for storage tests,
+`showprep_runtime_test` for cmd production-runtime tests, and
+`showprep_readiness_e2e` for browser fixtures. Storage resets schema while Go runs
+packages in parallel. Runtime tests require **`SHOW_PREP_RUNTIME_TEST_URL`** and
+skip when it is unset, even if `POSTGRES_TEST_URL` is set. No application/default
+DB fallback is permitted. The runtime guard accepts only an explicit loopback
+PostgreSQL URI/port, database `showprep_runtime_test`, user `showprep` or
+`slabledger`, and `sslmode=disable` without connection overrides; the connected
+user must own the database before migrations/truncation.
+
+After verifying the exact container above, create the dedicated runtime DB once
+(if absent) and verify ownership:
+
+```bash
+docker exec slabledger-cached-show-01a09dd6 createdb -U showprep -O showprep showprep_runtime_test
+docker exec slabledger-cached-show-01a09dd6 psql -U showprep -d showprep_runtime_test \
+  -c 'SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();'
+```
+
+CI creates the same dedicated runtime database owned by its `slabledger` role
+before supplying both independent opt-ins to `go test ./...`. This local command
+exercises the same **parallel-package isolation**, not a claim that remote CI ran:
+
+```bash
+unset DATABASE_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL SHOW_READINESS_E2E_URL
+POSTGRES_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_cached_test?sslmode=disable' \
+SHOW_PREP_RUNTIME_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_runtime_test?sslmode=disable' \
+TZ=UTC go test -race -count=1 -timeout 10m ./...
+```
+
+Keep this broad discovery separate from browser artifact generation. Archive old
+artifact directories instead of overwriting them.
+
+## Three explicitly separated phases
+
+| Mode/phase | Evidence precondition | Provider counts |
+|---|---|---|
+| `cached` | Explicit store-seeded qualified/old/failed snapshots | Absolute zero SDK and source requests throughout |
+| `worker`, A | Legacy ledger/comps at migration45, upgrade47 with empty verified store; actual `initializeSchedulers` → configured source provider → Group → EvidenceWorker → PG → source adapter | 142 sales requests + one Firebase token exchange, **before browser launch** |
+| Both modes, B | Worker cancelled/stopped/joined; provider blocked; new disabled production composition for cached reads | Zero **additional** requests; full population history retained; restart stays disabled |
+| `worker`, C | After B is archived, separately enable the actual runtime and hold one failed-identity repair | Exactly one additional sales request + one token exchange; never attributed to zero-source B |
+
+There are 155 unsold cards and one historical sold purchase. Twelve pairs share
+exact identities; one card remains unresolved. Worker A asserts the entire exact
+142-identity source cohort and coverage: **141 current / 1 deliberate incomplete /
+0 missing / 0 stale identities; 153 current / 155 eligible cards; 1 unresolved**.
+The partial response for card29 is deliberately inspectable but never current.
+Positive $270/$290 sales produce a $280 median against a saved $300 DH price;
+legacy $999 comps are not certified. Complete zero, one-sale Thin evidence,
+Below target and no-DH-price cards are separately checked. The seeded-cache mode
+additionally supplies old successful evidence and retained sales after failure;
+these seeded results are not a claim of worker ingestion.
+
+B drives Admin status, inventory → Supported → checkbox → stored evidence →
+create/list/add/pack → reload → rebuilt SQL pool/auth/router/services → add to an
+existing list → UTC stale selection and explicit Add/Pack409. It preserves whole
+campaign/purchase/sale/legacy-comp rows and packing history. Checkbox/filter/select
+all/clear request logs are independently empty; browser refresh POSTs are zero.
+Unauthenticated/authorized explicit401/410 retirement probes are logged separately.
+
+C repairs only card29 through the real admin retry endpoint and runtime, while it
+is selected under Needs review. A real financial form opens and cancels while the
+source is held. Publication changes its status to Supported but retains selected
+ID/version and row position. Explicit stale Add/Pack return409; no silent rebinding,
+financial write, or packing-history change. This phase returns the test clock from
+B's synthetic next-day stale observation to real wall time before starting runtime;
+there is no production clock or reset API.
+
+## Repeatable commands
+
+Run each separately from the worktree root with different artifact directories:
+
+```bash
+unset DATABASE_URL POSTGRES_TEST_URL SHOW_PREP_RUNTIME_TEST_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL
+SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
+SHOW_READINESS_MODE=cached SHOW_READINESS_ARTIFACTS=/tmp/showprep-cached \
+TZ=UTC go test -race -v -count=1 -timeout 10m ./cmd/slabledger -run TestShowReadinessRealBrowser
+
+SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
+SHOW_READINESS_MODE=worker SHOW_READINESS_ARTIFACTS=/tmp/showprep-worker \
+TZ=UTC go test -race -v -count=1 -timeout 10m ./cmd/slabledger -run TestShowReadinessRealBrowser
+```
+
+Worker population intentionally retains the production one-request/second pace,
+so allow roughly three minutes plus browser work. A rare launch within four minutes
+of UTC midnight waits for the next day to keep cohort-count assertions deterministic.
+Ordinary discovery skips this test without the opt-in e2e URL. Mode is mandatory.
+
+For the cold negative control, add `SHOW_READINESS_COLD_PROBE=1` to worker mode.
+It disables only runtime execution and **must fail** the whole-cohort assertion
+before any browser process is started. No old production source is mutated.
+
+The small actual-source renewal and active financial-write proof uses the other DB:
+
+```bash
+unset SHOW_READINESS_E2E_URL DATABASE_URL POSTGRES_TEST_URL
+SHOW_PREP_RUNTIME_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_runtime_test?sslmode=disable' \
+SHOW_READINESS_RUNTIME_ARTIFACTS=/tmp/showprep-runtime TZ=UTC \
+go test -race -v -count=1 -timeout 2m ./cmd/slabledger -run TestShowPrepRuntimePositiveMidnightAndFinancialWrite
+```
+
+It starts actual production composition, proves positive and complete-zero results,
+restarts without acquisition, then uses the existing domain clock seam through a
+real scheduler Group with the configured production source provider. It advances to
+**next UTC midnight, less than24h**, not blindly now+24h: the source adapter stamps
+real wall-time `RefreshedAt`. A real authenticated price-override PATCH completes
+while source HTTP is held. That intentional 32500-cent write has its own before/
+after financial baselines; renewal then makes zero further financial changes.
+Do not confuse this explicit mutation with B's whole-flow immutability.
+
+Existing freshly runnable runtime/PG seams cover new and resolved inventory without
+a browser, first-save/cross-instance activation, durable token400/source401 auth
+holds, explicit recovery, retry exhaustion/restart, two connections, lease loss,
+late publication, scope/availability safeguards and financial locks. They are part
+of the full dedicated cmd and storage race suites, not duplicated here.
+
+## Artifacts and browser checks
+
+- `upgrade-legacy-45.json`, `upgrade-empty-47.json`: actual before/after ledger and
+  initially empty verified store. Upgrade asserts every financial row unchanged.
+- Worker mode `worker-before.json`, `worker-populated.json`: exact source query
+  history, evidence, durable worker state, coverage and full ledger.
+- `cached-operator-complete.json`: B's immutable ledger and unchanged acquisition
+  history, before any C acquisition is allowed.
+- `wire-snapshots.json`: persisted snapshots/history, browser and explicit request
+  paths/bodies/statuses, empty checkbox/filter and browser-acquisition logs; C is
+  a separate named snapshot.
+- `operator-final.json`: final persisted ledger/evidence/coverage; in worker mode
+  it includes the explicitly separate repair phase.
+- `metrics.json`: desktop/mobile/tablet geometry, repeated expansion/collapse,
+  stable virtual rows, last-row clearance, keyboard packing/destination focus,
+  fine/coarse pointer geometry and rendered webfont checks.
+- Actual full-page/viewport PNGs, including Admin, selected evidence, mobile
+  destinations and concurrent publication. Public Google font GETs are the only
+  external browser allowlist, fetched without credentials or redirects. No overlay.
+- Event-to-rendered-frame 155-card filter/select/clear timings are local samples
+  against a <100ms goal, not a flaky CI wall-clock gate or production percentile.
+- `fixture.json` contains ephemeral loopback URLs and fixture-only local token.
+
+Cleanup is owned: servers, Groups, SQL pools and the launched Chromium close after
+success/failure; the PG container stays running. `SHOW_READINESS_SERVE=1` remains
+an optional separate interactive session; stop with SIGINT/SIGTERM. Never attach
+to shared Chrome. Test-only controls are compiled only in `_test.go`.
+
+## Focused held-selection DOM geometry
+
+The small fully resolved/priced fixture catches a coverage notice disappearing
+at 100% current and the no-search Needs Attention banner disappearing after
+publication removes the last support match. The actual React/query/virtual-row
+code runs in owned Chromium at desktop/mobile widths. API responses are controlled
+**only in this focused layout test**; it is not worker/source/financial proof.
+Existing minute polling delivers the coverage update. Initial checkbox geometry,
+held publication geometry, live zero counts, unchanged selected versions/disabled
+Add and clear/explicit-view reset are asserted. A quiet initial view must not gain
+a header row on selection. Checkbox/reset request logs stay empty.
+
+```bash
+cd web
+SHOW_LAYOUT_ARTIFACTS=/tmp/showprep-layout-fresh \
+  npx playwright test --config tests/show-readiness-layout.config.ts
+```
+
+The config owns loopback45173 (no server reuse/4173/shared CDP); geometry JSON is
+saved per case. Run the two actual backend modes after production layout changes,
+with fresh artifact paths, and then the four cleanup checks below.
+
+## Fixture cleanup/error regressions
 
 ```bash
 node --test web/tests/show-readiness-browser-checks.cjs
-TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= SHOW_READINESS_E2E_URL= \
-go test -race -count=1 ./cmd/slabledger -run 'TestReadiness(Restart|ConcurrentRestart|FixtureClock|Source)'
-```
+unset DATABASE_URL POSTGRES_TEST_URL SHOW_PREP_RUNTIME_TEST_URL SHOW_READINESS_E2E_URL
+TZ=UTC go test -race -count=1 ./cmd/slabledger -run 'TestReadiness(Restart|ConcurrentRestart|FixtureClock|Source)'
 
-These use real Chromium/failed artifact writes and a separate loopback HTTP server
-to prove original-error preservation, independent diagnostics, browser closure,
-failed-restart lock release, continued requests/shutdown, and whole-row clearance.
-They do not reset or access the preview database. The Node checks are deliberately
-outside Vitest discovery and run explicitly with Node's test runner. Source HTTP
-checks additionally prove malformed parameters return useful HTTP 500 responses,
-record unexpected fixture errors, and allow subsequent valid requests and cleanup;
-intentional 401/partial responses remain controlled outcomes.
-
-The shared control-state HTTP regression requires only the pinned disposable DB,
-not Chromium. Run sequentially with the browser regression because it resets the
-same e2e schema, temporarily changes ledger/table data, then restores it:
-
-```bash
-TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= \
 SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
-go test -race -count=1 -timeout 1m ./cmd/slabledger -run TestReadinessControlErrors
+TZ=UTC go test -race -count=1 -timeout 1m ./cmd/slabledger -run 'TestReadinessControlErrors|TestReadinessCachedSeedAtUTCMidnight'
 ```
 
-It verifies ledger mismatch, ledger-query and persisted-row-query failures through
-the same state handler used by the browser fixture: diagnostic HTTP 500, independent
-error recording, lock release, subsequent successful reads and server shutdown.
-Both fixture servers report unexpected errors nonfatally against the owning Go
-test, so browser tolerance/retries cannot hide fixture failures. Fatal ledger and
-browser assertions remain in the test goroutine.
-
-The test asserts:
-
-- Missing/wrong auth is rejected by actual middleware. Ordinary inventory,
-  evidence and empty-list reads make no source calls.
-- Cold Supported-first, before selection or list creation, reaches the local
-  source over HTTP. 24 scoped purchases coalesce to 12 identities in 10+2 refresh
-  batches, then render genuine persisted Supported results. Out-of-scope and
-  missing-price identities are not acquired automatically.
-- Reload and a new router/auth/inventory/show service, client, store and SQL pool
-  preserve current evidence without reacquisition.
-- Next UTC date makes old evidence stale/non-Supported on real reads. Selection
-  remains checked and non-addable until explicit review; clearing it permits
-  renewal of the correct window. Packed membership is unchanged.
-- A controlled source HTTP 401 and an incomplete page produce failed/partial
-  attempts, retain the verified sales and never autonomously retry on focus,
-  reload or clearing selection. Explicit Retry recovers.
-- Full rows in campaigns, purchases (all prices and DH fields), sales and legacy
-  comps remain byte-for-byte equal. Only the three explicit create/add/pack
-  requests change lists/items. The packed row remains identical through renewal
-  and failed checks; no financial HTTP writes occur.
-- Actual SPA links navigate inventory → Shows → inventory without reloading the
-  QueryClient. The App/provider regression suite separately exercises budget,
-  Cancel, pending dialog writes, identity changes and abandoned auth responses.
-- Reviewed price $400, evaluated DH listing $300, median $280: compact DH price
-  context remains visible on desktop/mobile without replacing CL/Market valuation.
-- Adjacent virtual-row bounds after three repeated evidence open/close cycles,
-  middle/end/start scrolls, desktop → mobile → desktop resizing, and an actual
-  fine → coarse pointer transition. CDP pointer:none is not called fine; both
-  media-query values and coarse-trigger 44px heights are asserted.
-- Desktop/tablet/mobile rendered states, keyboard pack/Escape/focus return,
-  progressive destination, inline evidence, virtualized final-row clearance and
-  horizontal overflow. Existing unit/stream tests retain budget, late-body,
-  retryAt, hidden-selection and 805-card ordering coverage beyond this flow.
-
-Only the external CardLadder HTTP response and service/browser clock are controlled;
-logger output uses the existing test logger. OAuth token exchange is never called:
-LocalAPIToken uses the real auth service/repository. No evaluate, refresh, inventory,
-list or packing response is intercepted. External requests are blocked except the
-app's existing public Google Font GETs, fetched without credentials or redirects.
-
-The source retains its real completion wall clock and existing 1/sec limiter.
-The test service/source-fixture clock advances with real elapsed time, then shifts
-to the next UTC midnight on explicit rollover, keeping genuine refresh timestamps
-within 24 hours. The browser receives each fixture clock value. To avoid an
-uncontrolled real midnight during cold/reload assertions, a regression launched
-in the final two UTC minutes waits for the next day before seeding (still within
-the four-minute timeout). Interactive mode does not wait and its clock keeps
-advancing, so it remains usable beyond a brief screenshot session.
-The definitive failure case uses HTTP 401; transient 503s have existing internal
-CardLadder/httpx retries. Do not confuse those with browser refresh-POST replay.
-
-Artifacts: full-page and viewport PNGs (geometry/pointer states use viewport-only
-CDP captures so clipped/full-page capture cannot reset live pointer emulation),
-`metrics.json`, `wire-snapshots.json`
-(persisted rows, request paths, refresh bodies), and `fixture.json` (ephemeral
-server addresses and fixture-only auth token). Diagnostic failures cannot replace
-a primary exercise failure or prevent browser closure; later diagnostics are still
-attempted. A failed restart returns HTTP 500 without retaining the application lock,
-so another request/restart and shutdown can complete. If reopening failed after the
-old pool closed, data reads may return errors until a successful restart.
-All test servers and browsers close on normal completion. This is local integration evidence, not production rollout.
-
-## Separate fixture server for two-tab critique
-
-Run **after** the count-sensitive regression finishes. This mode resets the same
-e2e database but runs no browser assertions. Build a test binary so Ctrl-C reaches
-its cleanup handler directly:
-
-```bash
-# From the worktree root; build the web frontend first as above.
-go test -c -o /tmp/slabledger-show-readiness.test ./cmd/slabledger
-cd cmd/slabledger
-TZ=UTC DATABASE_URL= POSTGRES_TEST_URL= \
-SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
-SHOW_READINESS_SERVE=1 SHOW_READINESS_ARTIFACTS=/tmp/show-readiness-preview \
-/tmp/slabledger-show-readiness.test -test.v -test.run TestShowReadinessRealBrowser -test.timeout 30m
-```
-
-Read `/tmp/show-readiness-preview/fixture.json`; every launch chooses free loopback
-API/source/control ports. Open its `app` + `/inventory` or `/shows` in **two new
-independent tabs**, each sending:
-
-```
-Authorization: Bearer show-readiness-local-fixture
-```
-
-Use Playwright `browser.newContext({ extraHTTPHeaders: { Authorization: ... } })`
-(or CDP Network.setExtraHTTPHeaders on each new tab). Do not use production
-browser credentials or fetch the user's existing tabs. Block external requests;
-if fonts are needed, forward only public font GETs without the fixture header as
-the committed browser script does. Set each tab's fixed clock to `fixture.now`
-when inspecting rollover. Label the tabs `[LLM]` and `[Human]` for critique.
-
-Only the separate **test-only control server** accepts these authenticated calls:
-
-| Method/path | Effect |
-|---|---|
-| `GET /state` | Source/request log, clock and actual persisted evidence/list rows; checks ledger equality. |
-| `POST /source?mode=hold` | Hold the next source response so Checking can be inspected. |
-| `POST /source?mode=complete` | Release a held response; subsequent pages are complete. |
-| `POST /source?mode=failed` | Subsequent source requests return a definitive HTTP 401. |
-| `POST /source?mode=partial` | Return two records but totalHits=3; the real adapter rejects coverage. |
-| `POST /rollover` | Advance service/source-fixture date to next UTC midnight; elapsed time continues. |
-| `POST /restart` | Drain requests and rebuild all app instances without reseeding. |
-
-Release held work before restarting. After rollover update browser time and focus
-or reactivate show mode to observe readback. These controls cannot be compiled into
-the production executable. Ctrl-C/SIGTERM stops API/source/control servers; PG stays
-running for its owner. No deploy, push, merge or production verification is implied.
+The last command resets only the pinned browser DB; run separately from acceptance.
+Failures retain contextual HTTP500 and independent test reporting; cleanup/lock
+release and continued valid requests are exercised. Historical proof artifacts
+are not overwritten. No push/deploy/backfill/production-readiness claim is implied.
+Worker rollout remains incomplete until separately authorized deployment, initial
+server-owned catch-up and actual production verification.

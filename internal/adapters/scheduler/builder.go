@@ -13,6 +13,7 @@ import (
 	domainCampaigns "github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/domain/pricing"
+	"github.com/guarzo/slabledger/internal/domain/showprep"
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
@@ -90,6 +91,9 @@ type BuildDeps struct {
 	DHPushHoldSetter   DHPushHoldSetter
 	DHPushRelister     DHPushRelister
 
+	ShowPrepWorker      *showprep.EvidenceWorker
+	ShowPrepCredentials *cardladder.ConfiguredClient
+
 	// Card Ladder dependencies (optional)
 	CardLadderClient           *cardladder.Client
 	CardLadderStore            *postgres.CardLadderStore
@@ -119,12 +123,14 @@ type BuildDeps struct {
 
 // BuildResult holds the scheduler group and optional auxiliary references.
 type BuildResult struct {
-	Group             *Group
-	CardLadderRefresh *CardLadderRefreshScheduler // nil if Card Ladder is not configured
-	PSASync           *PSASyncScheduler           // nil if PSA sync is not configured
-	CertEnrichJob     *CertEnrichJob              // nil if cert lookup is not configured
-	DHOrdersPoll      *DHOrdersPollScheduler      // nil if DH orders poll is not configured
-	DHReconcile       *DHReconcileScheduler       // nil if DH reconciler is not configured
+	ShowPrepRefresh       *ShowPrepRefreshScheduler
+	CardLadderCredentials *cardladder.ConfiguredClient
+	Group                 *Group
+	CardLadderRefresh     *CardLadderRefreshScheduler // nil if Card Ladder is not configured
+	PSASync               *PSASyncScheduler           // nil if PSA sync is not configured
+	CertEnrichJob         *CertEnrichJob              // nil if cert lookup is not configured
+	DHOrdersPoll          *DHOrdersPollScheduler      // nil if DH orders poll is not configured
+	DHReconcile           *DHReconcileScheduler       // nil if DH reconciler is not configured
 }
 
 // BuildGroup constructs a scheduler Group from centralized configuration and dependencies.
@@ -159,6 +165,13 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	clRefresh := buildCardLadderRefreshScheduler(cfg, deps)
 	if clRefresh != nil {
 		schedulers = append(schedulers, clRefresh)
+		if deps.ShowPrepCredentials != nil {
+			deps.ShowPrepCredentials.SetConsumer(clRefresh.SetClient)
+		}
+	}
+	showPrep := buildShowPrepRefreshScheduler(cfg, deps)
+	if showPrep != nil {
+		schedulers = append(schedulers, showPrep)
 	}
 
 	if s := buildDHIntelligenceRefreshScheduler(cfg, deps); s != nil {
@@ -209,11 +222,13 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	}
 
 	return BuildResult{
-		Group:             NewGroup(schedulers...),
-		CardLadderRefresh: clRefresh,
-		PSASync:           psaSync,
-		CertEnrichJob:     certEnrichJob,
-		DHOrdersPoll:      dhOrdersPoll,
-		DHReconcile:       dhReconcile,
+		ShowPrepRefresh:       showPrep,
+		CardLadderCredentials: deps.ShowPrepCredentials,
+		Group:                 NewGroup(schedulers...),
+		CardLadderRefresh:     clRefresh,
+		PSASync:               psaSync,
+		CertEnrichJob:         certEnrichJob,
+		DHOrdersPoll:          dhOrdersPoll,
+		DHReconcile:           dhReconcile,
 	}
 }

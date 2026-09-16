@@ -1,6 +1,4 @@
 import { useState, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { getShowRefreshCoordinator } from '../../../queries/showRefreshCoordinator';
 import { api, isAPIError } from '../../../../js/api';
 import { useToast } from '../../../contexts/ToastContext';
 import { Modal } from '../../../ui';
@@ -27,7 +25,6 @@ export default function FixDHMatchDialog({
   const [url, setUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const toast = useToast();
-  const coordinator = getShowRefreshCoordinator(useQueryClient());
   const urlRef = useRef<HTMLInputElement>(null);
 
   const parsedId = DH_URL_PATTERN.exec(url.trim())?.[1];
@@ -37,7 +34,7 @@ export default function FixDHMatchDialog({
     if (!isValid) return;
     setSaving(true);
     try {
-      const res = await coordinator.write(() => api.fixDHMatch({ purchaseId, dhUrl: url.trim() }));
+      const res = await api.fixDHMatch({ purchaseId, dhUrl: url.trim() });
       toast.success(`DH match updated (card #${res.dhCardId})`);
       onSaved();
       onClose();
@@ -47,7 +44,7 @@ export default function FixDHMatchDialog({
     } finally {
       setSaving(false);
     }
-  }, [isValid, purchaseId, url, toast, onSaved, onClose, coordinator]);
+  }, [isValid, purchaseId, url, toast, onSaved, onClose]);
 
   return (
     <Modal title="Fix DH Match" onClose={onClose} busy={saving} initialFocusRef={urlRef}>

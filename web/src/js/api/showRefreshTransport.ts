@@ -1,11 +1,6 @@
 import { APIError, DEFAULT_TIMEOUT_MS, type APIRequestOptions } from './client';
 import type { ShowEvaluation } from '../../types/showprep';
 
-/** Source acquisition is never replayed. Keep guards until the entire body settles. */
-export function refreshShowEvidence(purchaseIds: string[], signal?: AbortSignal): Promise<{ evaluations: ShowEvaluation[] }> {
-  return showJSON('/refresh', purchaseIds, { signal, timeoutMs: 120000 });
-}
-
 /** Evaluation remains a retryable read, even though its large ID set uses POST. */
 export async function evaluateShowEvidence(purchaseIds: string[], options?: APIRequestOptions): Promise<{ evaluations: ShowEvaluation[] }> {
   for (let attempt = 1; ; attempt++) {

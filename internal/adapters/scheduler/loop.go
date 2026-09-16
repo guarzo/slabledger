@@ -15,6 +15,7 @@ type LoopConfig struct {
 	InitialDelay time.Duration   // 0 = run workFn synchronously before the loop (blocks until it returns, delaying ctx.Done handling)
 	WG           *sync.WaitGroup // nil = don't track
 	StopChan     <-chan struct{}
+	Wake         <-chan struct{} // optional bounded/coalesced wake hints
 	Logger       observability.Logger
 	LogFields    []observability.Field // extra fields for startup log
 }
@@ -66,6 +67,8 @@ func RunLoop(ctx context.Context, cfg LoopConfig, workFn func(context.Context)) 
 			cfg.Logger.Info(ctx, cfg.Name+" scheduler stopped")
 			return
 		case <-ticker.C:
+			workFn(ctx)
+		case <-cfg.Wake:
 			workFn(ctx)
 		}
 	}

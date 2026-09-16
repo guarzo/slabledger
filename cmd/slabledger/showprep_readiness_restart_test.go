@@ -43,6 +43,15 @@ func TestReadinessConcurrentRestartClosesCurrentInstance(t *testing.T) {
 	require.NoError(t, err)
 	instances := []*os.File{current}
 	closes := map[*os.File]int{}
+	type lifecycleEvent struct {
+		operation string
+		instance  *os.File
+	}
+	events := make(chan lifecycleEvent, 3*restarts)
+	bindRuntime := func(instance *os.File) func() {
+		return func() { events <- lifecycleEvent{"stop", instance} }
+	}
+	stopRuntime := bindRuntime(current)
 	t.Cleanup(func() {
 		for _, instance := range instances {
 			_ = instance.Close()
@@ -58,10 +67,12 @@ func TestReadinessConcurrentRestartClosesCurrentInstance(t *testing.T) {
 			closeCurrent := readinessCurrentCloser(&current)
 			ready <- struct{}{}
 			results <- restartReadiness(&mu, func() error {
+				stopRuntime()
 				if err := closeCurrent(); err != nil {
 					return err
 				}
 				closes[current]++
+				events <- lifecycleEvent{"close", current}
 				return nil
 			}, func() error {
 				next, err := os.CreateTemp(directory, "instance-")
@@ -70,6 +81,8 @@ func TestReadinessConcurrentRestartClosesCurrentInstance(t *testing.T) {
 				}
 				current = next
 				instances = append(instances, next)
+				stopRuntime = bindRuntime(next)
+				events <- lifecycleEvent{"install", next}
 				return nil
 			})
 		}()
@@ -87,6 +100,15 @@ func TestReadinessConcurrentRestartClosesCurrentInstance(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Len(t, instances, restarts+1)
+	close(events)
+	var got, want []lifecycleEvent
+	for event := range events {
+		got = append(got, event)
+	}
+	for i := range restarts {
+		want = append(want, lifecycleEvent{"stop", instances[i]}, lifecycleEvent{"close", instances[i]}, lifecycleEvent{"install", instances[i+1]})
+	}
+	require.Equal(t, want, got, "stop/join, close, and install must stay paired and cannot interleave across generations")
 	for _, prior := range instances[:restarts] {
 		require.Equal(t, 1, closes[prior], "each displaced instance must close exactly once")
 		_, err := prior.WriteString("closed")

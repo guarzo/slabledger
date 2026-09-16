@@ -44,7 +44,7 @@ type Purchase struct {
 }
 
 func (p Purchase) Identity() Identity {
-	return Identity{p.ProfileID, strings.ToUpper(strings.TrimSpace(p.Grader)), p.Grade}
+	return Identity{strings.TrimSpace(p.ProfileID), strings.ToUpper(strings.TrimSpace(p.Grader)), p.Grade}
 }
 
 type Sale struct {

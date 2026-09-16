@@ -1,10 +1,6 @@
 package httpserver
 
-import (
-	"net/http"
-
-	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
-)
+import "net/http"
 
 func (rt *Router) registerShowPrepRoutes(mux *http.ServeMux) {
 	// Always claim the API prefix. Missing OAuth/local-token configuration must
@@ -46,10 +42,6 @@ func (rt *Router) registerShowPrepRoutes(mux *http.ServeMux) {
 		{"PUT /api/show-prep/lists/{listID}/items/{itemID}", h.HandleUpdateItem},
 		{"DELETE /api/show-prep/lists/{listID}/items/{itemID}", h.HandleRemoveItem},
 	} {
-		handler := rt.authMW.RequireAuth(route.handler)
-		if route.pattern == "POST /api/show-prep/refresh" {
-			handler = handlers.CaptureShowPrepStart(handler)
-		}
-		mux.Handle(route.pattern, handler)
+		mux.Handle(route.pattern, rt.authMW.RequireAuth(route.handler))
 	}
 }

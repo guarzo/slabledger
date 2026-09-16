@@ -31,6 +31,17 @@ func buildPriceRefreshScheduler(cfg *config.Config, deps BuildDeps) *PriceRefres
 	)
 }
 
+func buildShowPrepRefreshScheduler(cfg *config.Config, deps BuildDeps) *ShowPrepRefreshScheduler {
+	if deps.ShowPrepWorker == nil {
+		return nil
+	}
+	var configuration ShowPrepConfiguration
+	if deps.ShowPrepCredentials != nil {
+		configuration = deps.ShowPrepCredentials
+	}
+	return NewShowPrepRefreshScheduler(deps.ShowPrepWorker, configuration, deps.Logger, cfg.ShowPrepRefresh.Enabled)
+}
+
 // buildSessionCleanupScheduler builds the session cleanup scheduler (if auth is enabled).
 func buildSessionCleanupScheduler(cfg *config.Config, deps BuildDeps) *SessionCleanupScheduler {
 	if deps.AuthService == nil {

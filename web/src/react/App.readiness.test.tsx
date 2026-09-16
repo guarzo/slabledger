@@ -3,9 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router-dom';
 import PriceHintDialog from './PriceHintDialog';
+import { api } from '../js/api';
 import App from './App';
-import { getShowRefreshCoordinator } from './queries/showRefreshCoordinator';
-import { ready } from './queries/showReadiness.test-support';
 
 const probe = vi.hoisted(() => ({ client: undefined as QueryClient | undefined, fail: false, dialog: false }));
 function Page() {
@@ -30,8 +29,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
     if (url.endsWith('/auth/user')) return new Response(JSON.stringify({ id: identity, username: `user-${identity}`, is_admin: false }));
     if (url === '/ordinary') return new Response(JSON.stringify({ value: ordinary }));
-    const ids: string[] = JSON.parse(String(options?.body)).purchaseIds;
-    return new Response(JSON.stringify({ evaluations: ids.map(id => ready(Number(id.slice(3)), 'current')) }));
+    return new Response(JSON.stringify({ body: options?.body }));
   }));
 });
 afterEach(() => { probe.client?.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -39,37 +37,11 @@ async function navigate(name: string) {
   fireEvent.click(screen.getByRole('link', { name }));
   await screen.findByRole('link', { name: 'Inventory fixture' });
 }
-it('preserves automatic budget across actual App pathname navigation, but rereads ordinary pages', async () => {
+it('preserves show cache across actual App navigation but rereads ordinary pages', async () => {
   render(<App />); await screen.findByText('first read');
-  const qc = probe.client!; const coordinator = getShowRefreshCoordinator(qc); const owner = Symbol(); coordinator.attach(owner);
-  await act(async () => coordinator.check(Array.from({ length: 201 }, (_, i) => ready(i)), owner, true));
-  expect(coordinator.getSnapshot().phase).toBe('budget');
-  ordinary = 'new read'; await navigate('Shows fixture');
-  await screen.findByText('new read');
-  expect(probe.client).toBe(qc);
-  const next = getShowRefreshCoordinator(probe.client!);
-  await act(async () => next.check([ready(999)], owner, true));
-  expect(next.getSnapshot()).toMatchObject({ phase: 'budget', done: 200 });
-});
-it('preserves Cancel and a pending write lease across navigation without starting another check', async () => {
-  render(<App />); await screen.findByText('first read');
-  const qc = probe.client!; const c = getShowRefreshCoordinator(qc); const owner = Symbol(); c.attach(owner);
-  const fetcher = vi.mocked(fetch); fetcher.mockImplementationOnce(async () => new Response(new ReadableStream({ start(s) { s.enqueue(new TextEncoder().encode('{')); } })));
-  let run!: Promise<void>;
-  act(() => { run = c.check([ready(1)], owner, true); });
-  await act(async () => { c.cancel(); await run; });
-  let release!: () => void; let write!: Promise<void>;
-  act(() => { write = c.write(() => new Promise<void>(resolve => { release = resolve; })); });
-  await navigate('Shows fixture');
-  const next = getShowRefreshCoordinator(probe.client!);
-  expect(next.getSnapshot()).toMatchObject({ phase: 'cancelled', blocked: true });
-  const nextOwner = Symbol(); next.attach(nextOwner);
-  await act(async () => next.check([ready(2)], nextOwner, false));
-  expect(next.getSnapshot().phase).toBe('cancelled');
-  await act(async () => { release(); await write; });
-  expect(next.getSnapshot().blocked).toBe(false);
-  await act(async () => next.check([ready(2)], nextOwner, true));
-  expect(next.getSnapshot().phase).toBe('cancelled');
+  const qc = probe.client!; qc.setQueryData(['show-prep', 'cached'], 'retained');
+  ordinary = 'new read'; await navigate('Shows fixture'); await screen.findByText('new read');
+  expect(probe.client).toBe(qc); expect(qc.getQueryData(['show-prep', 'cached'])).toBe('retained');
 });
 it('never exposes a previous identity cache after route authentication returns another user', async () => {
   render(<App />); await screen.findByText('first read');
@@ -93,8 +65,9 @@ it('ignores authentication completing from an abandoned route', async () => {
   expect(probe.client).toBe(current);
   expect(probe.client!.getQueryData(['private-user'])).toBe('user-two');
 });
-it.each([200, 400])('holds an actual dialog write across App SPA navigation through %s body settlement', async status => {
+it.each([200, 400])('settles an actual dialog write across App SPA navigation through %s body settlement', async status => {
   probe.dialog = true;
+  const save = vi.spyOn(api, 'savePriceHint');
   const fetcher = vi.mocked(fetch); const normal = fetcher.getMockImplementation()!;
   let body!: ReadableStreamDefaultController<Uint8Array>;
   fetcher.mockImplementation((url, options) => String(url).endsWith('/price-hints')
@@ -106,13 +79,11 @@ it.each([200, 400])('holds an actual dialog write across App SPA navigation thro
   await act(async () => { window.history.pushState(null, '', '/shows'); window.dispatchEvent(new PopStateEvent('popstate')); });
   await screen.findByText('first read');
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  const c = getShowRefreshCoordinator(probe.client!);
-  expect(c.getSnapshot().blocked).toBe(true);
-  const owner = Symbol(); c.attach(owner);
-  await act(async () => c.check([ready(2)], owner, true));
-  expect(c.getSnapshot().phase).toBe('idle');
   await act(async () => { body.enqueue(new TextEncoder().encode(status === 200 ? '"status":"ok"}' : '"error":"rejected"}')); body.close(); });
-  await waitFor(() => expect(c.getSnapshot().blocked).toBe(false));
+  const outcome = save.mock.results[0].value;
+  if (status === 200) await expect(outcome).resolves.toEqual({ status: 'ok' });
+  else await expect(outcome).rejects.toMatchObject({ status: 400, message: 'rejected' });
+  expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/price-hints'))).toHaveLength(1);
 });
 it('still resets a route error on pathname navigation', async () => {
   const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});

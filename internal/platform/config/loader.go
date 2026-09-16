@@ -175,6 +175,9 @@ func FromEnv(base Config) Config {
 	envDurationPositive("SNAPSHOT_ENRICH_RETRY_INTERVAL", &cfg.SnapshotEnrich.RetryInterval)
 	envIntPositive("SNAPSHOT_ENRICH_MAX_RETRIES", &cfg.SnapshotEnrich.MaxRetries)
 
+	// Evidence collection is independent of legacy CL value/collection refresh.
+	envBool("SHOW_PREP_REFRESH_ENABLED", &cfg.ShowPrepRefresh.Enabled, false)
+
 	// Card Ladder scheduler
 	envBool("CARDLADDER_REFRESH_ENABLED", &cfg.CardLadder.Enabled, false)
 	envIntRange("CARDLADDER_REFRESH_HOUR", &cfg.CardLadder.RefreshHour, 0, 23)

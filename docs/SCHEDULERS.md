@@ -47,6 +47,7 @@ All schedulers delegate their tick/stop/context loop to `RunLoop` (defined in `l
 | `InitialDelay` | `time.Duration`       | Delay before first run (0 = run immediately)     |
 | `WG`           | `*sync.WaitGroup`     | Optional — enables `Wait()` on the scheduler     |
 | `StopChan`     | `<-chan struct{}`      | Receives stop signal from `Stop()`               |
+| `Wake`         | `<-chan struct{}`      | Optional bounded/coalesced wake hint             |
 | `Logger`       | `observability.Logger` | Structured logger                               |
 | `LogFields`    | `[]observability.Field`| Extra fields logged at startup                  |
 
@@ -88,7 +89,7 @@ Schedulers are conditionally included based on:
 
 ## Roster
 
-`BuildGroup` builds 19 schedulers; `cmd/slabledger/init_schedulers.go` adds a 20th
+`BuildGroup` builds 20 schedulers; `cmd/slabledger/init_schedulers.go` adds a 21st
 (pricing enrichment) after the Card Ladder scheduler exists to serve as its pricer.
 
 | Scheduler | Env gate | Cadence | Also requires |
@@ -100,6 +101,7 @@ Schedulers are conditionally included based on:
 | Inventory refresh | `INVENTORY_REFRESH_ENABLED` | `1h` | inventory lister + snapshot refresher |
 | Snapshot enrich | `SNAPSHOT_ENRICH_ENABLED` | `15s` | snapshot enrich service |
 | Card Ladder refresh | `CARDLADDER_REFRESH_ENABLED` | daily at `CARDLADDER_REFRESH_HOUR` | CL store + purchase lister + value updater |
+| Show evidence | `SHOW_PREP_REFRESH_ENABLED` (default `true`) | immediate startup + `1m` + bounded admin wake | DB; acquisition additionally needs saved CL credentials |
 | Pricing enrich | — (queue-driven) | on enqueue | pre-built job wired into `inventory.Service` |
 | DH intelligence refresh | `DH_ENABLED` | `1h` | enterprise DH key, intelligence repo |
 | DH analytics refresh | `DH_ANALYTICS_REFRESH_ENABLED` | daily at `DH_ANALYTICS_REFRESH_HOUR` | enterprise DH key, demand repo |
@@ -217,6 +219,65 @@ interval until `MaxRetries` is exhausted.
 | `RetryInterval` | `SNAPSHOT_ENRICH_RETRY_INTERVAL` | `30m` | Retry tick for failed snapshots |
 | `BatchSize` | `SNAPSHOT_ENRICH_BATCH_SIZE` | `3` | Max purchases per tick |
 | `MaxRetries` | `SNAPSHOT_ENRICH_MAX_RETRIES` | `5` | Attempts before marking exhausted |
+
+### Show Evidence
+
+**File:** `showprep_refresh.go`; composition in `cmd/slabledger/showprep_runtime.go`.
+Runs the domain `EvidenceWorker` independently of CL valuation/collection sync.
+Unsold, non-refunded inventory in non-closed campaigns is deduplicated by verified
+profile/grader/grade. Receipt and DH price do not gate collection. Grader-specific
+verified enrichment backfills missing profiles. A serial-only cached mapping is not
+provenance: reuse requires the purchase's existing verified profile to match; otherwise
+the existing grader-specific enrichment must resolve it without promoting that cache.
+
+The group owns one serialized local loop. Startup and minute ticks inspect stored
+credentials, even on auth hold. A one-slot wake channel is only a hint; PostgreSQL
+intent survives missed wakes/restarts. Stop cancels and joins the active sweep.
+The sweep has a five-minute application context; credential sync has a five-second
+child bound. The domain worker retains source budgets, heartbeat, lease/epoch and
+per-identity generation fences, oldest-due ordering and durable retry limits.
+
+The shared `ConfiguredClient` reuses one client/limiter with the legacy CL refresher
+and handler. Every sweep reads the current saved row, so late configuration and
+changes on other instances are observed. Each worker source resolution gets a fresh
+`ShowPrepSource` wrapper, never an old wrapper's singleflight result. Credential
+replacement also fences the client's in-flight Firebase token refresh publication.
+Explicit successful credential save updates the client before CredentialsChanged
+and wake; token rotation alone never clears an auth hold. Another instance's save
+advances the shared database epoch; other instances observe new credentials at their
+next sweep without recreating independently paced clients.
+
+Admin GETs and inventory coverage are database-only. Admin Run now/Retry failed return
+202 after durable intent, not fleet completion. Disabled/unconfigured workers stay
+visible. Last sweep and safe failure/hold state come from the worker's authoritative
+fenced PostgreSQL control row across restarts, not legacy CL value-refresh statistics.
+Coverage is recomputed from current inventory/evidence using explicit identity/card
+units; idle/nil RunOnce does not establish complete coverage. Auth hold can be resumed
+with Retry failed even when its failed identity has since left inventory.
+
+Runtime warnings retain safe diagnostic fields: `operation` distinguishes worker
+acquire/renew/candidate-read/begin/finish/end persistence from source acquisition
+and configuration refresh; `category`, `deadline` and `canceled` identify the
+failure class. Known database SQLSTATEs are allowlisted as `sqlstate` when present.
+Unknown codes, raw errors, provider text, URLs, credentials, SQL parameters and
+arbitrary error context are never logged here. Original wrapped causes remain
+available internally through `errors.Is`/`errors.As`; public status/error DTOs and
+persisted safe failure messages do not change. Normal shutdown still cancels and
+joins without logging a sweep failure.
+
+Migration47 adds the singleton lease/control row and retry metadata on existing evidence;
+it preserves snapshots, business fingerprints, lists/items and safety holds. A schema
+rollback requires stopped workers and a compatible application. Reversing47 retains
+that original data but discards lease, auth-hold and retry bookkeeping, so re-upgrading
+is not a way to preserve an exhausted retry budget. Service-role-only RLS/grants are
+covered by the disposable migration suite.
+
+Local [worker/cached-use proof](../web/tests/show-readiness-real.md) starts the actual
+runtime before Chromium, then separately disables and joins it for provider-blocked
+operator use. A restart in that phase also keeps `SHOW_PREP_REFRESH_ENABLED=false`;
+disabling legacy CL valuation alone is insufficient. Local verification is not
+production rollout: separately authorize deployment, initial server-owned catch-up
+and real-inventory coverage/browser verification before declaring the worker deployed.
 
 ### Card Ladder Refresh
 

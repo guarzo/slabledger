@@ -1,25 +1,37 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
 )
 
-type ShowPrepHandler struct {
-	svc          *sp.Service
-	writeTimeout time.Duration
-	logger       observability.Logger
+// ShowPrepService exposes cached reads and explicit list writes, not acquisition.
+type ShowPrepService interface {
+	Evaluate(context.Context, []string) ([]sp.Evaluation, error)
+	Evidence(context.Context, string) (sp.Evidence, error)
+	Lists(context.Context) ([]sp.List, error)
+	CreateList(context.Context, string, string) (sp.List, error)
+	ListDetail(context.Context, string) (sp.ListDetail, error)
+	RenameList(context.Context, string, string) (sp.List, error)
+	AddItems(context.Context, string, []sp.AddItem) (sp.ListDetail, error)
+	UpdateItem(context.Context, string, string, sp.UpdateItem) (sp.ListDetail, error)
+	RemoveItem(context.Context, string, string) error
 }
 
-func NewShowPrepHandler(svc *sp.Service, writeTimeout time.Duration, logger observability.Logger) *ShowPrepHandler {
-	return &ShowPrepHandler{svc, writeTimeout, logger}
+type ShowPrepHandler struct {
+	svc    ShowPrepService
+	logger observability.Logger
+}
+
+func NewShowPrepHandler(svc ShowPrepService, logger observability.Logger) *ShowPrepHandler {
+	return &ShowPrepHandler{svc, logger}
 }
 func (h *ShowPrepHandler) respond(w http.ResponseWriter, r *http.Request, result any, err error) {
 	if err == nil {
@@ -116,17 +128,5 @@ func (h *ShowPrepHandler) HandleEvidence(w http.ResponseWriter, r *http.Request)
 	h.respond(w, r, e, err)
 }
 func (h *ShowPrepHandler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
-	start, ok := r.Context().Value(showPrepStartKey{}).(time.Time)
-	if !ok {
-		start = time.Now()
-	} // Direct handler callers still anchor before decoding.
-	source, persistence, _ := refreshDeadlines(start, h.writeTimeout, r.Context())
-	ids, ok := showPrepIDs(w, r, 10)
-	if !ok {
-		return
-	}
-	es, err := h.svc.Refresh(r.Context(), ids, source, persistence)
-	h.respond(w, r, struct {
-		Evaluations []sp.Evaluation `json:"evaluations"`
-	}{es}, err)
+	writeError(w, http.StatusGone, "Comp collection is server-managed; reload the application")
 }

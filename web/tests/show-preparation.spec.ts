@@ -12,9 +12,10 @@ const ambiguousId = '55555555-5555-4555-8555-555555555555';
 const widths = [{ name: 'mobile', width: 390, height: 844 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'desktop', width: 1440, height: 1000 }];
 
 for (const failed of [true, false]) {
-  test(`no DH price preserves independent refresh health (failed=${failed})`, async ({ page }, testInfo) => {
+  test(`no DH price preserves independent stored evidence health (failed=${failed})`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    let current = evaluation({ status: 'no_listed_price', reason: 'No positive DH listed price', listedPriceCents: 0 });
+    const current = evaluation({ status: 'no_listed_price', reason: 'No positive DH listed price', listedPriceCents: 0,
+      evidenceNeedsReview: failed, evidenceReason: failed ? 'CardLadder refresh failed' : '' });
     let refreshes = 0;
     await page.route(url => url.pathname.startsWith('/api/'), async route => {
       const path = new URL(route.request().url()).pathname;
@@ -25,9 +26,7 @@ for (const failed of [true, false]) {
       else if (path === '/api/show-prep/evaluate') response = { evaluations: [current] };
       else if (path === '/api/show-prep/refresh') {
         refreshes++;
-        expect(route.request().postDataJSON()).toEqual({ purchaseIds: [purchaseId] });
-        current = { ...current, version: 'eval-2', evidenceNeedsReview: failed, evidenceReason: failed ? 'CardLadder refresh failed' : '' };
-        response = { evaluations: [current] };
+        await route.fulfill({ status: 410, json: { error: 'retired' } }); return;
       } else if (path === `/api/show-prep/evidence/${purchaseId}`) response = { evaluation: current, sales: [
         { id: 'sale-1', date: '2026-09-13', priceCents: 27000, platform: 'eBay', url: 'https://example.test/sale/1', listingType: 'Auction' },
         { id: 'sale-2', date: '2026-09-12', priceCents: 29000, platform: 'eBay', url: 'https://example.test/sale/2', listingType: 'BestOffer' },
@@ -36,22 +35,20 @@ for (const failed of [true, false]) {
       await route.fulfill({ json: response });
     });
     await page.goto('/inventory');
-    await page.getByRole('button', { name: 'Show selection', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Show 30-day evidence 12345678: No DH price/ })).toBeVisible();
     await page.getByRole('checkbox', { name: 'Select 12345678', exact: true }).check();
-    await page.getByRole('button', { name: 'Check selected (1)' }).click();
-    const actions = page.getByRole('region', { name: 'Show selection actions' });
-    await expect(actions.getByText(/Review and reselect/)).toContainText('12345678');
-    await expect(actions.getByRole('button', { name: 'Add selected to show (1)' })).toBeDisabled();
+    const actions = page.getByRole('region', { name: 'Bulk actions for selected cards' });
+    await expect(actions.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
     await page.getByRole('button', { name: 'Show 30-day evidence 12345678' }).click();
     const evidence = page.getByRole('region', { name: '30-day evidence 12345678' });
-    await expect(page.getByText('No listed price', { exact: true }).last()).toBeVisible();
+    await expect(page.getByText('No DH price', { exact: true }).last()).toBeVisible();
     await expect(evidence.getByText('No positive DH listed price', { exact: true })).toBeVisible();
     await expect(evidence.getByRole('list', { name: 'Individual matching sales' }).getByRole('listitem')).toHaveCount(2);
     if (failed) {
       await expect(evidence.getByText('CardLadder refresh failed', { exact: true })).toBeVisible();
       await expect(evidence.getByText(/Stored sales may be partial or stale/)).toBeVisible();
     } else await expect(evidence.getByText(/Stored sales may be partial or stale/)).toHaveCount(0);
-    expect(refreshes).toBe(1);
+    expect(refreshes).toBe(0);
     await page.screenshot({ path: testInfo.outputPath(`no-price-health-${failed ? 'failed' : 'complete'}.png`), fullPage: true });
   });
 }
@@ -82,7 +79,8 @@ for (const viewport of widths) {
       if (method !== 'GET') writes.push({ path, body });
       if (path === '/api/auth/user') response = { id: 1, username: 'Show operator', email: 'show@example.test', avatar_url: '', is_admin: false, last_login_at: null };
       else if (path === '/api/inventory') response = { items: inventory, warnings: [] };
-      else if (path === '/api/show-prep/evaluate' || path === '/api/show-prep/refresh') response = { evaluations: values.filter(e => body.purchaseIds.includes(e.purchaseId)) };
+      else if (path === '/api/show-prep/evaluate') response = { evaluations: values.filter(e => body.purchaseIds.includes(e.purchaseId)) };
+      else if (path === '/api/show-prep/refresh') { status = 410; response = { error: 'retired' }; }
       else if (path.startsWith('/api/show-prep/evidence/')) {
         response = { evaluation: values.find(e => path.endsWith(e.purchaseId)), sales: [
           { id: 'sale-1', date: '2026-09-13', priceCents: 27000, platform: 'eBay', url: 'https://example.test/sale/1', listingType: 'Auction' },
@@ -116,8 +114,7 @@ for (const viewport of widths) {
     });
     await page.goto('/inventory');
     await expect(page.getByRole('heading', { name: 'Inventory', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Show selection', exact: true }).click();
-    await page.getByLabel('Price support').selectOption('supported');
+    await page.getByLabel('Price support', { exact: true }).selectOption('supported');
     await page.getByLabel('Search cards').fill('Charizard');
     await expect(page.getByText('0 cards shown', { exact: true })).toBeVisible();
     await page.getByLabel('Search cards').fill('Pikachu');
@@ -137,20 +134,19 @@ for (const viewport of widths) {
     await page.screenshot({ path: testInfo.outputPath(`inventory-${viewport.name}.png`), fullPage: true });
     await expect(evidence.getByText('$270.00', { exact: true })).toBeVisible();
     await page.getByRole('checkbox', { name: 'Select all visible cards' }).check();
-    await page.getByRole('button', { name: 'Add selected to show (1)' }).click();
+    await page.getByRole('button', { name: 'Add to show (1)' }).click();
     await page.getByRole('combobox', { name: 'Show list', exact: true }).selectOption(listId);
-    await page.getByRole('button', { name: 'Add selected to show (1)' }).click();
-    await expect(page.getByRole('region', { name: 'Show selection actions' })).toHaveCount(0);
-    await page.getByLabel('Price support').selectOption('all');
+    await page.getByRole('button', { name: 'Add to show (1)' }).click();
+    await expect(page.getByRole('region', { name: 'Bulk actions for selected cards' })).toHaveCount(0);
+    await page.getByLabel('Price support', { exact: true }).selectOption('all');
     await page.getByLabel('Search cards').fill('');
     await page.getByRole('button', { name: /^All\s*\d+$/ }).click();
-    await page.getByLabel('Include not received').check();
     await page.getByRole('checkbox', { name: 'Select 87654321', exact: true }).check();
     await page.getByRole('checkbox', { name: 'Select 99999999', exact: true }).check();
-    await page.getByRole('button', { name: 'Add selected to show (2)' }).click();
+    await page.getByRole('button', { name: 'Add to show (2)' }).click();
     await expect(page.getByRole('combobox', { name: 'Show list', exact: true })).toHaveValue(listId);
-    await page.getByRole('button', { name: 'Add selected to show (2)' }).click();
-    await expect(page.getByRole('region', { name: 'Show selection actions' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Add to show (2)' }).click();
+    await expect(page.getByRole('region', { name: 'Bulk actions for selected cards' })).toHaveCount(0);
     await page.getByRole('link', { name: 'Open packing list →' }).click();
     await expect(page).toHaveURL(new RegExp(`/shows\\?list=${listId}`));
     const packed = page.getByRole('checkbox', { name: 'Packed 12345678', exact: true });

@@ -16,10 +16,10 @@ import (
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
-	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/google"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver"
 	"github.com/guarzo/slabledger/internal/adapters/httpserver/handlers"
+	"github.com/guarzo/slabledger/internal/adapters/scheduler"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
@@ -48,10 +48,24 @@ func openReadinessDB(ctx context.Context, raw string) (*postgres.DB, error) {
 	if raw != readinessDBURL {
 		return nil, fmt.Errorf("refusing any database except the owned e2e fixture")
 	}
-	return postgres.Open(ctx, raw, mocks.NewMockLogger())
+	db, err := postgres.Open(ctx, raw, mocks.NewMockLogger())
+	if err != nil {
+		return nil, err
+	}
+	var name, user, owner string
+	err = db.QueryRowContext(ctx, `SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()`).Scan(&name, &user, &owner)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("read fixture database owner: %w", err)
+	}
+	if name != "showprep_readiness_e2e" || user != "showprep" || owner != user {
+		_ = db.Close()
+		return nil, fmt.Errorf("fixture database owner mismatch: name=%q user=%q owner=%q", name, user, owner)
+	}
+	return db, nil
 }
 
-func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) {
+func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) map[string]string {
 	t.Helper()
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public`)
@@ -92,21 +106,29 @@ func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) {
 	_, err = db.ExecContext(ctx, `INSERT INTO cl_sales_comps(gem_rate_id,item_id,sale_date,price_cents,platform,condition)
 		VALUES('psa-1','legacy-comp',$1,99900,'ebay','g10')`, now.Format(time.DateOnly))
 	require.NoError(t, err)
+	legacy, err := readinessLedger(ctx, db)
+	require.NoError(t, err)
 	require.NoError(t, migration.Up())
+	upgraded, err := readinessLedger(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, legacy, upgraded, "45->47 must preserve every financial and legacy comp row")
 	var version, count int
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version))
-	require.GreaterOrEqual(t, version, 46)
+	require.Equal(t, 47, version)
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM showprep_evidence`).Scan(&count))
 	require.Zero(t, count)
+	return legacy
 }
 
 type readinessSourceFixture struct {
-	mu      sync.Mutex
-	now     time.Time
-	started time.Time
-	mode    string
-	calls   []url.Values
-	gate    chan struct{}
+	mu               sync.Mutex
+	now              time.Time
+	started          time.Time
+	mode             string
+	calls            []url.Values
+	gate             chan struct{}
+	workerDataset    bool
+	providerRequests []map[string]string
 }
 
 func TestReadinessFixtureClockAdvances(t *testing.T) {
@@ -135,6 +157,15 @@ func (f *readinessSourceFixture) setMode(mode string) {
 	}
 }
 func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) error {
+	f.mu.Lock()
+	f.calls = append(f.calls, r.URL.Query())
+	f.providerRequests = append(f.providerRequests, map[string]string{"method": r.Method, "path": r.URL.Path})
+	blocked := f.mode == "blocked"
+	f.mu.Unlock()
+	if blocked {
+		http.Error(w, "provider access blocked during cached use", http.StatusServiceUnavailable)
+		return nil
+	}
 	if r.Header.Get("Authorization") != "Bearer source-fixture" {
 		return fmt.Errorf("source fixture token required")
 	}
@@ -150,8 +181,7 @@ func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) e
 	}
 	profile := strings.TrimPrefix(parts[1], "profileId:")
 	f.mu.Lock()
-	f.calls = append(f.calls, q)
-	now, mode, gate := time.Now().UTC().Add(f.now.Sub(f.started)), f.mode, f.gate
+	now, mode, gate, workerDataset := time.Now().UTC().Add(f.now.Sub(f.started)), f.mode, f.gate, f.workerDataset
 	f.mu.Unlock()
 	if gate != nil {
 		select {
@@ -170,7 +200,19 @@ func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) e
 			"profileId": profile, "condition": "g10", "gradingCompany": "psa", "date": now.Format(time.DateOnly),
 			"price": 270.0 + float64(i)*20, "currency": "USD", "platform": "ebay", "listingType": "BestOffer"})
 	}
-	total := 2
+	if workerDataset {
+		switch profile {
+		case "cached-31":
+			hits = []map[string]any{}
+		case "cached-32":
+			hits = hits[:1]
+		case "cached-33":
+			hits[0]["price"], hits[1]["price"] = 200.0, 220.0
+		case "cached-29":
+			mode = "partial"
+		}
+	}
+	total := len(hits)
 	if mode == "partial" {
 		total = 3
 	} // Real adapter detects an incomplete page, not a fabricated evaluation.
@@ -181,10 +223,11 @@ func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-func readinessRouter(db *postgres.DB, f *readinessSourceFixture, sourceURL string) http.Handler {
+func readinessRouter(db *postgres.DB, f *readinessSourceFixture, result *scheduler.BuildResult) http.Handler {
 	logger := mocks.NewMockLogger()
-	client := cardladder.NewClient(cardladder.WithBaseURL(sourceURL), cardladder.WithStaticToken("source-fixture"))
-	service := sp.NewService(postgres.NewShowPrepStore(db.DB), cardladder.NewShowPrepSource(client, logger), f.clock)
+	// The same cached-only service capability as production. Only its business
+	// clock is controlled here; source access belongs exclusively to scheduling.
+	service := sp.NewService(postgres.NewShowPrepStore(db.DB), nil, f.clock)
 	campaigns := inventory.NewService(postgres.NewCampaignStore(db.DB, logger), postgres.NewPurchaseStore(db.DB, logger),
 		postgres.NewSaleStore(db.DB, logger), postgres.NewAnalyticsStore(db.DB, logger), postgres.NewFinanceStore(db.DB, logger),
 		postgres.NewPricingStore(db.DB, logger), postgres.NewDHStore(db.DB, logger),
@@ -193,8 +236,9 @@ func readinessRouter(db *postgres.DB, f *readinessSourceFixture, sourceURL strin
 	// OAuth transport is never called: actual LocalAPIToken middleware resolves
 	// the fixture user through the real auth service and PostgreSQL repository.
 	auth := google.NewOAuthService(postgres.NewAuthRepository(db.DB, nil), logger, "", "", "", nil)
-	return httpserver.NewRouter(httpserver.RouterConfig{ShowPrepHandler: handlers.NewShowPrepHandler(service, 90*time.Second, logger),
-		CampaignsService: campaigns, AuthService: auth, LocalAPIToken: readinessToken, GoogleOAuthEnv: "development",
+	return httpserver.NewRouter(httpserver.RouterConfig{ShowPrepHandler: handlers.NewShowPrepHandler(service, logger),
+		ShowPrepWorkerHandler: buildShowPrepWorkerHandler(handlerInputs{SchedulerResult: result}),
+		CampaignsService:      campaigns, AuthService: auth, LocalAPIToken: readinessToken, GoogleOAuthEnv: "development",
 		Logger: logger, SPAHandler: handlers.NewSPAHandler(logger), HealthHandler: handlers.NewHealthHandler(nil, nil, logger)}).Setup()
 }
 
