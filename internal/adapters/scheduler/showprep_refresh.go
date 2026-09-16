@@ -2,9 +2,11 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
 )
@@ -74,13 +76,57 @@ func (s *ShowPrepRefreshScheduler) Start(parent context.Context) {
 			err := s.configuration.Refresh(check)
 			cancelCheck()
 			if err != nil {
-				s.logger.Warn(ctx, "show evidence credentials unavailable")
+				s.logger.Warn(ctx, "show evidence credentials unavailable", showPrepDiagnosticFields(err, true)...)
 			}
 		}
 		if err := s.worker.RunOnce(sweep); err != nil && ctx.Err() == nil {
-			s.logger.Warn(ctx, "show evidence sweep incomplete")
+			s.logger.Warn(ctx, "show evidence sweep incomplete", showPrepDiagnosticFields(err, false)...)
 		}
 	})
+}
+
+// Errors can contain credentials, SQL parameters and arbitrary provider text.
+// Only bounded operation/category/context flags and known SQLSTATEs reach logs;
+// neither Error(), Message, nor an arbitrary Context map is safe to serialize.
+func showPrepDiagnosticFields(err error, configuration bool) []observability.Field {
+	operation, category := "showprep.run", "worker"
+	if configuration {
+		operation, category = "showprep.configuration.refresh", "configuration"
+	} else {
+		var app *apperrors.AppError
+		if errors.As(err, &app) {
+			stage, _ := app.Context["operation"].(string)
+			switch stage {
+			case "showprep.acquire", "showprep.renew", "showprep.candidates", "showprep.begin", "showprep.finish", "showprep.end":
+				operation, category = stage, "storage"
+			}
+		}
+		if category == "worker" {
+			switch {
+			case errors.Is(err, sp.ErrWorkerAuthHold):
+				operation, category = "showprep.source", "authentication"
+			case errors.Is(err, sp.ErrWorkerFailed):
+				operation, category = "showprep.source", "source"
+			case errors.Is(err, sp.ErrWorkerLeaseLost):
+				category = "lease_lost"
+			}
+		}
+	}
+	fields := []observability.Field{
+		observability.String("operation", operation), observability.String("category", category),
+		observability.Bool("deadline", errors.Is(err, context.DeadlineExceeded)),
+		observability.Bool("canceled", errors.Is(err, context.Canceled)),
+	}
+	var sqlState interface{ SQLState() string }
+	if (category == "storage" || category == "configuration") && errors.As(err, &sqlState) {
+		switch state := sqlState.SQLState(); state {
+		case "08000", "08001", "08003", "08004", "08006", "08007", "08P01",
+			"23502", "23503", "23505", "23514", "40001", "40P01", "42501", "42703", "42P01",
+			"53300", "53400", "57014", "57P01", "57P02", "57P03":
+			fields = append(fields, observability.String("sqlstate", state))
+		}
+	}
+	return fields
 }
 
 // Stop cancels active source work and drains the loop, not just the next tick.

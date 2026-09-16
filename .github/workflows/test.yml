@@ -54,9 +54,18 @@ jobs:
         ./scripts/check-file-size.sh
         ./scripts/check-playwright-version.sh
 
+    # cmd runtime fixtures and storage tests reset data independently while Go
+    # runs packages in parallel. Never point both opt-ins at the storage DB.
+    - name: Create isolated show preparation runtime test database
+      env:
+        PGPASSWORD: slabledger
+      run: createdb -h localhost -p 5432 -U slabledger -O slabledger showprep_runtime_test
+
     - name: Run tests with coverage and race detection
       env:
+        TZ: UTC
         POSTGRES_TEST_URL: postgresql://slabledger:slabledger@localhost:5432/slabledger?sslmode=disable
+        SHOW_PREP_RUNTIME_TEST_URL: postgresql://slabledger:slabledger@localhost:5432/showprep_runtime_test?sslmode=disable
       run: go test -race -timeout 10m -coverprofile=coverage.out -covermode=atomic ./...
 
     - name: Run linter

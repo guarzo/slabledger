@@ -23,22 +23,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const showRuntimeTestURL = "postgres://showprep:showprep_test@127.0.0.1:44620/showprep_cached_test?sslmode=disable"
-
 func showRuntimeDB(t *testing.T) *postgres.DB {
 	t.Helper()
-	raw := os.Getenv("POSTGRES_TEST_URL")
+	raw := os.Getenv("SHOW_PREP_RUNTIME_TEST_URL")
 	if raw == "" {
-		t.Skip("requires explicit owned POSTGRES_TEST_URL")
+		t.Skip("requires explicit owned SHOW_PREP_RUNTIME_TEST_URL")
 	}
-	require.Equal(t, showRuntimeTestURL, raw, "refusing any other database")
+	require.True(t, safeShowRuntimeTestURL(raw), "refusing non-loopback or non-dedicated runtime database")
 	db, err := postgres.Open(context.Background(), raw, mocks.NewMockLogger())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	var name, user, owner string
 	require.NoError(t, db.QueryRow(`SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()`).Scan(&name, &user, &owner))
-	require.Equal(t, "showprep_cached_test", name)
-	require.Equal(t, "showprep", user)
+	require.Equal(t, "showprep_runtime_test", name)
+	require.Contains(t, []string{"showprep", "slabledger"}, user)
 	require.Equal(t, user, owner)
 	require.NoError(t, postgres.RunMigrations(db, ""))
 	_, err = db.Exec(`TRUNCATE campaigns,showprep_evidence,showprep_worker,cardladder_config,cl_card_mappings CASCADE; INSERT INTO showprep_worker(singleton)VALUES(true); INSERT INTO campaigns(id,name,phase)VALUES('runtime','Runtime','active')`)

@@ -32,9 +32,38 @@ URL and database/user/owner before reset. Retain this parent-owned container.
 Use installed Go 1.26 and worktree-lockfile web dependencies with matching
 Playwright Chromium. Build first: `cd web && npm run build && cd ..`.
 Do not substitute a default/developer/production DB or run `make screenshots`.
-The separate `showprep_cached_test` is for cmd/storage integration tests. Its
-PostgreSQL package resets schema: run those two package suites **sequentially**.
-Keep broad `go test ./...` discovery separate from browser artifact generation.
+Use three separate databases: `showprep_cached_test` for storage tests,
+`showprep_runtime_test` for cmd production-runtime tests, and
+`showprep_readiness_e2e` for browser fixtures. Storage resets schema while Go runs
+packages in parallel. Runtime tests require **`SHOW_PREP_RUNTIME_TEST_URL`** and
+skip when it is unset, even if `POSTGRES_TEST_URL` is set. No application/default
+DB fallback is permitted. The runtime guard accepts only an explicit loopback
+PostgreSQL URI/port, database `showprep_runtime_test`, user `showprep` or
+`slabledger`, and `sslmode=disable` without connection overrides; the connected
+user must own the database before migrations/truncation.
+
+After verifying the exact container above, create the dedicated runtime DB once
+(if absent) and verify ownership:
+
+```bash
+docker exec slabledger-cached-show-01a09dd6 createdb -U showprep -O showprep showprep_runtime_test
+docker exec slabledger-cached-show-01a09dd6 psql -U showprep -d showprep_runtime_test \
+  -c 'SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();'
+```
+
+CI creates the same dedicated runtime database owned by its `slabledger` role
+before supplying both independent opt-ins to `go test ./...`. This local command
+exercises the same **parallel-package isolation**, not a claim that remote CI ran:
+
+```bash
+unset DATABASE_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL SHOW_READINESS_E2E_URL
+POSTGRES_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_cached_test?sslmode=disable' \
+SHOW_PREP_RUNTIME_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_runtime_test?sslmode=disable' \
+TZ=UTC go test -race -count=1 -timeout 10m ./...
+```
+
+Keep this broad discovery separate from browser artifact generation. Archive old
+artifact directories instead of overwriting them.
 
 ## Three explicitly separated phases
 
@@ -76,7 +105,7 @@ there is no production clock or reset API.
 Run each separately from the worktree root with different artifact directories:
 
 ```bash
-unset DATABASE_URL POSTGRES_TEST_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL
+unset DATABASE_URL POSTGRES_TEST_URL SHOW_PREP_RUNTIME_TEST_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL
 SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
 SHOW_READINESS_MODE=cached SHOW_READINESS_ARTIFACTS=/tmp/showprep-cached \
 TZ=UTC go test -race -v -count=1 -timeout 10m ./cmd/slabledger -run TestShowReadinessRealBrowser
@@ -98,8 +127,8 @@ before any browser process is started. No old production source is mutated.
 The small actual-source renewal and active financial-write proof uses the other DB:
 
 ```bash
-unset SHOW_READINESS_E2E_URL DATABASE_URL
-POSTGRES_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_cached_test?sslmode=disable' \
+unset SHOW_READINESS_E2E_URL DATABASE_URL POSTGRES_TEST_URL
+SHOW_PREP_RUNTIME_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_runtime_test?sslmode=disable' \
 SHOW_READINESS_RUNTIME_ARTIFACTS=/tmp/showprep-runtime TZ=UTC \
 go test -race -v -count=1 -timeout 2m ./cmd/slabledger -run TestShowPrepRuntimePositiveMidnightAndFinancialWrite
 ```
@@ -147,11 +176,33 @@ success/failure; the PG container stays running. `SHOW_READINESS_SERVE=1` remain
 an optional separate interactive session; stop with SIGINT/SIGTERM. Never attach
 to shared Chrome. Test-only controls are compiled only in `_test.go`.
 
+## Focused held-selection DOM geometry
+
+The small fully resolved/priced fixture catches a coverage notice disappearing
+at 100% current and the no-search Needs Attention banner disappearing after
+publication removes the last support match. The actual React/query/virtual-row
+code runs in owned Chromium at desktop/mobile widths. API responses are controlled
+**only in this focused layout test**; it is not worker/source/financial proof.
+Existing minute polling delivers the coverage update. Initial checkbox geometry,
+held publication geometry, live zero counts, unchanged selected versions/disabled
+Add and clear/explicit-view reset are asserted. A quiet initial view must not gain
+a header row on selection. Checkbox/reset request logs stay empty.
+
+```bash
+cd web
+SHOW_LAYOUT_ARTIFACTS=/tmp/showprep-layout-fresh \
+  npx playwright test --config tests/show-readiness-layout.config.ts
+```
+
+The config owns loopback45173 (no server reuse/4173/shared CDP); geometry JSON is
+saved per case. Run the two actual backend modes after production layout changes,
+with fresh artifact paths, and then the four cleanup checks below.
+
 ## Fixture cleanup/error regressions
 
 ```bash
 node --test web/tests/show-readiness-browser-checks.cjs
-unset DATABASE_URL POSTGRES_TEST_URL SHOW_READINESS_E2E_URL
+unset DATABASE_URL POSTGRES_TEST_URL SHOW_PREP_RUNTIME_TEST_URL SHOW_READINESS_E2E_URL
 TZ=UTC go test -race -count=1 ./cmd/slabledger -run 'TestReadiness(Restart|ConcurrentRestart|FixtureClock|Source)'
 
 SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \

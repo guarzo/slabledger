@@ -696,3 +696,85 @@ an authorized rollback. Local tests do not authorize resetting production retrie
 Worker rollout is **not complete**: separately authorize deployment, initial server-
 owned catch-up and real-inventory coverage plus zero-source browser verification.
 Parent independent final whole-branch review remains outstanding.
+
+## Final bounded recovery fix wave after `6fa439d0`
+
+This appendix supersedes Task4's shared cmd/storage test-DB recipe, not its
+historical results. Only validated findings F1–F3 were addressed. No further
+review agents, push, PR, deployment, production credentials or live provider
+requests were used. Parent owns the scoped final recheck; it remains pending.
+
+### Changes and RED/GREEN
+
+- **F1, independent runtime database:** cmd fixtures now require
+  `SHOW_PREP_RUNTIME_TEST_URL`, never `POSTGRES_TEST_URL` or an app DB fallback.
+  The guard admits only an explicit loopback PostgreSQL URI/port, known test user,
+  exact `showprep_runtime_test` database and no query overrides; connected user
+  must own it before migrations/truncation. CI provisions that separate DB and
+  wires both independent opt-ins for parallel packages. The storage-only CI-URI
+  regression failed against the old helper, then correctly skipped runtime;
+  dedicated runtime cases passed. Created only `showprep_runtime_test` in the
+  already verified parent-owned container. `showprep_cached_test` remains storage
+  only; `showprep_readiness_e2e` remains browser only. No remote CI was run.
+- **F2, held layout:** the existing presentation snapshot retains an already
+  visible Needs Attention banner with live zero counts. The coverage component
+  retains its measured existing height and live counts while selection is held,
+  keyed by the existing view so explicit changes/clear restore normal quiet
+  behavior. No initial checkbox-induced header row, new controls, CSS framework,
+  frozen evaluations or acknowledged versions. Actual desktop/mobile DOM RED
+  caught coverage collapse (desktop26px/mobile70px) and attention collapse59px.
+  All12 cases now pass, including initially quiet views and both clear and
+  explicit price-band view reset. Existing price-band/version regressions pass.
+- **F3, safe diagnostics:** existing AppError constructors/WithContext preserve
+  internal operation and original causes, including Is/As and lease-loss identity.
+  Runtime logs only allowlisted operation/category, deadline/canceled booleans,
+  and recognized database SQLSTATEs. No raw error, provider text, SQL parameter,
+  URL, credential or arbitrary context is serialized. Real worker-injected
+  Acquire/Candidates/Begin/Finish/End failures and actual ConfiguredClient config
+  read failures cover SQL/cancel/deadline/malicious cases. Source resolve/fetch
+  causes remain inspectable internally but safely redacted in logs. Public DTOs,
+  persisted safe messages, qualification, retry, lease/pacing and ownership stay
+  unchanged. RED failed missing stage/log fields and dropped source causes;
+  GREEN passes all29 diagnostic cases plus existing worker/runtime races.
+
+### Fresh final verification
+
+- Full UTC uncached Go-race without DBs: PASS; DB fixtures skipped as intended.
+- Actual CI-shaped parallel `go test -race -v -count=1 -timeout 10m
+  -coverprofile=… -covermode=atomic ./...`, with storage and runtime in their
+  separate databases: PASS. cmd16.142s, storage84.353s; migration47 local and
+  service-role/anon/authenticated RLS retention subtests ran. This is a local
+  isolation result, not remote CI/deployment verification.
+- Full frontend:87 files/859 tests PASS (21.78s); typecheck/lint/build PASS.
+  Focused Chromium geometry12/12 PASS (24.9s). Compatible-toolchain `make check`
+  PASS, zero lint issues; existing source-size/Vite/jsdom warnings remain.
+- Actual production-composition worker browser PASS179.85s, cached browser
+  PASS36.61s, both after final layout and diagnostics changes. A remains142
+  searches+1token; B adds0, with five empty checkbox/filter logs per mode and0
+  browser refresh POSTs. Separate C adds1search+1token, final143/145 totals.
+- Financial/migration baseline equality checked again from phase artifacts:
+ 156 purchases, one campaign/sale/legacy comp per browser mode unchanged;
+  original packed history retained. Runtime positive/zero next-midnight renewal
+  reran on the dedicated runtime DB:32500-cent deliberate PATCH has its own
+  baseline, renewal adds no further financial changes;4searches/1token total.
+- Worker C checkbox remains x21/y594.234375,13×13 before/after publication.
+  New focused desktop coverage/attention rows stay at y593.234375/y598.234375;
+  mobile at y786.421875/y747.421875. Reset hides notices normally; geometry JSON
+  records the released table footprint. Existing36 virtual-row observations
+  per real mode have475/473 adjacent pairs, minimum gap0 and no overflow.
+- Four actual owned-browser cleanup/whole-row tests PASS (1.948s); Go control,
+  source, restart and clock cleanup races PASS (6.055s).
+
+Fresh artifacts (old Task4/RED directories retained): `/tmp/showprep-final-worker/`,
+`/tmp/showprep-final-cached/`, `/tmp/showprep-final-runtime/runtime-renewal.json`,
+`/tmp/showprep-final-layout-verified/`. Exact commands, logs, source/financial
+attribution and changes are in local ignored
+`.superpowers/sdd/2026-09-15-cached-show-preparation/final/fix-report.md`.
+The durable runner is `web/tests/show-readiness-real.md`.
+
+Final resource checks: same owned container ID and loopback44620; all three DBs
+owned by showprep; zero other sessions. Worker ports45089/46353/45989, cached
+ports46091/45485/44921 and focused layout45173 closed. Groups, pools, source/app/
+control servers and owned browsers joined/closed; container retained. The final
+control tests reset only the browser schema; phase data/history lives in artifacts.
+Production rollout and parent scoped final recheck remain explicitly incomplete.

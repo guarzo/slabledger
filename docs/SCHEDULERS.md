@@ -255,6 +255,16 @@ Coverage is recomputed from current inventory/evidence using explicit identity/c
 units; idle/nil RunOnce does not establish complete coverage. Auth hold can be resumed
 with Retry failed even when its failed identity has since left inventory.
 
+Runtime warnings retain safe diagnostic fields: `operation` distinguishes worker
+acquire/renew/candidate-read/begin/finish/end persistence from source acquisition
+and configuration refresh; `category`, `deadline` and `canceled` identify the
+failure class. Known database SQLSTATEs are allowlisted as `sqlstate` when present.
+Unknown codes, raw errors, provider text, URLs, credentials, SQL parameters and
+arbitrary error context are never logged here. Original wrapped causes remain
+available internally through `errors.Is`/`errors.As`; public status/error DTOs and
+persisted safe failure messages do not change. Normal shutdown still cancels and
+joins without logging a sweep failure.
+
 Migration47 adds the singleton lease/control row and retry metadata on existing evidence;
 it preserves snapshots, business fingerprints, lists/items and safety holds. A schema
 rollback requires stopped workers and a compatible application. Reversing47 retains

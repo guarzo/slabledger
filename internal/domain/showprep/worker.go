@@ -60,8 +60,11 @@ func (w *EvidenceWorker) RunOnce(parent context.Context) error {
 	persist, cancel := context.WithTimeout(run, workerPersistBudget)
 	lease, ok, err := w.store.Acquire(persist, w.newOwner())
 	cancel()
-	if err != nil || !ok {
-		return err
+	if err != nil {
+		return workerStorageError("acquire", err)
+	}
+	if !ok {
+		return nil
 	}
 	heartbeat, stop := context.WithCancel(run)
 	joined := make(chan struct{})
@@ -79,7 +82,7 @@ func (w *EvidenceWorker) RunOnce(parent context.Context) error {
 				cancel()
 				if err != nil {
 					if heartbeat.Err() == nil {
-						cancelRun(ErrWorkerLeaseLost)
+						cancelRun(errors.Join(ErrWorkerLeaseLost, workerStorageError("renew", err)))
 					}
 					return
 				}
@@ -97,7 +100,7 @@ func (w *EvidenceWorker) RunOnce(parent context.Context) error {
 	persist, cancel = context.WithTimeout(run, workerPersistBudget)
 	defer cancel()
 	if err := w.store.End(persist, lease, result, w.now()); err != nil {
-		return err
+		return workerStorageError("end", err)
 	}
 	return runErr
 }
@@ -118,17 +121,17 @@ func (w *EvidenceWorker) runOwned(run context.Context, lease WorkerLease) (Worke
 		return failed, context.Cause(run)
 	}
 	if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth) {
-		return WorkerRunResult{State: "auth_hold", Error: ErrWorkerAuthHold.Error()}, ErrWorkerAuthHold
+		return WorkerRunResult{State: "auth_hold", Error: ErrWorkerAuthHold.Error()}, workerSourceError(ErrWorkerAuthHold, err)
 	}
 	if apperrors.HasErrorCode(err, apperrors.ErrCodeConfigMissing) || (err == nil && source == nil) {
 		return WorkerRunResult{State: "unconfigured"}, nil
 	}
 	if err != nil {
-		return failed, ErrWorkerFailed
+		return failed, workerSourceError(ErrWorkerFailed, err)
 	}
 	candidates, err := w.store.Candidates(work)
 	if err != nil {
-		return failed, err
+		return failed, workerStorageError("candidates", err)
 	}
 	now := w.now()
 	// Evaluate ordering once per sweep. Recheck due/scope atomically at Begin.
@@ -168,7 +171,7 @@ func (w *EvidenceWorker) runOwned(run context.Context, lease WorkerLease) (Worke
 	// A no-due tick must not erase durable failure visibility during backoff.
 	candidates, err = w.store.Candidates(run)
 	if err != nil {
-		return failed, err
+		return failed, workerStorageError("candidates", err)
 	}
 	for _, c := range candidates {
 		if c.Classification(w.now()) == "failed" {
@@ -178,13 +181,26 @@ func (w *EvidenceWorker) runOwned(run context.Context, lease WorkerLease) (Worke
 	return WorkerRunResult{State: "idle"}, nil
 }
 
+// Keep stage and the original cause for internal diagnostics/Is/As. Runtime
+// logging must allowlist these fields, never print this error or its Context.
+func workerStorageError(operation string, cause error) error {
+	return apperrors.StorageError("showprep."+operation, cause).WithContext("operation", "showprep."+operation)
+}
+
+func workerSourceError(outcome, cause error) error {
+	if errors.Is(outcome, ErrWorkerAuthHold) {
+		return apperrors.ProviderAuthFailed("CardLadder", errors.Join(outcome, cause)).WithContext("operation", "showprep.source")
+	}
+	return apperrors.ProviderUnavailable("CardLadder", errors.Join(outcome, cause)).WithContext("operation", "showprep.source")
+}
+
 func (w *EvidenceWorker) collect(run, work context.Context, lease WorkerLease, source Source, id Identity) error {
 	now := w.now()
 	persist, cancel := context.WithTimeout(work, workerPersistBudget)
 	attempt, err := w.store.Begin(persist, lease, id, now)
 	cancel()
 	if err != nil {
-		return err
+		return workerStorageError("begin", err)
 	}
 	sourceCtx, cancel := context.WithTimeout(work, workerSourceBudget)
 	snap, sourceErr := source.Fetch(sourceCtx, id, now)
@@ -226,16 +242,19 @@ func (w *EvidenceWorker) collect(run, work context.Context, lease WorkerLease, s
 	persist, cancel = context.WithTimeout(run, workerPersistBudget)
 	defer cancel()
 	if err := w.store.Finish(persist, lease, id, attempt, snap, w.now(), auth); err != nil {
-		return err
+		return workerStorageError("finish", err)
 	}
 	if auth {
-		return ErrWorkerAuthHold
+		return workerSourceError(ErrWorkerAuthHold, sourceErr)
 	}
 	if unconfigured {
 		return apperrors.ConfigMissing("CardLadder", "")
 	}
 	if !snap.Complete {
-		return ErrWorkerFailed
+		if timedOut {
+			sourceErr = errors.Join(sourceErr, context.DeadlineExceeded)
+		}
+		return workerSourceError(ErrWorkerFailed, sourceErr)
 	}
 	return nil
 }

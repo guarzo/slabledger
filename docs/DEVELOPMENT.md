@@ -73,6 +73,21 @@ Run them against a dedicated throwaway database:
 This creates `slabledger_test` on first use and points the tests at it. CI sets
 `POSTGRES_TEST_URL` explicitly (`.github/workflows/test.yml`).
 
+Show-preparation production-runtime tests in `cmd/slabledger/` instead require
+**`SHOW_PREP_RUNTIME_TEST_URL`**, independently gated with no fallback to the
+storage URL or `DATABASE_URL`. They truncate only `showprep_runtime_test` after
+checking a loopback PostgreSQL URI, explicit port, known test user and database
+ownership. URI query overrides are rejected. CI creates that separate database
+with the CI role as owner before running all packages in parallel; the storage
+package keeps its own database. Setting only `POSTGRES_TEST_URL` skips runtime
+fixtures rather than sharing storage's concurrently reset schema.
+
+Browser fixtures are a third opt-in, `SHOW_READINESS_E2E_URL`, never either test
+package's database. For owner-checked local provisioning, the CI-shaped parallel
+command, real worker/cached browser modes and artifact cleanup, follow
+[the show-preparation test guide](../web/tests/show-readiness-real.md). These
+variables are test-only, not application configuration or production credentials.
+
 ### Integration tests (`-tags integration`)
 
 Tests behind the `integration` build tag call live third-party APIs, so they are

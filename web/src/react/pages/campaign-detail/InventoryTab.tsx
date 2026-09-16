@@ -194,6 +194,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         setPriceBand={setPriceBand}
         priceBandCounts={priceBandCounts}
         retainedPriceBands={state.retainedPriceBands}
+        retainedNeedsHeadline={state.retainedNeedsHeadline}
         debouncedSearch={debouncedSearch}
         selected={selected}
         showFiltering={support !== 'all'}
@@ -206,7 +207,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         pending={evaluationsQuery.isFetching} fetching={evaluationsQuery.isFetching}
         failed={Object.keys(evaluationsQuery.data?.errors ?? {}).length + (evaluationsQuery.isFetching ? 0 : evaluationsQuery.unresolvedCount)}
         onRetry={() => { void evaluationsQuery.refetch(); }}>
-        <ShowReadinessLine readiness={readiness} coverage={coverage.data} coverageError={coverage.isError} />
+        <ShowReadinessLine key={state.viewKey} holdFootprint={selected.size > 0} readiness={readiness} coverage={coverage.data} coverageError={coverage.isError} />
       </ShowInventoryFilters>
 
       {isMobile ? (

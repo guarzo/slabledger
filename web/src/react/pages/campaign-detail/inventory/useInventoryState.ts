@@ -149,9 +149,10 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   // Pin membership/order only, never purchase objects or evaluation versions.
   // Explicit view changes rebuild the presentation; live deleted rows disappear.
   const viewKey = JSON.stringify([debouncedSearch, filterTab, priceBand, sortKey, sortDir, showFilters?.support]);
-  const presentation = useRef<{ key: string; ids: string[]; priceBands: PriceBand[] }>({ key: '', ids: [], priceBands: [] });
-  if (!showFiltering || selection.selected.size === 0 || presentation.current.key !== viewKey) {
+  const presentation = useRef<{ key: string; ids: string[]; priceBands: PriceBand[]; needsHeadline: boolean }>({ key: '', ids: [], priceBands: [], needsHeadline: false });
+  if (selection.selected.size === 0 || presentation.current.key !== viewKey) {
     presentation.current = { key: viewKey, ids: liveFilteredItems.map(item => item.purchase.id),
+      needsHeadline: !debouncedSearch.trim() && filterTab !== 'needs_attention' && visibleTabCounts.needs_attention > 0,
       priceBands: Object.entries(priceBandCounts).filter(([key, count]) => key !== 'all' && count > 0).map(([key]) => key as PriceBand) };
   }
   const byId = new Map(items.map(item => [item.purchase.id, item]));
@@ -240,6 +241,8 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     reviewStats, tabCounts: visibleTabCounts, priceBandCounts,
     // Keep existing filter controls above pinned rows; counts themselves stay live.
     retainedPriceBands: showFiltering && selection.selected.size > 0 ? presentation.current.priceBands : [],
+    retainedNeedsHeadline: selection.selected.size > 0 && presentation.current.needsHeadline,
+    viewKey,
     filteredAndSortedItems, showingSelected,
     revealSelected: () => setRevealedView(viewKey), hideSelected: () => setRevealedView(null),
     totalCost, totalMarket, totalPL, fullInventoryTotals,

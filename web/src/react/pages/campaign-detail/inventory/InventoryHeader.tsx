@@ -21,6 +21,7 @@ export interface InventoryHeaderProps {
   setPriceBand: (b: PriceBand) => void;
   priceBandCounts: PriceBandCounts;
   retainedPriceBands?: readonly PriceBand[];
+  retainedNeedsHeadline?: boolean;
   debouncedSearch: string;
   selected: ReadonlySet<string>;
   showFiltering?: boolean;
@@ -35,7 +36,7 @@ export default function InventoryHeader({
   searchQuery, setSearchQuery,
   filterTab, setFilterTab,
   tabCounts, priceBand, setPriceBand, priceBandCounts, retainedPriceBands = [], debouncedSearch,
-  selected, showFiltering = false,
+  selected, showFiltering = false, retainedNeedsHeadline = false,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -166,8 +167,8 @@ export default function InventoryHeader({
         </div>
       </div>
 
-      {/* Needs Attention call-to-action: only when there's something to do and the user isn't already there */}
-      {showNeedsHeadline && (
+      {/* Retain an existing banner above held rows, with honest live zero counts. */}
+      {(showNeedsHeadline || retainedNeedsHeadline) && (
         <button
           type="button"
           onClick={() => setFilterTab('needs_attention')}

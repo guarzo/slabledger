@@ -358,7 +358,10 @@ If selected data changes, rows stay identifiable and Add is blocked until you
 explicitly review/reselect; the application never silently acknowledges new prices
 or evidence. Existing price-band controls stay in place with current counts (including
 zero) while a filtered selection is held, rather than collapsing above selected rows.
-Explicit filter changes or clearing selection restore ordinary controls.
+An existing coverage notice and Needs Attention banner likewise retain their space
+with live counts while selection is held, even when coverage completes or the
+attention count reaches zero. Selecting in an already quiet view adds no notice.
+Explicit view changes or clearing selection restore ordinary quiet/hidden behavior.
 **Reveal selected** recovers cards outside your current view. Financial forms retain
 their own pending states and do not wait for comp collection.
 
