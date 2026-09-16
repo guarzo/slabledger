@@ -15,10 +15,10 @@ export interface PriceReviewWorkspaceProps {
   selected: ReadonlySet<string>; onToggleSelected: (id: string) => void;
   onSavePrice: (id: string, priceCents: number) => Promise<void>;
   onRecheckInventory?: () => Promise<boolean>;
-  initialDetail?: boolean;
+  detailNavigationKey?: string;
 }
-export function PriceReviewWorkspace({ items, evaluations, review, selected, onToggleSelected, onSavePrice, onRecheckInventory, initialDetail = false }: PriceReviewWorkspaceProps) {
-  const [mobileDetail, setMobileDetail] = useState(initialDetail);
+export function PriceReviewWorkspace({ items, evaluations, review, selected, onToggleSelected, onSavePrice, onRecheckInventory, detailNavigationKey }: PriceReviewWorkspaceProps) {
+  const [mobileDetail, setMobileDetail] = useState(!!detailNavigationKey);
   const focusControls = useRef(new Map<string, HTMLButtonElement>());
   const panel = useRef<HTMLElement>(null);
   const queueScroll = useRef(0);
@@ -28,6 +28,11 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
   const active = items.find(item => item.purchase.id === review.activeId);
   const position = review.rows.findIndex(item => item.purchase.id === review.activeId);
   const orderedSort = review.sort === 'attention' || review.sort === 'supported';
+
+  // URL history is explicit detail intent; changing saved facts is not.
+  useLayoutEffect(() => {
+    if (detailNavigationKey) setMobileDetail(true);
+  }, [detailNavigationKey]);
 
   useLayoutEffect(() => {
     if (!mobileDetail && returning.current) {

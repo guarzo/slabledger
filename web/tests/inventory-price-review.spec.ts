@@ -2,6 +2,59 @@ import { expect, test } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { evaluation, inventoryItem, otherId, preview, purchaseId, sales } from '../src/react/pages/price-review/fixtures.test-support';
 
+test('mobile history reopens visible card details with retained drafts after returning to the queue', async ({ page, baseURL }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let values = [evaluation(), evaluation({ purchaseId: otherId, cardName: 'Moon Tortoise', certNumber: '00000002', version: 'saved-b' })];
+  const requests: { method: string; path: string }[] = [];
+  const pageErrors: string[] = []; page.on('pageerror', error => pageErrors.push(error.message));
+  await page.route(url => url.origin !== new URL(baseURL!).origin, route => route.abort());
+  await page.route(url => url.pathname.startsWith('/api/'), async route => {
+    const request = route.request(); const path = new URL(request.url()).pathname;
+    requests.push({ method: request.method(), path });
+    if (path === '/api/auth/user') return route.fulfill({ json: { id: 1, username: 'Operator', email: 'fixture@example.test', is_admin: false } });
+    if (path === '/api/inventory') return route.fulfill({ json: { items: values.map(e => inventoryItem(e)), warnings: [] } });
+    if (path.endsWith('/evaluate')) return route.fulfill({ json: { evaluations: values } });
+    if (path.includes('/evidence/')) return route.fulfill({ json: { evaluation: values.find(e => path.endsWith(e.purchaseId)), sales } });
+    if (path.endsWith('/preview')) {
+      const body = request.postDataJSON();
+      return route.fulfill({ json: preview(body.priceCents, values.find(e => e.purchaseId === body.purchaseId)) });
+    }
+    return route.fulfill({ status: 400, json: { error: 'Unexpected fixture request' } });
+  });
+  await page.goto('/inventory?keep=history&view=pricing');
+  const details = page.getByRole('region', { name: 'Price details', exact: true });
+  const input = details.getByRole('textbox', { name: 'Asking price', exact: true });
+  const back = page.getByRole('button', { name: 'Back to inventory list', exact: true });
+  const queueA = page.getByRole('button', { name: 'Review Aurora Dragon', exact: true });
+  const queueB = page.getByRole('button', { name: 'Review Moon Tortoise', exact: true });
+  await queueA.scrollIntoViewIfNeeded();
+  const queueScroll = await page.evaluate(() => window.scrollY);
+  await queueA.click(); await expect(details.getByRole('heading', { name: 'Aurora Dragon' })).toBeVisible(); await input.fill('2400');
+  await page.getByRole('button', { name: 'Next card' }).click();
+  await expect(details.getByRole('heading', { name: 'Moon Tortoise' })).toBeVisible(); await input.fill('2500');
+  await back.focus(); await page.keyboard.press('Enter');
+  await expect(details).toBeHidden(); await expect(queueB).toBeFocused();
+  expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(queueScroll, 0);
+  // A background read may change saved price/evidence, but is not a request to open detail.
+  values = values.map(e => e.purchaseId === otherId ? { ...e, localPriceCents: 290000, version: 'evidence-updated', evidenceVersion: 'evidence-b-new' } : e);
+  const refreshed = page.waitForResponse(response => response.url().endsWith('/evaluate'));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await refreshed;
+  await expect(queueB).toContainText('$2,900.00'); await expect(details).toBeHidden(); await expect(queueB).toBeFocused();
+  await page.goBack(); await expect(page).toHaveURL(new RegExp(`keep=history&view=pricing&review=${purchaseId}`));
+  await expect(details.getByRole('heading', { name: 'Aurora Dragon', exact: true })).toBeVisible();
+  await expect(input).toBeVisible(); await expect(input).toHaveValue('2400');
+  await page.screenshot({ path: info.outputPath('history-back-A.png') });
+  await back.focus(); await page.keyboard.press('Enter');
+  await expect(details).toBeHidden(); await expect(queueA).toBeFocused();
+  await page.goForward(); await expect(page).toHaveURL(new RegExp(`keep=history&view=pricing&review=${otherId}`));
+  await expect(details.getByRole('heading', { name: 'Moon Tortoise', exact: true })).toBeVisible();
+  await expect(input).toBeVisible(); await expect(input).toHaveValue('2500');
+  await page.screenshot({ path: info.outputPath('history-forward-B.png') });
+  expect(pageErrors).toEqual([]);
+  expect(requests.every(r => r.method === 'GET' || r.path.endsWith('/evaluate') || r.path.endsWith('/preview'))).toBe(true);
+  await writeFile(info.outputPath('history-requests.json'), JSON.stringify({ requests, pageErrors, queueScroll }, null, 2));
+});
+
 for (const width of [1440, 390]) {
   test(`normal/review integration and read-only save recovery at ${width}`, async ({ page, baseURL }, info) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });

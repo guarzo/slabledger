@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ShowEvaluation } from '../../../types/showprep';
 import { queryKeys } from '../../queries/queryKeys';
@@ -45,6 +45,7 @@ export interface InventoryTabProps {
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const pricing = !campaignId && params.get('view') === 'pricing';
   const reviewId = pricing ? params.get('review') : null;
   const queryClient = useQueryClient();
@@ -245,7 +246,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <PriceReviewWorkspace items={items} evaluations={evaluations}
           review={{ ...review, focus: navigateReview, move: delta => { const id = review.move(delta); if (id) navigateReview(id); return id; } }}
           selected={selected} onToggleSelected={toggleCard} onSavePrice={handleInlinePriceSave}
-          onRecheckInventory={recheckInventory} initialDetail={!!reviewId} />
+          onRecheckInventory={recheckInventory} detailNavigationKey={reviewId ? location.key : undefined} />
       </> : isMobile ? (
         <div className="space-y-3">
           <label htmlFor="select-all-mobile" className="show-check flex items-center gap-2 text-xs text-[var(--text-muted)] px-1">
