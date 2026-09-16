@@ -1841,9 +1841,12 @@ integer cents, matching the inventory API.
 
 POSTs accept no selected-card cohort. They coalesce a bounded wake of the existing
 application-owned worker, never run acquisition in the request. Missing auth returns
-401, authenticated non-admin admin requests return 403, and failed intent persistence
-returns a safe 503. Accepted does not mean completed or fully covered. The enabled
-gate still applies; disabled requests remain durable for a later enabled startup.
+401 and authenticated non-admin admin requests return 403. An intent-persistence
+error returns a safe 503 with **acceptance unknown**: the write may have committed
+before its acknowledgement failed. Check worker status before explicitly retrying;
+do not automatically replay the request. Accepted does not mean completed or fully
+covered. The enabled gate still applies; disabled requests remain durable for a
+later enabled startup.
 
 Status JSON fields:
 
@@ -1896,6 +1899,19 @@ runs through the independent worker described below, not these endpoints.
 Legacy 90-day comps are not certified show evidence, so an upgraded database can
 legitimately be `not_checked`. Failed/partial collection is represented independently
 by `evidenceNeedsReview` and `evidenceReason`, not successful empty windows.
+
+Older verified evidence rows may use padded profile/grader keys. An existing exact
+canonical row is authoritative, including failed, running, NULL or unreadable
+payloads; more attractive alias evidence never replaces that lineage. With no
+canonical row, exactly one Go-normalized profile/grader/exact-grade match supplies
+cached evidence and inherited retry state. The first canonical attempt copies that
+one row's raw JSONB and attempt/retry metadata transactionally, leaving the original
+row intact. Multiple aliases instead report `Ambiguous legacy evidence identity`
+without choosing or merging evidence, and cannot start acquisition even through
+explicit retry. Unrelated identities continue; physical add/pack permissions still
+follow availability, not evidence strength. Raw-key completions remain isolated to
+their original rows. This is conservative compatibility, not universal historical
+payload recovery or a rekey/backfill operation.
 
 Each evaluation identifies the purchase, card/cert/grader/grade, `status`, `reason`,
 `evidenceNeedsReview` (boolean), `evidenceReason` (string), `availability`, `canAdd`,

@@ -44,7 +44,7 @@ func (h *ShowPrepWorkerHandler) request(w http.ResponseWriter, r *http.Request, 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	if err := h.worker.RequestRun(ctx, retry); err != nil {
-		writeError(w, http.StatusServiceUnavailable, "Evidence worker request was not accepted")
+		writeError(w, http.StatusServiceUnavailable, "Evidence worker request acceptance is unknown. Check worker status before explicitly retrying.")
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})

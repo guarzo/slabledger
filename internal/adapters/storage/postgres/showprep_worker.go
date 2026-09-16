@@ -2,8 +2,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"time"
 
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
@@ -21,46 +19,26 @@ func showWorkerCandidates(ctx context.Context, q showPrepQuery, id *sp.Identity)
 	if len(candidates) == 0 {
 		return out, nil
 	}
-	keys := make([]string, 0, len(candidates))
-	for key := range candidates {
-		keys = append(keys, key)
+	ids := make([]sp.Identity, 0, len(candidates))
+	for _, c := range candidates {
+		ids = append(ids, c.Identity)
 	}
-	// Inventory rows are closed before this second query, including when q is
-	// the fenced transaction's single connection. Load only canonical keys.
-	rows, err := q.QueryContext(ctx, `SELECT identity_key,payload,attempt,attempt_state,attempt_error,attempt_started_at,
- retry_window,retry_attempts,retry_not_before,retry_reset_epoch FROM showprep_evidence WHERE identity_key=ANY($1::text[])`, keys)
+	// Close inventory rows before resolving on the fenced single connection.
+	// Reads and dispatch must inherit the same lineage AND retry budget.
+	resolved, err := resolveShowEvidence(ctx, q, ids)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var key, state, msg, window string
-		var payload []byte
-		var attempt, reset int64
-		var attempts int
-		var started time.Time
-		var notBefore sql.NullTime
-		if err := rows.Scan(&key, &payload, &attempt, &state, &msg, &started, &window, &attempts, &notBefore, &reset); err != nil {
+	for _, c := range candidates {
+		r := resolved[c.Identity]
+		c.Snapshot, err = r.snapshot(c.Identity)
+		if err != nil {
 			return nil, err
 		}
-		c := candidates[key]
-		c.RetryWindow, c.Attempts, c.NotBefore, c.ResetEpoch = window, attempts, notBefore.Time, reset
-		c.Snapshot = &sp.Snapshot{}
-		if len(payload) > 0 {
-			if err := json.Unmarshal(payload, c.Snapshot); err != nil {
-				return nil, err
-			}
+		if r.row != nil {
+			c.RetryWindow, c.Attempts = r.row.retryWindow, r.row.retryAttempts
+			c.NotBefore, c.ResetEpoch = r.row.retryNotBefore.Time, r.row.retryResetEpoch
 		}
-		c.Snapshot.Identity = c.Identity
-		c.Snapshot.Attempt = attempt
-		c.Snapshot.AttemptState = state
-		c.Snapshot.AttemptError = msg
-		c.Snapshot.AttemptStartedAt = started
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	for _, c := range candidates {
 		out = append(out, *c)
 	}
 	return out, nil

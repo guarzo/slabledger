@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,11 +29,14 @@ func TestShowPrepWorkerRoutesAuthorizeWithoutAcquisition(t *testing.T) {
 	for _, tc := range []struct {
 		method, path    string
 		operator, admin int
+		requestError    error
 	}{
-		{"GET", "/api/show-prep/coverage", 200, 200},
-		{"GET", "/api/admin/show-prep/worker", 403, 200},
-		{"POST", "/api/admin/show-prep/worker/run", 403, 202},
-		{"POST", "/api/admin/show-prep/worker/retry", 403, 202},
+		{"GET", "/api/show-prep/coverage", 200, 200, nil},
+		{"GET", "/api/admin/show-prep/worker", 403, 200, nil},
+		{"POST", "/api/admin/show-prep/worker/run", 403, 202, nil},
+		{"POST", "/api/admin/show-prep/worker/retry", 403, 202, nil},
+		{"POST", "/api/admin/show-prep/worker/run", 403, 503, errors.New("commit acknowledgement lost: token=secret")},
+		{"POST", "/api/admin/show-prep/worker/retry", 403, 503, errors.New("commit acknowledgement lost: token=secret")},
 	} {
 		for _, role := range []string{"none", "operator", "admin"} {
 			t.Run(tc.path+"/"+role, func(t *testing.T) {
@@ -46,7 +50,7 @@ func TestShowPrepWorkerRoutesAuthorizeWithoutAcquisition(t *testing.T) {
 					ReadStateFn: func(context.Context) (sp.WorkerState, error) {
 						return sp.WorkerState{AuthHold: true, WorkerRunResult: sp.WorkerRunResult{State: "auth_hold"}}, nil
 					},
-					RequestRunFn: func(_ context.Context, r bool) error { requests.Add(1); retry = r; return nil },
+					RequestRunFn: func(_ context.Context, r bool) error { requests.Add(1); retry = r; return tc.requestError },
 				}
 				worker := sp.NewEvidenceWorker(store, func(ctx context.Context) (sp.Source, error) { acquisition.Add(1); <-ctx.Done(); return nil, ctx.Err() }, nil, nil)
 				service := scheduler.NewShowPrepRefreshScheduler(worker, nil, logger, true)
@@ -65,11 +69,20 @@ func TestShowPrepWorkerRoutesAuthorizeWithoutAcquisition(t *testing.T) {
 				router.ServeHTTP(w, r)
 				require.Equal(t, expected, w.Code, w.Body.String())
 				require.Zero(t, acquisition.Load())
-				if expected == 202 {
+				switch expected {
+				case 202:
 					require.Equal(t, int32(1), requests.Load())
 					require.Equal(t, strings.HasSuffix(tc.path, "retry"), retry)
 					require.Contains(t, w.Body.String(), "accepted")
-				} else {
+				case 503:
+					require.Equal(t, int32(1), requests.Load(), "never automatically retry an uncertain acknowledgement")
+					require.Equal(t, strings.HasSuffix(tc.path, "retry"), retry)
+					require.Contains(t, w.Body.String(), "acceptance is unknown")
+					require.Contains(t, w.Body.String(), "Check worker status before explicitly retrying")
+					require.NotContains(t, w.Body.String(), "not accepted")
+					require.NotContains(t, w.Body.String(), "secret")
+					require.NotContains(t, w.Body.String(), "commit acknowledgement")
+				default:
 					require.Zero(t, requests.Load())
 				}
 			})

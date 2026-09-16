@@ -823,3 +823,61 @@ Reviewer knowledge check:
 3. Why is a cert-only cached mapping insufficient to establish another purchase's identity?
 4. What distinguishes retained layout footprint from frozen data or silent version acknowledgement?
 5. Which verification remains necessary after separately authorized production deployment?
+
+## PR707: two approved compatibility/acknowledgement fixes
+
+Follow-up base: `d8df1ae99aa1cbbda7e053cca3538ca6e556a721`, same linked
+`fix/cached-show-preparation` branch. No migration, dependency, public DTO,
+qualification, fingerprint, money, availability, lease or source-policy change.
+
+- A shared adapter-private resolver keeps exact-key reads fast and resolves
+  canonical misses in one batched fallback using the existing Go Unicode/profile/
+  grader normalization and exact grade. Existing canonical **rows** win, including
+  failed, running, NULL and malformed payloads. Losing aliases are not decoded.
+  A unique old lineage supplies a canonical read projection; multiple aliases
+  instead produce a safe per-identity ambiguity reason, without fabricated source,
+  success, generation or timestamps. Unrelated identities continue.
+- Before the first canonical Begin, the existing advisory/fenced transaction copies
+  only a unique alias using direct `INSERT … SELECT`: raw JSONB (including unknown
+  fields), latest attempt metadata and all four retry fields. The old row stays
+  intact. Existing attempt increment and due/retry/epoch rules then proceed.
+  Both Begin paths reject ambiguity without creating or charging evidence. Raw
+  Finish still targets the exact original `(identity_key, attempt)`; an old-key
+  completion after adoption cannot redirect into the canonical lineage. Lease loss
+  or rejected transactions roll adoption back with the existing writes.
+- Worker-control errors retain HTTP503 but say acceptance is unknown and instruct
+  the operator to check status before explicitly retrying. HTTP202/auth behavior,
+  durable intent, error redaction and no-automatic-retry behavior are unchanged.
+
+This is deliberately **not universal recovery** of historical alias payloads.
+Canonical authority can leave more attractive legacy evidence unused. Ambiguous
+lineages require separately authorized investigation rather than arbitrary merge,
+rekey, deletion or retry-budget combination. No repair endpoint was added. Weak
+show evidence still does not prohibit physical planning/packing when available.
+
+Initial real-PostgreSQL REDs showed missing padded evidence, reset generations and
+retry state, and absent ambiguity reporting. Router REDs returned the misleading
+“not accepted” message. Focused GREEN covers Unicode/tab/newline spellings, raw
+reads, locked/list versions, canonical/alias authority, ambiguity, direct JSONB
+adoption, retained success after failure/abandonment, inherited backoff/exhaustion/
+reset epochs, concurrent Begins, old/raw/obsolete Finish and lease/rollback fences.
+Additional real-SQL tests cover a canonical insert between reads, a 40-identity
+single fallback, exact raw misses and migration46 payloads through migration47.
+
+Fresh full parallel Go-race passed with separate explicit storage/runtime URLs;
+859 frontend tests, typecheck/lint/build and compatible-toolchain `make check`
+passed. Both existing real browser modes passed on the changed backend. Cached
+mode: zero source/provider calls throughout. Worker A:142 searches+1token;
+B:zero additional; separate C:+1search+1token. Whole financial/legacy rows and
+packing history are preserved except explicit list operations. These browser
+fixtures retain their existing cohorts; padded-lineage cases are real-PostgreSQL
+store/service/worker tests, not claimed as browser-ingested legacy evidence.
+
+Only the parent-owned `slabledger-pr707-compat` container (ID
+`2d1c3374425512c0ca29fdb953be001bf9b9a664e1e8e0671bddb51537f6737e`),
+loopback44620, and its three approved disposable databases were used. Exact
+RED/GREEN commands, raw logs, final gate results, limitations and resource checks
+are in local `.superpowers/sdd/2026-09-15-cached-show-preparation/pr707-approved-fixes/report.md`.
+Scoped local polish made only safe test idiom/comment corrections; independent
+review and publication remain the parent's responsibility. No push, amend,
+ready-state change, deployment, default database or production operation occurred.
