@@ -10,6 +10,20 @@
 
 **Spec:** `docs/specs/2026-09-15-cached-show-preparation-design.md` (approved after independent SHIP design review).
 
+## Local completion status (Task4 handoff)
+
+| Task | Status |
+|---|---|
+| 1, cached operator containment/UI | Implemented and independently reviewed before Task4 |
+| 2, fenced worker/store/migration47 | Implemented and independently reviewed before Task4 |
+| 3, production composition/admin/identity | Implemented and independently reviewed before Task4 |
+| 4, final product proof/docs | Local implementation and verification complete; parent whole-branch review still required |
+| Deployment/backfill/production verification | Not authorized or performed; rollout incomplete |
+
+Task1–3 checklists below are retained as the original execution plan, not new work.
+Task4 evidence and exact commands are in `implementation-notes.md` and the real-wire
+guide. Its separate seeded-cache and actual-worker modes must not be conflated.
+
 ## Global Constraints
 
 - Every inventory/selection/filter/evidence/list/packing action causes zero CardLadder requests. A checkbox causes no request at all. Database-backed reads and explicit list writes remain allowed.
@@ -135,8 +149,8 @@ POST /api/admin/show-prep/worker/retry       admin, persist explicit retry-faile
 
 **Files:** update the existing `cmd/slabledger/showprep_readiness_*_test.go` harness and `web/tests/show-readiness-real.cjs`/guide for actual worker and cached-only modes; retain cleanup/geometry helpers and tests. Add dedicated worker/upgrade integration cases if needed. Update `implementation-notes.md`, API/user/scheduler docs, spec/plan status.
 
-- [ ] RED: run the final regression against a no-worker/cold baseline and observe that verified evidence is not prepared with no browser. Then start the actual runtime scheduler/service/store/source adapter and wait on persisted results before creating any browser page. Do not seed successful snapshots for this worker-population test.
-- [ ] Separately stop/pause only the test worker and make provider endpoints fail. Drive actual inventory, filter, checkbox selection, evidence, create/add/list/pack paths against real Go/Postgres responses. Assert no provider requests and no calls to the retired acquisition route. Initial auth/data reads are allowed; checkbox actions alone do not cause requests.
+- [x] RED: run the final regression against a no-worker/cold baseline and observe that verified evidence is not prepared with no browser. Then start the actual runtime scheduler/service/store/source adapter and wait on persisted results before creating any browser page. Do not seed successful snapshots for this worker-population test.
+- [x] Separately stop/pause only the test worker and make provider endpoints fail. Drive actual inventory, filter, checkbox selection, evidence, create/add/list/pack paths against real Go/Postgres responses. Assert no provider requests and no calls to the retired acquisition route. Initial auth/data reads are allowed; checkbox actions alone do not cause requests.
 
 ```js
 const sourceCallsBeforeUse = (await state()).calls.length;
@@ -147,10 +161,10 @@ expect(browserRequests.filter(r => r.path === '/api/show-prep/refresh')).toEqual
 
 `state` is the existing test-only control read; `useCachedInventoryAndPacking` is the extracted real-browser interaction flow defined in this task, not an API-response mock. Assertions additionally verify expected cards/prices/source sales/list membership and financial whole-row equality.
 
-- [ ] Prove late new/resolved identities are populated with the browser absent; restart preserves current evidence/retry/auth state; midnight schedules renewal; two workers/lease-loss publication are safe; failed/partial source results retain data and don't starve peers. No production clock/reset hooks.
-- [ ] Publish evidence/availability changes while selection is held. Confirm no lost selection or silent version advancement, explicit conflict on stale Add/Pack, retained history, and working financial actions while server collection is active.
-- [ ] Retain real desktop/mobile expand/collapse/scroll/breakpoint geometry, keyboard actions, named destination and success-link checks. Measure cached checkbox/filter responsiveness on the 155-card fixture; aim <100ms without provider-dependent waiting, report environment/timing rather than a flaky CI wall-clock assertion.
-- [ ] Run full Go race, disposable PostgreSQL/migration suite, full frontend tests/type/lint/build, actual browser flows, cleanup tests, architecture/file-size/docs checks, and proactive polish. Read final actual screenshots for the unified selection workflow; no invented overlays or unsupported visual score claims.
+- [x] Prove late new/resolved identities are populated with the browser absent; restart preserves current evidence/retry/auth state; midnight schedules renewal; two workers/lease-loss publication are safe; failed/partial source results retain data and don't starve peers. No production clock/reset hooks.
+- [x] Publish evidence/availability changes while selection is held. Confirm no lost selection or silent version advancement, explicit conflict on stale Add/Pack, retained history, and working financial actions while server collection is active.
+- [x] Retain real desktop/mobile expand/collapse/scroll/breakpoint geometry, keyboard actions, named destination and success-link checks. Measure cached checkbox/filter responsiveness on the 155-card fixture; aim <100ms without provider-dependent waiting, report environment/timing rather than a flaky CI wall-clock assertion.
+- [x] Run full Go race, disposable PostgreSQL/migration suite, full frontend tests/type/lint/build, actual browser flows, cleanup tests, architecture/file-size/docs checks, and proactive polish. Read final actual screenshots for the unified selection workflow; no invented overlays or unsupported visual score claims.
 - [ ] Final independent whole-branch review plus one scoped correction pass if needed. Explain changed ownership, retired interfaces, schema/rollback implications, actual verification and remaining limits. Do not claim production success; separate authorized deployment/backfill and real-inventory verification are still required.
 
 ## Scope/self-consistency check

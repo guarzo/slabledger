@@ -46,10 +46,8 @@ func TestReadinessCachedSeedAtUTCMidnight(t *testing.T) {
 	}
 }
 
-// PRECONDITION for cached-use acceptance, deliberately not a worker test.
-// Publish verified snapshots directly through the real store, without a provider.
-// The legacy-only upgrade remains separate and cannot certify these snapshots.
-func seedReadinessCached(t *testing.T, db *postgres.DB, now time.Time) {
+// Shared inventory only: worker mode must never seed verified snapshots.
+func seedReadinessInventory(t *testing.T, db *postgres.DB, now time.Time) {
 	t.Helper()
 	ctx := t.Context()
 	var database, owner string
@@ -67,6 +65,13 @@ func seedReadinessCached(t *testing.T, db *postgres.DB, now time.Time) {
 	}
 	_, err := db.ExecContext(ctx, `UPDATE campaign_purchases SET gem_rate_id='' WHERE id=$1`, readinessPurchase(30))
 	require.NoError(t, err)
+}
+
+// PRECONDITION for cached use, not worker population. No provider is involved.
+func seedReadinessCached(t *testing.T, db *postgres.DB, now time.Time) {
+	t.Helper()
+	seedReadinessInventory(t, db, now)
+	ctx := t.Context()
 	store := postgres.NewShowPrepStore(db.DB)
 	for i := 1; i <= 156; i++ {
 		if i == 25 || i == 27 || i == 30 || (i < 25 && i%2 == 0) {

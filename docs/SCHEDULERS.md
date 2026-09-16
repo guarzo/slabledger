@@ -225,8 +225,10 @@ interval until `MaxRetries` is exhausted.
 **File:** `showprep_refresh.go`; composition in `cmd/slabledger/showprep_runtime.go`.
 Runs the domain `EvidenceWorker` independently of CL valuation/collection sync.
 Unsold, non-refunded inventory in non-closed campaigns is deduplicated by verified
-profile/grader/grade. Receipt and DH price do not gate collection. Cached and newly
-resolved CL cert mappings backfill missing profiles without guessing identities.
+profile/grader/grade. Receipt and DH price do not gate collection. Grader-specific
+verified enrichment backfills missing profiles. A serial-only cached mapping is not
+provenance: reuse requires the purchase's existing verified profile to match; otherwise
+the existing grader-specific enrichment must resolve it without promoting that cache.
 
 The group owns one serialized local loop. Startup and minute ticks inspect stored
 credentials, even on auth hold. A one-slot wake channel is only a hint; PostgreSQL
@@ -252,6 +254,20 @@ fenced PostgreSQL control row across restarts, not legacy CL value-refresh stati
 Coverage is recomputed from current inventory/evidence using explicit identity/card
 units; idle/nil RunOnce does not establish complete coverage. Auth hold can be resumed
 with Retry failed even when its failed identity has since left inventory.
+
+Migration47 adds the singleton lease/control row and retry metadata on existing evidence;
+it preserves snapshots, business fingerprints, lists/items and safety holds. A schema
+rollback requires stopped workers and a compatible application. Reversing47 retains
+that original data but discards lease, auth-hold and retry bookkeeping, so re-upgrading
+is not a way to preserve an exhausted retry budget. Service-role-only RLS/grants are
+covered by the disposable migration suite.
+
+Local [worker/cached-use proof](../web/tests/show-readiness-real.md) starts the actual
+runtime before Chromium, then separately disables and joins it for provider-blocked
+operator use. A restart in that phase also keeps `SHOW_PREP_REFRESH_ENABLED=false`;
+disabling legacy CL valuation alone is insufficient. Local verification is not
+production rollout: separately authorize deployment, initial server-owned catch-up
+and real-inventory coverage/browser verification before declaring the worker deployed.
 
 ### Card Ladder Refresh
 

@@ -193,6 +193,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         priceBand={priceBand}
         setPriceBand={setPriceBand}
         priceBandCounts={priceBandCounts}
+        retainedPriceBands={state.retainedPriceBands}
         debouncedSearch={debouncedSearch}
         selected={selected}
         showFiltering={support !== 'all'}

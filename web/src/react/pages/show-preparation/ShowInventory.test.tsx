@@ -23,9 +23,9 @@ const values = [evaluation(), evaluation({ purchaseId: secondId, certNumber: '87
 const items = values.map((e, i) => inventoryItem(e, i === 2 ? { receivedAt: '', dhStatus: '' } : {}));
 let requests: { url: string; body: Record<string, unknown> }[];
 let addFails: boolean;
-function mount() {
+function mount(liveItems = items) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(<QueryClientProvider client={qc}><MemoryRouter><ToastProvider><InventoryTab items={items} isLoading={false} /></ToastProvider></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={qc}><MemoryRouter><ToastProvider><InventoryTab items={liveItems} isLoading={false} /></ToastProvider></MemoryRouter></QueryClientProvider>);
   return qc;
 }
 const add = (n = 1) => screen.getByRole('button', { name: `Add to show (${n})` });
@@ -144,6 +144,22 @@ describe('cached show preparation in the existing inventory', () => {
     await screen.findByText(/1 selected outside this view/); fireEvent.click(screen.getByRole('button', { name: 'Reveal selected' }));
     expect(await screen.findByRole('checkbox', { name: 'Select 12345678' })).toBeChecked(); expect(add()).toBeDisabled();
     fireEvent.keyDown(window, { key: 'Escape' }); expect(screen.queryByRole('region', { name: 'Bulk actions for selected cards' })).not.toBeInTheDocument();
+  });
+  it('retains price-band controls when publication removes the last match above a held selection', async () => {
+    const qc = mount(items.map(i => ({ ...i, currentMarket: { lastSoldCents: 30000, gradePriceCents: 30000 } })));
+    await waitFor(() => expect(qc.isFetching()).toBe(0));
+    fireEvent.click(screen.getByRole('button', { name: /^All\d/ }));
+    fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: '12345678' } });
+    support('supported'); await screen.findByText('1 card shown'); select();
+    expect(screen.getByRole('button', { name: /\$250–500/ })).toHaveTextContent('1');
+    await act(async () => qc.setQueriesData<InventoryEvaluations>({ queryKey: showPrepKeys.evaluations }, old => ({ evaluations: { ...old?.evaluations,
+      [purchaseId]: evaluation({ status: 'below_target', version: 'published' }) }, errors: {} })));
+    await screen.findByText(/Review and reselect/);
+    expect(screen.getByRole('button', { name: /\$250–500/ })).toHaveTextContent('0');
+    expect(screen.getByRole('checkbox', { name: 'Select 12345678' })).toBeChecked();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('button', { name: /\$250–500/ })).not.toBeInTheDocument();
+    expect(screen.getByText('No current matches under these filters.')).toBeVisible();
   });
   it('revalidates live purchase changes without acknowledging selected versions', async () => {
     let current = values[0];

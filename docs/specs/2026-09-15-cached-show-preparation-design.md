@@ -1,6 +1,12 @@
 # Show preparation from prepared data
 
-**Status: approved for local implementation following independent SHIP design review.**
+**Status: locally implemented and product-proof verified; parent final whole-branch review pending.**
+Tasks1–3 were implemented and reviewed before Task4. Task4 verified actual no-browser
+worker population, separately provider-blocked cached use, real concurrent publication,
+and local race/frontend/migration/geometry gates. This is not deployment or production
+backfill approval; rollout remains incomplete until separately authorized production
+catch-up and verification. See the recovery section of `implementation-notes.md` and
+`web/tests/show-readiness-real.md` for reproducible proof and limitations.
 Baseline: deployed merge `3baaed37` (PR #706). This document supersedes the browser-owned acquisition portions of the two previous show-preparation designs. The user approved continuing locally; push, production backfill, deployment, and production access remain separately gated.
 
 ## 1. The product contract

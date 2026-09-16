@@ -2017,7 +2017,9 @@ List metadata contains `id`, `name`, `createdAt`, and `updatedAt`. Names are tri
 non-empty, and at most 120 Unicode characters. Repeating list creation with the
 same caller-generated ID/name returns the existing list; reusing the ID with a
 different name conflicts. Adding an existing member does not reset its packing
-state or silently acknowledge new evidence.
+state or silently acknowledge new evidence. Such an idempotent existing-membership
+add can return200; test a new membership/destination when checking stale Add409.
+New additions still validate the submitted evaluation version transactionally.
 
 List detail contains `list`, `items`, and `summary`. Each item includes its stable
 membership `id`, original `purchaseId`, saved card identity, `addedAt`, `packedAt`

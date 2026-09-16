@@ -527,3 +527,172 @@ operations, credentials, dependencies, push or ready-state changes were made.
 Existing jsdom scrollTo, Vite-loader and six file-size guideline warnings remain.
 No unrelated test flake occurred in the final gates. The broader stalled non-show
 mutation transport limitation and optional findings remain deliberately unchanged.
+
+## Cached show-preparation recovery: Task4 local product proof
+
+Approved recovery: `docs/specs/2026-09-15-cached-show-preparation-design.md` and
+`docs/plans/2026-09-15-cached-show-preparation.md`. Task4 base is
+`0a13314bb9f9efbecf284cc9cd51194816833e29` on `fix/cached-show-preparation` in the
+linked `show-preparation-cached-design` worktree. Tasks1–3 were already implemented
+and reviewed. Earlier browser-owned warming, retry/control and first-configuration
+restart statements above are historical; the recovery supersedes that ownership.
+Parent final whole-branch review remains required. No production deployment,
+source access, backfill, push or PR was authorized/performed.
+
+### What the recovery owns now
+
+The application scheduler owns evidence acquisition, not inventory/checkboxes.
+Actual `initializeSchedulers` composes the configured shared CL client/source
+provider, PostgreSQL worker store, domain EvidenceWorker and scheduler Group.
+The operator service has no source capability. Authenticated legacy `/refresh`
+returns410; Admin run/retry only record durable intent. Migration47 adds bounded
+lease/control and retry metadata while preserving original evidence, versions,
+lists/items and safety holds. No qualification, cents, five-page, 30-UTC-date,
+24-hour, lease, retry, exact-identity or financial rules were relaxed.
+
+Task4 adds no backend production behavior, migration or dependency. It extends the
+existing opt-in test harness and repeatable guide. Its production UI changes are:
+
+- Correct the selected CL-value sum's label from “list” to **CL value**, without
+  changing the sum or inventing a show price. Focused render RED/GREEN: one failed
+  of eight before the copy fix; all eight passed afterward.
+- Fix a real-browser discovery: a background support change removed the final
+  matching price-band pill row above a held selection. The existing view-presentation
+  snapshot now retains only prior band keys alongside retained row IDs. Header
+  controls retain live zero counts until selection clears or the explicit view
+  changes. Prices/evaluations/versions are never frozen or advanced. Focused real
+  InventoryTab regression failed after publication before the fix and passed after;
+  the final real-worker browser measured identical checkbox coordinates across
+  publication (x21/y594.234375), with selection retained and Add blocked for review.
+  No new visual design, source controls, pricing behavior or reservation machinery.
+
+### Two decisive modes, plus a separately counted concurrency phase
+
+**Actual worker, A:** seed historical ledger and legacy comps at migration45,
+upgrade to47 with empty verified evidence and whole financial rows unchanged.
+Start the real production runtime before spawning Node/Chromium. Local Firebase
+and CardLadder HTTP fixtures are the only provider replacements; no static-token
+bypass, fake worker, Service.Refresh call or successful snapshot seeding. The real
+one-request/second shared-client pace and actual source adapter stay in place.
+
+The exact expected 142-identity cohort is asserted, not just a timestamp or nil
+RunOnce: 141 current, one controlled incomplete identity, no missing/stale resolved
+identities; 153/155 current cards and one unresolved card. Twelve duplicate pairs
+acquire once each. $270/$290 source sales yield median$280/Supported against DH$300;
+CL$310 and reviewed$400 remain distinct. Zero sales is a successful current result;
+one-sale Thin evidence, Below target and missing-DH-price cases are explicit.
+The partial identity's two inspectable sales are not certified as complete or
+misreported as “No recent sales.” Source history: **142 searches + one Firebase
+refresh =143 requests before any browser**. The cold negative control disables
+only runtime execution and fails the full-cohort assertion before browser launch.
+
+**Cached use, B:** stop/cancel/join the worker and block every provider endpoint.
+Create a disabled production composition for actual coverage/Admin and cached
+router/auth/inventory/show/PG responses. Rebuild SQL pool/router/auth/services on
+restart with the worker still disabled. Both modes exercise inventory, Supported,
+checkbox/select-all/clear, stored evidence, named list creation, add existing, pack,
+reload/restart, stale Add/Pack409 and retained history. The source-history arrays
+are compared without resetting them: **zero additional source/SDK requests**, zero
+browser refresh POSTs, and five empty checkbox/filter request phases.
+
+The explicitly seeded-cache mode is separately labelled a PRECONDITION, not
+worker ingestion. It supplies old/failed retained successful evidence and proves
+**absolute zero** provider requests. Both B runs end with one list/two members,
+whole campaigns/purchases/sales/legacy-comp rows identical, and previous packed
+row history unchanged. All156 purchases (155 unsold plus the historical sold row)
+and every persisted price/DH field are covered by whole-row equality.
+
+**Concurrent publication, C:** only after B's completed zero-source artifact is
+written, worker mode separately permits one actual runtime repair of card29.
+The test clock returns from B's synthetic next-day stale observation to real time;
+source HTTP is held, and an actual admin retry202 initiates background work. The
+selected Needs-review row and its observed version remain held; a real financial
+form opens/cancels while the worker is active. Release publishes a genuine complete
+source result. The card becomes Supported without disappearing, moving, or silently
+acknowledging the new version. New-destination Add and Pack with stale observations
+both return409. Existing-membership Add is intentionally idempotent, so it is not
+used as the stale-new-add probe. Lists/items stay unchanged by publication/conflicts;
+two lists/three memberships reflect only explicit C setup writes. Financial rows
+remain unchanged. This separate phase adds **one search + one token**: final history
+143 searches/145 total provider requests, never described as zero-source B.
+
+### Actual-source midnight, recovery and financial seams
+
+`TestShowPrepRuntimePositiveMidnightAndFinancialWrite` uses the separate cmd-test
+DB. Actual production startup acquires positive and complete-zero evidence, and a
+fresh runtime restart preserves both without provider requests. A real scheduler
+Group then reuses the configured production SourceProvider through the existing
+domain clock seam, advanced to **next UTC midnight (<24h)**. This matters because
+the actual source adapter stamps wall-time RefreshedAt. No production clock/reset
+API, fabricated success timestamp or weakened freshness guard was added.
+
+During held real source HTTP, an actual authenticated router/service/PG price-
+override PATCH204 writes32500 cents promptly. That intentional financial action
+has a separate after-write baseline; subsequent renewal changes no further financial
+rows. Positive and zero evidence renew current, with four total searches/one token
+across population+restart+renewal. Runtime artifact preserves all phase baselines.
+
+Fresh full cmd/storage race suites reuse the existing correct seams for new/resolved
+identities without a browser, shared-cert/grader safety, first-save/cross-instance
+activation, source401/Firebase400 durable auth hold and explicit recovery, retry
+exhaustion/restart, two connections, heartbeat/lease loss, late publication/generation
+fencing, failure fairness and sold/refunded/closed/not-received safeguards. Actual
+financial write tests and existing form-owned pending/transport tests remain intact.
+
+### Fresh verification and artifacts
+
+Exact runner commands and resource checks: `web/tests/show-readiness-real.md`.
+The local SDD `task-4-report.md` records complete commands/results and review focus.
+Final code gates performed after local polish:
+
+- Full `TZ=UTC go test -race -count=1 -timeout 10m ./...`, with all database and
+  e2e URL variables unset: PASS. DB-dependent tests skip here, not claimed exercised.
+- Explicit owned `POSTGRES_TEST_URL`, sequential full `./cmd/slabledger` and
+  `./internal/adapters/storage/postgres` races: PASS, **15.297s /75.902s**, including
+  migration47 up/down/retention and service-role/anon/authenticated RLS tests.
+- `npm test`: **87 files/859 tests**, PASS (14.68s). Typecheck, ESLint and production
+  build PASS (373 modules/869ms). Compatible-toolchain `make check` PASS, zero lint
+  issues, architecture self-tests/import rules, file sizes, doc paths and Playwright
+  version alignment. Existing six unrelated source-size warnings remain.
+- Actual worker browser: PASS **179.65s** (package180.686s), artifact directory
+  `/tmp/showprep-task4-worker-verified/`. Actual seeded-cache browser: PASS **36.82s**
+  (package37.857s), `/tmp/showprep-task4-cached-verified/`.
+- Four owned-browser cleanup/whole-row-clearance tests PASS. Focused Go real-PG
+  control failure, midnight seed, source error/counting, restart and clock races
+  PASS, **6.129s**. No unrelated failing gate was bypassed.
+- Geometry: worker36 observations/475 adjacent row pairs, cached36/473 pairs;
+  minimum gap0px, no overlap/horizontal overflow. Fine/coarse trigger sizing,
+  repeated expand/collapse/scroll, mobile/tablet bottom-bar clearance, keyboard
+  packing, Escape and destination focus-return passed. Rendered fonts loaded.
+- Local 155-card event-to-next-frame timings (filter/select/clear): worker
+  **15.1/19.0/18.3ms**; cached **13.7/19.3/20.0ms**. These are local samples under
+  the100ms target, not production percentile or provider-latency claims.
+
+Final actual desktop/mobile/Admin/selected-evidence/destination/last-row and
+publication screenshots were opened and inspected. Artifacts contain migration
+pre/post, full financial baselines, evidence and worker rows, exact source queries,
+coverage, browser/explicit request logs with stale versions/statuses, item history,
+geometry and PNGs. Historical artifacts and earlier notes remain preserved.
+
+### Recovery/rollout limits
+
+Only parent-owned PostgreSQL `slabledger-cached-show-01a09dd6`, exact ID
+`d56b5500410d90a5609c98656c2a33b7c9364135f588d3013bbfc34f0b3d496b`, loopback44620,
+user/owner showprep was used. Browser schema resets are restricted to
+showprep_readiness_e2e; sequential cmd/storage suites use showprep_cached_test.
+All owned servers, Groups, SQL pools and browsers are closed; PG is retained for
+the parent. No shared CDP, default DB, live Firebase/CardLadder credentials, port4173,
+production operation, dependency change, amend, hook bypass, push or deployment.
+
+The Admin screenshot's unrelated CL/DH/PSA panels are unconfigured/omitted fixture
+integrations, not a production-health result. Inventory fleet coverage can lag a
+new per-card read until its existing minute poll; it never initiates acquisition.
+The legacy value/comp pipeline remains separate and can make its own provider calls.
+The test clock covers next-midnight renewal, not arbitrary weeks of clock changes.
+
+Rolling schema47 down preserves snapshots/list/history/holds but loses worker
+ownership/auth-hold/retry bookkeeping; stop workers and use a compatible app before
+an authorized rollback. Local tests do not authorize resetting production retries.
+Worker rollout is **not complete**: separately authorize deployment, initial server-
+owned catch-up and real-inventory coverage plus zero-source browser verification.
+Parent independent final whole-branch review remains outstanding.

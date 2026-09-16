@@ -101,7 +101,7 @@ export default function InventorySelectionBar({ selectedItems, selected, selecte
       {needsReselection.length > 0 && <p className="show-selection-warning">Selected data changed or was not observed. Review and reselect these cards before adding: {needsReselection.map(id => evaluations[id]?.certNumber || id).join(', ')}. Selection retained.</p>}
       {error && <p role="alert" className="text-[var(--danger)]">{error} Selection retained. Review updated data, then retry adding.</p>}
       <div className="show-selection-main">
-        <span className="text-sm tabular-nums">{ids.length} selected{totalListCents > 0 && <> · {formatCents(totalListCents)} list</>}</span>
+        <span className="text-sm tabular-nums">{ids.length} selected{totalListCents > 0 && <> · {formatCents(totalListCents)} CL value</>}</span>
         <div className="show-actions">
           <Button ref={addButton} size="sm" aria-expanded={choosing} aria-controls={pickerId}
             disabled={cannotAdd || (choosing && !listId)} onClick={() => void addSelected()}>{add.isPending ? 'Adding…' : `Add to show (${ids.length})`}</Button>

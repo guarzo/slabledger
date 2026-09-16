@@ -66,7 +66,7 @@ describe('InventorySelectionBar', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders count and total list price summing clValueCents', () => {
+  it('labels summed CL values separately from DH and reviewed prices', () => {
     const items = [makeItem('1', 5000), makeItem('2', 6000), makeItem('3', undefined)];
     render(
       <InventorySelectionBar
@@ -77,13 +77,14 @@ describe('InventorySelectionBar', () => {
       />,
     );
     expect(screen.getByText(/3 selected/, { selector: 'span' })).toBeInTheDocument();
-    expect(screen.getByText(/\$110\.00 list/)).toBeInTheDocument();
+    expect(screen.getByText(/\$110\.00 CL value/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$110\.00 list/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Record sale \(3\)/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /List on DH \(3\)/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Clear$/ })).toBeInTheDocument();
   });
 
-  it('omits the list-price segment when no item has a CL value', () => {
+  it('omits the CL-value segment when no item has a CL value', () => {
     const items = [makeItem('1', undefined), makeItem('2', undefined)];
     render(
       <InventorySelectionBar
@@ -94,7 +95,7 @@ describe('InventorySelectionBar', () => {
       />,
     );
     expect(screen.getByText(/2 selected/, { selector: 'span' })).toBeInTheDocument();
-    expect(screen.queryByText(/\$.* list$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\$.* CL value$/)).not.toBeInTheDocument();
   });
 
   it('invokes the matching callback when each button is clicked', () => {

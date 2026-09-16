@@ -347,7 +347,8 @@ lists use **Update list status** and invalidation after actions instead of these
 timers. Old successful sales remain inspectable with their acquisition date.
 
 Use the existing card checkboxes and choose **Add to show** in the same selected-items
-bar as Record sale and List on DH. Choose a saved list or name a new one, then add.
+bar as Record sale and List on DH. Its **CL value** total is a valuation, not the
+DH listed or reviewed price. Choose a saved list or name a new one, then add.
 Escape closes destination details before clearing selection. Successful Add links
 to the submitted packing list. Creating a list alone does not select inventory.
 Unreceived cards can be planned but cannot be packed. Missing or weak comp evidence
@@ -355,8 +356,11 @@ does not prohibit a physically eligible manual shortlist.
 
 If selected data changes, rows stay identifiable and Add is blocked until you
 explicitly review/reselect; the application never silently acknowledges new prices
-or evidence. **Reveal selected** recovers cards outside your current view. Financial
-forms retain their own pending states and do not wait for comp collection.
+or evidence. Existing price-band controls stay in place with current counts (including
+zero) while a filtered selection is held, rather than collapsing above selected rows.
+Explicit filter changes or clearing selection restore ordinary controls.
+**Reveal selected** recovers cards outside your current view. Financial forms retain
+their own pending states and do not wait for comp collection.
 
 On the saved list, check **Packed** as you load each slab. Price/support changes
 are flagged for review rather than silently acknowledged. A price change after
@@ -371,11 +375,13 @@ delist online inventory, reserve a card, or record a sale. Continue recording sa
 through the existing sales workflow. **Update list status** rereads saved prices
 and availability; it never requests source acquisition.
 
-Local verification uses a real-browser/Go/PostgreSQL fixture with qualified
-snapshots seeded explicitly as a precondition and every provider endpoint blocked.
-It proves cached use, not worker population. Reproduction instructions are in
-[the real-wire test guide](../web/tests/show-readiness-real.md). Production access,
-population and rollout still require separate authorization.
+Local verification has two real-browser/Go/PostgreSQL modes: explicitly seeded
+cached-use preconditions, and actual server-worker population from an empty verified
+store before any browser starts. Both stop the worker and block all provider endpoints
+for cached operator use, preserving source-request history. A separately counted
+background-publication phase verifies held selections and stale Add/Pack conflicts.
+Reproduction instructions are in [the real-wire test guide](../web/tests/show-readiness-real.md).
+Production access, population and rollout still require separate authorization.
 
 ### Market Direction
 
