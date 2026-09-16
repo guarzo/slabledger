@@ -152,7 +152,7 @@ Scan for language markers. Load language rules from `~/.config/opencode/skills/c
 - `.rs` → `rules/rust.md`
 - `.java` → `rules/java.md`
 
-Load `CLAUDE.md` at project root for conventions.
+Load `AGENTS.md` at project root for conventions.
 
 #### Phase B.2: Gather the diff
 

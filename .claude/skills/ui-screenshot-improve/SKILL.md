@@ -419,4 +419,4 @@ To run this skill unattended (e.g., overnight), wrap it in the `ralph-loop` plug
 - **UI_CLEAN is earned, not declared** — Three consecutive `substantive` zero-🔴 cycles with recurring structural pressure, OR four consecutive cycles of honest-search exhaustion. See the Completion signaling section.
 - **DB state precondition** — Never audit an unseeded DB. Step 1.5 runs `scripts/state-check.sh`; on failure, auto-runs `YES=1 make db-pull` when `$PROD_DB_URL` is set, otherwise halts. See `references/state-check.md` for rationale and override flag.
 - **Bundled references** — `references/friction-log-template.md` (log format), `references/tier-c-questions.md` (systemic lenses), `references/structural-vs-cosmetic.md` (fix classification), `references/state-check.md` (DB precondition). Read these when the relevant step cites them.
-- **Project conventions** — See `/workspace/CLAUDE.md`.
+- **Project conventions** — See `AGENTS.md` at the project root.

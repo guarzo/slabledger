@@ -514,7 +514,7 @@ touch internal/adapters/storage/postgres/migrations/000026_description.down.sql
 
 **Step 4**: Update `docs/SCHEMA.md` with the new table/column.
 
-**Step 5**: Update the migration count in `CLAUDE.md`'s Database section.
+**Step 5**: Update `AGENTS.md`'s Database section only if the migration introduces semantics agents need to know. Derive migration numbers from the directory; do not maintain a count.
 
 **Step 6**: Verify with `make test-postgres`.
 
