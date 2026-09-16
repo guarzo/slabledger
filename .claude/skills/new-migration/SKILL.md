@@ -88,7 +88,7 @@ go build ./...
 ### Step 6: Update Documentation
 
 1. Update `docs/SCHEMA.md` with the new table/column/index
-2. Update the migration count in `CLAUDE.md` (Database section) — change the count and the range end
+2. Update `AGENTS.md` (Database section) only if the migration introduces semantics agents need to know. Derive migration numbers from the directory; do not maintain a count.
 
 ### Step 7: Test
 
@@ -105,5 +105,5 @@ go test ./internal/adapters/storage/sqlite/... -v
 - [ ] Down migration reverses the up migration exactly
 - [ ] `go build ./...` succeeds
 - [ ] `docs/SCHEMA.md` updated
-- [ ] `CLAUDE.md` migration count updated
+- [ ] `AGENTS.md` Database guidance updated if needed (no migration count)
 - [ ] Tests pass
