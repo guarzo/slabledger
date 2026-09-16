@@ -7,14 +7,13 @@ import { queryKeys } from '../../../queries/queryKeys';
 import { api } from '../../../../js/api';
 import { getErrorMessage } from '../../../utils/formatters';
 import type { SortKey, SortDir } from './utils';
-import { computeInventoryMeta, computeTotals, filterAndSortItems, applySearchAndTab, computePriceBandCounts, matchesPriceBand } from './inventoryCalcs';
-import type { ShowFilters } from '../../show-preparation/ShowInventoryControls';
+import { computeInventoryMeta, computeTotals, filterAndSortItems, applySearchAndTab, computePriceBandCounts } from './inventoryCalcs';
 import type { FilterTab, PriceBand } from './inventoryCalcs';
 import { useInventorySelection } from './useInventorySelection';
 import { useDHActions } from './useDHActions';
 import { usePricingActions } from './usePricingActions';
 
-export function useInventoryState(items: AgingItem[], campaignId?: string, showFilters?: ShowFilters) {
+export function useInventoryState(items: AgingItem[], campaignId?: string) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const selection = useInventorySelection();
@@ -80,23 +79,9 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     [items],
   );
 
-  const showFiltering = !!showFilters && showFilters.support !== 'all';
-  const showItems = useMemo(() => {
-    if (!showFiltering || !showFilters) return items;
-    return items.filter(item => {
-      const e = showFilters.evaluations[item.purchase.id];
-      return showFilters.support === 'all' || e?.status === showFilters.support;
-    });
-  }, [items, showFilters, showFiltering]);
-  // Only the show feature tightens legacy search's tab-bypass behavior.
-  const showSearchItems = useMemo(() => applySearchAndTab(showItems, debouncedSearch, 'all'), [showItems, debouncedSearch]);
-  const showBaseItems = useMemo(() => applySearchAndTab(showSearchItems, '', filterTab), [showSearchItems, filterTab]);
-  const visibleTabCounts = useMemo(() => showFiltering
-    ? computeInventoryMeta(showSearchItems.filter(i => matchesPriceBand(i, priceBand))).tabCounts
-    : tabCounts, [showFiltering, showSearchItems, priceBand, tabCounts]);
   const priceBandCounts = useMemo(
-    () => computePriceBandCounts(showFiltering ? showBaseItems : applySearchAndTab(items, debouncedSearch, filterTab)),
-    [items, debouncedSearch, filterTab, showFiltering, showBaseItems],
+    () => computePriceBandCounts(applySearchAndTab(items, debouncedSearch, filterTab)),
+    [items, debouncedSearch, filterTab],
   );
 
   // Smart default tab: needs_attention if > 0, else all
@@ -135,30 +120,20 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   }, [sortKey, sortDir, debouncedSearch, filterTab, priceBand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const liveFilteredItems = useMemo(
-    () => filterAndSortItems(showFiltering ? showBaseItems.filter(i => matchesPriceBand(i, priceBand)) : items, {
-      debouncedSearch: showFiltering ? '' : debouncedSearch,
-      filterTab: showFiltering ? 'all' : filterTab,
+    () => filterAndSortItems(items, {
+      debouncedSearch,
+      filterTab,
       sortKey,
       sortDir,
       pinnedIds: selection.pinnedIds,
       priceBand,
     }),
-    [items, debouncedSearch, sortKey, sortDir, filterTab, selection.pinnedIds, priceBand, showFiltering, showBaseItems],
+    [items, debouncedSearch, sortKey, sortDir, filterTab, selection.pinnedIds, priceBand],
   );
 
-  // Pin membership/order only, never purchase objects or evaluation versions.
-  // Explicit view changes rebuild the presentation; live deleted rows disappear.
-  const viewKey = JSON.stringify([debouncedSearch, filterTab, priceBand, sortKey, sortDir, showFilters?.support]);
-  const presentation = useRef<{ key: string; ids: string[]; priceBands: PriceBand[]; needsHeadline: boolean }>({ key: '', ids: [], priceBands: [], needsHeadline: false });
-  if (selection.selected.size === 0 || presentation.current.key !== viewKey) {
-    presentation.current = { key: viewKey, ids: liveFilteredItems.map(item => item.purchase.id),
-      needsHeadline: !debouncedSearch.trim() && filterTab !== 'needs_attention' && visibleTabCounts.needs_attention > 0,
-      priceBands: Object.entries(priceBandCounts).filter(([key, count]) => key !== 'all' && count > 0).map(([key]) => key as PriceBand) };
-  }
-  const byId = new Map(items.map(item => [item.purchase.id, item]));
+  const viewKey = JSON.stringify([debouncedSearch, filterTab, priceBand, sortKey, sortDir]);
   const showingSelected = revealedView === viewKey && selection.selected.size > 0;
-  const filteredAndSortedItems = showingSelected ? items.filter(item => selection.selected.has(item.purchase.id)) : showFiltering && selection.selected.size > 0
-    ? presentation.current.ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []) : liveFilteredItems;
+  const filteredAndSortedItems = showingSelected ? items.filter(item => selection.selected.has(item.purchase.id)) : liveFilteredItems;
 
   // Inline intent belongs to its row; closing/filtering the row abandons it.
   useEffect(() => {
@@ -166,8 +141,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
   }, [inlineSaleId, expandedId, filteredAndSortedItems]);
   const filteredTotals = useMemo(() => computeTotals(filteredAndSortedItems), [filteredAndSortedItems]);
 
-  function toggleAll() {
-    const visibleIds = filteredAndSortedItems.map(i => i.purchase.id);
+  function toggleAll(visibleIds = filteredAndSortedItems.map(i => i.purchase.id)) {
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selection.selected.has(id));
     selection.setSelected(prev => {
       const next = new Set(prev);
@@ -238,10 +212,7 @@ export function useInventoryState(items: AgingItem[], campaignId?: string, showF
     filterTab, setFilterTab: chooseFilterTab,
     priceBand, setPriceBand,
     debouncedSearch,
-    reviewStats, tabCounts: visibleTabCounts, priceBandCounts,
-    // Keep existing filter controls above pinned rows; counts themselves stay live.
-    retainedPriceBands: showFiltering && selection.selected.size > 0 ? presentation.current.priceBands : [],
-    retainedNeedsHeadline: selection.selected.size > 0 && presentation.current.needsHeadline,
+    reviewStats, tabCounts, priceBandCounts,
     viewKey,
     filteredAndSortedItems, showingSelected,
     revealSelected: () => setRevealedView(viewKey), hideSelected: () => setRevealedView(null),

@@ -19,11 +19,12 @@ export interface PriceReviewPanelProps {
   purchaseId: string; item?: AgingItem; evaluation?: ShowEvaluation; draft?: PriceDraft;
   onDraftChange: (draft: PriceDraft) => void; onClearDraft: () => void;
   onSavePrice: (id: string, priceCents: number) => Promise<void>;
+  onRecheckInventory?: () => Promise<boolean>;
   save?: PriceSaveResult; onSaveResultChange: (result: PriceSaveResult) => void; onSaveRechecked: (rechecked: boolean) => void;
 }
 
 export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftChange, onClearDraft, onSavePrice,
-  save, onSaveResultChange, onSaveRechecked }: PriceReviewPanelProps) {
+  save, onSaveResultChange, onSaveRechecked, onRecheckInventory }: PriceReviewPanelProps) {
   const aggregate = isShowEvaluation(evaluation) ? evaluation : undefined;
   const evidence = useShowEvidence(purchaseId, !!item, aggregate?.version);
   const detail = !evidence.isFetching && !evidence.isError ? evidence.data?.evaluation : undefined;
@@ -55,9 +56,14 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
   function changeDraft(next: string) {
     onDraftChange({ value: next, baselinePriceCents: draft?.baselinePriceCents ?? savedCents });
   }
-  async function recheck() {
-    const response = await evidence.refetch();
-    onSaveRechecked(!response.isError);
+  async function recheck() { onSaveRechecked(await recheckSaved()); }
+  async function recheckSaved() {
+    const inventoryCurrent = onRecheckInventory ? await onRecheckInventory() : true;
+    // Inventory may settle after focus moves. Recheck the captured card using the
+    // installed evidence query, including its aggregate publication rules.
+    const queryKey = [...showPrepKeys.evidence(purchaseId), aggregate?.version ?? ''];
+    await qc.refetchQueries({ queryKey, exact: true, type: 'all' });
+    return inventoryCurrent && qc.getQueryState(queryKey)?.status === 'success';
   }
   async function persist() {
     if (cents === null || !editable) return;
@@ -75,12 +81,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
     onSaveResultChange(outcome);
     // An uncertain result is read back, never automatically replayed. Keep the draft
     // until an authoritative read confirms a successful local save.
-    // Refetch the captured identity, not an observer that may now point at another card.
-    // Reuse the exact read query installed by useShowEvidence, including its publication rules.
-    const queryKey = [...showPrepKeys.evidence(purchaseId), aggregate?.version ?? ''];
-    await qc.refetchQueries({ queryKey, exact: true, type: 'all' });
-    const rechecked = qc.getQueryState(queryKey)?.status === 'success';
-    onSaveRechecked(rechecked);
+    onSaveRechecked(await recheckSaved());
   }
   const recent = e?.recent;
   const recentIDs = new Set(recent?.saleIds);
@@ -101,8 +102,9 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
         <span>{item.purchase.setName} · Cert {item.purchase.certNumber}</span></p>
     </header>}
     {unavailable && <p role="status" className="price-review-warning">{unavailable}</p>}
-    <section aria-label="Saved price assessment" className="price-review-saved">
-      <strong className={`price-review-status price-review-status-${priceGroup(e)}`}>{e ? assessmentLabels[e.status] : 'Evaluation unavailable'}</strong>
+    <section aria-label="Saved price assessment" className="price-review-saved" aria-busy={saving || needsRecheck}>
+      {saving || needsRecheck ? <p role="status" className="price-review-warning">Assessment pending refresh. Previously loaded facts may be stale.</p>
+        : <strong className={`price-review-status price-review-status-${priceGroup(e)}`}>{e ? assessmentLabels[e.status] : 'Evaluation unavailable'}</strong>}
       {e?.reason && <p>{e.reason}</p>}
       {e?.evidenceNeedsReview && <p className="price-review-warning">Stored sales may be partial or stale. They are not a verified current window. {e.evidenceReason}</p>}
       <dl className="price-review-facts">
@@ -150,6 +152,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
       <Button disabled={!canSave} loading={saving} onClick={() => {
         if (canSave && qc.isMutating({ mutationKey }) === 0) mutation.mutate();
       }}>{saving ? 'Saving price…' : 'Save price'}</Button>
+      {save?.state === 'saved' && needsRecheck && onRecheckInventory && <p role="status" className="price-review-warning">Price saved; assessment could not be refreshed. Retry the read to confirm current inventory and evidence.</p>}
       {save?.state === 'saved' && <p role="status" className="price-review-success">Price saved locally. {save.rechecked ? 'Saved state rechecked.' : 'Recheck saved state to confirm the current amount.'} DH processing may still be pending.</p>}
       {save?.state === 'error' && <p role="alert" className="price-review-warning">Save not confirmed: {save.message}. Draft retained. {save.rechecked ? 'Saved state rechecked; review it before retrying.' : 'Recheck saved state before retrying.'}</p>}
     </section>

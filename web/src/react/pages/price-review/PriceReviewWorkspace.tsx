@@ -14,9 +14,11 @@ export interface PriceReviewWorkspaceProps {
   review: ReturnType<typeof usePriceReviewState>;
   selected: ReadonlySet<string>; onToggleSelected: (id: string) => void;
   onSavePrice: (id: string, priceCents: number) => Promise<void>;
+  onRecheckInventory?: () => Promise<boolean>;
+  initialDetail?: boolean;
 }
-export function PriceReviewWorkspace({ items, evaluations, review, selected, onToggleSelected, onSavePrice }: PriceReviewWorkspaceProps) {
-  const [mobileDetail, setMobileDetail] = useState(false);
+export function PriceReviewWorkspace({ items, evaluations, review, selected, onToggleSelected, onSavePrice, onRecheckInventory, initialDetail = false }: PriceReviewWorkspaceProps) {
+  const [mobileDetail, setMobileDetail] = useState(initialDetail);
   const focusControls = useRef(new Map<string, HTMLButtonElement>());
   const panel = useRef<HTMLElement>(null);
   const queueScroll = useRef(0);
@@ -87,7 +89,7 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
         {review.outsideFilter && active && <p role="status" className="price-review-warning">Outside the current filter. This card stays open until you move on.</p>}
         {review.activeId ? <PriceReviewPanel purchaseId={review.activeId} item={active} evaluation={evaluations[review.activeId]}
           draft={review.drafts[review.activeId]} onDraftChange={draft => review.setDraft(review.activeId!, draft)}
-          onClearDraft={() => review.clearDraft(review.activeId!)} onSavePrice={onSavePrice}
+          onClearDraft={() => review.clearDraft(review.activeId!)} onSavePrice={onSavePrice} onRecheckInventory={onRecheckInventory}
           save={review.saves[review.activeId]} onSaveResultChange={result => review.setSaveResult(review.activeId!, result)}
           onSaveRechecked={rechecked => review.markSaveRechecked(review.activeId!, rechecked)} />
           : <p className="price-review-empty">Select a card to review its saved asking price.</p>}

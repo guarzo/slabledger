@@ -2,13 +2,19 @@ import { Link } from 'react-router-dom';
 import { useGlobalInventory } from '../queries/useCampaignQueries';
 import { SectionErrorBoundary } from '../ui';
 import InventoryTab from './campaign-detail/InventoryTab';
+import type { AgingItem } from '../../types/campaigns';
+
+const EMPTY_ITEMS: AgingItem[] = [];
 
 export default function GlobalInventoryPage() {
-  const { data: items = [], warnings, isLoading, isError, error, refetch, isFetching } = useGlobalInventory();
+  const { data, warnings, isLoading, isError, error, refetch, isFetching } = useGlobalInventory();
+  const items = data ?? EMPTY_ITEMS;
 
   const inHand = items.filter(i => !!i.purchase.receivedAt).length;
 
-  if (isError) {
+  // A failed background read retains the successful snapshot and every editor.
+  // An empty successful response is still data, not an initial-load failure.
+  if (isError && data === undefined) {
     return (
       <div className="max-w-[1600px] mx-auto px-4 text-center py-16">
         <p className="text-[var(--danger)] mb-4">{error instanceof Error ? error.message : 'Failed to load inventory'}</p>
@@ -41,6 +47,11 @@ export default function GlobalInventoryPage() {
           <Link to="/shows" className="text-sm text-[var(--brand-300)] py-3">Show preparation →</Link>
         </div>
       </div>
+
+      {isError && <div role="alert" className="mb-4 p-3 rounded-lg border border-[var(--warning)]/20 text-sm text-[var(--warning)]">
+        <p>Inventory could not be refreshed. Previously loaded inventory is retained. {error instanceof Error ? error.message : ''}</p>
+        <button type="button" className="show-link" disabled={isFetching} onClick={() => refetch()}>{isFetching ? 'Retrying…' : 'Retry inventory read'}</button>
+      </div>}
 
       {warnings && warnings.length > 0 && (
         <div className="mb-4 p-3 rounded-lg bg-[var(--warning)]/10 border border-[var(--warning)]/20 text-sm text-[var(--warning)]">

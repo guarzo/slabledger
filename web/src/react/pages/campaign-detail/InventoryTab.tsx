@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { ShowEvaluation, SupportStatus } from '../../../types/showprep';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import type { ShowEvaluation } from '../../../types/showprep';
+import { queryKeys } from '../../queries/queryKeys';
+import { PriceReviewWorkspace } from '../price-review/PriceReviewWorkspace';
+import { usePriceReviewState } from '../price-review/usePriceReviewState';
+import { supportIndicator } from '../show-preparation/showPrepLabels';
+import { formatCents } from '../../utils/formatters';
 import { useShowReadiness } from '../../queries/useShowReadiness';
-import { useShowPrepCoverage } from '../../queries/useShowPrepWorker';
-import ShowReadinessLine from '../show-preparation/ShowReadinessLine';
-import { useShowEvaluations } from '../../queries/useShowPrepQueries';
-import ShowEvidenceDisclosure, { ShowEvidenceButton } from '../show-preparation/ShowEvidence';
-import { ShowInventoryFilters } from '../show-preparation/ShowInventoryControls';
+import { showPrepKeys, useShowEvaluations } from '../../queries/useShowPrepQueries';
 import type { AgingItem } from '../../../types/campaigns';
 import type { Purchase } from '../../../types/campaigns/core';
 import PokeballLoader from '../../PokeballLoader';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-import { EmptyState } from '../../ui';
+import { Button, EmptyState } from '../../ui';
 import { costBasis, unrealizedPL } from './inventory/utils';
 import { needsPriceReview } from './inventory/inventoryCalcs';
 import DesktopRow from './inventory/DesktopRow';
@@ -28,6 +31,7 @@ import FixDHMatchDialog from './inventory/FixDHMatchDialog';
 import InventoryHeader from './inventory/InventoryHeader';
 import InventorySelectionBar from './inventory/InventorySelectionBar';
 import { ACTIONS_COLUMN_WIDTH } from './inventory/columnWidths';
+import '../show-preparation/show-preparation.css';
 
 const EMPTY_EVALUATIONS: Record<string, ShowEvaluation> = {};
 
@@ -40,15 +44,14 @@ export interface InventoryTabProps {
 
 export default function InventoryTab({ items, isLoading: loading, campaignId, showCampaignColumn }: InventoryTabProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const [support, setSupport] = useState<SupportStatus | 'all'>('all');
+  const [params, setParams] = useSearchParams();
+  const pricing = !campaignId && params.get('view') === 'pricing';
+  const reviewId = pricing ? params.get('review') : null;
+  const queryClient = useQueryClient();
   const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
   const [selectionBarHeight, setSelectionBarHeight] = useState(0);
-  // Virtual rows unmount offscreen. Keep evidence disclosure intent with inventory,
-  // not the measured row, so scrolling or resizing cannot silently close it.
-  const [evidenceExpandedId, setEvidenceExpandedId] = useState<string | null>(null);
   const purchaseIds = useMemo(() => items.map(item => item.purchase.id), [items]);
   const evaluationsQuery = useShowEvaluations(purchaseIds);
-  const coverage = useShowPrepCoverage();
   const previousItems = useRef(items);
   const { refetch: recheckEvaluations } = evaluationsQuery;
   useEffect(() => {
@@ -59,8 +62,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     void recheckEvaluations({ cancelRefetch: false });
   }, [items, recheckEvaluations]);
   const evaluations = evaluationsQuery.data?.evaluations ?? EMPTY_EVALUATIONS;
-  const showFilters = useMemo(() => ({ support, evaluations }), [support, evaluations]);
-  const state = useInventoryState(items, campaignId, showFilters);
+  const state = useInventoryState(items, campaignId);
   const {
     scrollContainerRef, mobileScrollRef,
     selected, setSelected, expandedId,
@@ -82,9 +84,31 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     inlineSaleId, startInlineSale, cancelInlineSale, handleInlineSaleSuccess,
   } = state;
 
+  // Keep expiry, UTC rollover and focus observation even without the old header.
   const readiness = useShowReadiness(purchaseIds, evaluations);
-  const outsideView = [...selected].filter(id => !filteredAndSortedItems.some(item => item.purchase.id === id)).length;
-  const revealSelected = state.revealSelected;
+  const review = usePriceReviewState(items, evaluations, debouncedSearch, selected);
+  const { focus: focusReview } = review;
+  useEffect(() => { if (reviewId) focusReview(reviewId); }, [reviewId, focusReview]);
+  const visibleItems = pricing ? review.rows : filteredAndSortedItems;
+  const outsideView = [...selected].filter(id => !visibleItems.some(item => item.purchase.id === id)).length;
+  const revealSelected = pricing ? review.revealSelection : state.revealSelected;
+
+  function reviewURL(id?: string) {
+    const next = new URLSearchParams(campaignId ? undefined : params);
+    next.set('view', 'pricing');
+    if (id) next.set('review', id); else next.delete('review');
+    return next;
+  }
+  function navigateReview(id: string) { focusReview(id); setParams(reviewURL(id)); }
+  async function recheckInventory() {
+    try {
+      // Join the post-save read if it is still running. Never replay the PATCH.
+      await queryClient.refetchQueries({ queryKey: campaignId ? queryKeys.campaigns.inventory(campaignId) : queryKeys.portfolio.globalInventory },
+        { cancelRefetch: false, throwOnError: true });
+      await queryClient.invalidateQueries({ queryKey: showPrepKeys.all }, { cancelRefetch: false });
+      return true;
+    } catch { return false; }
+  }
 
   const selectedItems = useMemo(
     () => items.filter(i => selected.has(i.purchase.id)),
@@ -108,9 +132,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     toggleSelect(id);
   }
   function toggleVisible() {
-    const ids = filteredAndSortedItems.map(item => item.purchase.id);
+    const ids = visibleItems.map(item => item.purchase.id);
     captureSelection(ids, !ids.every(id => selected.has(id)));
-    toggleAll();
+    toggleAll(ids);
   }
 
   // Keep in sync with the conditional modal renders below — every overlay
@@ -148,7 +172,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
 
   if (loading) return <div className="py-8 text-center"><PokeballLoader /></div>;
 
-  if (items.length === 0) {
+  if (items.length === 0 && !pricing) {
     return (
       <EmptyState
         icon="✅"
@@ -164,21 +188,28 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const getOnRetryDHMatch = (purchase: Purchase) =>
     purchase.dhPushStatus === 'unmatched' && !dhRetryInFlight.has(purchase.id) ? () => handleRetryDHMatch(purchase) : undefined;
 
-  const evidenceButton = (item: AgingItem) => <ShowEvidenceButton purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''}
-    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} showListedPrice expanded={evidenceExpandedId === item.purchase.id}
-    onClick={() => setEvidenceExpandedId(evidenceExpandedId === item.purchase.id ? null : item.purchase.id)} />;
-  const evidencePanel = (item: AgingItem) => evidenceExpandedId === item.purchase.id && <ShowEvidenceDisclosure
-    purchaseId={item.purchase.id} certNumber={item.purchase.certNumber || ''} detailsOnly expanded
-    evaluation={evaluations[item.purchase.id]} loading={evaluationsQuery.isFetching} error={evaluationsQuery.data?.errors[item.purchase.id]} />;
+  const evidenceButton = (item: AgingItem) => {
+    const e = evaluations[item.purchase.id];
+    const indicator = e ? supportIndicator(e) : { label: evaluationsQuery.isFetching ? 'Loading price support…' : 'Evaluation unavailable', tone: 'muted' };
+    return <Link to={`/inventory?${reviewURL(item.purchase.id)}`} className={`show-evidence-trigger show-tone-${indicator.tone}`}
+      aria-label={`Review price ${item.purchase.certNumber}: ${indicator.label}`}
+      title={`SlabLedger asking ${e && e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'not set'}`}
+      onClick={event => event.stopPropagation()}><strong>{indicator.label}</strong><span aria-hidden="true">→</span></Link>;
+  };
+  const unavailableEvaluations = Object.keys(evaluationsQuery.data?.errors ?? {}).length + evaluationsQuery.unresolvedCount;
   const emptyMatches = <div className="show-empty-matches">
-    <p>{support !== 'all' ? 'No current matches under these filters.'
-      : debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}</p>
-    {support !== 'all' && readiness.incomplete && <p>Comp data coverage is incomplete. Missing or out-of-date evidence is not a current match.</p>}
-    {support !== 'all' && <button className="show-link" onClick={() => setSupport('all')}>Clear price support filter</button>}
+    <p>{debouncedSearch ? `No cards match "${debouncedSearch}"` : 'No cards in this view'}</p>
   </div>;
 
   return (
     <div className="show-inventory">
+      {!campaignId && <div role="group" aria-label="Inventory view" className="flex gap-2 mb-4">
+        <Button variant={!pricing ? 'secondary' : 'ghost'} size="sm" aria-pressed={!pricing} onClick={() => {
+          const next = new URLSearchParams(params); next.delete('view'); next.delete('review'); setParams(next);
+        }}>Inventory</Button>
+        <Button variant={pricing ? 'secondary' : 'ghost'} size="sm" aria-pressed={pricing}
+          onClick={() => setParams(reviewURL())}>Price review</Button>
+      </div>}
       <InventoryHeader
         items={items}
         filteredCount={filteredAndSortedItems.length}
@@ -193,24 +224,29 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         priceBand={priceBand}
         setPriceBand={setPriceBand}
         priceBandCounts={priceBandCounts}
-        retainedPriceBands={state.retainedPriceBands}
-        retainedNeedsHeadline={state.retainedNeedsHeadline}
         debouncedSearch={debouncedSearch}
         selected={selected}
-        showFiltering={support !== 'all'}
+        pricing={pricing}
         onDeselectMissingCL={handleDeselectMissingCL}
         onHighlightMissingCL={handleHighlightMissingCL}
       />
 
-      <ShowInventoryFilters filters={showFilters} setSupport={setSupport}
-        count={filteredAndSortedItems.length}
-        pending={evaluationsQuery.isFetching} fetching={evaluationsQuery.isFetching}
-        failed={Object.keys(evaluationsQuery.data?.errors ?? {}).length + (evaluationsQuery.isFetching ? 0 : evaluationsQuery.unresolvedCount)}
-        onRetry={() => { void evaluationsQuery.refetch(); }}>
-        <ShowReadinessLine key={state.viewKey} holdFootprint={selected.size > 0} readiness={readiness} coverage={coverage.data} coverageError={coverage.isError} />
-      </ShowInventoryFilters>
+      {!evaluationsQuery.isFetching && (unavailableEvaluations > 0 || readiness.observationError) && <div role="alert" className="text-sm text-[var(--warning)] mb-3">
+        {unavailableEvaluations > 0 ? `${unavailableEvaluations} evaluations unavailable. ` : readiness.observationError}
+        <button className="show-link" disabled={readiness.observing} onClick={() => {
+          if (readiness.observationError) void readiness.retryObservation(); else void evaluationsQuery.refetch();
+        }}>Retry evaluation</button>
+      </div>}
 
-      {isMobile ? (
+      {pricing ? <>
+        <label className="show-check flex items-center gap-2 text-xs text-[var(--text-muted)] mb-3">
+          <input type="checkbox" aria-label="Select all visible cards" checked={visibleItems.length > 0 && visibleItems.every(item => selected.has(item.purchase.id))} onChange={toggleVisible} />Select all
+        </label>
+        <PriceReviewWorkspace items={items} evaluations={evaluations}
+          review={{ ...review, focus: navigateReview, move: delta => { const id = review.move(delta); if (id) navigateReview(id); return id; } }}
+          selected={selected} onToggleSelected={toggleCard} onSavePrice={handleInlinePriceSave}
+          onRecheckInventory={recheckInventory} initialDetail={!!reviewId} />
+      </> : isMobile ? (
         <div className="space-y-3">
           <label htmlFor="select-all-mobile" className="show-check flex items-center gap-2 text-xs text-[var(--text-muted)] px-1">
             <input id="select-all-mobile" aria-label="Select all visible cards" type="checkbox" checked={filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selected.has(i.purchase.id))}
@@ -251,7 +287,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       dhListedOverride={dhListedOptimistic.has(item.purchase.id)}
                       showCampaignColumn={showCampaignColumn}
                       priceSupport={evidenceButton(item)}
-                    >{evidencePanel(item)}</MobileCard>
+                    />
                   </div>
                 );
               })}
@@ -322,7 +358,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         priceSupport={evidenceButton(item)}
                       />
                     </div>
-                    {evidencePanel(item)}
                     {isExpanded && <ExpandedDetail item={item} onReviewed={handleReviewed} campaignId={campaignId} onOpenFlagDialog={() => setFlagTarget({ purchaseId: item.purchase.id, cardName: item.purchase.cardName, grade: item.purchase.gradeValue })} onResolveFlag={handleResolveFlag} onApproveDHPush={handleApproveDHPush} onSetPrice={() => handleSetPrice(item)} combineWithList={needsPriceReview(item)} recordingSale={inlineSaleId === item.purchase.id} onCancelInlineSale={cancelInlineSale} onInlineSaleSuccess={handleInlineSaleSuccess} />}
                   </div>
                 );
@@ -406,7 +441,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       <InventorySelectionBar
         selectedItems={selectedItems} selected={selected} selectedVersions={selectedVersions} evaluations={evaluations}
         onHeightChange={setSelectionBarHeight} outsideView={outsideView} onReveal={revealSelected}
-        showingSelected={state.showingSelected} onHideSelected={state.hideSelected}
+        showingSelected={pricing ? review.showingSelection : state.showingSelected} onHideSelected={pricing ? review.hideSelection : state.hideSelected}
         onAdded={ids => setSelected(prev => { const next = new Set(prev); for (const id of ids) next.delete(id); return next; })}
         onRecordSale={() => openSaleModal(selectedItems)}
         onListOnDH={() => handleBulkListOnDH(selectedItems.map(i => i.purchase.id))}

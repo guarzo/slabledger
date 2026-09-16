@@ -36,17 +36,17 @@ for (const failed of [true, false]) {
       await route.fulfill({ json: response });
     });
     await page.goto('/inventory');
-    await expect(page.getByRole('button', { name: /Show 30-day evidence 12345678: No asking price/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Review price 12345678: No asking price/ })).toBeVisible();
     await page.getByRole('checkbox', { name: 'Select 12345678', exact: true }).check();
     const actions = page.getByRole('region', { name: 'Bulk actions for selected cards' });
     await expect(actions.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Show 30-day evidence 12345678' }).click();
-    const evidence = page.getByRole('region', { name: '30-day evidence 12345678' });
-    await expect(page.getByText('No asking price', { exact: true }).last()).toBeVisible();
+    await page.getByRole('link', { name: /Review price 12345678/ }).click();
+    const evidence = page.getByRole('region', { name: 'Price details' });
+    await expect(evidence.getByRole('region', { name: 'Saved price assessment' }).getByText('No asking price', { exact: true })).toBeVisible();
     await expect(evidence.getByText('No positive SlabLedger asking price', { exact: true })).toBeVisible();
-    await expect(evidence.getByRole('list', { name: 'Individual matching sales' }).getByRole('listitem')).toHaveCount(2);
+    await expect(evidence.locator('.price-review-sales').first().getByRole('listitem')).toHaveCount(2);
     if (failed) {
-      await expect(evidence.getByText('CardLadder refresh failed', { exact: true })).toBeVisible();
+      await expect(evidence.getByText(/Stored sales may be partial or stale/)).toContainText('CardLadder refresh failed');
       await expect(evidence.getByText(/Stored sales may be partial or stale/)).toBeVisible();
     } else await expect(evidence.getByText(/Stored sales may be partial or stale/)).toHaveCount(0);
     expect(refreshes).toBe(0);
@@ -121,31 +121,28 @@ for (const viewport of widths) {
     });
     await page.goto('/inventory');
     await expect(page.getByRole('heading', { name: 'Inventory', exact: true })).toBeVisible();
-    await page.getByLabel('Price support', { exact: true }).selectOption('supported');
+    await page.getByRole('button', { name: 'Price review', exact: true }).click();
+    await page.getByRole('button', { name: /^Supported 2$/ }).click();
     await page.getByLabel('Search cards').fill('Charizard');
-    await expect(page.getByText('0 cards shown', { exact: true })).toBeVisible();
+    await expect(page.getByText('0 of 1 cards', { exact: true })).toBeVisible();
     await page.getByLabel('Search cards').fill('Pikachu');
-    await page.getByRole('button', { name: /^DH Listed/ }).click();
-    await expect(page.getByText('1 card shown', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Show 30-day evidence 12345678' }).click();
-    const evidence = page.getByRole('region', { name: '30-day evidence 12345678' });
-    await expect(evidence.getByText('$270.00', { exact: true })).toBeVisible();
-    await expect(evidence.getByRole('link')).toHaveCount(1);
-    // A measured row can unmount on scroll or breakpoint changes; disclosure
-    // intent must survive that remount rather than silently closing evidence.
+    await expect(page.getByText('1 of 1 cards', { exact: true })).toBeVisible();
+    await page.getByRole('checkbox', { name: 'Select all visible cards' }).check();
+    await page.getByRole('button', { name: 'Review Pikachu' }).click();
+    const evidence = page.getByRole('region', { name: 'Price details' });
+    await expect(evidence.locator('.price-review-sales').first().getByText('$270.00', { exact: true })).toBeVisible();
+    await expect(evidence.locator('.price-review-sales').first().getByRole('link')).toHaveCount(1);
+    // Focused review intent survives breakpoint changes without a row disclosure.
     await page.setViewportSize({ width: viewport.width === 390 ? 1440 : 390, height: 844 });
-    await expect(evidence.getByText('$270.00', { exact: true })).toBeVisible();
+    await expect(evidence.locator('.price-review-sales').first().getByText('$270.00', { exact: true })).toBeVisible();
     await page.setViewportSize(viewport);
     await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(evidence.getByText('$270.00', { exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`inventory-${viewport.name}.png`), fullPage: true });
-    await expect(evidence.getByText('$270.00', { exact: true })).toBeVisible();
-    await page.getByRole('checkbox', { name: 'Select all visible cards' }).check();
     await page.getByRole('button', { name: 'Add to show (1)' }).click();
     await page.getByRole('combobox', { name: 'Show list', exact: true }).selectOption(listId);
     await page.getByRole('button', { name: 'Add to show (1)' }).click();
     await expect(page.getByRole('region', { name: 'Bulk actions for selected cards' })).toHaveCount(0);
-    await page.getByLabel('Price support', { exact: true }).selectOption('all');
+    await page.getByRole('button', { name: 'Inventory', exact: true }).click();
     await page.getByLabel('Search cards').fill('');
     await page.getByRole('button', { name: /^All\s*\d+$/ }).click();
     await page.getByRole('checkbox', { name: 'Select 87654321', exact: true }).check();

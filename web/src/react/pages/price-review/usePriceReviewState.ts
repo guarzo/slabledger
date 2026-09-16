@@ -10,15 +10,21 @@ export interface PriceSaveResult {
 }
 
 // Owned by the inventory view switch, not by the conditional workspace mount.
-export function usePriceReviewState(items: AgingItem[], evaluations: Record<string, ShowEvaluation>, search: string) {
+export function usePriceReviewState(items: AgingItem[], evaluations: Record<string, ShowEvaluation>, search: string, selection?: ReadonlySet<string>) {
   const [filter, setFilter] = useState<PriceReviewFilter>('all');
   const [sort, setSort] = useState<PriceReviewSort>('attention');
   const [descending, setDescending] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, PriceDraft>>({});
   const [saves, setSaves] = useState<Record<string, PriceSaveResult>>({});
-  const { rows, counts } = useMemo(() => buildPriceReview(items, evaluations, { search, filter, sort, descending }),
+  const { rows: matches, counts } = useMemo(() => buildPriceReview(items, evaluations, { search, filter, sort, descending }),
     [items, evaluations, search, filter, sort, descending]);
+  const viewKey = JSON.stringify([search, filter, sort, descending]);
+  const [revealedView, setRevealedView] = useState<string | null>(null);
+  const showingSelection = revealedView === viewKey && !!selection?.size;
+  // Revealed selections are the navigation queue too, not just replacement rows.
+  const rows = useMemo(() => showingSelection ? items.filter(item => selection?.has(item.purchase.id)) : matches,
+    [showingSelection, items, selection, matches]);
   const ids = useMemo(() => rows.map(item => item.purchase.id), [rows]);
   // Retain only navigation identity, never an old purchase or authorization token.
   const anchorQueue = useRef<string[]>([]);
@@ -31,14 +37,17 @@ export function usePriceReviewState(items: AgingItem[], evaluations: Record<stri
     if (!ids.length) return;
     const current = activeId === null ? -1 : ids.indexOf(activeId);
     if (current >= 0) {
-      setActiveId(ids[Math.max(0, Math.min(ids.length - 1, current + delta))]);
-      return;
+      const id = ids[Math.max(0, Math.min(ids.length - 1, current + delta))];
+      setActiveId(id);
+      return id;
     }
     const anchor = activeId === null ? -1 : anchorQueue.current.indexOf(activeId);
     for (let n = anchor + delta; anchor >= 0 && n >= 0 && n < anchorQueue.current.length; n += delta) {
-      if (ids.includes(anchorQueue.current[n])) { setActiveId(anchorQueue.current[n]); return; }
+      if (ids.includes(anchorQueue.current[n])) { setActiveId(anchorQueue.current[n]); return anchorQueue.current[n]; }
     }
-    setActiveId(delta === 1 ? ids[0] : ids[ids.length - 1]);
+    const id = delta === 1 ? ids[0] : ids[ids.length - 1];
+    setActiveId(id);
+    return id;
   }, [activeId, ids]);
   const returnFocusId = useCallback(() => {
     if (activeId !== null && ids.includes(activeId)) return activeId;
@@ -55,5 +64,6 @@ export function usePriceReviewState(items: AgingItem[], evaluations: Record<stri
     const next = { ...old }; delete next[id]; return next;
   }), []);
   return { filter, setFilter, sort, setSort, descending, setDescending, rows, counts, activeId, focus, move,
+    showingSelection, revealSelection: () => setRevealedView(viewKey), hideSelection: () => setRevealedView(null),
     drafts, setDraft, clearDraft, saves, setSaveResult, markSaveRechecked, returnFocusId, outsideFilter: activeId !== null && !ids.includes(activeId) };
 }

@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { showPrepKeys } from '../../../queries/useShowPrepQueries';
 import type { AgingItem, Purchase } from '../../../../types/campaigns';
 import type { PriceFlagReason } from '../../../../types/campaigns/priceReview';
 import { api } from '../../../../js/api';
@@ -37,6 +39,7 @@ export interface PricingActionsState {
 }
 
 export function usePricingActions({ toast, invalidateInventory, onReviewed }: PricingActionsParams): PricingActionsState {
+  const queryClient = useQueryClient();
   const [priceTarget, setPriceTarget] = useState<PricingActionsState['priceTarget']>(null);
   const [flagTarget, setFlagTarget] = useState<PricingActionsState['flagTarget']>(null);
   const [flagSubmitting, setFlagSubmitting] = useState(false);
@@ -89,11 +92,12 @@ export function usePricingActions({ toast, invalidateInventory, onReviewed }: Pr
       await api.setReviewedPrice(purchaseId, priceCents, 'manual');
       toast.success('Price saved');
       invalidateInventory();
+      void queryClient.invalidateQueries({ queryKey: showPrepKeys.all });
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to save price'));
       throw err;
     }
-  }, [toast, invalidateInventory]);
+  }, [toast, invalidateInventory, queryClient]);
 
   const handleFixPricing = useCallback((purchase: Purchase) => {
     if (!purchase.setName || !purchase.cardNumber) {

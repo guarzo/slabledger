@@ -41,6 +41,8 @@
 .price-review-identity { gap: var(--space-1-5); overflow-wrap: anywhere; }
 .price-review-identity .grade-badge { flex-shrink: 0; }
 .price-review-detail { display: none; padding: var(--space-4); }
+/* The integrated route has sticky app navigation above mobile focus targets. */
+.show-inventory .price-review-detail { scroll-margin-top: 5.5rem; }
 .price-review-detail-nav { justify-content: space-between; margin-bottom: var(--space-5); }
 .price-review-detail-nav button { min-width: 44px; min-height: 44px; }
 .price-review-detail-nav .price-review-back { flex-basis: 100%; }
