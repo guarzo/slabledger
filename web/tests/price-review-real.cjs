@@ -139,7 +139,12 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     // acknowledge the authoritative saved asking, never a trial amount.
     const listID = '22222222-2222-4222-8222-222222222222';
     await json(`${app}/api/show-prep/lists`, 'POST', { id: listID, name: 'Price review packing' });
+    snapshots.beforeStaleAdd = await state();
     await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(1), evaluationVersion: original.evaluation.version }] }, 409);
+    snapshots.afterStaleAdd = await state();
+    for (const table of ['showprep_lists', 'showprep_items']) {
+      expect(snapshots.afterStaleAdd.rows[table], `stale Add must preserve ${table}`).toBe(snapshots.beforeStaleAdd.rows[table]);
+    }
     await page.getByRole('button', { name: 'Clear', exact: true }).click();
     await page.getByRole('button', { name: 'Inventory', exact: true }).click();
     await page.getByLabel('Search cards', { exact: true }).fill('91000001');
