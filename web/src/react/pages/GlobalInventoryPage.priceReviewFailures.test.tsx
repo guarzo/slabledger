@@ -7,7 +7,7 @@ import { ToastProvider } from '../contexts/ToastContext';
 import { evaluation, inventoryItem, purchaseId, sales } from './price-review/fixtures.test-support';
 import { showPrepKeys } from '../queries/showPrepKeys';
 import type { InventoryEvaluations } from '../../js/api/showprep';
-import type { ShowEvaluation } from '../../types/showprep';
+import type { ShowEvaluation, ShowEvidence } from '../../types/showprep';
 import unknownPurchase from './price-review/unknown-purchase.test-support.json';
 
 // Only layout and HTTP are controlled; page, transport, validation and observer are real.
@@ -84,6 +84,55 @@ it('does not recertify initially unversioned cached detail after failed midnight
   fireEvent.click(selected()); fireEvent.click(selected());
   expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
   expect(requests.some(url => /refresh|review-price|override|preview/.test(url))).toBe(false);
+});
+
+it('does not let a recovered detail cache override a repeated unknown aggregate with the same deterministic version', async () => {
+  const unknown = unknownPurchase as ShowEvaluation;
+  let known = evaluation({ status: 'supported', reason: 'Authoritative known asking', version: 'known-before-failure' });
+  let failDetail = true;
+  let detailReads = 0;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/inventory') return Response.json({ items: [inventoryItem(known)], warnings: [] });
+    if (url.endsWith('/evaluate')) return Response.json({ evaluations: [unknown] });
+    if (url.includes('/evidence/')) {
+      detailReads++;
+      return failDetail ? Response.json({ error: 'Controlled purchase read failure' }, { status: 400 })
+        : Response.json({ evaluation: known, sales });
+    }
+    throw new Error(`Unexpected ${url}`);
+  }));
+  mount(); await flush(); await advance(100);
+  expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('Unknown');
+  failDetail = false; click('Retry evidence'); await flush(); await advance(100);
+  expect(saved().getByText('Supported', { exact: true })).toBeVisible();
+  const unknownKey = [...showPrepKeys.evidence(purchaseId), unknown.version];
+  expect(qc.getQueryData<ShowEvidence>(unknownKey)?.evaluation.version).toBe('known-before-failure');
+  fireEvent.click(selected());
+  fireEvent.change(screen.getByRole('textbox', { name: 'Asking price' }), { target: { value: 'unfinished draft' } });
+  failDetail = true;
+  const readsBeforeFailure = detailReads;
+  await act(async () => { await qc.invalidateQueries({ queryKey: showPrepKeys.evaluations }); }); await advance(100);
+  expect(qc.getQueryData<InventoryEvaluations>([...showPrepKeys.evaluations, [purchaseId]])?.evaluations[purchaseId]).toEqual(unknown);
+  expect(detailReads).toBe(readsBeforeFailure); // Still-query-fresh known detail under the repeated unknown key.
+  expect(saved().queryByText('Supported', { exact: true })).toBeNull();
+  expect(saved().queryByText(known.reason, { exact: true })).toBeNull();
+  expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('Unknown');
+  expect(screen.getByRole('button', { name: 'Unavailable 1' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
+  expect(selected()).toBeChecked();
+  // Time alone cannot recover. Remounting stale detail performs a genuinely new read.
+  await advance(31000);
+  expect(saved().queryByText('Supported', { exact: true })).toBeNull();
+  failDetail = false; known = { ...known, version: 'known-after-recovery' };
+  click('Inventory'); click('Price review'); await flush(); await advance(100);
+  expect(detailReads).toBeGreaterThan(readsBeforeFailure);
+  expect(saved().getByText('Supported', { exact: true })).toBeVisible();
+  expect(qc.getQueryData<InventoryEvaluations>([...showPrepKeys.evaluations, [purchaseId]])?.evaluations[purchaseId].version).toBe('known-after-recovery');
+  expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
+  expect(selected()).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
 });
 
 it.each(['current', 'legacy'] as const)('presents the %s failed-purchase-read DTO as unavailable, never a known missing asking', async shape => {

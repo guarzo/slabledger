@@ -32,7 +32,11 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
   // A query-fresh cache entry is not a new observation. After aggregate failure,
   // retain detail as inspectable facts only; a successful read clears that error
   // through the shared hook's publication, never by comparing fingerprints.
-  const e = readError ? aggregate ?? evidence.data?.evaluation
+  // Unknown versions can recur after recovery, so their cached known detail
+  // cannot override the latest unknown aggregate either. A new detail read
+  // publishes its known evaluation to the aggregate before it can certify again.
+  const e = aggregate?.availability === 'unknown' ? aggregate
+    : readError ? aggregate ?? evidence.data?.evaluation
     : detail && detail.version !== aggregate?.version ? detail : aggregate;
   const unknownAsking = e?.availability === 'unknown';
   const currentAssessment = !readError && !unknownAsking;
