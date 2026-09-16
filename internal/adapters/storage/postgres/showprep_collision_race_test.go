@@ -151,14 +151,14 @@ func TestShowPrepLockedCollisionSurvivesRejectedMutation(t *testing.T) {
 				es, err = svc.Evaluate(ctx, []string{showPurchase})
 				require.NoError(t, err)
 				require.True(t, es[0].PriceAssociationUnclear)
-				require.Equal(t, sp.NeedsReview, es[0].Status)
+				require.Equal(t, sp.Supported, es[0].Status)
 				if operation.add {
 					_, err = svc.AddItems(ctx, showList, []sp.AddItem{{PurchaseID: showPurchase, EvaluationVersion: es[0].Version}})
 					require.NoError(t, err)
 				}
 				detail, err := svc.ListDetail(ctx, showList)
 				require.NoError(t, err)
-				require.Zero(t, detail.Summary.KnownValueCents)
+				require.Equal(t, 30000, detail.Summary.KnownValueCents)
 				require.Equal(t, 1, detail.Summary.AmbiguousPriceCount)
 				require.Zero(t, detail.Summary.PackedCount)
 			})

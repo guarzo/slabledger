@@ -37,11 +37,11 @@ it('keeps cold inventory read-only on mount and rerender', async () => {
   expect(hook.result.current.readiness.counts.not_checked).toBe(2);
   expect(hook.result.current.readiness.incomplete).toBe(true); hook.unmount(); hook.qc.clear();
 });
-it('separates malformed metadata, current evidence and missing listed prices', async () => {
-  const hook = mount([ready(1, 'current'), ready(2, 'not_checked', { listedPriceCents: 0 }), ready(3, 'not_checked', { readiness: { state: 'not_checked' } })]);
+it('separates malformed metadata, current evidence and missing canonical asking prices', async () => {
+  const hook = mount([ready(1, 'current', { listedPriceCents: 0 }), ready(2, 'not_checked', { localPriceCents: 0 }), ready(3, 'not_checked', { localPriceCents: 0, readiness: { state: 'not_checked' } })]);
   await flush(); expect(hook.calls).toHaveLength(1);
   expect(hook.result.current.readiness.counts).toMatchObject({ current: 1, not_checked: 1, unknown: 1 });
-  expect(hook.result.current.readiness.missingPriceCount).toBe(1); hook.unmount(); hook.qc.clear();
+  expect(hook.result.current.readiness.missingPriceCount).toBe(2); hook.unmount(); hook.qc.clear();
 });
 it('settles a stalled observation, removes cached Supported and offers a read retry', async () => {
   const hook = mount([ready(1, 'current')]); await flush();

@@ -61,7 +61,7 @@ func (s *Service) ListDetail(ctx context.Context, id string) (ListDetail, error)
 			e.Grade = item.Grade
 		}
 		item.Evaluation = e
-		item.PriceChanged = item.AcknowledgedPriceCents != e.ListedPriceCents
+		item.PriceChanged = item.AcknowledgedPriceCents != e.LocalPriceCents
 		item.SupportChanged = item.AcknowledgedStatus != e.Status
 		detail.Summary.TotalCount++
 		if item.PackedAt != "" {
@@ -74,12 +74,13 @@ func (s *Service) ListDetail(ctx context.Context, id string) (ListDetail, error)
 		default:
 			detail.Summary.UnavailableCount++
 		}
-		if e.ListedPriceCents <= 0 {
-			detail.Summary.MissingPriceCount++
-		} else if e.PriceAssociationUnclear {
+		if e.PriceAssociationUnclear {
 			detail.Summary.AmbiguousPriceCount++
+		}
+		if e.LocalPriceCents <= 0 {
+			detail.Summary.MissingPriceCount++
 		} else if e.Availability == Ready {
-			detail.Summary.KnownValueCents += e.ListedPriceCents
+			detail.Summary.KnownValueCents += e.LocalPriceCents
 		}
 	}
 	return detail, nil
@@ -120,7 +121,7 @@ func (s *Service) AddItems(ctx context.Context, list string, adds []AddItem) (Li
 			if !e.CanAdd || e.Version != a.EvaluationVersion {
 				return ErrConflict
 			}
-			item := Item{ID: uuid.NewString(), PurchaseID: a.PurchaseID, CardName: e.CardName, CertNumber: e.CertNumber, Grader: e.Grader, Grade: e.Grade, AddedAt: Timestamp(s.now()), Version: 1, AcknowledgedPriceCents: e.ListedPriceCents, AcknowledgedStatus: e.Status}
+			item := Item{ID: uuid.NewString(), PurchaseID: a.PurchaseID, CardName: e.CardName, CertNumber: e.CertNumber, Grader: e.Grader, Grade: e.Grade, AddedAt: Timestamp(s.now()), Version: 1, AcknowledgedPriceCents: e.LocalPriceCents, AcknowledgedStatus: e.Status}
 			if err := tx.InsertItem(ctx, list, item); err != nil {
 				return err
 			}
@@ -199,7 +200,7 @@ func (s *Service) UpdateItem(ctx context.Context, list, id string, cmd UpdateIte
 			return ErrConflict
 		}
 		if needsReview {
-			item.AcknowledgedPriceCents = e.ListedPriceCents
+			item.AcknowledgedPriceCents = e.LocalPriceCents
 			item.AcknowledgedStatus = e.Status
 		}
 		if cmd.Packed != nil {

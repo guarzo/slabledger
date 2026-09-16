@@ -11,12 +11,13 @@ export function ShowSupport({ evaluation: e }: { evaluation: ShowEvaluation }) {
   return <div className="show-support tabular-nums">
     <strong className={`show-tone-${indicator.tone}`}>{indicator.label}</strong>
     {lifecycle !== indicator.label && <span>{lifecycle}</span>}
-    <span>DH listed price <b>{e.listedPriceCents > 0 ? formatCents(e.listedPriceCents) : 'Missing'}</b>{e.priceAssociationUnclear && ' (unverified)'}</span>
-    {!e.evidenceNeedsReview && <span>30d median <b>{e.compCount > 0 ? formatCents(e.medianCents) : 'No matching sales'}</b> · {e.compCount} sales</span>}
-    {!e.evidenceNeedsReview && e.latestSaleDate && <span>Latest sale {e.latestSaleDate}</span>}
+    <span>SlabLedger asking <b>{e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'Missing'}</b></span>
+    {!e.evidenceNeedsReview && <span>Recent median <b>{e.recent.count > 0 ? formatCents(e.recent.medianCents) : 'No matching sales'}</b> · {e.recent.count} sales</span>}
+    {!e.evidenceNeedsReview && e.recent.latestSaleDate && <span>Newest sale date {e.recent.latestSaleDate}</span>}
+    <span>Stored DH listed <b>{e.listedPriceCents > 0 ? formatCents(e.listedPriceCents) : 'Missing'}</b>{e.priceAssociationUnclear && ' (unverified)'}</span>
     <span>{availabilityLabels[e.availability] ?? availabilityLabels.unknown}</span>
-    {e.priceAssociationUnclear && <span className="text-[var(--warning)]">DH price association unclear; excluded from known value</span>}
-    {e.priceMismatch && <span className="text-[var(--warning)]">Local price differs: {formatCents(e.localPriceCents)}</span>}
+    {e.priceAssociationUnclear && <span className="text-[var(--warning)]">DH price association unclear; asking assessment is independent</span>}
+    {e.priceMismatch && <span className="text-[var(--warning)]">Stored DH price differs from SlabLedger asking</span>}
   </div>;
 }
 
@@ -27,11 +28,13 @@ export function EvidenceDetails({ data }: { data: Evidence }) {
     {e.evidenceNeedsReview && e.evidenceReason !== e.reason && <p className="text-[var(--warning)]">{e.evidenceReason}</p>}
     <dl className="show-evidence-meta">
       <div><dt>Matching identity</dt><dd>{e.cardName} · {e.grader} {e.grade} · Cert {e.certNumber}</dd></div>
+      <div><dt>Recent assessment window (UTC)</dt><dd>{e.recent.windowStart} to {e.recent.windowEnd} (inclusive)</dd></div>
+      <div><dt>30-day context median</dt><dd>{e.compCount > 0 ? formatCents(e.medianCents) : 'No matching sales'} · {e.compCount} sales</dd></div>
       <div><dt>30-day window (UTC)</dt><dd>{e.windowStart || 'Unknown'} to {e.windowEnd || 'Unknown'} (inclusive)</dd></div>
       <div><dt>CardLadder refreshed</dt><dd>{showTime(e.refreshedAt)}</dd></div>
       <div><dt>DH last synced</dt><dd>{showTime(e.listingSyncedAt)}</dd></div>
     </dl>
-    <p className="text-[var(--text-muted)]">Support: median ≥90% of DH listed price, at least two matching sales. Complete evidence must cover the current window and be no older than 24 hours.</p>
+    <p className="text-[var(--text-muted)]">Support uses the newest five matching sales in the past seven UTC dates, including every sale tied on the fifth sale’s date. At least two sales, a median ≥90% of SlabLedger asking, and no newest-day sale more than 20% below asking are required. The wider 30-day history is context only. Complete evidence must cover the current 30-day window and be no older than 24 hours.</p>
     {e.evidenceNeedsReview && <p className="text-[var(--warning)]">Stored sales may be partial or stale. They are not a verified current window.</p>}
     {data.sales.length > 0 ? <ul className="show-sales" aria-label="Individual matching sales">
       {data.sales.map(sale => {
@@ -51,13 +54,13 @@ export function ShowEvidenceButton({ purchaseId, certNumber, evaluation, loading
   purchaseId: string; certNumber: string; evaluation?: ShowEvaluation; loading?: boolean; expanded: boolean; onClick: () => void; showListedPrice?: boolean;
 }) {
   const indicator = evaluation ? supportIndicator(evaluation) : { label: loading ? 'Loading price support…' : 'Evaluation unavailable', tone: 'muted' };
-  const listedPrice = !evaluation ? 'Unavailable' : evaluation.listedPriceCents > 0 ? formatCents(evaluation.listedPriceCents) : 'Missing';
+  const askingPrice = !evaluation ? 'Unavailable' : evaluation.localPriceCents > 0 ? formatCents(evaluation.localPriceCents) : 'Missing';
   return <span className="show-price-support">
-    {showListedPrice && <span className="show-listed-price">DH listed {listedPrice}{evaluation?.priceAssociationUnclear && ' (unverified)'}</span>}
+    {showListedPrice && <span className="show-listed-price">SlabLedger asking {askingPrice}</span>}
     <button type="button" className={`show-evidence-trigger show-tone-${indicator.tone}`}
     aria-expanded={expanded} aria-controls={`show-evidence-${purchaseId}`}
     aria-label={`${expanded ? 'Hide' : 'Show'} 30-day evidence ${certNumber}: ${indicator.label}`}
-    title={`${indicator.label}: 30-day price support`} onClick={event => { event.stopPropagation(); onClick(); }}>
+    title={`${indicator.label}: recent price support with 30-day context`} onClick={event => { event.stopPropagation(); onClick(); }}>
     <strong>{indicator.label}</strong><span aria-hidden="true">{expanded ? '▴' : '▾'}</span>
   </button></span>;
 }

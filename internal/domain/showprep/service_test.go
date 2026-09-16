@@ -17,7 +17,7 @@ func TestServiceFailsClosedWithoutLosingPhysicalEligibility(t *testing.T) {
 	}{{"no credentials", false, false}, {"hold storage fails", true, false}, {"evidence storage fails", false, true}} {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &mocks.ShowPrepStoreMock{ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) {
-				return map[string]sp.Purchase{"p": {ID: "p", Known: true, Exists: true, CampaignExists: true, Phase: "pending", Received: true, ListedPriceCents: 30000, ProfileID: "psa-1", Grader: "PSA", Grade: 10}}, nil
+				return map[string]sp.Purchase{"p": {ID: "p", Known: true, Exists: true, CampaignExists: true, Phase: "pending", Received: true, ListedPriceCents: 30000, LocalPriceCents: 30000, ProfileID: "psa-1", Grader: "PSA", Grade: 10}}, nil
 			}}
 			if tt.holdErr {
 				store.ObservePriceAssociationsFn = func(context.Context, []string) (map[string]bool, error) {

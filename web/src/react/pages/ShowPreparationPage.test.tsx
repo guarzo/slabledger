@@ -80,30 +80,30 @@ describe('saved show preparation', () => {
     fireEvent.click(packed);
     await waitFor(() => expect(packed).not.toBeChecked());
     expect(packed).toBeDisabled();
-    expect(screen.getByLabelText('Known ready-to-pack listed value')).toHaveTextContent('$0.00');
+    expect(screen.getByLabelText('Known ready-to-pack asking value')).toHaveTextContent('$0.00');
     fireEvent.click(screen.getByRole('button', { name: 'Remove 12345678 from show' }));
     await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Packed 12345678' })).not.toBeInTheDocument());
   });
 
   it('shows missing/ambiguous totals separately and keeps ambiguous-but-ready cards packable', async () => {
     saved = detail([
-      member({ evaluation: evaluation({ status: 'needs_review', priceAssociationUnclear: true, reason: 'DH price association unclear' }) }),
+      member({ evaluation: evaluation({ status: 'supported', priceAssociationUnclear: true, listedPriceCents: 90000 }) }),
       ...['44444444-4444-4444-8444-444444444444', '55555555-5555-4555-8555-555555555555'].map((id, index) => member({
-        id, purchaseId: id, certNumber: `missing-${index}`, evaluation: evaluation({ purchaseId: id, certNumber: `missing-${index}`, status: 'no_listed_price', listedPriceCents: 0 }),
+        id, purchaseId: id, certNumber: `missing-${index}`, evaluation: evaluation({ purchaseId: id, certNumber: `missing-${index}`, status: 'no_listed_price', localPriceCents: 0 }),
       })),
     ]);
-    saved.summary = { ...saved.summary, knownValueCents: 0, ambiguousPriceCount: 1, missingPriceCount: 2, totalCount: 3 };
+    saved.summary = { ...saved.summary, knownValueCents: 30000, ambiguousPriceCount: 1, missingPriceCount: 2, totalCount: 3 };
     mount();
     expect(await screen.findByRole('checkbox', { name: 'Packed 12345678' })).toBeEnabled();
-    expect(screen.getByLabelText('Known ready-to-pack listed value')).toHaveTextContent('$0.00');
-    expect(screen.getByLabelText('Ambiguous DH prices')).toHaveTextContent('1');
-    expect(screen.getByLabelText('Missing DH prices')).toHaveTextContent('2');
-    expect(screen.getByText(/DH price association unclear; excluded/)).toBeVisible();
+    expect(screen.getByLabelText('Known ready-to-pack asking value')).toHaveTextContent('$300.00');
+    expect(screen.getByLabelText('DH association warnings')).toHaveTextContent('1');
+    expect(screen.getByLabelText('Missing asking prices')).toHaveTextContent('2');
+    expect(screen.getByText(/DH price association unclear; asking assessment is independent/)).toBeVisible();
   });
 
   it('flags changed price/support after packing and acknowledges only observed versions', async () => {
     saved = detail([member({ packedAt: '2026-09-14T11:00:00Z', version: 3, priceChanged: true, supportChanged: true,
-      evaluation: evaluation({ listedPriceCents: 35000, status: 'below_target', version: 'eval-2' }) })]);
+      evaluation: evaluation({ localPriceCents: 35000, status: 'below_target', version: 'eval-2' }) })]);
     mount();
     expect(await screen.findByText(/Price changed.*check the physical sticker/i)).toBeVisible();
     expect(screen.getByText(/Support changed/)).toBeVisible();

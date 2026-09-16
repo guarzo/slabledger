@@ -47,6 +47,39 @@ func TestShowPrepBatchEvidenceRead(t *testing.T) {
 	require.Len(t, got, 200)
 	require.Equal(t, 1, calls)
 }
+func TestShowPrepCanonicalKnownValueIndependentOfDHWarnings(t *testing.T) {
+	ctx := context.Background()
+	purchases := map[string]sp.Purchase{}
+	items := []sp.Item{}
+	for _, tt := range []struct {
+		id       string
+		price    int
+		received bool
+	}{
+		{"ready", 30000, true}, {"missing", 0, true}, {"not-received", 40000, false},
+	} {
+		purchases[tt.id] = sp.Purchase{ID: tt.id, Known: true, Exists: true, CampaignExists: true, Phase: "active", Received: tt.received, LocalPriceCents: tt.price, ListedPriceCents: 90000}
+		items = append(items, sp.Item{PurchaseID: tt.id, AcknowledgedPriceCents: 90000})
+	}
+	store := &mocks.ShowPrepStoreMock{
+		ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) { return purchases, nil },
+		GetItemsFn:      func(context.Context, string) ([]sp.Item, error) { return items, nil },
+		ObservePriceAssociationsFn: func(context.Context, []string) (map[string]bool, error) {
+			return map[string]bool{"ready": true, "missing": true, "not-received": true}, nil
+		},
+	}
+	d, err := sp.NewService(store, nil, time.Now).ListDetail(ctx, "list")
+	require.NoError(t, err)
+	require.Equal(t, 30000, d.Summary.KnownValueCents)
+	require.Equal(t, 3, d.Summary.AmbiguousPriceCount)
+	require.Equal(t, 1, d.Summary.MissingPriceCount)
+	require.Equal(t, 1, d.Summary.NotReceivedCount)
+	for _, item := range d.Items {
+		require.True(t, item.PriceChanged)
+		require.Equal(t, 90000, item.AcknowledgedPriceCents)
+	}
+}
+
 func TestShowPrepMutationAndNameValidation(t *testing.T) {
 	for _, tt := range []struct {
 		name string

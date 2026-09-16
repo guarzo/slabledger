@@ -37,7 +37,7 @@ func TestServiceReadinessReadOutcomes(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
-			p := sp.Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: 30000}
+			p := sp.Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: 30000, LocalPriceCents: 30000}
 			if tt.invalid {
 				p.ProfileID = ""
 			}
@@ -82,11 +82,11 @@ func TestServiceReadinessReadOutcomes(t *testing.T) {
 			}
 			if tt.evidenceErr && !tt.purchaseErr && !tt.invalid {
 				require.Equal(t, "Evidence storage unavailable", evaluations[0].EvidenceReason)
-				require.Equal(t, "6a43b7ae30085ba53b8c578fe86a2363ef45640c6f51784e894b8a7380b700f3", evaluations[0].Version)
+				require.Equal(t, "5ad0c4fb129ea6e003f98aeee7f45016169dc318c871cb2906d4c54c0902de58", evaluations[0].Version)
 				require.Equal(t, "fcdc1fb5b4cadc3df2da7670b8391b0930eac8aa99c9d6479eceffaf6e68e9d2", evaluations[0].EvidenceVersion)
 			}
 			if tt.purchaseErr && !tt.evidenceErr {
-				require.Equal(t, "5ef62f62e7e28657a4be4805a6e4626b53648217cb11515aec2aca31509215ed", evaluations[0].Version)
+				require.Equal(t, "990cc591b1d732166a200d6776f45f1b45350ff6fc0e7921e8321b953d0ed4c9", evaluations[0].Version)
 			}
 			now = now.Add(time.Minute)
 			reread, err := svc.Evaluate(context.Background(), []string{"p"})

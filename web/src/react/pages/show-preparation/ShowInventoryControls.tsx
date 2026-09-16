@@ -16,7 +16,9 @@ export function ShowInventoryFilters({ filters, setSupport, count, pending, fail
     <label>Support
       <select aria-label="Price support" className="show-input" value={filters.support} onChange={e => setSupport(e.target.value as SupportStatus | 'all')}>
         <option value="all">All price support</option>
-        {Object.entries(supportLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        {Object.entries(supportLabels).map(([key, label]) => <option key={key} value={key}>
+          {label}{key === 'thin_evidence' ? ': one sale' : key === 'no_recent_comps' ? ': no recent sales' : ''}
+        </option>)}
       </select>
     </label>
     <span className="show-match-count tabular-nums" role="status">{count} {count === 1 ? 'card' : 'cards'} shown{pending ? ' · Reading…' : ''}</span>

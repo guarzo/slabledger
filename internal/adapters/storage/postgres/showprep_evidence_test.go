@@ -66,7 +66,7 @@ func TestShowPrepNoPriceRefreshHealthAndRetainedEvidence(t *testing.T) {
 			db := setupShowPrepTestDB(t)
 			ctx := context.Background()
 			seedShowPurchase(t, db, showPurchase, "camp-show", "cert", "PSA")
-			_, err := db.ExecContext(ctx, `UPDATE campaign_purchases SET dh_listing_price_cents=0 WHERE id=$1`, showPurchase)
+			_, err := db.ExecContext(ctx, `UPDATE campaign_purchases SET reviewed_price_cents=0 WHERE id=$1`, showPurchase)
 			require.NoError(t, err)
 			store := NewShowPrepStore(db.DB)
 			seedShowEvidence(t, store)
@@ -92,7 +92,8 @@ func TestShowPrepNoPriceRefreshHealthAndRetainedEvidence(t *testing.T) {
 			}
 			for _, e := range []sp.Evaluation{refreshed[0], after.Evaluation} {
 				require.Equal(t, sp.NoListedPrice, e.Status)
-				require.Equal(t, "No positive DH listed price", e.Reason)
+				require.Equal(t, "No positive SlabLedger asking price", e.Reason)
+				require.Nil(t, e.Recent.GapPct)
 				encoded, err := json.Marshal(e)
 				require.NoError(t, err)
 				var wire map[string]any

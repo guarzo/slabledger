@@ -20,21 +20,21 @@ func TestEvaluate(t *testing.T) {
 		{"exact threshold", []int{27000, 27000}, 30000, nil, Supported},
 		{"half cent below", []int{26999, 27000}, 30000, nil, BelowTarget},
 		{"above listing", []int{40000}, 30000, nil, ThinEvidence},
-		{"one low", []int{20000}, 30000, nil, BelowTarget},
-		{"odd median", []int{1, 27000, 40000}, 30000, nil, Supported},
+		{"one low", []int{20000}, 30000, nil, ThinEvidence},
+		{"odd median with newest day contradiction", []int{1, 27000, 40000}, 30000, nil, MixedEvidence},
 		{"empty complete", nil, 30000, nil, NoRecentComps},
 		{"no listing", nil, 0, nil, NoListedPrice},
 		{"partial", []int{40000, 40000}, 30000, func(_ *Purchase, s *Snapshot) { s.Complete = false }, NeedsReview},
 		{"stale", nil, 30000, func(_ *Purchase, s *Snapshot) { s.RefreshedAt = now.Add(-25 * time.Hour) }, NeedsReview},
 		{"rollover", nil, 30000, func(_ *Purchase, s *Snapshot) { s.WindowEnd = "2026-09-13" }, NeedsReview},
 		{"failed recheck", []int{40000, 40000}, 30000, func(_ *Purchase, s *Snapshot) { s.AttemptState = "failed"; s.AttemptError = "source timeout" }, NeedsReview},
-		{"cross grader collision", []int{40000, 40000}, 30000, func(p *Purchase, _ *Snapshot) { p.PriceAssociationUnclear = true }, NeedsReview},
+		{"cross grader collision", []int{40000, 40000}, 30000, func(p *Purchase, _ *Snapshot) { p.PriceAssociationUnclear = true }, Supported},
 		{"unknown source", nil, 30000, func(_ *Purchase, s *Snapshot) { s.Source = "legacy" }, NeedsReview},
 		{"wrong identity", nil, 30000, func(_ *Purchase, s *Snapshot) { s.Identity.Grader = "BGS" }, NeedsReview},
 		{"future date", []int{40000}, 30000, func(_ *Purchase, s *Snapshot) { s.Sales[0].Date = "2026-09-15" }, NeedsReview},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			p := Purchase{ID: "p1", CardName: "Card", CertNumber: "123", Grader: "PSA", Grade: 10, ProfileID: "psa-1", Known: true, Exists: true, CampaignExists: true, Phase: "pending", Received: true, ListedPriceCents: tt.listed}
+			p := Purchase{ID: "p1", CardName: "Card", CertNumber: "123", Grader: "PSA", Grade: 10, ProfileID: "psa-1", Known: true, Exists: true, CampaignExists: true, Phase: "pending", Received: true, ListedPriceCents: tt.listed, LocalPriceCents: tt.listed}
 			s := Snapshot{Identity: p.Identity(), Source: "cardladder", Generation: 1, Complete: true, WindowStart: "2026-08-16", WindowEnd: "2026-09-14", RefreshedAt: now, AttemptState: "complete"}
 			for i, price := range tt.prices {
 				s.Sales = append(s.Sales, Sale{ID: string(rune('a' + i)), Date: "2026-09-14", PriceCents: price})
@@ -48,11 +48,11 @@ func TestEvaluate(t *testing.T) {
 			require.Equal(t, e.Version, Evaluate(p, &s, now.Add(time.Minute)).Version, "reading time is not a version")
 		})
 	}
-	p := Purchase{ID: "missing", ListedPriceCents: 30000}
+	p := Purchase{ID: "missing", ListedPriceCents: 30000, LocalPriceCents: 30000}
 	require.Equal(t, NeedsReview, Evaluate(p, nil, now).Status)
 }
 
-func TestEvidenceHealthIndependentOfListedPrice(t *testing.T) {
+func TestEvidenceHealthIndependentOfAskingPrice(t *testing.T) {
 	now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
 	for _, tt := range []struct {
 		name   string
@@ -83,7 +83,7 @@ func TestEvidenceHealthIndependentOfListedPrice(t *testing.T) {
 	} {
 		for _, listed := range []int{0, 30000} {
 			t.Run(tt.name+"/listed="+strconv.Itoa(listed), func(t *testing.T) {
-				p := Purchase{ID: "p", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: listed}
+				p := Purchase{ID: "p", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: listed, LocalPriceCents: listed}
 				s := &Snapshot{Identity: p.Identity(), Source: "cardladder", Complete: true, WindowStart: "2026-08-16", WindowEnd: "2026-09-14", RefreshedAt: now, AttemptState: "complete", Sales: []Sale{{ID: "a", Date: "2026-09-14", PriceCents: 30000}, {ID: "b", Date: "2026-09-14", PriceCents: 30000}}}
 				tt.change(&p, &s)
 				e := Evaluate(p, s, now)
@@ -96,13 +96,15 @@ func TestEvidenceHealthIndependentOfListedPrice(t *testing.T) {
 				require.Equal(t, tt.reason, wire["evidenceReason"])
 				if listed == 0 {
 					require.Equal(t, NoListedPrice, e.Status)
-					require.Equal(t, "No positive DH listed price", e.Reason)
-				} else if p.PriceAssociationUnclear {
-					require.Equal(t, NeedsReview, e.Status)
-					require.Equal(t, "DH price association unclear", e.Reason)
+					require.Equal(t, "No positive SlabLedger asking price", e.Reason)
 				} else if tt.reason != "" {
 					require.Equal(t, NeedsReview, e.Status)
 					require.Equal(t, tt.reason, e.Reason)
+				} else if e.CompCount > 0 {
+					require.Equal(t, Supported, e.Status)
+				}
+				if listed == 0 || tt.reason != "" {
+					require.Nil(t, e.Recent.GapPct)
 				}
 			})
 		}

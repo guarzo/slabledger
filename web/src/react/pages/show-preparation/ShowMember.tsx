@@ -48,7 +48,7 @@ export default function ShowMember({ item, listId, stale }: {
     {e && !available && <p className="text-xs text-[var(--warning)] mt-2">{availabilityLabels[e.availability] ?? availabilityLabels.unknown}. {packed ? 'Packing history retained. Unpack or remove explicitly.' : 'Cannot pack in this state.'}</p>}
     {packed && <p className="text-xs text-[var(--text-muted)]">Packed {showTime(item.packedAt)}</p>}
     <div className="show-warnings">
-      {item.priceChanged && <p>Price changed{packed ? ': check the physical sticker' : ''}. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no listed price'}.</p>}
+      {item.priceChanged && <p>Price changed{packed ? ': check the physical sticker' : ''}. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no price'}.</p>}
       {item.supportChanged && <p>Support changed. Previously {supportLabels[item.acknowledgedStatus] ?? 'unknown'}.</p>}
     </div>
     <ShowEvidenceDisclosure purchaseId={item.purchaseId} certNumber={item.certNumber} evaluation={e} />

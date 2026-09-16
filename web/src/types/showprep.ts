@@ -1,4 +1,4 @@
-export type SupportStatus = 'supported' | 'thin_evidence' | 'below_target' | 'no_recent_comps' | 'needs_review' | 'no_listed_price';
+export type SupportStatus = 'supported' | 'thin_evidence' | 'below_target' | 'mixed_evidence' | 'no_recent_comps' | 'needs_review' | 'no_listed_price';
 export type Availability = 'ready' | 'not_received' | 'sold' | 'refunded' | 'campaign_closed' | 'removed' | 'unknown';
 
 export type ReadinessState = 'not_checked' | 'current' | 'stale' | 'running' | 'interrupted' | 'failed' | 'invalid' | 'unavailable';
@@ -11,6 +11,19 @@ export interface ShowReadiness {
   expiresAt: string;
   /** Read-only observation boundary; never permission to retry automatically. */
   retryAt: string;
+}
+
+export interface RecentPriceEvidence {
+  windowStart: string;
+  windowEnd: string;
+  saleIds: string[];
+  count: number;
+  medianCents: number;
+  latestSaleDate: string;
+  latestSaleCount: number;
+  latestSaleMinCents: number;
+  latestSaleMaxCents: number;
+  gapPct: number | null;
 }
 
 export interface ShowEvaluation {
@@ -39,6 +52,8 @@ export interface ShowEvaluation {
   refreshedAt: string;
   evidenceVersion: string;
   version: string;
+  policyVersion: string;
+  recent: RecentPriceEvidence;
   /** Untrusted additive metadata: consume only through getShowReadiness. */
   readiness?: unknown;
 }

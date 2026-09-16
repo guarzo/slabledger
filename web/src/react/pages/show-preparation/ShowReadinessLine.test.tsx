@@ -12,7 +12,7 @@ it('distinguishes coverage gaps without acquisition controls or manual-price pro
   render(<ShowReadinessLine readiness={readiness} coverage={{ eligibleIdentities: 5, currentIdentities: 1, missingIdentities: 1, staleIdentities: 1, failedIdentities: 2, eligibleCards: 8, currentCards: 2, unresolvedCards: 1 }} />);
   expect(screen.getByLabelText('Comp data coverage')).toHaveTextContent('2/8 cards with current evidence');
   expect(screen.getByText('All inventory: 1/5 identities current')).toBeVisible();
-  for (const label of ['1 missing · 1 stale · 2 failed identities', '1 unresolved card', '1 no DH price in this view']) expect(screen.getByText(label)).toBeVisible();
+  for (const label of ['1 missing · 1 stale · 2 failed identities', '1 unresolved card', '1 no asking price in this view']) expect(screen.getByText(label)).toBeVisible();
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
   expect(screen.queryByText(/select.*manually/i)).not.toBeInTheDocument();
 });

@@ -71,6 +71,14 @@ describe('cached show preparation in the existing inventory', () => {
     expect(screen.queryByRole('button', { name: /Show selection|Check selected|Cancel checking|Check comps|Retry.*checking/ })).not.toBeInTheDocument();
     expect(requests.filter(r => r.url.endsWith('/refresh'))).toEqual([]);
   });
+  it('distinguishes the two limited-evidence filters without acquiring sales', async () => {
+    const qc = mount(); await waitFor(() => expect(qc.isFetching()).toBe(0));
+    expect(screen.getByRole('option', { name: 'Limited evidence: one sale' })).toHaveValue('thin_evidence');
+    expect(screen.getByRole('option', { name: 'Limited evidence: no recent sales' })).toHaveValue('no_recent_comps');
+    expect(screen.getByRole('option', { name: 'Mixed evidence' })).toHaveValue('mixed_evidence');
+    const before = requests.length; support('mixed_evidence'); await act(async () => {});
+    expect(requests).toHaveLength(before);
+  });
   it('intersects support, search and tab; not-received cards remain manually plannable', async () => {
     mount(); await screen.findAllByText('Supported', { selector: 'strong' });
     support('supported'); fireEvent.click(screen.getByRole('button', { name: /^DH Listed/ }));
@@ -90,7 +98,7 @@ describe('cached show preparation in the existing inventory', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ evaluations: [values[0]] }))));
     mount(); expect(await screen.findByRole('alert')).toHaveTextContent('2 evaluations unavailable');
     fireEvent.click(screen.getByRole('button', { name: /^All\d/ }));
-    expect(screen.queryByText('No recent sales', { selector: 'strong' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Limited evidence', { selector: 'strong' })).not.toBeInTheDocument();
     expect(screen.getAllByText('Evaluation unavailable', { selector: 'strong' })).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Retry evaluation' })).toBeEnabled();
   });
@@ -110,7 +118,7 @@ describe('cached show preparation in the existing inventory', () => {
       let response: unknown = detail();
       if (url.endsWith('/evaluate')) response = { evaluations: [current, ...values.slice(1)] };
       else if (url.endsWith('/lists') && options.method === 'POST') {
-        current = evaluation({ version: 'eval-2', status: 'below_target', listedPriceCents: 35000 });
+        current = evaluation({ version: 'eval-2', status: 'below_target', localPriceCents: 35000 });
         created = { ...created, ...body }; response = created;
       } else if (url.endsWith('/lists')) response = { lists: [created] };
       return new Response(JSON.stringify(response));
@@ -207,7 +215,7 @@ describe('cached show preparation in the existing inventory', () => {
   });
   it('loads one compact stored evidence disclosure only on intent, showing every sale and safe links', async () => {
     mount(); const trigger = await screen.findByRole('button', { name: /Show 30-day evidence 12345678/ });
-    expect(trigger.closest('[role="row"]')).not.toBeNull(); expect(screen.queryByText(/30d median/)).not.toBeInTheDocument();
+    expect(trigger.closest('[role="row"]')).not.toBeNull(); expect(screen.queryByText(/Recent median/)).not.toBeInTheDocument();
     expect(requests.some(r => r.url.includes('/evidence/'))).toBe(false); fireEvent.click(trigger);
     const region = await screen.findByRole('region', { name: '30-day evidence 12345678' });
     expect(trigger).toHaveAttribute('aria-controls', region.id);

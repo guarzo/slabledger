@@ -13,6 +13,11 @@ export function evaluation(overrides: Partial<ShowEvaluation> = {}): ShowEvaluat
     listingSyncedAt: '2026-09-14T08:00:00Z', medianCents: 28000, compCount: 2,
     latestSaleDate: '2026-09-13', windowStart: '2026-08-16', windowEnd: '2026-09-14',
     refreshedAt: '2026-09-14T09:00:00Z', evidenceVersion: 'evidence-1', version: 'eval-1',
+    policyVersion: 'recent-sales-v1', recent: {
+      windowStart: '2026-09-08', windowEnd: '2026-09-14', saleIds: ['a', 'b'], count: 2,
+      medianCents: 28000, latestSaleDate: '2026-09-13', latestSaleCount: 2,
+      latestSaleMinCents: 27000, latestSaleMaxCents: 29000, gapPct: 100 / 15,
+    },
     ...overrides,
   };
 }

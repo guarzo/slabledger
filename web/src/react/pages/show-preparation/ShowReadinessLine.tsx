@@ -33,7 +33,7 @@ export default function ShowReadinessLine({ readiness: r, coverage: c, coverageE
       <span>{c.missingIdentities} missing · {c.staleIdentities} stale · {c.failedIdentities} failed identities</span>
       {c.unresolvedCards > 0 && <span>{c.unresolvedCards} unresolved {c.unresolvedCards === 1 ? 'card' : 'cards'}</span>}
     </>}
-    {r.missingPriceCount > 0 && <span>{r.missingPriceCount} no DH price in this view</span>}
+    {r.missingPriceCount > 0 && <span>{r.missingPriceCount} no asking price in this view</span>}
     {r.observationError && <><span role="alert">{r.observationError}</span><Button size="sm" variant="secondary" disabled={r.observing} onClick={() => void r.retryObservation()}>Retry price support read</Button></>}
   </div>;
 }
