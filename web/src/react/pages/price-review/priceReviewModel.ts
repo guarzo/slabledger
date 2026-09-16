@@ -12,7 +12,7 @@ export const reviewFilters: { value: PriceReviewFilter; label: string }[] = [
   { value: 'limited', label: 'Limited' }, { value: 'supported', label: 'Supported' },
   { value: 'unavailable', label: 'Unavailable' }, { value: 'unpriced', label: 'Unpriced' },
 ];
-const groups: Record<SupportStatus, Exclude<PriceReviewFilter, 'all'>> = {
+export const assessmentGroups: Record<SupportStatus, Exclude<PriceReviewFilter, 'all'>> = {
   below_target: 'above', mixed_evidence: 'mixed', thin_evidence: 'limited', no_recent_comps: 'limited',
   supported: 'supported', needs_review: 'unavailable', no_listed_price: 'unpriced',
 };
@@ -23,7 +23,7 @@ export const assessmentLabels: Record<SupportStatus, string> = {
 const attention = { above: 0, mixed: 1, limited: 2, unavailable: 3, unpriced: 4, supported: 5 };
 
 export function priceGroup(e?: ShowEvaluation): Exclude<PriceReviewFilter, 'all'> {
-  return isShowEvaluation(e) ? groups[e.status] : 'unavailable';
+  return isShowEvaluation(e) ? assessmentGroups[e.status] : 'unavailable';
 }
 export function parsePriceDraft(value: string): number | null {
   const trimmed = value.trim();

@@ -12,7 +12,7 @@ import GradeBadge from '../../ui/GradeBadge';
 import { centsToDollars, formatCents, getErrorMessage } from '../../utils/formatters';
 import { costBasis } from '../campaign-detail/inventory/utils';
 import { availabilityLabels, evidenceLabel, listingTypeLabel, safeSourceURL, showTime } from '../show-preparation/showPrepLabels';
-import { assessmentLabels, gapLabel, parsePriceDraft, priceGroup, type PriceDraft } from './priceReviewModel';
+import { assessmentGroups, assessmentLabels, gapLabel, parsePriceDraft, priceGroup, type PriceDraft } from './priceReviewModel';
 import type { PriceSaveResult } from './usePriceReviewState';
 
 export interface PriceReviewPanelProps {
@@ -141,7 +141,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
           : trial.isError ? <div><p role="alert">Trial assessment unavailable: {getErrorMessage(trial.error)}</p>
             <Button variant="secondary" size="sm" onClick={() => trial.refetch()}>Retry preview</Button></div>
           : result ? <><p className="price-review-meta">Trial only · {formatCents(result.trialPriceCents)}</p>
-            <strong className={`price-review-status price-review-status-${result.status === 'supported' ? 'supported' : result.status === 'below_target' ? 'above' : 'mixed'}`}>{assessmentLabels[result.status]}</strong>
+            <strong className={`price-review-status price-review-status-${assessmentGroups[result.status]}`}>{assessmentLabels[result.status]}</strong>
             <p>{result.reason}</p>{result.evidenceNeedsReview && <p className="price-review-warning">{result.evidenceReason}</p>}
             <p className="price-review-meta">{gapLabel(result.recent.gapPct)} · Not saved</p></> : <p>Checking trial price…</p>}
       </section>

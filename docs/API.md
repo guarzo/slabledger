@@ -1277,7 +1277,12 @@ Dismisses (clears) the pending AI price suggestion without accepting it.
 
 Auth: RequireAuth
 
-Sets a reviewed price for a purchase (human-verified price point).
+Commits a reviewed price for a purchase. On success, invalidates inventory and
+show-preparation assessments in the UI. Configured DH price sync and auto-list
+services run asynchronously: a local save does not confirm remote completion.
+Eligible received/PSA-shipped inventory can become listed; an already-listed,
+price/channel-synced item is a no-op for listing. Ineligible items are skipped.
+The price sync and listing operations are not an atomic transaction with the save.
 
 **Path params:** `purchaseId` (purchase UUID)
 
@@ -1825,8 +1830,8 @@ Generates a global sell sheet across all active campaigns.
 
 ## Show Preparation
 
-Show preparation evaluates recent sale evidence against the last-synced DH listing
-price and stores named packing lists. These operations do not reprice, delist,
+Show preparation evaluates recent sale evidence against canonical SlabLedger asking
+and stores named packing lists. These operations do not reprice, delist,
 reserve, or sell purchases. All endpoints require authentication. Money remains in
 integer cents, matching the inventory API.
 
@@ -1888,9 +1893,10 @@ status and use Retry failed after repair; do not mistake this response for a fai
 |---|---|---|
 | `POST /api/show-prep/evaluate` | `{ "purchaseIds": ["uuid"] }`, 1–200 IDs | `{ "evaluations": [...] }` |
 | `GET /api/show-prep/evidence/{purchaseID}` | None | `{ "evaluation": {...}, "sales": [...] }` |
+| `POST /api/show-prep/preview` | `{ "purchaseId": "canonical-uuid", "priceCents": 240000 }` | Read-only `PricePreview` below |
 | `POST /api/show-prep/refresh` | Ignored (retired route) | Authenticated JSON `410`: `{ "error": "Comp collection is server-managed; reload the application" }` |
 
-Evaluate, evidence and list reads use stored data; none initiates source acquisition.
+Evaluate, evidence, preview and list reads use stored data; none initiates source acquisition.
 Refresh is retired without provider or store access, including for malformed stale
 clients; authentication still runs first. The handler-facing service has cached
 read/list capabilities and production wiring supplies no source. Browser selection
@@ -1918,39 +1924,86 @@ Each evaluation identifies the purchase, card/cert/grader/grade, `status`, `reas
 `canPack`, `listedPriceCents`, `localPriceCents`,
 `priceMismatch`, `priceAssociationUnclear`, `listingSyncedAt`, `medianCents`,
 `compCount`, `latestSaleDate`, `windowStart`, `windowEnd`, `refreshedAt`,
-`evidenceVersion`, and `version`. `version` identifies the evaluated input state
+`evidenceVersion`, `policyVersion`, `recent`, and `version`. `version` identifies the evaluated input state
 and is required when acknowledging evidence or packing a member. It is not a
 fresh token merely because the evaluation was read again.
 
 | `status` | Meaning |
 |---|---|
-| `supported` | At least two matching sales; median is at least 90% of the DH listed price. |
-| `thin_evidence` | One matching sale meets that price threshold. |
-| `below_target` | The recent median is below the threshold. |
-| `no_recent_comps` | A current, complete lookup found no matching sales. |
-| `needs_review` | Identity, DH price association, freshness, or coverage is unresolved. See `reason`. |
-| `no_listed_price` | No positive DH listing price is available. |
+| `supported` | At least two recent sales; median is at least 90% of asking and no newest-day sale is more than 20% below asking. |
+| `thin_evidence` | Exactly one recent sale, regardless of its amount. UI: Limited evidence; show the amount/gap. |
+| `below_target` | Recent median is strictly below 90% of asking. UI: Asking above comps. |
+| `mixed_evidence` | Median clears the threshold, but at least one newest-day sale is strictly more than 20% below asking. |
+| `no_recent_comps` | Healthy complete evidence has no sales within seven UTC dates. UI: Limited evidence; older history is context. |
+| `needs_review` | Evidence identity, freshness, or coverage is unresolved. UI: Evidence unavailable; normal compact badges explain lifecycle. |
+| `no_listed_price` | No positive canonical local asking. Legacy wire name retained; UI: No asking price. |
 
-The required evidence-health fields are assessed independently of DH price.
-`evidenceNeedsReview: true` includes a specific `evidenceReason` for missing,
-failed/running, partial, stale, invalid, or identity/source-mismatched evidence.
-Healthy complete evidence returns `false` and `""`, including complete empty
-windows and purchases with missing or ambiguous DH prices. Price precedence is
-unchanged: a missing DH price remains `no_listed_price` with reason
-`No positive DH listed price`, even after a failed refresh. Prior readable sales
-remain visible, but health drives data-availability labels and detail warnings.
-A `needs_review` status due only to DH price ambiguity does not imply bad evidence.
+`policyVersion` is `recent-sales-v1`. `localPriceCents` is canonical asking from
+`inventory.ResolveListingPriceCents`: latest operator-committed reviewed/override
+price according to existing timestamp precedence. Never substitute CL or DH.
+`listedPriceCents` remains the stored DH diagnostic; ambiguity/mismatch does not
+suppress a healthy asking assessment. Evidence health is independent: missing,
+failed/running, partial, stale, invalid or mismatched evidence retains inspectable
+facts but clears `recent.gapPct`. With no asking, status stays `no_listed_price`
+and gap is null even if evidence is also unhealthy. No migration/backfill occurs.
 
-The window is 30 UTC calendar dates including today. All eligible matching sales
-are considered, not only favorable sales. A complete snapshot must be no older
-than 24 hours and cover that date range. Even-count medians are compared without
-rounding; `medianCents` is the display-rounded result. Each sale has `id`, `date`,
+The evidence snapshot still covers 30 UTC dates including today and must be no
+older than 24 hours. Qualification selects the newest five eligible matching sales
+within **today and the preceding six UTC dates**, including **every sale tied on
+the fifth sale's date**. IDs sort by date descending then ID, not claimed intraday
+order. Lower sales cannot be cherry-picked away. Recent median failure takes
+precedence over newest-day contradiction. Equality at 90% median or 20% newest-day
+drop passes; comparisons preserve half-cent precision and use overflow-safe integer
+arithmetic. Rounded display medians never determine qualification. The wider
+`medianCents`, `compCount`, `latestSaleDate`, and window remain 30-day context and
+cannot override recent contradiction.
+
+`recent` contains `windowStart`, `windowEnd`, ordered `saleIds`, `count`, rounded
+`medianCents`, `latestSaleDate`, `latestSaleCount`, `latestSaleMinCents`,
+`latestSaleMaxCents`, and nullable `gapPct` (positive means reference below asking).
+Policy/recent facts enter the business fingerprint; readiness remains outside it. Each sale has `id`, `date`,
 `priceCents`, `platform`, `url`, and `listingType`. Missing source links remain
 empty rather than being fabricated. Coverage also requires verified paging:
 identical sale IDs within one page are deduplicated, but overlap between pages
 makes coverage uncertain even with stable `totalHits` and matching dates.
 Inspectable partial records are retained; overlapping pages never certify a
 complete window. Contradictory duplicate records are rejected.
+
+### Trial-price preview
+
+`POST /api/show-prep/preview` requires authentication, a canonical UUID and an
+integer `priceCents` in `1..9007199254740991`. Unknown fields and trailing JSON are
+rejected. The service reads one purchase and its stored snapshot, evaluates a
+value-copy with the trial asking, and returns:
+
+```json
+{
+  "purchaseId": "11111111-1111-4111-8111-111111111111",
+  "currentPriceCents": 320000,
+  "trialPriceCents": 240000,
+  "status": "supported",
+  "reason": "Recent matching sales support the asking price",
+  "evidenceNeedsReview": false,
+  "evidenceReason": "",
+  "evidenceVersion": "opaque-evidence-fingerprint",
+  "policyVersion": "recent-sales-v1",
+  "recent": {
+    "windowStart": "2026-09-10", "windowEnd": "2026-09-16",
+    "saleIds": ["a", "b", "c", "d", "e", "f", "g", "h"],
+    "count": 8, "medianCents": 232000,
+    "latestSaleDate": "2026-09-16", "latestSaleCount": 2,
+    "latestSaleMinCents": 202500, "latestSaleMaxCents": 231500,
+    "gapPct": 3.3333333333333335
+  }
+}
+```
+
+Preview does not call a source, observe/write association holds, or write any
+purchase/sale/list row. It returns **no** list authorization version, `canAdd`, or
+`canPack`; never publish hypothetical facts as the saved aggregate. Errors:
+`400` invalid input, `401` unauthenticated, `404` missing purchase, `503` missing
+composition, sanitized `500` storage failure. Saving is the separate reviewed-price
+PATCH above; preview itself grants no save/list authorization.
 
 ### Readiness metadata and client policy
 
@@ -2052,8 +2105,15 @@ becomes unavailable.
 The summary contains `totalCount`, `packedCount`, `notReceivedCount`,
 `unavailableCount`, `knownValueCents`, `missingPriceCount`, and
 `ambiguousPriceCount`. Known value includes only ready-to-pack members with a
-positive, unambiguously associated DH price. Packing history is retained even
-when a member is no longer available.
+positive canonical local asking. `missingPriceCount` counts missing local asking;
+`ambiguousPriceCount` independently counts DH association warnings. Packing history
+is retained even when a member is no longer available.
+
+Legacy acknowledged amounts/statuses, packing timestamps and exact command replays
+are retained verbatim. Historical status copy is policy-neutral: the old
+`no_listed_price` did not establish absence of a local asking. Only an explicit
+fresh Add/Pack/Acknowledge records the new canonical asking/status; reads never
+silently reinterpret or backfill historical acknowledgments.
 
 Availability values are `ready`, `not_received`, `sold`, `refunded`,
 `campaign_closed`, `removed`, and `unknown`. Sold/refunded/removed/closed members

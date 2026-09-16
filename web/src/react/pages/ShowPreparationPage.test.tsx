@@ -113,6 +113,15 @@ describe('saved show preparation', () => {
     expect(screen.getByRole('checkbox', { name: 'Packed 12345678' })).toBeChecked();
   });
 
+  it('retains policy-neutral historical acknowledgment without claiming legacy no-DH meant no asking', async () => {
+    saved = detail([member({ supportChanged: true, acknowledgedStatus: 'no_listed_price', acknowledgedPriceCents: 0,
+      evaluation: evaluation({ localPriceCents: 30000 }) })]);
+    mount();
+    expect(await screen.findByText('Support changed. Previously recorded status: no_listed_price.')).toBeVisible();
+    expect(screen.queryByText(/Previously.*No asking price/)).not.toBeInTheDocument();
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+  });
+
   it('does not claim packing success on 409 and refetches current availability', async () => {
     conflict = true; mount();
     const packed = await screen.findByRole('checkbox', { name: 'Packed 12345678' });

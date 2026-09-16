@@ -53,6 +53,15 @@ it('uses the server trial outcome and only persists after explicit Save; saved b
   await waitFor(() => expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,400.00'));
   expect(screen.getByText(/Price saved locally/)).toBeInTheDocument();
 });
+it.each([
+  ['thin_evidence', 'Limited evidence', 'limited'], ['no_recent_comps', 'Limited evidence', 'limited'],
+  ['needs_review', 'Evidence unavailable', 'unavailable'], ['mixed_evidence', 'Mixed evidence', 'mixed'],
+] as const)('styles %s trial using its server assessment group, not Mixed by default', async (status, label, group) => {
+  vi.spyOn(priceReviewAPI, 'preview').mockResolvedValue({ ...preview(), status });
+  setup({ value: '2400', baselinePriceCents: 280000 });
+  const badge = await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText(label, { exact: true });
+  expect(badge).toHaveClass(`price-review-status-${group}`);
+});
 it('invalidates the displayed trial immediately during debounce and cannot show a late 254000 result over current 240000', async () => {
   const requests: { cents: number; release: (data: ReturnType<typeof preview>) => void }[] = [];
   // Keep the real preview hook, API validation, transport and QueryClient. Only HTTP is controlled.

@@ -881,3 +881,82 @@ are in local `.superpowers/sdd/2026-09-15-cached-show-preparation/pr707-approved
 Scoped local polish made only safe test idiom/comment corrections; independent
 review and publication remain the parent's responsibility. No push, amend,
 ready-state change, deployment, default database or production operation occurred.
+
+## Inventory price review: Task 6 acceptance (2026-09-16)
+
+This section records only the Task6 change from `7e0214e9`, not a rerun of the
+historical production investigations above. Tasks1–5 supply recent-sales policy,
+canonical asking, preview and the approved Inventory/Price review workspace.
+Task6 adds real-wire acceptance, reconciles adjacent drivers/runtime expectations,
+and documents the integrated contract. No deployment, production repricing or
+backfill is authorized. Private prototype/comparison and current SDD artifacts
+remain ignored, untracked and outside the application build pending operator
+acceptance; the older unrelated tracked SDD record is untouched.
+
+`TestPriceReviewRealBrowser` explicitly sets cached mode, asserts disabled worker
+status, and seeds seven anonymized snapshots through the real PG evidence store.
+The falling-market case retains the actual regression cent amounts, all eight
+cutoff-date ties, median232000, asking320000, trial254000 Mixed and trial240000
+Supported. Browser→HTTP→router/auth→services→PostgreSQL is real. Its launched
+Chromium is owned; no shared CDP or mocked application API is used. Non-app browser
+origins are blocked (fonts fall back in this new fixture; existing adjacent modes
+retain their public-font checks).
+
+The test archives separate authorities: whole-row immutable navigation/trials;
+a declared other-actor asking320000→310000 change; explicit reviewed-price saves;
+and explicit show commands. Preview adds no holds/list/financial writes. The
+configured CampaignsHandler delegates to real dhpricing/dhlisting services, real
+purchase/config stores and the real DH HTTP client/adapter against a loopback
+external boundary. That boundary never edits PG. Test-only delegates record calls
+and impose sync-before-list scheduling, not a production atomicity guarantee.
+Expected results: three sync and three list calls, two DH PATCHes and one channel
+POST; already-listed sync240000 then listing no-op, eligible unlisted preset230000
+becomes listed/matched with ebay+shopify, and not-received/no-inventory is skipped.
+`WaitBackground()` joins before save assertions and before DB cleanup. Full-row
+comparisons allow only reviewed amount/source/timestamps and precisely enumerated
+DH fields on the explicitly saved cards. Listing's last-sync string remains empty
+under its existing contract; the test does not invent a timestamp or manual effect.
+
+A controlled server503 inventory read verifies retained drafts/save confirmation
+and read-only recovery. Stale Add/Pack409 cannot mutate membership; fresh explicit
+Add/Pack acknowledge240000. Fresh-context mobile deep link and queue return focus
+pass. Normal sale/list controls and cancel paths remain present. Adjacent cached/
+worker drivers now use compact review links and the new review filters without
+removing their provider, whole-ledger/history, auth, restart, cancel, selection,
+packing or fine/coarse-pointer geometry assertions. Runtime renewal assesses the
+committed32500 override as Below target, not the unrelated stored-DH40000.
+
+Two focused production cleanups: ShowMember reports historical status codes
+without reinterpreting legacy `no_listed_price`; trial badges share the existing
+server-status grouping so Limited/Unavailable do not default to Mixed.
+
+Actual verification (full commands and logs in the local Task6 report):
+
+- Focused UI RED:4 failures/27 passes for legacy copy and trial groups; GREEN31.
+- Actual runtime RED: Supported expected from a DH-only seed, got no asking;
+  canonical fixture GREEN retains financial/provider proofs.
+- Real DH negative control (`PRICE_REVIEW_DH_COLD_PROBE=1`) failed expected3/actual0
+  external calls despite successful local saves. Configured real-wire run passed.
+- Focused Go race passed: showprep1.269s, PG63.204s, handlers1.209s, router1.115s,
+  cmd/runtime15.195s. Fresh broad `go test -race -count=1 -timeout 10m ./...` passed
+  all45 tested packages, PG75.293s and cmd16.809s, with independent explicit DB URLs.
+- First broad run hit the unchanged DH sale-contract circuit-breaker test; its
+  package rerun and full rerun passed without editing unrelated code. All raw
+  results are retained; no failing run is represented as success.
+- `npm test`:94 files/1034 tests; typecheck, ESLint and Vite build passed.
+- Compatible `make check`:passed, zero lint issues after correcting a task-local
+  numeric HTTP constant. Baseline six size warnings and jsdom/Vite notices remain.
+- Browser checks node suite passed. Real-price browser passed28.27s; adjacent
+  cached passed36.40s (absolute0 provider calls), worker passed179.68s (population
+  142 searches+1token, cached use+0, separate publication+1search+1token).
+
+Only parent-owned `slabledger-price-review-test`, ID
+`dadbb5bfc768c851ede6956c966172d03161f796d800c28c52d1aa40ad6a45b1`, task label
+`inventory-price-review`, loopback44620, was used. User/owners are `showprep` for
+`showprep_cached_test`, `showprep_runtime_test`, `showprep_readiness_e2e`. Browser
+DB phases were serialized and all artifact directories are fresh under
+`/tmp/price-review-task6-Hsr8qWT3/`. The container remains running for the parent.
+Scoped `polish-core --fix` was performed locally; whole-range polish and independent
+implementation review are parent-owned after this task commit. No new dependencies,
+production backend changes, migrations, default DB access or external provider
+acquisition occurred in the price-review phase.

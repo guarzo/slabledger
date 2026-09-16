@@ -18,13 +18,14 @@ postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode
 Verify the owner's resource before running:
 
 ```bash
-docker inspect slabledger-cached-show-01a09dd6 --format '{{.Id}} {{.State.Running}} {{json .NetworkSettings.Ports}}'
-docker exec slabledger-cached-show-01a09dd6 psql -U showprep -d showprep_readiness_e2e \
+docker inspect slabledger-price-review-test --format '{{.Id}} {{.State.Running}} {{json .Config.Labels}} {{json .NetworkSettings.Ports}}'
+docker exec slabledger-price-review-test psql -U showprep -d showprep_readiness_e2e \
   -c 'SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();'
 ```
 
 Expected container ID:
-`d56b5500410d90a5609c98656c2a33b7c9364135f588d3013bbfc34f0b3d496b`, running,
+`dadbb5bfc768c851ede6956c966172d03161f796d800c28c52d1aa40ad6a45b1`, running,
+label `slabledger.task=inventory-price-review`,
 5432 published only at `127.0.0.1:44620`; database/user/owner are
 `showprep_readiness_e2e`/`showprep`/`showprep`. The harness also verifies the exact
 URL and database/user/owner before reset. Retain this parent-owned container.
@@ -46,8 +47,8 @@ After verifying the exact container above, create the dedicated runtime DB once
 (if absent) and verify ownership:
 
 ```bash
-docker exec slabledger-cached-show-01a09dd6 createdb -U showprep -O showprep showprep_runtime_test
-docker exec slabledger-cached-show-01a09dd6 psql -U showprep -d showprep_runtime_test \
+docker exec slabledger-price-review-test createdb -U showprep -O showprep showprep_runtime_test
+docker exec slabledger-price-review-test psql -U showprep -d showprep_runtime_test \
   -c 'SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();'
 ```
 
@@ -79,13 +80,14 @@ exact identities; one card remains unresolved. Worker A asserts the entire exact
 142-identity source cohort and coverage: **141 current / 1 deliberate incomplete /
 0 missing / 0 stale identities; 153 current / 155 eligible cards; 1 unresolved**.
 The partial response for card29 is deliberately inspectable but never current.
-Positive $270/$290 sales produce a $280 median against a saved $300 DH price;
-legacy $999 comps are not certified. Complete zero, one-sale Thin evidence,
-Below target and no-DH-price cards are separately checked. The seeded-cache mode
+Positive $270/$290 sales produce a $280 median against canonical reviewed $300
+asking (stored DH $400 is diagnostic); legacy $999 comps are not certified.
+Complete zero, low-single-sale Limited evidence, Asking above comps and no-local-
+asking cards are separately checked. The seeded-cache mode
 additionally supplies old successful evidence and retained sales after failure;
 these seeded results are not a claim of worker ingestion.
 
-B drives Admin status, inventory → Supported → checkbox → stored evidence →
+B drives Admin status, normal inventory → Price review → Supported → checkbox → stored evidence →
 create/list/add/pack → reload → rebuilt SQL pool/auth/router/services → add to an
 existing list → UTC stale selection and explicit Add/Pack409. It preserves whole
 campaign/purchase/sale/legacy-comp rows and packing history. Checkbox/filter/select
@@ -93,7 +95,7 @@ all/clear request logs are independently empty; browser refresh POSTs are zero.
 Unauthenticated/authorized explicit401/410 retirement probes are logged separately.
 
 C repairs only card29 through the real admin retry endpoint and runtime, while it
-is selected under Needs review. A real financial form opens and cancels while the
+is selected with unavailable evidence in normal inventory. A real financial form opens and cancels while the
 source is held. Publication changes its status to Supported but retains selected
 ID/version and row position. Explicit stale Add/Pack return409; no silent rebinding,
 financial write, or packing-history change. This phase returns the test clock from
@@ -102,7 +104,9 @@ there is no production clock or reset API.
 
 ## Repeatable commands
 
-Run each separately from the worktree root with different artifact directories:
+Run each separately from the worktree root with fresh unique artifact directories
+(for example `mktemp -d /tmp/showprep-cached-XXXXXXXX`). The literal paths below
+are examples; do not reuse them across runs:
 
 ```bash
 unset DATABASE_URL POSTGRES_TEST_URL SHOW_PREP_RUNTIME_TEST_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL
@@ -161,7 +165,7 @@ of the full dedicated cmd and storage race suites, not duplicated here.
   a separate named snapshot.
 - `operator-final.json`: final persisted ledger/evidence/coverage; in worker mode
   it includes the explicitly separate repair phase.
-- `metrics.json`: desktop/mobile/tablet geometry, repeated expansion/collapse,
+- `metrics.json`: desktop/mobile/tablet geometry, repeated review/detail/normal return,
   stable virtual rows, last-row clearance, keyboard packing/destination focus,
   fine/coarse pointer geometry and rendered webfont checks.
 - Actual full-page/viewport PNGs, including Admin, selected evidence, mobile
@@ -176,11 +180,68 @@ success/failure; the PG container stays running. `SHOW_READINESS_SERVE=1` remain
 an optional separate interactive session; stop with SIGINT/SIGTERM. Never attach
 to shared Chrome. Test-only controls are compiled only in `_test.go`.
 
+## Price-review real-wire acceptance
+
+`TestPriceReviewRealBrowser` explicitly sets cached mode and asserts disabled
+worker status. It uses the same owned database/reset/auth/source guard and the
+built application, but seeds seven anonymized cases through the actual snapshot
+store: declining, supported, mixed, low single sale, old sales, unpriced, failed.
+Declining uses the regression amounts 231500, 202500, 309937, 242500, 220000,
+233012, 222500 and 232500 cents, plus higher older context. At asking320000 it
+is Above comps; trial254000 is Mixed; trial240000 is Supported. Cutoff-date ties
+retain all eight recent sales and the median is232000.
+
+```bash
+unset DATABASE_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL POSTGRES_TEST_URL SHOW_PREP_RUNTIME_TEST_URL PRICE_REVIEW_DH_COLD_PROBE
+SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
+SHOW_READINESS_ARTIFACTS=/tmp/price-review-fresh \
+TZ=UTC go test -race -count=1 -v -timeout 10m ./cmd/slabledger -run '^TestPriceReviewRealBrowser$'
+```
+
+Phases and authority:
+
+1. **Read-only:** navigation/search/filter/sort/selection/trials and cancelled sale
+   forms leave whole campaign/purchase/sale/legacy/list/item/hold/evidence rows
+   identical. Browser application APIs are never mocked. All non-app browser
+   origins are blocked. CardLadder/Firebase acquisition stays absolute zero.
+2. **Controlled other actor:** the test-only control endpoint changes only the
+   declining card's committed asking320000→310000. Whole-row comparison verifies
+   no additional fields change. Draft and stale selected version remain visible.
+3. **Explicit saves:** reviewed-price PATCHes commit240000,230000,240000. The real
+   configured `CampaignsHandler` is passed via `RouterConfig.CampaignsHandler` with
+   both DH options, delegating to actual dhpricing/dhlisting services and PG stores.
+   The real DH client/adapter contacts a loopback HTTP boundary with fixture-only
+   credentials; this boundary does not edit the database. Test-only delegates
+   record service results and enforce sync-before-list scheduling for deterministic
+   assertions, not a production concurrency/atomicity promise. Expected: three
+   sync and three list calls, two DH PATCHes, one channel POST. Already-listed
+   card syncs240000 then listing reports Synced1/Listed0. Eligible unlisted card
+   skips price drift (preset230000), then persists listed/matched/ebay+shopify.
+   Not-received/no-inventory card skips both remote effects. Zero calls fail.
+4. **Recovery and shows:** an attributed server503 inventory-read fault proves
+   save confirmation/draft retention and read-only retry. Fresh Add/Pack explicitly
+   acknowledge240000; stale Add/Pack409 leave list rows unchanged. Mobile fresh-
+   context deep link and queue return focus use owned Chromium.
+
+The handler's `WaitBackground()` is joined after HTTP saves, before assertions,
+and before database cleanup. Artifacts are `price-review-initial.json`,
+`price-review-read-only-complete.json`, `price-review-controlled-background.json`,
+`price-review-save-complete.json`, `price-review-final.json`, `price-review-wire.json`
+and seven-case/desktop/mobile PNGs. Save artifacts name the exact permitted fields;
+no whole-flow zero-write claim is made. Database/container lifecycle stays with
+the parent; never stop/remove it from a task worker.
+
+Negative control: add `PRICE_REVIEW_DH_COLD_PROBE=1` to the command with a new
+artifact directory. This intentionally recreates the default handler without DH
+collaborators and **must fail** the positive save counter assertion (expected3,
+actual0), despite successful local prices. Never enable it for a passing gate.
+This is local acceptance, not production repricing/backfill/deployment approval.
+
 ## Focused held-selection DOM geometry
 
-The small fully resolved/priced fixture catches a coverage notice disappearing
-at 100% current and the no-search Needs Attention banner disappearing after
-publication removes the last support match. The actual React/query/virtual-row
+The small fully resolved/priced fixture catches selected intent loss after
+publication changes the last matching assessment. Coverage remains an Admin concern;
+normal Inventory deliberately has no readiness-heavy header. The actual React/query/virtual-row
 code runs in owned Chromium at desktop/mobile widths. API responses are controlled
 **only in this focused layout test**; it is not worker/source/financial proof.
 Existing minute polling delivers the coverage update. Initial checkbox geometry,

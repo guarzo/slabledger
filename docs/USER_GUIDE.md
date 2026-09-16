@@ -281,44 +281,59 @@ Cards held longer than 30 days are treated as deeply stale in the sell signals.
 
 ### Show Preparation
 
-Use inventory's price-support controls to find cards whose recent sales support
-their sticker price, then add selected slabs to a named show shortlist. Saved
-lists are available at `/shows` and retain saved membership and packing checks
-across reloads. Unsaved checkbox selection is local to the current page.
+Normal **Inventory** remains the default, with compact assessment links and the
+existing sale/list controls. Choose **Price review** for a queue and persistent
+price panel (focused detail with **Back to inventory list** on mobile). The queue
+filters Above comps, Mixed, Limited, Supported, Unavailable and Unpriced; sorting
+here does not change normal inventory ordering.
 
-Price support compares the **last-synced DH listing price** with exact-match sales
-from the last 30 UTC calendar dates, including today:
+The saved assessment compares the **latest operator-committed SlabLedger asking**
+(reviewed price or override, using their existing timestamp precedence) with
+exact-match sales. CL valuations and the stored DH price are not substitutes.
+The `recent-sales-v1` policy uses today and the previous six **UTC calendar dates**,
+selects the newest five sales, and includes **all ties on the fifth sale's date**.
+There may therefore be more than five qualifying sales.
 
 | Status | Meaning |
 |---|---|
-| **Supported** | At least two matching sales, with a median at least 90% of listed price. |
-| **Thin evidence** | One matching sale meets that threshold. |
-| **Below target** | The median is below the threshold. |
-| **No recent comps** | A current, complete lookup found no matching sales. |
-| **Needs review** | Matching, price association, freshness, or coverage is uncertain. |
-| **No listed price** | No known positive DH listing price is available. |
+| **Supported** | At least two recent sales; median at least 90% of asking, with no newest-day sale more than 20% below asking. |
+| **Asking above comps** | Recent median strictly below 90% of asking. |
+| **Mixed evidence** | Median clears 90%, but a newest-day sale is strictly more than 20% below asking. |
+| **Limited evidence** | One recent sale, or no recent sales. Inspect the single-sale amount/gap; Limited does not mean safe. |
+| **Evidence unavailable** | Identity, freshness, completeness or source health is unresolved. Retained facts are not certified current. |
+| **No asking price** | No positive committed local asking, regardless of DH/CL value. |
 
-For example, a $300 listing needs a median of at least $270. All eligible matching
-sales count, including lower sales; the tool does not cherry-pick supporting comps.
-Open the evidence details to see sale dates, amounts, platforms, source links,
-and the actual date range. An unavailable or partial lookup is not proof that a
-card has no recent sales. **No comp data**, **Out of date**, **Data unavailable**,
-and **No DH price** are distinct from completed support results. A fresh complete
-zero-sale lookup alone establishes **No recent sales**. The compact indicator
-names the evaluated **DH listed** price on both desktop
-and mobile. It does not support a different local reviewed price or CL/Market
-valuation; those ordinary inventory values keep their existing meaning. Missing
-and unverified DH prices stay explicitly labeled.
+Exactly 90% median and exactly 20% newest-day drop pass those thresholds. Half-cent
+medians are compared exactly before display rounding. Older **30-day sale history**
+is context only and cannot outweigh a falling recent market. Source diagnostics
+retain DH amount/mismatch/association warnings and collection health separately.
+Normal compact badges may say No comp data, Out of date, Data unavailable or Needs
+matching to explain unavailable evidence. A failed lookup is not a zero-sale result.
 
-Inventory loads saved price support. **Supported** filters the loaded results;
-checkboxes select cards immediately without a request. Browsing, filtering,
-selection, opening evidence, adding to lists and packing never collect CardLadder
-comps. There is no separate selection mode or per-card collection control.
+Enter **Asking price** to make a read-only trial against stored evidence. The
+**Trial price assessment** never replaces **Saved price assessment** or grants
+packing permission. Navigation, search, filters, selection and trials do not acquire
+provider comps. Preview writes no association hold, purchase, sale or list row.
+Only **Save price** sends the reviewed-price commit. It can sync DH and auto-list
+eligible received/PSA-shipped inventory; already-synced listed cards and ineligible
+cards follow existing skip rules. DH runs asynchronously: local success is not
+remote completion. Continue using explicit sale confirmation for financial sales.
 
-A quiet coverage line appears when data is incomplete. It reports server-counted
-**all-inventory identities** and **cards** separately, including missing/stale/failed
-identities and unresolved cards. Missing DH prices are separately counted for this
-view. An empty Supported view does not start a job or clear other filters.
+Drafts stay with their card through focus/filter/mode changes while this inventory
+owner is mounted. A background asking change retains the draft and warns; it does
+not silently rebase your intent. Failed background inventory reads retain the last
+loaded workspace. After a confirmed save with failed read-back, use **Recheck saved
+state** to retry reads, not the PATCH. Saved assessment remains pending until reads
+succeed. Full reload/new context does not restore unsaved drafts or selection.
+`/inventory?view=pricing&review=<purchase-uuid>` deep-links to a card; unrelated
+query parameters survive view changes. Mobile return restores queue focus; browser
+history explicitly reopens the referenced detail.
+
+Checkbox selection is separate from the focused editor. Select-all uses visible
+queue IDs. A changed evaluation leaves the captured selected version stale and
+requires explicit review/reselection before Add. An empty filter never starts a
+collection job. Fleet coverage remains available in Admin, not a duplicated
+readiness-heavy inventory header.
 
 The server collects missing/due verified evidence on startup and every minute,
 independently of browser activity, DH price, receipt, and CL collection membership.
@@ -358,9 +373,9 @@ If selected data changes, rows stay identifiable and Add is blocked until you
 explicitly review/reselect; the application never silently acknowledges new prices
 or evidence. Existing price-band controls stay in place with current counts (including
 zero) while a filtered selection is held, rather than collapsing above selected rows.
-An existing coverage notice and Needs Attention banner likewise retain their space
-with live counts while selection is held, even when coverage completes or the
-attention count reaches zero. Selecting in an already quiet view adds no notice.
+The existing Needs Attention banner likewise retains its space with live counts
+while selection is held, even when the attention count reaches zero. Selecting in
+an already quiet view adds no notice.
 Explicit view changes or clearing selection restore ordinary quiet/hidden behavior.
 **Reveal selected** recovers cards outside your current view. Financial forms retain
 their own pending states and do not wait for comp collection.
@@ -372,8 +387,12 @@ closed-campaign members stay visible with their packing history; they are exclud
 from available value and cannot be newly packed. You can still unpack or remove
 them explicitly.
 
-Known listed-value totals exclude missing and ambiguous DH prices rather than
-substituting CardLadder values. Adding or packing cards **does not** change prices,
+Known ready-to-pack asking totals use positive canonical local asking; missing
+asking and DH association warnings are counted separately. Historical acknowledged
+amounts/status codes and packing times are retained without migration or automatic
+acknowledgment. An old `no_listed_price` code meant no DH listed price under the old
+policy, not necessarily no local asking. Only explicit Add, Pack or Acknowledge
+records the current asking/status. Adding or packing cards **does not** change prices,
 delist online inventory, reserve a card, or record a sale. Continue recording sales
 through the existing sales workflow. **Update list status** rereads saved prices
 and availability; it never requests source acquisition.
@@ -383,8 +402,13 @@ cached-use preconditions, and actual server-worker population from an empty veri
 store before any browser starts. Both stop the worker and block all provider endpoints
 for cached operator use, preserving source-request history. A separately counted
 background-publication phase verifies held selections and stale Add/Pack conflicts.
-Reproduction instructions are in [the real-wire test guide](../web/tests/show-readiness-real.md).
-Production access, population and rollout still require separate authorization.
+A separate seven-case Price review test proves read-only trials and whole-row
+immutability, then explicit reviewed-price persistence and nonzero controlled DH
+sync/list effects with real services and storage. It also exercises failed-read
+recovery, stale Add/Pack and mobile deep links. Reproduction instructions are in
+[the real-wire test guide](../web/tests/show-readiness-real.md).
+Production access, repricing, backfill, population and rollout still require
+separate authorization.
 
 ### Market Direction
 

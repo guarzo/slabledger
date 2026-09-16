@@ -225,23 +225,32 @@ func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-func readinessRouter(db *postgres.DB, f *readinessSourceFixture, result *scheduler.BuildResult) http.Handler {
+func readinessRouter(db *postgres.DB, f *readinessSourceFixture, result *scheduler.BuildResult, configured ...*handlers.CampaignsHandler) http.Handler {
 	logger := mocks.NewMockLogger()
 	// The same cached-only service capability as production. Only its business
 	// clock is controlled here; source access belongs exclusively to scheduling.
 	service := sp.NewService(postgres.NewShowPrepStore(db.DB), nil, f.clock)
-	campaigns := inventory.NewService(postgres.NewCampaignStore(db.DB, logger), postgres.NewPurchaseStore(db.DB, logger),
-		postgres.NewSaleStore(db.DB, logger), postgres.NewAnalyticsStore(db.DB, logger), postgres.NewFinanceStore(db.DB, logger),
-		postgres.NewPricingStore(db.DB, logger), postgres.NewDHStore(db.DB, logger),
-		inventory.WithIDGenerator(uuid.NewString),
-		inventory.WithCompSummaryProvider(inventory.NewCompositeCompProvider(postgres.NewCLSalesStore(db.DB), postgres.NewDHCompCacheStore(db.DB))))
+	campaigns := readinessCampaigns(db)
+	var campaignHandler *handlers.CampaignsHandler
+	if len(configured) > 0 {
+		campaignHandler = configured[0]
+	}
 	// OAuth transport is never called: actual LocalAPIToken middleware resolves
 	// the fixture user through the real auth service and PostgreSQL repository.
 	auth := google.NewOAuthService(postgres.NewAuthRepository(db.DB, nil), logger, "", "", "", nil)
 	return httpserver.NewRouter(httpserver.RouterConfig{ShowPrepHandler: handlers.NewShowPrepHandler(service, logger),
 		ShowPrepWorkerHandler: buildShowPrepWorkerHandler(handlerInputs{SchedulerResult: result}),
-		CampaignsService:      campaigns, AuthService: auth, LocalAPIToken: readinessToken, GoogleOAuthEnv: "development",
+		CampaignsService:      campaigns, CampaignsHandler: campaignHandler, AuthService: auth, LocalAPIToken: readinessToken, GoogleOAuthEnv: "development",
 		Logger: logger, SPAHandler: handlers.NewSPAHandler(logger), HealthHandler: handlers.NewHealthHandler(nil, nil, logger)}).Setup()
+}
+
+func readinessCampaigns(db *postgres.DB) inventory.Service {
+	logger := mocks.NewMockLogger()
+	return inventory.NewService(postgres.NewCampaignStore(db.DB, logger), postgres.NewPurchaseStore(db.DB, logger),
+		postgres.NewSaleStore(db.DB, logger), postgres.NewAnalyticsStore(db.DB, logger), postgres.NewFinanceStore(db.DB, logger),
+		postgres.NewPricingStore(db.DB, logger), postgres.NewDHStore(db.DB, logger),
+		inventory.WithIDGenerator(uuid.NewString),
+		inventory.WithCompSummaryProvider(inventory.NewCompositeCompProvider(postgres.NewCLSalesStore(db.DB), postgres.NewDHCompCacheStore(db.DB))))
 }
 
 // Whole persisted rows catch changes to every price/purchase/DH field, not just
