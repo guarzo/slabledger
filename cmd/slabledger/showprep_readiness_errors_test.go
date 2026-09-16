@@ -67,9 +67,22 @@ func TestReadinessSourceMalformedRequest(t *testing.T) {
 			f.mu.Lock()
 			calls := append([]url.Values{}, f.calls...)
 			f.mu.Unlock()
-			require.Equal(t, []url.Values{readinessSourceQuery()}, calls)
+			require.Equal(t, []url.Values{q, readinessSourceQuery()}, calls, "count rejected requests too; zero-provider proof cannot ignore malformed calls")
 		})
 	}
+}
+
+func TestReadinessSourceBlockedCountsAllRequests(t *testing.T) {
+	f := &readinessSourceFixture{mode: "blocked"}
+	server := startReadinessSource(t, f)
+	for _, query := range []url.Values{readinessSourceQuery(), {"unexpected": {"endpoint"}}} {
+		status, body := requestReadinessSource(t, server, query)
+		require.Equal(t, http.StatusServiceUnavailable, status)
+		require.Contains(t, string(body), "provider access blocked")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	require.Len(t, f.calls, 2, "blocked mode counts all provider requests, not just valid acquisition shapes")
 }
 
 func TestReadinessSourceControlledFailures(t *testing.T) {

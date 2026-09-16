@@ -1,20 +1,16 @@
-import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useShowList, useShowLists } from '../queries/useShowPrepQueries';
 import { Button } from '../ui';
 import { formatCents } from '../utils/formatters';
 import ShowListPicker from './show-preparation/ShowListPicker';
 import ShowMember from './show-preparation/ShowMember';
-import ShowRefresh from './show-preparation/ShowRefresh';
 import { showError } from './show-preparation/showPrepLabels';
 import './show-preparation/show-preparation.css';
 
 function PackingList({ listId }: { listId: string }) {
   const query = useShowList(listId);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const data = query.data;
   const summary = data?.summary;
-  const refreshIds = (data?.items ?? []).filter(item => selected.has(item.purchaseId)).map(item => item.purchaseId);
   return <section aria-label="Packing list" className="mt-4">
     <div className="show-actions">
       <Button variant="secondary" size="sm" disabled={query.isFetching} onClick={() => query.refetch()}>Update list status</Button>
@@ -35,11 +31,7 @@ function PackingList({ listId }: { listId: string }) {
       </dl>
       <p className="text-xs text-[var(--text-muted)] mt-2">Known value includes only ready-to-pack members with a positive, unambiguous DH listed price. Missing and ambiguous prices are excluded, not valued at zero.</p>
       {data.items.length === 0 ? <p className="py-8 text-[var(--text-muted)]">No slabs in this list. <Link className="show-link" to="/inventory">Select cards from inventory →</Link></p> : <>
-        {data.items.map(item => <ShowMember key={item.id} item={item} listId={listId} stale={query.isError || query.isFetching}
-          selected={selected.has(item.purchaseId)} onSelect={() => setSelected(prev => {
-            const next = new Set(prev); if (next.has(item.purchaseId)) next.delete(item.purchaseId); else next.add(item.purchaseId); return next;
-          })} />)}
-        <div className="mt-4"><ShowRefresh scope={`list:${listId}`} evaluations={Object.fromEntries(data.items.flatMap(item => item.evaluation ? [[item.purchaseId, item.evaluation]] : []))} purchaseIds={refreshIds} disabled={query.isFetching} /></div>
+        {data.items.map(item => <ShowMember key={item.id} item={item} listId={listId} stale={query.isError || query.isFetching} />)}
       </>}
     </>}
   </section>;

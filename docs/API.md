@@ -1830,25 +1830,88 @@ price and stores named packing lists. These operations do not reprice, delist,
 reserve, or sell purchases. All endpoints require authentication. Money remains in
 integer cents, matching the inventory API.
 
+### Worker coverage and administration
+
+| Method and route | Authorization | Response |
+|---|---|---|
+| `GET /api/show-prep/coverage` | Authenticated | Safe fleet status/counts below; no source work or wake |
+| `GET /api/admin/show-prep/worker` | Admin | Worker status/counts below |
+| `POST /api/admin/show-prep/worker/run` | Admin | `202 { "status": "accepted" }` after durable normal intent |
+| `POST /api/admin/show-prep/worker/retry` | Admin | `202 { "status": "accepted" }` after durable explicit retry intent |
+
+POSTs accept no selected-card cohort. They coalesce a bounded wake of the existing
+application-owned worker, never run acquisition in the request. Missing auth returns
+401 and authenticated non-admin admin requests return 403. An intent-persistence
+error returns a safe 503 with **acceptance unknown**: the write may have committed
+before its acknowledgement failed. Check worker status before explicitly retrying;
+do not automatically replay the request. Accepted does not mean completed or fully
+covered. The enabled gate still applies; disabled requests remain durable for a
+later enabled startup.
+
+Status JSON fields:
+
+```json
+{
+  "enabled": true, "configured": true, "state": "failed",
+  "eligibleIdentities": 5, "currentIdentities": 2,
+  "missingIdentities": 1, "staleIdentities": 1, "failedIdentities": 1,
+  "eligibleCards": 8, "currentCards": 3, "unresolvedCards": 1,
+  "lastSweepAt": "2026-09-15T12:00:00Z", "retryAt": "2026-09-15T12:15:00Z",
+  "error": "CardLadder evidence collection failed"
+}
+```
+
+Eligible identities are resolved normalized profile/grader/grade combinations;
+current + missing + stale + failed partitions that identity denominator. Eligible
+cards include unresolved inventory; current cards sum copies of current identities.
+No IDs, credentials, hashes, source URLs or raw errors are exposed. Timestamps are
+UTC RFC3339Nano, empty when inapplicable. `retryAt` is the earliest future retry/window
+boundary, not permission to ignore a hold. A last sweep timestamp does not certify
+fleet coverage. Complete current zero-sale windows count as current.
+
+States: `disabled`, `unconfigured`, `idle`, `running`, `failed`, `auth_hold`.
+The UI labels `failed` as completed with errors and distinguishes idle/incomplete
+from current fleet coverage. Normal Run now respects auth hold, backoff and limits.
+Retry failed clears the hold and advances ownership for one bounded retry sweep,
+including when failed identity coverage is zero. Explicit successful CL credential
+save updates the shared client, advances ownership and wakes normal due work;
+ordinary token rotation does not clear a hold or reset retry budgets.
+
+`POST /api/admin/cardladder/config` still reports `connected` on success. If credentials
+were saved but client activation/worker notification failed, HTTP 200 instead returns
+`{"status":"saved","workerNotification":"failed","warning":"..."}`. Inspect worker
+status and use Retry failed after repair; do not mistake this response for a failed save.
+
 ### Evidence operations
 
 | Method and route | Body | Response |
 |---|---|---|
 | `POST /api/show-prep/evaluate` | `{ "purchaseIds": ["uuid"] }`, 1–200 IDs | `{ "evaluations": [...] }` |
 | `GET /api/show-prep/evidence/{purchaseID}` | None | `{ "evaluation": {...}, "sales": [...] }` |
-| `POST /api/show-prep/refresh` | `{ "purchaseIds": ["uuid"] }`, 1–10 IDs | `{ "evaluations": [...] }` |
+| `POST /api/show-prep/refresh` | Ignored (retired route) | Authenticated JSON `410`: `{ "error": "Comp collection is server-managed; reload the application" }` |
 
 Evaluate, evidence and list reads use stored data; none initiates source acquisition.
-Refresh requests bounded source work. The inventory client dispatches it automatically
-only when show selection or a non-All Support filter is active; ordinary inventory
-and opening an evidence disclosure remain read-only. Legacy 90-day comps are not
-certified show evidence, so an upgraded database can legitimately be `not_checked`.
-Individual source failures are represented by `evidenceNeedsReview` and
-`evidenceReason`, not successful empty windows. A source refresh can be partial;
-inspect evidence health independently of the price-support status.
-Show preparation binds the configured CardLadder client at startup. If the first
-CardLadder configuration is saved while the process is running, restart once to
-attach that client; saved lists and missing-evidence evaluation remain available.
+Refresh is retired without provider or store access, including for malformed stale
+clients; authentication still runs first. The handler-facing service has cached
+read/list capabilities and production wiring supplies no source. Browser selection
+and filters never trigger a request or acquisition. Server-owned evidence population
+runs through the independent worker described below, not these endpoints.
+Legacy 90-day comps are not certified show evidence, so an upgraded database can
+legitimately be `not_checked`. Failed/partial collection is represented independently
+by `evidenceNeedsReview` and `evidenceReason`, not successful empty windows.
+
+Older verified evidence rows may use padded profile/grader keys. An existing exact
+canonical row is authoritative, including failed, running, NULL or unreadable
+payloads; more attractive alias evidence never replaces that lineage. With no
+canonical row, exactly one Go-normalized profile/grader/exact-grade match supplies
+cached evidence and inherited retry state. The first canonical attempt copies that
+one row's raw JSONB and attempt/retry metadata transactionally, leaving the original
+row intact. Multiple aliases instead report `Ambiguous legacy evidence identity`
+without choosing or merging evidence, and cannot start acquisition even through
+explicit retry. Unrelated identities continue; physical add/pack permissions still
+follow availability, not evidence strength. Raw-key completions remain isolated to
+their original rows. This is conservative compatibility, not universal historical
+payload recovery or a rekey/backfill operation.
 
 Each evaluation identifies the purchase, card/cert/grader/grade, `status`, `reason`,
 `evidenceNeedsReview` (boolean), `evidenceReason` (string), `availability`, `canAdd`,
@@ -1875,7 +1938,7 @@ Healthy complete evidence returns `false` and `""`, including complete empty
 windows and purchases with missing or ambiguous DH prices. Price precedence is
 unchanged: a missing DH price remains `no_listed_price` with reason
 `No positive DH listed price`, even after a failed refresh. Prior readable sales
-remain visible, but health drives refresh review counts and detail warnings.
+remain visible, but health drives data-availability labels and detail warnings.
 A `needs_review` status due only to DH price ambiguity does not imply bad evidence.
 
 The window is 30 UTC calendar dates including today. All eligible matching sales
@@ -1891,7 +1954,7 @@ complete window. Contradictory duplicate records are rejected.
 
 ### Readiness metadata and client policy
 
-Every evaluation response (evaluate, evidence, refresh and list detail) additionally
+Every evaluation response (evaluate, evidence and list detail) additionally
 contains optional `readiness`. This is scheduling metadata, not another support
 status. It is attached after the business `version` fingerprint is computed, so a
 read or running-to-interrupted transition alone does not invalidate selection.
@@ -1930,10 +1993,8 @@ for interrupted attempts. Missing/future attempt starts fail closed. Reads neith
 change persisted attempt state nor infer provider configuration health.
 
 Old responses without valid optional readiness remain displayable and manually
-usable; automatic acquisition is disabled for those evaluations. A retryAt wakeup
-is **read-only**, never permission to replay a source request. Active inventory
-show workflows (show selection or a non-All Support filter) reread on
-visibility/focus, UTC rollover and applicable expiry/attempt boundaries;
+usable. Readiness is display metadata, not browser acquisition authority. Inventory
+rereads on visibility/focus, UTC rollover and applicable expiry/attempt boundaries;
 unresolved early observations have a 30-second follow-up cooldown. Hidden tabs do
 not replay missed timers. Saved packing lists do not mount this observer: they use
 explicit **Update list status** and invalidation after actions, not these timers.
@@ -1945,37 +2006,16 @@ are not replayed. Failed reads expose explicit read retry and cannot publish lat
 Supported results. An open disclosure uses the latest readiness observation for
 the same business version without refetching detailed sales or changing intent.
 
-The browser shares one runner per QueryClient/tab: at most 10 IDs/request, one
-representative per normalized identity, at most 200 automatic identities and 20
-automatic requests per current UTC window, and five minutes per run. Only positive
-DH-price, refreshable identities in the current campaign/inventory, search, tab,
-price-band and availability scope are acquired; Support and selection do not narrow
-that acquisition cohort. Manual checks share concurrency, batch and time limits but
-bypass the automatic quota. The client lives above pathname error boundaries for
-one verified authenticated identity: SPA navigation preserves its budget, stops,
-and write leases; route authentication and non-show fresh-on-entry reads remain.
-An identity change clears the old cache. Reload creates a new tab budget; this is
-not a global or durable quota. The existing source client limiter/retry policy and five-page
-traversal bound remain unchanged; the browser does not replay refresh POSTs.
+The QueryClient remains scoped to one verified authenticated identity across SPA
+routes; identity changes clear the old cache. Route authentication and ordinary
+fresh-on-entry reads remain. There is no browser acquisition runner, quota, source
+retry or source-only financial write lock.
 
-Cancel, full-body transport timeout (120 seconds), run deadline, exhausted budget,
-invalid responses and source failure/partial results stop automatic continuation.
-The UI offers explicit Retry/Continue, with authoritative readback because the
-server may already have committed evidence. A late response cannot report success
-or dispatch another batch. Cancellation does not promise rollback. Manual list
-retry keeps the originating list and failed/undispatched IDs; changing list or
-selection does not retarget that command. Busy and terminal guards remain shared.
-
-First selection pauses later automatic batches, not the active batch. Clearing
-selection can resume eligible work unless a terminal stop requires explicit action.
 Captured versions never advance automatically. Selected row membership/order stays
 stable against background evidence updates, but unavailable or changed-version rows
-immediately become non-addable. Explicit view changes still apply. Add/pack and
-other local conflicting writes cannot overlap the shared refresh runner. Editor
-visibility blockers end when the form disappears; asynchronous sale, price-override,
-AI-price, price-hint, and DH-match write leases last through full promise settlement,
-including after page unmount. No checking
-operation creates a list, packs, acknowledges, reprices, reserves, delists or sells.
+immediately become non-addable. Explicit view changes still apply. Add/pack use
+existing transactional version/availability checks. Sale, price and DH forms retain
+their own pending states and error handling, independently of evidence preparation.
 
 ### Saved lists
 
@@ -1993,7 +2033,9 @@ List metadata contains `id`, `name`, `createdAt`, and `updatedAt`. Names are tri
 non-empty, and at most 120 Unicode characters. Repeating list creation with the
 same caller-generated ID/name returns the existing list; reusing the ID with a
 different name conflicts. Adding an existing member does not reset its packing
-state or silently acknowledge new evidence.
+state or silently acknowledge new evidence. Such an idempotent existing-membership
+add can return200; test a new membership/destination when checking stale Add409.
+New additions still validate the submitted evaluation version transactionally.
 
 List detail contains `list`, `items`, and `summary`. Each item includes its stable
 membership `id`, original `purchaseId`, saved card identity, `addedAt`, `packedAt`

@@ -13,9 +13,10 @@ import (
 )
 
 // resolveGemRate returns the (gemRateID, condition) pair for a purchase, using
-// the cached cl_card_mappings entry when present and resolving fresh via
-// BuildCollectionCard otherwise. On a fresh resolve it also persists the
-// mapping, gemRateID, CL card metadata, and (when the local set_name is
+// the cached cl_card_mappings entry only when anchored by the purchase's
+// verified profile, and resolving fresh via BuildCollectionCard otherwise.
+// On a fresh resolve it also persists the mapping, gemRateID, CL card metadata,
+// and (when the local set_name is
 // generic) the real set name from CL. Returns ok=false when the cert can't be
 // resolved; the per-purchase failure reason is recorded for the admin UI.
 // quotaHit is true when the resolve failed because CL's daily request quota was
@@ -31,8 +32,13 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 	// rows with pre-existing cached mappings (typical for certs whose previous
 	// CL resolution only populated gemRateID+condition) would keep their
 	// generic set_name forever.
-	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLGemRateID != "" && m.CLCondition != "" && !constants.IsGenericSetName(p.SetName) {
-		return m.CLGemRateID, m.CLCondition, true, false
+	// The mapping key is serial-only: another grader may own the same cert.
+	// Reuse requires this purchase's verified identity, not a condition label.
+	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLCondition != "" && !constants.IsGenericSetName(p.SetName) {
+		profile := strings.TrimSpace(m.CLGemRateID)
+		if profile != "" && profile == strings.TrimSpace(p.GemRateID) {
+			return profile, m.CLCondition, true, false
+		}
 	}
 
 	grader := strings.ToLower(p.Grader)
@@ -54,6 +60,7 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 		s.recordCLError(ctx, p.ID, reason)
 		return "", "", false, quota
 	}
+	resp.GemRateID = strings.TrimSpace(resp.GemRateID)
 	if resp.GemRateID == "" || resp.Condition == "" {
 		s.logger.Warn(ctx, "CL refresh: BuildCollectionCard returned no gemRateID or condition",
 			observability.String("cert", p.CertNumber),
@@ -76,16 +83,8 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 			CLCondition: resp.Condition,
 		}
 	}
+	s.persistVerifiedProfile(ctx, p, resp.GemRateID)
 	if s.gemRateUpdater != nil {
-		if p.GemRateID == "" {
-			if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, p.ID, resp.GemRateID); err != nil {
-				s.logger.Warn(ctx, "CL refresh: failed to persist gemRateID on purchase",
-					observability.String("cert", p.CertNumber),
-					observability.Err(err))
-			} else {
-				p.GemRateID = resp.GemRateID
-			}
-		}
 		if resp.Player != "" || resp.Variation != "" || resp.Category != "" {
 			if err := s.gemRateUpdater.UpdatePurchaseCLCardMetadata(ctx, p.ID, resp.Player, resp.Variation, resp.Category); err != nil {
 				s.logger.Warn(ctx, "CL refresh: failed to persist card metadata",
@@ -108,6 +107,22 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 		}
 	}
 	return resp.GemRateID, resp.Condition, true, false
+}
+
+// Persist the grader-specific enrichment result independently of CL collection
+// membership. A serial-only cache cannot supply missing purchase identity.
+// Never replace a known identity or infer grader/grade from a valuation condition.
+// Existing price holds stay intact.
+func (s *CardLadderRefreshScheduler) persistVerifiedProfile(ctx context.Context, p *inventory.Purchase, profile string) {
+	if s.gemRateUpdater == nil || strings.TrimSpace(p.GemRateID) != "" || profile == "" {
+		return
+	}
+	if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, p.ID, profile); err != nil {
+		s.logger.Warn(ctx, "CL refresh: failed to persist gemRateID on purchase",
+			observability.String("cert", p.CertNumber), observability.Err(err))
+	} else {
+		p.GemRateID = profile
+	}
 }
 
 // shouldReenrollForCLChange returns true when a CL value change should

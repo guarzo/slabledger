@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
+	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
 const (
@@ -100,6 +102,23 @@ func (a *FirebaseAuth) RefreshToken(ctx context.Context, refreshToken string) (*
 		a.tokenBaseURL, url.QueryEscape(a.apiKey))
 	resp, err := a.httpClient.Post(ctx, fullURL, map[string]string{"Content-Type": "application/x-www-form-urlencoded"}, bodyBytes, 0)
 	if err != nil {
+		// Firebase returns documented credential rejections as HTTP 400. Keep
+		// other bad requests distinct; the worker must hold on auth, not walk
+		// the fleet. The contract's code is error.message, not free-text matching.
+		// https://firebase.google.com/docs/reference/rest/auth#section-refresh-token
+		if resp != nil && resp.StatusCode == http.StatusBadRequest {
+			var envelope struct {
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(resp.Body, &envelope) == nil {
+				switch envelope.Error.Message {
+				case "TOKEN_EXPIRED", "INVALID_REFRESH_TOKEN", "USER_DISABLED", "USER_NOT_FOUND":
+					err = apperrors.ProviderAuthFailed("CardLadder", err)
+				}
+			}
+		}
 		return nil, fmt.Errorf("firebase refresh: %w", err)
 	}
 

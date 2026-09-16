@@ -20,21 +20,21 @@ it.each([
   expect(screen.getByText(label)).toBeVisible();
 });
 it('updates an open summary from a readiness-only observation without changing detail keys or selection versions', async () => {
-  const running = evaluation({ status: 'needs_review', evidenceNeedsReview: true, readiness: { state: 'running', refreshEligibility: 'wait', identityKey: 'a'.repeat(64), expiresAt: '', retryAt: '2026-09-14T12:00:00Z' } });
+  const running = evaluation({ readiness: { state: 'current', refreshEligibility: 'not_needed', identityKey: 'a'.repeat(64), expiresAt: '2026-09-15T00:00:00Z', retryAt: '' } });
   const fetcher = vi.fn(async () => new Response(JSON.stringify({ evaluation: running, sales: [] })));
   vi.stubGlobal('fetch', fetcher);
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const tree = (e = running) => <QueryClientProvider client={qc}><ShowEvidenceDisclosure purchaseId={purchaseId} certNumber="12345678" expanded evaluation={e} /></QueryClientProvider>;
-  const view = render(tree()); await screen.findByText(/No detailed sales available/);
+  const view = render(tree()); await screen.findByText(/Complete current lookup/);
   await waitFor(() => expect(screen.queryByText('Loading sale evidence…')).not.toBeInTheDocument());
-  view.rerender(tree({ ...running, readiness: { ...(running.readiness as object), state: 'interrupted', refreshEligibility: 'retry_only' } }));
-  expect(screen.getByText('Check interrupted', { selector: 'strong' })).toBeVisible();
-  expect(screen.queryByText('Checking', { selector: 'strong' })).not.toBeInTheDocument();
+  view.rerender(tree({ ...running, status: 'needs_review', evidenceNeedsReview: true, readiness: { ...(running.readiness as object), state: 'failed', refreshEligibility: 'retry_only', expiresAt: '' } }));
+  expect(screen.getByText('Data unavailable', { selector: 'strong' })).toBeVisible();
+  expect(screen.queryByText('Supported', { selector: 'strong' })).not.toBeInTheDocument();
   expect(fetcher).toHaveBeenCalledOnce();
 });
 it.each([
-  ['not_checked', 'needed', 'Not checked'], ['running', 'wait', 'Checking'], ['stale', 'needed', 'Stale comps'],
-  ['interrupted', 'retry_only', 'Check interrupted'], ['failed', 'retry_only', 'Check failed'], ['invalid', 'retry_only', 'Evidence needs review'],
+  ['not_checked', 'needed', 'No comp data'], ['running', 'wait', 'Data unavailable'], ['stale', 'needed', 'Out of date'],
+  ['interrupted', 'retry_only', 'Data unavailable'], ['failed', 'retry_only', 'Data unavailable'], ['invalid', 'retry_only', 'Data unavailable'],
 ])('distinguishes %s evidence from a verified zero-sale window', (state, refreshEligibility, label) => {
   render(<ShowSupport evaluation={evaluation({ status: 'needs_review', compCount: 0, evidenceNeedsReview: true,
     readiness: { state, refreshEligibility, identityKey: 'a'.repeat(64),
@@ -42,6 +42,19 @@ it.each([
   })} />);
   expect(screen.getByText(label)).toBeVisible();
   expect(screen.queryByText(/0 sales/)).not.toBeInTheDocument();
+});
+it.each([
+  { name: 'resolved storage failure', identityKey: 'a'.repeat(64), label: 'Data unavailable' },
+  { name: 'unresolved identity', identityKey: '', label: 'Needs matching' },
+])('labels unavailable evidence without conflating $name', ({ identityKey, label }) => {
+  const e = evaluation({ status: 'needs_review', evidenceNeedsReview: true,
+    evidenceReason: identityKey ? 'Evidence storage unavailable' : 'Card identity unresolved',
+    readiness: { state: 'unavailable', refreshEligibility: 'unavailable', identityKey, expiresAt: '', retryAt: '' },
+  });
+  render(<><ShowSupport evaluation={e} /><ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678" evaluation={e} expanded={false} onClick={() => {}} /></>);
+  expect(screen.getByRole('button', { name: `Show 30-day evidence 12345678: ${label}` })).toBeVisible();
+  expect(screen.getAllByText(label, { selector: 'strong' })).toHaveLength(2);
+  expect(screen.queryByText(identityKey ? 'Needs matching' : 'Data unavailable')).not.toBeInTheDocument();
 });
 it('does not color a supported explanation as a warning and formats source listing enums', () => {
   render(<EvidenceDetails data={{ evaluation: evaluation({ reason: 'Median supports listed price' }), sales: [
@@ -56,8 +69,8 @@ it('keeps missing listed price separate from a failed check', () => {
   render(<ShowSupport evaluation={evaluation({ status: 'no_listed_price', listedPriceCents: 0, compCount: 0, evidenceNeedsReview: true,
     readiness: { state: 'failed', refreshEligibility: 'retry_only', identityKey: 'a'.repeat(64), expiresAt: '', retryAt: '' },
   })} />);
-  expect(screen.getByText('No listed price')).toBeVisible();
-  expect(screen.getByText('Check failed')).toBeVisible();
+  expect(screen.getByText('No DH price')).toBeVisible();
+  expect(screen.getByText('Data unavailable')).toBeVisible();
   expect(screen.queryByText(/0 sales/)).not.toBeInTheDocument();
 });
 it('does not revive an older supported detail after a newer evaluation arrives', async () => {
@@ -95,7 +108,7 @@ it.each([
   expect(await screen.findByRole('list', { name: 'Individual matching sales' })).toHaveTextContent('$270.00');
   expect(screen.getByText(health.reason)).toBeVisible();
   if (health.evidenceNeedsReview) {
-    expect(screen.getByText('No listed price', { selector: 'strong' })).toBeVisible();
+    expect(screen.getByText('No DH price', { selector: 'strong' })).toBeVisible();
     expect(screen.getByText('CardLadder refresh failed')).toBeVisible();
     expect(screen.getByText(/Stored sales may be partial or stale/)).toBeVisible();
   } else {

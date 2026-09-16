@@ -78,9 +78,7 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 		req.Grader = strings.ToLower(req.Grader)
 	}
 
-	h.mu.Lock()
-	client := h.client
-	h.mu.Unlock()
+	client := h.currentClient()
 
 	if client == nil {
 		writeError(w, http.StatusServiceUnavailable, "Card Ladder client not configured")
@@ -113,8 +111,8 @@ func (h *CardLadderHandler) HandleAddCard(w http.ResponseWriter, r *http.Request
 // HandleSyncToCardLadder pushes unsold purchases with cert numbers to the
 // Card Ladder collection. Cards already present (by cert number mapping) are skipped.
 func (h *CardLadderHandler) HandleSyncToCardLadder(w http.ResponseWriter, r *http.Request) {
+	client := h.currentClient()
 	h.mu.Lock()
-	client := h.client
 	lister := h.purchaseLister
 	h.mu.Unlock()
 

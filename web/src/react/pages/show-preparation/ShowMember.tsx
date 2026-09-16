@@ -1,22 +1,20 @@
 import { useState } from 'react';
 import type { ShowListItem } from '../../../types/showprep';
 import { isShowEvaluation } from '../../../js/api/showprep';
-import { useShowRefreshState } from '../../queries/useShowReadiness';
 import { useShowListWrites } from '../../queries/useShowPrepQueries';
 import { Button, GradeBadge } from '../../ui';
 import { formatCents } from '../../utils/formatters';
 import ShowEvidenceDisclosure from './ShowEvidence';
 import { availabilityLabels, showError, showTime, supportLabels } from './showPrepLabels';
 
-export default function ShowMember({ item, listId, selected, onSelect, stale }: {
-  item: ShowListItem; listId: string; selected: boolean; onSelect: () => void; stale: boolean;
+export default function ShowMember({ item, listId, stale }: {
+  item: ShowListItem; listId: string; stale: boolean;
 }) {
   const { update, remove } = useShowListWrites();
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const refresh = useShowRefreshState();
   const saving = update.isPending || remove.isPending;
-  const busy = saving || refresh.busy;
+  const busy = saving;
   const e = isShowEvaluation(item.evaluation) ? item.evaluation : undefined;
   const packed = !!item.packedAt;
   const available = e?.availability === 'ready';
@@ -53,8 +51,7 @@ export default function ShowMember({ item, listId, selected, onSelect, stale }: 
       {item.priceChanged && <p>Price changed{packed ? ': check the physical sticker' : ''}. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no listed price'}.</p>}
       {item.supportChanged && <p>Support changed. Previously {supportLabels[item.acknowledgedStatus] ?? 'unknown'}.</p>}
     </div>
-    <ShowEvidenceDisclosure purchaseId={item.purchaseId} certNumber={item.certNumber} evaluation={e}
-      actions={<label className="show-check text-[var(--text-muted)]"><input type="checkbox" checked={selected} onChange={onSelect} aria-label={`Refresh evidence for ${item.certNumber}`} />Select for evidence refresh</label>} />
+    <ShowEvidenceDisclosure purchaseId={item.purchaseId} certNumber={item.certNumber} evaluation={e} />
     {(item.priceChanged || item.supportChanged) && <Button variant="secondary" size="sm" aria-label={`Acknowledge changes ${item.certNumber}`}
       disabled={busy || stale || !e?.version} onClick={() => void change({ acknowledge: true })}>Acknowledge changes</Button>}
     {saving && <p role="status">Saving…</p>}

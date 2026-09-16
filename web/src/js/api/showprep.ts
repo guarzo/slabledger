@@ -1,5 +1,5 @@
 import { APIClient, type APIRequestOptions } from './client';
-import { evaluateShowEvidence, refreshShowEvidence } from './showRefreshTransport';
+import { evaluateShowEvidence } from './showRefreshTransport';
 import type { ShowEvaluation, ShowEvidence, ShowList, ShowListDetail, ShowItemAdd, ShowItemUpdate, ShowReadiness, ReadinessState, RefreshEligibility } from '../../types/showprep';
 
 const client = new APIClient('/api/show-prep');
@@ -29,7 +29,7 @@ function isReadinessTimestamp(value: string): boolean {
   return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 19) === value.slice(0, 19);
 }
 
-/** Invalid/missing metadata disables automatic checking, not display or manual APIs. */
+/** Validate display metadata without granting the browser acquisition capability. */
 export function getShowReadiness(evaluation: Pick<ShowEvaluation, 'readiness'> | null | undefined): ShowReadiness | undefined {
   const value = evaluation?.readiness;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -62,7 +62,6 @@ async function listDetail(response: Promise<ShowListDetail>) {
 
 export const showPrepAPI = {
   evaluate: (purchaseIds: string[], options?: APIRequestOptions) => evaluations(evaluateShowEvidence(purchaseIds, options)),
-  refresh: (purchaseIds: string[], signal?: AbortSignal) => evaluations(refreshShowEvidence(purchaseIds, signal)),
   evidence: async (purchaseId: string, options?: APIRequestOptions): Promise<ShowEvidence> => {
     const result = await client.get<ShowEvidence>(`/evidence/${encodeURIComponent(purchaseId)}`, options);
     requireArray(result.sales, 'evidence sales');

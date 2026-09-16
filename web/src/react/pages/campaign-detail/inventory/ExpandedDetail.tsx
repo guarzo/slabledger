@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { useShowRefreshState } from '../../../queries/useShowReadiness';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AgingItem } from '../../../../types/campaigns';
 import { api, isAPIError } from '../../../../js/api';
@@ -43,7 +42,6 @@ function formatHoldReason(reason: string): string {
 
 export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFlagDialog, onResolveFlag, onApproveDHPush, onSetPrice, combineWithList, recordingSale, onCancelInlineSale, onInlineSaleSuccess }: ExpandedDetailProps) {
   const queryClient = useQueryClient();
-  const refresh = useShowRefreshState();
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -76,7 +74,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
     queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.globalInventory });
   };
 
-  const handleConfirm = (priceCents: number, source: string) => refresh.coordinator.write(async () => {
+  const handleConfirm = async (priceCents: number, source: string) => {
     setIsSubmitting(true);
     try {
       await api.setReviewedPrice(purchase.id, priceCents, source);
@@ -89,9 +87,9 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
     } finally {
       setIsSubmitting(false);
     }
-  }).catch(error => toast.error(error instanceof Error ? error.message : 'Write blocked'));
+  };
 
-  const handleSetAndList = (priceCents: number, source: string) => refresh.coordinator.write(async () => {
+  const handleSetAndList = async (priceCents: number, source: string) => {
     setIsSubmitting(true);
     try {
       await api.setReviewedPrice(purchase.id, priceCents, source);
@@ -122,7 +120,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
     } finally {
       setIsSubmitting(false);
     }
-  }).catch(error => toast.error(error instanceof Error ? error.message : 'Write blocked'));
+  };
 
   const lowestListCents = snap?.lowestListCents ?? 0;
   const overrideCents = purchase.overridePriceCents ?? 0;
@@ -163,7 +161,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
         preSelected={preSelected}
         onConfirm={combineWithList ? handleSetAndList : handleConfirm}
         onFlag={onOpenFlagDialog}
-        isSubmitting={isSubmitting || refresh.busy}
+        isSubmitting={isSubmitting}
         confirmLabel={combineWithList ? 'List on DH' : undefined}
         secondaryConfirm={combineWithList ? { label: 'Set Price', onConfirm: handleConfirm } : undefined}
         costBasisCents={cb}

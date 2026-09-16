@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import type { AgingItem } from '../../../../types/campaigns';
-import InventorySelectionBar from './InventorySelectionBar';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import RealSelectionBar, { type InventorySelectionBarProps } from './InventorySelectionBar';
+
+function InventorySelectionBar(props: Pick<InventorySelectionBarProps, 'selectedItems' | 'onRecordSale' | 'onListOnDH' | 'onClear' | 'disabled'>) {
+  return <QueryClientProvider client={new QueryClient()}><MemoryRouter><RealSelectionBar {...props}
+    selected={new Set(props.selectedItems.map(i => i.purchase.id))} selectedVersions={{}} evaluations={{}} onAdded={() => {}} /></MemoryRouter></QueryClientProvider>;
+}
 
 function makeItem(id: string, clValueCents: number | undefined): AgingItem {
   return {
@@ -36,6 +43,17 @@ afterEach(() => {
 });
 
 describe('InventorySelectionBar', () => {
+  it('retains missing selected IDs for review without opening empty financial forms', () => {
+    const onRecordSale = vi.fn(); const onListOnDH = vi.fn();
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><RealSelectionBar
+      selected={new Set(['deleted'])} selectedItems={[]} selectedVersions={{ deleted: 'old' }} evaluations={{}}
+      onAdded={() => {}} onClear={() => {}} onRecordSale={onRecordSale} onListOnDH={onListOnDH} /></MemoryRouter></QueryClientProvider>);
+    expect(screen.getByText(/Review and reselect/)).toHaveTextContent('deleted');
+    expect(screen.getByRole('button', { name: /Record sale/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /List on DH/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /Record sale/ }));
+    expect(onRecordSale).not.toHaveBeenCalled(); expect(onListOnDH).not.toHaveBeenCalled();
+  });
   it('renders nothing when selectedItems is empty', () => {
     const { container } = render(
       <InventorySelectionBar
@@ -48,7 +66,7 @@ describe('InventorySelectionBar', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders count and total list price summing clValueCents', () => {
+  it('labels summed CL values separately from DH and reviewed prices', () => {
     const items = [makeItem('1', 5000), makeItem('2', 6000), makeItem('3', undefined)];
     render(
       <InventorySelectionBar
@@ -58,14 +76,15 @@ describe('InventorySelectionBar', () => {
         onClear={vi.fn()}
       />,
     );
-    expect(screen.getByText(/3 selected/)).toBeInTheDocument();
-    expect(screen.getByText(/\$110\.00 list/)).toBeInTheDocument();
+    expect(screen.getByText(/3 selected/, { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByText(/\$110\.00 CL value/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$110\.00 list/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Record sale \(3\)/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /List on DH \(3\)/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Clear$/ })).toBeInTheDocument();
   });
 
-  it('omits the list-price segment when no item has a CL value', () => {
+  it('omits the CL-value segment when no item has a CL value', () => {
     const items = [makeItem('1', undefined), makeItem('2', undefined)];
     render(
       <InventorySelectionBar
@@ -75,8 +94,8 @@ describe('InventorySelectionBar', () => {
         onClear={vi.fn()}
       />,
     );
-    expect(screen.getByText(/2 selected/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$.* list$/)).not.toBeInTheDocument();
+    expect(screen.getByText(/2 selected/, { selector: 'span' })).toBeInTheDocument();
+    expect(screen.queryByText(/\$.* CL value$/)).not.toBeInTheDocument();
   });
 
   it('invokes the matching callback when each button is clicked', () => {

@@ -174,6 +174,7 @@ type Config struct {
 	SessionCleanup     SessionCleanupConfig
 	InventoryRefresh   InventoryRefreshConfig
 	SnapshotEnrich     SnapshotEnrichConfig
+	ShowPrepRefresh    ShowPrepRefreshConfig
 	CardLadder         CardLadderConfig
 	PSAPortal          PSAPortalConfig
 	PSASync            PSASyncConfig
@@ -303,6 +304,9 @@ type PSASyncConfig struct {
 	SyncHour            int           // hour (0-23 UTC) to schedule runs; -1 = use InitialDelay (default: 10)
 	CampaignSyncEnabled bool          // harvester: fetch campaign config + drain approved PSA pushes
 }
+
+// ShowPrepRefreshConfig gates evidence collection independently of CL valuation.
+type ShowPrepRefreshConfig struct{ Enabled bool }
 
 // CardLadderConfig controls the Card Ladder value refresh scheduler.
 type CardLadderConfig struct {

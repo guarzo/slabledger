@@ -20,6 +20,8 @@ import (
 
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
+	cardLadderAuthOptions      []cardladder.AuthOption // narrow local-fixture SDK seam; no production endpoint override
+	DB                         *postgres.DB
 	Config                     *config.Config
 	Logger                     observability.Logger
 	DBTracker                  *postgres.DBTracker
@@ -231,6 +233,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		buildDeps.CertEnrichJobPrebuilt = deps.CertEnrichJob
 	}
 
+	wireShowPrepScheduler(ctx, deps, &buildDeps)
 	schedulerResult := scheduler.BuildGroup(deps.Config, buildDeps)
 
 	// Wire the pricing-enrich job's providers now that the CL scheduler exists.

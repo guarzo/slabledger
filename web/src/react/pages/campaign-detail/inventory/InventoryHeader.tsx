@@ -20,6 +20,8 @@ export interface InventoryHeaderProps {
   priceBand: PriceBand;
   setPriceBand: (b: PriceBand) => void;
   priceBandCounts: PriceBandCounts;
+  retainedPriceBands?: readonly PriceBand[];
+  retainedNeedsHeadline?: boolean;
   debouncedSearch: string;
   selected: ReadonlySet<string>;
   showFiltering?: boolean;
@@ -33,8 +35,8 @@ export default function InventoryHeader({
   fullInventoryTotals,
   searchQuery, setSearchQuery,
   filterTab, setFilterTab,
-  tabCounts, priceBand, setPriceBand, priceBandCounts, debouncedSearch,
-  selected, showFiltering = false,
+  tabCounts, priceBand, setPriceBand, priceBandCounts, retainedPriceBands = [], debouncedSearch,
+  selected, showFiltering = false, retainedNeedsHeadline = false,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -165,8 +167,8 @@ export default function InventoryHeader({
         </div>
       </div>
 
-      {/* Needs Attention call-to-action: only when there's something to do and the user isn't already there */}
-      {showNeedsHeadline && (
+      {/* Retain an existing banner above held rows, with honest live zero counts. */}
+      {(showNeedsHeadline || retainedNeedsHeadline) && (
         <button
           type="button"
           onClick={() => setFilterTab('needs_attention')}
@@ -227,13 +229,15 @@ export default function InventoryHeader({
             Built for in-person liquidation triage where the operator wants to surface
             "everything in this dollar tier" fast. Bands hide at count=0 unless active.
             The whole row is hidden when no band has any items AND no band is active,
-            so an empty/priceless inventory doesn't show a label-only row. */}
-        {(priceBands.some(b => b.count > 0) || priceBand !== 'all') && (
+            so an empty/priceless inventory doesn't show a label-only row.
+            Held show selections retain prior controls with live zero counts so
+            background publication cannot collapse this row above them. */}
+        {(priceBands.some(b => b.count > 0) || priceBand !== 'all' || retainedPriceBands.length > 0) && (
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
             <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-[var(--text-muted)] mr-1">Price</span>
             {priceBands.map(band => {
               const isActive = priceBand === band.key;
-              if (band.count === 0 && !isActive) return null;
+              if (band.count === 0 && !isActive && !retainedPriceBands.includes(band.key)) return null;
               return (
                 <button
                   key={band.key}

@@ -1,20 +1,39 @@
+import { useLayoutEffect, useRef } from 'react';
 import type { useShowReadiness } from '../../queries/useShowReadiness';
+import type { ShowPrepWorkerStatus } from '../../../types/showprepWorker';
 import { Button } from '../../ui';
 
-/** Compact functional controls, independent of displayed matches and selection. */
-export default function ShowReadinessLine({ readiness: r, selectedCount }: { readiness: ReturnType<typeof useShowReadiness>; selectedCount: number }) {
-  const summary = r.observing ? 'Reading current price support…' : r.observationError ? 'Current price support unavailable' : r.busy ? `Checking comps ${r.done}/${r.total}`
-    : r.counts.running ? `Checking comps · ${r.counts.running} ${r.counts.running === 1 ? 'card' : 'cards'} awaiting server observation`
-    : r.incomplete ? `${r.counts.not_checked === r.cohortCount ? 'Not checked' : 'Check incomplete'} · ${r.currentCount}/${r.cohortCount} ${r.cohortCount === 1 ? 'card' : 'cards'} current`
-    : r.cohortCount ? `Check complete · ${r.cohortCount} ${r.cohortCount === 1 ? 'card' : 'cards'} current` : 'No cards in check scope';
-  return <div className="show-readiness show-actions" aria-label="Comps readiness">
-    <span role="status">{summary}{r.busy ? ` identities · ${r.cohortCount} cards in scope` : ''}{selectedCount > 0 && r.incomplete ? ' · Paused for selection' : ''}</span>
+type Coverage = Pick<ShowPrepWorkerStatus, 'eligibleIdentities' | 'currentIdentities' | 'missingIdentities' | 'staleIdentities' | 'failedIdentities' | 'eligibleCards' | 'currentCards' | 'unresolvedCards'>;
+
+/** Quiet, server-counted fleet coverage, not a selected-cohort progress task. */
+export default function ShowReadinessLine({ readiness: r, coverage: c, coverageError = false, holdFootprint = false }: {
+  readiness: ReturnType<typeof useShowReadiness>;
+  coverage?: Coverage;
+  coverageError?: boolean;
+  holdFootprint?: boolean;
+}) {
+  const element = useRef<HTMLDivElement>(null);
+  const height = useRef(0);
+  const summaryWasVisible = useRef(false);
+  const incomplete = c && c.currentCards < c.eligibleCards;
+  const showSummary = !coverageError && !!c && (incomplete || (holdFootprint && summaryWasVisible.current));
+  useLayoutEffect(() => {
+    if (!holdFootprint || height.current === 0) height.current = element.current?.getBoundingClientRect().height ?? 0;
+    summaryWasVisible.current = showSummary;
+  });
+  // Capture the already-rendered notice, not selection itself. A quiet view
+  // stays quiet on the first checkbox; the parent keys this by explicit view.
+  const heldHeight = holdFootprint ? height.current : 0;
+  // A price-only notice also has height; selection must not add fleet text.
+  if (!incomplete && !coverageError && !r.missingPriceCount && !r.observationError && !heldHeight) return null;
+  return <div ref={element} style={heldHeight ? { minHeight: heldHeight } : undefined} className="show-readiness show-actions" aria-label="Comp data coverage">
+    {coverageError ? <span>Evidence coverage unavailable</span> : c && showSummary && <>
+      <span>All inventory: {c.currentIdentities}/{c.eligibleIdentities} identities current</span>
+      <span>{c.currentCards}/{c.eligibleCards} cards with current evidence</span>
+      <span>{c.missingIdentities} missing · {c.staleIdentities} stale · {c.failedIdentities} failed identities</span>
+      {c.unresolvedCards > 0 && <span>{c.unresolvedCards} unresolved {c.unresolvedCards === 1 ? 'card' : 'cards'}</span>}
+    </>}
+    {r.missingPriceCount > 0 && <span>{r.missingPriceCount} no DH price in this view</span>}
     {r.observationError && <><span role="alert">{r.observationError}</span><Button size="sm" variant="secondary" disabled={r.observing} onClick={() => void r.retryObservation()}>Retry price support read</Button></>}
-    {r.busy ? <Button size="sm" variant="ghost" onClick={r.cancel}>Cancel checking</Button>
-      : !r.observationError && (r.incomplete || r.error) && <Button size="sm" variant="secondary" disabled={r.blocked || r.cohortCount === 0} onClick={() => void r.check()}>{r.error || r.retry ? 'Retry / Continue checking' : 'Check comps'}</Button>}
-    {r.missingPriceCount > 0 && <span>{r.missingPriceCount} without a listed price. Select to check manually.</span>}
-    {r.counts.unknown > 0 && <span>{r.counts.unknown} cards need manual checking.</span>}
-    {r.counts.interrupted > 0 && <span>Interrupted check; retry explicitly.</span>}
-    {r.error && <span role="alert">{r.error}</span>}
   </div>;
 }

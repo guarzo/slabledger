@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getShowRefreshCoordinator } from './showRefreshCoordinator';
 import { evaluateInventory, showPrepAPI, type InventoryEvaluations } from '../../js/api/showprep';
 import type { ShowItemAdd, ShowItemUpdate, ShowListDetail } from '../../types/showprep';
 
@@ -69,12 +68,11 @@ export function useShowList(id: string) {
 export function useShowListWrites() {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: showPrepKeys.all });
-  const coordinator = getShowRefreshCoordinator(qc);
   return {
-    create: useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => coordinator.write(() => showPrepAPI.createList(id, name)), onSettled: invalidate }),
-    rename: useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => coordinator.write(() => showPrepAPI.renameList(id, name)), onSettled: invalidate }),
-    add: useMutation({ mutationFn: ({ id, items }: { id: string; items: ShowItemAdd[] }) => coordinator.write(() => showPrepAPI.addItems(id, items)), onSettled: invalidate }),
-    update: useMutation({ mutationFn: ({ id, itemId, input }: { id: string; itemId: string; input: ShowItemUpdate }) => coordinator.write(() => showPrepAPI.updateItem(id, itemId, input)), onSettled: invalidate }),
-    remove: useMutation({ mutationFn: ({ id, itemId }: { id: string; itemId: string }) => coordinator.write(() => showPrepAPI.removeItem(id, itemId)), onSettled: invalidate }),
+    create: useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => showPrepAPI.createList(id, name), onSettled: invalidate }),
+    rename: useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => showPrepAPI.renameList(id, name), onSettled: invalidate }),
+    add: useMutation({ mutationFn: ({ id, items }: { id: string; items: ShowItemAdd[] }) => showPrepAPI.addItems(id, items), onSettled: invalidate }),
+    update: useMutation({ mutationFn: ({ id, itemId, input }: { id: string; itemId: string; input: ShowItemUpdate }) => showPrepAPI.updateItem(id, itemId, input), onSettled: invalidate }),
+    remove: useMutation({ mutationFn: ({ id, itemId }: { id: string; itemId: string }) => showPrepAPI.removeItem(id, itemId), onSettled: invalidate }),
   };
 }
