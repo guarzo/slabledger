@@ -59,7 +59,7 @@ func seedReadinessInventory(t *testing.T, db *postgres.DB, now time.Time) {
 		_, err := db.ExecContext(ctx, `INSERT INTO campaign_purchases
 		(id,campaign_id,card_name,cert_number,grader,grade_value,purchase_date,received_at,gem_rate_id,
 		buy_cost_cents,cl_value_cents,override_price_cents,reviewed_price_cents,dh_card_id,dh_inventory_id,dh_status,dh_push_status,dh_listing_price_cents,dh_channels_json)
-		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,29000,40000,$6,$6,'listed','synced',30000,'["ebay"]')`,
+		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,29000,30000,$6,$6,'listed','synced',40000,'["ebay"]')`,
 			readinessPurchase(i), fmt.Sprintf("Readiness slab %03d", i), fmt.Sprintf("91000%03d", i), now.AddDate(0, 0, -10).Format(time.DateOnly), fmt.Sprintf("cached-%d", i), 1000+i)
 		require.NoError(t, err)
 	}
@@ -72,6 +72,8 @@ func seedReadinessCached(t *testing.T, db *postgres.DB, now time.Time) {
 	t.Helper()
 	seedReadinessInventory(t, db, now)
 	ctx := t.Context()
+	baseline, err := readinessLedger(ctx, db)
+	require.NoError(t, err)
 	store := postgres.NewShowPrepStore(db.DB)
 	for i := 1; i <= 156; i++ {
 		if i == 25 || i == 27 || i == 30 || (i < 25 && i%2 == 0) {
@@ -118,15 +120,22 @@ func seedReadinessCached(t *testing.T, db *postgres.DB, now time.Time) {
 		state  string
 		status sp.Status
 		sales  int
+		asking int
 	}{
-		{1, "current", sp.Supported, 2}, {25, "not_checked", sp.NeedsReview, 0}, {26, "current", sp.NoListedPrice, 2},
-		{28, "stale", sp.NeedsReview, 2}, {29, "failed", sp.NeedsReview, 2}, {30, "unavailable", sp.NeedsReview, 0},
-		{31, "current", sp.NoRecentComps, 0}, {32, "current", sp.ThinEvidence, 1}, {33, "current", sp.BelowTarget, 2},
+		{1, "current", sp.Supported, 2, 30000}, {25, "not_checked", sp.NeedsReview, 0, 30000}, {26, "current", sp.NoListedPrice, 2, 0},
+		{28, "stale", sp.NeedsReview, 2, 30000}, {29, "failed", sp.NeedsReview, 2, 30000}, {30, "unavailable", sp.NeedsReview, 0, 30000},
+		{31, "current", sp.NoRecentComps, 0, 30000}, {32, "current", sp.ThinEvidence, 1, 30000}, {33, "current", sp.BelowTarget, 2, 30000},
 	} {
 		evidence, err := service.Evidence(ctx, readinessPurchase(tc.index))
 		require.NoError(t, err)
 		require.EqualValues(t, tc.state, evidence.Evaluation.Readiness.State)
 		require.Equal(t, tc.status, evidence.Evaluation.Status)
+		require.Equal(t, tc.asking, evidence.Evaluation.LocalPriceCents)
+		require.Equal(t, 40000, evidence.Evaluation.ListedPriceCents, "stored DH is diagnostics, not the assessed asking")
+		require.Equal(t, sp.PriceAssessmentPolicy, evidence.Evaluation.PolicyVersion)
 		require.Len(t, evidence.Sales, tc.sales)
 	}
+	final, err := readinessLedger(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, baseline, final, "seeding evidence must preserve every financial and legacy row")
 }

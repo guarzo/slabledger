@@ -81,18 +81,20 @@ func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) map[stri
 	_, err = db.ExecContext(ctx, `INSERT INTO campaigns(id,name,phase) VALUES('readiness-campaign','Readiness fixture','active')`)
 	require.NoError(t, err)
 	for i := 1; i <= 26; i++ {
-		name, profile, price := fmt.Sprintf("Readiness slab %02d", i), fmt.Sprintf("psa-%d", (i+1)/2), 30000
+		name, profile := fmt.Sprintf("Readiness slab %02d", i), fmt.Sprintf("psa-%d", (i+1)/2)
+		asking, override := 30000, 29000
 		if i == 25 {
 			name, profile = "Outside acquisition scope", "outside"
 		}
 		if i == 26 {
-			name, profile, price = "Readiness missing price", "no-price", 0
+			name, profile = "Readiness missing price", "no-price"
+			asking, override = 0, 0
 		}
 		_, err = db.ExecContext(ctx, `INSERT INTO campaign_purchases
 		(id,campaign_id,card_name,cert_number,grader,grade_value,purchase_date,received_at,gem_rate_id,
 		buy_cost_cents,cl_value_cents,override_price_cents,reviewed_price_cents,dh_card_id,dh_inventory_id,dh_status,dh_push_status,dh_listing_price_cents,dh_channels_json)
-		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,29000,40000,$6,$6,'listed','synced',$7,'["ebay"]')`,
-			readinessPurchase(i), name, fmt.Sprintf("910000%02d", i), now.AddDate(0, 0, -10).Format(time.DateOnly), profile, 1000+i, price)
+		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,$8,$7,$6,$6,'listed','synced',40000,'["ebay"]')`,
+			readinessPurchase(i), name, fmt.Sprintf("910000%02d", i), now.AddDate(0, 0, -10).Format(time.DateOnly), profile, 1000+i, asking, override)
 		require.NoError(t, err)
 	}
 	// A real historical sale also has to remain byte-for-byte unchanged.
