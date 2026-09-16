@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { evaluation, inventoryItem } from '../src/react/pages/show-preparation/fixtures.test-support';
 
 for (const width of [1440, 390]) {
-  for (const notice of ['coverage', 'attention', 'quiet'] as const) {
+  for (const notice of ['coverage', 'attention', 'quiet', 'price-only'] as const) {
     for (const reset of ['clear', 'view'] as const) {
       test(`${notice} footprint at ${width}, reset by ${reset}`, async ({ page, baseURL }, info) => {
         await page.setViewportSize({ width, height: 1000 });
@@ -11,7 +11,7 @@ for (const width of [1440, 390]) {
         // filtering, selection and observed-version fencing are production code.
         let published = false;
         const calls: string[] = [];
-        const before = evaluation();
+        const before = evaluation(notice === 'price-only' ? { listedPriceCents: 0, status: 'no_listed_price' } : {});
         const item = { ...inventoryItem(before), currentMarket: { lastSoldCents: 30000, gradePriceCents: 30000 } };
         await page.route(url => url.origin !== new URL(baseURL!).origin, route => route.abort());
         await page.route(url => url.pathname.startsWith('/api/'), async route => {
@@ -42,12 +42,17 @@ for (const width of [1440, 390]) {
           await page.getByLabel('Search cards').fill('12345678');
           await expect(page.getByText('1 of 1 cards', { exact: true })).toBeVisible();
         }
-        await page.getByLabel('Price support', { exact: true }).selectOption('supported');
+        await page.getByLabel('Price support', { exact: true }).selectOption(notice === 'price-only' ? 'no_listed_price' : 'supported');
         await expect(page.getByText('1 card shown', { exact: true })).toBeVisible();
         const coverage = page.getByLabel('Comp data coverage');
         const attention = page.getByRole('button', { name: /card.*need.*attention.*Review/ });
-        await expect(coverage).toHaveCount(notice === 'coverage' ? 1 : 0);
+        await expect(coverage).toHaveCount(notice === 'coverage' || notice === 'price-only' ? 1 : 0);
         await expect(attention).toHaveCount(notice === 'attention' ? 1 : 0);
+        if (notice === 'price-only') {
+          await expect(coverage).toHaveText('1 no DH price in this view');
+          await expect(coverage.locator('span')).toHaveCount(1);
+        }
+        const initialContent = await coverage.allTextContents();
         // Fast-forward the installed production minute poll, not a new test poll.
         const initial = await checkbox.boundingBox();
         const tableStart = page.getByRole('checkbox', { name: 'Select all visible cards' });
@@ -56,8 +61,30 @@ for (const width of [1440, 390]) {
         await checkbox.check();
         await expect(checkbox).toBeChecked();
         const selected = await checkbox.boundingBox();
+        const selectedContent = await coverage.allTextContents();
+        await writeFile(info.outputPath('selection-geometry.json'), JSON.stringify({ initial, selected, initialContent, selectedContent, requests: calls.slice(requestStart) }, null, 2));
+        expect(selectedContent).toEqual(initialContent);
         expect(selected).toEqual(initial); // no checkbox-induced header row
         expect(calls.slice(requestStart)).toEqual([]);
+        if (notice === 'price-only') {
+          const resetStart = calls.length;
+          if (reset === 'clear') {
+            await page.getByRole('region', { name: 'Bulk actions for selected cards' }).getByRole('button', { name: 'Clear', exact: true }).click();
+            await expect(checkbox).not.toBeChecked();
+          } else {
+            await page.getByLabel('Price support', { exact: true }).selectOption('all');
+            await expect(checkbox).toBeChecked();
+          }
+          await expect(coverage).toHaveText('1 no DH price in this view');
+          await expect(coverage.locator('span')).toHaveCount(1);
+          const resetRow = await checkbox.boundingBox();
+          expect(resetRow).toEqual(initial);
+          expect(calls.slice(resetStart)).toEqual([]);
+          await writeFile(info.outputPath('price-only-reset.json'), JSON.stringify({ row: resetRow, content: await coverage.allTextContents(), requests: calls.slice(resetStart) }, null, 2));
+          if (reset === 'clear') await checkbox.check();
+          else await page.getByLabel('Price support', { exact: true }).selectOption('no_listed_price');
+          expect(calls.slice(resetStart)).toEqual([]);
+        }
         published = true;
         await page.clock.fastForward(60_001);
         await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -73,6 +100,12 @@ for (const width of [1440, 390]) {
           await expect(coverage).toContainText('0 missing');
         }
         if (notice === 'attention') await expect(attention).toContainText('0 cards need attention');
+        if (notice === 'price-only') {
+          // The new evaluation has a price: remove its stale price warning while
+          // retaining only the prior footprint, never invent a fleet summary.
+          await expect(coverage).toHaveText('');
+          await expect(coverage.locator('span')).toHaveCount(0);
+        }
         await expect(page.getByRole('button', { name: /\$250–500/ })).toContainText('0');
         const resetStart = calls.length;
         if (reset === 'clear') await page.getByRole('region', { name: 'Bulk actions for selected cards' }).getByRole('button', { name: 'Clear', exact: true }).click();

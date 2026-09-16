@@ -14,16 +14,20 @@ export default function ShowReadinessLine({ readiness: r, coverage: c, coverageE
 }) {
   const element = useRef<HTMLDivElement>(null);
   const height = useRef(0);
+  const summaryWasVisible = useRef(false);
+  const incomplete = c && c.currentCards < c.eligibleCards;
+  const showSummary = !coverageError && !!c && (incomplete || (holdFootprint && summaryWasVisible.current));
   useLayoutEffect(() => {
     if (!holdFootprint || height.current === 0) height.current = element.current?.getBoundingClientRect().height ?? 0;
+    summaryWasVisible.current = showSummary;
   });
   // Capture the already-rendered notice, not selection itself. A quiet view
   // stays quiet on the first checkbox; the parent keys this by explicit view.
   const heldHeight = holdFootprint ? height.current : 0;
-  const incomplete = c && c.currentCards < c.eligibleCards;
+  // A price-only notice also has height; selection must not add fleet text.
   if (!incomplete && !coverageError && !r.missingPriceCount && !r.observationError && !heldHeight) return null;
   return <div ref={element} style={heldHeight ? { minHeight: heldHeight } : undefined} className="show-readiness show-actions" aria-label="Comp data coverage">
-    {coverageError ? <span>Evidence coverage unavailable</span> : c && (incomplete || heldHeight > 0) && <>
+    {coverageError ? <span>Evidence coverage unavailable</span> : c && showSummary && <>
       <span>All inventory: {c.currentIdentities}/{c.eligibleIdentities} identities current</span>
       <span>{c.currentCards}/{c.eligibleCards} cards with current evidence</span>
       <span>{c.missingIdentities} missing · {c.staleIdentities} stale · {c.failedIdentities} failed identities</span>
