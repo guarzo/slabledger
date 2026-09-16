@@ -57,6 +57,20 @@ export interface ShowEvaluation {
   /** Untrusted additive metadata: consume only through getShowReadiness. */
   readiness?: unknown;
 }
+/** Hypothetical cached assessment. Deliberately excludes list-mutation tokens. */
+export interface PricePreview {
+  purchaseId: string;
+  currentPriceCents: number;
+  trialPriceCents: number;
+  status: SupportStatus;
+  reason: string;
+  evidenceNeedsReview: boolean;
+  evidenceReason: string;
+  evidenceVersion: string;
+  policyVersion: string;
+  recent: RecentPriceEvidence;
+}
+
 export interface ShowSale {
   id: string;
   date: string;

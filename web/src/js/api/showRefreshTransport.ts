@@ -5,7 +5,7 @@ import type { ShowEvaluation } from '../../types/showprep';
 export async function evaluateShowEvidence(purchaseIds: string[], options?: APIRequestOptions): Promise<{ evaluations: ShowEvaluation[] }> {
   for (let attempt = 1; ; attempt++) {
     options?.signal?.throwIfAborted();
-    try { return await showJSON('/evaluate', purchaseIds, options); }
+    try { return await showJSON<{ evaluations: ShowEvaluation[] }>('/evaluate', { purchaseIds }, options); }
     catch (error) {
       const retryable = error instanceof APIError && (error.code === 'NETWORK_ERROR' || error.status === 429 || error.status >= 500);
       if (!retryable || attempt >= 3) throw error;
@@ -19,8 +19,10 @@ export async function evaluateShowEvidence(purchaseIds: string[], options?: APIR
   }
 }
 
-async function showJSON(endpoint: string, purchaseIds: string[], options?: APIRequestOptions): Promise<{ evaluations: ShowEvaluation[] }> {
+/** One deadline covers headers and the entire body; callers own any retry policy. */
+export async function showJSON<T>(endpoint: string, body: object, options?: APIRequestOptions): Promise<T> {
   const external = options?.signal;
+  if (external?.aborted) throw new APIError('Request was cancelled', 0, 'CANCELLED');
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const { signal } = controller;
@@ -40,7 +42,7 @@ async function showJSON(endpoint: string, purchaseIds: string[], options?: APIRe
   try {
     const response = await Promise.race([aborted, fetch(`/api/show-prep${endpoint}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'include', body: JSON.stringify({ purchaseIds }), signal,
+      credentials: 'include', body: JSON.stringify(body), signal,
     })]);
     signal.throwIfAborted();
     reader = response.body?.getReader();
@@ -56,7 +58,7 @@ async function showJSON(endpoint: string, purchaseIds: string[], options?: APIRe
     }
     signal.throwIfAborted();
     let data;
-    try { data = JSON.parse(text); } catch { if (response.ok) throw new APIError('Invalid show evaluation response. Retry the read.', 0, 'INVALID_RESPONSE'); }
+    try { data = JSON.parse(text); } catch { if (response.ok) throw new APIError('Invalid show preparation response. Retry the read.', 0, 'INVALID_RESPONSE'); }
     if (!response.ok) throw new APIError(data?.error || data?.message || `API error: ${response.status} ${response.statusText}`, response.status, data?.code, data);
     return data;
   } catch (error) {

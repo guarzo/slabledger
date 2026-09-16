@@ -16,6 +16,7 @@ import (
 type ShowPrepService interface {
 	Evaluate(context.Context, []string) ([]sp.Evaluation, error)
 	Evidence(context.Context, string) (sp.Evidence, error)
+	Preview(context.Context, string, int) (sp.PricePreview, error)
 	Lists(context.Context) ([]sp.List, error)
 	CreateList(context.Context, string, string) (sp.List, error)
 	ListDetail(context.Context, string) (sp.ListDetail, error)
