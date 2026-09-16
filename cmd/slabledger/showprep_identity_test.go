@@ -24,11 +24,14 @@ func TestShowPrepIdentityHandoffNewCachedAndUnresolved(t *testing.T) {
 		name               string
 		cached, unresolved bool
 		initial, want      string
+		resolutions        int32
 	}{
-		{"cached new purchase", true, false, "", "canonical-profile"},
-		{"new verified result", false, false, "", "canonical-profile"},
-		{"unresolved", false, true, "", ""},
-		{"preserve existing identity", true, false, "existing-profile", "existing-profile"},
+		{"unproven cache needs enrichment", true, false, "", "canonical-profile", 1},
+		{"new verified result", false, false, "", "canonical-profile", 1},
+		{"unresolved", false, true, "", "", 1},
+		{"unproven cache stays unresolved on failure", true, true, "", "", 1},
+		{"verified cached identity", true, false, "canonical-profile", "canonical-profile", 0},
+		{"preserve existing different identity", true, false, "existing-profile", "existing-profile", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db := showRuntimeDB(t)
@@ -75,11 +78,7 @@ func TestShowPrepIdentityHandoffNewCachedAndUnresolved(t *testing.T) {
 			require.Equal(t, tc.want, p.GemRateID)
 			require.Equal(t, "BGS", grader)
 			require.Equal(t, 9.5, grade)
-			if tc.cached {
-				require.Zero(t, resolutions.Load())
-			} else {
-				require.Equal(t, int32(1), resolutions.Load())
-			}
+			require.Equal(t, tc.resolutions, resolutions.Load())
 			candidates, err := postgres.NewShowPrepWorkerStore(db.DB).Candidates(ctx)
 			require.NoError(t, err)
 			require.Len(t, candidates, 1)

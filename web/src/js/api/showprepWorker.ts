@@ -22,5 +22,12 @@ async function readStatus(path: string, options?: APIRequestOptions): Promise<Sh
 export const showPrepWorkerAPI = {
   coverage: (options?: APIRequestOptions) => readStatus('/show-prep/coverage', options),
   status: (options?: APIRequestOptions) => readStatus('/admin/show-prep/worker', options),
-  request: (retry: boolean) => client.post<{ status: 'accepted' }>(`/admin/show-prep/worker/${retry ? 'retry' : 'run'}`, {}),
+  request: async (retry: boolean) => {
+    const acknowledgement = await client.post<unknown>(`/admin/show-prep/worker/${retry ? 'retry' : 'run'}`, {});
+    if (!acknowledgement || typeof acknowledgement !== 'object'
+      || !('status' in acknowledgement) || acknowledgement.status !== 'accepted') {
+      throw new Error('Cannot confirm evidence worker request acceptance');
+    }
+    return { status: 'accepted' as const };
+  },
 };

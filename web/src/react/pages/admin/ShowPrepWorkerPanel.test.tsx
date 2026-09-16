@@ -76,12 +76,40 @@ it('does not report current coverage for a malformed status response', async () 
   view.close();
 });
 
-it('reports rejected intent without silently retrying an epoch reset', async () => {
+it('does not confirm acceptance after an HTTP error or silently retry an epoch reset', async () => {
   const view = mount(initial, async () => new Response(JSON.stringify({ error: 'private detail' }), { status: 503 }));
   await screen.findByText('Authentication hold');
   fireEvent.click(screen.getByRole('button', { name: 'Retry failed' }));
-  await screen.findByText('Request was not accepted. Try again after checking service availability.');
+  await screen.findByText('Cannot confirm request acceptance. Check worker status before explicitly retrying.');
   expect(view.requests.filter(r => r.startsWith('POST'))).toHaveLength(1);
   expect(screen.queryByText(/private detail/)).not.toBeInTheDocument();
   view.close();
+});
+
+it.each([
+  ['lost network response', async () => { throw new TypeError('Failed to fetch'); }],
+  ['missing acknowledgement', async () => new Response('{}', { status: 202 })],
+  ['null acknowledgement', async () => new Response('null', { status: 202 })],
+  ['wrong acknowledgement', async () => new Response('{"status":"queued"}', { status: 202 })],
+  ['invalid JSON acknowledgement', async () => new Response('{"status":', { status: 202 })],
+  ['lost acknowledgement body', async () => new Response(new ReadableStream({
+    start(controller) { controller.error(new TypeError('Connection lost')); },
+  }), { status: 202 })],
+] as const)('treats %s as uncertain, not confirmed rejection or success', async (_name, respond) => {
+  const view = mount(initial, respond);
+  try {
+    await screen.findByText('Authentication hold');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry failed' }));
+    await screen.findByText('Cannot confirm request acceptance. Check worker status before explicitly retrying.');
+    expect(screen.queryByText(/Request was not accepted|Request accepted\./)).not.toBeInTheDocument();
+    expect(view.requests.filter(r => r.startsWith('POST'))).toEqual(['POST /api/admin/show-prep/worker/retry']);
+    // Failure does not remove the explicit recovery path, including an auth
+    // hold with zero failed identities. Only this second click may replay it.
+    expect(screen.getByRole('button', { name: 'Retry failed' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry failed' }));
+    await waitFor(() => expect(view.requests.filter(r => r.startsWith('POST'))).toHaveLength(2));
+    await screen.findByText('Cannot confirm request acceptance. Check worker status before explicitly retrying.');
+  } finally {
+    view.close();
+  }
 });

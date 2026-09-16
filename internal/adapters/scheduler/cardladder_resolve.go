@@ -13,9 +13,10 @@ import (
 )
 
 // resolveGemRate returns the (gemRateID, condition) pair for a purchase, using
-// the cached cl_card_mappings entry when present and resolving fresh via
-// BuildCollectionCard otherwise. On a fresh resolve it also persists the
-// mapping, gemRateID, CL card metadata, and (when the local set_name is
+// the cached cl_card_mappings entry only when anchored by the purchase's
+// verified profile, and resolving fresh via BuildCollectionCard otherwise.
+// On a fresh resolve it also persists the mapping, gemRateID, CL card metadata,
+// and (when the local set_name is
 // generic) the real set name from CL. Returns ok=false when the cert can't be
 // resolved; the per-purchase failure reason is recorded for the admin UI.
 // quotaHit is true when the resolve failed because CL's daily request quota was
@@ -31,10 +32,13 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 	// rows with pre-existing cached mappings (typical for certs whose previous
 	// CL resolution only populated gemRateID+condition) would keep their
 	// generic set_name forever.
-	if m, cached := mappingByCert[p.CertNumber]; cached && strings.TrimSpace(m.CLGemRateID) != "" && m.CLCondition != "" && !constants.IsGenericSetName(p.SetName) {
+	// The mapping key is serial-only: another grader may own the same cert.
+	// Reuse requires this purchase's verified identity, not a condition label.
+	if m, cached := mappingByCert[p.CertNumber]; cached && m.CLCondition != "" && !constants.IsGenericSetName(p.SetName) {
 		profile := strings.TrimSpace(m.CLGemRateID)
-		s.persistVerifiedProfile(ctx, p, profile)
-		return profile, m.CLCondition, true, false
+		if profile != "" && profile == strings.TrimSpace(p.GemRateID) {
+			return profile, m.CLCondition, true, false
+		}
 	}
 
 	grader := strings.ToLower(p.Grader)
@@ -105,9 +109,10 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 	return resp.GemRateID, resp.Condition, true, false
 }
 
-// A cert mapping is verified independently of CL collection membership. Backfill
-// the current purchase on cached hits too; never replace a known identity or
-// infer grader/grade from a valuation condition. Existing price holds stay intact.
+// Persist the grader-specific enrichment result independently of CL collection
+// membership. A serial-only cache cannot supply missing purchase identity.
+// Never replace a known identity or infer grader/grade from a valuation condition.
+// Existing price holds stay intact.
 func (s *CardLadderRefreshScheduler) persistVerifiedProfile(ctx context.Context, p *inventory.Purchase, profile string) {
 	if s.gemRateUpdater == nil || strings.TrimSpace(p.GemRateID) != "" || profile == "" {
 		return

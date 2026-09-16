@@ -22,15 +22,22 @@ import (
 )
 
 func TestShowPrepRuntimeAuthHoldExplicitResumeWithoutFailedCoverage(t *testing.T) {
-	for _, resume := range []string{"retry", "credentials on another instance"} {
-		t.Run(resume, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, resume     string
+		refreshRejection bool
+	}{
+		{"source rejection/retry", "retry", false},
+		{"source rejection/credentials on another instance", "credentials", false},
+		{"refresh rejection/retry", "retry", true},
+		{"refresh rejection/credentials on another instance", "credentials", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			db := showRuntimeDB(t)
 			ctx := context.Background()
 			logger := mocks.NewMockLogger()
 			showRuntimeSeed(t, db, "11111111-1111-4111-8111-111111111111", "a-first")
 			showRuntimeSeed(t, db, "22222222-2222-4222-8222-222222222222", "z-next")
-			var calls atomic.Int32
-			var attempted atomic.Value
+			var calls, tokenRejections atomic.Int32
 			var reject atomic.Bool
 			reject.Store(true)
 			fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,11 +45,17 @@ func TestShowPrepRuntimeAuthHoldExplicitResumeWithoutFailedCoverage(t *testing.T
 				case "/v1/accounts:signInWithPassword":
 					_ = json.NewEncoder(w).Encode(cl.FirebaseAuthResponse{IDToken: "new-id", RefreshToken: "new-refresh", LocalID: "uid"})
 				case "/v1/token":
+					if tc.refreshRejection && reject.Load() {
+						tokenRejections.Add(1)
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadRequest)
+						_, _ = w.Write([]byte(`{"error":{"code":400,"message":"TOKEN_EXPIRED","errors":[{"domain":"global","reason":"invalid","message":"TOKEN_EXPIRED"}]}}`))
+						return
+					}
 					_ = json.NewEncoder(w).Encode(cl.FirebaseRefreshResponse{IDToken: "current-id", RefreshToken: "rotated", ExpiresIn: "3600"})
 				case "/search":
-					attempted.Store(r.URL.Query().Get("filters"))
 					calls.Add(1)
-					if reject.Load() {
+					if !tc.refreshRejection && reject.Load() {
 						http.Error(w, "secret-provider-error", http.StatusUnauthorized)
 						return
 					}
@@ -61,15 +74,24 @@ func TestShowPrepRuntimeAuthHoldExplicitResumeWithoutFailedCoverage(t *testing.T
 			deps := schedulerDeps{DB: db, Config: &cfg, Logger: logger, CardLadderStore: store, cardLadderAuthOptions: []cl.AuthOption{cl.WithAuthBaseURL(fixture.URL), cl.WithTokenBaseURL(fixture.URL)}}
 			result, cancel := initializeSchedulers(ctx, deps)
 			t.Cleanup(func() { cancel(); result.Group.StopAll(); result.Group.Wait() })
-			require.Eventually(t, func() bool { s, e := result.ShowPrepRefresh.Status(ctx); return e == nil && s.State == "auth_hold" }, 4*time.Second, 10*time.Millisecond)
-			require.Equal(t, int32(1), calls.Load(), "typed auth failure must stop fleet")
-			profile := "z-next"
-			if strings.Contains(attempted.Load().(string), "profileId:a-first") {
-				profile = "a-first"
-			}
-			_, err = db.Exec(`DELETE FROM campaign_purchases WHERE gem_rate_id=$1`, profile)
-			require.NoError(t, err)
+			require.Eventually(t, func() bool { s, e := result.ShowPrepRefresh.Status(ctx); return e == nil && s.LastSweepAt != "" }, 4*time.Second, 10*time.Millisecond)
 			status, err := result.ShowPrepRefresh.Status(ctx)
+			require.NoError(t, err)
+			require.Equal(t, "auth_hold", status.State, "credential rejection must stop the due fleet")
+			var held bool
+			require.NoError(t, db.QueryRow(`SELECT auth_hold FROM showprep_worker`).Scan(&held))
+			require.True(t, held, "hold must be persisted, not just process-local")
+			var initialCalls int32 = 1
+			if tc.refreshRejection {
+				initialCalls = 0
+				require.Equal(t, int32(1), tokenRejections.Load(), "one token rejection, not one per due identity")
+			}
+			require.Equal(t, initialCalls, calls.Load())
+			require.Equal(t, 1, status.FailedIdentities)
+			require.Equal(t, 1, status.MissingIdentities)
+			_, err = db.Exec(`DELETE FROM campaign_purchases WHERE gem_rate_id IN (SELECT profile_id FROM showprep_evidence WHERE attempt_state='failed')`)
+			require.NoError(t, err)
+			status, err = result.ShowPrepRefresh.Status(ctx)
 			require.NoError(t, err)
 			require.Equal(t, 0, status.FailedIdentities)
 			require.Equal(t, "auth_hold", status.State)
@@ -92,10 +114,19 @@ func TestShowPrepRuntimeAuthHoldExplicitResumeWithoutFailedCoverage(t *testing.T
 			status, err = result.ShowPrepRefresh.Status(ctx)
 			require.NoError(t, err)
 			require.Equal(t, "auth_hold", status.State)
-			require.Equal(t, int32(1), calls.Load())
+			require.Equal(t, initialCalls, calls.Load())
 			require.NotContains(t, status.Error, "secret")
+			// Even after the fixture is healthy, ordinary run and token rotation
+			// cannot resume the held worker. Only explicit operational repair can.
 			reject.Store(false)
-			if resume == "retry" {
+			require.Equal(t, 202, request("/api/admin/show-prep/worker/run"))
+			require.Never(t, func() bool {
+				s, e := result.ShowPrepRefresh.Status(ctx)
+				return e != nil || s.State != "auth_hold" || calls.Load() != initialCalls
+			}, 200*time.Millisecond, 10*time.Millisecond)
+			require.NoError(t, db.QueryRow(`SELECT auth_hold FROM showprep_worker`).Scan(&held))
+			require.True(t, held)
+			if tc.resume == "retry" {
 				require.Equal(t, 202, request("/api/admin/show-prep/worker/retry"))
 			} else {
 				// Save through another instance's REAL handler. Its local loop need not
@@ -115,7 +146,10 @@ func TestShowPrepRuntimeAuthHoldExplicitResumeWithoutFailedCoverage(t *testing.T
 				s, e := result.ShowPrepRefresh.Status(ctx)
 				return e == nil && s.CurrentIdentities == 1 && s.State == "idle"
 			}, 4*time.Second, 10*time.Millisecond)
-			require.Equal(t, int32(2), calls.Load())
+			require.Equal(t, initialCalls+1, calls.Load())
+			if tc.refreshRejection {
+				require.Equal(t, int32(1), tokenRejections.Load())
+			}
 		})
 	}
 }

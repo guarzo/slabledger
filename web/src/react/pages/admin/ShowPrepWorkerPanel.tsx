@@ -58,6 +58,6 @@ export function ShowPrepWorkerPanel({ enabled = true }: { enabled?: boolean }) {
         onClick={() => requestRun(true)}>{request.isPending && request.variables ? 'Requesting…' : 'Retry failed'}</Button>
     </div>
     {request.isSuccess && <p role="status" className="text-xs text-[var(--text-muted)]">Request accepted. Background coverage will update separately.</p>}
-    {request.isError && <p role="alert" className="text-xs text-[var(--danger)]">Request was not accepted. Try again after checking service availability.</p>}
+    {request.isError && <p role="alert" className="text-xs text-[var(--danger)]">Cannot confirm request acceptance. Check worker status before explicitly retrying.</p>}
   </section>;
 }
