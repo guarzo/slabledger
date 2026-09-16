@@ -16,6 +16,7 @@ const (
 	Supported     Status = "supported"
 	ThinEvidence  Status = "thin_evidence"
 	BelowTarget   Status = "below_target"
+	MixedEvidence Status = "mixed_evidence"
 	NoRecentComps Status = "no_recent_comps"
 	NeedsReview   Status = "needs_review"
 	NoListedPrice Status = "no_listed_price"
