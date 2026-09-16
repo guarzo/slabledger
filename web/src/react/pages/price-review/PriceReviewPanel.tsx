@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AgingItem } from '../../../types/campaigns';
 import type { ShowEvaluation, ShowSale } from '../../../types/showprep';
@@ -13,15 +13,17 @@ import { centsToDollars, formatCents, getErrorMessage } from '../../utils/format
 import { costBasis } from '../campaign-detail/inventory/utils';
 import { availabilityLabels, evidenceLabel, listingTypeLabel, safeSourceURL, showTime } from '../show-preparation/showPrepLabels';
 import { assessmentLabels, gapLabel, parsePriceDraft, priceGroup, type PriceDraft } from './priceReviewModel';
+import type { PriceSaveResult } from './usePriceReviewState';
 
 export interface PriceReviewPanelProps {
   purchaseId: string; item?: AgingItem; evaluation?: ShowEvaluation; draft?: PriceDraft;
   onDraftChange: (draft: PriceDraft) => void; onClearDraft: () => void;
   onSavePrice: (id: string, priceCents: number) => Promise<void>;
+  save?: PriceSaveResult; onSaveResultChange: (result: PriceSaveResult) => void; onSaveRechecked: (rechecked: boolean) => void;
 }
-interface SaveResult { state: 'saving' | 'saved' | 'error'; cents: number; value: string; message?: string; rechecked: boolean }
 
-export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftChange, onClearDraft, onSavePrice }: PriceReviewPanelProps) {
+export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftChange, onClearDraft, onSavePrice,
+  save, onSaveResultChange, onSaveRechecked }: PriceReviewPanelProps) {
   const aggregate = isShowEvaluation(evaluation) ? evaluation : undefined;
   const evidence = useShowEvidence(purchaseId, !!item, aggregate?.version);
   const detail = !evidence.isFetching && !evidence.isError ? evidence.data?.evaluation : undefined;
@@ -39,12 +41,10 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
   const trial = usePricePreview(purchaseId, editable && currentInput && changed ? cents : null, e);
   const result = currentInput && changed && !trial.isFetching && !trial.isError ? trial.data : undefined;
   const previewBaselineChanged = !!result && result.currentPriceCents !== savedCents;
-  const [saves, setSaves] = useState<Record<string, SaveResult>>({});
   const qc = useQueryClient();
   const mutationKey = ['price-review', 'save-price', purchaseId];
   const saving = useIsMutating({ mutationKey }) > 0;
   const mutation = useMutation({ mutationKey, mutationFn: persist, retry: false });
-  const save = saves[purchaseId];
   const needsRecheck = !!save && !save.rechecked && !saving;
   const canSave = editable && changed && !saving && !needsRecheck && !previewBaselineChanged && !evidence.isError;
 
@@ -57,19 +57,22 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
   }
   async function recheck() {
     const response = await evidence.refetch();
-    setSaves(old => old[purchaseId] ? { ...old, [purchaseId]: { ...old[purchaseId], rechecked: !response.isError } } : old);
+    onSaveRechecked(!response.isError);
   }
   async function persist() {
     if (cents === null || !editable) return;
-    const pending: SaveResult = { state: 'saving', cents, value, rechecked: false };
-    setSaves(old => ({ ...old, [purchaseId]: pending }));
-    let outcome: SaveResult;
+    const pending: PriceSaveResult = { state: 'saving', cents, value, rechecked: false };
+    onSaveResultChange(pending);
+    let outcome: PriceSaveResult;
     try {
       await onSavePrice(purchaseId, cents);
       outcome = { ...pending, state: 'saved' };
     } catch (error) {
       outcome = { ...pending, state: 'error', message: getErrorMessage(error, 'Price save failed') };
     }
+    // Record the write outcome in the persistent owner before read-back. A failed
+    // read must not erase a confirmed write, even if this panel has unmounted.
+    onSaveResultChange(outcome);
     // An uncertain result is read back, never automatically replayed. Keep the draft
     // until an authoritative read confirms a successful local save.
     // Refetch the captured identity, not an observer that may now point at another card.
@@ -77,7 +80,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
     const queryKey = [...showPrepKeys.evidence(purchaseId), aggregate?.version ?? ''];
     await qc.refetchQueries({ queryKey, exact: true, type: 'all' });
     const rechecked = qc.getQueryState(queryKey)?.status === 'success';
-    setSaves(old => ({ ...old, [purchaseId]: { ...outcome, rechecked } }));
+    onSaveRechecked(rechecked);
   }
   const recent = e?.recent;
   const recentIDs = new Set(recent?.saleIds);

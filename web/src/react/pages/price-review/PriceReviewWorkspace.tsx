@@ -21,6 +21,8 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
   const panel = useRef<HTMLElement>(null);
   const queueScroll = useRef(0);
   const returning = useRef(false);
+  const returnId = useRef<string | null>(null);
+  const allFilterControl = useRef<HTMLButtonElement>(null);
   const active = items.find(item => item.purchase.id === review.activeId);
   const position = review.rows.findIndex(item => item.purchase.id === review.activeId);
   const orderedSort = review.sort === 'attention' || review.sort === 'supported';
@@ -28,8 +30,14 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
   useLayoutEffect(() => {
     if (!mobileDetail && returning.current) {
       returning.current = false;
-      if (review.activeId) focusControls.current.get(review.activeId)?.focus({ preventScroll: true });
-      if (window.matchMedia('(max-width: 899px)').matches) window.scrollTo({ top: queueScroll.current, behavior: 'instant' });
+      const activeControl = review.activeId ? focusControls.current.get(review.activeId) : undefined;
+      const target = activeControl ?? (returnId.current ? focusControls.current.get(returnId.current) : undefined) ?? allFilterControl.current;
+      target?.focus({ preventScroll: true });
+      if (window.matchMedia('(max-width: 899px)').matches) {
+        window.scrollTo({ top: queueScroll.current, behavior: 'instant' });
+        // A removed row's old scroll position need not contain its surviving neighbor.
+        if (!activeControl) target?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      }
     } else if (mobileDetail && window.matchMedia('(max-width: 899px)').matches) {
       panel.current?.querySelector<HTMLElement>('[data-price-detail-heading]')?.focus({ preventScroll: true });
       panel.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -43,7 +51,7 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
   return <section aria-label="Price review" className="price-review" data-mobile-detail={mobileDetail}>
     <div className="price-review-controls">
       <div className="price-review-filters" role="group" aria-label="Price assessment filters">
-        {reviewFilters.map(filter => <Button key={filter.value} variant={review.filter === filter.value ? 'secondary' : 'ghost'} size="sm"
+        {reviewFilters.map(filter => <Button key={filter.value} ref={filter.value === 'all' ? allFilterControl : undefined} variant={review.filter === filter.value ? 'secondary' : 'ghost'} size="sm"
           aria-pressed={review.filter === filter.value} onClick={() => review.setFilter(filter.value)}>{filter.label} <span className="num">{review.counts[filter.value]}</span></Button>)}
       </div>
       <div className="price-review-toolbar">
@@ -67,7 +75,9 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
       </div>
       <section aria-label="Price details" className="price-review-detail" ref={panel}>
         <div className="price-review-detail-nav">
-          <Button className="price-review-back" variant="secondary" size="sm" onClick={() => { returning.current = true; setMobileDetail(false); }}>Back to inventory list</Button>
+          <Button className="price-review-back" variant="secondary" size="sm" onClick={() => {
+            returnId.current = review.returnFocusId(); returning.current = true; setMobileDetail(false);
+          }}>Back to inventory list</Button>
           <span className="price-review-meta">{position >= 0 ? `Price review · ${position + 1} of ${review.rows.length}` : 'Price review'}</span>
           <div className="price-review-actions">
             <Button variant="ghost" size="sm" aria-label="Previous card" disabled={!review.rows.length || position === 0} onClick={() => review.move(-1)}>↑</Button>
@@ -77,7 +87,9 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
         {review.outsideFilter && active && <p role="status" className="price-review-warning">Outside the current filter. This card stays open until you move on.</p>}
         {review.activeId ? <PriceReviewPanel purchaseId={review.activeId} item={active} evaluation={evaluations[review.activeId]}
           draft={review.drafts[review.activeId]} onDraftChange={draft => review.setDraft(review.activeId!, draft)}
-          onClearDraft={() => review.clearDraft(review.activeId!)} onSavePrice={onSavePrice} />
+          onClearDraft={() => review.clearDraft(review.activeId!)} onSavePrice={onSavePrice}
+          save={review.saves[review.activeId]} onSaveResultChange={result => review.setSaveResult(review.activeId!, result)}
+          onSaveRechecked={rechecked => review.markSaveRechecked(review.activeId!, rechecked)} />
           : <p className="price-review-empty">Select a card to review its saved asking price.</p>}
       </section>
     </div>

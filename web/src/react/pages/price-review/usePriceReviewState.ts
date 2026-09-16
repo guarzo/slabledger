@@ -5,6 +5,10 @@ import { buildPriceReview, type PriceDraft, type PriceReviewFilter, type PriceRe
 
 export type { PriceDraft, PriceReviewFilter, PriceReviewSort } from './priceReviewModel';
 
+export interface PriceSaveResult {
+  state: 'saving' | 'saved' | 'error'; cents: number; value: string; message?: string; rechecked: boolean;
+}
+
 // Owned by the inventory view switch, not by the conditional workspace mount.
 export function usePriceReviewState(items: AgingItem[], evaluations: Record<string, ShowEvaluation>, search: string) {
   const [filter, setFilter] = useState<PriceReviewFilter>('all');
@@ -12,6 +16,7 @@ export function usePriceReviewState(items: AgingItem[], evaluations: Record<stri
   const [descending, setDescending] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, PriceDraft>>({});
+  const [saves, setSaves] = useState<Record<string, PriceSaveResult>>({});
   const { rows, counts } = useMemo(() => buildPriceReview(items, evaluations, { search, filter, sort, descending }),
     [items, evaluations, search, filter, sort, descending]);
   const ids = useMemo(() => rows.map(item => item.purchase.id), [rows]);
@@ -35,10 +40,20 @@ export function usePriceReviewState(items: AgingItem[], evaluations: Record<stri
     }
     setActiveId(delta === 1 ? ids[0] : ids[ids.length - 1]);
   }, [activeId, ids]);
+  const returnFocusId = useCallback(() => {
+    if (activeId !== null && ids.includes(activeId)) return activeId;
+    const anchor = anchorQueue.current.indexOf(activeId ?? '');
+    const after = anchorQueue.current.slice(anchor + 1).find(id => ids.includes(id));
+    const before = anchorQueue.current.slice(0, anchor).reverse().find(id => ids.includes(id));
+    return after ?? before ?? ids[0] ?? null;
+  }, [activeId, ids]);
+  const setSaveResult = useCallback((id: string, result: PriceSaveResult) => setSaves(old => ({ ...old, [id]: result })), []);
+  const markSaveRechecked = useCallback((id: string, rechecked: boolean) => setSaves(old => old[id]
+    ? { ...old, [id]: { ...old[id], rechecked } } : old), []);
   const setDraft = useCallback((id: string, draft: PriceDraft) => setDrafts(old => ({ ...old, [id]: draft })), []);
   const clearDraft = useCallback((id: string) => setDrafts(old => {
     const next = { ...old }; delete next[id]; return next;
   }), []);
   return { filter, setFilter, sort, setSort, descending, setDescending, rows, counts, activeId, focus, move,
-    drafts, setDraft, clearDraft, outsideFilter: activeId !== null && !ids.includes(activeId) };
+    drafts, setDraft, clearDraft, saves, setSaveResult, markSaveRechecked, returnFocusId, outsideFilter: activeId !== null && !ids.includes(activeId) };
 }

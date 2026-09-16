@@ -92,6 +92,82 @@ it('offers mobile return to queue and restores focus to its review control', asy
   await user.click(screen.getByRole('button', { name: 'Back to inventory list' }));
   expect(screen.getByRole('button', { name: 'Review Orbit Fox' })).toHaveFocus();
 });
+it.each(['filtered', 'removed', 'empty'] as const)('returns focus to a surviving queue control after the active row is %s', async change => {
+  const { user, rerender } = setup();
+  if (change === 'filtered') await user.click(screen.getByRole('button', { name: 'Above comps 1' }));
+  await user.click(screen.getByRole('button', { name: 'Review Aurora Dragon' }));
+  if (change === 'filtered') {
+    liveEvaluations = { ...initialEvaluations, [purchaseId]: { ...a, ...supported, version: 'outside' } };
+    rerender(<Harness evaluations={liveEvaluations} />);
+  } else rerender(<Harness items={change === 'empty' ? [] : [initialItems[1]]} />);
+  await user.click(screen.getByRole('button', { name: 'Back to inventory list' }));
+  const target = change === 'removed' ? 'Review Orbit Fox' : change === 'empty' ? 'All 0' : 'All 2';
+  expect(screen.getByRole('button', { name: target })).toHaveFocus();
+});
+it('retains a rejected save and successful recheck after the submitting workspace has unmounted and remounted', async () => {
+  let reject!: (error: Error) => void;
+  save.mockImplementation(() => new Promise<void>((_resolve, fail) => { reject = fail; }));
+  const { user } = setup();
+  await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  expect(screen.queryByRole('region', { name: 'Price review' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await act(async () => reject(new Error('Write connection lost')));
+  await screen.findByText(/Save not confirmed: Write connection lost/);
+  expect(screen.getByText(/Saved state rechecked; review it before retrying/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,800.00');
+  expect(screen.getByLabelText('Asking price')).toHaveValue('2400');
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  expect(screen.getByText(/Save not confirmed: Write connection lost/)).toBeInTheDocument();
+  expect(save).toHaveBeenCalledTimes(1);
+});
+it('retains confirmation and clears the confirmed draft after remount followed by successful write and read-back', async () => {
+  let complete!: () => void;
+  save.mockImplementation(() => new Promise<void>(resolve => { complete = () => {
+    liveEvaluations = { ...initialEvaluations, [purchaseId]: { ...a, ...supported, version: 'saved-after-remount' } };
+    resolve();
+  }; }));
+  const { user } = setup();
+  await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await act(async () => complete());
+  await screen.findByText(/Price saved locally/);
+  await waitFor(() => expect(screen.getByLabelText('Asking price')).toHaveValue('2400.00'));
+  expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,400.00');
+  expect(screen.queryByRole('button', { name: 'Reset draft' })).not.toBeInTheDocument();
+  expect(save).toHaveBeenCalledExactlyOnceWith(purchaseId, 240000);
+});
+it('keeps a confirmed write distinct from failed read-back across remount, and recovers without another save', async () => {
+  let complete!: () => void;
+  save.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
+  const { user } = setup();
+  await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  vi.mocked(showPrepAPI.evidence).mockRejectedValue(new Error('Read-back offline'));
+  await act(async () => complete());
+  await screen.findByText(/Price saved locally/);
+  expect(screen.queryByText(/Save not confirmed/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Asking price')).toHaveValue('2400');
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await screen.findByText(/Evidence unavailable: Read-back offline/);
+  expect(screen.getByText(/Price saved locally/)).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Recheck saved state' })).toBeEnabled());
+  vi.mocked(showPrepAPI.evidence).mockResolvedValue({ evaluation: { ...a, ...supported, version: 'read-recovered' }, sales });
+  await user.click(screen.getByRole('button', { name: 'Recheck saved state' }));
+  await waitFor(() => expect(screen.getByLabelText('Asking price')).toHaveValue('2400.00'));
+  expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,400.00');
+  expect(screen.queryByRole('button', { name: 'Reset draft' })).not.toBeInTheDocument();
+  expect(save).toHaveBeenCalledTimes(1);
+});
 it('blocks duplicate saves across view unmount/remount while preserving the submitted draft', async () => {
   let complete!: () => void;
   save.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));

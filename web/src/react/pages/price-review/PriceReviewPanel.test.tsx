@@ -7,6 +7,7 @@ import { showPrepAPI } from '../../../js/api/showprep';
 import { priceReviewAPI } from '../../../js/api/priceReview';
 import type { ShowEvaluation } from '../../../types/showprep';
 import { PriceReviewPanel } from './PriceReviewPanel';
+import { usePriceReviewState } from './usePriceReviewState';
 import type { PriceDraft } from './priceReviewModel';
 import { evaluation, inventoryItem, preview, purchaseId, sales } from './fixtures.test-support';
 
@@ -25,8 +26,11 @@ function setup(initialDraft?: PriceDraft, onSavePrice = vi.fn(async (_id: string
   const { qc, wrapper } = provider();
   function Harness({ e = saved }: { e?: ShowEvaluation }) {
     const [draft, setDraft] = useState(initialDraft);
+    const review = usePriceReviewState([inventoryItem(e)], { [purchaseId]: e }, '');
     return <PriceReviewPanel purchaseId={purchaseId} item={inventoryItem(e)} evaluation={e} draft={draft}
-      onDraftChange={setDraft} onClearDraft={() => setDraft(undefined)} onSavePrice={onSavePrice} />;
+      onDraftChange={setDraft} onClearDraft={() => setDraft(undefined)} onSavePrice={onSavePrice}
+      save={review.saves[purchaseId]} onSaveResultChange={result => review.setSaveResult(purchaseId, result)}
+      onSaveRechecked={rechecked => review.markSaveRechecked(purchaseId, rechecked)} />;
   }
   return { ...render(<Harness />, { wrapper }), qc, Harness, onSavePrice, user: userEvent.setup() };
 }
