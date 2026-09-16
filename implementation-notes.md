@@ -536,8 +536,8 @@ Approved recovery: `docs/specs/2026-09-15-cached-show-preparation-design.md` and
 linked `show-preparation-cached-design` worktree. Tasks1–3 were already implemented
 and reviewed. Earlier browser-owned warming, retry/control and first-configuration
 restart statements above are historical; the recovery supersedes that ownership.
-Parent final whole-branch review remains required. No production deployment,
-source access, backfill, push or PR was authorized/performed.
+Final review was pending at this checkpoint; see the completion record below.
+No production deployment, source access, backfill, push or PR was authorized/performed.
 
 ### What the recovery owns now
 
@@ -695,14 +695,14 @@ ownership/auth-hold/retry bookkeeping; stop workers and use a compatible app bef
 an authorized rollback. Local tests do not authorize resetting production retries.
 Worker rollout is **not complete**: separately authorize deployment, initial server-
 owned catch-up and real-inventory coverage plus zero-source browser verification.
-Parent independent final whole-branch review remains outstanding.
+Final review was outstanding at this checkpoint; the completion record below supersedes it.
 
 ## Final bounded recovery fix wave after `6fa439d0`
 
 This appendix supersedes Task4's shared cmd/storage test-DB recipe, not its
 historical results. Only validated findings F1–F3 were addressed. No further
 review agents, push, PR, deployment, production credentials or live provider
-requests were used. Parent owns the scoped final recheck; it remains pending.
+requests were used. The scoped recheck and its final residual correction are recorded below.
 
 ### Changes and RED/GREEN
 
@@ -777,4 +777,49 @@ owned by showprep; zero other sessions. Worker ports45089/46353/45989, cached
 ports46091/45485/44921 and focused layout45173 closed. Groups, pools, source/app/
 control servers and owned browsers joined/closed; container retained. The final
 control tests reset only the browser schema; phase data/history lives in artifacts.
-Production rollout and parent scoped final recheck remain explicitly incomplete.
+Production rollout remains explicitly incomplete.
+
+## Local completion — 2026-09-16
+
+Final reviewed implementation: `5ce621c51ca236aff4a0993300e4e0ffbe313196`.
+The independent whole-branch review and scoped corrections conclude **SHIP**;
+Task4 spec and quality pass. This is a local code verdict, not a deployment or
+real-inventory readiness claim.
+
+The scoped recheck found one additional presentation regression: an already-complete
+fleet could show only a missing-price notice, but selecting a card used that
+notice's height to enable previously absent fleet-summary text. The final two-file
+correction tracks prior summary visibility separately from overall notice height.
+Actual mobile RED measured a66px shift; all16 desktop/mobile Chromium cases now
+pass, including price-only content, live updates, stale versions, clear/view reset
+and zero interaction requests. Full859 frontend tests, typecheck, lint, build and
+make check passed after that correction. Backend/CI/diagnostics were unchanged.
+
+The controller also freshly ran full Go-race with both isolated PostgreSQL opt-ins
+(cmd16.574s/storage97.914s),859 frontend tests, typecheck/lint/build and make check
+on `43892d49`, before the final price-only conditional correction. Actual worker
+and cached browser modes passed179.85s/36.61s on that same backend/layout baseline;
+they were not rerun after the two-file residual. Fresh16-case Chromium geometry
+covers the residual and all12 original focused cases. Prior source/financial
+phase artifacts remain valid historical evidence, not relabeled as new runs.
+
+Important implementation decisions remain: identity/card coverage units are
+explicit; abandoned starts consume the bounded retry budget; serial-only CL
+mappings require an existing purchase identity anchor or grader-aware enrichment;
+auth rejection is held durably; control acknowledgements distinguish uncertainty;
+and runtime tests have an independent CI database. No monetary rules, business
+fingerprints, list/packing history or price-association protections were weakened.
+Safe worker diagnostics preserve internal causes but expose only allowed fields.
+
+The final pass required one extra bounded price-only follow-up beyond the planned
+fix wave, rather than parking a known checkbox regression. No further broad audit,
+new feature, dependency or production operation was added. Remote CI remains unrun.
+The linked branch and review/test artifacts are retained for the next integration
+choice; the owned disposable PostgreSQL container is removed after verification.
+
+Reviewer knowledge check:
+1. Which provider requests belong to server preparation, cached use and explicit background repair?
+2. Why are lease ownership, attempt generation and credential generation separate fences?
+3. Why is a cert-only cached mapping insufficient to establish another purchase's identity?
+4. What distinguishes retained layout footprint from frozen data or silent version acknowledgement?
+5. Which verification remains necessary after separately authorized production deployment?

@@ -1,6 +1,6 @@
 # Show preparation from prepared data
 
-**Status: locally implemented and product-proof verified; parent final whole-branch review pending.**
+**Status: locally implemented, product-proof verified, and final scoped code review SHIP at `5ce621c5` (2026-09-16). Production rollout remains separately gated.**
 Tasks1–3 were implemented and reviewed before Task4. Task4 verified actual no-browser
 worker population, separately provider-blocked cached use, real concurrent publication,
 and local race/frontend/migration/geometry gates. This is not deployment or production
@@ -117,7 +117,7 @@ Packing remains the existing saved-list workflow. No new pricing system, reserva
 
 ## 5. Operations and failure visibility
 
-Reuse the existing Admin integrations surface and scheduler-stat storage, adding a **separate evidence-worker status** rather than presenting CL pricing success as evidence success.
+Reuse the existing Admin integrations and scheduler infrastructure, with **separate evidence-worker status** persisted in the authoritative fenced worker row. Do not duplicate it in unfenced legacy pricing statistics or present CL pricing success as evidence success.
 
 Show enabled/unconfigured/idle/running/failed state; eligible/current/missing/stale/failed **identity** counts; eligible/current/unresolved **card** counts; last sweep finish; and retry due time. Eligible identities count resolved normalized identities, while eligible cards include unresolved inventory. Never mix these denominators. Report completed-with-errors honestly. A recent success for one card is not complete inventory coverage.
 
@@ -155,7 +155,7 @@ Provider outage: preserve dated data, report the operational failure, obey retry
 
 ## 8. Evidence, scope, and approval
 
-Repository findings that constrain this proposal:
+Historical discovery findings from deployed baseline `3baaed37` that constrained this design (paths and “current” behavior below refer to that baseline, not the completed recovery):
 
 - `web/src/react/pages/campaign-detail/InventoryTab.tsx`: currently activates acquisition for `selecting || support !== 'all'`; also already uses shared selected IDs and captured versions.
 - `web/src/react/pages/campaign-detail/inventory/InventorySelectionBar.tsx` and `web/src/react/pages/show-preparation/ShowSelectionBar.tsx`: existing bulk selection and destination mechanics can be reused; a new selection system is unnecessary.
