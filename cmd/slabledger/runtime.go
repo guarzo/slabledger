@@ -254,6 +254,7 @@ func (w *wiring) buildCampaignsAndIntegrations(ctx context.Context, cfg *config.
 // from the wiring's fields.
 func (w *wiring) schedulerDeps(cfg *config.Config, logger observability.Logger) schedulerDeps {
 	sDeps := schedulerDeps{
+		DB:                         w.db,
 		Config:                     cfg,
 		Logger:                     logger,
 		DBTracker:                  w.priceRepo,

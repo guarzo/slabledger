@@ -1,4 +1,5 @@
 import { CardLadderTab } from './CardLadderTab';
+import { ShowPrepWorkerPanel } from './ShowPrepWorkerPanel';
 import { DHTab } from './DHTab';
 import { PSASyncTab } from './PSASyncTab';
 import { DHOperationsPanel } from './DHOperationsPanel';
@@ -141,6 +142,8 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
           <PSASyncTab enabled={enabled} />
         </section>
       </div>
+
+      <ShowPrepWorkerPanel enabled={enabled} />
 
       <section className="mt-6">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-subtle)] mb-1">

@@ -20,6 +20,7 @@ import (
 
 // Router configures all HTTP routes and returns the configured handler
 type Router struct {
+	showPrepWorkerHandler     *handlers.ShowPrepWorkerHandler
 	showPrepHandler           *handlers.ShowPrepHandler
 	handler                   *handlers.Handler
 	healthHandler             *handlers.HealthHandler
@@ -55,6 +56,7 @@ type Router struct {
 
 // RouterConfig holds configuration for creating a new Router
 type RouterConfig struct {
+	ShowPrepWorkerHandler     *handlers.ShowPrepWorkerHandler
 	ShowPrepHandler           *handlers.ShowPrepHandler
 	Handler                   *handlers.Handler
 	HealthHandler             *handlers.HealthHandler
@@ -93,16 +95,17 @@ type RouterConfig struct {
 // NewRouter creates a new router with the given configuration
 func NewRouter(cfg RouterConfig) *Router {
 	rt := &Router{
-		showPrepHandler:  cfg.ShowPrepHandler,
-		handler:          cfg.Handler,
-		healthHandler:    cfg.HealthHandler,
-		apiStatusHandler: cfg.APIStatusHandler,
-		spaHandler:       cfg.SPAHandler,
-		logger:           cfg.Logger,
-		databasePath:     cfg.DatabasePath,
-		timingStore:      cfg.TimingStore,
-		googleOAuthEnv:   cfg.GoogleOAuthEnv,
-		localAPIToken:    cfg.LocalAPIToken,
+		showPrepWorkerHandler: cfg.ShowPrepWorkerHandler,
+		showPrepHandler:       cfg.ShowPrepHandler,
+		handler:               cfg.Handler,
+		healthHandler:         cfg.HealthHandler,
+		apiStatusHandler:      cfg.APIStatusHandler,
+		spaHandler:            cfg.SPAHandler,
+		logger:                cfg.Logger,
+		databasePath:          cfg.DatabasePath,
+		timingStore:           cfg.TimingStore,
+		googleOAuthEnv:        cfg.GoogleOAuthEnv,
+		localAPIToken:         cfg.LocalAPIToken,
 	}
 
 	if cfg.CampaignsHandler != nil {
@@ -270,6 +273,7 @@ func (rt *Router) Setup() http.Handler {
 	// Liquidation pricing routes
 	rt.registerLiquidationRoutes(mux)
 	rt.registerShowPrepRoutes(mux)
+	rt.registerShowPrepWorkerRoutes(mux)
 
 	return mux
 }

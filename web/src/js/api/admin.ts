@@ -22,7 +22,7 @@ declare module './client' {
     getPriceOverrideStats(): Promise<PriceOverrideStats>;
     getCardLadderStatus(): Promise<CLStatusResponse>;
     getCardLadderFailures(limit?: number): Promise<IntegrationFailuresReport>;
-    saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string }>;
+    saveCardLadderConfig(config: { email: string; password: string; collectionId: string; firebaseApiKey: string }): Promise<{ status: string; workerNotification?: 'failed'; warning?: string }>;
     triggerCardLadderRefresh(): Promise<{ status: string }>;
     syncCardLadderCollection(): Promise<CLSyncResult>;
     getDHStatus(): Promise<DHStatusResponse>;
@@ -91,7 +91,7 @@ proto.getCardLadderFailures = async function (this: APIClient, limit?: number) {
 };
 
 proto.saveCardLadderConfig = async function (this: APIClient, config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) {
-  return this.post<{ status: string }>('/admin/cardladder/config', config);
+  return this.post<{ status: string; workerNotification?: 'failed'; warning?: string }>('/admin/cardladder/config', config);
 };
 
 proto.triggerCardLadderRefresh = async function (this: APIClient) {

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../js/api';
 import { queryKeys } from './queryKeys';
 import type { DHPushConfig } from '../../types/apiStatus';
+import { showPrepWorkerKeys } from './useShowPrepWorker';
 
 /** Options shared by all admin read queries */
 export interface AdminQueryOptions {
@@ -128,6 +129,7 @@ export function useSaveCardLadderConfig() {
     mutationFn: (config: { email: string; password: string; collectionId: string; firebaseApiKey: string }) =>
       api.saveCardLadderConfig(config),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: showPrepWorkerKeys.all });
       qc.invalidateQueries({ queryKey: queryKeys.admin.cardLadderStatus });
     },
   });

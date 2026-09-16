@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ShowEvaluation, SupportStatus } from '../../../types/showprep';
 import { useShowReadiness } from '../../queries/useShowReadiness';
+import { useShowPrepCoverage } from '../../queries/useShowPrepWorker';
 import ShowReadinessLine from '../show-preparation/ShowReadinessLine';
 import { useShowEvaluations } from '../../queries/useShowPrepQueries';
 import ShowEvidenceDisclosure, { ShowEvidenceButton } from '../show-preparation/ShowEvidence';
@@ -47,6 +48,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const [evidenceExpandedId, setEvidenceExpandedId] = useState<string | null>(null);
   const purchaseIds = useMemo(() => items.map(item => item.purchase.id), [items]);
   const evaluationsQuery = useShowEvaluations(purchaseIds);
+  const coverage = useShowPrepCoverage();
   const previousItems = useRef(items);
   const { refetch: recheckEvaluations } = evaluationsQuery;
   useEffect(() => {
@@ -203,7 +205,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         pending={evaluationsQuery.isFetching} fetching={evaluationsQuery.isFetching}
         failed={Object.keys(evaluationsQuery.data?.errors ?? {}).length + (evaluationsQuery.isFetching ? 0 : evaluationsQuery.unresolvedCount)}
         onRetry={() => { void evaluationsQuery.refetch(); }}>
-        <ShowReadinessLine readiness={readiness} />
+        <ShowReadinessLine readiness={readiness} coverage={coverage.data} coverageError={coverage.isError} />
       </ShowInventoryFilters>
 
       {isMobile ? (

@@ -80,6 +80,7 @@ func Default() Config {
 			BatchSize:     3,
 			MaxRetries:    5,
 		},
+		ShowPrepRefresh: ShowPrepRefreshConfig{Enabled: true},
 		CardLadder: CardLadderConfig{
 			Enabled:     true, // runs automatically when credentials are configured
 			Interval:    24 * time.Hour,

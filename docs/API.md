@@ -1830,6 +1830,55 @@ price and stores named packing lists. These operations do not reprice, delist,
 reserve, or sell purchases. All endpoints require authentication. Money remains in
 integer cents, matching the inventory API.
 
+### Worker coverage and administration
+
+| Method and route | Authorization | Response |
+|---|---|---|
+| `GET /api/show-prep/coverage` | Authenticated | Safe fleet status/counts below; no source work or wake |
+| `GET /api/admin/show-prep/worker` | Admin | Worker status/counts below |
+| `POST /api/admin/show-prep/worker/run` | Admin | `202 { "status": "accepted" }` after durable normal intent |
+| `POST /api/admin/show-prep/worker/retry` | Admin | `202 { "status": "accepted" }` after durable explicit retry intent |
+
+POSTs accept no selected-card cohort. They coalesce a bounded wake of the existing
+application-owned worker, never run acquisition in the request. Missing auth returns
+401, authenticated non-admin admin requests return 403, and failed intent persistence
+returns a safe 503. Accepted does not mean completed or fully covered. The enabled
+gate still applies; disabled requests remain durable for a later enabled startup.
+
+Status JSON fields:
+
+```json
+{
+  "enabled": true, "configured": true, "state": "failed",
+  "eligibleIdentities": 5, "currentIdentities": 2,
+  "missingIdentities": 1, "staleIdentities": 1, "failedIdentities": 1,
+  "eligibleCards": 8, "currentCards": 3, "unresolvedCards": 1,
+  "lastSweepAt": "2026-09-15T12:00:00Z", "retryAt": "2026-09-15T12:15:00Z",
+  "error": "CardLadder evidence collection failed"
+}
+```
+
+Eligible identities are resolved normalized profile/grader/grade combinations;
+current + missing + stale + failed partitions that identity denominator. Eligible
+cards include unresolved inventory; current cards sum copies of current identities.
+No IDs, credentials, hashes, source URLs or raw errors are exposed. Timestamps are
+UTC RFC3339Nano, empty when inapplicable. `retryAt` is the earliest future retry/window
+boundary, not permission to ignore a hold. A last sweep timestamp does not certify
+fleet coverage. Complete current zero-sale windows count as current.
+
+States: `disabled`, `unconfigured`, `idle`, `running`, `failed`, `auth_hold`.
+The UI labels `failed` as completed with errors and distinguishes idle/incomplete
+from current fleet coverage. Normal Run now respects auth hold, backoff and limits.
+Retry failed clears the hold and advances ownership for one bounded retry sweep,
+including when failed identity coverage is zero. Explicit successful CL credential
+save updates the shared client, advances ownership and wakes normal due work;
+ordinary token rotation does not clear a hold or reset retry budgets.
+
+`POST /api/admin/cardladder/config` still reports `connected` on success. If credentials
+were saved but client activation/worker notification failed, HTTP 200 instead returns
+`{"status":"saved","workerNotification":"failed","warning":"..."}`. Inspect worker
+status and use Retry failed after repair; do not mistake this response for a failed save.
+
 ### Evidence operations
 
 | Method and route | Body | Response |
@@ -1843,7 +1892,7 @@ Refresh is retired without provider or store access, including for malformed sta
 clients; authentication still runs first. The handler-facing service has cached
 read/list capabilities and production wiring supplies no source. Browser selection
 and filters never trigger a request or acquisition. Server-owned evidence population
-is a separate delivery, not a side effect of these endpoints.
+runs through the independent worker described below, not these endpoints.
 Legacy 90-day comps are not certified show evidence, so an upgraded database can
 legitimately be `not_checked`. Failed/partial collection is represented independently
 by `evidenceNeedsReview` and `evidenceReason`, not successful empty windows.

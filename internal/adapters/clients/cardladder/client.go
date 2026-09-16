@@ -47,11 +47,12 @@ type Client struct {
 	httpClient   *httpx.Client
 
 	// Token management
-	mu           sync.Mutex
-	token        TokenState
-	auth         *FirebaseAuth
-	refreshToken string
-	refreshGroup singleflight.Group
+	mu               sync.Mutex
+	token            TokenState
+	auth             *FirebaseAuth
+	refreshToken     string
+	refreshGroup     singleflight.Group
+	credentialsEpoch uint64
 
 	// For testing: bypass token management
 	staticToken string
@@ -101,6 +102,8 @@ func NewClient(opts ...ClientOption) *Client {
 
 // Available returns true if the client has valid credentials.
 func (c *Client) Available() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.staticToken != "" || (c.auth != nil && c.refreshToken != "")
 }
 
@@ -231,10 +234,16 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 		c.mu.Unlock()
 		return "", apperrors.ConfigMissing("CardLadder credentials", "")
 	}
+	epoch := c.credentialsEpoch
 	c.mu.Unlock()
 
-	v, err, _ := c.refreshGroup.Do("refresh", func() (any, error) {
+	// Repairs must not join an in-flight refresh from previous credentials.
+	v, err, _ := c.refreshGroup.Do(strconv.FormatUint(epoch, 10), func() (any, error) {
 		c.mu.Lock()
+		if c.credentialsEpoch != epoch {
+			c.mu.Unlock()
+			return "", context.Canceled
+		}
 		if c.token.IDToken != "" && time.Now().Add(5*time.Minute).Before(c.token.ExpiresAt) {
 			token := c.token.IDToken
 			c.mu.Unlock()
@@ -256,6 +265,9 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 
 		c.mu.Lock()
 		defer c.mu.Unlock()
+		if c.credentialsEpoch != epoch {
+			return "", context.Canceled
+		}
 		c.token = TokenState{
 			IDToken:   resp.IDToken,
 			ExpiresAt: time.Now().Add(time.Duration(expSec) * time.Second),
@@ -290,6 +302,7 @@ func (c *Client) SetRefreshToken(refreshToken string) {
 func (c *Client) UpdateCredentials(auth *FirebaseAuth, refreshToken string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.credentialsEpoch++
 	c.auth = auth
 	c.refreshToken = refreshToken
 	// Invalidate cached token so the next call uses the new credentials.

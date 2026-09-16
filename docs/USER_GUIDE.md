@@ -315,10 +315,29 @@ checkboxes select cards immediately without a request. Browsing, filtering,
 selection, opening evidence, adding to lists and packing never collect CardLadder
 comps. There is no separate selection mode or per-card collection control.
 
-The coverage line separates current evidence from missing, old and unavailable
-data, unresolved matches, and missing DH prices. An empty Supported view does not
-start a job or clear other filters. This cached-only containment change does not
-populate empty caches; server-owned population is a separate delivery.
+A quiet coverage line appears when data is incomplete. It reports server-counted
+**all-inventory identities** and **cards** separately, including missing/stale/failed
+identities and unresolved cards. Missing DH prices are separately counted for this
+view. An empty Supported view does not start a job or clear other filters.
+
+The server collects missing/due verified evidence on startup and every minute,
+independently of browser activity, DH price, receipt, and CL collection membership.
+`SHOW_PREP_REFRESH_ENABLED` defaults to true and is independent of CL value refresh.
+Unresolved cards wait for existing verified identity enrichment. Complete zero-sale
+windows are current data; yesterday's UTC window is stale until the worker renews it.
+
+Administrators can inspect **Admin → Integrations → Show evidence** for enabled/
+configured state, coverage, last finished sweep and retry/window timing. **Run now**
+requests a normal due scan; it does not bypass an authentication hold or retry limits.
+**Retry failed** resumes after repair and allows one bounded retry sweep, even if
+an authentication hold remains after its failed card left inventory. Current evidence
+is not refetched. A request accepted message is not a completed fleet refresh.
+
+Saving Card Ladder credentials activates the shared client and notifies the worker.
+If the save succeeds but worker notification fails, the UI says credentials were saved
+and directs the administrator to retry activation. Token rotation alone does not
+clear an authentication hold. Disabled/unconfigured workers remain visible; cached
+selection and packing remain usable during outages.
 
 Inventory rereads stored evaluations on focus, UTC midnight and evidence expiry.
 These reads do not collect comps or change selected versions. Unresolved early

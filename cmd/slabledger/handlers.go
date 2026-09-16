@@ -83,10 +83,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	logger := in.Logger
 
 	// Card Ladder handler
-	var clHandler *handlers.CardLadderHandler
-	if in.CLStore != nil {
-		clHandler = handlers.NewCardLadderHandler(in.CLStore, in.CLClient, logger)
-	}
+	clHandler := buildCardLadderHandler(in)
 
 	// PSA Sync handler (pending items + admin status)
 	var psaSyncHandler *handlers.PSASyncHandler
@@ -242,6 +239,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 
 	deps := ServerDependencies{
 		ShowPrepHandler:           buildShowPrepHandler(in),
+		ShowPrepWorkerHandler:     buildShowPrepWorkerHandler(in),
 		Config:                    in.Cfg,
 		Logger:                    logger,
 		PriceProv:                 in.PriceProvImpl,

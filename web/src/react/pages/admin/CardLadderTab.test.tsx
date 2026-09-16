@@ -6,10 +6,11 @@ import type { CLStatusResponse, IntegrationFailuresReport } from '../../../types
 
 let status: CLStatusResponse;
 let failures: IntegrationFailuresReport | undefined;
+const saveConfig = vi.fn();
 
 vi.mock('../../queries/useAdminQueries', () => ({
   useCardLadderStatus: () => ({ data: status, isLoading: false, error: null }),
-  useSaveCardLadderConfig: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSaveCardLadderConfig: () => ({ mutateAsync: saveConfig, isPending: false }),
   useTriggerCardLadderRefresh: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSyncCardLadderCollection: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCardLadderFailures: () => ({ data: failures }),
@@ -43,6 +44,22 @@ describe('CardLadderTab diagnostics', () => {
   beforeEach(() => {
     status = { configured: true, email: 'ops@example.com', collectionId: 'abc123' };
     failures = undefined;
+    saveConfig.mockReset();
+  });
+
+  it('distinguishes saved credentials from failed worker notification', async () => {
+    const warning = 'Credentials saved, but evidence worker activation failed. Check Show evidence in Admin.';
+    saveConfig.mockResolvedValue({ status: 'saved', workerNotification: 'failed', warning });
+    status = { configured: false };
+    renderTab();
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'fixture@example.test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'fixture' } });
+    fireEvent.change(screen.getByLabelText('Collection ID'), { target: { value: 'collection' } });
+    fireEvent.change(screen.getByLabelText('Firebase API Key'), { target: { value: 'key' } });
+    fireEvent.submit(screen.getByLabelText('Email').closest('form')!);
+    await screen.findByText(warning);
+    expect(screen.queryByText('Card Ladder connected')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toHaveValue('');
   });
 
   it('renders the unprocessed bucket even when the last run recorded no failures', () => {

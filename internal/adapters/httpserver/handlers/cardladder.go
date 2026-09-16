@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"sync"
-	"time"
 
 	cardladderclient "github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/scheduler"
@@ -41,13 +40,15 @@ type CLRefresher interface {
 
 // CardLadderHandler manages Card Ladder admin endpoints.
 type CardLadderHandler struct {
-	mu             sync.Mutex
-	store          CardLadderStore
-	client         *cardladderclient.Client
-	refresher      CLRefresher
-	purchaseLister CLPurchaseLister
-	syncUpdater    CLSyncUpdater
-	logger         observability.Logger
+	mu                 sync.Mutex
+	store              CardLadderStore
+	client             *cardladderclient.Client
+	configuredClient   *cardladderclient.ConfiguredClient
+	credentialsChanged func(context.Context) error
+	refresher          CLRefresher
+	purchaseLister     CLPurchaseLister
+	syncUpdater        CLSyncUpdater
+	logger             observability.Logger
 }
 
 // SetRefresher injects the refresh trigger after scheduler construction.
@@ -59,7 +60,8 @@ func (h *CardLadderHandler) SetRefresher(r CLRefresher) {
 
 // NewCardLadderHandler creates a new Card Ladder admin handler.
 func NewCardLadderHandler(store CardLadderStore, client *cardladderclient.Client, logger observability.Logger) *CardLadderHandler {
-	return &CardLadderHandler{store: store, client: client, logger: logger}
+	return &CardLadderHandler{store: store, client: client, logger: logger,
+		configuredClient: cardladderclient.NewConfiguredClient(store, client, logger)}
 }
 
 type cardLadderConfigRequest struct {
@@ -80,9 +82,10 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Create a temporary auth client with the provided API key
-	tempAuth := cardladderclient.NewFirebaseAuth(req.FirebaseAPIKey)
-	authResp, err := tempAuth.Login(r.Context(), req.Email, req.Password)
+	h.mu.Lock()
+	configured, notify := h.configuredClient, h.credentialsChanged
+	h.mu.Unlock()
+	authResp, err := configured.Authenticate(r.Context(), req.FirebaseAPIKey, req.Email, req.Password)
 	if err != nil {
 		h.logger.Error(r.Context(), "Card Ladder Firebase login failed", observability.Err(err))
 		writeError(w, http.StatusUnauthorized, "Firebase authentication failed")
@@ -95,31 +98,25 @@ func (h *CardLadderHandler) HandleSaveConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Atomically update or create the live client
+	// Sync the actual saved row, then fence old evidence work and wake the
+	// application-owned loop. A successful save is not a successful notification.
+	if err := configured.Refresh(r.Context()); err != nil {
+		h.credentialNotificationFailed(w)
+		return
+	}
 	h.mu.Lock()
-	if h.client != nil {
-		h.client.UpdateCredentials(
-			cardladderclient.NewFirebaseAuth(req.FirebaseAPIKey),
-			authResp.RefreshToken,
-		)
-	} else {
-		h.client = cardladderclient.NewClient(
-			cardladderclient.WithTokenManager(
-				cardladderclient.NewFirebaseAuth(req.FirebaseAPIKey),
-				authResp.RefreshToken,
-				time.Time{},
-			),
-		)
-	}
-	// Capture client ref under lock before pushing to scheduler.
-	client := h.client
+	h.client = configured.Current()
+	client, refresher := h.client, h.refresher
 	h.mu.Unlock()
-
-	// Push the new/updated client to the scheduler so it picks up new credentials.
-	if h.refresher != nil {
-		h.refresher.SetClient(client)
+	if refresher != nil {
+		refresher.SetClient(client)
 	}
-
+	if notify != nil {
+		if err := notify(r.Context()); err != nil {
+			h.credentialNotificationFailed(w)
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
 }
 

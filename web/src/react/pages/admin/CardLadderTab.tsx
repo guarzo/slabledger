@@ -50,8 +50,9 @@ export function CardLadderTab({ enabled = true }: { enabled?: boolean }) {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await saveMutation.mutateAsync({ email, password, collectionId, firebaseApiKey });
-      toast.success('Card Ladder connected');
+      const result = await saveMutation.mutateAsync({ email, password, collectionId, firebaseApiKey });
+      if (result.workerNotification === 'failed') toast.warning(result.warning ?? 'Credentials saved, but evidence worker activation failed. Check Show evidence in Admin.');
+      else toast.success('Card Ladder connected');
       setPassword('');
     } catch {
       toast.error('Failed to connect Card Ladder. Check your credentials.');

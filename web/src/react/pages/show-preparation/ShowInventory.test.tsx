@@ -44,6 +44,7 @@ beforeEach(() => {
     requests.push({ url, body });
     let response: unknown = {}; let status = 200;
     if (url.endsWith('/refresh')) { response = { error: 'retired' }; status = 410; }
+    else if (url.endsWith('/coverage')) response = { enabled: true, configured: true, state: 'idle', eligibleIdentities: 2, currentIdentities: 1, missingIdentities: 1, staleIdentities: 0, failedIdentities: 0, eligibleCards: 3, currentCards: 2, unresolvedCards: 0, lastSweepAt: '', retryAt: '', error: '' };
     else if (url.endsWith('/evaluate')) response = { evaluations: values };
     else if (url.endsWith('/lists')) response = { lists: [detail().list] };
     else if (url.endsWith('/items')) { response = addFails ? { error: 'Evaluation changed. Review current data.' } : detail(); status = addFails ? 409 : 200; }
@@ -59,6 +60,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('cached show preparation in the existing inventory', () => {
   it('uses the existing bulk bar for cached-only selection without checkbox or filter requests', async () => {
     const qc = mount(); await waitFor(() => expect(qc.isFetching()).toBe(0));
+    expect(requests.filter(r => r.url.endsWith('/coverage'))).toHaveLength(1);
     const before = requests.length; select();
     const bar = screen.getByRole('region', { name: 'Bulk actions for selected cards' });
     expect(within(bar).getByRole('button', { name: /^Add to show/ })).toBeEnabled();
@@ -195,6 +197,6 @@ describe('cached show preparation in the existing inventory', () => {
     const qc = mount(); await waitFor(() => expect(qc.isFetching()).toBe(0)); support('supported');
     await screen.findByText('No current matches under these filters.');
     expect(screen.getByText(/Comp data coverage is incomplete/)).toBeVisible();
-    await act(async () => {}); expect(calls).toEqual(['/api/show-prep/evaluate']);
+    await act(async () => {}); expect(calls.sort()).toEqual(['/api/show-prep/coverage', '/api/show-prep/evaluate']);
   });
 });
