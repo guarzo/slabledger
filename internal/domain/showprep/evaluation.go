@@ -87,6 +87,13 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 			e.Status, e.Reason = NeedsReview, e.EvidenceReason
 		}
 	}
+	if a == Unknown {
+		// A purchase fallback's zero fields are unreadable, not a committed missing
+		// asking. Resolve this before hashing; ordinary physical/DH warnings do not
+		// suppress a known asking assessment.
+		e.Status, e.Reason = NeedsReview, "Purchase details unavailable"
+		e.Recent.GapPct = nil
+	}
 	// Include derived status/window (date rollover and freshness matter), but not the read instant.
 	e.Version = Fingerprint(struct {
 		Purchase   Purchase

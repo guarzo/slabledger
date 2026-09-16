@@ -23,7 +23,7 @@ export const assessmentLabels: Record<SupportStatus, string> = {
 const attention = { above: 0, mixed: 1, limited: 2, unavailable: 3, unpriced: 4, supported: 5 };
 
 export function priceGroup(e?: ShowEvaluation): Exclude<PriceReviewFilter, 'all'> {
-  return isShowEvaluation(e) ? assessmentGroups[e.status] : 'unavailable';
+  return isShowEvaluation(e) && e.availability !== 'unknown' ? assessmentGroups[e.status] : 'unavailable';
 }
 export function parsePriceDraft(value: string): number | null {
   const trimmed = value.trim();
@@ -47,7 +47,7 @@ function knownFirst(a: number | null, b: number | null, descending: boolean): nu
   return (descending ? -1 : 1) * (a - b);
 }
 function sortValue(e: ShowEvaluation | undefined, sort: PriceReviewSort): number | null {
-  if (!isShowEvaluation(e)) return null;
+  if (!isShowEvaluation(e) || e.availability === 'unknown') return null;
   if (sort === 'asking') return e.localPriceCents > 0 ? e.localPriceCents : null;
   if (e.evidenceNeedsReview) return null;
   if (sort === 'recent') return e.recent.count > 0 ? e.recent.medianCents : null;

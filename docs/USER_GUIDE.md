@@ -371,14 +371,16 @@ does not prohibit a physically eligible manual shortlist.
 
 If selected data changes, rows stay identifiable and Add is blocked until you
 explicitly review/reselect; the application never silently acknowledges new prices
-or evidence. Existing price-band controls stay in place with current counts (including
-zero) while a filtered selection is held, rather than collapsing above selected rows.
-The existing Needs Attention banner likewise retains its space with live counts
-while selection is held, even when the attention count reaches zero. Selecting in
-an already quiet view adds no notice.
-Explicit view changes or clearing selection restore ordinary quiet/hidden behavior.
+or evidence. Normal Inventory retains its operational filters, price bands and
+Needs Attention controls; inactive zero-count bands and a quiet attention banner
+hide normally, even with a selection. Price review instead provides focused assessment
+filters and sorting alongside the persistent price editor. Shared search, selected
+cards and unsaved drafts survive switching between Inventory and Price review.
+Neither view has the retired price-support/coverage header.
 **Reveal selected** recovers cards outside your current view. Financial forms retain
-their own pending states and do not wait for comp collection.
+their own pending states and do not wait for comp collection. If an evaluation read
+fails, cached facts remain inspectable but do not certify current support. Retry the
+read; a successful recovery does not silently advance selected versions.
 
 On the saved list, check **Packed** as you load each slab. Price/support changes
 are flagged for review rather than silently acknowledged. A price change after

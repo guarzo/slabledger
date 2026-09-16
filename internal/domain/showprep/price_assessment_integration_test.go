@@ -42,7 +42,7 @@ func TestEvaluateCanonicalRecentPrice(t *testing.T) {
 		{"missing ID excluded", func(_ *Purchase, s *Snapshot) { s.Sales = append(s.Sales, Sale{Date: "2026-09-16", PriceCents: 90000}) }, NeedsReview, 2, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			p := Purchase{ID: "p", Grader: "PSA", Grade: 10, ProfileID: "profile", LocalPriceCents: 30000, ListedPriceCents: 90000}
+			p := Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "profile", LocalPriceCents: 30000, ListedPriceCents: 90000}
 			start, end := Window(now)
 			s := &Snapshot{Identity: p.Identity(), Source: "cardladder", Complete: true, AttemptState: "complete", WindowStart: start, WindowEnd: end, RefreshedAt: now,
 				Sales: []Sale{{ID: "a", Date: end, PriceCents: 30000}, {ID: "b", Date: end, PriceCents: 30000}}}
@@ -96,7 +96,7 @@ func TestEvaluateRecentContradictionAndWideMedianOverflow(t *testing.T) {
 		{"maximum cents context", int(^uint(0) >> 1), []int{int(^uint(0) >> 1), int(^uint(0) >> 1)}, Supported, int(^uint(0) >> 1)},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			p := Purchase{ID: "p", Grader: "PSA", Grade: 10, ProfileID: "profile", LocalPriceCents: tt.asking, ListedPriceCents: tt.asking}
+			p := Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "profile", LocalPriceCents: tt.asking, ListedPriceCents: tt.asking}
 			start, end := Window(now)
 			s := &Snapshot{Identity: p.Identity(), Source: "cardladder", Complete: true, AttemptState: "complete", WindowStart: start, WindowEnd: end, RefreshedAt: now}
 			for i, price := range tt.prices {

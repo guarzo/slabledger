@@ -243,7 +243,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
         <label className="show-check flex items-center gap-2 text-xs text-[var(--text-muted)] mb-3">
           <input type="checkbox" aria-label="Select all visible cards" checked={visibleItems.length > 0 && visibleItems.every(item => selected.has(item.purchase.id))} onChange={toggleVisible} />Select all
         </label>
-        <PriceReviewWorkspace items={items} evaluations={evaluations}
+        <PriceReviewWorkspace items={items} evaluations={evaluations} evaluationErrors={evaluationsQuery.data?.errors}
           review={{ ...review, focus: navigateReview, move: delta => { const id = review.move(delta); if (id) navigateReview(id); return id; } }}
           selected={selected} onToggleSelected={toggleCard} onSavePrice={handleInlinePriceSave}
           onRecheckInventory={recheckInventory} detailNavigationKey={reviewId ? location.key : undefined} />

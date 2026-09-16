@@ -15,6 +15,7 @@ export function PriceReviewQueue({ rows, evaluations, activeId, selected, onTogg
     <div className="price-review-queue-heading"><span>Card / assessment</span><span>Asking / recent</span></div>
     <ul aria-label="Price review queue">{rows.map(({ purchase: p, campaignName }) => {
       const raw = evaluations[p.id]; const e = isShowEvaluation(raw) ? raw : undefined;
+      const unknown = e?.availability === 'unknown';
       const recent = e?.recent;
       return <li key={p.id} data-active={activeId === p.id}>
         <label className="price-review-checkbox"><input type="checkbox" aria-label={`Select ${p.cardName}`} checked={selected.has(p.id)} onChange={() => onToggleSelected(p.id)} /></label>
@@ -25,11 +26,11 @@ export function PriceReviewQueue({ rows, evaluations, activeId, selected, onTogg
             <strong>{p.cardName}</strong>
             <span className="price-review-identity"><GradeBadge grader={p.grader} grade={p.gradeValue} /><span>{p.setName} · {p.certNumber}</span></span>
           </span>
-          <span className="price-review-amount"><strong className="num">{!e ? 'Unavailable' : e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'Not set'}</strong>
+          <span className="price-review-amount"><strong className="num">{unknown ? 'Unknown asking' : !e ? 'Unavailable' : e.localPriceCents > 0 ? formatCents(e.localPriceCents) : 'Not set'}</strong>
             <span className="price-review-meta">{recent && recent.count > 0 ? `${formatCents(recent.medianCents)} recent` : 'No recent reference'}</span></span>
-          <span className={`price-review-status price-review-status-${priceGroup(e)}`}>{e ? assessmentLabels[e.status] : 'Evaluation unavailable'}</span>
+          <span className={`price-review-status price-review-status-${priceGroup(e)}`}>{e && !unknown ? assessmentLabels[e.status] : 'Evaluation unavailable'}</span>
           <span className="price-review-row-context">{recent && recent.count > 0 ? <>
-            <span className={recent.count === 1 && recent.gapPct !== null && recent.gapPct > 0 ? 'price-review-low' : ''}>{gapLabel(recent.gapPct)}</span>
+            <span className={recent.count === 1 && recent.gapPct !== null && recent.gapPct > 0 ? 'price-review-low' : ''}>{gapLabel(unknown ? null : recent.gapPct)}</span>
             <span>{recent.count} {recent.count === 1 ? 'sale' : 'sales'} · {recent.latestSaleDate}</span>
           </> : <span>Recent sales unavailable</span>}{e?.evidenceNeedsReview && <span className="price-review-warning">Stored facts, partial or stale</span>}</span>
         </button>

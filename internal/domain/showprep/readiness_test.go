@@ -177,7 +177,7 @@ func TestReadinessAssessmentVersionCompatibility(t *testing.T) {
 		{"unavailable snapshot read", "5ad0c4fb129ea6e003f98aeee7f45016169dc318c871cb2906d4c54c0902de58", "fcdc1fb5b4cadc3df2da7670b8391b0930eac8aa99c9d6479eceffaf6e68e9d2", func(p *Purchase, s **Snapshot) {
 			*s = &Snapshot{Identity: p.Identity(), AttemptError: "Evidence storage unavailable"}
 		}},
-		{"unavailable purchase read", "990cc591b1d732166a200d6776f45f1b45350ff6fc0e7921e8321b953d0ed4c9", "", func(p *Purchase, s **Snapshot) { *p = Purchase{ID: "p"}; *s = nil }},
+		{"unavailable purchase read", "e87eee8204c142dc7c9b0d7eacf1ae3c602e3cc7d7da7de95d2c7704a53dfcd6", "", func(p *Purchase, s **Snapshot) { *p = Purchase{ID: "p"}; *s = nil }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			p, s, now := readinessFixture()

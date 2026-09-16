@@ -83,7 +83,7 @@ func TestEvidenceHealthIndependentOfAskingPrice(t *testing.T) {
 	} {
 		for _, listed := range []int{0, 30000} {
 			t.Run(tt.name+"/listed="+strconv.Itoa(listed), func(t *testing.T) {
-				p := Purchase{ID: "p", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: listed, LocalPriceCents: listed}
+				p := Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: listed, LocalPriceCents: listed}
 				s := &Snapshot{Identity: p.Identity(), Source: "cardladder", Complete: true, WindowStart: "2026-08-16", WindowEnd: "2026-09-14", RefreshedAt: now, AttemptState: "complete", Sales: []Sale{{ID: "a", Date: "2026-09-14", PriceCents: 30000}, {ID: "b", Date: "2026-09-14", PriceCents: 30000}}}
 				tt.change(&p, &s)
 				e := Evaluate(p, s, now)

@@ -1,0 +1,14 @@
+{
+  "purchaseId": "11111111-1111-4111-8111-111111111111",
+  "cardName": "", "certNumber": "", "grader": "", "grade": 0,
+  "status": "needs_review", "reason": "Purchase details unavailable",
+  "evidenceNeedsReview": true, "evidenceReason": "Comparable identity unresolved",
+  "availability": "unknown", "canAdd": false, "canPack": false,
+  "listedPriceCents": 0, "localPriceCents": 0, "priceMismatch": false, "priceAssociationUnclear": false,
+  "listingSyncedAt": "", "medianCents": 0, "compCount": 0, "latestSaleDate": "",
+  "windowStart": "2026-08-18", "windowEnd": "2026-09-16", "refreshedAt": "", "evidenceVersion": "",
+  "version": "79f5f38dd613b1751f1da0ed07fd4d4be2fd087fa952c1b5f936d01a27e96331", "policyVersion": "recent-sales-v1",
+  "recent": { "windowStart": "2026-09-10", "windowEnd": "2026-09-16", "saleIds": [], "count": 0,
+    "medianCents": 0, "latestSaleDate": "", "latestSaleCount": 0, "latestSaleMinCents": 0, "latestSaleMaxCents": 0, "gapPct": null },
+  "readiness": { "state": "unavailable", "refreshEligibility": "unavailable", "identityKey": "", "expiresAt": "", "retryAt": "" }
+}

@@ -240,14 +240,19 @@ This is local acceptance, not production repricing/backfill/deployment approval.
 ## Focused held-selection DOM geometry
 
 The small fully resolved/priced fixture catches selected intent loss after
-publication changes the last matching assessment. Coverage remains an Admin concern;
-normal Inventory deliberately has no readiness-heavy header. The actual React/query/virtual-row
-code runs in owned Chromium at desktop/mobile widths. API responses are controlled
-**only in this focused layout test**; it is not worker/source/financial proof.
-Existing minute polling delivers the coverage update. Initial checkbox geometry,
-held publication geometry, live zero counts, unchanged selected versions/disabled
-Add and clear/explicit-view reset are asserted. A quiet initial view must not gain
-a header row on selection. Checkbox/reset request logs stay empty.
+publication changes the assessment. Coverage remains an Admin concern; neither
+normal Inventory nor focused Price review has the retired price-support/coverage
+header. The actual React/query/virtual-row code runs in owned Chromium at 1440px
+and 390px widths in both views. API responses are controlled **only in this focused
+layout test**; it is not worker/source/financial proof.
+The test advances the UTC boundary to trigger the existing evaluation observer,
+not minute coverage polling. Initial checkbox geometry is asserted unchanged by
+selection, with no selection-triggered requests. After publication it asserts the
+checkbox remains selected and Add stays disabled until explicit reselection. It
+records post-publication geometry without asserting equality to the initial box.
+No refresh, coverage or financial requests are permitted. Zero-count/header-space
+retention and clear/view-reset geometry are not promised or tested; normal Inventory
+retains its ordinary operational controls and hide-on-zero behavior.
 
 ```bash
 cd web

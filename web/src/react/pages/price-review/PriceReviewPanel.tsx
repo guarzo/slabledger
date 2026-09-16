@@ -16,21 +16,26 @@ import { assessmentGroups, assessmentLabels, gapLabel, parsePriceDraft, priceGro
 import type { PriceSaveResult } from './usePriceReviewState';
 
 export interface PriceReviewPanelProps {
-  purchaseId: string; item?: AgingItem; evaluation?: ShowEvaluation; draft?: PriceDraft;
+  purchaseId: string; item?: AgingItem; evaluation?: ShowEvaluation; evaluationError?: string; draft?: PriceDraft;
   onDraftChange: (draft: PriceDraft) => void; onClearDraft: () => void;
   onSavePrice: (id: string, priceCents: number) => Promise<void>;
   onRecheckInventory?: () => Promise<boolean>;
   save?: PriceSaveResult; onSaveResultChange: (result: PriceSaveResult) => void; onSaveRechecked: (rechecked: boolean) => void;
 }
 
-export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftChange, onClearDraft, onSavePrice,
+export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError, draft, onDraftChange, onClearDraft, onSavePrice,
   save, onSaveResultChange, onSaveRechecked, onRecheckInventory }: PriceReviewPanelProps) {
   const aggregate = isShowEvaluation(evaluation) ? evaluation : undefined;
   const evidence = useShowEvidence(purchaseId, !!item, aggregate?.version);
   const detail = !evidence.isFetching && !evidence.isError ? evidence.data?.evaluation : undefined;
-  // Detail reads may observe newer saved inputs. The shared hook also publishes them
-  // to the aggregate; hypothetical previews never participate in this reconciliation.
-  const e = detail && detail.version !== aggregate?.version ? detail : aggregate;
+  const readError = evaluationError || (!aggregate && evidence.isError ? getErrorMessage(evidence.error) : undefined);
+  // A query-fresh cache entry is not a new observation. After aggregate failure,
+  // retain detail as inspectable facts only; a successful read clears that error
+  // through the shared hook's publication, never by comparing fingerprints.
+  const e = readError ? aggregate ?? evidence.data?.evaluation
+    : detail && detail.version !== aggregate?.version ? detail : aggregate;
+  const unknownAsking = e?.availability === 'unknown';
+  const currentAssessment = !readError && !unknownAsking;
   const savedCents = e?.localPriceCents ?? 0;
   const value = draft?.value ?? (savedCents > 0 ? centsToDollars(savedCents) : '');
   const cents = parsePriceDraft(value);
@@ -39,7 +44,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
     && (e.availability === 'ready' || e.availability === 'not_received');
   const changed = cents !== null && cents !== savedCents;
   const currentInput = debouncedValue === value;
-  const trial = usePricePreview(purchaseId, editable && currentInput && changed ? cents : null, e);
+  const trial = usePricePreview(purchaseId, editable && currentAssessment && currentInput && changed ? cents : null, e);
   const result = currentInput && changed && !trial.isFetching && !trial.isError ? trial.data : undefined;
   const previewBaselineChanged = !!result && result.currentPriceCents !== savedCents;
   const qc = useQueryClient();
@@ -47,7 +52,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
   const saving = useIsMutating({ mutationKey }) > 0;
   const mutation = useMutation({ mutationKey, mutationFn: persist, retry: false });
   const needsRecheck = !!save && !save.rechecked && !saving;
-  const canSave = editable && changed && !saving && !needsRecheck && !previewBaselineChanged && !evidence.isError;
+  const canSave = editable && currentAssessment && changed && !saving && !needsRecheck && !previewBaselineChanged && !evidence.isError;
 
   useEffect(() => {
     if (save?.state === 'saved' && save.rechecked && savedCents === save.cents && draft?.value === save.value) onClearDraft();
@@ -91,8 +96,8 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
     : item.purchase.wasRefunded ? 'Unavailable: refunded' : item.purchase.dhStatus === 'sold' ? 'Unavailable: sold'
     : e && e.availability !== 'ready' && e.availability !== 'not_received' ? availabilityLabels[e.availability] : undefined;
   const cost = item ? costBasis(item.purchase) : null;
-  const singleLow = recent?.count === 1 && recent.gapPct !== null && recent.gapPct > 0;
-  const newestLow = !!recent && savedCents > 0 && recent.latestSaleMinCents < savedCents;
+  const singleLow = currentAssessment && recent?.count === 1 && recent.gapPct !== null && recent.gapPct > 0;
+  const newestLow = currentAssessment && !!recent && savedCents > 0 && recent.latestSaleMinCents < savedCents;
 
   return <div className="price-review-panel">
     {item && <header>
@@ -104,18 +109,19 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
     {unavailable && <p role="status" className="price-review-warning">{unavailable}</p>}
     <section aria-label="Saved price assessment" className="price-review-saved" aria-busy={saving || needsRecheck}>
       {saving || needsRecheck ? <p role="status" className="price-review-warning">Assessment pending refresh. Previously loaded facts may be stale.</p>
-        : <strong className={`price-review-status price-review-status-${priceGroup(e)}`}>{e ? assessmentLabels[e.status] : 'Evaluation unavailable'}</strong>}
-      {e?.reason && <p>{e.reason}</p>}
+        : readError ? <p role="status" className="price-review-warning">Assessment unavailable. Previously loaded facts may be stale. {readError}</p>
+        : <strong className={`price-review-status price-review-status-${priceGroup(e)}`}>{e && !unknownAsking ? assessmentLabels[e.status] : 'Evaluation unavailable'}</strong>}
+      {currentAssessment && e?.reason && <p>{e.reason}</p>}
       {e?.evidenceNeedsReview && <p className="price-review-warning">Stored sales may be partial or stale. They are not a verified current window. {e.evidenceReason}</p>}
       <dl className="price-review-facts">
-        <div><dt>SlabLedger asking</dt><dd><output aria-label="Saved asking price">{!e ? 'Unavailable' : savedCents > 0 ? formatCents(savedCents) : 'Not set'}</output></dd></div>
+        <div><dt>SlabLedger asking</dt><dd><output aria-label="Saved asking price">{unknownAsking ? 'Unknown' : !e ? 'Unavailable' : savedCents > 0 ? formatCents(savedCents) : 'Not set'}</output></dd></div>
         <div><dt>{recent?.count === 1 ? 'Recent single sale' : 'Recent median'}</dt>
           <dd><span aria-label={recent?.count === 1 ? 'Recent single sale' : 'Recent median'} className={singleLow ? 'price-review-low' : ''}>
             {recent && recent.count > 0 ? formatCents(recent.medianCents) : 'No recent reference'}</span></dd>
           {recent && <dd className="price-review-meta">{recent.count} {recent.count === 1 ? 'sale' : 'sales'} · {recent.windowStart} to {recent.windowEnd} UTC</dd>}
         </div>
       </dl>
-      {recent && recent.count > 0 && <p className={singleLow ? 'price-review-low' : 'price-review-meta'}>{gapLabel(recent.gapPct)}</p>}
+      {recent && recent.count > 0 && <p className={singleLow ? 'price-review-low' : 'price-review-meta'}>{gapLabel(currentAssessment ? recent.gapPct : null)}</p>}
       {recent?.latestSaleDate && <p className="price-review-newest">Newest sale day · {recent.latestSaleDate} · <strong className={newestLow ? 'price-review-low' : ''}>
         {formatCents(recent.latestSaleMinCents)}{recent.latestSaleMaxCents !== recent.latestSaleMinCents && ` to ${formatCents(recent.latestSaleMaxCents)}`}
       </strong> · {recent.latestSaleCount} {recent.latestSaleCount === 1 ? 'sale' : 'sales'}{newestLow && ' · Below asking'}</p>}
@@ -125,16 +131,16 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
       <h4>Test an asking price</h4>
       <Input label="Asking price" inputMode="decimal" leftAddon="$" value={value} onChange={event => changeDraft(event.target.value)}
         disabled={!editable || saving} error={draft && cents === null ? 'Enter a positive USD amount with no more than two decimal places.' : undefined} />
-      {draft && draft.baselinePriceCents !== savedCents && e && <p role="status" className="price-review-warning">
+      {draft && draft.baselinePriceCents !== savedCents && e && !unknownAsking && !readError && <p role="status" className="price-review-warning">
         Saved asking changed from {formatCents(draft.baselinePriceCents)} to {formatCents(savedCents)}. Draft retained. Review before saving.
       </p>}
       <div className="price-review-actions">
-        {recent && recent.count > 0 && <Button variant="secondary" size="sm" disabled={!editable || saving || e?.evidenceNeedsReview}
+        {recent && recent.count > 0 && <Button variant="secondary" size="sm" disabled={!editable || !currentAssessment || saving || e?.evidenceNeedsReview}
           onClick={() => changeDraft(centsToDollars(recent.medianCents))}>Try recent reference {formatCents(recent.medianCents)}</Button>}
         {draft && <Button variant="ghost" size="sm" disabled={saving} onClick={onClearDraft}>Reset draft</Button>}
       </div>
       <section aria-label="Trial price assessment" aria-live="polite" className="price-review-trial">
-        {!editable ? <p>Trial assessment unavailable for this card.</p> : cents === null ? <p>Enter a valid trial price.</p>
+        {!editable || !currentAssessment ? <p>Trial assessment unavailable for this card.</p> : cents === null ? <p>Enter a valid trial price.</p>
           : !changed ? <p>Enter a different price to test. The saved assessment is shown above.</p>
           : !currentInput ? <p>Waiting for current input…</p>
           : trial.isFetching ? <p>Checking trial price…</p>
@@ -162,7 +168,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, draft, onDraftC
       {evidence.isFetching && <p role="status">Loading stored sale evidence…</p>}
       {evidence.isError && <div role="alert"><p>Evidence unavailable: {getErrorMessage(evidence.error)}</p>
         <Button variant="secondary" size="sm" onClick={() => evidence.refetch()}>Retry evidence</Button></div>}
-      {(evidence.isFetching || evidence.isError) && evidence.data && <p className="price-review-warning">Previously loaded sales, not confirmed current.</p>}
+      {(evidence.isFetching || evidence.isError || readError) && evidence.data && <p className="price-review-warning">Previously loaded sales, not confirmed current.</p>}
       {recentSales.length ? <SaleRows sales={recentSales} /> : !evidence.isFetching && <p className="price-review-meta">{e && !e.evidenceNeedsReview && !evidence.isError ? 'No matching recent sales in stored evidence.' : 'No verified recent sale detail available.'}</p>}
       <details><summary>30-day sale history</summary>
         <p className="price-review-meta">Older sales are context only; they cannot override recent contradictions.</p>

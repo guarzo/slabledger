@@ -10,14 +10,14 @@ import { PriceReviewQueue } from './PriceReviewQueue';
 import './price-review.css';
 
 export interface PriceReviewWorkspaceProps {
-  items: AgingItem[]; evaluations: Record<string, ShowEvaluation>;
+  items: AgingItem[]; evaluations: Record<string, ShowEvaluation>; evaluationErrors?: Record<string, string>;
   review: ReturnType<typeof usePriceReviewState>;
   selected: ReadonlySet<string>; onToggleSelected: (id: string) => void;
   onSavePrice: (id: string, priceCents: number) => Promise<void>;
   onRecheckInventory?: () => Promise<boolean>;
   detailNavigationKey?: string;
 }
-export function PriceReviewWorkspace({ items, evaluations, review, selected, onToggleSelected, onSavePrice, onRecheckInventory, detailNavigationKey }: PriceReviewWorkspaceProps) {
+export function PriceReviewWorkspace({ items, evaluations, evaluationErrors, review, selected, onToggleSelected, onSavePrice, onRecheckInventory, detailNavigationKey }: PriceReviewWorkspaceProps) {
   const [mobileDetail, setMobileDetail] = useState(!!detailNavigationKey);
   const focusControls = useRef(new Map<string, HTMLButtonElement>());
   const panel = useRef<HTMLElement>(null);
@@ -92,7 +92,7 @@ export function PriceReviewWorkspace({ items, evaluations, review, selected, onT
           </div>
         </div>
         {review.outsideFilter && active && <p role="status" className="price-review-warning">Outside the current filter. This card stays open until you move on.</p>}
-        {review.activeId ? <PriceReviewPanel purchaseId={review.activeId} item={active} evaluation={evaluations[review.activeId]}
+        {review.activeId ? <PriceReviewPanel purchaseId={review.activeId} item={active} evaluation={evaluations[review.activeId]} evaluationError={evaluationErrors?.[review.activeId]}
           draft={review.drafts[review.activeId]} onDraftChange={draft => review.setDraft(review.activeId!, draft)}
           onClearDraft={() => review.clearDraft(review.activeId!)} onSavePrice={onSavePrice} onRecheckInventory={onRecheckInventory}
           save={review.saves[review.activeId]} onSaveResultChange={result => review.setSaveResult(review.activeId!, result)}

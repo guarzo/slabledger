@@ -86,7 +86,7 @@ func TestServiceReadinessReadOutcomes(t *testing.T) {
 				require.Equal(t, "fcdc1fb5b4cadc3df2da7670b8391b0930eac8aa99c9d6479eceffaf6e68e9d2", evaluations[0].EvidenceVersion)
 			}
 			if tt.purchaseErr && !tt.evidenceErr {
-				require.Equal(t, "990cc591b1d732166a200d6776f45f1b45350ff6fc0e7921e8321b953d0ed4c9", evaluations[0].Version)
+				require.Equal(t, "e87eee8204c142dc7c9b0d7eacf1ae3c602e3cc7d7da7de95d2c7704a53dfcd6", evaluations[0].Version)
 			}
 			now = now.Add(time.Minute)
 			reread, err := svc.Evaluate(context.Background(), []string{"p"})
@@ -109,7 +109,7 @@ func TestServiceReadinessReadOutcomes(t *testing.T) {
 
 func TestServiceReadinessRefreshFailureRemainsManualOnly(t *testing.T) {
 	now := time.Now().UTC()
-	p := sp.Purchase{ID: "p", ProfileID: "psa-1", Grader: "PSA", Grade: 10}
+	p := sp.Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Phase: "active", ProfileID: "psa-1", Grader: "PSA", Grade: 10}
 	var saved *sp.Snapshot
 	store := &mocks.ShowPrepStoreMock{
 		ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) {
