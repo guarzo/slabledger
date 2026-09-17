@@ -21,10 +21,6 @@ it.each(['settle', 'cancel'])('selection during a real streamed evaluation %s ke
   const calls: string[] = []; let stream!: ServerResponse;
   const server = createServer((req, res) => {
     calls.push(req.url!); res.writeHead(200, { 'Content-Type': 'application/json' });
-    if (req.url === '/api/show-prep/coverage') {
-      res.end(JSON.stringify({ enabled: false, configured: false, state: 'disabled', lastSweepAt: '', retryAt: '', error: '', eligibleIdentities: 1, currentIdentities: 1, missingIdentities: 0, staleIdentities: 0, failedIdentities: 0, eligibleCards: 1, currentCards: 1, unresolvedCards: 0 }));
-      return;
-    }
     stream = res; res.write('{"evaluations":');
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -39,7 +35,7 @@ it.each(['settle', 'cancel'])('selection during a real streamed evaluation %s ke
     act(() => window.dispatchEvent(new Event('focus'))); await waitFor(() => expect(stream).toBeDefined());
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select cert-0' }));
     expect(screen.getByRole('checkbox', { name: 'Select cert-0' })).toBeChecked();
-    expect([...calls].sort()).toEqual(['/api/show-prep/coverage', '/api/show-prep/evaluate']);
+    expect(calls).toEqual(['/api/show-prep/evaluate']);
     if (outcome === 'cancel') {
       await act(async () => qc.cancelQueries({ queryKey: showPrepKeys.evaluations }));
       stream.end(`${JSON.stringify([changed])}}`);
@@ -50,7 +46,7 @@ it.each(['settle', 'cancel'])('selection during a real streamed evaluation %s ke
       expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
     }
     await waitFor(() => expect(qc.isFetching()).toBe(0));
-    expect(screen.getByRole('checkbox', { name: 'Select cert-0' })).toBeChecked(); expect([...calls].sort()).toEqual(['/api/show-prep/coverage', '/api/show-prep/evaluate']);
+    expect(screen.getByRole('checkbox', { name: 'Select cert-0' })).toBeChecked(); expect(calls).toEqual(['/api/show-prep/evaluate']);
   } finally {
     view.unmount(); qc.clear(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
   }

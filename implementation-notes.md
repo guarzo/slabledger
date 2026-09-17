@@ -881,3 +881,177 @@ are in local `.superpowers/sdd/2026-09-15-cached-show-preparation/pr707-approved
 Scoped local polish made only safe test idiom/comment corrections; independent
 review and publication remain the parent's responsibility. No push, amend,
 ready-state change, deployment, default database or production operation occurred.
+
+## Inventory price review: Task 6 acceptance (2026-09-16)
+
+This section records only the Task6 change from `7e0214e9`, not a rerun of the
+historical production investigations above. Tasks1–5 supply recent-sales policy,
+canonical asking, preview and the approved Inventory/Price review workspace.
+Task6 adds real-wire acceptance, reconciles adjacent drivers/runtime expectations,
+and documents the integrated contract. No deployment, production repricing or
+backfill is authorized. Private prototype/comparison and current SDD artifacts
+remain ignored, untracked and outside the application build pending operator
+acceptance; the older unrelated tracked SDD record is untouched.
+
+`TestPriceReviewRealBrowser` explicitly sets cached mode, asserts disabled worker
+status, and seeds seven anonymized snapshots through the real PG evidence store.
+The falling-market case retains the actual regression cent amounts, all eight
+cutoff-date ties, median232000, asking320000, trial254000 Mixed and trial240000
+Supported. Browser→HTTP→router/auth→services→PostgreSQL is real. Its launched
+Chromium is owned; no shared CDP or mocked application API is used. Non-app browser
+origins are blocked (fonts fall back in this new fixture; existing adjacent modes
+retain their public-font checks).
+
+The test archives separate authorities: whole-row immutable navigation/trials;
+a declared other-actor asking320000→310000 change; explicit reviewed-price saves;
+and explicit show commands. Preview adds no holds/list/financial writes. The
+configured CampaignsHandler delegates to real dhpricing/dhlisting services, real
+purchase/config stores and the real DH HTTP client/adapter against a loopback
+external boundary. That boundary never edits PG. Test-only delegates record calls
+and impose sync-before-list scheduling, not a production atomicity guarantee.
+Expected results: three sync and three list calls, two DH PATCHes and one channel
+POST; already-listed sync240000 then listing no-op, eligible unlisted preset230000
+becomes listed/matched with ebay+shopify, and not-received/no-inventory is skipped.
+`WaitBackground()` joins before save assertions and before DB cleanup. Full-row
+comparisons allow only reviewed amount/source/timestamps and precisely enumerated
+DH fields on the explicitly saved cards. Listing's last-sync string remains empty
+under its existing contract; the test does not invent a timestamp or manual effect.
+
+A controlled server503 inventory read verifies retained drafts/save confirmation
+and read-only recovery. Stale Add/Pack409 cannot mutate membership; fresh explicit
+Add/Pack acknowledge240000. Fresh-context mobile deep link and queue return focus
+pass. Normal sale/list controls and cancel paths remain present. Adjacent cached/
+worker drivers now use compact review links and the new review filters without
+removing their provider, whole-ledger/history, auth, restart, cancel, selection,
+packing or fine/coarse-pointer geometry assertions. Runtime renewal assesses the
+committed32500 override as Below target, not the unrelated stored-DH40000.
+
+Two focused production cleanups: ShowMember reports historical status codes
+without reinterpreting legacy `no_listed_price`; trial badges share the existing
+server-status grouping so Limited/Unavailable do not default to Mixed.
+
+Actual verification (full commands and logs in the local Task6 report):
+
+- Focused UI RED:4 failures/27 passes for legacy copy and trial groups; GREEN31.
+- Actual runtime RED: Supported expected from a DH-only seed, got no asking;
+  canonical fixture GREEN retains financial/provider proofs.
+- Real DH negative control (`PRICE_REVIEW_DH_COLD_PROBE=1`) failed expected3/actual0
+  external calls despite successful local saves. Configured real-wire run passed.
+- Focused Go race passed: showprep1.269s, PG63.204s, handlers1.209s, router1.115s,
+  cmd/runtime15.195s. Fresh broad `go test -race -count=1 -timeout 10m ./...` passed
+  all45 tested packages, PG75.293s and cmd16.809s, with independent explicit DB URLs.
+- First broad run hit the unchanged DH sale-contract circuit-breaker test; its
+  package rerun and full rerun passed without editing unrelated code. All raw
+  results are retained; no failing run is represented as success.
+- `npm test`:94 files/1034 tests; typecheck, ESLint and Vite build passed.
+- Compatible `make check`:passed, zero lint issues after correcting a task-local
+  numeric HTTP constant. Baseline six size warnings and jsdom/Vite notices remain.
+- Browser checks node suite passed. Real-price browser passed28.27s; adjacent
+  cached passed36.40s (absolute0 provider calls), worker passed179.68s (population
+  142 searches+1token, cached use+0, separate publication+1search+1token).
+
+Only parent-owned `slabledger-price-review-test`, ID
+`dadbb5bfc768c851ede6956c966172d03161f796d800c28c52d1aa40ad6a45b1`, task label
+`inventory-price-review`, loopback44620, was used. User/owners are `showprep` for
+`showprep_cached_test`, `showprep_runtime_test`, `showprep_readiness_e2e`. Browser
+DB phases were serialized and all artifact directories are fresh under
+`/tmp/price-review-task6-Hsr8qWT3/`. The container remains running for the parent.
+Scoped `polish-core --fix` was performed locally; whole-range polish and independent
+implementation review are parent-owned after this task commit. No new dependencies,
+production backend changes, migrations, default DB access or external provider
+acquisition occurred in the price-review phase.
+
+## Inventory price review: final implementation verification (2026-09-16)
+
+Implementation is complete on `investigate/price-support-705-707`, based on
+`6ca4b420`. Application changes finish at `65affbce`; `e1fca4b1` subsequently
+changes only browser test measurement/diagnostics. No push, merge, deployment,
+production repricing or backfill was performed.
+
+### What changed and how it works
+
+- Normal Inventory remains the default. `/inventory?view=pricing` opens the
+  focused queue/detail view, with shareable card identity, separate bulk selection,
+  retained per-card drafts, explicit price saves and mobile return/history support.
+- One backend assessor uses canonical SlabLedger asking and the newest five sales
+  within seven UTC dates, retaining all cutoff-date ties. Thirty-day history is
+  context, never a rescue for a recent contradiction. Exact wide-integer products
+  preserve half-cent and strict threshold boundaries without overflow.
+- Preview reads cached purchase/evidence ports and returns no list-mutation token.
+  It does not observe holds, acquire comps, save prices or acknowledge lists.
+  Explicit saves retain the existing reviewed-price/DH-sync/eligible-listing path.
+- Current aggregate observations outrank merely cached differing detail. A hash
+  difference does not order reads. Only genuinely successful detail publication
+  or aggregate recovery restores authority after a failed read. Tests cover UTC
+  expiry, repeated unknown-purchase versions, repeated snapshot-failure versions
+  and healthy changed observations without losing drafts or selection fencing.
+- Unreadable purchases are unavailable, not positively unpriced. Their zero-value
+  fallback cannot fabricate missing-price counts or historical price/status changes.
+  Successfully read unpriced cards remain unpriced even with unhealthy evidence.
+- Confirmed saves remain distinct from failed inventory/evidence reloads. Read
+  retries never replay the financial PATCH. Historical acknowledgments, holds,
+  packing times and exact retries remain intact; stale Add/Pack rejection has
+  immediate persisted-row immutability assertions.
+
+### Decisions and discoveries
+
+Independent task reviews and whole-range polish exposed view-lifetime, mobile
+history/focus, cached-read-authority and fixture-observation gaps. They were fixed
+with regression-first checks and independently re-reviewed. Final source review
+found no remaining Critical/Important findings after the aggregate-authority,
+unknown-label and shared desktop-header/sticky-offset corrections. The shared
+65px desktop header leaves detail navigation below the banner; mobile sizing is
+unchanged. Removed legacy header-retention promises are not represented as tested.
+
+One final worker capture measured a nominal 44px button at
+43.99993896484375px. An owned-Chromium reproduction using the actual button CSS
+confirmed a possible pressed-transition residual while layout/computed height
+stayed 44px. The test-only 0.0001px measurement allowance still rejects 43.9998px,
+a full 1/64px deficit, 43.9px and the actual pressed scale. Raw, computed, layout
+and transform metrics are retained; no application sizing was relaxed.
+
+### Verification actually performed
+
+Fresh parent gates on the final application source:
+
+- Explicit separate owned storage/runtime URLs with
+  `TZ=UTC go test -race -count=1 -timeout 10m ./...`: all 45 tested packages passed;
+  PostgreSQL 66.134s and runtime/cmd 15.961s. No browser opt-in in this package gate.
+- `(cd web && TZ=UTC npm test && npm run typecheck && npm run lint && npm run build)`:
+  95 files / 1,045 tests passed; typecheck/lint/build passed, 379 build modules.
+- Compatible-toolchain `make check`: lint, architecture, source limits, doc paths
+  and Playwright alignment passed. Existing six size warnings remain.
+- Real Go/PostgreSQL/Chromium price-review test: 27.58s; cached 155-card workflow:
+  37.01s. The price-review phase has zero acquisition and exactly bounded intended
+  save/DH effects, not a whole-flow zero-write claim.
+- After the test-only precision correction, the full worker workflow passed
+  179.09s through all later assertions: population 142 searches + one token,
+  operator use +0, separate publication +one search/+one token; financial/history
+  and observed-version checks passed.
+- `node --test web/tests/price-review-observer-checks.cjs web/tests/show-readiness-browser-checks.cjs`:
+  14/14 passed, including unexpected recovered mobile HTTP failure, exact controlled
+  fault markers, asynchronous observation draining, cleanup and geometry boundaries.
+- Implementer production-preview browser checks: 10/10, including desktop
+  1440/1024 scrolled navigation, mobile recovery/history and packing compatibility.
+  These use intercepted HTTP and are separate from the real Go/PG browser proofs.
+
+The earlier untouched DH-sale contract test had one circuit-open failure; its
+unchanged reruns and both fresh parent full-suite runs passed. The mobile precision
+failure above is likewise retained, not relabeled as a pass. Existing jsdom/Vite
+and global-logo notices are documented, not suppressed. Exact commands and raw
+results remain in ignored `.superpowers/sdd/2026-09-16-inventory-price-review/`
+(`final-verify2-*`, `final-verify3-*`, task reports and review artifacts).
+
+The task-owned PostgreSQL container recorded above and its anonymous data volume
+were stopped/removed after final tests and artifact collection. No unrelated
+container/database was touched. The linked worktree and ignored private comparison
+remain for operator acceptance. Live marketplace fulfillment, physical devices and
+remote CI are not claimed verified; saves remain asynchronous and last-writer-wins.
+
+### Reviewer knowledge check
+
+1. Why cannot a differing cached detail fingerprint supersede the latest aggregate observation?
+2. How do cutoff-date ties and exact arithmetic prevent the original false-support result?
+3. Why must preview bypass the hold-observing evidence service and omit list-mutation tokens?
+4. Which save effects are intentional, and which operations remain forbidden during navigation/trials?
+5. How are unknown purchase reads kept distinct from genuinely unpriced cards without rewriting history?

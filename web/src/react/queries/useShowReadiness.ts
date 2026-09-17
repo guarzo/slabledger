@@ -17,5 +17,5 @@ export function useShowReadiness(ids: string[], evaluations: Record<string, Show
   }
   return { ...observation, cohortCount: ids.length, currentCount: counts.current, needsMatchingCount,
     incomplete: counts.current < ids.length, counts,
-    missingPriceCount: values.filter(e => e && e.listedPriceCents <= 0).length };
+    missingPriceCount: values.filter(e => e && e.localPriceCents <= 0).length };
 }

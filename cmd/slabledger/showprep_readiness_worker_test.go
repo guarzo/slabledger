@@ -144,18 +144,22 @@ func populateReadinessWorker(t *testing.T, db *postgres.DB, f *readinessSourceFi
 		index  int
 		status sp.Status
 		sales  int
+		asking int
 	}{
-		{1, sp.Supported, 2}, {25, sp.Supported, 2}, {26, sp.NoListedPrice, 2}, {28, sp.Supported, 2},
-		{29, sp.NeedsReview, 2}, {30, sp.NeedsReview, 0}, {31, sp.NoRecentComps, 0},
-		{32, sp.ThinEvidence, 1}, {33, sp.BelowTarget, 2},
+		{1, sp.Supported, 2, 30000}, {25, sp.Supported, 2, 30000}, {26, sp.NoListedPrice, 2, 0}, {28, sp.Supported, 2, 30000},
+		{29, sp.NeedsReview, 2, 30000}, {30, sp.NeedsReview, 0, 30000}, {31, sp.NoRecentComps, 0, 30000},
+		{32, sp.ThinEvidence, 1, 30000}, {33, sp.BelowTarget, 2, 30000},
 	} {
 		e, err := service.Evidence(t.Context(), readinessPurchase(tc.index))
 		require.NoError(t, err)
 		require.Equal(t, tc.status, e.Evaluation.Status)
+		require.Equal(t, tc.asking, e.Evaluation.LocalPriceCents)
+		require.Equal(t, 40000, e.Evaluation.ListedPriceCents)
+		require.Equal(t, sp.PriceAssessmentPolicy, e.Evaluation.PolicyVersion)
 		require.Len(t, e.Sales, tc.sales)
 		if tc.index == 1 {
 			require.Equal(t, 28000, e.Evaluation.MedianCents)
-			require.Equal(t, 30000, e.Evaluation.ListedPriceCents)
+			require.Equal(t, 28000, e.Evaluation.Recent.MedianCents)
 			require.Equal(t, 27000, e.Sales[0].PriceCents)
 			require.Equal(t, 29000, e.Sales[1].PriceCents)
 		}

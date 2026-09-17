@@ -5,7 +5,7 @@ import { useShowListWrites } from '../../queries/useShowPrepQueries';
 import { Button, GradeBadge } from '../../ui';
 import { formatCents } from '../../utils/formatters';
 import ShowEvidenceDisclosure from './ShowEvidence';
-import { availabilityLabels, showError, showTime, supportLabels } from './showPrepLabels';
+import { availabilityLabels, showError, showTime } from './showPrepLabels';
 
 export default function ShowMember({ item, listId, stale }: {
   item: ShowListItem; listId: string; stale: boolean;
@@ -48,8 +48,8 @@ export default function ShowMember({ item, listId, stale }: {
     {e && !available && <p className="text-xs text-[var(--warning)] mt-2">{availabilityLabels[e.availability] ?? availabilityLabels.unknown}. {packed ? 'Packing history retained. Unpack or remove explicitly.' : 'Cannot pack in this state.'}</p>}
     {packed && <p className="text-xs text-[var(--text-muted)]">Packed {showTime(item.packedAt)}</p>}
     <div className="show-warnings">
-      {item.priceChanged && <p>Price changed{packed ? ': check the physical sticker' : ''}. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no listed price'}.</p>}
-      {item.supportChanged && <p>Support changed. Previously {supportLabels[item.acknowledgedStatus] ?? 'unknown'}.</p>}
+      {item.priceChanged && <p>Price changed{packed ? ': check the physical sticker' : ''}. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no price'}.</p>}
+      {item.supportChanged && <p>Support changed. Previously recorded status: {item.acknowledgedStatus || 'unknown'}.</p>}
     </div>
     <ShowEvidenceDisclosure purchaseId={item.purchaseId} certNumber={item.certNumber} evaluation={e} />
     {(item.priceChanged || item.supportChanged) && <Button variant="secondary" size="sm" aria-label={`Acknowledge changes ${item.certNumber}`}

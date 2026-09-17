@@ -16,6 +16,7 @@ const (
 	Supported     Status = "supported"
 	ThinEvidence  Status = "thin_evidence"
 	BelowTarget   Status = "below_target"
+	MixedEvidence Status = "mixed_evidence"
 	NoRecentComps Status = "no_recent_comps"
 	NeedsReview   Status = "needs_review"
 	NoListedPrice Status = "no_listed_price"
@@ -72,32 +73,34 @@ type Snapshot struct {
 }
 
 type Evaluation struct {
-	PurchaseID              string       `json:"purchaseId"`
-	CardName                string       `json:"cardName"`
-	CertNumber              string       `json:"certNumber"`
-	Grader                  string       `json:"grader"`
-	Grade                   float64      `json:"grade"`
-	Status                  Status       `json:"status"`
-	Reason                  string       `json:"reason"`
-	EvidenceNeedsReview     bool         `json:"evidenceNeedsReview"`
-	EvidenceReason          string       `json:"evidenceReason"`
-	Availability            Availability `json:"availability"`
-	CanAdd                  bool         `json:"canAdd"`
-	CanPack                 bool         `json:"canPack"`
-	ListedPriceCents        int          `json:"listedPriceCents"`
-	LocalPriceCents         int          `json:"localPriceCents"`
-	PriceMismatch           bool         `json:"priceMismatch"`
-	PriceAssociationUnclear bool         `json:"priceAssociationUnclear"`
-	ListingSyncedAt         string       `json:"listingSyncedAt"`
-	MedianCents             int          `json:"medianCents"`
-	CompCount               int          `json:"compCount"`
-	LatestSaleDate          string       `json:"latestSaleDate"`
-	WindowStart             string       `json:"windowStart"`
-	WindowEnd               string       `json:"windowEnd"`
-	RefreshedAt             string       `json:"refreshedAt"`
-	EvidenceVersion         string       `json:"evidenceVersion"`
-	Version                 string       `json:"version"`
-	Readiness               *Readiness   `json:"readiness,omitempty"`
+	PurchaseID              string              `json:"purchaseId"`
+	CardName                string              `json:"cardName"`
+	CertNumber              string              `json:"certNumber"`
+	Grader                  string              `json:"grader"`
+	Grade                   float64             `json:"grade"`
+	Status                  Status              `json:"status"`
+	Reason                  string              `json:"reason"`
+	EvidenceNeedsReview     bool                `json:"evidenceNeedsReview"`
+	EvidenceReason          string              `json:"evidenceReason"`
+	Availability            Availability        `json:"availability"`
+	CanAdd                  bool                `json:"canAdd"`
+	CanPack                 bool                `json:"canPack"`
+	ListedPriceCents        int                 `json:"listedPriceCents"`
+	LocalPriceCents         int                 `json:"localPriceCents"`
+	PriceMismatch           bool                `json:"priceMismatch"`
+	PriceAssociationUnclear bool                `json:"priceAssociationUnclear"`
+	ListingSyncedAt         string              `json:"listingSyncedAt"`
+	MedianCents             int                 `json:"medianCents"`
+	CompCount               int                 `json:"compCount"`
+	LatestSaleDate          string              `json:"latestSaleDate"`
+	WindowStart             string              `json:"windowStart"`
+	WindowEnd               string              `json:"windowEnd"`
+	RefreshedAt             string              `json:"refreshedAt"`
+	EvidenceVersion         string              `json:"evidenceVersion"`
+	Version                 string              `json:"version"`
+	PolicyVersion           string              `json:"policyVersion"`
+	Recent                  RecentPriceEvidence `json:"recent"`
+	Readiness               *Readiness          `json:"readiness,omitempty"`
 }
 
 type Evidence struct {

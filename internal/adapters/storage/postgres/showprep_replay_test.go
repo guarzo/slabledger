@@ -22,7 +22,7 @@ func TestShowPrepAppliedReplaySurvivesInventoryChanges(t *testing.T) {
 			{"refunded", sp.Refunded, sp.Supported},
 			{"removed", sp.Removed, sp.NoListedPrice},
 			{"purchase locked", sp.Ready, sp.Supported},
-			{"collision", sp.Ready, sp.NeedsReview},
+			{"collision", sp.Ready, sp.Supported},
 		} {
 			t.Run(operation+"/"+change.name, func(t *testing.T) {
 				db := setupShowPrepTestDB(t)
@@ -54,7 +54,7 @@ func TestShowPrepAppliedReplaySurvivesInventoryChanges(t *testing.T) {
 
 				switch change.name {
 				case "price":
-					_, err = db.ExecContext(ctx, `UPDATE campaign_purchases SET dh_listing_price_cents=40000 WHERE id=$1`, showPurchase)
+					_, err = db.ExecContext(ctx, `UPDATE campaign_purchases SET reviewed_price_cents=40000 WHERE id=$1`, showPurchase)
 				case "refunded":
 					_, err = db.ExecContext(ctx, `UPDATE campaign_purchases SET was_refunded=true WHERE id=$1`, showPurchase)
 				case "removed":

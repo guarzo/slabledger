@@ -7,7 +7,7 @@
 const { chromium, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { withFixtureCleanup, assertLastRowClearance } = require('./show-readiness-browser-helpers.cjs');
+const { withFixtureCleanup, assertLastRowClearance, assertTouchTargetHeights } = require('./show-readiness-browser-helpers.cjs');
 const { exerciseGeometry } = require('./show-readiness-geometry.cjs');
 const app = process.env.SHOW_READINESS_APP;
 const control = process.env.SHOW_READINESS_CONTROL;
@@ -73,11 +73,12 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
           }),
         overflow: document.documentElement.scrollWidth > innerWidth,
         controls: [...document.querySelectorAll('.show-toolbar select, .show-toolbar button, .show-selection-bar:not([hidden]) button')]
-          .filter(e => e.getClientRects().length).map(e => ({ text: e.textContent, height: e.getBoundingClientRect().height })),
+          .filter(e => e.getClientRects().length).map(e => ({ text: e.textContent, height: e.getBoundingClientRect().height,
+            computedHeight: window.getComputedStyle(e).height, layoutHeight: e.offsetHeight, transform: window.getComputedStyle(e).transform })),
       }));
       metrics.push({ name, ...geometry }); expect(geometry.overflow, name).toBe(false);
       expect(geometry.renderedFonts.every(f => f.loaded), `${name} rendered webfonts loaded`).toBe(true);
-      if (geometry.width <= 768) expect(geometry.controls.every(c => c.height >= 44), `${name} touch targets`).toBe(true);
+      if (geometry.width <= 768) assertTouchTargetHeights(geometry.controls, name);
     }
     const checkbox = i => page.getByRole('checkbox', { name: `Select ${cert(i)}`, exact: true });
     const add = n => page.getByRole('button', { name: `Add to show (${n})`, exact: true });
@@ -93,7 +94,7 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
       await expect(page.getByRole('heading', { name: 'Inventory', exact: true })).toBeVisible();
       await page.getByRole('button', { name: /^All\s*\d+$/ }).click();
       await page.getByRole('button', { name: 'Sort by Card', exact: true }).click();
-      await expect(page.getByText('155 cards shown', { exact: true })).toBeVisible(); await idle();
+      await expect(page.getByRole('button', { name: /^All\s*155$/ })).toBeVisible(); await idle();
     }
     const before = await state(); snapshots.precondition = before;
     const workerMode = before.mode === 'worker';
@@ -124,31 +125,37 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
     await page.goto(`${app}/shows`);
     await expect(page.getByRole('heading', { name: 'No show lists yet' })).toBeVisible(); await capture('desktop-empty-shows');
     await page.getByRole('link', { name: 'Inventory →', exact: true }).click(); await inventory();
-    await expect(page.getByLabel('Comp data coverage')).toContainText(workerMode ? '153/155 cards with current evidence' : '151/155 cards with current evidence');
+    // Coverage remains proved by the real Admin panel above; normal Inventory
+    // deliberately no longer duplicates its readiness-heavy coverage header.
     await capture('desktop-cached-inventory');
     const e = await evidence(1);
-    expect(e.evaluation).toMatchObject({ status: 'supported', listedPriceCents: 30000, medianCents: 28000, compCount: 2, readiness: { state: 'current' } });
+    expect(e.evaluation).toMatchObject({ status: 'supported', localPriceCents: 30000, listedPriceCents: 40000, policyVersion: 'recent-sales-v1', medianCents: 28000, compCount: 2, readiness: { state: 'current' } });
     expect(e.sales.map(s => s.priceCents)).toEqual([27000, 29000]);
     // UI labels and stored evidence use the real evaluator, including incomplete coverage.
-    for (const [i, label] of [[25,workerMode ? 'Supported' : 'No comp data'], [26,'No DH price'], [28,workerMode ? 'Supported' : 'Out of date'], [29,'Data unavailable'], [30,'Needs matching'], [31,'No recent sales'], [32,'Thin evidence'], [33,'Below target']]) {
+    for (const [i, label] of [[25,workerMode ? 'Supported' : 'No comp data'], [26,'No asking price'], [28,workerMode ? 'Supported' : 'Out of date'], [29,'Data unavailable'], [30,'Needs matching'], [31,'Limited evidence'], [32,'Limited evidence'], [33,'Asking above comps']]) {
       await page.getByLabel('Search cards', { exact: true }).fill(cert(i));
-      const trigger = page.getByRole('button', { name: new RegExp(`Show 30-day evidence ${cert(i)}: ${label}`) });
+      const trigger = page.getByRole('link', { name: `Review price ${cert(i)}: ${label}`, exact: true });
       await expect(trigger).toBeVisible();
       if (i === 29 || (!workerMode && i === 28)) {
         await trigger.click();
-        await expect(page.getByRole('region', { name: `30-day evidence ${cert(i)}` })).toContainText('$270.00');
+        await page.getByText('30-day sale history', { exact: true }).click();
+        await expect(page.getByRole('region', { name: 'Price details' })).toContainText('$270.00');
         await capture(`desktop-retained-${i}`);
+        await page.getByRole('button', { name: 'Inventory', exact: true }).click();
       }
     }
-    await page.getByLabel('Search cards', { exact: true }).fill(''); await expect(page.getByText('155 cards shown', { exact: true })).toBeVisible();
-    await pure('Supported filter', () => page.getByLabel('Price support', { exact: true }).selectOption('supported'));
-    await expect(page.getByText(`${workerMode ? 149 : 147} cards shown`, { exact: true })).toBeVisible();
+    await page.getByLabel('Search cards', { exact: true }).fill('');
+    await page.getByRole('button', { name: 'Price review', exact: true }).click();
+    const filters = () => page.getByRole('group', { name: 'Price assessment filters' });
+    await expect(filters().getByRole('button', { name: 'All 155', exact: true })).toBeVisible();
+    await pure('Supported filter', () => filters().getByRole('button', { name: `Supported ${workerMode ? 149 : 147}`, exact: true }).click());
+    await expect(page.getByText(`${workerMode ? 149 : 147} of 155 cards`, { exact: true })).toBeVisible();
     // Measure event -> next rendered frame inside the browser, excluding driver latency.
     const interaction = await page.evaluate(async () => {
-      const select = document.querySelector('select[aria-label="Price support"]');
+      const all = [...document.querySelectorAll('[aria-label="Price assessment filters"] button')].find(button => button.textContent.startsWith('All'));
       const timed = async action => { const start = performance.now(); action(); await new Promise(requestAnimationFrame); return performance.now() - start; };
-      const filterMs = await timed(() => { select.value = 'all'; select.dispatchEvent(new Event('change', { bubbles: true })); });
-      const check = document.querySelector('input[aria-label="Select 91000001"]');
+      const filterMs = await timed(() => all.click());
+      const check = document.querySelector('input[aria-label="Select Readiness slab 01"]');
       const selectMs = await timed(() => check.click()); const clearMs = await timed(() => check.click());
       return { filterMs, selectMs, clearMs };
     });
@@ -157,7 +164,8 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
     metrics.push({ name: '155-card-target', targetMs: 100, met: Object.values(interaction).every(ms => ms < 100) });
     await pure('select all 155', () => page.getByRole('checkbox', { name: 'Select all visible cards', exact: true }).check());
     await expect(add(155)).toBeEnabled(); await pure('clear all 155', () => page.getByRole('button', { name: 'Clear', exact: true }).click());
-    await pure('Supported filter again', () => page.getByLabel('Price support', { exact: true }).selectOption('supported'));
+    await pure('Supported filter again', () => filters().getByRole('button', { name: `Supported ${workerMode ? 149 : 147}`, exact: true }).click());
+    await page.getByRole('button', { name: 'Inventory', exact: true }).click();
     // Existing geometry assertions exercise stable virtual rows with stored sales.
     await exerciseGeometry(page, context, capture, metrics, cert(1));
     await pure('checkbox', () => checkbox(1).check()); await expect(add(1)).toBeEnabled();
@@ -166,9 +174,10 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
     await expect(bar().getByRole('button', { name: 'Record sale (1)' })).toBeEnabled();
     await expect(bar().getByRole('button', { name: 'List on DH (1)' })).toBeEnabled();
     await expect(page.getByRole('button', { name: /Show selection|Check selected|Cancel checking|Check comps|Retry.*checking/ })).toHaveCount(0);
-    await page.getByRole('button', { name: new RegExp(`Show 30-day evidence ${cert(1)}`) }).click();
-    await expect(page.getByRole('region', { name: `30-day evidence ${cert(1)}` })).toContainText('$290.00');
+    await page.getByRole('link', { name: `Review price ${cert(1)}: Supported`, exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Price details' })).toContainText('$290.00');
     await capture('desktop-selected-evidence');
+    await page.getByRole('button', { name: 'Inventory', exact: true }).click();
     await add(1).click(); await expect(page.getByLabel('New show name')).toBeVisible();
     await page.getByRole('button', { name: 'Close destination', exact: true }).click(); await expect(add(1)).toBeFocused();
     await add(1).click(); await page.getByLabel('New show name').fill('Cached local show');
@@ -192,18 +201,22 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
     const third = await evidence(3);
     // A clock change invalidates selected versions, without changing stored prices.
     await page.getByRole('link', { name: 'Inventory →', exact: true }).click(); await inventory();
-    await checkbox(3).check(); await page.getByLabel('Price support', { exact: true }).selectOption('supported');
+    await checkbox(3).check(); await page.getByRole('button', { name: 'Price review', exact: true }).click();
+    await filters().getByRole('button', { name: `Supported ${workerMode ? 149 : 147}`, exact: true }).click();
     s = await command('rollover'); await page.clock.setFixedTime(new Date(s.now));
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(bar()).toContainText('Review and reselect'); await expect(checkbox(3)).toBeChecked(); await expect(add(1)).toBeDisabled();
+    await expect(bar()).toContainText('Review and reselect');
+    await bar().getByRole('button', { name: 'Reveal selected', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Select Readiness slab 03', exact: true })).toBeChecked(); await expect(add(1)).toBeDisabled();
     await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(3), evaluationVersion: third.evaluation.version }] }, 409);
     await json(`${app}/api/show-prep/lists/${listID}/items/${second.id}`, 'PUT', { version: second.version, evaluationVersion: old.evaluation.version, packed: true }, 409);
     s = await state(); expect(s.items).toEqual(snapshots.existingListAdded.items); assertNoSource(s);
     await capture('desktop-changed-selection');
     await page.getByRole('button', { name: 'Clear', exact: true }).click();
-    await expect(page.getByText('No current matches under these filters.', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Comp data coverage is incomplete/)).toBeVisible(); await capture('desktop-incomplete-supported');
-    await page.getByLabel('Price support', { exact: true }).selectOption('all');
+    await expect(page.getByText('No cards match. Change the price filter or search.', { exact: true })).toBeVisible();
+    expect((await evidence(3)).evaluation.readiness.state).toBe('stale'); await capture('desktop-incomplete-supported');
+    await filters().getByRole('button', { name: 'All 155', exact: true }).click();
+    await page.getByRole('button', { name: 'Inventory', exact: true }).click();
     for (const viewport of [{ name: 'mobile', width: 390, height: 844 }, { name: 'tablet', width: 768, height: 1024 }]) {
       await page.setViewportSize(viewport); await page.evaluate(() => window.scrollTo(0,0));
       await checkbox(1).check(); await checkbox(1).scrollIntoViewIfNeeded();
@@ -236,8 +249,7 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${app}/inventory`); await inventory();
       await page.getByLabel('Search cards', { exact: true }).fill(cert(29));
-      await page.getByLabel('Price support', { exact: true }).selectOption('needs_review');
-      await expect(page.getByText('1 card shown', { exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: `Review price ${cert(29)}: Data unavailable`, exact: true })).toBeVisible();
       const held = await evidence(29);
       await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(29), evaluationVersion: held.evaluation.version }] });
       const conflictList = '22222222-2222-4222-8222-222222222222';

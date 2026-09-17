@@ -80,30 +80,30 @@ describe('saved show preparation', () => {
     fireEvent.click(packed);
     await waitFor(() => expect(packed).not.toBeChecked());
     expect(packed).toBeDisabled();
-    expect(screen.getByLabelText('Known ready-to-pack listed value')).toHaveTextContent('$0.00');
+    expect(screen.getByLabelText('Known ready-to-pack asking value')).toHaveTextContent('$0.00');
     fireEvent.click(screen.getByRole('button', { name: 'Remove 12345678 from show' }));
     await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Packed 12345678' })).not.toBeInTheDocument());
   });
 
   it('shows missing/ambiguous totals separately and keeps ambiguous-but-ready cards packable', async () => {
     saved = detail([
-      member({ evaluation: evaluation({ status: 'needs_review', priceAssociationUnclear: true, reason: 'DH price association unclear' }) }),
+      member({ evaluation: evaluation({ status: 'supported', priceAssociationUnclear: true, listedPriceCents: 90000 }) }),
       ...['44444444-4444-4444-8444-444444444444', '55555555-5555-4555-8555-555555555555'].map((id, index) => member({
-        id, purchaseId: id, certNumber: `missing-${index}`, evaluation: evaluation({ purchaseId: id, certNumber: `missing-${index}`, status: 'no_listed_price', listedPriceCents: 0 }),
+        id, purchaseId: id, certNumber: `missing-${index}`, evaluation: evaluation({ purchaseId: id, certNumber: `missing-${index}`, status: 'no_listed_price', localPriceCents: 0 }),
       })),
     ]);
-    saved.summary = { ...saved.summary, knownValueCents: 0, ambiguousPriceCount: 1, missingPriceCount: 2, totalCount: 3 };
+    saved.summary = { ...saved.summary, knownValueCents: 30000, ambiguousPriceCount: 1, missingPriceCount: 2, totalCount: 3 };
     mount();
     expect(await screen.findByRole('checkbox', { name: 'Packed 12345678' })).toBeEnabled();
-    expect(screen.getByLabelText('Known ready-to-pack listed value')).toHaveTextContent('$0.00');
-    expect(screen.getByLabelText('Ambiguous DH prices')).toHaveTextContent('1');
-    expect(screen.getByLabelText('Missing DH prices')).toHaveTextContent('2');
-    expect(screen.getByText(/DH price association unclear; excluded/)).toBeVisible();
+    expect(screen.getByLabelText('Known ready-to-pack asking value')).toHaveTextContent('$300.00');
+    expect(screen.getByLabelText('DH association warnings')).toHaveTextContent('1');
+    expect(screen.getByLabelText('Missing asking prices')).toHaveTextContent('2');
+    expect(screen.getByText(/DH price association unclear; asking assessment is independent/)).toBeVisible();
   });
 
   it('flags changed price/support after packing and acknowledges only observed versions', async () => {
     saved = detail([member({ packedAt: '2026-09-14T11:00:00Z', version: 3, priceChanged: true, supportChanged: true,
-      evaluation: evaluation({ listedPriceCents: 35000, status: 'below_target', version: 'eval-2' }) })]);
+      evaluation: evaluation({ localPriceCents: 35000, status: 'below_target', version: 'eval-2' }) })]);
     mount();
     expect(await screen.findByText(/Price changed.*check the physical sticker/i)).toBeVisible();
     expect(screen.getByText(/Support changed/)).toBeVisible();
@@ -111,6 +111,16 @@ describe('saved show preparation', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Acknowledge changes 12345678' })).not.toBeInTheDocument());
     expect(calls.find(c => c.method === 'PUT')?.body).toEqual({ version: 3, evaluationVersion: 'eval-2', acknowledge: true });
     expect(screen.getByRole('checkbox', { name: 'Packed 12345678' })).toBeChecked();
+  });
+
+  it('retains policy-neutral historical acknowledgment without claiming legacy no-DH meant no asking', async () => {
+    saved = detail([member({ priceChanged: true, supportChanged: true, acknowledgedStatus: 'no_listed_price', acknowledgedPriceCents: 0,
+      evaluation: evaluation({ localPriceCents: 30000 }) })]);
+    mount();
+    expect(await screen.findByText('Support changed. Previously recorded status: no_listed_price.')).toBeVisible();
+    expect(screen.getByText('Price changed. Previously acknowledged no price.')).toBeVisible();
+    expect(screen.queryByText(/Previously.*No asking price/)).not.toBeInTheDocument();
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
   });
 
   it('does not claim packing success on 409 and refetches current availability', async () => {

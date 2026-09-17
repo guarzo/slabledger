@@ -34,15 +34,17 @@ async function exerciseGeometry(page, context, capture, metrics, cert) {
       expect(pointer.coarse).toBe(mode.touch); expect(pointer.fine).toBe(!mode.touch);
       await page.evaluate(() => { document.querySelectorAll('.show-inventory .overflow-y-auto').forEach(e => { e.scrollTop = 0; }); window.scrollTo(0, 0); });
       for (let turn = 0; turn < 3; turn++) {
-        await page.getByRole('button', { name: new RegExp(`Show 30-day evidence ${cert}`) }).click();
-        await expect(page.getByRole('region', { name: `30-day evidence ${cert}` })).toContainText('$270.00');
-        await assertRowsSeparated(page, `${mode.name}-open-${turn}`, metrics);
-        await page.getByRole('button', { name: new RegExp(`Hide 30-day evidence ${cert}`) }).click();
-        await assertRowsSeparated(page, `${mode.name}-collapsed-${turn}`, metrics);
+        await page.getByRole('link', { name: `Review price ${cert}: Supported`, exact: true }).click();
+        await expect(page.getByRole('region', { name: 'Price details' })).toContainText('$270.00');
+        await expect(page.getByLabel('Saved asking price')).toHaveText('$300.00');
+        await page.getByText('Source diagnostics', { exact: true }).click();
+        await expect(page.getByRole('region', { name: 'Price details' })).toContainText('$400.00');
+        await page.getByRole('button', { name: 'Inventory', exact: true }).click();
+        await assertRowsSeparated(page, `${mode.name}-review-return-${turn}`, metrics);
       }
-      const owningRow = page.locator('.show-inventory [data-index="0"]');
-      await expect(owningRow).toContainText('DH listed $300.00');
-      if (mode.width > 768) await expect(owningRow).toContainText('$400.00');
+      const owningRow = page.locator('.show-inventory [data-index]').filter({ has: page.getByRole('checkbox', { name: `Select ${cert}`, exact: true }) });
+      const compact = owningRow.getByRole('link', { name: `Review price ${cert}: Supported`, exact: true });
+      await expect(compact).toHaveAttribute('title', 'SlabLedger asking $300.00');
       await owningRow.scrollIntoViewIfNeeded();
       const trigger = await owningRow.locator('.show-evidence-trigger').boundingBox();
       metrics.push({ name: `${mode.name}-trigger`, height: trigger.height });

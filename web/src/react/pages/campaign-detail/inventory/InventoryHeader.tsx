@@ -20,11 +20,9 @@ export interface InventoryHeaderProps {
   priceBand: PriceBand;
   setPriceBand: (b: PriceBand) => void;
   priceBandCounts: PriceBandCounts;
-  retainedPriceBands?: readonly PriceBand[];
-  retainedNeedsHeadline?: boolean;
   debouncedSearch: string;
   selected: ReadonlySet<string>;
-  showFiltering?: boolean;
+  pricing?: boolean;
   onDeselectMissingCL: (purchaseIds: string[]) => void;
   onHighlightMissingCL: (purchaseIds: string[]) => void;
 }
@@ -35,8 +33,8 @@ export default function InventoryHeader({
   fullInventoryTotals,
   searchQuery, setSearchQuery,
   filterTab, setFilterTab,
-  tabCounts, priceBand, setPriceBand, priceBandCounts, retainedPriceBands = [], debouncedSearch,
-  selected, showFiltering = false, retainedNeedsHeadline = false,
+  tabCounts, priceBand, setPriceBand, priceBandCounts, debouncedSearch,
+  selected, pricing = false,
   onDeselectMissingCL, onHighlightMissingCL,
 }: InventoryHeaderProps) {
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -63,7 +61,7 @@ export default function InventoryHeader({
     { key: 'pending_dh_match' as const, label: 'Pending DH Match', count: tabCounts.pending_dh_match, alwaysShow: false },
     { key: 'pending_price' as const, label: 'Pending Price', count: tabCounts.pending_price, alwaysShow: false },
     { key: 'skipped' as const, label: 'Skipped on DH Listing', count: tabCounts.skipped, alwaysShow: false },
-  ].filter(t => t.alwaysShow || t.count > 0 || filterTab === t.key || (showFiltering && t.key === 'dh_listed')), [tabCounts, filterTab, showFiltering]);
+  ].filter(t => t.alwaysShow || t.count > 0 || filterTab === t.key), [tabCounts, filterTab]);
 
   const pillClass = (isActive: boolean, size: 'primary' | 'secondary') => {
     const base = 'shrink-0 inline-flex items-center rounded-full border transition-colors tabular-nums';
@@ -105,7 +103,7 @@ export default function InventoryHeader({
           headline (Fraunces) with the supporting stats demoted to a tabular mono
           strip, plus a small cost-vs-market bar that visualizes where the unrealized
           delta sits without needing historical data. */}
-      <div className="mb-5">
+      {!pricing && <div className="mb-5">
         {universe.totalMarket > 0 ? (
           <>
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brand-400)] mb-1">
@@ -165,10 +163,9 @@ export default function InventoryHeader({
             </span>
           )}
         </div>
-      </div>
+      </div>}
 
-      {/* Retain an existing banner above held rows, with honest live zero counts. */}
-      {(showNeedsHeadline || retainedNeedsHeadline) && (
+      {!pricing && showNeedsHeadline && (
         <button
           type="button"
           onClick={() => setFilterTab('needs_attention')}
@@ -192,7 +189,7 @@ export default function InventoryHeader({
       {/* Filter pills + inline search — replaces the heavy ReviewSummaryBar panel */}
       <div className="flex flex-col gap-2 mb-3">
         <div className="flex flex-wrap items-center gap-2">
-          {primary.map(tab => {
+          {!pricing && primary.map(tab => {
             const isActive = filterTab === tab.key;
             return (
               <button key={tab.key} type="button" onClick={() => setFilterTab(tab.key)} aria-pressed={isActive} className={pillClass(isActive, 'primary')}>
@@ -205,14 +202,14 @@ export default function InventoryHeader({
             <input
               type="text"
               aria-label="Search cards"
-              placeholder="Search by cert, card, or set…"
+              placeholder="Search by cert, card, set, or campaign…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className={`${isMobile ? 'flex-1' : 'w-48'} px-3 py-1.5 text-sm rounded-md border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]`}
             />
           </div>
         </div>
-        {secondary.length > 0 && (
+        {!pricing && secondary.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
             {secondary.map(tab => {
               const isActive = filterTab === tab.key;
@@ -230,14 +227,13 @@ export default function InventoryHeader({
             "everything in this dollar tier" fast. Bands hide at count=0 unless active.
             The whole row is hidden when no band has any items AND no band is active,
             so an empty/priceless inventory doesn't show a label-only row.
-            Held show selections retain prior controls with live zero counts so
-            background publication cannot collapse this row above them. */}
-        {(priceBands.some(b => b.count > 0) || priceBand !== 'all' || retainedPriceBands.length > 0) && (
+        */}
+        {!pricing && (priceBands.some(b => b.count > 0) || priceBand !== 'all') && (
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
             <span className="text-[10px] uppercase tracking-[0.08em] font-medium text-[var(--text-muted)] mr-1">Price</span>
             {priceBands.map(band => {
               const isActive = priceBand === band.key;
-              if (band.count === 0 && !isActive && !retainedPriceBands.includes(band.key)) return null;
+              if (band.count === 0 && !isActive) return null;
               return (
                 <button
                   key={band.key}
@@ -264,7 +260,7 @@ export default function InventoryHeader({
         )}
       </div>
 
-      {hasSearch && (
+      {!pricing && hasSearch && (
         <div className="text-xs text-[var(--text-subtle)] mb-2 pl-1">
           {filteredCount} of {items.length} cards
         </div>

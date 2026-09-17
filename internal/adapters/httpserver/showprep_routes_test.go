@@ -54,6 +54,53 @@ func TestShowPrepRefreshRetired(t *testing.T) {
 	}
 }
 
+func TestShowPrepPreviewAuthentication(t *testing.T) {
+	for _, tc := range []struct {
+		name, configuredToken, suppliedToken string
+		composed                             bool
+		status                               int
+	}{
+		{"authenticated preview", "fixture", "fixture", true, 200},
+		{"unauthenticated", "fixture", "", true, 401},
+		{"wrong token", "fixture", "wrong", true, 401},
+		{"no auth configured", "", "", true, 401},
+		{"missing composition", "fixture", "fixture", false, 503},
+		{"missing composition requires auth", "fixture", "", false, 401},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := mocks.NewMockLogger()
+			reads := 0
+			const id = "11111111-1111-4111-8111-111111111111"
+			store := &mocks.ShowPrepStoreMock{ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) {
+				reads++
+				return map[string]sp.Purchase{id: {ID: id, LocalPriceCents: 280000}}, nil
+			}}
+			var h *handlers.ShowPrepHandler
+			if tc.composed {
+				h = handlers.NewShowPrepHandler(sp.NewService(store, nil, time.Now), logger)
+			}
+			router := NewRouter(RouterConfig{ShowPrepHandler: h, LocalAPIToken: tc.configuredToken, Logger: logger,
+				SPAHandler: handlers.NewSPAHandler(logger), HealthHandler: handlers.NewHealthHandler(nil, nil, logger)}).Setup()
+			r := httptest.NewRequest("POST", "/api/show-prep/preview", strings.NewReader(`{"purchaseId":"`+id+`","priceCents":240000}`))
+			if tc.suppliedToken != "" {
+				r.Header.Set("Authorization", "Bearer "+tc.suppliedToken)
+			}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, r)
+			require.Equal(t, tc.status, w.Code, w.Body.String())
+			if tc.status == 200 {
+				require.Equal(t, 1, reads)
+				var result sp.PricePreview
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+				require.Equal(t, id, result.PurchaseID)
+				require.Equal(t, 240000, result.TrialPriceCents)
+			} else {
+				require.Zero(t, reads)
+			}
+		})
+	}
+}
+
 func TestShowPrepAPIPrefixIsolation(t *testing.T) {
 	for _, tt := range []struct {
 		name, method, path, configuredToken, suppliedToken string

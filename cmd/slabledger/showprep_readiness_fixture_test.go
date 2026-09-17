@@ -81,18 +81,20 @@ func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) map[stri
 	_, err = db.ExecContext(ctx, `INSERT INTO campaigns(id,name,phase) VALUES('readiness-campaign','Readiness fixture','active')`)
 	require.NoError(t, err)
 	for i := 1; i <= 26; i++ {
-		name, profile, price := fmt.Sprintf("Readiness slab %02d", i), fmt.Sprintf("psa-%d", (i+1)/2), 30000
+		name, profile := fmt.Sprintf("Readiness slab %02d", i), fmt.Sprintf("psa-%d", (i+1)/2)
+		asking, override := 30000, 29000
 		if i == 25 {
 			name, profile = "Outside acquisition scope", "outside"
 		}
 		if i == 26 {
-			name, profile, price = "Readiness missing price", "no-price", 0
+			name, profile = "Readiness missing price", "no-price"
+			asking, override = 0, 0
 		}
 		_, err = db.ExecContext(ctx, `INSERT INTO campaign_purchases
 		(id,campaign_id,card_name,cert_number,grader,grade_value,purchase_date,received_at,gem_rate_id,
 		buy_cost_cents,cl_value_cents,override_price_cents,reviewed_price_cents,dh_card_id,dh_inventory_id,dh_status,dh_push_status,dh_listing_price_cents,dh_channels_json)
-		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,29000,40000,$6,$6,'listed','synced',$7,'["ebay"]')`,
-			readinessPurchase(i), name, fmt.Sprintf("910000%02d", i), now.AddDate(0, 0, -10).Format(time.DateOnly), profile, 1000+i, price)
+		VALUES($1,'readiness-campaign',$2,$3,'PSA',10,$4,$4,$5,18000,31000,$8,$7,$6,$6,'listed','synced',40000,'["ebay"]')`,
+			readinessPurchase(i), name, fmt.Sprintf("910000%02d", i), now.AddDate(0, 0, -10).Format(time.DateOnly), profile, 1000+i, asking, override)
 		require.NoError(t, err)
 	}
 	// A real historical sale also has to remain byte-for-byte unchanged.
@@ -223,23 +225,32 @@ func (f *readinessSourceFixture) serve(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-func readinessRouter(db *postgres.DB, f *readinessSourceFixture, result *scheduler.BuildResult) http.Handler {
+func readinessRouter(db *postgres.DB, f *readinessSourceFixture, result *scheduler.BuildResult, configured ...*handlers.CampaignsHandler) http.Handler {
 	logger := mocks.NewMockLogger()
 	// The same cached-only service capability as production. Only its business
 	// clock is controlled here; source access belongs exclusively to scheduling.
 	service := sp.NewService(postgres.NewShowPrepStore(db.DB), nil, f.clock)
-	campaigns := inventory.NewService(postgres.NewCampaignStore(db.DB, logger), postgres.NewPurchaseStore(db.DB, logger),
-		postgres.NewSaleStore(db.DB, logger), postgres.NewAnalyticsStore(db.DB, logger), postgres.NewFinanceStore(db.DB, logger),
-		postgres.NewPricingStore(db.DB, logger), postgres.NewDHStore(db.DB, logger),
-		inventory.WithIDGenerator(uuid.NewString),
-		inventory.WithCompSummaryProvider(inventory.NewCompositeCompProvider(postgres.NewCLSalesStore(db.DB), postgres.NewDHCompCacheStore(db.DB))))
+	campaigns := readinessCampaigns(db)
+	var campaignHandler *handlers.CampaignsHandler
+	if len(configured) > 0 {
+		campaignHandler = configured[0]
+	}
 	// OAuth transport is never called: actual LocalAPIToken middleware resolves
 	// the fixture user through the real auth service and PostgreSQL repository.
 	auth := google.NewOAuthService(postgres.NewAuthRepository(db.DB, nil), logger, "", "", "", nil)
 	return httpserver.NewRouter(httpserver.RouterConfig{ShowPrepHandler: handlers.NewShowPrepHandler(service, logger),
 		ShowPrepWorkerHandler: buildShowPrepWorkerHandler(handlerInputs{SchedulerResult: result}),
-		CampaignsService:      campaigns, AuthService: auth, LocalAPIToken: readinessToken, GoogleOAuthEnv: "development",
+		CampaignsService:      campaigns, CampaignsHandler: campaignHandler, AuthService: auth, LocalAPIToken: readinessToken, GoogleOAuthEnv: "development",
 		Logger: logger, SPAHandler: handlers.NewSPAHandler(logger), HealthHandler: handlers.NewHealthHandler(nil, nil, logger)}).Setup()
+}
+
+func readinessCampaigns(db *postgres.DB) inventory.Service {
+	logger := mocks.NewMockLogger()
+	return inventory.NewService(postgres.NewCampaignStore(db.DB, logger), postgres.NewPurchaseStore(db.DB, logger),
+		postgres.NewSaleStore(db.DB, logger), postgres.NewAnalyticsStore(db.DB, logger), postgres.NewFinanceStore(db.DB, logger),
+		postgres.NewPricingStore(db.DB, logger), postgres.NewDHStore(db.DB, logger),
+		inventory.WithIDGenerator(uuid.NewString),
+		inventory.WithCompSummaryProvider(inventory.NewCompositeCompProvider(postgres.NewCLSalesStore(db.DB), postgres.NewDHCompCacheStore(db.DB))))
 }
 
 // Whole persisted rows catch changes to every price/purchase/DH field, not just

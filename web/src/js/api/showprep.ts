@@ -10,11 +10,18 @@ function requireArray<T>(value: T[], label: string): T[] {
 }
 export function isShowEvaluation(value: ShowEvaluation | undefined): value is ShowEvaluation {
   if (!value?.purchaseId || !value.version) return false;
-  return ['supported', 'thin_evidence', 'below_target', 'no_recent_comps', 'needs_review', 'no_listed_price'].includes(value.status)
+  const recent = value.recent;
+  return ['supported', 'thin_evidence', 'below_target', 'mixed_evidence', 'no_recent_comps', 'needs_review', 'no_listed_price'].includes(value.status)
     && ['ready', 'not_received', 'sold', 'refunded', 'campaign_closed', 'removed', 'unknown'].includes(value.availability)
     && [value.listedPriceCents, value.localPriceCents, value.medianCents, value.compCount].every(Number.isSafeInteger)
     && [value.canAdd, value.canPack, value.priceMismatch, value.priceAssociationUnclear, value.evidenceNeedsReview].every(flag => typeof flag === 'boolean')
-    && typeof value.reason === 'string' && typeof value.evidenceReason === 'string';
+    && typeof value.reason === 'string' && typeof value.evidenceReason === 'string'
+    && typeof value.policyVersion === 'string' && value.policyVersion.length > 0
+    && !!recent && typeof recent === 'object' && !Array.isArray(recent)
+    && [recent.windowStart, recent.windowEnd, recent.latestSaleDate].every(date => typeof date === 'string')
+    && Array.isArray(recent.saleIds) && recent.saleIds.every(id => typeof id === 'string')
+    && [recent.count, recent.medianCents, recent.latestSaleCount, recent.latestSaleMinCents, recent.latestSaleMaxCents].every(Number.isSafeInteger)
+    && (recent.gapPct === null || (typeof recent.gapPct === 'number' && Number.isFinite(recent.gapPct)));
 }
 const readinessEligibility: Record<ReadinessState, RefreshEligibility> = {
   not_checked: 'needed', current: 'not_needed', stale: 'needed', running: 'wait',

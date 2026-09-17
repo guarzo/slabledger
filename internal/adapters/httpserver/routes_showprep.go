@@ -32,6 +32,7 @@ func (rt *Router) registerShowPrepRoutes(mux *http.ServeMux) {
 		handler http.HandlerFunc
 	}{
 		{"POST /api/show-prep/evaluate", h.HandleEvaluate},
+		{"POST /api/show-prep/preview", h.HandlePreview},
 		{"GET /api/show-prep/evidence/{purchaseID}", h.HandleEvidence},
 		{"POST /api/show-prep/refresh", h.HandleRefresh},
 		{"GET /api/show-prep/lists", h.HandleLists},

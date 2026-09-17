@@ -30,7 +30,7 @@ func seedShowPurchase(t *testing.T, db *DB, id, campaign, cert, grader string) {
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `INSERT INTO campaigns(id,name,phase) VALUES($1,'Show test','pending') ON CONFLICT DO NOTHING`, campaign)
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, `INSERT INTO campaign_purchases(id,campaign_id,card_name,cert_number,grader,grade_value,purchase_date,received_at,dh_listing_price_cents,gem_rate_id) VALUES($1,$2,'Card',$3,$4,10,'2026-09-01','2026-09-02',30000,'psa-1')`, id, campaign, cert, grader)
+	_, err = db.ExecContext(ctx, `INSERT INTO campaign_purchases(id,campaign_id,card_name,cert_number,grader,grade_value,purchase_date,received_at,dh_listing_price_cents,reviewed_price_cents,gem_rate_id) VALUES($1,$2,'Card',$3,$4,10,'2026-09-01','2026-09-02',30000,30000,'psa-1')`, id, campaign, cert, grader)
 	require.NoError(t, err)
 }
 func seedShowEvidence(t *testing.T, store *ShowPrepStore) {

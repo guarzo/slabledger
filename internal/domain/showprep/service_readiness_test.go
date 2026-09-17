@@ -37,7 +37,7 @@ func TestServiceReadinessReadOutcomes(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
-			p := sp.Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: 30000}
+			p := sp.Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: 30000, LocalPriceCents: 30000}
 			if tt.invalid {
 				p.ProfileID = ""
 			}
@@ -82,11 +82,11 @@ func TestServiceReadinessReadOutcomes(t *testing.T) {
 			}
 			if tt.evidenceErr && !tt.purchaseErr && !tt.invalid {
 				require.Equal(t, "Evidence storage unavailable", evaluations[0].EvidenceReason)
-				require.Equal(t, "6a43b7ae30085ba53b8c578fe86a2363ef45640c6f51784e894b8a7380b700f3", evaluations[0].Version)
+				require.Equal(t, "5ad0c4fb129ea6e003f98aeee7f45016169dc318c871cb2906d4c54c0902de58", evaluations[0].Version)
 				require.Equal(t, "fcdc1fb5b4cadc3df2da7670b8391b0930eac8aa99c9d6479eceffaf6e68e9d2", evaluations[0].EvidenceVersion)
 			}
 			if tt.purchaseErr && !tt.evidenceErr {
-				require.Equal(t, "5ef62f62e7e28657a4be4805a6e4626b53648217cb11515aec2aca31509215ed", evaluations[0].Version)
+				require.Equal(t, "e87eee8204c142dc7c9b0d7eacf1ae3c602e3cc7d7da7de95d2c7704a53dfcd6", evaluations[0].Version)
 			}
 			now = now.Add(time.Minute)
 			reread, err := svc.Evaluate(context.Background(), []string{"p"})
@@ -109,7 +109,7 @@ func TestServiceReadinessReadOutcomes(t *testing.T) {
 
 func TestServiceReadinessRefreshFailureRemainsManualOnly(t *testing.T) {
 	now := time.Now().UTC()
-	p := sp.Purchase{ID: "p", ProfileID: "psa-1", Grader: "PSA", Grade: 10}
+	p := sp.Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Phase: "active", ProfileID: "psa-1", Grader: "PSA", Grade: 10}
 	var saved *sp.Snapshot
 	store := &mocks.ShowPrepStoreMock{
 		ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) {

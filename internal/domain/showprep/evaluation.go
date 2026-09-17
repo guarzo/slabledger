@@ -18,6 +18,7 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 		e.ListingSyncedAt = Timestamp(synced)
 	}
 	var prices []int
+	var eligibleSales []Sale
 	invalid := false
 	if s != nil {
 		e.RefreshedAt = Timestamp(s.RefreshedAt)
@@ -34,6 +35,7 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 			}
 			seen[sale.ID] = true
 			prices = append(prices, sale.PriceCents)
+			eligibleSales = append(eligibleSales, sale)
 			if sale.Date > e.LatestSaleDate {
 				e.LatestSaleDate = sale.Date
 			}
@@ -41,15 +43,16 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 	}
 	slices.Sort(prices)
 	e.CompCount = len(prices)
-	var twice int64
+	// Twice a positive int fits uint64, including half-cent display medians.
+	var twice uint64
 	if len(prices) > 0 {
-		twice = 2 * int64(prices[len(prices)/2])
+		twice = 2 * uint64(prices[len(prices)/2])
 		if len(prices)%2 == 0 {
-			twice = int64(prices[len(prices)/2-1]) + int64(prices[len(prices)/2])
+			twice = uint64(prices[len(prices)/2-1]) + uint64(prices[len(prices)/2])
 		}
 		e.MedianCents = int((twice + 1) / 2)
 	}
-	// Evidence health is independent of DH price quality. Validate once so price
+	// Evidence health is independent of asking price. Validate once so price
 	// precedence cannot hide failed attempts or mislabel healthy retained sales.
 	switch {
 	case !p.Identity().Valid():
@@ -75,34 +78,28 @@ func Evaluate(p Purchase, s *Snapshot, now time.Time) Evaluation {
 		e.EvidenceReason = "Evidence is stale"
 	}
 	e.EvidenceNeedsReview = e.EvidenceReason != ""
-	e.Status = NeedsReview
-	switch {
-	case p.ListedPriceCents <= 0:
-		e.Status = NoListedPrice
-		e.Reason = "No positive DH listed price"
-	case p.PriceAssociationUnclear:
-		e.Reason = "DH price association unclear"
-	case e.EvidenceNeedsReview:
-		e.Reason = e.EvidenceReason
-	case len(prices) == 0:
-		e.Status = NoRecentComps
-		e.Reason = "Complete lookup found no recent matching sales"
-	case 5*twice < 9*int64(p.ListedPriceCents):
-		e.Status = BelowTarget
-		e.Reason = "Median below 90% of DH listed price"
-	case len(prices) == 1:
-		e.Status = ThinEvidence
-		e.Reason = "Only one matching sale supports the listed price"
-	default:
-		e.Status = Supported
-		e.Reason = "Recent matching median supports the listed price"
+	e.Status, e.Reason, e.Recent = assessRecentPrice(p.LocalPriceCents, eligibleSales, now)
+	e.PolicyVersion = PriceAssessmentPolicy
+	if e.EvidenceNeedsReview {
+		// Retain readable facts, but never certify or show a gap from unhealthy evidence.
+		e.Recent.GapPct = nil
+		if p.LocalPriceCents > 0 {
+			e.Status, e.Reason = NeedsReview, e.EvidenceReason
+		}
+	}
+	if a == Unknown {
+		// A purchase fallback's zero fields are unreadable, not a committed missing
+		// asking. Resolve this before hashing; ordinary physical/DH warnings do not
+		// suppress a known asking assessment.
+		e.Status, e.Reason = NeedsReview, "Purchase details unavailable"
+		e.Recent.GapPct = nil
 	}
 	// Include derived status/window (date rollover and freshness matter), but not the read instant.
 	e.Version = Fingerprint(struct {
 		Purchase   Purchase
 		Evaluation Evaluation
 	}{p, e})
-	// Hash the exact legacy business projection first. The absent optional field
+	// Hash the business projection first. The absent optional field
 	// is omitted from JSON, so scheduling transitions cannot invalidate selection.
 	e.Readiness = deriveReadiness(p.Identity(), s, now, invalid)
 	return e

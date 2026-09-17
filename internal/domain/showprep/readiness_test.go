@@ -10,7 +10,7 @@ import (
 
 func readinessFixture() (Purchase, *Snapshot, time.Time) {
 	now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
-	p := Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: 30000}
+	p := Purchase{ID: "p", Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "active", Grader: "PSA", Grade: 10, ProfileID: "psa-1", ListedPriceCents: 30000, LocalPriceCents: 30000}
 	s := &Snapshot{Identity: p.Identity(), Source: "cardladder", Generation: 1, Complete: true, WindowStart: "2026-08-16", WindowEnd: "2026-09-14", RefreshedAt: now, Attempt: 1, AttemptState: "complete", AttemptStartedAt: now.Add(-time.Minute), Sales: []Sale{{ID: "a", Date: "2026-09-14", PriceCents: 30000}, {ID: "b", Date: "2026-09-14", PriceCents: 30000}}}
 	return p, s, now
 }
@@ -34,7 +34,7 @@ func TestReadinessLifecycle(t *testing.T) {
 		{"cold", "not_checked", "needed", "", "", func(_ *Purchase, s **Snapshot, _ *time.Time) { *s = nil }},
 		{"current", "current", "not_needed", "2026-09-15T00:00:00Z", "", nil},
 		{"complete empty", "current", "not_needed", "2026-09-15T00:00:00Z", "", func(_ *Purchase, s **Snapshot, _ *time.Time) { (*s).Sales = nil }},
-		{"no price", "current", "not_needed", "2026-09-15T00:00:00Z", "", func(p *Purchase, _ **Snapshot, _ *time.Time) { p.ListedPriceCents = 0 }},
+		{"no price", "current", "not_needed", "2026-09-15T00:00:00Z", "", func(p *Purchase, _ **Snapshot, _ *time.Time) { p.LocalPriceCents = 0 }},
 		{"price association unclear", "current", "not_needed", "2026-09-15T00:00:00Z", "", func(p *Purchase, _ **Snapshot, _ *time.Time) { p.PriceAssociationUnclear = true }},
 		{"age before bound", "current", "not_needed", "2026-09-14T12:00:00.000000001Z", "", func(_ *Purchase, s **Snapshot, now *time.Time) {
 			(*s).RefreshedAt = now.Add(-24*time.Hour + time.Nanosecond)
@@ -74,7 +74,7 @@ func TestReadinessLifecycle(t *testing.T) {
 			(*s).AttemptStartedAt = now.Add(time.Nanosecond)
 		}},
 		{"failed retained", "failed", "retry_only", "", "", func(_ *Purchase, s **Snapshot, _ *time.Time) { (*s).AttemptState = "failed" }},
-		{"failed no price", "failed", "retry_only", "", "", func(p *Purchase, s **Snapshot, _ *time.Time) { p.ListedPriceCents = 0; (*s).AttemptState = "failed" }},
+		{"failed no price", "failed", "retry_only", "", "", func(p *Purchase, s **Snapshot, _ *time.Time) { p.LocalPriceCents = 0; (*s).AttemptState = "failed" }},
 		{"failure text is not a read outcome", "failed", "retry_only", "", "", func(_ *Purchase, s **Snapshot, _ *time.Time) {
 			(*s).AttemptState = "failed"
 			(*s).AttemptError = "Evidence storage unavailable"
@@ -119,7 +119,7 @@ func TestReadinessLifecycle(t *testing.T) {
 			}
 			require.Equal(t, map[string]any{"state": tt.state, "refreshEligibility": tt.eligibility, "identityKey": key, "expiresAt": tt.expires, "retryAt": tt.retry}, readinessWire(t, e))
 			require.Equal(t, before, Fingerprint(s), "readiness must never mutate attempts/payload")
-			if p.ListedPriceCents == 0 {
+			if p.LocalPriceCents == 0 {
 				require.Equal(t, NoListedPrice, e.Status)
 			}
 			if tt.name == "complete empty" {
@@ -164,19 +164,20 @@ func TestReadinessWindowRolloverStillChangesBusinessVersion(t *testing.T) {
 	require.Equal(t, before.EvidenceVersion, after.EvidenceVersion)
 }
 
-// Golden hashes are captured from BASE 7d2fa901 before readiness is implemented.
-func TestReadinessLegacyVersionCompatibility(t *testing.T) {
+// Assessment policy changes business hashes; evidence hashes stay unchanged.
+// These goldens continue to guard the wire projection with readiness excluded.
+func TestReadinessAssessmentVersionCompatibility(t *testing.T) {
 	for _, tt := range []struct {
 		name, version, evidence string
 		change                  func(*Purchase, **Snapshot)
 	}{
-		{"healthy", "1ff22a98683b917782f46e6cdd2ad22641f198c02e15ed542c4c81e337f951b4", "595f7f7a0467ebf371176c2582fa77082040c2573f4c76572367b266b85f1f37", nil},
-		{"cold", "845bb02ac3104bf7747abb1a2c05464cbbbeff6e5a3883da35ff94647dbbd2e0", "", func(_ *Purchase, s **Snapshot) { *s = nil }},
-		{"failed retained", "fa9b65339261b610c49fb6ca60a64154e5b3ca3f58dc81fe7dcc4d6c7b757ca8", "48b90e985519ab26f04d37026ae23b8e95c4132653e4e4e96e19d1daaf3bdfb7", func(_ *Purchase, s **Snapshot) { (*s).AttemptState = "failed" }},
-		{"unavailable snapshot read", "6a43b7ae30085ba53b8c578fe86a2363ef45640c6f51784e894b8a7380b700f3", "fcdc1fb5b4cadc3df2da7670b8391b0930eac8aa99c9d6479eceffaf6e68e9d2", func(p *Purchase, s **Snapshot) {
+		{"healthy", "c443f3ab122a4596e046e21e26e312dc76c7d04957959930cb63a93cc19888b8", "595f7f7a0467ebf371176c2582fa77082040c2573f4c76572367b266b85f1f37", nil},
+		{"cold", "790471a0a7fcc418e176dcc70c265aad83dd458d0cd664294ca80ee651dd3215", "", func(_ *Purchase, s **Snapshot) { *s = nil }},
+		{"failed retained", "b6f6afce41a063e2cd728df0051beac812f1ecfbca622cd54a17c4137d12901f", "48b90e985519ab26f04d37026ae23b8e95c4132653e4e4e96e19d1daaf3bdfb7", func(_ *Purchase, s **Snapshot) { (*s).AttemptState = "failed" }},
+		{"unavailable snapshot read", "5ad0c4fb129ea6e003f98aeee7f45016169dc318c871cb2906d4c54c0902de58", "fcdc1fb5b4cadc3df2da7670b8391b0930eac8aa99c9d6479eceffaf6e68e9d2", func(p *Purchase, s **Snapshot) {
 			*s = &Snapshot{Identity: p.Identity(), AttemptError: "Evidence storage unavailable"}
 		}},
-		{"unavailable purchase read", "5ef62f62e7e28657a4be4805a6e4626b53648217cb11515aec2aca31509215ed", "", func(p *Purchase, s **Snapshot) { *p = Purchase{ID: "p"}; *s = nil }},
+		{"unavailable purchase read", "e87eee8204c142dc7c9b0d7eacf1ae3c602e3cc7d7da7de95d2c7704a53dfcd6", "", func(p *Purchase, s **Snapshot) { *p = Purchase{ID: "p"}; *s = nil }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			p, s, now := readinessFixture()

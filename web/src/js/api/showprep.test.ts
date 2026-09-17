@@ -61,6 +61,36 @@ describe('show preparation transport', () => {
     await expect(showPrepAPI.evidence(purchaseId)).rejects.toThrow(/invalid/i);
   });
 
+  it('accepts mixed recent evidence without replacing DH diagnostics or losing the canonical asking', async () => {
+    const value = { ...evaluation(), status: 'mixed_evidence', localPriceCents: 30000, listedPriceCents: 90000,
+      policyVersion: 'recent-sales-v1', recent: { windowStart: '2026-09-08', windowEnd: '2026-09-14',
+        saleIds: ['a', 'b', 'c'], count: 3, medianCents: 30000, latestSaleDate: '2026-09-13',
+        latestSaleCount: 3, latestSaleMinCents: 20000, latestSaleMaxCents: 30000, gapPct: 0 } };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => json(url.includes('/evidence/')
+      ? { evaluation: value, sales: [] } : { evaluations: [value] })));
+    expect((await evaluateInventory([purchaseId])).evaluations[purchaseId]).toEqual(value);
+    expect((await showPrepAPI.evidence(purchaseId)).evaluation).toEqual(value);
+  });
+
+  it.each([
+    { policyVersion: undefined }, { policyVersion: '' }, { policyVersion: 1 },
+    { recent: undefined }, { recent: null }, { recent: {} },
+    ...['count', 'medianCents', 'latestSaleCount', 'latestSaleMinCents', 'latestSaleMaxCents'].map(key => ({
+      recent: { windowStart: '2026-09-08', windowEnd: '2026-09-14', saleIds: ['a'], count: 1, medianCents: 30000,
+        latestSaleDate: '2026-09-13', latestSaleCount: 1, latestSaleMinCents: 30000, latestSaleMaxCents: 30000, gapPct: 0, [key]: 1.5 },
+    })),
+    ...[{ saleIds: [1] }, { gapPct: '0' }, { windowStart: null }, { windowEnd: undefined }, { latestSaleDate: 1 }].map(bad => ({
+      recent: { windowStart: '2026-09-08', windowEnd: '2026-09-14', saleIds: ['a'], count: 1, medianCents: 30000,
+        latestSaleDate: '2026-09-13', latestSaleCount: 1, latestSaleMinCents: 30000, latestSaleMaxCents: 30000, gapPct: 0, ...bad },
+    })),
+  ])('rejects malformed policy assessment fields: %j', async fields => {
+    const value = { ...evaluation(), ...fields };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => json(url.includes('/evidence/')
+      ? { evaluation: value, sales: [] } : { evaluations: [value] })));
+    expect((await evaluateInventory([purchaseId])).evaluations[purchaseId]).toBeUndefined();
+    await expect(showPrepAPI.evidence(purchaseId)).rejects.toThrow(/invalid/i);
+  });
+
   it('rejects malformed arrays instead of calling them empty evidence', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ evaluations: null })));
     const result = await evaluateInventory([purchaseId]);

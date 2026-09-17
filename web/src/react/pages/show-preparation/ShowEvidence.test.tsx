@@ -12,12 +12,31 @@ it('includes visible support, cert and expanded relationship in the compact butt
   expect(button).toHaveAttribute('aria-controls', `show-evidence-${purchaseId}`);
 });
 it.each([
-  { listedPriceCents: 30000, priceAssociationUnclear: false, label: 'DH listed $300.00' },
-  { listedPriceCents: 0, priceAssociationUnclear: false, label: 'DH listed Missing' },
-  { listedPriceCents: 30000, priceAssociationUnclear: true, label: 'DH listed $300.00 (unverified)' },
+  { localPriceCents: 40000, listedPriceCents: 30000, priceAssociationUnclear: false, label: 'SlabLedger asking $400.00' },
+  { localPriceCents: 0, listedPriceCents: 30000, priceAssociationUnclear: false, label: 'SlabLedger asking Missing' },
+  { localPriceCents: 40000, listedPriceCents: 30000, priceAssociationUnclear: true, label: 'SlabLedger asking $400.00' },
 ])('identifies the exact evaluated price in compact show context: $label', ({ label, ...values }) => {
-  render(<ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678" evaluation={evaluation({ ...values, localPriceCents: 40000 })} showListedPrice expanded={false} onClick={() => {}} />);
+  render(<ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678" evaluation={evaluation(values)} showListedPrice expanded={false} onClick={() => {}} />);
   expect(screen.getByText(label)).toBeVisible();
+});
+it.each([0, 40000])('does not label unreadable purchase prices as missing or known (%s retained cents)', cents => {
+  const unknown = evaluation({ availability: 'unknown', status: 'needs_review', evidenceNeedsReview: true,
+    localPriceCents: cents, listedPriceCents: cents });
+  render(<><ShowSupport evaluation={unknown} /><ShowEvidenceButton purchaseId={purchaseId} certNumber="12345678"
+    evaluation={unknown} showListedPrice expanded={false} onClick={() => {}} /></>);
+  expect(screen.getAllByText(/^SlabLedger asking/)).toHaveLength(2);
+  for (const asking of screen.getAllByText(/^SlabLedger asking/)) expect(asking).toHaveTextContent('SlabLedger asking Unknown');
+  expect(screen.getByText(/^Stored DH listed/)).toHaveTextContent('Stored DH listed Unknown');
+  expect(screen.queryByText(/Missing|\$400.00/)).not.toBeInTheDocument();
+});
+it('shows canonical support independently of a DH association warning', () => {
+  render(<ShowSupport evaluation={evaluation({ listedPriceCents: 90000, localPriceCents: 30000, priceMismatch: true, priceAssociationUnclear: true })} />);
+  expect(screen.getByText('Supported', { selector: 'strong' })).toBeVisible();
+  expect(screen.getByText(/^SlabLedger asking/)).toHaveTextContent('$300.00');
+  expect(screen.getByText(/Stored DH listed/)).toHaveTextContent('$900.00');
+  expect(screen.getByText(/Recent median/)).toHaveTextContent('$280.00');
+  expect(screen.getByText(/DH price association unclear; asking assessment is independent/)).toBeVisible();
+  expect(screen.queryByText(/excluded from known value/)).not.toBeInTheDocument();
 });
 it('updates an open summary from a readiness-only observation without changing detail keys or selection versions', async () => {
   const running = evaluation({ readiness: { state: 'current', refreshEligibility: 'not_needed', identityKey: 'a'.repeat(64), expiresAt: '2026-09-15T00:00:00Z', retryAt: '' } });
@@ -65,11 +84,11 @@ it('does not color a supported explanation as a warning and formats source listi
   expect(screen.getByText('Best offer')).toBeVisible();
   expect(screen.getByText('Fixed price')).toBeVisible();
 });
-it('keeps missing listed price separate from a failed check', () => {
-  render(<ShowSupport evaluation={evaluation({ status: 'no_listed_price', listedPriceCents: 0, compCount: 0, evidenceNeedsReview: true,
+it('keeps missing asking price separate from a failed check', () => {
+  render(<ShowSupport evaluation={evaluation({ status: 'no_listed_price', localPriceCents: 0, compCount: 0, evidenceNeedsReview: true,
     readiness: { state: 'failed', refreshEligibility: 'retry_only', identityKey: 'a'.repeat(64), expiresAt: '', retryAt: '' },
   })} />);
-  expect(screen.getByText('No DH price')).toBeVisible();
+  expect(screen.getByText('No asking price')).toBeVisible();
   expect(screen.getByText('Data unavailable')).toBeVisible();
   expect(screen.queryByText(/0 sales/)).not.toBeInTheDocument();
 });
@@ -86,19 +105,22 @@ it('does not revive an older supported detail after a newer evaluation arrives',
   fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
   await screen.findByRole('list', { name: 'Individual matching sales' });
   fireEvent.click(screen.getByRole('button', { name: 'Hide 30-day evidence 12345678' }));
-  current = evaluation({ status: 'below_target', version: 'eval-2', listedPriceCents: 45000 });
+  current = evaluation({ status: 'below_target', version: 'eval-2', localPriceCents: 45000 });
   view.rerender(tree());
   fireEvent.click(screen.getByRole('button', { name: 'Show 30-day evidence 12345678' }));
   expect(screen.queryByText('Supported', { selector: 'strong' })).not.toBeInTheDocument();
   await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
-  expect(screen.getByText('Below target', { selector: 'strong' })).toBeVisible();
+  expect(screen.getByText('Asking above comps', { selector: 'strong' })).toBeVisible();
 });
 it.each([
-  { name: 'no price and failed recheck', status: 'no_listed_price' as const, reason: 'No positive DH listed price', listedPriceCents: 0, evidenceNeedsReview: true, evidenceReason: 'CardLadder refresh failed' },
-  { name: 'no price and healthy evidence', status: 'no_listed_price' as const, reason: 'No positive DH listed price', listedPriceCents: 0, evidenceNeedsReview: false, evidenceReason: '' },
-  { name: 'ambiguous price and healthy evidence', status: 'needs_review' as const, reason: 'DH price association unclear', listedPriceCents: 30000, evidenceNeedsReview: false, evidenceReason: '' },
+  { name: 'no price and failed recheck', status: 'no_listed_price' as const, reason: 'No positive SlabLedger asking price', localPriceCents: 0, evidenceNeedsReview: true, evidenceReason: 'CardLadder refresh failed' },
+  { name: 'no price and healthy evidence', status: 'no_listed_price' as const, reason: 'No positive SlabLedger asking price', localPriceCents: 0, evidenceNeedsReview: false, evidenceReason: '' },
+  { name: 'ambiguous DH price and healthy evidence', status: 'thin_evidence' as const, reason: 'Only one recent matching sale; review its amount', priceAssociationUnclear: true, localPriceCents: 30000, evidenceNeedsReview: false, evidenceReason: '' },
 ])('warns about retained sales only when evidence is unhealthy: $name', async ({ name: _name, ...health }) => {
-  const e = evaluation({ ...health, compCount: 1, medianCents: 27000 });
+  const e = evaluation({ ...health, compCount: 1, medianCents: 27000, recent: {
+    ...evaluation().recent, saleIds: ['a'], count: 1, medianCents: 27000,
+    latestSaleCount: 1, latestSaleMinCents: 27000, latestSaleMaxCents: 27000, gapPct: health.localPriceCents <= 0 || health.evidenceNeedsReview ? null : 10,
+  } });
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ evaluation: e, sales: [
     { id: 'a', date: '2026-09-13', priceCents: 27000, platform: 'eBay', url: 'https://example.test/sale', listingType: 'Auction' },
   ] }))));
@@ -108,7 +130,7 @@ it.each([
   expect(await screen.findByRole('list', { name: 'Individual matching sales' })).toHaveTextContent('$270.00');
   expect(screen.getByText(health.reason)).toBeVisible();
   if (health.evidenceNeedsReview) {
-    expect(screen.getByText('No DH price', { selector: 'strong' })).toBeVisible();
+    expect(screen.getByText('No asking price', { selector: 'strong' })).toBeVisible();
     expect(screen.getByText('CardLadder refresh failed')).toBeVisible();
     expect(screen.getByText(/Stored sales may be partial or stale/)).toBeVisible();
   } else {
@@ -117,7 +139,7 @@ it.each([
 });
 
 it.each([false, true])('describes an empty window from independent health, not missing price (needs review=%s)', evidenceNeedsReview => {
-  render(<EvidenceDetails data={{ evaluation: evaluation({ status: 'no_listed_price', reason: 'No positive DH listed price', listedPriceCents: 0,
+  render(<EvidenceDetails data={{ evaluation: evaluation({ status: 'no_listed_price', reason: 'No positive SlabLedger asking price', localPriceCents: 0,
     compCount: 0, medianCents: 0, evidenceNeedsReview, evidenceReason: evidenceNeedsReview ? 'CardLadder refresh failed' : '',
   }), sales: [] }} />);
   if (evidenceNeedsReview) {

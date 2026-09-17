@@ -25,11 +25,11 @@ function PackingList({ listId }: { listId: string }) {
         <div><dt>Packed (includes history)</dt><dd>{summary.packedCount}</dd></div>
         <div><dt>Not received</dt><dd>{summary.notReceivedCount}</dd></div>
         <div><dt>Unavailable</dt><dd>{summary.unavailableCount}</dd></div>
-        <div aria-label="Known ready-to-pack listed value"><dt>Known ready-to-pack listed value</dt><dd>{formatCents(summary.knownValueCents)}</dd></div>
-        <div aria-label="Missing DH prices"><dt>Missing DH prices</dt><dd>{summary.missingPriceCount}</dd></div>
-        <div aria-label="Ambiguous DH prices"><dt>Ambiguous DH prices</dt><dd>{summary.ambiguousPriceCount}</dd></div>
+        <div aria-label="Known ready-to-pack asking value"><dt>Known ready-to-pack asking value</dt><dd>{formatCents(summary.knownValueCents)}</dd></div>
+        <div aria-label="Missing asking prices"><dt>Missing asking prices</dt><dd>{summary.missingPriceCount}</dd></div>
+        <div aria-label="DH association warnings"><dt>DH association warnings</dt><dd>{summary.ambiguousPriceCount}</dd></div>
       </dl>
-      <p className="text-xs text-[var(--text-muted)] mt-2">Known value includes only ready-to-pack members with a positive, unambiguous DH listed price. Missing and ambiguous prices are excluded, not valued at zero.</p>
+      <p className="text-xs text-[var(--text-muted)] mt-2">Known value includes ready-to-pack members with a positive SlabLedger asking price. Missing asking prices are excluded, not valued at zero. DH association warnings are counted separately and do not exclude known asking value.</p>
       {data.items.length === 0 ? <p className="py-8 text-[var(--text-muted)]">No slabs in this list. <Link className="show-link" to="/inventory">Select cards from inventory →</Link></p> : <>
         {data.items.map(item => <ShowMember key={item.id} item={item} listId={listId} stale={query.isError || query.isFetching} />)}
       </>}
