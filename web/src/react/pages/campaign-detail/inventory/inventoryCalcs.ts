@@ -291,7 +291,8 @@ export function applySearchAndTab(
     return items.filter(i =>
       i.purchase.cardName.toLowerCase().includes(q) ||
       (i.purchase.certNumber && i.purchase.certNumber.toLowerCase().includes(q)) ||
-      (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q))
+      (i.purchase.setName && i.purchase.setName.toLowerCase().includes(q)) ||
+      (i.campaignName && i.campaignName.toLowerCase().includes(q))
     );
   }
   if (filterTab === 'in_hand' || filterTab === 'all') {

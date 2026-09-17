@@ -45,6 +45,13 @@ function setup() {
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
   return { ...render(<Harness />, { wrapper }), user: userEvent.setup() };
 }
+async function saveCurrentTrial(user: ReturnType<typeof userEvent.setup>) {
+  await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText('Trial only · $2,400.00');
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
+  expect(save).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(save).toHaveBeenCalledExactlyOnceWith(purchaseId, 240000);
+}
 it('separates focused card from bulk checkbox intent and retains both through view unmount/remount', async () => {
   const { user } = setup();
   const workspace = screen.getByRole('region', { name: 'Price review' });
@@ -83,6 +90,7 @@ it('keeps removed-card draft visible and disables unsafe saves rather than retai
 it('cannot turn supported but sold/not-packable live inventory into show eligibility', async () => {
   const { user, rerender } = setup();
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2300');
+  await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText('Trial only · $2,300.00');
   expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
   liveEvaluations = { ...initialEvaluations, [purchaseId]: { ...a, ...supported, availability: 'sold', canAdd: false, canPack: false, version: 'sold' } };
   rerender(<Harness evaluations={liveEvaluations} />);
@@ -114,7 +122,7 @@ it('retains a rejected save and successful recheck after the submitting workspac
   save.mockImplementation(() => new Promise<void>((_resolve, fail) => { reject = fail; }));
   const { user } = setup();
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
-  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await saveCurrentTrial(user);
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
   expect(screen.queryByRole('region', { name: 'Price review' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
@@ -137,7 +145,7 @@ it('retains confirmation and clears the confirmed draft after remount followed b
   }; }));
   const { user } = setup();
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
-  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await saveCurrentTrial(user);
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
   await act(async () => complete());
@@ -152,7 +160,7 @@ it('keeps a confirmed write distinct from failed read-back across remount, and r
   save.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
   const { user } = setup();
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
-  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await saveCurrentTrial(user);
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
   vi.mocked(showPrepAPI.evidence).mockRejectedValue(new Error('Read-back offline'));
@@ -178,7 +186,7 @@ it('blocks duplicate saves across view unmount/remount while preserving the subm
   save.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
   const { user } = setup();
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
-  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await saveCurrentTrial(user);
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
   await user.click(screen.getByRole('button', { name: 'Switch view' }));
   expect(screen.getByLabelText('Asking price')).toBeDisabled();
@@ -191,7 +199,7 @@ it('rechecks the submitted card, not the newly focused card, when a save finishe
   save.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
   const { user } = setup();
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
-  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  await saveCurrentTrial(user);
   await user.click(screen.getByRole('button', { name: 'Review Orbit Fox' }));
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '1900');
   await waitFor(() => expect(showPrepAPI.evidence).toHaveBeenCalledTimes(2));

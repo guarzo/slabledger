@@ -16,18 +16,20 @@ import (
 func TestPurchaseReadFailureIsNotMissingAsking(t *testing.T) {
 	const id = "11111111-1111-4111-8111-111111111111"
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
-	for _, partial := range []bool{false, true} {
-		name := "empty failed read"
-		if partial {
-			name = "partial failed read"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		partial bool
+	}{
+		{"empty failed read", false},
+		{"partial failed read", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			item := sp.Item{ID: "item", PurchaseID: id, CardName: "Saved card", CertNumber: "123", Grader: "PSA", Grade: 10,
 				AcknowledgedPriceCents: 240000, AcknowledgedStatus: sp.Supported, PackedAt: "2026-09-15T12:00:00Z", Version: 7, LastCommand: "saved-intent"}
 			store := &mocks.ShowPrepStoreMock{
 				ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) {
 					var purchases map[string]sp.Purchase
-					if partial {
+					if tc.partial {
 						purchases = map[string]sp.Purchase{id: {ID: id, Known: true, LocalPriceCents: 240000}}
 					}
 					return purchases, errors.New("controlled purchase storage failure")

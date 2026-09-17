@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -61,11 +61,70 @@ it('uses the server trial outcome and only persists after explicit Save; saved b
 it.each([
   ['thin_evidence', 'Limited evidence', 'limited'], ['no_recent_comps', 'Limited evidence', 'limited'],
   ['needs_review', 'Evidence unavailable', 'unavailable'], ['mixed_evidence', 'Mixed evidence', 'mixed'],
-] as const)('styles %s trial using its server assessment group, not Mixed by default', async (status, label, group) => {
-  vi.spyOn(priceReviewAPI, 'preview').mockResolvedValue({ ...preview(), status });
-  setup({ value: '2400', baselinePriceCents: 280000 });
+  ['below_target', 'Asking above comps', 'above'],
+] as const)('styles %s as advisory and allows an explicit save after the current preview', async (status, label, group) => {
+  vi.spyOn(priceReviewAPI, 'preview').mockResolvedValue({ ...preview(), status,
+    evidenceNeedsReview: status === 'needs_review', evidenceReason: status === 'needs_review' ? 'Stored evidence unavailable' : '' });
+  const { user, onSavePrice } = setup({ value: '2400', baselinePriceCents: 280000 });
   const badge = await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText(label, { exact: true });
   expect(badge).toHaveClass(`price-review-status-${group}`);
+  expect(onSavePrice).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(onSavePrice).toHaveBeenCalledExactlyOnceWith(purchaseId, 240000);
+});
+it.each([
+  { name: 'debounce', initialDraft: undefined },
+  { name: 'loading', initialDraft: { value: '2400', baselinePriceCents: 280000 } },
+])('blocks saving during $name until current preview success', async ({ initialDraft }) => {
+  let release!: (data: ReturnType<typeof preview>) => void;
+  const fetcher = vi.fn(() => new Promise<Response>(resolve => {
+    release = data => resolve(Response.json(data));
+  }));
+  vi.stubGlobal('fetch', fetcher);
+  const { user, onSavePrice } = setup(initialDraft);
+  if (!initialDraft) {
+    fireEvent.change(screen.getByLabelText('Asking price'), { target: { value: '2400' } });
+    expect(screen.getByText('Waiting for current input…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Save price' }));
+    expect(onSavePrice).not.toHaveBeenCalled();
+  }
+  await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+  expect(screen.getByText('Checking trial price…')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(onSavePrice).not.toHaveBeenCalled();
+  await act(async () => release(preview()));
+  await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText('Supported', { exact: true });
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
+  expect(onSavePrice).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(onSavePrice).toHaveBeenCalledExactlyOnceWith(purchaseId, 240000);
+});
+it('does not authorize a save with a late preview of an old saved target', async () => {
+  const requests: ((data: ReturnType<typeof preview>) => void)[] = [];
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => {
+    requests.push(data => resolve(Response.json(data)));
+  })));
+  const { user, Harness, rerender, onSavePrice } = setup({ value: '2400', baselinePriceCents: 280000 });
+  await waitFor(() => expect(requests).toHaveLength(1));
+  const old = saved;
+  saved = { ...saved, localPriceCents: 270000, version: 'changed' };
+  rerender(<Harness e={saved} />);
+  await waitFor(() => expect(requests).toHaveLength(2));
+  await act(async () => requests[0](preview(240000, old)));
+  expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,700.00');
+  expect(screen.getByLabelText('Asking price')).toHaveValue('2400');
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(onSavePrice).not.toHaveBeenCalled();
+  await act(async () => requests[1](preview(240000, saved)));
+  await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText('Supported', { exact: true });
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
+  expect(onSavePrice).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(onSavePrice).toHaveBeenCalledExactlyOnceWith(purchaseId, 240000);
 });
 it('invalidates the displayed trial immediately during debounce and cannot show a late 254000 result over current 240000', async () => {
   const requests: { cents: number; release: (data: ReturnType<typeof preview>) => void }[] = [];
@@ -94,8 +153,15 @@ it('retains the input on preview failure, allows an explicit read retry, and doe
   expect(await screen.findByText(/Preview offline/)).toBeInTheDocument();
   expect(screen.getByLabelText('Asking price')).toHaveValue('2400');
   expect(onSavePrice).not.toHaveBeenCalled(); expect(read).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(onSavePrice).not.toHaveBeenCalled();
   await user.click(screen.getByRole('button', { name: 'Retry preview' }));
   await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText('Supported', { exact: true });
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
+  expect(onSavePrice).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Save price' }));
+  expect(onSavePrice).toHaveBeenCalledExactlyOnceWith(purchaseId, 240000);
 });
 it('keeps a changed saved baseline visible while preserving dirty input', async () => {
   vi.spyOn(priceReviewAPI, 'preview').mockImplementation(async (_id, cents) => preview(cents, saved));

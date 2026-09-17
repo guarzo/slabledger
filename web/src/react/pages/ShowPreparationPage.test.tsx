@@ -114,10 +114,11 @@ describe('saved show preparation', () => {
   });
 
   it('retains policy-neutral historical acknowledgment without claiming legacy no-DH meant no asking', async () => {
-    saved = detail([member({ supportChanged: true, acknowledgedStatus: 'no_listed_price', acknowledgedPriceCents: 0,
+    saved = detail([member({ priceChanged: true, supportChanged: true, acknowledgedStatus: 'no_listed_price', acknowledgedPriceCents: 0,
       evaluation: evaluation({ localPriceCents: 30000 }) })]);
     mount();
     expect(await screen.findByText('Support changed. Previously recorded status: no_listed_price.')).toBeVisible();
+    expect(screen.getByText('Price changed. Previously acknowledged no price.')).toBeVisible();
     expect(screen.queryByText(/Previously.*No asking price/)).not.toBeInTheDocument();
     expect(calls.every(call => call.method === 'GET')).toBe(true);
   });

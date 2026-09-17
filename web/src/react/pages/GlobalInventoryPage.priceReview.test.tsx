@@ -39,6 +39,12 @@ const selectedA = () => screen.getByRole('checkbox', { name: /^Select (00000001|
 const selectedB = () => screen.getByRole('checkbox', { name: /^Select (00000002|Moon Tortoise)$/ });
 const writes = () => requests.filter(r => r.method === 'PATCH');
 async function ready() { await screen.findByRole('textbox', { name: 'Asking price' }); await waitFor(() => expect(input()).toBeEnabled()); }
+async function saveCurrentTrial() {
+  await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText('Trial only · $2,400.00');
+  expect(screen.getByRole('button', { name: 'Save price' })).toBeEnabled();
+  expect(writes()).toHaveLength(0);
+  click('Save price');
+}
 beforeEach(() => {
   values = [evaluation(), evaluation({ purchaseId: otherId, certNumber: '00000002', cardName: 'Moon Tortoise', version: 'saved-b' })];
   requests = []; failInventory = false; failWrite = false; emptyInventory = false; failEvidence = ''; inventoryGate = undefined;
@@ -123,7 +129,7 @@ it('retains owner/data/drafts/focus/selection after confirmed PATCH then failed 
 });
 
 it('failed PATCH retains draft and error without success or advance and never calls override API', async () => {
-  mount(`/inventory?view=pricing&review=${purchaseId}`); await ready(); draft('2400'); failWrite = true; click('Save price');
+  mount(`/inventory?view=pricing&review=${purchaseId}`); await ready(); draft('2400'); failWrite = true; await saveCurrentTrial();
   await screen.findByText(/Save not confirmed: Price write refused/);
   expect(input()).toHaveValue('2400'); expect(screen.queryByText(/Price saved locally/)).not.toBeInTheDocument();
   expect(requests.some(r => r.url.includes('override'))).toBe(false); expect(writes()).toHaveLength(1);
@@ -146,7 +152,7 @@ it('reserves blocking errors for no successful response, not an empty successful
 });
 
 it('rechecks the submitted card even if focus changes during the inventory read', async () => {
-  mount(`/inventory?view=pricing&review=${purchaseId}`); await ready(); draft('2400'); failInventory = true; click('Save price');
+  mount(`/inventory?view=pricing&review=${purchaseId}`); await ready(); draft('2400'); failInventory = true; await saveCurrentTrial();
   await screen.findByText(/Price saved; assessment could not be refreshed/);
   let release!: () => void; inventoryGate = new Promise<void>(resolve => { release = resolve; });
   failInventory = false; failEvidence = purchaseId; click('Recheck saved state'); reviewCard('Moon Tortoise');
@@ -171,6 +177,6 @@ it('invalidates the whole show cache family after the canonical reviewed-price w
   mount('/inventory?view=pricing'); await ready();
   const keys = [[...showPrepKeys.all, 'price-preview', 'inactive'], [...showPrepKeys.all, 'list', 'inactive'], [...showPrepKeys.all, 'evidence', 'inactive']];
   qc.setQueryData(keys[0], preview()); qc.setQueryData(keys[1], detail([])); qc.setQueryData(keys[2], { evaluation: evaluation(), sales });
-  draft('2400'); click('Save price'); await screen.findByText(/Saved state rechecked/);
+  draft('2400'); await saveCurrentTrial(); await screen.findByText(/Saved state rechecked/);
   keys.forEach(key => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
 });

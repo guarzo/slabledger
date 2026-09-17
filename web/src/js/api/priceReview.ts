@@ -28,7 +28,7 @@ function isPreview(value: unknown, purchaseId: string, priceCents: number): valu
     'evidenceReason', 'evidenceVersion', 'policyVersion', 'recent'];
   return Object.keys(value).length === keys.length && keys.every(key => Object.prototype.hasOwnProperty.call(value, key))
     && value.purchaseId === purchaseId && value.trialPriceCents === priceCents
-    && Number.isSafeInteger(value.currentPriceCents)
+    && typeof value.currentPriceCents === 'number' && Number.isSafeInteger(value.currentPriceCents) && value.currentPriceCents >= 0
     && typeof value.status === 'string'
     && ['supported', 'thin_evidence', 'below_target', 'mixed_evidence', 'no_recent_comps', 'needs_review', 'no_listed_price'].includes(value.status)
     && typeof value.reason === 'string' && typeof value.evidenceReason === 'string'

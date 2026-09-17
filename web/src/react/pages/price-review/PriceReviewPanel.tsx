@@ -51,7 +51,8 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
   const saving = useIsMutating({ mutationKey }) > 0;
   const mutation = useMutation({ mutationKey, mutationFn: persist, retry: false });
   const needsRecheck = !!save && !save.rechecked && !saving;
-  const canSave = editable && currentAssessment && changed && !saving && !needsRecheck && !previewBaselineChanged && !evidence.isError;
+  const canSave = editable && currentAssessment && changed && !!result
+    && !saving && !needsRecheck && !previewBaselineChanged && !evidence.isError;
 
   useEffect(() => {
     if (save?.state === 'saved' && save.rechecked && savedCents === save.cents && draft?.value === save.value) onClearDraft();

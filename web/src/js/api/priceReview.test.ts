@@ -40,6 +40,7 @@ const malformed: [string, unknown][] = [
   ['null', null], ['array', []], ['missing fields', {}],
   ['wrong purchase', { ...preview(), purchaseId: '22222222-2222-4222-8222-222222222222' }],
   ['wrong trial', { ...preview(), trialPriceCents: 254000 }],
+  ['negative current', { ...preview(), currentPriceCents: -1 }],
   ['fractional current', { ...preview(), currentPriceCents: 1.5 }],
   ['unsafe current', { ...preview(), currentPriceCents: Number.MAX_SAFE_INTEGER + 1 }],
   ['unknown status', { ...preview(), status: 'approved' }],

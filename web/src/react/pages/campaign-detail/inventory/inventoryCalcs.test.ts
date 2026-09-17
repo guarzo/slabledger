@@ -223,6 +223,25 @@ describe('inventoryCalcs', () => {
     });
   });
 
+  describe('applySearchAndTab search scope', () => {
+    const items = [
+      makeItem({ purchase: { id: 'card', cardName: 'Aurora Dragon', certNumber: '001', setName: 'Northern Lights' }, campaignName: 'Autumn Collection' }),
+      makeItem({ purchase: { id: 'other', cardName: 'Moon Tortoise', certNumber: '002', setName: 'Sky', receivedAt: '2026-04-08T00:00:00Z', dhStatus: 'listed' }, campaignName: 'Winter Collection' }),
+      makeItem({ purchase: { id: 'no-campaign', cardName: 'Sun Bird', certNumber: '003', setName: 'Dawn' } }),
+    ];
+    it.each([
+      { name: 'card', search: 'aUrOrA', ids: ['card'] },
+      { name: 'cert', search: '001', ids: ['card'] },
+      { name: 'set', search: 'nOrThErN', ids: ['card'] },
+      { name: 'campaign', search: 'aUtUmN', ids: ['card'] },
+      { name: 'shared campaign text', search: 'collection', ids: ['card', 'other'] },
+      { name: 'absent campaign', search: 'missing', ids: [] },
+      { name: 'empty search', search: '', ids: ['other'] },
+    ])('matches $name without changing search-over-tab precedence', ({ search, ids }) => {
+      expect(applySearchAndTab(items, search, 'dh_listed').map(item => item.purchase.id)).toEqual(ids);
+    });
+  });
+
   describe('filterAndSortItems — column sort (no search)', () => {
     // Three items with distinct cost bases so sort order is unambiguous.
     const items = [

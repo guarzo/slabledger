@@ -180,23 +180,31 @@ func TestPreviewReadFailuresAndCancellation(t *testing.T) {
 }
 
 func TestPreviewRetainsUnhealthyFactsAndAcceptsPriceBounds(t *testing.T) {
-	for _, price := range []int{1, 9007199254740991} {
-		store, source := previewReadOnlyStore(t)
-		store.ReadPurchasesFn = func(context.Context, []string) (map[string]sp.Purchase, error) {
-			return map[string]sp.Purchase{previewID: {ID: previewID, ProfileID: "card", Grader: "PSA", Grade: 10}}, nil
-		}
-		store.ReadSnapshotsFn = func(_ context.Context, ids []sp.Identity) (map[sp.Identity]*sp.Snapshot, error) {
-			return map[sp.Identity]*sp.Snapshot{ids[0]: {Identity: ids[0], AttemptState: "failed", AttemptError: "Retained evidence after failed refresh",
-				Sales: []sp.Sale{{ID: "sale", Date: "2026-09-16", PriceCents: 250000}}}}, nil
-		}
-		got, err := sp.NewService(store, source, func() time.Time { return time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC) }).Preview(context.Background(), previewID, price)
-		require.NoError(t, err)
-		require.Equal(t, sp.NeedsReview, got.Status)
-		require.True(t, got.EvidenceNeedsReview)
-		require.Equal(t, "Retained evidence after failed refresh", got.EvidenceReason)
-		require.Nil(t, got.Recent.GapPct)
-		require.Equal(t, []string{"sale"}, got.Recent.SaleIDs)
-		require.Zero(t, got.CurrentPriceCents)
-		require.Equal(t, price, got.TrialPriceCents)
+	for _, tc := range []struct {
+		name  string
+		price int
+	}{
+		{"minimum positive cent", 1},
+		{"maximum safe integer cents", 9007199254740991},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, source := previewReadOnlyStore(t)
+			store.ReadPurchasesFn = func(context.Context, []string) (map[string]sp.Purchase, error) {
+				return map[string]sp.Purchase{previewID: {ID: previewID, ProfileID: "card", Grader: "PSA", Grade: 10}}, nil
+			}
+			store.ReadSnapshotsFn = func(_ context.Context, ids []sp.Identity) (map[sp.Identity]*sp.Snapshot, error) {
+				return map[sp.Identity]*sp.Snapshot{ids[0]: {Identity: ids[0], AttemptState: "failed", AttemptError: "Retained evidence after failed refresh",
+					Sales: []sp.Sale{{ID: "sale", Date: "2026-09-16", PriceCents: 250000}}}}, nil
+			}
+			got, err := sp.NewService(store, source, func() time.Time { return time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC) }).Preview(context.Background(), previewID, tc.price)
+			require.NoError(t, err)
+			require.Equal(t, sp.NeedsReview, got.Status)
+			require.True(t, got.EvidenceNeedsReview)
+			require.Equal(t, "Retained evidence after failed refresh", got.EvidenceReason)
+			require.Nil(t, got.Recent.GapPct)
+			require.Equal(t, []string{"sale"}, got.Recent.SaleIDs)
+			require.Zero(t, got.CurrentPriceCents)
+			require.Equal(t, tc.price, got.TrialPriceCents)
+		})
 	}
 }
