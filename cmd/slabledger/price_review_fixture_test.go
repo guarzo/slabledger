@@ -78,16 +78,27 @@ func seedPriceReview(t *testing.T, db *postgres.DB, now time.Time) {
 	_, err = db.ExecContext(t.Context(), `UPDATE campaign_purchases SET received_at=NULL,dh_inventory_id=0,dh_status='',dh_push_status='',dh_listing_price_cents=0 WHERE id=$1`, readinessPurchase(3))
 	require.NoError(t, err)
 	service := sp.NewService(store, nil, func() time.Time { return now })
-	for i, want := range []sp.Status{sp.BelowTarget, sp.Supported, sp.MixedEvidence, sp.ThinEvidence, sp.NoRecentComps, sp.NoListedPrice, sp.NeedsReview} {
-		evidence, err := service.Evidence(t.Context(), readinessPurchase(i+1))
-		require.NoError(t, err)
-		require.Equal(t, want, evidence.Evaluation.Status)
-		if i == 2 {
-			require.Equal(t, sp.NotReceived, evidence.Evaluation.Availability)
-			require.False(t, evidence.Evaluation.CanPack)
-		} else {
-			require.Equal(t, sp.Ready, evidence.Evaluation.Availability)
-		}
+	for i, tt := range []struct {
+		name         string
+		status       sp.Status
+		availability sp.Availability
+		canPack      bool
+	}{
+		{name: "declining", status: sp.BelowTarget, availability: sp.Ready, canPack: true},
+		{name: "supported", status: sp.Supported, availability: sp.Ready, canPack: true},
+		{name: "mixed unreceived", status: sp.MixedEvidence, availability: sp.NotReceived, canPack: false},
+		{name: "single sale", status: sp.ThinEvidence, availability: sp.Ready, canPack: true},
+		{name: "old sale", status: sp.NoRecentComps, availability: sp.Ready, canPack: true},
+		{name: "unpriced", status: sp.NoListedPrice, availability: sp.Ready, canPack: true},
+		{name: "failed evidence", status: sp.NeedsReview, availability: sp.Ready, canPack: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			evidence, err := service.Evidence(t.Context(), readinessPurchase(i+1))
+			require.NoError(t, err)
+			require.Equal(t, tt.status, evidence.Evaluation.Status)
+			require.Equal(t, tt.availability, evidence.Evaluation.Availability)
+			require.Equal(t, tt.canPack, evidence.Evaluation.CanPack)
+		})
 	}
 }
 

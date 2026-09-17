@@ -124,9 +124,15 @@ for (const viewport of widths) {
     await page.getByRole('button', { name: 'Price review', exact: true }).click();
     await page.getByRole('button', { name: /^Supported 2$/ }).click();
     await page.getByLabel('Search cards').fill('Charizard');
-    await expect(page.getByText('0 of 1 cards', { exact: true })).toBeVisible();
+    await expect(page.getByText('0 of 0 in-hand cards', { exact: true })).toBeVisible();
+    // Unreceived cards are outside Price review, not merely hidden by Supported.
+    await page.getByRole('button', { name: 'All 0', exact: true }).click();
+    await expect(page.getByText('0 of 0 in-hand cards', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Review ${values[1].cardName}`, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: `Select ${values[1].cardName}`, exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Supported 0', exact: true }).click();
     await page.getByLabel('Search cards').fill('Pikachu');
-    await expect(page.getByText('1 of 1 cards', { exact: true })).toBeVisible();
+    await expect(page.getByText('1 of 1 in-hand cards', { exact: true })).toBeVisible();
     await page.getByRole('checkbox', { name: 'Select all visible cards' }).check();
     await page.getByRole('button', { name: 'Review Pikachu' }).click();
     const evidence = page.getByRole('region', { name: 'Price details' });

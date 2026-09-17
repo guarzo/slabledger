@@ -218,17 +218,26 @@ func TestPriceReviewRealBrowser(t *testing.T) {
 		}
 	}
 	service := sp.NewService(postgres.NewShowPrepStore(db.DB), nil, f.clock)
-	for i, price := range []int{240000, 230000, 240000} {
-		evidence, err := service.Evidence(t.Context(), readinessPurchase(i+1))
-		require.NoError(t, err)
-		require.Equal(t, price, evidence.Evaluation.LocalPriceCents)
-		require.Equal(t, sp.Supported, evidence.Evaluation.Status)
-		require.Equal(t, sp.PriceAssessmentPolicy, evidence.Evaluation.PolicyVersion)
-		if i == 2 {
-			// The normal Inventory save cannot receive or make this card packable.
-			require.Equal(t, sp.NotReceived, evidence.Evaluation.Availability)
-			require.False(t, evidence.Evaluation.CanPack)
-		}
+	for i, tt := range []struct {
+		name         string
+		price        int
+		availability sp.Availability
+		canPack      bool
+	}{
+		{name: "declining review save", price: 240000, availability: sp.Ready, canPack: true},
+		{name: "supported review save", price: 230000, availability: sp.Ready, canPack: true},
+		// The normal Inventory save cannot receive or make this card packable.
+		{name: "unreceived inventory save", price: 240000, availability: sp.NotReceived, canPack: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			evidence, err := service.Evidence(t.Context(), readinessPurchase(i+1))
+			require.NoError(t, err)
+			require.Equal(t, tt.price, evidence.Evaluation.LocalPriceCents)
+			require.Equal(t, sp.Supported, evidence.Evaluation.Status)
+			require.Equal(t, sp.PriceAssessmentPolicy, evidence.Evaluation.PolicyVersion)
+			require.Equal(t, tt.availability, evidence.Evaluation.Availability)
+			require.Equal(t, tt.canPack, evidence.Evaluation.CanPack)
+		})
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
