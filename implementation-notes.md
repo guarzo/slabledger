@@ -1082,7 +1082,12 @@ The real Go/PG driver now saves fixture #3 (cert `91000003`, still unreceived) v
 normal Inventory's explicit inline edit. All three-save/DH skip and financial-row
 immutability assertions remain; fixture assertions also require it to stay unreceived.
 
-Fresh verification and remaining gate details are recorded in the ignored task report
-`.superpowers/price-review-in-hand/report.md`. Real Go/PG browser execution belongs to
-the parent and is not claimed by this implementation. No backend production, schema,
-dependency or operational configuration changes; no production calls, push or merge.
+Fresh verification: 1,071 frontend tests, TypeScript/lint/build, 45 no-DB Go race
+packages, make check, 7 controlled-HTTP Chromium workflows and 14 browser helper
+checks passed. Independent scoped review approved `48b30287` without findings.
+The parent reran 103 focused tests and TypeScript, then the actual Go/PostgreSQL
+browser gate: passed in 28.96s, preserving exact financial/DH assertions and zero
+provider acquisition. The disposable DB used only task-owned loopback PostgreSQL;
+this is not live marketplace verification. Commands and logs remain in ignored
+`.superpowers/price-review-in-hand/`. No backend production, schema, dependency or
+operational configuration changes. No production calls, repricing or deployment.
