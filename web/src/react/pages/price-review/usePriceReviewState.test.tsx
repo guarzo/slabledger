@@ -37,6 +37,32 @@ it.each([-1, 1] as const)('chooses adjacent surviving queue item after active le
   act(() => hook.result.current.move(delta));
   expect(hook.result.current.activeId).toBe(delta === -1 ? 'before' : 'after');
 });
+it('never reveals or navigates unreceived selections and retains drafts/outcomes when intake disappears', () => {
+  const es = ['before', 'active', 'after'].map(purchaseId => evaluation({ purchaseId }));
+  const props = { items: es.map(e => inventoryItem(e)), evaluations: Object.fromEntries(es.map(e => [e.purchaseId, e])) };
+  const selected = new Set(['before', 'active', 'after']);
+  const hook = renderHook(p => usePriceReviewState(p.items, p.evaluations, '', selected), { initialProps: props });
+  const draft = { value: '2400', baselinePriceCents: 280000 };
+  const outcome = { state: 'error' as const, value: '2400', cents: 240000, rechecked: false, message: 'Uncertain write' };
+  act(() => { hook.result.current.focus('active'); hook.result.current.setDraft('active', draft); hook.result.current.setSaveResult('active', outcome); });
+  const unreceived = props.items.map(item => item.purchase.id === 'active' ? { ...item, purchase: { ...item.purchase, receivedAt: '' } } : item);
+  hook.rerender({ ...props, items: unreceived });
+  act(() => hook.result.current.setFilter('supported'));
+  act(() => hook.result.current.revealSelection());
+  expect(hook.result.current.rows.map(i => i.purchase.id)).toEqual(['before', 'after']);
+  expect(hook.result.current.activeId).toBe('active');
+  expect(hook.result.current.drafts.active).toEqual(draft);
+  expect(hook.result.current.saves.active).toEqual(outcome);
+  expect(hook.result.current.returnFocusId()).toBe('after');
+  act(() => hook.result.current.move(1)); expect(hook.result.current.activeId).toBe('after');
+  act(() => hook.result.current.move(-1)); expect(hook.result.current.activeId).toBe('before');
+  hook.rerender(props);
+  expect(hook.result.current.rows.map(i => i.purchase.id)).toEqual(['before', 'active', 'after']);
+  expect(hook.result.current.drafts.active).toEqual(draft);
+  expect(hook.result.current.saves.active).toEqual(outcome);
+  expect([...selected]).toEqual(['before', 'active', 'after']);
+});
+
 it('keeps an unavailable identity and its unsaved text when a card disappears, without retaining stale purchase objects', () => {
   const { hook, props } = setup();
   act(() => hook.result.current.setDraft(purchaseId, { value: '2400', baselinePriceCents: 280000 }));

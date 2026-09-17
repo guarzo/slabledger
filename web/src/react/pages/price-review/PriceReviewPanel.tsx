@@ -12,7 +12,7 @@ import GradeBadge from '../../ui/GradeBadge';
 import { centsToDollars, formatCents, getErrorMessage } from '../../utils/formatters';
 import { costBasis } from '../campaign-detail/inventory/utils';
 import { availabilityLabels, evidenceLabel, listingTypeLabel, safeSourceURL, showTime } from '../show-preparation/showPrepLabels';
-import { assessmentGroups, assessmentLabels, gapLabel, parsePriceDraft, priceGroup, type PriceDraft } from './priceReviewModel';
+import { assessmentGroups, assessmentLabels, gapLabel, isInHand, parsePriceDraft, priceGroup, type PriceDraft } from './priceReviewModel';
 import type { PriceSaveResult } from './usePriceReviewState';
 
 export interface PriceReviewPanelProps {
@@ -26,7 +26,8 @@ export interface PriceReviewPanelProps {
 export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError, draft, onDraftChange, onClearDraft, onSavePrice,
   save, onSaveResultChange, onSaveRechecked, onRecheckInventory }: PriceReviewPanelProps) {
   const aggregate = isShowEvaluation(evaluation) ? evaluation : undefined;
-  const evidence = useShowEvidence(purchaseId, !!item, aggregate?.version);
+  const inHand = isInHand(item);
+  const evidence = useShowEvidence(purchaseId, inHand, aggregate?.version);
   const detail = !evidence.isFetching && !evidence.isError ? evidence.data?.evaluation : undefined;
   const readError = evaluationError || (!aggregate && evidence.isError ? getErrorMessage(evidence.error) : undefined);
   // The latest aggregate observation wins over cached detail for every outcome.
@@ -39,7 +40,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
   const value = draft?.value ?? (savedCents > 0 ? centsToDollars(savedCents) : '');
   const cents = parsePriceDraft(value);
   const debouncedValue = useDebounce(value, 300);
-  const editable = !!item && !!e && !item.purchase.wasRefunded && item.purchase.dhStatus !== 'sold'
+  const editable = inHand && !!e && !item.purchase.wasRefunded && item.purchase.dhStatus !== 'sold'
     && (e.availability === 'ready' || e.availability === 'not_received');
   const changed = cents !== null && cents !== savedCents;
   const currentInput = debouncedValue === value;
@@ -55,8 +56,8 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
     && !saving && !needsRecheck && !previewBaselineChanged && !evidence.isError;
 
   useEffect(() => {
-    if (save?.state === 'saved' && save.rechecked && savedCents === save.cents && draft?.value === save.value) onClearDraft();
-  }, [save, savedCents, draft, onClearDraft]);
+    if (inHand && save?.state === 'saved' && save.rechecked && savedCents === save.cents && draft?.value === save.value) onClearDraft();
+  }, [inHand, save, savedCents, draft, onClearDraft]);
 
   function changeDraft(next: string) {
     onDraftChange({ value: next, baselinePriceCents: draft?.baselinePriceCents ?? savedCents });
@@ -92,20 +93,33 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
   const recentIDs = new Set(recent?.saleIds);
   const saleRows = evidence.data?.sales ?? [];
   const recentSales = saleRows.filter(sale => recentIDs.has(sale.id));
-  const unavailable = !item ? 'Card unavailable in current inventory. Unsaved text is retained; price actions are disabled.'
-    : item.purchase.wasRefunded ? 'Unavailable: refunded' : item.purchase.dhStatus === 'sold' ? 'Unavailable: sold'
+  const unavailable = item?.purchase.wasRefunded ? 'Unavailable: refunded' : item?.purchase.dhStatus === 'sold' ? 'Unavailable: sold'
     : e && e.availability !== 'ready' && e.availability !== 'not_received' ? availabilityLabels[e.availability] : undefined;
   const cost = item ? costBasis(item.purchase) : null;
   const singleLow = currentAssessment && recent?.count === 1 && recent.gapPct !== null && recent.gapPct > 0;
   const newestLow = currentAssessment && !!recent && savedCents > 0 && recent.latestSaleMinCents < savedCents;
 
+  const saveFeedback = <>
+    {save?.state === 'saved' && needsRecheck && onRecheckInventory && <p role="status" className="price-review-warning">Price saved; assessment could not be refreshed. Retry the read to confirm current inventory and evidence.</p>}
+    {save?.state === 'saved' && <p role="status" className="price-review-success">Price saved locally. {save.rechecked ? 'Saved state rechecked.' : 'Recheck saved state to confirm the current amount.'} DH processing may still be pending.</p>}
+    {save?.state === 'error' && <p role="alert" className="price-review-warning">Save not confirmed: {save.message}. Draft retained. {save.rechecked ? 'Saved state rechecked; review it before retrying.' : 'Recheck saved state before retrying.'}</p>}
+  </>;
+  // Keep mutation hooks mounted so an already submitted save can settle into
+  // the persistent owner. Cached evidence cannot restore intake eligibility.
+  if (!inHand) return <div className="price-review-panel">
+    <h3 tabIndex={-1} data-price-detail-heading>Card unavailable in current in-hand inventory</h3>
+    <p role="status" className="price-review-warning">Price review is for in-hand inventory only. Cards awaiting intake remain in Inventory. Unsaved drafts are retained until the card is in hand again.</p>
+    {saving && <p role="status">Previously submitted price save is still pending.</p>}
+    {saveFeedback}
+  </div>;
+
   return <div className="price-review-panel">
-    {item && <header>
+    <header>
       {item.campaignName && <p className="price-review-meta">{item.campaignName}</p>}
       <h3 tabIndex={-1} data-price-detail-heading>{item.purchase.cardName}</h3>
       <p className="price-review-identity"><GradeBadge grader={item.purchase.grader} grade={item.purchase.gradeValue} />
         <span>{item.purchase.setName} · Cert {item.purchase.certNumber}</span></p>
-    </header>}
+    </header>
     {unavailable && <p role="status" className="price-review-warning">{unavailable}</p>}
     <section aria-label="Saved price assessment" className="price-review-saved" aria-busy={saving || needsRecheck}>
       {saving || needsRecheck ? <p role="status" className="price-review-warning">Assessment pending refresh. Previously loaded facts may be stale.</p>
@@ -152,18 +166,16 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
             <p className="price-review-meta">{gapLabel(result.recent.gapPct)} · Not saved</p></> : <p>Checking trial price…</p>}
       </section>
       {previewBaselineChanged && <p role="status" className="price-review-warning">Preview observed a different saved asking price: {formatCents(result.currentPriceCents)}. Recheck saved state before saving.</p>}
-      {(needsRecheck || previewBaselineChanged) && <Button variant="secondary" size="sm" disabled={!item || evidence.isFetching} onClick={recheck}>Recheck saved state</Button>}
+      {(needsRecheck || previewBaselineChanged) && <Button variant="secondary" size="sm" disabled={evidence.isFetching} onClick={recheck}>Recheck saved state</Button>}
       {cost !== null && <p className="price-review-meta">Cost {formatCents(cost)}{cents !== null && ` · Before-fee margin at trial ${formatCents(cents - cost)}`}. Not a sale-profit guarantee.</p>}
       <p className="price-review-consequence">Saving syncs DH and can list eligible inventory. DH processing is asynchronous; a local save does not confirm remote completion.</p>
       <Button disabled={!canSave} loading={saving} onClick={() => {
         if (canSave && qc.isMutating({ mutationKey }) === 0) mutation.mutate();
       }}>{saving ? 'Saving price…' : 'Save price'}</Button>
-      {save?.state === 'saved' && needsRecheck && onRecheckInventory && <p role="status" className="price-review-warning">Price saved; assessment could not be refreshed. Retry the read to confirm current inventory and evidence.</p>}
-      {save?.state === 'saved' && <p role="status" className="price-review-success">Price saved locally. {save.rechecked ? 'Saved state rechecked.' : 'Recheck saved state to confirm the current amount.'} DH processing may still be pending.</p>}
-      {save?.state === 'error' && <p role="alert" className="price-review-warning">Save not confirmed: {save.message}. Draft retained. {save.rechecked ? 'Saved state rechecked; review it before retrying.' : 'Recheck saved state before retrying.'}</p>}
+      {saveFeedback}
     </section>
 
-    {item && <section className="price-review-evidence">
+    <section className="price-review-evidence">
       <h4>Recent matching sales</h4>
       {evidence.isFetching && <p role="status">Loading stored sale evidence…</p>}
       {evidence.isError && <div role="alert"><p>Evidence unavailable: {getErrorMessage(evidence.error)}</p>
@@ -186,7 +198,7 @@ export function PriceReviewPanel({ purchaseId, item, evaluation, evaluationError
           <div><dt>Assessment policy</dt><dd>{e.policyVersion}</dd></div>
         </dl> : <p>Evaluation unavailable. Retry the evidence read.</p>}
       </details>
-    </section>}
+    </section>
   </div>;
 }
 

@@ -72,15 +72,33 @@ func seedPriceReview(t *testing.T, db *postgres.DB, now time.Time) {
 	}
 	// Case2 already has the target remote preset but is not listed; case3 cannot
 	// list because it is neither received nor shipped and has no inventory ID.
+	// It is excluded from Price review; normal Inventory explicitly saves its price.
 	_, err = db.ExecContext(t.Context(), `UPDATE campaign_purchases SET dh_status='in_stock',dh_listing_price_cents=230000,dh_channels_json='' WHERE id=$1`, readinessPurchase(2))
 	require.NoError(t, err)
 	_, err = db.ExecContext(t.Context(), `UPDATE campaign_purchases SET received_at=NULL,dh_inventory_id=0,dh_status='',dh_push_status='',dh_listing_price_cents=0 WHERE id=$1`, readinessPurchase(3))
 	require.NoError(t, err)
 	service := sp.NewService(store, nil, func() time.Time { return now })
-	for i, want := range []sp.Status{sp.BelowTarget, sp.Supported, sp.MixedEvidence, sp.ThinEvidence, sp.NoRecentComps, sp.NoListedPrice, sp.NeedsReview} {
-		evidence, err := service.Evidence(t.Context(), readinessPurchase(i+1))
-		require.NoError(t, err)
-		require.Equal(t, want, evidence.Evaluation.Status)
+	for i, tt := range []struct {
+		name         string
+		status       sp.Status
+		availability sp.Availability
+		canPack      bool
+	}{
+		{name: "declining", status: sp.BelowTarget, availability: sp.Ready, canPack: true},
+		{name: "supported", status: sp.Supported, availability: sp.Ready, canPack: true},
+		{name: "mixed unreceived", status: sp.MixedEvidence, availability: sp.NotReceived, canPack: false},
+		{name: "single sale", status: sp.ThinEvidence, availability: sp.Ready, canPack: true},
+		{name: "old sale", status: sp.NoRecentComps, availability: sp.Ready, canPack: true},
+		{name: "unpriced", status: sp.NoListedPrice, availability: sp.Ready, canPack: true},
+		{name: "failed evidence", status: sp.NeedsReview, availability: sp.Ready, canPack: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			evidence, err := service.Evidence(t.Context(), readinessPurchase(i+1))
+			require.NoError(t, err)
+			require.Equal(t, tt.status, evidence.Evaluation.Status)
+			require.Equal(t, tt.availability, evidence.Evaluation.Availability)
+			require.Equal(t, tt.canPack, evidence.Evaluation.CanPack)
+		})
 	}
 }
 

@@ -282,10 +282,13 @@ Cards held longer than 30 days are treated as deeply stale in the sell signals.
 ### Show Preparation
 
 Normal **Inventory** remains the default, with compact assessment links and the
-existing sale/list controls. Choose **Price review** for a queue and persistent
-price panel (focused detail with **Back to inventory list** on mobile). The queue
-filters Above comps, Mixed, Limited, Supported, Unavailable and Unpriced; sorting
-here does not change normal inventory ordering.
+existing sale/list controls, including cards awaiting intake. Choose **Price review**
+for an **in-hand inventory only** queue and persistent price panel (focused detail
+with **Back to inventory list** on mobile). A recorded receipt makes a card in hand;
+missing or failed price evidence does not exclude it. Review counts, search, sorting,
+select-all and navigation all use that in-hand cohort. The queue filters Above comps,
+Mixed, Limited, Supported, Unavailable and Unpriced; sorting here does not change
+normal inventory ordering. Use normal Inventory's price controls for unreceived cards.
 
 The saved assessment compares the **latest operator-committed SlabLedger asking**
 (reviewed price or override, using their existing timestamp precedence) with
@@ -326,8 +329,12 @@ loaded workspace. After a confirmed save with failed read-back, use **Recheck sa
 state** to retry reads, not the PATCH. Saved assessment remains pending until reads
 succeed. Full reload/new context does not restore unsaved drafts or selection.
 `/inventory?view=pricing&review=<purchase-uuid>` deep-links to a card; unrelated
-query parameters survive view changes. Mobile return restores queue focus; browser
-history explicitly reopens the referenced detail.
+query parameters survive view changes. An unreceived or removed card's direct link
+shows an unavailable message, not a price editor. If receipt disappears during review,
+the card leaves the queue and editor, but its draft and any submitted save outcome
+are retained. Re-intake restores the draft/recovery state; a submitted save is not
+cancelled or silently replayed. Mobile return restores queue focus; browser history
+explicitly reopens the referenced detail only when it is still in hand.
 
 Checkbox selection is separate from the focused editor. Select-all uses visible
 queue IDs. A changed evaluation leaves the captured selected version stale and
@@ -377,7 +384,9 @@ hide normally, even with a selection. Price review instead provides focused asse
 filters and sorting alongside the persistent price editor. Shared search, selected
 cards and unsaved drafts survive switching between Inventory and Price review.
 Neither view has the retired price-support/coverage header.
-**Reveal selected** recovers cards outside your current view. Financial forms retain
+**Reveal selected** recovers cards outside your current filters, but Price review
+never reveals unreceived cards. Those selections remain available in normal Inventory.
+Financial forms retain
 their own pending states and do not wait for comp collection. If an evaluation read
 fails, cached facts remain inspectable but do not certify current support. Retry the
 read; a successful recovery does not silently advance selected versions.
@@ -404,9 +413,11 @@ cached-use preconditions, and actual server-worker population from an empty veri
 store before any browser starts. Both stop the worker and block all provider endpoints
 for cached operator use, preserving source-request history. A separately counted
 background-publication phase verifies held selections and stale Add/Pack conflicts.
-A separate seven-case Price review test proves read-only trials and whole-row
-immutability, then explicit reviewed-price persistence and nonzero controlled DH
-sync/list effects with real services and storage. It also exercises failed-read
+A separate seven-case pricing test proves six in-hand review cases and exclusion of
+an unreceived direct link, read-only trials and whole-row immutability. Two explicit
+Price review saves and the unreceived card's normal Inventory price edit retain the
+three-save proof of reviewed-price persistence and nonzero controlled DH sync/list
+effects with real services and storage. It also exercises failed-read
 recovery, stale Add/Pack and mobile deep links. Reproduction instructions are in
 [the real-wire test guide](../web/tests/show-readiness-real.md).
 Production access, repricing, backfill, population and rollout still require

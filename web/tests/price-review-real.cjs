@@ -61,10 +61,15 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     await page.getByLabel('Search cards', { exact: true }).fill('91000002');
     await expect(page.getByRole('button', { name: 'List on DH', exact: true })).toBeEnabled();
     await page.getByLabel('Search cards', { exact: true }).fill('');
-    await page.getByRole('button', { name: 'Price review', exact: true }).click();
+    await page.goto(`${app}/inventory?retained=price-review&view=pricing&review=${id(3)}`);
+    await expect(page.getByText(/Price review is for in-hand inventory only/)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Price editor' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Review Mixed fixture', exact: true })).toHaveCount(0);
+    const excluded = await evidence(3); snapshots.unreceived = excluded;
+    expect(excluded.evaluation).toMatchObject({ availability: 'not_received', status: 'mixed_evidence', canPack: false });
     const cases = [
       ['Declining fixture', 'Asking above comps', '3,200.00'], ['Supported fixture', 'Supported', '2,400.00'],
-      ['Mixed fixture', 'Mixed evidence', '2,540.00'], ['Single sale fixture', 'Limited evidence', '3,200.00'],
+      ['Single sale fixture', 'Limited evidence', '3,200.00'],
       ['Old sale fixture', 'Limited evidence', '2,400.00'], ['Unpriced fixture', 'No asking price', null],
       ['Failed fixture', 'Evidence unavailable', '2,400.00'],
     ];
@@ -74,7 +79,7 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
       await expect(page.getByLabel('Saved asking price')).toHaveText(price ? `$${price}` : 'Not set');
       await capture(`case-${name.split(' ')[0].toLowerCase()}`);
     }
-    for (const label of ['Above comps 1', 'Mixed 1', 'Limited 2', 'Supported 1', 'Unavailable 1', 'Unpriced 1', 'All 7']) {
+    for (const label of ['Above comps 1', 'Mixed 0', 'Limited 2', 'Supported 1', 'Unavailable 1', 'Unpriced 1', 'All 6']) {
       await filters().getByRole('button', { name: label, exact: true }).click();
     }
     for (const sort of ['asking', 'recent', 'gap', 'supported', 'attention']) await page.getByLabel('Price review sort').selectOption(sort);
@@ -120,11 +125,22 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     await page.getByRole('button', { name: 'Recheck saved state', exact: true }).click();
     await expect(page.getByLabel('Saved asking price')).toHaveText('$2,400.00');
     await expect(saved().getByText('Supported', { exact: true })).toBeVisible();
-    for (const [name, amount] of [['Supported fixture','2300'], ['Mixed fixture','2400']]) {
-      await review(name); await page.getByLabel('Asking price', { exact: true }).fill(amount);
-      await page.getByRole('button', { name: 'Save price', exact: true }).click();
-      await expect(page.getByText(/Price saved locally.*Saved state rechecked/)).toBeVisible();
-    }
+    await review('Supported fixture'); await page.getByLabel('Asking price', { exact: true }).fill('2300');
+    await page.getByRole('button', { name: 'Save price', exact: true }).click();
+    await expect(page.getByText(/Price saved locally.*Saved state rechecked/)).toBeVisible();
+    // The deliberately ineligible case still exercises the same real reviewed-price
+    // write/DH dependency path, through normal Inventory's explicit price edit.
+    await page.getByRole('button', { name: 'Inventory', exact: true }).click();
+    await page.getByRole('button', { name: /^All\s*7$/ }).click();
+    await page.getByLabel('Search cards', { exact: true }).fill('91000003');
+    const unreceivedRow = page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: 'Select 91000003', exact: true }) });
+    await expect(unreceivedRow.getByTitle('Awaiting intake', { exact: true })).toBeVisible();
+    await unreceivedRow.getByTitle('Click to edit list price', { exact: true }).click();
+    const normalPrice = unreceivedRow.getByRole('textbox', { name: 'List price', exact: true });
+    await normalPrice.fill('2400');
+    const priceSaved = page.waitForResponse(response => response.url().endsWith(`/purchases/${id(3)}/review-price`) && response.request().method() === 'PATCH');
+    await normalPrice.press('Enter'); expect((await priceSaved).status()).toBe(200);
+    await expect(unreceivedRow.getByTitle('Click to edit list price', { exact: true })).toHaveText('$2,400.00');
     snapshots.saved = await command('save-complete');
     expect(snapshots.saved.dh.wire).toHaveLength(3);
     expect(snapshots.saved.dh).toMatchObject({ syncCalls: 3, listCalls: 3 });
@@ -204,7 +220,7 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     () => {
       observer.assertNoUnexpected();
       expect(failures.some(failure => failure.controlled), 'marked inventory read fault exercised').toBe(true);
-      if (exerciseCompleted) console.log('PASS seven-case cached real-wire price review: whole-row immutable navigation/trials; controlled background+503; three explicit reviewed saves; real DH sync/list results and persisted effects; stale Add/Pack409, explicit packing, mobile deep link/focus; provider acquisition=0; all-context HTTP observers drained');
+      if (exerciseCompleted) console.log('PASS seven-case cached real-wire pricing: six in-hand review cases, excluded unreceived direct link; whole-row immutable navigation/trials; controlled background+503; two review saves plus one normal Inventory reviewed save; real DH sync/list results and persisted effects; stale Add/Pack409, explicit packing, mobile deep link/focus; provider acquisition=0; all-context HTTP observers drained');
     },
   ], () => browser.close());
 })().catch(error => { console.error(error); process.exitCode = 1; });

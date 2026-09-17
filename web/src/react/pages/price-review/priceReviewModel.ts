@@ -53,11 +53,16 @@ function sortValue(e: ShowEvaluation | undefined, sort: PriceReviewSort): number
   if (sort === 'recent') return e.recent.count > 0 ? e.recent.medianCents : null;
   return e.recent.gapPct;
 }
+// Intake, not evidence health or packing readiness, owns review eligibility.
+export function isInHand(item?: AgingItem): item is AgingItem {
+  return !!item?.purchase.receivedAt;
+}
 export function buildPriceReview(items: AgingItem[], evaluations: Record<string, ShowEvaluation>, options: {
   search: string; filter: PriceReviewFilter; sort: PriceReviewSort; descending: boolean;
 }) {
   const search = options.search.trim().toLowerCase();
-  const scope = items.filter(({ purchase: p, campaignName }) => !search
+  const cohort = items.filter(isInHand);
+  const scope = cohort.filter(({ purchase: p, campaignName }) => !search
     || [p.cardName, p.certNumber, p.setName, campaignName].some(value => value?.toLowerCase().includes(search)));
   const counts: Record<PriceReviewFilter, number> = { all: scope.length, above: 0, mixed: 0, limited: 0, supported: 0, unavailable: 0, unpriced: 0 };
   for (const item of scope) counts[priceGroup(evaluations[item.purchase.id])]++;
@@ -70,5 +75,5 @@ export function buildPriceReview(items: AgingItem[], evaluations: Record<string,
     }
     return knownFirst(sortValue(ea, options.sort), sortValue(eb, options.sort), options.descending);
   });
-  return { rows, counts };
+  return { cohort, rows, counts };
 }

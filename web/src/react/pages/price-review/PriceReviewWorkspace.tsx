@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { AgingItem } from '../../../types/campaigns';
 import type { ShowEvaluation } from '../../../types/showprep';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
@@ -10,14 +9,14 @@ import { PriceReviewQueue } from './PriceReviewQueue';
 import './price-review.css';
 
 export interface PriceReviewWorkspaceProps {
-  items: AgingItem[]; evaluations: Record<string, ShowEvaluation>; evaluationErrors?: Record<string, string>;
+  evaluations: Record<string, ShowEvaluation>; evaluationErrors?: Record<string, string>;
   review: ReturnType<typeof usePriceReviewState>;
   selected: ReadonlySet<string>; onToggleSelected: (id: string) => void;
   onSavePrice: (id: string, priceCents: number) => Promise<void>;
   onRecheckInventory?: () => Promise<boolean>;
   detailNavigationKey?: string;
 }
-export function PriceReviewWorkspace({ items, evaluations, evaluationErrors, review, selected, onToggleSelected, onSavePrice, onRecheckInventory, detailNavigationKey }: PriceReviewWorkspaceProps) {
+export function PriceReviewWorkspace({ evaluations, evaluationErrors, review, selected, onToggleSelected, onSavePrice, onRecheckInventory, detailNavigationKey }: PriceReviewWorkspaceProps) {
   const [mobileDetail, setMobileDetail] = useState(!!detailNavigationKey);
   const focusControls = useRef(new Map<string, HTMLButtonElement>());
   const panel = useRef<HTMLElement>(null);
@@ -25,7 +24,7 @@ export function PriceReviewWorkspace({ items, evaluations, evaluationErrors, rev
   const returning = useRef(false);
   const returnId = useRef<string | null>(null);
   const allFilterControl = useRef<HTMLButtonElement>(null);
-  const active = items.find(item => item.purchase.id === review.activeId);
+  const active = review.cohort.find(item => item.purchase.id === review.activeId);
   const position = review.rows.findIndex(item => item.purchase.id === review.activeId);
   const orderedSort = review.sort === 'attention' || review.sort === 'supported';
 
@@ -62,7 +61,7 @@ export function PriceReviewWorkspace({ items, evaluations, evaluationErrors, rev
           aria-pressed={review.filter === filter.value} onClick={() => review.setFilter(filter.value)}>{filter.label} <span className="num">{review.counts[filter.value]}</span></Button>)}
       </div>
       <div className="price-review-toolbar">
-        <span className="price-review-meta">{review.rows.length} of {review.counts.all} cards</span>
+        <span className="price-review-meta">{review.rows.length} of {review.counts.all} in-hand cards</span>
         <Select aria-label="Price review sort" value={review.sort} selectSize="sm" onChange={event => review.setSort(event.target.value as PriceReviewSort)} options={[
           { value: 'attention', label: 'Pricing attention first' }, { value: 'supported', label: 'Supported first' },
           { value: 'asking', label: 'Asking price' }, { value: 'recent', label: 'Recent reference' }, { value: 'gap', label: 'Gap below asking' },
@@ -73,8 +72,8 @@ export function PriceReviewWorkspace({ items, evaluations, evaluationErrors, rev
     </div>
     <div className="price-review-columns">
       <div className="price-review-list">
-        {items.length === 0 ? <p className="price-review-empty">No inventory to review</p> : review.rows.length === 0
-          ? <p className="price-review-empty">No cards match. Change the price filter or search.</p>
+        {review.cohort.length === 0 ? <p className="price-review-empty">No in-hand inventory to review. Cards awaiting intake remain in Inventory.</p> : review.rows.length === 0
+          ? <p className="price-review-empty">No in-hand cards match. Change the price filter or search.</p>
           : <PriceReviewQueue rows={review.rows} evaluations={evaluations} activeId={review.activeId} selected={selected}
             onToggleSelected={onToggleSelected} onFocus={focus} registerFocusControl={(id, node) => {
               if (node) focusControls.current.set(id, node); else focusControls.current.delete(id);
