@@ -1055,3 +1055,34 @@ remote CI are not claimed verified; saves remain asynchronous and last-writer-wi
 3. Why must preview bypass the hold-observing evidence service and omit list-mutation tokens?
 4. Which save effects are intentional, and which operations remain forbidden during navigation/trials?
 5. How are unknown purchase reads kept distinct from genuinely unpriced cards without rewriting history?
+
+## Price review: in-hand-only follow-up (2026-09-17)
+
+Approved bounded follow-up to merged #709, baseline `e182cbcf`. The latest approval
+supersedes the historical design's inclusion of unreceived inventory; those records
+and their ordinary price controls remain unchanged in normal Inventory.
+
+`priceReviewModel` owns the truthy `purchase.receivedAt` predicate and in-hand cohort.
+Counts, search and sorts derive from it; the state hook reuses it for revealed
+selections/navigation and the workspace for active detail lookup. Evidence readiness
+and packing eligibility are not intake substitutes. Shared Inventory evaluations and
+selection ownership remain unfiltered; unreceived selections cannot reappear in review.
+
+Unavailable detail keeps its mutation hooks mounted but opens no price editor or
+preview/evidence read, even with successful cached detail. Drafts and save outcomes
+remain above the workspace; intake loss does not clear a draft or cancel a submitted
+save. Re-intake restores draft/recovery state. Copy explains the in-hand-only scope.
+
+Regression-first model/hook/panel/page tests cover mixed/empty cohorts, evaluation
+failures, all sorts/counts, selection reveal/select-all, cached direct links and
+intake loss/re-entry. Desktop/mobile controlled-HTTP Playwright adds the same scope
+and cached-detail transition. Global inventory deliberately disables focus refetch;
+the browser fixture uses its existing stale-query reconnect path, not an app change.
+The real Go/PG driver now saves fixture #3 (cert `91000003`, still unreceived) via
+normal Inventory's explicit inline edit. All three-save/DH skip and financial-row
+immutability assertions remain; fixture assertions also require it to stay unreceived.
+
+Fresh verification and remaining gate details are recorded in the ignored task report
+`.superpowers/price-review-in-hand/report.md`. Real Go/PG browser execution belongs to
+the parent and is not claimed by this implementation. No backend production, schema,
+dependency or operational configuration changes; no production calls, push or merge.

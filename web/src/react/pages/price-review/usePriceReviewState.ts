@@ -17,14 +17,14 @@ export function usePriceReviewState(items: AgingItem[], evaluations: Record<stri
   const [activeId, setActiveId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, PriceDraft>>({});
   const [saves, setSaves] = useState<Record<string, PriceSaveResult>>({});
-  const { rows: matches, counts } = useMemo(() => buildPriceReview(items, evaluations, { search, filter, sort, descending }),
+  const { cohort, rows: matches, counts } = useMemo(() => buildPriceReview(items, evaluations, { search, filter, sort, descending }),
     [items, evaluations, search, filter, sort, descending]);
   const viewKey = JSON.stringify([search, filter, sort, descending]);
   const [revealedView, setRevealedView] = useState<string | null>(null);
   const showingSelection = revealedView === viewKey && !!selection?.size;
   // Revealed selections are the navigation queue too, not just replacement rows.
-  const rows = useMemo(() => showingSelection ? items.filter(item => selection?.has(item.purchase.id)) : matches,
-    [showingSelection, items, selection, matches]);
+  const rows = useMemo(() => showingSelection ? cohort.filter(item => selection?.has(item.purchase.id)) : matches,
+    [showingSelection, cohort, selection, matches]);
   const ids = useMemo(() => rows.map(item => item.purchase.id), [rows]);
   // Retain only navigation identity, never an old purchase or authorization token.
   const anchorQueue = useRef<string[]>([]);
@@ -63,7 +63,7 @@ export function usePriceReviewState(items: AgingItem[], evaluations: Record<stri
   const clearDraft = useCallback((id: string) => setDrafts(old => {
     const next = { ...old }; delete next[id]; return next;
   }), []);
-  return { filter, setFilter, sort, setSort, descending, setDescending, rows, counts, activeId, focus, move,
+  return { filter, setFilter, sort, setSort, descending, setDescending, cohort, rows, counts, activeId, focus, move,
     showingSelection, revealSelection: () => setRevealedView(viewKey), hideSelection: () => setRevealedView(null),
     drafts, setDraft, clearDraft, saves, setSaveResult, markSaveRechecked, returnFocusId, outsideFilter: activeId !== null && !ids.includes(activeId) };
 }

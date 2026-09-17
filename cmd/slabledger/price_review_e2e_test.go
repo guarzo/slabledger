@@ -224,6 +224,11 @@ func TestPriceReviewRealBrowser(t *testing.T) {
 		require.Equal(t, price, evidence.Evaluation.LocalPriceCents)
 		require.Equal(t, sp.Supported, evidence.Evaluation.Status)
 		require.Equal(t, sp.PriceAssessmentPolicy, evidence.Evaluation.PolicyVersion)
+		if i == 2 {
+			// The normal Inventory save cannot receive or make this card packable.
+			require.Equal(t, sp.NotReceived, evidence.Evaluation.Availability)
+			require.False(t, evidence.Evaluation.CanPack)
+		}
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()

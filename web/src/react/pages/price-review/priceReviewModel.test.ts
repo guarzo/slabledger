@@ -64,6 +64,27 @@ it('recent sort never treats empty or unhealthy evidence as a zero-dollar bargai
   expect(ids(buildPriceReview(data.items, data.evaluations, { ...defaults, sort: 'recent', descending: false }))).toEqual(['card-1', 'card-0', 'card-2']);
 });
 
+it.each(['attention', 'supported', 'asking', 'recent', 'gap'] as const)('scopes every count and %s sort to in-hand inventory, including failed evaluations', sort => {
+  const data = cohort(['below_target', 'mixed_evidence', 'thin_evidence', 'supported', 'needs_review', 'no_listed_price']);
+  const received = data.items.map(item => ({ ...item, purchase: { ...item.purchase, id: `received-${item.purchase.id}` } }));
+  const missing = inventoryItem(evaluation({ purchaseId: 'missing' }));
+  const evaluations = { ...data.evaluations, ...Object.fromEntries(Object.entries(data.evaluations).map(([id, e]) => [`received-${id}`, e])) };
+  const unreceived = data.items.map((item, i) => ({ ...item, purchase: { ...item.purchase, receivedAt: i % 2 ? '' : undefined } }));
+  const items = [...unreceived, ...received, missing];
+  const result = buildPriceReview(items, evaluations, { ...defaults, sort });
+  expect(result.rows).toHaveLength(7);
+  expect(result.rows.every(item => !item.purchase.id.startsWith('card-'))).toBe(true);
+  expect(result.counts).toEqual({ all: 7, above: 1, mixed: 1, limited: 1, supported: 1, unavailable: 2, unpriced: 1 });
+  expect(ids(buildPriceReview(items, evaluations, { ...defaults, filter: 'unavailable', sort }))).toEqual(['received-card-4', 'missing']);
+  unreceived[0].purchase.cardName = 'Awaiting only';
+  const searched = buildPriceReview(items, evaluations, { ...defaults, search: 'Awaiting only', sort });
+  expect(searched.rows).toEqual([]);
+  expect(Object.values(searched.counts)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  const empty = buildPriceReview(unreceived, evaluations, { ...defaults, sort });
+  expect(empty.rows).toEqual([]);
+  expect(Object.values(empty.counts)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+});
+
 describe('safe dollar drafts', () => {
   it.each(['', '0', '-1', '1e3', 'Infinity', '12usd', '1.001', '1,000', '90071992547409.92'])('rejects %s', value => {
     expect(parsePriceDraft(value)).toBeNull();

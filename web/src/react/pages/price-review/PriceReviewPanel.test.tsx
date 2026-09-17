@@ -223,6 +223,21 @@ it('shows low single-sale facts even for Limited, safe matching-sale links and p
   expect(screen.getByLabelText('Asking price')).toHaveValue('2000.00');
   expect(onSavePrice).not.toHaveBeenCalled();
 });
+it.each([undefined, ''])('does not open an unreceived editor or request evidence/preview despite cached successful detail (%s)', receivedAt => {
+  const { qc, wrapper } = provider();
+  qc.setQueryData([...showPrepKeys.evidence(purchaseId), saved.version], { evaluation: saved, sales });
+  const read = vi.spyOn(priceReviewAPI, 'preview');
+  const clear = vi.fn();
+  render(<PriceReviewPanel purchaseId={purchaseId} item={inventoryItem(saved, { receivedAt })} evaluation={saved}
+    draft={{ value: '2400', baselinePriceCents: 280000 }} onDraftChange={vi.fn()} onClearDraft={clear}
+    onSavePrice={vi.fn()} onSaveResultChange={vi.fn()} onSaveRechecked={vi.fn()} />, { wrapper });
+  expect(screen.getByText(/Price review is for in-hand inventory only/)).toBeVisible();
+  expect(screen.queryByRole('region', { name: 'Price editor' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Saved asking price')).not.toBeInTheDocument();
+  expect(showPrepAPI.evidence).not.toHaveBeenCalled();
+  expect(read).not.toHaveBeenCalled(); expect(clear).not.toHaveBeenCalled();
+});
+
 it('keeps physical readiness in diagnostics rather than ahead of the price assessment', async () => {
   const { user } = setup();
   expect(screen.getByText('Ready to pack')).not.toBeVisible();

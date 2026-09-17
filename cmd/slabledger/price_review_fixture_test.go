@@ -72,6 +72,7 @@ func seedPriceReview(t *testing.T, db *postgres.DB, now time.Time) {
 	}
 	// Case2 already has the target remote preset but is not listed; case3 cannot
 	// list because it is neither received nor shipped and has no inventory ID.
+	// It is excluded from Price review; normal Inventory explicitly saves its price.
 	_, err = db.ExecContext(t.Context(), `UPDATE campaign_purchases SET dh_status='in_stock',dh_listing_price_cents=230000,dh_channels_json='' WHERE id=$1`, readinessPurchase(2))
 	require.NoError(t, err)
 	_, err = db.ExecContext(t.Context(), `UPDATE campaign_purchases SET received_at=NULL,dh_inventory_id=0,dh_status='',dh_push_status='',dh_listing_price_cents=0 WHERE id=$1`, readinessPurchase(3))
@@ -81,6 +82,12 @@ func seedPriceReview(t *testing.T, db *postgres.DB, now time.Time) {
 		evidence, err := service.Evidence(t.Context(), readinessPurchase(i+1))
 		require.NoError(t, err)
 		require.Equal(t, want, evidence.Evaluation.Status)
+		if i == 2 {
+			require.Equal(t, sp.NotReceived, evidence.Evaluation.Availability)
+			require.False(t, evidence.Evaluation.CanPack)
+		} else {
+			require.Equal(t, sp.Ready, evidence.Evaluation.Availability)
+		}
 	}
 }
 

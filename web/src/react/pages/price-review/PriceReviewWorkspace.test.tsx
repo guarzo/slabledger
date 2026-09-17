@@ -36,7 +36,7 @@ function Harness({ items = initialItems, evaluations: observation }: { items?: A
   const review = usePriceReviewState(items, evaluations, '');
   const [selected, setSelected] = useState(new Set<string>());
   const [visible, setVisible] = useState(true);
-  return <><button onClick={() => setVisible(!visible)}>Switch view</button>{visible && <PriceReviewWorkspace items={items} evaluations={evaluations}
+  return <><button onClick={() => setVisible(!visible)}>Switch view</button>{visible && <PriceReviewWorkspace evaluations={evaluations}
     review={review} selected={selected} onToggleSelected={id => setSelected(old => {
       const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next;
     })} onSavePrice={save} />}</>;
@@ -79,13 +79,39 @@ it('keeps the focused panel after live status leaves the filter until explicit n
   await user.click(screen.getByRole('button', { name: 'Next card' }));
   expect(within(screen.getByRole('region', { name: 'Price details' })).getByRole('heading', { name: 'Orbit Fox' })).toBeInTheDocument();
 });
-it('keeps removed-card draft visible and disables unsafe saves rather than retaining stale inventory', async () => {
+it('retains a removed-card draft without opening an editor from stale inventory', async () => {
   const { user, rerender } = setup();
   await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
   rerender(<Harness items={[initialItems[1]]} />);
-  expect(screen.getByText(/Card unavailable in current inventory/)).toBeInTheDocument();
+  expect(screen.getByText(/Card unavailable in current in-hand inventory/)).toBeInTheDocument();
+  expect(screen.queryByLabelText('Asking price')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save price' })).not.toBeInTheDocument();
+  rerender(<Harness />);
   expect(screen.getByLabelText('Asking price')).toHaveValue('2400');
-  expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
+});
+it.each(['draft', 'saving', 'failed'] as const)('removes revoked intake from queue/editor but retains %s and recovers on re-intake', async state => {
+  let reject!: (error: Error) => void;
+  save.mockImplementation(() => new Promise<void>((_resolve, fail) => { reject = fail; }));
+  const { user, rerender } = setup();
+  await user.clear(screen.getByLabelText('Asking price')); await user.type(screen.getByLabelText('Asking price'), '2400');
+  await within(screen.getByRole('region', { name: 'Trial price assessment' })).findByText('Trial only · $2,400.00');
+  if (state !== 'draft') await saveCurrentTrial(user);
+  if (state === 'failed') { await act(async () => reject(new Error('Write connection lost'))); await screen.findByText(/Save not confirmed/); }
+  const notInHand = initialItems.map(item => item.purchase.id === purchaseId ? { ...item, purchase: { ...item.purchase, receivedAt: '' } } : item);
+  rerender(<Harness items={notInHand} />);
+  expect(screen.queryByRole('button', { name: 'Review Aurora Dragon' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'All 1' })).toBeVisible();
+  expect(screen.getByText(/Price review is for in-hand inventory only/)).toBeVisible();
+  expect(screen.queryByRole('region', { name: 'Price editor' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Outside the current filter/)).not.toBeInTheDocument();
+  if (state === 'saving') { await act(async () => reject(new Error('Write connection lost'))); await screen.findByText(/Save not confirmed/); }
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  await user.click(screen.getByRole('button', { name: 'Switch view' }));
+  expect(screen.queryByLabelText('Asking price')).not.toBeInTheDocument();
+  rerender(<Harness />);
+  expect(screen.getByLabelText('Asking price')).toHaveValue('2400');
+  if (state !== 'draft') expect(screen.getByText(/Save not confirmed: Write connection lost/)).toBeVisible();
+  expect(save).toHaveBeenCalledTimes(state === 'draft' ? 0 : 1);
 });
 it('cannot turn supported but sold/not-packable live inventory into show eligibility', async () => {
   const { user, rerender } = setup();
@@ -210,7 +236,7 @@ it('rechecks the submitted card, not the newly focused card, when a save finishe
 });
 it('handles initially empty inventory without price actions or evidence requests', () => {
   render(<QueryClientProvider client={qc}><Harness items={[]} evaluations={{}} /></QueryClientProvider>);
-  expect(screen.getByText('No inventory to review')).toBeInTheDocument();
+  expect(screen.getByText(/No in-hand inventory to review/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Save price' })).not.toBeInTheDocument();
   expect(showPrepAPI.evidence).not.toHaveBeenCalled();
 });
