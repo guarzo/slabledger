@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ShowPreparationPage from '../ShowPreparationPage';
 import { detail, evaluation, inventoryItem, listId, purchaseId } from './fixtures.test-support';
@@ -16,6 +15,8 @@ let listedOnly = false;
 let evaluationFails = false;
 let mismatchedCert = false;
 let collision = false;
+let blockAdd = false;
+let releaseAdd: (() => void) | undefined;
 const evaluations = () => [evaluation({ version, certNumber: mismatchedCert ? '87654321' : '12345678' }), evaluation({ purchaseId: secondId, certNumber: '87654321', cardName: 'Charizard', version: version === 'eval-1' ? 'eval-2' : version })];
 function mount() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -29,12 +30,13 @@ function scan(cert: string) {
   return field;
 }
 beforeEach(() => {
-  writes = []; version = 'eval-1'; conflict = false; existingMember = true; ambiguous = false; listedOnly = false; evaluationFails = false; mismatchedCert = false; collision = false;
+  writes = []; version = 'eval-1'; conflict = false; existingMember = true; ambiguous = false; listedOnly = false; evaluationFails = false; mismatchedCert = false; collision = false; blockAdd = false; releaseAdd = undefined;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
     if (url.endsWith('/api/inventory')) return Response.json({ items: [...evaluations().filter(e => !listedOnly || e.purchaseId !== purchaseId).map(e => inventoryItem(e, e.purchaseId === purchaseId ? { certNumber: '12345678' } : collision ? { certNumber: '12345678' } : {})), ...(ambiguous ? [inventoryItem(evaluations()[1], { certNumber: '12345678' })] : [])], warnings: [] });
     if (url.endsWith('/evaluate')) return evaluationFails ? Response.json({ error: 'Evaluation unavailable' }, { status: 400 }) : Response.json({ evaluations: evaluations() });
     if (url.endsWith('/items') && options.method === 'POST') {
       writes.push(JSON.parse(String(options.body)));
+      if (blockAdd) await new Promise<void>(resolve => { releaseAdd = resolve; });
       return conflict ? Response.json({ error: 'Evaluation changed. Review current data.' }, { status: 409 }) : Response.json(detail());
     }
     if (url.endsWith('/lists')) return Response.json({ lists: [detail().list] });
@@ -125,6 +127,26 @@ it('blocks a changed evaluation until the operator removes and rescans', async (
   scan('87654321');
   fireEvent.click(await screen.findByRole('button', { name: 'Add 1 to show' }));
   await waitFor(() => expect(writes).toEqual([{ items: [{ purchaseId: secondId, evaluationVersion: 'eval-3' }] }]));
+});
+
+it('keeps scans whose memberships are absent from a successful add response', async () => {
+  existingMember = false; mount(); await screen.findByRole('textbox', { name: 'Scan slab barcode' });
+  scan('12345678'); scan('87654321');
+  fireEvent.click(await screen.findByRole('button', { name: 'Add 2 to show' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/1 card was not confirmed on the show list/i);
+  expect(screen.getByText(/1 card confirmed on show list/i)).toBeVisible();
+  expect(screen.getByText('Charizard')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Remove scan 12345678' })).not.toBeInTheDocument();
+});
+
+it('prevents switching lists while an add is in flight', async () => {
+  blockAdd = true; mount(); await screen.findByRole('textbox', { name: 'Scan slab barcode' });
+  scan('87654321');
+  fireEvent.click(await screen.findByRole('button', { name: 'Add 1 to show' }));
+  expect(screen.getByRole('combobox', { name: 'Show list' })).toBeDisabled();
+  await waitFor(() => expect(releaseAdd).toBeTypeOf('function'));
+  releaseAdd?.();
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Show list' })).toBeEnabled());
 });
 
 it('retains the queue on an add conflict', async () => {

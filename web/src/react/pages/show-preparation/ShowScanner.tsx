@@ -8,7 +8,7 @@ import { showError } from './showPrepLabels';
 interface Scan { cert: string; purchaseId?: string; cardName?: string; version?: string; ambiguous?: boolean }
 const EMPTY_EVALUATIONS: Record<string, ShowEvaluation> = {};
 
-export default function ShowScanner({ listId }: { listId: string }) {
+export default function ShowScanner({ listId, onAddingChange }: { listId: string; onAddingChange: (pending: boolean) => void }) {
   const inventory = useGlobalInventory();
   const list = useShowList(listId);
   const { add } = useShowListWrites();
@@ -51,32 +51,42 @@ export default function ShowScanner({ listId }: { listId: string }) {
     setError('');
   }
 
-  function status(scan: Scan) {
-    if (scan.ambiguous) return 'Multiple inventory matches';
-    if (!scan.purchaseId) return 'No inventory match';
-    if (members.has(scan.purchaseId)) return 'Already on this show list';
+  function status(scan: Scan): { label: string; canAdd: boolean } {
+    if (scan.ambiguous) return { label: 'Multiple inventory matches', canAdd: false };
+    if (!scan.purchaseId) return { label: 'No inventory match', canAdd: false };
+    if (members.has(scan.purchaseId)) return { label: 'Already on this show list', canAdd: false };
     const value = current[scan.purchaseId];
-    if (!value) return evaluations.data?.errors[scan.purchaseId] ?? 'Checking availability…';
-    if (value.certNumber !== scan.cert) return 'Identity changed. Remove and rescan to review.';
-    if (!value.canAdd || !['ready', 'not_received'].includes(value.availability)) return `Unavailable: ${value.availability}`;
-    if (!scan.version) return 'Checking availability…';
-    if (scan.version !== value.version) return 'Evaluation changed. Remove and rescan to review.';
-    return value.availability === 'not_received' ? 'Ready to plan (not received)' : 'Ready to add';
+    if (!value) return { label: evaluations.data?.errors[scan.purchaseId] ?? 'Checking availability…', canAdd: false };
+    if (value.certNumber !== scan.cert) return { label: 'Identity changed. Remove and rescan to review.', canAdd: false };
+    if (!value.canAdd || !['ready', 'not_received'].includes(value.availability)) return { label: `Unavailable: ${value.availability}`, canAdd: false };
+    if (!scan.version) return { label: 'Checking availability…', canAdd: false };
+    if (scan.version !== value.version) return { label: 'Evaluation changed. Remove and rescan to review.', canAdd: false };
+    return { label: value.availability === 'not_received' ? 'Ready to plan (not received)' : 'Ready to add', canAdd: true };
   }
-  const ready = scans.filter(scan => status(scan).startsWith('Ready to'));
+  const rows = scans.map(scan => ({ scan, state: status(scan) }));
+  const ready = rows.filter(row => row.state.canAdd).map(row => row.scan);
   async function addReady() {
     if (!ready.length || !canScan || evaluations.isFetching) return;
     setError('');
+    onAddingChange(true);
     try {
-      await add.mutateAsync({ id: listId, items: ready.map(scan => ({ purchaseId: scan.purchaseId!, evaluationVersion: scan.version! })) });
-      setScans(previous => previous.filter(scan => !ready.includes(scan)));
-      setNotice(`Added ${ready.length} ${ready.length === 1 ? 'card' : 'cards'} to show list.`);
+      const detail = await add.mutateAsync({ id: listId, items: ready.map(scan => ({ purchaseId: scan.purchaseId!, evaluationVersion: scan.version! })) });
+      const confirmed = new Set(detail.items.map(item => item.purchaseId));
+      const added = ready.filter(scan => confirmed.has(scan.purchaseId!));
+      setScans(previous => previous.filter(scan => !added.includes(scan)));
+      setNotice(added.length ? `${added.length} ${added.length === 1 ? 'card' : 'cards'} confirmed on show list.` : 'No scanned cards confirmed on show list.');
+      if (added.length < ready.length) {
+        setError(`${ready.length - added.length} ${ready.length - added.length === 1 ? 'card was' : 'cards were'} not confirmed on the show list. Queue retained; recheck before retrying.`);
+        void list.refetch();
+      }
       field.current?.focus();
     } catch (err) {
       setError(`${showError(err)} Queue retained. Review current data before retrying.`);
       void list.refetch();
       void evaluations.refetch();
       void inventory.refetch();
+    } finally {
+      onAddingChange(false);
     }
   }
 
@@ -92,9 +102,9 @@ export default function ShowScanner({ listId }: { listId: string }) {
     {ids.some(id => evaluations.data?.errors[id]) && <p className="text-sm text-[var(--warning)]">Some evaluations unavailable. <button type="button" className="show-link" disabled={evaluations.isFetching} onClick={() => void evaluations.refetch()}>Retry evaluations</button></p>}
     {scans.length > 0 && <>
       <div className="show-scanner-heading show-scanner-review"><h3>Review scans <span className="tabular-nums">({scans.length})</span></h3><Button variant="ghost" size="sm" disabled={add.isPending} onClick={() => { setScans([]); setError(''); field.current?.focus(); }}>Clear queue</Button></div>
-      <ul className="show-scan-rows">{scans.map(scan => <li key={scan.cert} className="show-scan-row">
+      <ul className="show-scan-rows">{rows.map(({ scan, state }) => <li key={scan.cert} className="show-scan-row">
         <span className="tabular-nums">{scan.cert}</span><span className="show-scan-name">{scan.cardName ?? 'Unmatched cert'}</span>
-        <span className={status(scan).startsWith('Ready to') ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>{status(scan)}</span>
+        <span className={state.canAdd ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>{state.label}</span>
         <Button variant="ghost" size="sm" disabled={add.isPending} aria-label={`Remove scan ${scan.cert}`} onClick={() => { setScans(previous => previous.filter(item => item !== scan)); field.current?.focus(); }}>Remove</Button>
       </li>)}</ul>
       {error && <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>}
