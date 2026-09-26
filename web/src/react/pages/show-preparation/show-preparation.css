@@ -97,6 +97,36 @@
 .show-prep-page { max-width: 80rem; margin: 0 auto; padding: 0 1rem; }
 .show-prep-page h1 { margin-bottom: 0.5rem; }
 .show-prep-page header { margin-bottom: 1.5rem; }
+.show-prep-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--brand-500);
+  background: var(--brand-500);
+  color: var(--surface-0);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.show-prep-entry:hover { background: var(--brand-400); border-color: var(--brand-400); }
+.show-scanner { margin-top: 1.5rem; padding: 1rem 0; border-top: 1px solid var(--surface-3); }
+.show-scanner-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1rem; margin-bottom: 0.75rem; }
+.show-scanner-heading h2 { font-size: 1.125rem; font-weight: 600; }
+.show-scanner-heading h3 { font-size: 0.875rem; font-weight: 600; }
+.show-scanner-review { justify-content: space-between; margin-top: 1rem; }
+.show-scanner > label { display: block; color: var(--text-muted); font-size: 0.75rem; margin-bottom: 0.375rem; }
+.show-scanner > input { width: min(100%, 24rem); font-variant-numeric: tabular-nums; }
+.show-scanner > p { margin: 0.5rem 0; }
+.show-scan-rows { margin-bottom: 0.75rem; border-top: 1px solid var(--surface-3); }
+.show-scan-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr) minmax(10rem, 14rem) auto; align-items: center; gap: 0.5rem 1rem; padding: 0.375rem 0; border-bottom: 1px solid var(--surface-2); font-size: 0.875rem; }
+.show-scan-name { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 639px) { .show-scan-row { grid-template-columns: 1fr auto; } .show-scan-name { grid-column: 1; } }
+@media print { .show-scanner, .show-prep-entry { display: none; } }
 .inventory-mobile-card { margin-bottom: 0.75rem; }
 .inventory-mobile-card .show-disclosure { padding: 0.75rem 0 0; margin-top: 0.75rem; border-top: 1px solid var(--surface-3); }
 .inventory-mobile-select { display: inline-flex; align-items: center; justify-content: center; min-width: 2.75rem; min-height: 2.75rem; margin: -0.5rem -0.5rem 0; flex-shrink: 0; }

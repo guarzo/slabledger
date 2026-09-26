@@ -26,7 +26,7 @@ export default function GlobalInventoryPage() {
         >
           {isFetching ? 'Retrying…' : 'Retry'}
         </button>
-        <Link to="/shows" className="block text-sm text-[var(--brand-300)] py-3 mt-3">Show preparation →</Link>
+        <Link to="/shows" className="show-prep-entry inline-flex mt-3">Prepare for show <span aria-hidden="true">→</span></Link>
       </div>
     );
   }
@@ -44,7 +44,7 @@ export default function GlobalInventoryPage() {
               </span>
             )}
           </div>
-          <Link to="/shows" className="text-sm text-[var(--brand-300)] py-3">Show preparation →</Link>
+          <Link to="/shows" className="show-prep-entry">Prepare for show <span aria-hidden="true">→</span></Link>
         </div>
       </div>
 

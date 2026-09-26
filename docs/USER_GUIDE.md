@@ -368,8 +368,16 @@ observations have a bounded follow-up. Evaluation reads retain a full-response
 lists use **Update list status** and invalidation after actions instead of these
 timers. Old successful sales remain inspectable with their acquisition date.
 
-Use the existing card checkboxes and choose **Add to show** in the same selected-items
-bar as Record sale and List on DH. Its **CL value** total is a valuation, not the
+For a stack of slabs, open **Prepare for show** from Inventory, choose or create a
+show list, and focus **Scan slab barcode**. A USB/Bluetooth scanner that types the
+cert number followed by Enter adds each scan to a review queue, not directly to the
+list. Check matches and availability, remove mistakes, then choose **Add to show**.
+Duplicate scans do not add another row; unmatched, ambiguous, already-listed and
+unavailable certs remain visible but are not submitted. A changed assessment needs
+removal and a new scan. A failed add leaves the queue in place for review and retry.
+
+Alternatively, use the existing card checkboxes and choose **Add to show** in the
+same selected-items bar as Record sale and List on DH. Its **CL value** total is a valuation, not the
 DH listed or reviewed price. Choose a saved list or name a new one, then add.
 Escape closes destination details before clearing selection. Successful Add links
 to the submitted packing list. Creating a list alone does not select inventory.

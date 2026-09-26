@@ -4,6 +4,7 @@ import { Button } from '../ui';
 import { formatCents } from '../utils/formatters';
 import ShowListPicker from './show-preparation/ShowListPicker';
 import ShowMember from './show-preparation/ShowMember';
+import ShowScanner from './show-preparation/ShowScanner';
 import { showError } from './show-preparation/showPrepLabels';
 import './show-preparation/show-preparation.css';
 
@@ -47,6 +48,7 @@ export default function ShowPreparationPage() {
       <p className="text-sm text-[var(--text-muted)]">Shortlist slabs, then pack. Lists do not change prices, listings, or sales.</p>
     </header>
     <ShowListPicker value={listId} onChange={id => setParams(id ? { list: id } : {})} allowRename />
+    {listId && <ShowScanner key={listId} listId={listId} />}
     {listId ? <PackingList key={listId} listId={listId} /> : !!lists.data?.length && <p className="text-sm text-[var(--text-muted)] py-8">Choose a show list to review and pack its slabs.</p>}
   </div>;
 }
