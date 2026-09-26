@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import ShowPreparationPage from '../ShowPreparationPage';
 import { detail, evaluation, inventoryItem, listId, member, purchaseId } from './fixtures.test-support';
 
@@ -13,6 +13,7 @@ vi.mock('../../../js/api/showprep', async importOriginal => {
 });
 
 const secondId = '44444444-4444-4444-8444-444444444444';
+const secondListId = '66666666-6666-4666-8666-666666666666';
 let writes: { items: { purchaseId: string; evaluationVersion: string }[] }[];
 let version = 'eval-1';
 let conflict = false;
@@ -57,6 +58,7 @@ beforeEach(() => {
     }
     if (url.endsWith('/lists')) return Response.json({ lists: [detail().list] });
     if (url.endsWith(`/lists/${listId}`)) return Response.json(detail(existingMember ? undefined : []));
+    if (url.endsWith(`/lists/${secondListId}`)) return Response.json({ ...detail([]), list: { ...detail().list, id: secondListId } });
     return Response.json({ error: `Unexpected ${url}` }, { status: 400 });
   }));
 });
@@ -188,6 +190,21 @@ it('prevents switching lists while an add is in flight', async () => {
   await waitFor(() => expect(releaseAdd).toBeTypeOf('function'));
   releaseAdd?.();
   await waitFor(() => expect(screen.getByRole('combobox', { name: 'Show list' })).toBeEnabled());
+});
+
+it('releases picker pending state if browser navigation replaces the scanner', async () => {
+  function SwitchRoute() { const navigate = useNavigate(); return <button onClick={() => navigate(`/shows?list=${secondListId}`)}>Switch route</button>; }
+  blockAdd = true;
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  render(<QueryClientProvider client={qc}><MemoryRouter initialEntries={[`/shows?list=${listId}`]}><SwitchRoute /><ShowPreparationPage /></MemoryRouter></QueryClientProvider>);
+  await screen.findByRole('textbox', { name: 'Scan slab barcode' });
+  scan('87654321');
+  fireEvent.click(await screen.findByRole('button', { name: 'Add 1 to show' }));
+  expect(screen.getByRole('combobox', { name: 'Show list' })).toBeDisabled();
+  await waitFor(() => expect(releaseAdd).toBeTypeOf('function'));
+  fireEvent.click(screen.getByRole('button', { name: 'Switch route' }));
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Show list' })).toBeEnabled());
+  releaseAdd?.();
 });
 
 it('retains the queue on an add conflict', async () => {

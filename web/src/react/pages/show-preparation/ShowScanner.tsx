@@ -24,6 +24,11 @@ export default function ShowScanner({ listId, onAddingChange }: { listId: string
   const canScan = !!inventory.data && !inventory.isError && !!list.data && !list.isError && !add.isPending;
 
   useEffect(() => {
+    onAddingChange(add.isPending);
+    return () => onAddingChange(false);
+  }, [add.isPending, onAddingChange]);
+
+  useEffect(() => {
     if (canScan && (document.activeElement === document.body || document.activeElement?.matches('.show-picker select'))) field.current?.focus();
   }, [canScan]);
 
@@ -69,7 +74,6 @@ export default function ShowScanner({ listId, onAddingChange }: { listId: string
   async function addReady() {
     if (!ready.length || !canScan || evaluations.isFetching || evaluations.isError) return;
     setError('');
-    onAddingChange(true);
     try {
       const detail = await add.mutateAsync({ id: listId, items: ready.map(scan => ({ purchaseId: scan.purchaseId!, evaluationVersion: scan.version! })) });
       const confirmed = new Set(detail.items.map(item => item.purchaseId));
@@ -86,8 +90,6 @@ export default function ShowScanner({ listId, onAddingChange }: { listId: string
       void list.refetch();
       void evaluations.refetch();
       void inventory.refetch();
-    } finally {
-      onAddingChange(false);
     }
   }
 
