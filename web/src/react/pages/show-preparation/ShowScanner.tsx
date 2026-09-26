@@ -55,8 +55,9 @@ export default function ShowScanner({ listId, onAddingChange }: { listId: string
     if (scan.ambiguous) return { label: 'Multiple inventory matches', canAdd: false };
     if (!scan.purchaseId) return { label: 'No inventory match', canAdd: false };
     if (members.has(scan.purchaseId)) return { label: 'Already on this show list', canAdd: false };
+    if (evaluations.isError) return { label: showError(evaluations.error), canAdd: false };
     const value = current[scan.purchaseId];
-    if (!value) return { label: evaluations.isError ? showError(evaluations.error) : evaluations.data?.errors[scan.purchaseId] ?? 'Checking availability…', canAdd: false };
+    if (!value) return { label: evaluations.data?.errors[scan.purchaseId] ?? 'Checking availability…', canAdd: false };
     if (value.certNumber !== scan.cert) return { label: 'Identity changed. Remove and rescan to review.', canAdd: false };
     if (!value.canAdd || !['ready', 'not_received'].includes(value.availability)) return { label: `Unavailable: ${value.availability}`, canAdd: false };
     if (!scan.version) return { label: 'Checking availability…', canAdd: false };
@@ -66,7 +67,7 @@ export default function ShowScanner({ listId, onAddingChange }: { listId: string
   const rows = scans.map(scan => ({ scan, state: status(scan) }));
   const ready = rows.filter(row => row.state.canAdd).map(row => row.scan);
   async function addReady() {
-    if (!ready.length || !canScan || evaluations.isFetching) return;
+    if (!ready.length || !canScan || evaluations.isFetching || evaluations.isError) return;
     setError('');
     onAddingChange(true);
     try {
