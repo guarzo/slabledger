@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useShowList, useShowLists } from '../queries/useShowPrepQueries';
 import { Button } from '../ui';
 import { formatCents } from '../utils/formatters';
 import ShowListPicker from './show-preparation/ShowListPicker';
 import ShowMember from './show-preparation/ShowMember';
+import ShowScanner from './show-preparation/ShowScanner';
 import { showError } from './show-preparation/showPrepLabels';
 import './show-preparation/show-preparation.css';
 
@@ -39,6 +41,7 @@ function PackingList({ listId }: { listId: string }) {
 
 export default function ShowPreparationPage() {
   const [params, setParams] = useSearchParams();
+  const [scanAddPending, setScanAddPending] = useState(false);
   const listId = params.get('list') || '';
   const lists = useShowLists();
   return <div className="show-prep-page">
@@ -46,7 +49,8 @@ export default function ShowPreparationPage() {
       <div className="show-actions justify-between"><h1 className="page-title">Shows</h1><Link className="show-link" to="/inventory">Inventory →</Link></div>
       <p className="text-sm text-[var(--text-muted)]">Shortlist slabs, then pack. Lists do not change prices, listings, or sales.</p>
     </header>
-    <ShowListPicker value={listId} onChange={id => setParams(id ? { list: id } : {})} allowRename />
+    <ShowListPicker value={listId} onChange={id => setParams(id ? { list: id } : {})} allowRename disabled={scanAddPending} />
+    {listId && <ShowScanner key={listId} listId={listId} onAddingChange={setScanAddPending} />}
     {listId ? <PackingList key={listId} listId={listId} /> : !!lists.data?.length && <p className="text-sm text-[var(--text-muted)] py-8">Choose a show list to review and pack its slabs.</p>}
   </div>;
 }
