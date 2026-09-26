@@ -5,6 +5,13 @@ import { MemoryRouter } from 'react-router-dom';
 import ShowPreparationPage from '../ShowPreparationPage';
 import { detail, evaluation, inventoryItem, listId, purchaseId } from './fixtures.test-support';
 
+const queryFailure = vi.hoisted(() => ({ enabled: false }));
+vi.mock('../../../js/api/showprep', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../../js/api/showprep')>();
+  return { ...actual, evaluateInventory: (...args: Parameters<typeof actual.evaluateInventory>) =>
+    queryFailure.enabled ? Promise.reject(new Error('Evaluation read failed')) : actual.evaluateInventory(...args) };
+});
+
 const secondId = '44444444-4444-4444-8444-444444444444';
 let writes: { items: { purchaseId: string; evaluationVersion: string }[] }[];
 let version = 'eval-1';
@@ -30,7 +37,7 @@ function scan(cert: string) {
   return field;
 }
 beforeEach(() => {
-  writes = []; version = 'eval-1'; conflict = false; existingMember = true; ambiguous = false; listedOnly = false; evaluationFails = false; mismatchedCert = false; collision = false; blockAdd = false; releaseAdd = undefined;
+  writes = []; version = 'eval-1'; conflict = false; existingMember = true; ambiguous = false; listedOnly = false; evaluationFails = false; mismatchedCert = false; collision = false; blockAdd = false; releaseAdd = undefined; queryFailure.enabled = false;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
     if (url.endsWith('/api/inventory')) return Response.json({ items: [...evaluations().filter(e => !listedOnly || e.purchaseId !== purchaseId).map(e => inventoryItem(e, e.purchaseId === purchaseId ? { certNumber: '12345678' } : collision ? { certNumber: '12345678' } : {})), ...(ambiguous ? [inventoryItem(evaluations()[1], { certNumber: '12345678' })] : [])], warnings: [] });
     if (url.endsWith('/evaluate')) return evaluationFails ? Response.json({ error: 'Evaluation unavailable' }, { status: 400 }) : Response.json({ evaluations: evaluations() });
@@ -82,6 +89,16 @@ it('lets the operator retry failed evaluation reads without rescanning', async (
   const retry = await screen.findByRole('button', { name: 'Retry evaluations' });
   expect(screen.getByRole('button', { name: 'Add 0 to show' })).toBeDisabled();
   evaluationFails = false;
+  fireEvent.click(retry);
+  expect(await screen.findByRole('button', { name: 'Add 1 to show' })).toBeEnabled();
+});
+
+it('offers evaluation retry when the query fails before returning per-card errors', async () => {
+  queryFailure.enabled = true; existingMember = false; mount(); await screen.findByRole('textbox', { name: 'Scan slab barcode' });
+  scan('87654321');
+  const retry = await screen.findByRole('button', { name: 'Retry evaluations' });
+  expect(screen.getByText('Evaluation read failed')).toBeVisible();
+  queryFailure.enabled = false;
   fireEvent.click(retry);
   expect(await screen.findByRole('button', { name: 'Add 1 to show' })).toBeEnabled();
 });

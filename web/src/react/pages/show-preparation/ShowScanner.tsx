@@ -56,7 +56,7 @@ export default function ShowScanner({ listId, onAddingChange }: { listId: string
     if (!scan.purchaseId) return { label: 'No inventory match', canAdd: false };
     if (members.has(scan.purchaseId)) return { label: 'Already on this show list', canAdd: false };
     const value = current[scan.purchaseId];
-    if (!value) return { label: evaluations.data?.errors[scan.purchaseId] ?? 'Checking availability…', canAdd: false };
+    if (!value) return { label: evaluations.isError ? showError(evaluations.error) : evaluations.data?.errors[scan.purchaseId] ?? 'Checking availability…', canAdd: false };
     if (value.certNumber !== scan.cert) return { label: 'Identity changed. Remove and rescan to review.', canAdd: false };
     if (!value.canAdd || !['ready', 'not_received'].includes(value.availability)) return { label: `Unavailable: ${value.availability}`, canAdd: false };
     if (!scan.version) return { label: 'Checking availability…', canAdd: false };
@@ -99,7 +99,7 @@ export default function ShowScanner({ listId, onAddingChange }: { listId: string
     {inventory.isLoading || list.isLoading ? <p role="status">Loading inventory and show list…</p> : null}
     {inventory.isError || list.isError ? <p role="alert" className="text-[var(--danger)]">Could not load scan data. <button type="button" className="show-link" onClick={() => { void inventory.refetch(); void list.refetch(); }}>Retry</button></p> : null}
     {notice && <p role="status" className="text-sm text-[var(--text-muted)]">{notice}</p>}
-    {ids.some(id => evaluations.data?.errors[id]) && <p className="text-sm text-[var(--warning)]">Some evaluations unavailable. <button type="button" className="show-link" disabled={evaluations.isFetching} onClick={() => void evaluations.refetch()}>Retry evaluations</button></p>}
+    {(evaluations.isError || ids.some(id => evaluations.data?.errors[id])) && <p className="text-sm text-[var(--warning)]">Some evaluations unavailable. <button type="button" className="show-link" disabled={evaluations.isFetching} onClick={() => void evaluations.refetch()}>Retry evaluations</button></p>}
     {scans.length > 0 && <>
       <div className="show-scanner-heading show-scanner-review"><h3>Review scans <span className="tabular-nums">({scans.length})</span></h3><Button variant="ghost" size="sm" disabled={add.isPending} onClick={() => { setScans([]); setError(''); field.current?.focus(); }}>Clear queue</Button></div>
       <ul className="show-scan-rows">{rows.map(({ scan, state }) => <li key={scan.cert} className="show-scan-row">
