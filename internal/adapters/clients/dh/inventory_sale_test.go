@@ -49,6 +49,45 @@ func TestClient_RecordInventorySale(t *testing.T) {
 	require.Equal(t, 1500, resp.RealizedProfitCents)
 }
 
+func TestClient_RecordInventorySaleIDFormats(t *testing.T) {
+	const other = `,"dh_inventory_id":98765,"sold_inventory_id":98765,"item_status":"sold","delisted":true,"replayed":true}`
+	tests := []struct {
+		name, body, wantID string
+		wantErr            bool
+	}{
+		{"numeric preserves digits", `{"sale_id":9007199254740993` + other, "9007199254740993", false},
+		{"opaque string", `{"sale_id":"sale_123"` + other, "sale_123", false},
+		{"missing", `{"dh_inventory_id":98765}`, "", true},
+		{"null", `{"sale_id":null` + other, "", true},
+		{"empty", `{"sale_id":" "` + other, "", true},
+		{"zero", `{"sale_id":0` + other, "", true},
+		{"negative", `{"sale_id":-1` + other, "", true},
+		{"fractional", `{"sale_id":1.5` + other, "", true},
+		{"bool", `{"sale_id":true` + other, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+
+			resp, err := NewClient(server.URL, WithEnterpriseKey("test_key")).RecordInventorySale(
+				context.Background(), 98765, "key-1", InventorySaleRequest{SalePriceCents: 45000})
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantID, resp.SaleID)
+			require.Equal(t, 98765, *resp.SoldInventoryID)
+			require.True(t, resp.Delisted)
+			require.True(t, resp.Replayed)
+		})
+	}
+}
+
 func TestClient_VoidInventorySale_EscapesSaleID(t *testing.T) {
 	var gotRequestURI string
 
