@@ -370,6 +370,16 @@ func (s *DHSoldReconcilerScheduler) recordSale(ctx context.Context, p *inventory
 		return err
 	}
 
+	if result.Replayed && (result.SoldInventoryID == nil ||
+		*result.SoldInventoryID != p.DHInventoryID || !result.Delisted) {
+		replayErr := fmt.Errorf("DH sale replay did not confirm delisting inventory %d", p.DHInventoryID)
+		if cErr := s.conflictSetter.SetDHSaleConflict(ctx, p.ID, replayErr.Error()); cErr != nil {
+			s.logger.Warn(ctx, "dh sold reconciler: failed to flag replay conflict",
+				observability.String("purchaseID", p.ID), observability.Err(cErr))
+		}
+		return replayErr
+	}
+
 	if setErr := s.writer.SetSaleDHSaleID(ctx, sale.ID, result.DHSaleID, time.Now()); setErr != nil {
 		return fmt.Errorf("persist dh_sale_id: %w", setErr)
 	}

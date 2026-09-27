@@ -2,8 +2,11 @@ package dh
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 )
 
 // InventorySaleRequest is the body for POST .../inventory/:id/sale.
@@ -26,6 +29,41 @@ type InventorySaleResponse struct {
 	Delisted            bool   `json:"delisted"`
 	Replayed            bool   `json:"replayed"`
 	RealizedProfitCents int    `json:"realized_profit_cents"`
+}
+
+func (r *InventorySaleResponse) UnmarshalJSON(data []byte) error {
+	type response InventorySaleResponse
+	wire := struct {
+		SaleID json.RawMessage `json:"sale_id"`
+		*response
+	}{response: (*response)(r)}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if len(wire.SaleID) == 0 || string(wire.SaleID) == "null" {
+		return fmt.Errorf("DH sale_id is missing or null")
+	}
+	if wire.SaleID[0] == '"' {
+		var id string
+		if err := json.Unmarshal(wire.SaleID, &id); err != nil {
+			return err
+		}
+		if strings.TrimSpace(id) == "" {
+			return fmt.Errorf("DH sale_id is empty")
+		}
+		r.SaleID = id
+		return nil
+	}
+	var id json.Number
+	if err := json.Unmarshal(wire.SaleID, &id); err != nil {
+		return fmt.Errorf("DH sale_id is not a string or integer: %w", err)
+	}
+	n, err := strconv.ParseUint(id.String(), 10, 64)
+	if err != nil || n == 0 {
+		return fmt.Errorf("DH sale_id must be a positive integer")
+	}
+	r.SaleID = id.String()
+	return nil
 }
 
 // VoidSaleRequest is the body for POST .../sales/:sale_id/void.
