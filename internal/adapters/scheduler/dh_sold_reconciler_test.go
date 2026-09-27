@@ -228,46 +228,66 @@ func TestDHSoldReconciler_SweepDH(t *testing.T) {
 }
 
 // TestDHSoldReconciler_RecordSale_ConflictFlagging exercises recordSale's
-// three conflict-flagging outcomes directly, bypassing sweepDH/recovery so the
-// error-classification branch is asserted in isolation rather than only
-// incidentally through a sweep scenario.
+// conflict outcomes and replay identity directly, bypassing sweepDH/recovery.
 func TestDHSoldReconciler_RecordSale_ConflictFlagging(t *testing.T) {
+	soldID, wrongID := 42, 43
 	tests := []struct {
 		name          string
 		recordErr     error
 		result        *inventory.DHSaleResult
-		wantConflict  bool
 		wantConflictN int
+		wantWrites    int
+		wantErr       bool
 	}{
 		{
 			name:          "non-retryable error flags a conflict",
 			recordErr:     inventory.ErrDHValidation,
-			wantConflict:  true,
 			wantConflictN: 1,
+			wantErr:       true,
 		},
 		{
-			name:          "idempotency-in-progress is retryable, no conflict",
-			recordErr:     inventory.ErrDHIdempotencyInProgress,
-			wantConflict:  false,
-			wantConflictN: 0,
+			name:      "idempotency-in-progress is retryable, no conflict",
+			recordErr: inventory.ErrDHIdempotencyInProgress,
+			wantErr:   true,
 		},
 		{
-			name:          "lock contention is retryable, no conflict",
-			recordErr:     inventory.ErrDHLockContention,
-			wantConflict:  false,
-			wantConflictN: 0,
+			name:      "lock contention is retryable, no conflict",
+			recordErr: inventory.ErrDHLockContention,
+			wantErr:   true,
 		},
 		{
-			name:          "success but not delisted flags a conflict",
+			name:          "first-time success but not delisted flags a conflict",
 			result:        &inventory.DHSaleResult{DHSaleID: "dh-1", Delisted: false},
-			wantConflict:  true,
 			wantConflictN: 1,
+			wantWrites:    1,
 		},
 		{
-			name:          "success and delisted flags nothing",
-			result:        &inventory.DHSaleResult{DHSaleID: "dh-1", Delisted: true},
-			wantConflict:  false,
-			wantConflictN: 0,
+			name:       "first-time success with null sold ID preserves legacy recovery",
+			result:     &inventory.DHSaleResult{DHSaleID: "dh-1", Delisted: true},
+			wantWrites: 1,
+		},
+		{
+			name:          "replay with null sold ID is rejected",
+			result:        &inventory.DHSaleResult{DHSaleID: "dh-1", Replayed: true, Delisted: true},
+			wantConflictN: 1,
+			wantErr:       true,
+		},
+		{
+			name:          "replay with wrong sold ID is rejected",
+			result:        &inventory.DHSaleResult{DHSaleID: "dh-1", SoldInventoryID: &wrongID, Replayed: true, Delisted: true},
+			wantConflictN: 1,
+			wantErr:       true,
+		},
+		{
+			name:          "replay without delisting is rejected",
+			result:        &inventory.DHSaleResult{DHSaleID: "dh-1", SoldInventoryID: &soldID, Replayed: true, Delisted: false},
+			wantConflictN: 1,
+			wantErr:       true,
+		},
+		{
+			name:       "replay with matching sold ID and delisting persists handle",
+			result:     &inventory.DHSaleResult{DHSaleID: "dh-1", SoldInventoryID: &soldID, Replayed: true, Delisted: true},
+			wantWrites: 1,
 		},
 	}
 
@@ -281,6 +301,11 @@ func TestDHSoldReconciler_RecordSale_ConflictFlagging(t *testing.T) {
 				DHIdempotencyKey: "slabledger-sale-existing",
 			}
 			store.Sales[sale.ID] = sale
+			var handleWrites int
+			store.SetSaleDHSaleIDFn = func(_ context.Context, _, _ string, _ time.Time) error {
+				handleWrites++
+				return nil
+			}
 			purchase := &inventory.Purchase{ID: "p1", DHInventoryID: 42, PurchaseDate: "2026-06-01"}
 
 			recorder := &mocks.DHSaleRecorderMock{
@@ -305,10 +330,16 @@ func TestDHSoldReconciler_RecordSale_ConflictFlagging(t *testing.T) {
 				WithDHSoldSweep(nil, nil, nil, recorder, store, conflictSetter),
 			)
 
-			_ = s.recordSale(context.Background(), purchase, sale)
+			err := s.recordSale(context.Background(), purchase, sale)
 
+			if (err != nil) != tt.wantErr {
+				t.Errorf("recordSale error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if handleWrites != tt.wantWrites {
+				t.Errorf("SetSaleDHSaleID called %d times, want %d", handleWrites, tt.wantWrites)
+			}
 			if conflictCalls != tt.wantConflictN {
-				t.Fatalf("SetDHSaleConflict called %d times, want %d", conflictCalls, tt.wantConflictN)
+				t.Errorf("SetDHSaleConflict called %d times, want %d", conflictCalls, tt.wantConflictN)
 			}
 		})
 	}
@@ -531,7 +562,8 @@ func TestDHSoldReconciler_RecoveryPass_ReplayDoesNotDoubleRecord(t *testing.T) {
 			if req.IdempotencyKey != "slabledger-sale-existing" {
 				t.Fatalf("replay used key %q, want the existing persisted key", req.IdempotencyKey)
 			}
-			return &inventory.DHSaleResult{DHSaleID: "dh-existing", Replayed: true, Delisted: true}, nil
+			soldID := 9001
+			return &inventory.DHSaleResult{DHSaleID: "dh-existing", SoldInventoryID: &soldID, Replayed: true, Delisted: true}, nil
 		},
 	}
 
