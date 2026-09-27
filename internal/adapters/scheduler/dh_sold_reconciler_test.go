@@ -332,7 +332,11 @@ func TestDHSoldReconciler_RecordSale_ConflictFlagging(t *testing.T) {
 
 			err := s.recordSale(context.Background(), purchase, sale)
 
-			if (err != nil) != tt.wantErr {
+			if tt.recordErr != nil {
+				if !errors.Is(err, tt.recordErr) {
+					t.Errorf("recordSale error = %v, want %v", err, tt.recordErr)
+				}
+			} else if (err != nil) != tt.wantErr {
 				t.Errorf("recordSale error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if handleWrites != tt.wantWrites {
