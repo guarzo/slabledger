@@ -292,6 +292,32 @@ func TestIsRetryableError(t *testing.T) {
 	}
 }
 
+func TestRetryWithBackoff_TerminalProviderCodesOverrideMessage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"invalid request with 504 in port", apperrors.ProviderInvalidRequest("CardLadder-Auth", fmt.Errorf("HTTP 400: malformed envelope: POST http://127.0.0.1:45049/v1/token"))},
+		{"wrapped invalid request with 503 in port", fmt.Errorf("refresh: %w", apperrors.ProviderInvalidRequest("provider", fmt.Errorf("HTTP 400 at http://127.0.0.1:50312")))},
+		{"auth rejection with transient text", apperrors.ProviderAuthFailed("provider", fmt.Errorf("HTTP 401: temporary timeout at http://127.0.0.1:50212"))},
+		{"missing resource with transient text", apperrors.ProviderNotFound("provider", "temporary EOF at http://127.0.0.1:50412")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			attempts := 0
+			err := RetryWithBackoff(context.Background(), testLogger(), RetryPolicy{MaxRetries: 2}, func() error {
+				attempts++
+				return tc.err
+			})
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("original error lost: %v", err)
+			}
+			if attempts != 1 {
+				t.Fatalf("terminal provider error retried: got %d attempts, want 1", attempts)
+			}
+		})
+	}
+}
+
 func TestDefaultRetryPolicy(t *testing.T) {
 	policy := DefaultRetryPolicy()
 

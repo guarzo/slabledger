@@ -208,7 +208,15 @@ func isRetryableError(err error) bool {
 		return true
 	}
 
-	// Fall back to string matching for non-AppError cases
+	// Terminal provider responses stay terminal even if their URL or body
+	// contains a retryable status number or transient-error wording.
+	if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderInvalidReq) ||
+		apperrors.HasErrorCode(err, apperrors.ErrCodeProviderAuth) ||
+		apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) {
+		return false
+	}
+
+	// Fall back to string matching for remaining errors.
 	errStr := strings.ToLower(err.Error())
 
 	// Explicitly guard HTTP 429 to avoid accidental retries via generic checks
