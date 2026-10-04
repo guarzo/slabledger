@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { ConfirmedReturnState, Purchase } from '../src/types/campaigns';
+import type { ConfirmedReturnState, Purchase, Sale } from '../src/types/campaigns';
 
 const cards = [
   { cert: '160944741', inventoryId: 147840, externalSale: 443, grade: 3, name: 'Charizard' },
@@ -24,10 +24,20 @@ for (const width of [1440, 390]) {
     test(`confirmed return ${card.cert} stays separate from List at ${width}`, async ({ page, baseURL }, info) => {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
       const p = purchase(card);
+      // Spheal exercises a linked local sale; Charizard keeps the nullable CAS case.
+      const sale: Sale | null = card.cert === '162787413' ? {
+        id: '30000000-0000-4000-8000-000000000848', purchaseId: p.id,
+        saleChannel: 'ebay', salePriceCents: 2600, saleFeeCents: 465,
+        saleDate: '2026-09-26', daysToSell: 25, netProfitCents: 1135,
+        forcedLiquidation: false, orderId: 'ext-848', createdAt: stamp, updatedAt: stamp,
+      } : null;
+      const expectedSaleId = sale?.id ?? null;
       let durable: ConfirmedReturnState = {
-        operation: null, expectedSaleId: null, awaitingListing: false,
-        precedingAttempt: null, purchase: p, sale: null,
+        operation: null, expectedSaleId, awaitingListing: false,
+        precedingAttempt: null, purchase: p, sale,
       };
+      let priceReviewSucceeded = false;
+      const returnButton = page.getByRole('button', { name: sale ? 'Return' : 'Confirm DH return', exact: true });
       const mutations: { path: string; body: Record<string, unknown> | null }[] = [];
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -45,12 +55,12 @@ for (const width of [1440, 390]) {
         } });
         if (path.endsWith('/confirmed-return')) return route.fulfill({ json: durable });
         if (path.endsWith('/confirm-return')) {
-          expect(request.postDataJSON()).toEqual({ returnConfirmed: true, expectedSaleId: null });
-          durable = { ...durable, awaitingListing: true, outcome: 'completed',
+          expect(request.postDataJSON()).toEqual({ returnConfirmed: true, expectedSaleId });
+          durable = { ...durable, expectedSaleId: null, sale: null, awaitingListing: true, outcome: 'completed',
             operation: {
               id: `operation-${card.inventoryId}`, purchaseId: p.id, capturedPurchaseId: p.id,
               dhInventoryId: card.inventoryId, certNumber: card.cert, grader: 'PSA',
-              expectedSaleId: null, capturedOrderId: '', returnedOrderId: `ext-${card.externalSale}`,
+              expectedSaleId, capturedOrderId: sale?.orderId ?? '', returnedOrderId: `ext-${card.externalSale}`,
               state: 'completed', createdAt: stamp, completedAt: stamp,
             },
           };
@@ -58,9 +68,14 @@ for (const width of [1440, 390]) {
         }
         if (path.endsWith('/review-price')) {
           expect(request.postDataJSON()).toEqual({ priceCents: 4000, source: 'market' });
-          return route.fulfill({ json: { success: true, reviewedAt: stamp } });
+          await route.fulfill({ json: { success: true, reviewedAt: stamp } });
+          priceReviewSucceeded = true;
+          return;
         }
         if (path.endsWith('/list-on-dh')) {
+          if (!priceReviewSucceeded) {
+            return route.fulfill({ status: 409, json: { error: 'Review the price before listing on DH' } });
+          }
           durable = { ...durable, awaitingListing: false,
             purchase: { ...p, dhStatus: 'listed', dhPushStatus: 'matched' } };
           return route.fulfill({ json: { listed: 1, synced: 2, skipped: 0, total: 1 } });
@@ -71,7 +86,7 @@ for (const width of [1440, 390]) {
       const input = page.getByPlaceholder('Scan or type cert number…');
       await expect(page.getByText('No pending items.')).toBeVisible();
       await input.fill(card.cert); await input.press('Enter');
-      await page.getByRole('button', { name: 'Confirm DH return', exact: true }).click();
+      await returnButton.click();
       const dialog = page.getByRole('alertdialog');
       await expect(dialog).toContainText(card.cert);
       await expect(dialog).toContainText('physically back');
@@ -79,17 +94,22 @@ for (const width of [1440, 390]) {
       await page.screenshot({ path: info.outputPath(`confirm-${card.cert}-${width}.png`), fullPage: true });
       await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
       expect(mutations.filter(r => r.path.endsWith('/confirm-return'))).toHaveLength(0);
-      await page.getByRole('button', { name: 'Confirm DH return', exact: true }).click();
+      await returnButton.click();
       await dialog.getByRole('button', { name: 'Confirm return', exact: true }).click();
       await expect(page.getByText('Returned; review the price and list explicitly.')).toBeVisible();
       expect(mutations.filter(r => r.path.endsWith('/confirm-return'))).toHaveLength(1);
       expect(mutations.filter(r => r.path.endsWith('/list-on-dh'))).toHaveLength(0);
+      expect(mutations.filter(r => r.path.endsWith('/review-price'))).toHaveLength(0);
       await page.reload();
       await expect(page.getByText('Returned; review the price and list explicitly.')).toBeVisible();
       expect(mutations.filter(r => r.path.endsWith('/confirm-return'))).toHaveLength(1);
       await page.getByRole('button', { name: 'List on DH', exact: true }).click();
       await expect(page.getByText('Returned; review the price and list explicitly.')).toHaveCount(0);
+      expect(mutations.filter(r => r.path.endsWith('/review-price'))).toHaveLength(1);
       expect(mutations.filter(r => r.path.endsWith('/list-on-dh'))).toHaveLength(1);
+      expect(mutations.filter(r => r.path.endsWith('/review-price') || r.path.endsWith('/list-on-dh'))
+        .map(r => r.path.split('/').at(-1))).toEqual(['review-price', 'list-on-dh']);
+      expect(mutations.filter(r => r.path.endsWith('/confirm-return'))[0].body?.expectedSaleId).toBe(expectedSaleId);
       expect(mutations.some(r => r.path.endsWith('/sale'))).toBe(false);
       expect(errors).toEqual([]);
       await page.screenshot({ path: info.outputPath(`listed-${card.cert}-${width}.png`), fullPage: true });

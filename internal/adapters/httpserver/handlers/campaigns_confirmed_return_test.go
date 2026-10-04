@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfirmedReturnHandlerErrorMapping(t *testing.T) {
@@ -109,6 +111,41 @@ func TestConfirmedReturnHandlerContract(t *testing.T) {
 		})
 	}
 }
+func TestListPurchaseHandlesUnavailableReturnState(t *testing.T) {
+	var typedNil *mocks.ConfirmedReturnServiceMock
+	for _, tc := range []struct {
+		name              string
+		service           ConfirmedReturnService
+		status, listCalls int
+	}{
+		{"absent service", nil, http.StatusOK, 1},
+		{"typed nil service", typedNil, http.StatusOK, 1},
+		{"nil state", &mocks.ConfirmedReturnServiceMock{GetReturnStateFn: func(context.Context, string) (*inventory.ConfirmedReturnState, error) { return nil, nil }}, http.StatusServiceUnavailable, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			received := "2026-01-01"
+			inv := &mocks.MockInventoryService{GetPurchaseFn: func(context.Context, string) (*inventory.Purchase, error) {
+				return &inventory.Purchase{ID: "p1", CertNumber: "cert", ReceivedAt: &received, DHInventoryID: 42, DHStatus: "in_stock", ReviewedPriceCents: 25000}, nil
+			}}
+			calls := 0
+			list := &mocks.MockDHListingService{ListPurchasesFn: func(context.Context, []string) dhlisting.DHListingResult {
+				calls++
+				return dhlisting.DHListingResult{Listed: 1}
+			}}
+			h := NewCampaignsHandler(inv, nil, nil, nil, mocks.NewMockLogger(), nil, WithConfirmedReturnService(tc.service), WithDHListingService(list))
+			r := httptest.NewRequest(http.MethodPost, "/", nil)
+			r.SetPathValue("purchaseId", "p1")
+			w := httptest.NewRecorder()
+			require.NotPanics(t, func() { h.HandleListPurchaseOnDH(w, r) })
+			require.Equal(t, tc.status, w.Code)
+			require.Equal(t, tc.listCalls, calls)
+			if tc.status == http.StatusServiceUnavailable {
+				require.Contains(t, w.Body.String(), "Returned listing state unavailable")
+			}
+		})
+	}
+}
+
 func TestConfirmedReturnStateRequiresUser(t *testing.T) {
 	calls := 0
 	svc := &mocks.ConfirmedReturnServiceMock{GetReturnStateFn: func(context.Context, string) (*inventory.ConfirmedReturnState, error) { calls++; return nil, nil }}

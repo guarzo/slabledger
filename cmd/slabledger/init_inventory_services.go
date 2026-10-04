@@ -185,7 +185,7 @@ func initializeCampaignsService(
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
 		returner = dhlistingadapter.NewInventoryAdapter(dhClient)
 	}
-	confirmedReturns := inventory.NewConfirmedReturnService(returnStore, returnStore, returner, campaignsService.(inventory.ConfirmedUnsellCAS).DeleteSaleByPurchaseIDCAS, uuid.NewString, inventory.WithConfirmedReturnLogger(logger))
+	confirmedReturns := inventory.NewConfirmedReturnService(returnStore, returnStore, returner, confirmedReturnLegacyUnsell(ctx, campaignsService, logger), uuid.NewString, inventory.WithConfirmedReturnLogger(logger))
 
 	// CSV/portal intake. It writes through the same repositories and reaches back
 	// into the inventory service for the parts of intake inventory owns (purchase
@@ -278,6 +278,15 @@ func initializeCampaignsService(
 		financeService:   financeSvc,
 		exportService:    exportSvc,
 	}
+}
+
+func confirmedReturnLegacyUnsell(ctx context.Context, service inventory.Service, logger observability.Logger) inventory.LegacyConfirmedUnsell {
+	cas, ok := service.(inventory.ConfirmedUnsellCAS)
+	if !ok || !inventory.DHDependenciesPresent(cas) {
+		logger.Error(ctx, "confirmed legacy returns unavailable: inventory service does not support sale CAS")
+		return nil
+	}
+	return cas.DeleteSaleByPurchaseIDCAS
 }
 
 // enqueueImageBackfill re-enqueues unsold PSA purchases with empty image URLs

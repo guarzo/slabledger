@@ -13,23 +13,15 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 	"github.com/stretchr/testify/require"
-	"os"
 	"testing"
 )
 
 func setupIntegrationReturn(t *testing.T, cert string) (*postgres.DB, *postgres.ConfirmedReturnStore, *inventory.ConfirmedReturnService, *mocks.DHReturnerMock, string) {
 	t.Helper()
-	dsn := os.Getenv("POSTGRES_TEST_URL")
-	if dsn == "" {
-		t.Skip("POSTGRES_TEST_URL not set")
-	}
-	require.Equal(t, "postgresql://slabledger:slabledger@172.20.0.2:5432/slabledger_confirmed_returns_test?sslmode=disable", dsn, "dedicated disposable DB only")
 	ctx := context.Background()
-	db, e := postgres.Open(ctx, dsn, mocks.NewMockLogger())
-	require.NoError(t, e)
-	t.Cleanup(func() { _ = db.Close() })
+	db := openConfirmedReturnsTestDB(t, ctx)
 	require.NoError(t, postgres.RunMigrations(db, ""))
-	_, e = db.ExecContext(ctx, `TRUNCATE campaigns CASCADE; TRUNCATE confirmed_dh_returns,dh_mutation_attempts,dh_target_watermarks; INSERT INTO campaigns(id,name,phase,created_at,updated_at) VALUES('return-c','Returns','pending',now(),now())`)
+	_, e := db.ExecContext(ctx, `TRUNCATE campaigns CASCADE; TRUNCATE confirmed_dh_returns,dh_mutation_attempts,dh_target_watermarks; INSERT INTO campaigns(id,name,phase,created_at,updated_at) VALUES('return-c','Returns','pending',now(),now())`)
 	require.NoError(t, e)
 	_, e = db.ExecContext(ctx, `INSERT INTO campaign_purchases(id,campaign_id,card_name,cert_number,grader,dh_inventory_id,dh_status,dh_push_status,reviewed_price_cents,received_at,purchase_date,created_at,updated_at) VALUES('return-p','return-c','Card',$1,'PSA',42,'in_stock','matched',25000,now(),'2026-01-01',now(),now())`, cert)
 	require.NoError(t, e)

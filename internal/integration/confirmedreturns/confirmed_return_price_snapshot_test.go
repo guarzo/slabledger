@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,15 +32,11 @@ func TestCoordinatedPriceUsesValidatedSnapshot(t *testing.T) {
 			logger := mocks.NewMockLogger()
 			// The consumer owns one backend; the independent ordinary writer has
 			// its own connection and does not participate in purchase ownership.
-			db, e := postgres.Open(ctx, os.Getenv("POSTGRES_TEST_URL"), logger)
-			require.NoError(t, e)
-			defer db.Close()
+			db := openConfirmedReturnsTestDB(t, ctx)
 			db.SetMaxOpenConns(1)
 			db.SetMaxIdleConns(1)
 			store := postgres.NewConfirmedReturnStore(db.DB)
-			writerDB, e := postgres.Open(ctx, os.Getenv("POSTGRES_TEST_URL"), logger)
-			require.NoError(t, e)
-			defer writerDB.Close()
+			writerDB := openConfirmedReturnsTestDB(t, ctx)
 			repo := postgres.NewPurchaseStore(db.DB, logger)
 			validated, committed := make(chan struct{}), make(chan error, 1)
 			guards := &mocks.DHMutationGuardsMock{}

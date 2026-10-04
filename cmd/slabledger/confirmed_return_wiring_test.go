@@ -14,6 +14,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestConfirmedReturnLegacyCASCapability(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		service   inventory.Service
+		available bool
+	}{
+		{"supported", inventory.NewService(nil, nil, nil, nil, nil, nil, nil, inventory.WithIDGenerator(func() string { return "id" })), true},
+		{"unsupported", &mocks.MockInventoryService{}, false},
+		{"absent", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := mocks.NewCapturingLogger()
+			var unsell inventory.LegacyConfirmedUnsell
+			require.NotPanics(t, func() { unsell = confirmedReturnLegacyUnsell(context.Background(), tc.service, logger) })
+			if tc.available {
+				require.NotNil(t, unsell)
+				require.ErrorIs(t, unsell(context.Background(), "purchase", "sale"), inventory.ErrReturnConflict)
+				require.Empty(t, logger.Entries())
+			} else {
+				require.Nil(t, unsell)
+				require.Len(t, logger.Entries(), 1)
+				require.Equal(t, "error", logger.Entries()[0].Level)
+				require.Contains(t, logger.Entries()[0].Message, "sale CAS")
+			}
+		})
+	}
+}
+
 func TestConfirmedReturnRuntimeForwarding(t *testing.T) {
 	store := &postgres.ConfirmedReturnStore{}
 	coord := inventory.NewDHMutationCoordinator(store, store)

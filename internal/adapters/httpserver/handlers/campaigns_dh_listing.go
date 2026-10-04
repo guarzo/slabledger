@@ -81,10 +81,14 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 	}
 
 	var operationID string
-	if h.confirmedReturns != nil {
+	if inventory.DHDependenciesPresent(h.confirmedReturns) {
 		state, e := h.confirmedReturns.GetReturnState(r.Context(), purchaseID)
 		if e != nil {
 			writeConfirmedReturnError(w, e)
+			return
+		}
+		if state == nil {
+			writeError(w, http.StatusServiceUnavailable, "Returned listing state unavailable")
 			return
 		}
 		if state.AwaitingListing {
