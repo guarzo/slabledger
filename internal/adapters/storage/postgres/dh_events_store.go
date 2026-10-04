@@ -36,7 +36,7 @@ func NewDHEventStore(db *sql.DB) *DHEventStore {
 // CountByTypeSince are consistent. The DEFAULT remains a safety net for any
 // direct SQL inserts.
 func (s *DHEventStore) Record(ctx context.Context, e dhevents.Event) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := executor(ctx, s.db).ExecContext(ctx, `
 		INSERT INTO dh_state_events (
 			purchase_id, cert_number, event_at, event_type,
 			prev_push_status, new_push_status,

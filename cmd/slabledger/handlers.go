@@ -32,6 +32,9 @@ import (
 // assemble the ServerDependencies struct. Every field is set by runServer
 // before calling createHandlers.
 type handlerInputs struct {
+	ReturnStore          *postgres.ConfirmedReturnStore
+	MutationCoordinator  *inventory.DHMutationCoordinator
+	ConfirmedReturns     handlers.ConfirmedReturnService
 	Cfg                  *config.Config
 	Logger               observability.Logger
 	DB                   *postgres.DB
@@ -120,7 +123,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	var dhHandler *handlers.DHHandler
 	if in.DHClient != nil && in.DHClient.EnterpriseAvailable() {
 		var reconcileOpts []dhlisting.ReconcilerOption
-		reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileStatusRepairer(in.PurchaseStore))
+		reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileStatusRepairer(in.PurchaseStore), dhlisting.WithReconcileMutationGuards(in.ReturnStore, in.ReturnStore))
 		if in.DHEventStore != nil {
 			reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileEventRecorder(in.DHEventStore))
 		}
@@ -139,7 +142,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 			ordersIngester = in.SchedulerResult.DHOrdersPoll
 		}
 		dhHandler = handlers.NewDHHandler(handlers.DHHandlerDeps{
-			CertResolver:      in.DHClient,
+			MutationRequired: true, MutationCoordinator: in.MutationCoordinator, MutationGuards: in.ReturnStore, CertResolver: in.DHClient,
 			CardIDSaver:       in.CardIDMappingRepo,
 			PurchaseLister:    in.PurchaseStore,
 			InventoryPusher:   in.DHClient,
@@ -238,7 +241,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 	dhTombstonesHandler := handlers.NewDHTombstonesHandler(dhTombstoneRepo, logger)
 
 	deps := ServerDependencies{
-		ShowPrepHandler:           buildShowPrepHandler(in),
+		ConfirmedReturnService: in.ConfirmedReturns, ShowPrepHandler: buildShowPrepHandler(in),
 		ShowPrepWorkerHandler:     buildShowPrepWorkerHandler(in),
 		Config:                    in.Cfg,
 		Logger:                    logger,
@@ -267,43 +270,7 @@ func createHandlers(ctx context.Context, in handlerInputs) (ServerDependencies, 
 		CampaignSignalsHandler:    campaignSignalsHandler,
 		LiquidationHandler:        liquidationHandler,
 	}
-	// Build DHListingService from available components.
-	// Nil-safe: only create the service if at least the lister client is available.
-	if in.DHClient != nil {
-		listingOpts := []dhlisting.DHListingServiceOption{
-			dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryAdapter(in.DHClient)),
-			dhlisting.WithDHListingPSAImporter(dhlistingadapter.NewPSAImporterAdapter(in.DHClient)),
-		}
-		if in.PurchaseStore != nil {
-			listingOpts = append(listingOpts,
-				dhlisting.WithDHListingFieldsUpdater(in.PurchaseStore),
-				dhlisting.WithDHListingPushStatusUpdater(in.PurchaseStore),
-				dhlisting.WithDHListingResetter(in.PurchaseStore),
-				dhlisting.WithDHListingUnlistedClearer(in.PurchaseStore),
-			)
-		}
-		if in.CardIDMappingRepo != nil {
-			listingOpts = append(listingOpts, dhlisting.WithDHListingCardIDSaver(in.CardIDMappingRepo))
-		}
-		if in.DHEventStore != nil {
-			listingOpts = append(listingOpts, dhlisting.WithEventRecorder(in.DHEventStore))
-		}
-		if in.DHStore != nil {
-			// Honor the admin "Pause DH Listings" toggle on the HTTP listing
-			// paths (cert import, scan-cert, reviewed-price/override auto-list,
-			// manual "List on DH"). Without this the toggle only gated the push
-			// scheduler and these paths listed regardless.
-			listingOpts = append(listingOpts, dhlisting.WithDHListingConfigLoader(in.DHStore))
-		}
-		svc, err := dhlisting.NewDHListingService(
-			in.CampaignsService, in.Logger, listingOpts...,
-		)
-		if err != nil {
-			in.Logger.Error(ctx, "create DH listing service", observability.Err(err))
-		} else {
-			deps.DHListingService = svc
-		}
-	}
+	deps.DHListingService = buildHTTPListingService(ctx, in)
 
 	// Wire services from initialization
 	deps.ExportService = in.ExportService

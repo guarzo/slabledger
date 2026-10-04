@@ -37,8 +37,23 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 				CertNumber:   r.CertNumber,
 				ProductTitle: r.ProductTitle,
 				Reason:       "not_found",
+				OrderID:      r.OrderNumber, SalePriceCents: mathutil.ToCentsInt(r.UnitPrice),
 			})
 			continue
+		}
+
+		if s.mutationGuards != nil {
+			if !inventory.DHDependenciesPresent(s.mutationGuards) {
+				return nil, inventory.NewReturnConflict("coordination_unavailable", "order identity coordination required")
+			}
+			returned, e := s.mutationGuards.IsReturnedOrder(ctx, purchase.ID, r.OrderNumber)
+			if e != nil {
+				return nil, fmt.Errorf("returned order lookup: %w", e)
+			}
+			if returned {
+				result.Skipped = append(result.Skipped, OrdersImportSkip{CertNumber: r.CertNumber, ProductTitle: r.ProductTitle, OrderID: r.OrderNumber, SalePriceCents: mathutil.ToCentsInt(r.UnitPrice), Reason: "returned_order"})
+				continue
+			}
 		}
 
 		// Check if already sold
@@ -49,6 +64,7 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 				CertNumber:   r.CertNumber,
 				ProductTitle: r.ProductTitle,
 				Reason:       "lookup_error",
+				OrderID:      r.OrderNumber, SalePriceCents: mathutil.ToCentsInt(r.UnitPrice),
 			})
 			continue
 		}
@@ -57,6 +73,7 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 				CertNumber:   r.CertNumber,
 				ProductTitle: r.ProductTitle,
 				Reason:       "already_sold",
+				OrderID:      r.OrderNumber, SalePriceCents: mathutil.ToCentsInt(r.UnitPrice),
 			})
 			continue
 		}
@@ -81,6 +98,7 @@ func (s *service) ImportOrdersSales(ctx context.Context, rows []OrdersExportRow)
 		netProfit := inventory.CalculateNetProfit(salePriceCents, purchase.BuyCostCents, purchase.PSASourcingFeeCents, saleFeeCents)
 
 		result.Matched = append(result.Matched, OrdersImportMatch{
+			OrderID:              r.OrderNumber,
 			CertNumber:           r.CertNumber,
 			ProductTitle:         r.ProductTitle,
 			SaleChannel:          r.SalesChannel,
@@ -215,7 +233,7 @@ func (s *service) ConfirmOrdersSales(ctx context.Context, items []OrdersConfirmI
 		// with no DH history are usually eBay-CSV imports and shouldn't be flagged
 		// as DH-sold.
 		if purchase.DHInventoryID != 0 {
-			if err := s.purchases.UpdatePurchaseDHStatus(ctx, purchase.ID, string(inventory.DHStatusSold)); err != nil {
+			if err := s.markImportedSaleSold(ctx, purchase, sa); err != nil {
 				if s.logger != nil {
 					s.logger.Error(ctx, "confirm sales: failed to update dh_status to sold",
 						observability.String("purchaseID", purchase.ID),

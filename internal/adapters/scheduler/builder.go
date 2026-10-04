@@ -19,13 +19,17 @@ import (
 
 // BuildDeps holds the dependencies needed to build the scheduler group.
 type BuildDeps struct {
-	APITracker        pricing.APITracker
-	HealthChecker     pricing.HealthChecker
-	AccessTracker     pricing.AccessTracker
-	RefreshCandidates pricing.RefreshCandidateProvider
-	PriceProvider     pricing.PriceProvider
-	AuthService       auth.Service // may be nil if auth is not configured
-	Logger            observability.Logger
+	DHMutationRequired    bool
+	DHMutationCoordinator *domainCampaigns.DHMutationCoordinator
+	DHMutationScope       domainCampaigns.PurchaseMutationScope
+	DHMutationGuards      domainCampaigns.DHMutationGuards
+	APITracker            pricing.APITracker
+	HealthChecker         pricing.HealthChecker
+	AccessTracker         pricing.AccessTracker
+	RefreshCandidates     pricing.RefreshCandidateProvider
+	PriceProvider         pricing.PriceProvider
+	AuthService           auth.Service // may be nil if auth is not configured
+	Logger                observability.Logger
 
 	// Sync state (shared by DH schedulers)
 	SyncStateStore SyncStateStore

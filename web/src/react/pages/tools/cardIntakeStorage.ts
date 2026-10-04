@@ -17,9 +17,15 @@ export function loadQueue(): Map<string, CertRow> {
     const entries: [string, CertRow][] = JSON.parse(raw);
     const cleaned = entries.map(([k, v]): [string, CertRow] => [
       k,
-      v.status === 'scanning' || v.status === 'importing'
-        ? { ...v, status: v.purchaseId ? 'existing' : 'resolving' }
-        : v,
+      {
+        ...v,
+        ...(v.status === 'scanning' || v.status === 'importing'
+          ? { status: v.purchaseId ? 'existing' as const : 'resolving' as const } : {}),
+        // In-flight work and durable return state are reloaded from the server,
+        // never resumed or acknowledged from yesterday's browser projection.
+        returnBusy: false, returnLoading: false, returnState: undefined,
+        returnStatusError: undefined, returnError: undefined,
+      },
     ]);
     return new Map(cleaned);
   } catch {

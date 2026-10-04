@@ -25,7 +25,7 @@ func NewCardIDMappingRepository(db *sql.DB) *CardIDMappingRepository {
 // GetExternalID returns the cached external ID for the given card+provider, or "" if not found.
 func (r *CardIDMappingRepository) GetExternalID(ctx context.Context, cardName, setName, collectorNumber, provider string) (string, error) {
 	var externalID string
-	err := r.db.QueryRowContext(ctx,
+	err := executor(ctx, r.db).QueryRowContext(ctx,
 		`SELECT external_id FROM card_id_mappings WHERE card_name = $1 AND set_name = $2 AND collector_number = $3 AND provider = $4`,
 		cardName, setName, collectorNumber, provider,
 	).Scan(&externalID)
@@ -134,7 +134,7 @@ func (r *CardIDMappingRepository) GetExternalIDFresh(ctx context.Context, cardNa
 // (hint_source='manual') are preserved — the user set those deliberately.
 // Returns the number of rows removed (0 or 1).
 func (r *CardIDMappingRepository) DeleteAutoMapping(ctx context.Context, cardName, setName, collectorNumber, provider string) (int64, error) {
-	result, err := r.db.ExecContext(ctx,
+	result, err := executor(ctx, r.db).ExecContext(ctx,
 		`DELETE FROM card_id_mappings
 		 WHERE card_name = $1 AND set_name = $2 AND collector_number = $3 AND provider = $4 AND hint_source = 'auto'`,
 		cardName, setName, collectorNumber, provider,
@@ -172,7 +172,7 @@ func (r *CardIDMappingRepository) DeleteByCard(ctx context.Context, cardName, se
 // Manual hints (hint_source='manual') are never overwritten by auto-discovery.
 func (r *CardIDMappingRepository) SaveExternalID(ctx context.Context, cardName, setName, collectorNumber, provider, externalID string) error {
 	now := time.Now()
-	_, err := r.db.ExecContext(ctx,
+	_, err := executor(ctx, r.db).ExecContext(ctx,
 		`INSERT INTO card_id_mappings (card_name, set_name, collector_number, provider, external_id, hint_source, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, 'auto', $6, $7)
 		 ON CONFLICT(card_name, set_name, collector_number, provider)

@@ -114,11 +114,11 @@ var _ dhlisting.PSAKeyRotator = (*PSAImporterAdapter)(nil)
 // and inventory.DHSaleRecorder. It handles both read/list operations and
 // inventory status mutations (listing updates and sale recording).
 //
-// When transitioning to "listed" and the underlying client supports
-// dh.PSAKeyRotator, UpdateInventoryStatus will rotate PSA keys on 401/422
-// via dh.UpdateInventoryWithRotation.
+// Legacy mode rotates PSA keys when listing. Coordinated receipt mode makes
+// one mutation call: rotation cannot prove the earlier call had no effect.
 type InventoryAdapter struct {
-	client interface {
+	mutationReceipts bool
+	client           interface {
 		UpdateInventory(ctx context.Context, inventoryID int, update dh.InventoryUpdate) (*dh.InventoryResult, error)
 		SyncChannels(ctx context.Context, inventoryID int, channels []string) (*dh.ChannelSyncResponse, error)
 		RecordInventorySale(ctx context.Context, inventoryID int, idempotencyKey string, req dh.InventorySaleRequest) (*dh.InventorySaleResponse, error)
@@ -174,9 +174,9 @@ func (a *InventoryAdapter) ResetPSAKeyRotation() {
 }
 
 // UpdateInventoryStatus PATCHes /inventory/:id with the new status, listing
-// price, and (when set) cert image URLs. When update.Status == "listed" and
-// a rotator is configured, PSA auth/rate-limit errors trigger key rotation.
-// On exhaustion, the returned error wraps dh.ErrPSAKeysExhausted.
+// price, and (when set) cert image URLs. Only legacy mode rotates PSA keys
+// after auth/rate-limit errors; exhaustion wraps dh.ErrPSAKeysExhausted.
+// Coordinated mode preserves the first error and never redispatches.
 func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryID int, update inventory.DHInventoryStatusUpdate) (int, error) {
 	dhUpdate := dh.InventoryUpdate{Status: update.Status}
 	if update.ListingPriceCents > 0 {
@@ -193,7 +193,7 @@ func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryI
 		resp *dh.InventoryResult
 		err  error
 	)
-	if update.Status == inventory.DHStatusListed && a.rotator != nil {
+	if !a.mutationReceipts && update.Status == inventory.DHStatusListed && a.rotator != nil {
 		resp, err = dh.UpdateInventoryWithRotation(
 			ctx, inventoryID, dhUpdate,
 			a.client.UpdateInventory,
@@ -208,7 +208,10 @@ func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryI
 		if errors.Is(err, dh.ErrPSAKeysExhausted) {
 			return 0, fmt.Errorf("%w: %w", dhlisting.ErrPSAKeysExhausted, err)
 		}
-		return 0, err
+		return 0, classifyInitialPatchRejection(err)
+	}
+	if a.mutationReceipts && (resp == nil || resp.DHInventoryID != inventoryID || resp.Status != update.Status || resp.Error != "") {
+		return 0, fmt.Errorf("DH PATCH did not verify target/status receipt")
 	}
 	if resp == nil {
 		return 0, nil
@@ -217,8 +220,27 @@ func (a *InventoryAdapter) UpdateInventoryStatus(ctx context.Context, inventoryI
 }
 
 func (a *InventoryAdapter) SyncChannels(ctx context.Context, inventoryID int, channels []string) error {
-	_, err := a.client.SyncChannels(ctx, inventoryID, channels)
-	return err
+	resp, err := a.client.SyncChannels(ctx, inventoryID, channels)
+	if err != nil {
+		return err
+	}
+	if a.mutationReceipts {
+		if resp == nil || resp.DHInventoryID != inventoryID || resp.Status != inventory.DHStatusListed {
+			return fmt.Errorf("DH channel sync did not verify target/status receipt")
+		}
+		for _, requested := range channels {
+			accepted := false
+			for _, r := range resp.Channels {
+				if r.Name == requested && (r.Status == "pending" || r.Status == "active") {
+					accepted = true
+				}
+			}
+			if !accepted {
+				return fmt.Errorf("DH channel sync did not accept requested channel %s", requested)
+			}
+		}
+	}
+	return nil
 }
 
 // RecordInventorySale posts a sale for the given inventory item to DH via the
@@ -240,6 +262,9 @@ func (a *InventoryAdapter) RecordInventorySale(ctx context.Context, req inventor
 		return nil, classifyDHSaleError(err)
 	}
 
+	if resp == nil || (a.mutationReceipts && resp.DHInventoryID != req.DHInventoryID) {
+		return nil, fmt.Errorf("DH sale receipt target missing or mismatched")
+	}
 	return &inventory.DHSaleResult{
 		DHSaleID:            resp.SaleID,
 		SoldInventoryID:     resp.SoldInventoryID,

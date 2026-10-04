@@ -143,8 +143,14 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 	start := time.Now()
 	var resp *Response
 	attempt := 0
+	phase := PhasePrepare
+	uncertain := false
+	policy := c.retryPolicy
+	if retriesDisabled(ctx, req) {
+		policy.MaxRetries = 0
+	}
 
-	err := resilience.RetryWithBackoff(ctx, c.logger, c.retryPolicy, func() error {
+	err := resilience.RetryWithBackoff(ctx, c.logger, policy, func() error {
 		attempt++
 
 		result, err := c.breaker.Execute(func() (interface{}, error) {
@@ -152,6 +158,12 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 		})
 
 		if err != nil {
+			phase = PhasePrepare
+			var failure *RequestError
+			if errors.As(err, &failure) {
+				phase = failure.Phase
+				uncertain = uncertain || failure.Uncertain
+			}
 			// Extract response even on error so callers can inspect status
 			// codes (e.g. 429) and headers (e.g. Retry-After).
 			if result != nil {
@@ -181,7 +193,7 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 	if err != nil {
 		httpReq, _ := http.NewRequestWithContext(ctx, req.Method, req.URL, nil) //nolint:errcheck // Best-effort request creation for error logging
 		c.observer.OnError(ctx, httpReq, err, attempt, duration)
-		return resp, err
+		return resp, &RequestError{Phase: phase, Attempts: attempt, Uncertain: uncertain, Err: err}
 	}
 
 	return resp, nil
@@ -223,16 +235,16 @@ func (c *Client) doRequest(ctx context.Context, req Request, attempt int) (*Resp
 	if err != nil {
 		c.observer.OnError(ctx, httpReq, err, attempt, duration)
 		if isTimeoutError(err) || ctx.Err() == context.DeadlineExceeded {
-			return nil, apperrors.ProviderTimeout(c.providerName, err)
+			return nil, &RequestError{Phase: PhaseDispatch, Uncertain: true, Err: apperrors.ProviderTimeout(c.providerName, err)}
 		}
-		return nil, fmt.Errorf("executing request: %w", err)
+		return nil, &RequestError{Phase: PhaseDispatch, Uncertain: true, Err: fmt.Errorf("executing request: %w", err)}
 	}
 	defer func() { _ = httpResp.Body.Close() }() //nolint:errcheck // Intentional: cannot handle Close() errors in defer
 
 	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		c.observer.OnError(ctx, httpReq, err, attempt, duration)
-		return nil, fmt.Errorf("reading response body: %w", err)
+		return nil, &RequestError{Phase: PhaseResponseRead, Uncertain: true, Err: fmt.Errorf("reading response body: %w", err)}
 	}
 
 	resp := &Response{
@@ -246,7 +258,7 @@ func (c *Client) doRequest(ctx context.Context, req Request, attempt int) (*Resp
 	if httpResp.StatusCode >= 400 {
 		err := c.handleHTTPError(ctx, httpReq.Method, httpReq.URL.String(), httpResp.StatusCode, httpResp.Header, body)
 		c.observer.OnError(ctx, httpReq, err, attempt, duration)
-		return resp, err
+		return resp, &RequestError{Phase: PhaseResponse, Uncertain: httpResp.StatusCode >= 500, Err: err}
 	}
 
 	c.observer.OnSuccess(ctx, httpReq, httpResp.StatusCode, attempt, duration)

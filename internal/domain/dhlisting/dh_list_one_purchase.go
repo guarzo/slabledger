@@ -63,6 +63,7 @@ func (s *dhListingService) listOnePurchase(ctx context.Context, p *inventory.Pur
 		return outcomeSkipped, errors.New("not received or shipped by PSA; cannot list on DH")
 	}
 
+	pushedInline := false
 	// If pending DH push, do inline match + push first.
 	if p.DHInventoryID == 0 && p.DHPushStatus == inventory.DHPushStatusPending {
 		if s.psaImporter == nil {
@@ -73,6 +74,7 @@ func (s *dhListingService) listOnePurchase(ctx context.Context, p *inventory.Pur
 			return outcomeSkipped, errors.New("inline match/push failed") // unmatched or failed — skip listing
 		}
 		p.DHInventoryID = invID
+		pushedInline = true
 	}
 
 	if p.DHInventoryID == 0 {
@@ -116,12 +118,22 @@ func (s *dhListingService) listOnePurchase(ctx context.Context, p *inventory.Pur
 		CertImageURLBack:  p.BackImageURL,
 	})
 	if err != nil {
+		if pushedInline {
+			var rejection *inventory.DHNonMutationError
+			if errors.As(err, &rejection) {
+				err = &inventory.DHNonMutationError{Code: rejection.Code, Message: rejection.Message, Cause: err, Uncertain: true}
+			}
+		}
 		return s.handleStatusUpdateFailure(ctx, p, err)
 	}
 
 	defaultChannels := DefaultListingChannels
 	if syncErr := s.lister.SyncChannels(ctx, p.DHInventoryID, defaultChannels); syncErr != nil {
-		s.revertAfterChannelSyncFailure(ctx, p, syncErr)
+		// Unknown sync can still be executing remotely. A coordinated run
+		// retains its open marker; never send a blind compensating PATCH.
+		if !s.mutationRequired {
+			s.revertAfterChannelSyncFailure(ctx, p, syncErr)
+		}
 		return outcomeSkipped, syncErr
 	}
 

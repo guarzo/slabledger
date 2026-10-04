@@ -14,8 +14,9 @@ import (
 // persisted-columns invariant needs: a test asserting the same key and SoldAt
 // across a retry catches a regression a call-count assertion would miss.
 type DHSaleRecorderMock struct {
-	RecordInventorySaleFn func(ctx context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error)
-	VoidInventorySaleFn   func(ctx context.Context, dhSaleID, reason string) error
+	RecordInventorySaleFn       func(ctx context.Context, req inventory.DHSaleRequest) (*inventory.DHSaleResult, error)
+	VoidInventorySaleFn         func(ctx context.Context, dhSaleID, reason string) error
+	VoidInventorySaleVerifiedFn func(context.Context, string, int, string) error
 
 	mu       sync.Mutex
 	recorded []inventory.DHSaleRequest
@@ -50,6 +51,13 @@ func (m *DHSaleRecorderMock) VoidInventorySale(ctx context.Context, dhSaleID, re
 		return m.VoidInventorySaleFn(ctx, dhSaleID, reason)
 	}
 	return nil
+}
+
+func (m *DHSaleRecorderMock) VoidInventorySaleVerified(ctx context.Context, handle string, target int, reason string) error {
+	if m.VoidInventorySaleVerifiedFn != nil {
+		return m.VoidInventorySaleVerifiedFn(ctx, handle, target, reason)
+	}
+	return m.VoidInventorySale(ctx, handle, reason)
 }
 
 // RecordedSales returns every DHSaleRequest passed to RecordInventorySale, in

@@ -18,11 +18,12 @@ import (
 
 // Request represents an HTTP request
 type Request struct {
-	Method  string
-	URL     string
-	Headers map[string]string
-	Body    []byte
-	Timeout time.Duration // Override default timeout for this request
+	Method       string
+	URL          string
+	Headers      map[string]string
+	Body         []byte
+	Timeout      time.Duration // Override default timeout for this request
+	DisableRetry bool          // One attempt only; never mutates the shared retry policy.
 }
 
 // Response represents an HTTP response
@@ -116,6 +117,7 @@ func (c *Client) handleHTTPError(ctx context.Context, method, url string, status
 		StatusCode: statusCode,
 		Body:       sanitized,
 		Message:    extractUpstreamMessage(body, headers.Get("Content-Type")),
+		Code:       extractUpstreamCode(body),
 		RequestID:  headers.Get("X-Request-Id"),
 	}
 	switch statusCode {

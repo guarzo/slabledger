@@ -299,7 +299,7 @@ func (ps *PurchaseStore) UpdatePurchaseCLCardMetadata(ctx context.Context, id, p
 // dh_last_synced_at. Used by the DH price re-sync flow after a successful
 // DH PATCH; avoids the full-field overwrite of UpdatePurchaseDHFields.
 func (ps *PurchaseStore) UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error {
-	return ps.execAndExpectRow(ctx, "update dh price sync",
+	return ps.execDHMutation(ctx, id, "update dh price sync",
 		`UPDATE campaign_purchases
 		 SET dh_listing_price_cents = $1,
 		     dh_last_synced_at      = $2,

@@ -22,6 +22,9 @@ type selectMatchRequest struct {
 }
 
 func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
+	if h.coordinateLink(w, r, "select_match", h.HandleSelectMatch) {
+		return
+	}
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -138,6 +141,9 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 
 	if h.pushStatusUpdater != nil {
 		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusManual); err != nil {
+			if h.failCoordinatedWrite(w, ctx, purchase.ID, err) {
+				return
+			}
 			h.logger.Warn(ctx, "select match: failed to set manual status",
 				observability.String("purchaseID", purchase.ID), observability.Err(err))
 		} else {
@@ -154,6 +160,9 @@ func (h *DHHandler) HandleSelectMatch(w http.ResponseWriter, r *http.Request) {
 			})
 			if h.candidatesSaver != nil {
 				if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+					if h.failCoordinatedWrite(w, ctx, purchase.ID, err) {
+						return
+					}
 					h.logger.Warn(ctx, "select match: failed to clear candidates",
 						observability.String("purchaseID", purchase.ID), observability.Err(err))
 				}

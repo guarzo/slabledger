@@ -20,6 +20,8 @@ import (
 
 // schedulerDeps bundles all dependencies needed by initializeSchedulers.
 type schedulerDeps struct {
+	ReturnStore                *postgres.ConfirmedReturnStore
+	MutationCoordinator        *inventory.DHMutationCoordinator
 	cardLadderAuthOptions      []cardladder.AuthOption // narrow local-fixture SDK seam; no production endpoint override
 	DB                         *postgres.DB
 	Config                     *config.Config
@@ -62,7 +64,7 @@ type schedulerDeps struct {
 func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.BuildResult, context.CancelFunc) {
 	schedulerCtx, cancelScheduler := context.WithCancel(ctx)
 	buildDeps := scheduler.BuildDeps{
-		APITracker:                 deps.DBTracker,
+		DHMutationRequired: true, DHMutationCoordinator: deps.MutationCoordinator, DHMutationScope: deps.ReturnStore, DHMutationGuards: deps.ReturnStore, APITracker: deps.DBTracker,
 		HealthChecker:              deps.DBTracker,
 		AccessTracker:              deps.DBTracker,
 		RefreshCandidates:          deps.RefreshCandidates,
@@ -96,7 +98,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		// Lets the sold reconciler record and recover sales on DH for items it
 		// still offers, or whose sale handle we failed to persist.
 		if deps.DHClient.EnterpriseAvailable() {
-			dhSaleAdapter := dhlistingadapter.NewInventoryAdapter(deps.DHClient).WithLogger(deps.Logger)
+			dhSaleAdapter := dhlistingadapter.NewInventoryAdapter(deps.DHClient).WithLogger(deps.Logger).WithMutationReceipts()
 			buildDeps.DHSaleRecorder = dhSaleAdapter
 		}
 		// Guard against typed-nil pointers: use individual stores instead of composite repo.
@@ -156,7 +158,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 	// so the daily drift scan's absence doesn't go unnoticed.
 	if deps.DHClient != nil && deps.DHClient.EnterpriseAvailable() && deps.PurchaseStore != nil {
 		var reconcileOpts []dhlisting.ReconcilerOption
-		reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileStatusRepairer(deps.PurchaseStore))
+		reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileStatusRepairer(deps.PurchaseStore), dhlisting.WithReconcileMutationGuards(deps.ReturnStore, deps.ReturnStore))
 		if deps.DHEventStore != nil {
 			reconcileOpts = append(reconcileOpts, dhlisting.WithReconcileEventRecorder(deps.DHEventStore))
 		}
@@ -181,7 +183,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		// the HTTP path — both are stateless, so duplication is fine.
 		if deps.CampaignsService != nil {
 			listingOpts := []dhlisting.DHListingServiceOption{
-				dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryAdapter(deps.DHClient)),
+				dhlisting.WithDHListingMutationCoordinator(deps.MutationCoordinator, deps.ReturnStore, deps.ReturnStore), dhlisting.WithDHListingLister(dhlistingadapter.NewInventoryAdapter(deps.DHClient).WithMutationReceipts()),
 				dhlisting.WithDHListingPSAImporter(dhlistingadapter.NewPSAImporterAdapter(deps.DHClient)),
 				dhlisting.WithDHListingFieldsUpdater(deps.PurchaseStore),
 				dhlisting.WithDHListingPushStatusUpdater(deps.PurchaseStore),

@@ -136,7 +136,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 			$66, $67
 		)
 	`
-	_, err := ps.db.ExecContext(ctx, query,
+	_, err := executor(ctx, ps.db).ExecContext(ctx, query,
 		p.ID, p.CampaignID, p.CardName, p.CertNumber,
 		p.CardNumber, p.SetName,
 		p.Grader, p.GradeValue,
@@ -171,7 +171,7 @@ func (ps *PurchaseStore) CreatePurchase(ctx context.Context, p *inventory.Purcha
 func (ps *PurchaseStore) GetPurchase(ctx context.Context, id string) (*inventory.Purchase, error) {
 	query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE id = $1`
 	var p inventory.Purchase
-	err := scanPurchase(ps.db.QueryRowContext(ctx, query, id), &p)
+	err := scanPurchase(executor(ctx, ps.db).QueryRowContext(ctx, query, id), &p)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, inventory.ErrPurchaseNotFound
 	}
@@ -185,7 +185,7 @@ func (ps *PurchaseStore) ListPurchasesByCampaign(ctx context.Context, campaignID
 	query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE campaign_id = $1
 		ORDER BY purchase_date DESC
 		LIMIT $2 OFFSET $3`
-	rows, err := ps.db.QueryContext(ctx, query, campaignID, limit, offset)
+	rows, err := executor(ctx, ps.db).QueryContext(ctx, query, campaignID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (ps *PurchaseStore) ListUnsoldPurchases(ctx context.Context, campaignID str
 		LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		WHERE p.campaign_id = $1 AND s.id IS NULL
 		ORDER BY p.purchase_date DESC`
-	rows, err := ps.db.QueryContext(ctx, query, campaignID)
+	rows, err := executor(ctx, ps.db).QueryContext(ctx, query, campaignID)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func (ps *PurchaseStore) CountPurchasesByCampaign(ctx context.Context, campaignI
 
 // execAndExpectRow runs a write query and returns ErrPurchaseNotFound if no row was affected.
 func (ps *PurchaseStore) execAndExpectRow(ctx context.Context, op, query string, args ...any) error {
-	result, err := ps.db.ExecContext(ctx, query, args...)
+	result, err := executor(ctx, ps.db).ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -486,7 +486,7 @@ func (ps *PurchaseStore) UpdatePurchaseCardYear(ctx context.Context, id string, 
 func (ps *PurchaseStore) GetPurchaseByCertNumber(ctx context.Context, grader string, certNumber string) (*inventory.Purchase, error) {
 	query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE grader = $1 AND cert_number = $2`
 	var p inventory.Purchase
-	err := scanPurchase(ps.db.QueryRowContext(ctx, query, grader, certNumber), &p)
+	err := scanPurchase(executor(ctx, ps.db).QueryRowContext(ctx, query, grader, certNumber), &p)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, inventory.ErrPurchaseNotFound
 	}

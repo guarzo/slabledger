@@ -255,42 +255,8 @@ func (cs *CampaignStore) ListCampaigns(ctx context.Context, activeOnly bool) (re
 	return result, rows.Err()
 }
 
-func (cs *CampaignStore) DeleteCampaign(ctx context.Context, id string) (retErr error) {
-	tx, err := cs.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		if retErr != nil {
-			_ = tx.Rollback() //nolint:errcheck // best-effort; error logged via retErr
-		}
-	}()
-
-	if _, retErr = tx.ExecContext(ctx,
-		`DELETE FROM campaign_sales WHERE purchase_id IN (SELECT id FROM campaign_purchases WHERE campaign_id = $1)`, id,
-	); retErr != nil {
-		return retErr
-	}
-
-	if _, retErr = tx.ExecContext(ctx,
-		`DELETE FROM campaign_purchases WHERE campaign_id = $1`, id,
-	); retErr != nil {
-		return retErr
-	}
-
-	result, retErr := tx.ExecContext(ctx, `DELETE FROM campaigns WHERE id = $1`, id)
-	if retErr != nil {
-		return retErr
-	}
-	n, retErr := result.RowsAffected()
-	if retErr != nil {
-		return retErr
-	}
-	if n == 0 {
-		return inventory.ErrCampaignNotFound
-	}
-
-	return tx.Commit()
+func (cs *CampaignStore) DeleteCampaign(ctx context.Context, id string) error {
+	return cs.deleteCampaignGuarded(ctx, id)
 }
 
 func (cs *CampaignStore) UpdateCampaign(ctx context.Context, c *inventory.Campaign) error {

@@ -38,7 +38,7 @@ func (ps *PurchaseStore) GetPurchasesByGraderAndCertNumbers(ctx context.Context,
 		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases
 			WHERE grader = $1 AND cert_number IN (` + strings.Join(placeholders, ",") + `)`
 
-		rows, err := ps.db.QueryContext(ctx, query, args...)
+		rows, err := executor(ctx, ps.db).QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, fmt.Errorf("query purchases by grader/cert chunk: %w", err)
 		}
@@ -84,7 +84,7 @@ func (ps *PurchaseStore) GetPurchasesByCertNumbers(ctx context.Context, certNumb
 		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases
 			WHERE cert_number IN (` + strings.Join(placeholders, ",") + `)`
 
-		rows, err := ps.db.QueryContext(ctx, query, args...)
+		rows, err := executor(ctx, ps.db).QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, fmt.Errorf("query purchases by cert chunk: %w", err)
 		}
@@ -127,7 +127,7 @@ func (ps *PurchaseStore) GetPurchasesByIDs(ctx context.Context, ids []string) (m
 		}
 
 		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases WHERE id IN (` + strings.Join(placeholders, ",") + `)`
-		rows, err := ps.db.QueryContext(ctx, query, args...)
+		rows, err := executor(ctx, ps.db).QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, fmt.Errorf("query purchases by IDs chunk: %w", err)
 		}
@@ -171,7 +171,7 @@ func (ps *PurchaseStore) GetPurchasesByDHInventoryIDs(ctx context.Context, dhIDs
 		query := `SELECT ` + purchaseColumns + ` FROM campaign_purchases
 			WHERE dh_inventory_id IN (` + strings.Join(placeholders, ",") + `)`
 
-		rows, err := ps.db.QueryContext(ctx, query, args...)
+		rows, err := executor(ctx, ps.db).QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, fmt.Errorf("query purchases by DH inventory IDs: %w", err)
 		}
@@ -211,7 +211,7 @@ func (ps *PurchaseStore) SetReceivedAt(ctx context.Context, purchaseID string, r
 // GetPurchasesByGraderAndCertNumbers instead.
 func (ps *PurchaseStore) GetDHStatusByCertNumber(ctx context.Context, certNumber string) (string, string, error) {
 	var id, dhStatus string
-	err := ps.db.QueryRowContext(ctx,
+	err := executor(ctx, ps.db).QueryRowContext(ctx,
 		`SELECT id, dh_status FROM campaign_purchases WHERE cert_number = $1`, certNumber,
 	).Scan(&id, &dhStatus)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -221,39 +221,23 @@ func (ps *PurchaseStore) GetDHStatusByCertNumber(ctx context.Context, certNumber
 }
 
 // DeletePurchase removes a purchase and its associated sales within a transaction.
-func (ps *PurchaseStore) DeletePurchase(ctx context.Context, id string) (retErr error) {
-	tx, err := ps.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() {
-		if retErr != nil {
-			_ = tx.Rollback() //nolint:errcheck // best-effort; error logged via retErr
+func (ps *PurchaseStore) DeletePurchase(ctx context.Context, id string) error {
+	return withLocalPurchaseMutation(ctx, ps.db, id, false, func(owned context.Context) error {
+		x := executor(owned, ps.db)
+		if _, err := x.ExecContext(owned, `DELETE FROM campaign_sales WHERE purchase_id=$1`, id); err != nil {
+			return err
 		}
-	}()
-
-	// Delete any sales associated with this purchase
-	if _, retErr = tx.ExecContext(ctx,
-		`DELETE FROM campaign_sales WHERE purchase_id = $1`, id,
-	); retErr != nil {
-		return retErr
-	}
-
-	// Delete the purchase
-	result, err := tx.ExecContext(ctx, `DELETE FROM campaign_purchases WHERE id = $1`, id)
-	if err != nil {
-		retErr = fmt.Errorf("delete purchase: %w", err)
-		return retErr
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		retErr = fmt.Errorf("check rows affected: %w", err)
-		return retErr
-	}
-	if n == 0 {
-		retErr = inventory.ErrPurchaseNotFound
-		return retErr
-	}
-
-	return tx.Commit()
+		result, err := x.ExecContext(owned, `DELETE FROM campaign_purchases WHERE id=$1`, id)
+		if err != nil {
+			return fmt.Errorf("delete purchase: %w", err)
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return inventory.ErrPurchaseNotFound
+		}
+		return nil
+	})
 }

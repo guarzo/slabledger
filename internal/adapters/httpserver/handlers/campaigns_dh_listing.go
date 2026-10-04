@@ -80,7 +80,33 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 		return
 	}
 
-	result := h.dhListingSvc.ListPurchases(r.Context(), []string{p.CertNumber})
+	var operationID string
+	if h.confirmedReturns != nil {
+		state, e := h.confirmedReturns.GetReturnState(r.Context(), purchaseID)
+		if e != nil {
+			writeConfirmedReturnError(w, e)
+			return
+		}
+		if state.AwaitingListing {
+			if requireUser(w, r) == nil {
+				return
+			}
+			if state.Operation == nil {
+				writeError(w, 503, "Returned listing state unavailable")
+				return
+			}
+			operationID = state.Operation.ID
+		}
+	}
+	var result dhlisting.DHListingResult
+	if explicit, ok := h.dhListingSvc.(dhlisting.ExplicitListingService); ok {
+		result = explicit.ListPurchaseExplicit(r.Context(), purchaseID, p.CertNumber, operationID)
+	} else if operationID != "" {
+		writeError(w, 503, "Explicit returned listing coordination unavailable")
+		return
+	} else {
+		result = h.dhListingSvc.ListPurchases(r.Context(), []string{p.CertNumber})
+	}
 	if result.Paused {
 		// The global "Pause DH Listings" toggle is on (or its config couldn't be
 		// loaded and we failed closed). The item was deliberately not listed —
@@ -91,6 +117,10 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 		return
 	}
 	if result.Error != nil {
+		if errors.Is(result.Error, inventory.ErrReturnConflict) {
+			writeConfirmedReturnError(w, result.Error)
+			return
+		}
 		if errors.Is(result.Error, dhlisting.ErrPSAKeysExhausted) {
 			h.logger.Warn(r.Context(), "dh listing: PSA keys exhausted — deferring",
 				observability.Err(result.Error), observability.String("purchaseId", purchaseID))
@@ -106,6 +136,10 @@ func (h *CampaignsHandler) HandleListPurchaseOnDH(w http.ResponseWriter, r *http
 	if result.Listed == 0 {
 		// Prefer the upstream reason captured per-cert by the service.
 		if certErr, ok := result.FailedCerts[p.CertNumber]; ok && certErr != nil {
+			if errors.Is(certErr, inventory.ErrReturnConflict) {
+				writeConfirmedReturnError(w, certErr)
+				return
+			}
 			h.logger.Warn(r.Context(), "dh listing: per-cert failure",
 				observability.Err(certErr), observability.String("purchaseId", purchaseID))
 			status, msg := dhErrorStatus(certErr)

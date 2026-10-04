@@ -5,7 +5,8 @@ import { buildPriceSources } from '../../ui/priceDecisionHelpers';
 import type { PreSelection } from '../../ui/priceDecisionHelpers';
 import type { MarketSnapshot } from '../../../types/campaigns';
 import type { CertRow, CertStatus } from './cardIntakeTypes';
-import { hasDHMatch, hasDHInventory, hasCLPrice, dhPushStuck, rowIsListable, rowAwaitingSync } from './cardIntakeTypes';
+import { hasDHMatch, hasDHInventory, hasCLPrice, dhPushStuck, rowIsListable, rowAwaitingSync, returnActionLabel, returnNeedsDiagnosis } from './cardIntakeTypes';
+import CardIntakeReturnNotice from './CardIntakeReturnNotice';
 
 const DH_SEARCH_BASE = 'https://doubleholo.com/marketplace';
 
@@ -128,6 +129,7 @@ export function CertRowItem({
   row,
   highlighted,
   onReturn,
+  onRefreshReturnState,
   onDismiss,
   onList,
   onFixDHMatch,
@@ -135,6 +137,7 @@ export function CertRowItem({
   row: CertRow;
   highlighted?: boolean;
   onReturn: (certNumber: string) => void;
+  onRefreshReturnState?: (certNumber: string) => void;
   onDismiss: (certNumber: string) => void;
   onList: (certNumber: string, priceCents: number, source: string) => void;
   onFixDHMatch: () => void;
@@ -143,10 +146,14 @@ export function CertRowItem({
   const canList = rowIsListable(row);
   const awaitingSync = rowAwaitingSync(row);
   const { market, buyCostCents, listingStatus, listingError } = row;
-  const busy = listingStatus === 'setting-price' || listingStatus === 'listing';
+  const busy = listingStatus === 'setting-price' || listingStatus === 'listing' || row.returnBusy;
+  const returnLabel = returnActionLabel(row);
   const listed = listingStatus === 'listed';
   const inPlaceableStatus = row.status === 'existing' || row.status === 'returned' || row.status === 'imported';
-  const showFixDH = !!row.purchaseId && inPlaceableStatus && (
+  const returnHeld = !row.returnState || !!row.returnStatusError || !!row.returnLoading
+    || !!row.returnBusy || returnNeedsDiagnosis(row.returnState)
+    || row.returnState.awaitingListing || row.returnState.operation?.state === 'pending';
+  const showFixDH = !!row.purchaseId && inPlaceableStatus && !returnHeld && (
     row.dhPushStatus === 'unmatched' ||
     (row.dhPushStatus === undefined && !hasDHMatch(row))
   );
@@ -214,12 +221,15 @@ export function CertRowItem({
               Fix DH Match
             </button>
           )}
-          {row.status === 'sold' && (
+          {returnLabel && (
             <button
-              onClick={() => onReturn(row.certNumber)}
-              className="rounded-md bg-[var(--warning)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--warning)] hover:bg-[var(--warning)]/30 transition-colors"
+              onClick={() => row.returnStatusError
+                || (row.returnState && returnNeedsDiagnosis(row.returnState))
+                ? onRefreshReturnState?.(row.certNumber) : onReturn(row.certNumber)}
+              disabled={!!row.returnLoading || !!row.returnBusy || !!busy}
+              className="rounded-md bg-[var(--warning)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--warning)] hover:bg-[var(--warning)]/30 disabled:opacity-50 transition-colors"
             >
-              Return
+              {returnLabel}
             </button>
           )}
           {showDismiss && (
@@ -251,6 +261,8 @@ export function CertRowItem({
       {canExpand && expanded && (
         <CertRowDetail row={row} />
       )}
+
+      <CardIntakeReturnNotice row={row} />
 
       {canList && (
         <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.015)] px-4 py-2.5">

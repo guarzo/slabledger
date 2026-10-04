@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 	apperrors "github.com/guarzo/slabledger/internal/domain/errors"
 )
 
@@ -36,7 +37,7 @@ func (c *Client) PSAImport(ctx context.Context, items []PSAImportItem) (*PSAImpo
 	}
 
 	var resp PSAImportResponse
-	if err := c.postEnterprise(ctx, fullURL, body, &resp); err != nil {
+	if err := c.postEnterprise(httpx.WithNoRetry(ctx), fullURL, body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

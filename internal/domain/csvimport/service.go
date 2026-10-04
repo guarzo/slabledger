@@ -62,11 +62,13 @@ type Deps struct {
 	PricingQueue inventory.PricingEnqueuer
 	PSAResolver  inventory.PSACampaignResolver
 
-	IDGen  func() string
-	Logger observability.Logger
+	MutationGuards inventory.DHMutationGuards
+	IDGen          func() string
+	Logger         observability.Logger
 }
 
 type service struct {
+	mutationGuards  inventory.DHMutationGuards
 	campaigns       inventory.CampaignRepository
 	purchases       inventory.PurchaseRepository
 	sales           inventory.SaleRepository
@@ -101,6 +103,7 @@ func NewService(d Deps) Service {
 		panic("csvimport.NewService: IDGen is required")
 	}
 	return &service{
+		mutationGuards:  d.MutationGuards,
 		campaigns:       d.Campaigns,
 		purchases:       d.Purchases,
 		sales:           d.Sales,

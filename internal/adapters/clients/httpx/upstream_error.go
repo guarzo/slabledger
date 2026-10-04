@@ -17,14 +17,15 @@ import (
 //	}
 //
 // Network failures, timeouts, and circuit-breaker trips are NOT UpstreamErrors —
-// they return only the existing apperrors. UpstreamError means "we reached
-// the provider and the provider said no".
+// they return only the existing apperrors. An upstream error is a received
+// response, NOT evidence that a mutation did not execute (especially for 5xx).
 type UpstreamError struct {
 	Provider   string // e.g. "dh"
 	Op         string // logical operation, e.g. "POST /v1/enterprise/inventory/123/sync"
 	StatusCode int    // upstream HTTP status (e.g. 422)
 	Body       string // upstream response body (sanitized, length-capped)
 	Message    string // best-effort extracted human message (e.g. JSON "error" field)
+	Code       string // structured JSON code, extracted before body truncation
 	RequestID  string // upstream x-request-id header if present
 }
 
@@ -43,6 +44,16 @@ func (e *UpstreamError) Error() string {
 // IsClientError reports whether the upstream returned a 4xx status.
 func (e *UpstreamError) IsClientError() bool {
 	return e.StatusCode >= 400 && e.StatusCode < 500
+}
+
+func extractUpstreamCode(body []byte) string {
+	var wire struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &wire); err != nil {
+		return ""
+	}
+	return wire.Code
 }
 
 // extractUpstreamMessage attempts to pull a human-readable error message out

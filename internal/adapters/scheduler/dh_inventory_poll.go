@@ -42,13 +42,15 @@ type DHInventoryPollConfig struct {
 // DHInventoryPollScheduler polls DH for inventory status updates.
 type DHInventoryPollScheduler struct {
 	StopHandle
-	client    DHInventoryListClient
-	syncState SyncStateStore
-	updater   DHFieldsUpdater
-	lookup    PurchaseByCertLookup
-	eventRec  dhevents.Recorder // may be nil
-	logger    observability.Logger
-	config    DHInventoryPollConfig
+	observationRequired bool
+	guards              inventory.DHMutationGuards
+	client              DHInventoryListClient
+	syncState           SyncStateStore
+	updater             DHFieldsUpdater
+	lookup              PurchaseByCertLookup
+	eventRec            dhevents.Recorder // may be nil
+	logger              observability.Logger
+	config              DHInventoryPollConfig
 }
 
 // NewDHInventoryPollScheduler creates a new inventory poll scheduler.
@@ -60,11 +62,12 @@ func NewDHInventoryPollScheduler(
 	eventRec dhevents.Recorder, // may be nil for tests / unwired
 	logger observability.Logger,
 	config DHInventoryPollConfig,
+	opts ...DHInventoryPollOption,
 ) *DHInventoryPollScheduler {
 	if config.Interval <= 0 {
 		config.Interval = 2 * time.Hour
 	}
-	return &DHInventoryPollScheduler{
+	s := &DHInventoryPollScheduler{
 		StopHandle: NewStopHandle(),
 		client:     client,
 		syncState:  syncState,
@@ -74,6 +77,10 @@ func NewDHInventoryPollScheduler(
 		logger:     logger.With(context.Background(), observability.String("component", "dh-inventory-poll")),
 		config:     config,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Start begins the inventory poll loop.
@@ -108,6 +115,17 @@ func (s *DHInventoryPollScheduler) recordEvent(ctx context.Context, e dhevents.E
 
 // poll fetches inventory status from DH and writes updates back to local purchase records.
 func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
+	fetchedAt := time.Now()
+	if s.observationRequired {
+		if !inventory.DHDependenciesPresent(s.guards, s.lookup, s.updater, s.syncState, s.client) {
+			return
+		}
+		var e error
+		fetchedAt, e = s.guards.ObservationTime(ctx)
+		if e != nil {
+			return
+		}
+	}
 	since, err := s.syncState.Get(ctx, syncStateKeyDHInventoryPoll)
 	if err != nil {
 		s.logger.Warn(ctx, "failed to read dh inventory sync state, defaulting to no filter",
@@ -164,15 +182,16 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			continue
 		}
 
-		if updateErr := s.updater.UpdatePurchaseDHFields(ctx, purchaseID, inventory.DHFieldsUpdate{
+		applied, updateErr := s.applyInventoryObservation(ctx, purchaseID, item.DHInventoryID, fetchedAt, inventory.DHFieldsUpdate{
 			CardID:            item.DHCardID,
 			InventoryID:       item.DHInventoryID,
 			CertStatus:        dh.CertStatusMatched,
 			ListingPriceCents: item.ListingPriceCents,
 			ChannelsJSON:      dh.MarshalChannels(item.Channels),
 			DHStatus:          item.Status,
-			LastSyncedAt:      time.Now().UTC().Format(time.RFC3339),
-		}); updateErr != nil {
+			LastSyncedAt:      fetchedAt.UTC().Format(time.RFC3339),
+		})
+		if updateErr != nil {
 			s.logger.Warn(ctx, "dh inventory poll: failed to update purchase",
 				observability.String("purchaseID", purchaseID),
 				observability.String("cert", item.CertNumber),
@@ -181,6 +200,10 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			continue
 		}
 
+		if !applied {
+			skipped++
+			continue
+		}
 		updated++
 
 		// Emit an observation event. A listed → in_stock drop is the only

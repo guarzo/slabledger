@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/guarzo/slabledger/internal/adapters/clients/httpx"
 )
 
 // InventoryFilters are query parameters for GET /inventory.
@@ -30,7 +32,7 @@ func (c *Client) PushInventory(ctx context.Context, items []InventoryItem) (*Inv
 	body := InventoryPushRequest{Items: items}
 
 	var resp InventoryPushResponse
-	if err := c.postEnterprise(ctx, fullURL, body, &resp); err != nil {
+	if err := c.postEnterprise(httpx.WithNoRetry(ctx), fullURL, body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -80,7 +82,7 @@ func (c *Client) UpdateInventory(ctx context.Context, inventoryID int, update In
 	}
 
 	var resp InventoryResult
-	if err := c.patchEnterprise(ctx, fullURL, update, &resp, extraHeaders); err != nil {
+	if err := c.patchEnterprise(httpx.WithNoRetry(ctx), fullURL, update, &resp, extraHeaders); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -92,7 +94,7 @@ func (c *Client) SyncChannels(ctx context.Context, inventoryID int, channels []s
 	body := ChannelSyncRequest{Channels: channels}
 
 	var resp ChannelSyncResponse
-	if err := c.postEnterprise(ctx, fullURL, body, &resp); err != nil {
+	if err := c.postEnterprise(httpx.WithNoRetry(ctx), fullURL, body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -103,7 +105,7 @@ func (c *Client) SyncChannels(ctx context.Context, inventoryID int, channels []s
 // Use this on unmatch; use DelistChannels for channel-only removal (e.g. card swap).
 func (c *Client) DeleteInventory(ctx context.Context, inventoryID int) error {
 	fullURL := fmt.Sprintf("%s/api/v1/enterprise/inventory/%d", c.baseURL, inventoryID)
-	return c.deleteEnterprise(ctx, fullURL, nil, nil)
+	return c.deleteEnterprise(httpx.WithNoRetry(ctx), fullURL, nil, nil)
 }
 
 // DelistChannels removes a listed inventory item from specific external channels.
@@ -117,7 +119,7 @@ func (c *Client) DelistChannels(ctx context.Context, inventoryID int, channels [
 	}
 
 	var resp ChannelSyncResponse
-	if err := c.deleteEnterprise(ctx, fullURL, body, &resp); err != nil {
+	if err := c.deleteEnterprise(httpx.WithNoRetry(ctx), fullURL, body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

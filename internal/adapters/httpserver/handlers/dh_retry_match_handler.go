@@ -25,6 +25,9 @@ type retryMatchResponse struct {
 // purchase via PSA import with overrides. DH validates the resolved match
 // against our overrides and corrects wrong-variant matches automatically.
 func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
+	if h.coordinateLink(w, r, "retry_match", h.HandleRetryMatch) {
+		return
+	}
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -85,6 +88,10 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.mutationRequired && (importResp == nil || !importResp.Success || len(importResp.Results) != 1 || importResp.Results[0].CertNumber != purchase.CertNumber || importResp.Results[0].DHInventoryID <= 0 || importResp.Results[0].DHCardID <= 0) {
+		writeError(w, 502, "DH PSA import receipt target invalid")
+		return
+	}
 	if len(importResp.Results) == 0 {
 		writeError(w, http.StatusUnprocessableEntity, "no results from DH")
 		return
@@ -114,12 +121,18 @@ func (h *DHHandler) HandleRetryMatch(w http.ResponseWriter, r *http.Request) {
 		}
 		if h.cardIDSaver != nil && result.DHCardID != 0 {
 			if err := h.cardIDSaver.SaveExternalID(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH, fmt.Sprintf("%d", result.DHCardID)); err != nil {
+				if h.failCoordinatedWrite(w, ctx, purchase.ID, err) {
+					return
+				}
 				h.logger.Warn(ctx, "retry match: save external card ID after PSA import", observability.Err(err),
 					observability.String("cardName", purchase.CardName), observability.String("setName", purchase.SetName))
 			}
 		}
 		if h.candidatesSaver != nil {
 			if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+				if h.failCoordinatedWrite(w, ctx, purchase.ID, err) {
+					return
+				}
 				h.logger.Warn(ctx, "retry match: clear candidates after PSA import", observability.Err(err),
 					observability.String("purchaseID", purchase.ID))
 			}

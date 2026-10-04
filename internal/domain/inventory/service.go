@@ -206,13 +206,18 @@ type Service interface {
 }
 
 type service struct {
-	campaigns CampaignRepository
-	purchases PurchaseRepository
-	sales     SaleRepository
-	analytics AnalyticsRepository
-	finance   FinanceRepository
-	pricing   PricingRepository
-	dh        DHRepository
+	mutationRequired    bool
+	mutationCoordinator *DHMutationCoordinator
+	mutationScope       PurchaseMutationScope
+	mutationRepo        DHMutationRepository
+	mutationGuards      DHMutationGuards
+	campaigns           CampaignRepository
+	purchases           PurchaseRepository
+	sales               SaleRepository
+	analytics           AnalyticsRepository
+	finance             FinanceRepository
+	pricing             PricingRepository
+	dh                  DHRepository
 
 	priceProv          PriceLookup
 	certLookup         CertLookup

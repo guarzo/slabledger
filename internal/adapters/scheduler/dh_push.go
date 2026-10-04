@@ -115,6 +115,11 @@ func WithDHPushRelister(r DHPushRelister) DHPushOption {
 // DHPushScheduler routes pending purchases through DH's psa_import endpoint
 // (match + inventory-create in one call) on a fixed interval.
 type DHPushScheduler struct {
+	mutationRequired bool
+	coordinator      *inventory.DHMutationCoordinator
+	scope            inventory.PurchaseMutationScope
+	guards           inventory.DHMutationGuards
+	purchaseReader   inventory.DHSalePurchaseReader
 	StopHandle
 	pendingLister DHPushPendingLister
 	statusUpdater DHPushStatusUpdater
@@ -246,6 +251,9 @@ func (s *DHPushScheduler) push(ctx context.Context) {
 }
 
 func (s *DHPushScheduler) processPurchase(ctx context.Context, p inventory.Purchase, pushCfg inventory.DHPushConfig) processResult {
+	if s.mutationRequired {
+		return s.processCoordinatedPurchase(ctx, p, pushCfg)
+	}
 	// Guard: if a previous cycle pushed successfully (inventory ID set) but the
 	// status update failed, just fix the status rather than re-pushing.
 	if p.DHInventoryID != 0 {

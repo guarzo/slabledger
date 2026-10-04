@@ -37,25 +37,28 @@ type exportReaderComposite struct {
 
 // campaignsInitResult holds all values returned by initializeCampaignsService.
 type campaignsInitResult struct {
-	service          inventory.Service
-	importService    csvimport.Service
-	campaignStore    *postgres.CampaignStore
-	purchaseStore    *postgres.PurchaseStore
-	saleStore        *postgres.SaleStore
-	analyticsStore   *postgres.AnalyticsStore
-	financeStore     *postgres.FinanceStore
-	pricingStore     *postgres.PricingStore
-	dhStore          *postgres.DHStore
-	pendingItemsRepo *postgres.PendingItemsRepository
-	certLookup       inventory.CertLookup
-	certEnrichJob    *scheduler.CertEnrichJob    // nil if PSA not configured
-	pricingEnrichJob *scheduler.PricingEnrichJob // pricers are attached later once CL schedulers exist
-	dhCompStore      *postgres.DHCompCacheStore
-	arbSvc           arbitrage.Service
-	portSvc          portfolio.Service
-	tuningSvc        tuning.Service
-	financeService   finance.Service
-	exportService    export.Service
+	returnStore         *postgres.ConfirmedReturnStore
+	mutationCoordinator *inventory.DHMutationCoordinator
+	confirmedReturns    *inventory.ConfirmedReturnService
+	service             inventory.Service
+	importService       csvimport.Service
+	campaignStore       *postgres.CampaignStore
+	purchaseStore       *postgres.PurchaseStore
+	saleStore           *postgres.SaleStore
+	analyticsStore      *postgres.AnalyticsStore
+	financeStore        *postgres.FinanceStore
+	pricingStore        *postgres.PricingStore
+	dhStore             *postgres.DHStore
+	pendingItemsRepo    *postgres.PendingItemsRepository
+	certLookup          inventory.CertLookup
+	certEnrichJob       *scheduler.CertEnrichJob    // nil if PSA not configured
+	pricingEnrichJob    *scheduler.PricingEnrichJob // pricers are attached later once CL schedulers exist
+	dhCompStore         *postgres.DHCompCacheStore
+	arbSvc              arbitrage.Service
+	portSvc             portfolio.Service
+	tuningSvc           tuning.Service
+	financeService      finance.Service
+	exportService       export.Service
 }
 
 // initializeCampaignsService creates the campaigns service with all options
@@ -83,9 +86,11 @@ func initializeCampaignsService(
 	dhStore := postgres.NewDHStore(db.DB, logger)
 	pendingItemsRepo := postgres.NewPendingItemsRepository(db.DB)
 
+	returnStore := postgres.NewConfirmedReturnStore(db.DB)
+	mutationCoordinator := inventory.NewDHMutationCoordinator(returnStore, returnStore)
 	priceLookupAdapter := lookup.NewAdapter(priceProvImpl)
 	campaignOpts := []inventory.ServiceOption{
-		inventory.WithPriceLookup(priceLookupAdapter),
+		inventory.WithDHMutationCoordinator(mutationCoordinator, returnStore, returnStore, returnStore), inventory.WithPriceLookup(priceLookupAdapter),
 		inventory.WithPendingItemRepository(pendingItemsRepo),
 		inventory.WithIDGenerator(uuid.NewString),
 		inventory.WithMaxSnapshotRetries(cfg.SnapshotEnrich.MaxRetries),
@@ -138,7 +143,7 @@ func initializeCampaignsService(
 	// DH sale recorder — records (and, on un-sell, voids) sales on DH via the
 	// purpose-built sale endpoint.
 	if dhClient != nil && dhClient.EnterpriseAvailable() {
-		campaignOpts = append(campaignOpts, inventory.WithDHSaleRecorder(dhlistingadapter.NewInventoryAdapter(dhClient).WithLogger(logger)))
+		campaignOpts = append(campaignOpts, inventory.WithDHSaleRecorder(dhlistingadapter.NewInventoryAdapter(dhClient).WithLogger(logger).WithMutationReceipts()))
 	}
 
 	// DH cert → card_id resolver. Feeds batchResolveCardIDs in the inventory
@@ -176,11 +181,17 @@ func initializeCampaignsService(
 		campaignOpts...,
 	)
 
+	var returner inventory.DHReturner
+	if dhClient != nil && dhClient.EnterpriseAvailable() {
+		returner = dhlistingadapter.NewInventoryAdapter(dhClient)
+	}
+	confirmedReturns := inventory.NewConfirmedReturnService(returnStore, returnStore, returner, campaignsService.(inventory.ConfirmedUnsellCAS).DeleteSaleByPurchaseIDCAS, uuid.NewString, inventory.WithConfirmedReturnLogger(logger))
+
 	// CSV/portal intake. It writes through the same repositories and reaches back
 	// into the inventory service for the parts of intake inventory owns (purchase
 	// creation, market snapshots, DH events, card-ID backfill).
 	importService := csvimport.NewService(csvimport.Deps{
-		Campaigns:       campaignStore,
+		MutationGuards: returnStore, Campaigns: campaignStore,
 		Purchases:       purchaseStore,
 		Sales:           saleStore,
 		Finance:         financeStore,
@@ -247,7 +258,7 @@ func initializeCampaignsService(
 	financeSvc := finance.New(financeStore, uuid.NewString)
 
 	return campaignsInitResult{
-		service:          campaignsService,
+		returnStore: returnStore, mutationCoordinator: mutationCoordinator, confirmedReturns: confirmedReturns, service: campaignsService,
 		importService:    importService,
 		campaignStore:    campaignStore,
 		purchaseStore:    purchaseStore,

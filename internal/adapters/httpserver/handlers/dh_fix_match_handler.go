@@ -38,6 +38,9 @@ type fixMatchResponse struct {
 // the wrong card. DH has no delete-inventory endpoint today — the old row
 // stays on DH's side; this only detaches its channels.
 func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
+	if h.coordinateLink(w, r, "fix_match", h.HandleFixMatch) {
+		return
+	}
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -125,6 +128,9 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 	// Set status to manual
 	if h.pushStatusUpdater != nil {
 		if err := h.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, purchase.ID, inventory.DHPushStatusManual); err != nil {
+			if h.failCoordinatedWrite(w, ctx, purchase.ID, err) {
+				return
+			}
 			h.logger.Warn(ctx, "fix match: failed to set manual status",
 				observability.String("purchaseID", purchase.ID),
 				observability.Err(err))
@@ -134,6 +140,9 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 	// Clear stored candidates (if any) now that a manual match has been applied
 	if h.candidatesSaver != nil {
 		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+			if h.failCoordinatedWrite(w, ctx, purchase.ID, err) {
+				return
+			}
 			h.logger.Warn(ctx, "fix match: failed to clear candidates",
 				observability.String("purchaseID", purchase.ID),
 				observability.Err(err))
@@ -174,16 +183,25 @@ func (h *DHHandler) HandleFixMatch(w http.ResponseWriter, r *http.Request) {
 		oldInv := oldInventoryID
 		oldCard := oldCardID
 		newCard := dhCardID
-		h.dispatchBackground(ctx, "fix_match_delist", func(bgCtx context.Context) {
-			if _, derr := h.channelDelister.DelistChannels(bgCtx, oldInv, nil); derr != nil {
-				h.logger.Warn(bgCtx, "fix match: delist old channels failed, continuing",
-					observability.String("purchaseID", purchaseID),
-					observability.Int("oldDHInventoryID", oldInv),
-					observability.Int("oldDHCardID", oldCard),
-					observability.Int("newDHCardID", newCard),
-					observability.Err(derr))
+		if h.mutationRequired {
+			// The old target is part of the precommitted link marker, not detached
+			// work that could escape its retained cert/target fence.
+			if receipt, err := h.channelDelister.DelistChannels(ctx, oldInv, nil); err != nil || !validFullDelistReceipt(receipt, oldInv) {
+				writeError(w, 502, "Old DH target delist uncertain; reload state before retrying")
+				return
 			}
-		})
+		} else {
+			h.dispatchBackground(ctx, "fix_match_delist", func(bgCtx context.Context) {
+				if _, derr := h.channelDelister.DelistChannels(bgCtx, oldInv, nil); derr != nil {
+					h.logger.Warn(bgCtx, "fix match: delist old channels failed, continuing",
+						observability.String("purchaseID", purchaseID),
+						observability.Int("oldDHInventoryID", oldInv),
+						observability.Int("oldDHCardID", oldCard),
+						observability.Int("newDHCardID", newCard),
+						observability.Err(derr))
+				}
+			})
+		}
 	}
 
 	writeJSON(w, http.StatusOK, fixMatchResponse{

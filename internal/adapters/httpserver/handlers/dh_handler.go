@@ -153,36 +153,39 @@ type EventHistoryStore interface {
 
 // DHHandler handles DH bulk match, export, intelligence, and suggestions endpoints.
 type DHHandler struct {
-	certResolver      DHCertResolver
-	cardIDSaver       DHCardIDSaver
-	purchaseLister    DHPurchaseLister
-	inventoryPusher   DHInventoryPusher   // optional: pushes matched cards to DH inventory
-	dhFieldsUpdater   DHFieldsUpdater     // optional: persists DH inventory IDs after push
-	pushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
-	candidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
-	mappingDeleter    DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
-	inventoryDeleter  DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
-	dhUnmatcher       DHUnmatcher         // optional: atomic field-clear + status set for unmatch
-	channelDelister   DHChannelDelister   // optional: takes down channels on card swap (fix-match)
-	statusCounter     DHStatusCounter     // optional: efficient push status counts
-	pendingLister     DHPendingLister     // optional: lists DH pending pipeline items
-	intelRepo         intelligence.Repository
-	trajectoryRepo    intelligence.TrajectoryRepository // optional: weekly CL-lag trajectory
-	suggestionsRepo   intelligence.SuggestionsRepository
-	intelCounter      DHIntelligenceCounter
-	suggestCounter    DHSuggestionsCounter
-	logger            observability.Logger
-	baseCtx           context.Context
-	healthReporter    DHHealthReporter    // optional: API health metrics
-	countsFetcher     DHCountsFetcher     // optional: DH inventory/order counts
-	dhApproveService  inventory.DHService // optional: approve held pushes + push config
-	matchConfirmer    DHMatchConfirmer    // optional: confirms matches with DH for learning
-	psaImporter       DHPSAImporter       // optional: PSA import fallback for retry-match
-	ordersIngester    DHOrdersIngester    // optional: POST /api/dh/ingest-orders manual trigger
-	eventRec          dhevents.Recorder   // optional: records DH state-change events
-	syncStateReader   SyncStateReader     // optional: reads dh_orders_last_poll timestamp
-	eventCountsStore  EventCountsStore    // optional: 24h event counts for orders ingest health
-	eventHistoryStore EventHistoryStore   // optional: per-purchase/per-cert event trail reads
+	mutationRequired    bool
+	mutationCoordinator *inventory.DHMutationCoordinator
+	mutationGuards      inventory.DHMutationGuards
+	certResolver        DHCertResolver
+	cardIDSaver         DHCardIDSaver
+	purchaseLister      DHPurchaseLister
+	inventoryPusher     DHInventoryPusher   // optional: pushes matched cards to DH inventory
+	dhFieldsUpdater     DHFieldsUpdater     // optional: persists DH inventory IDs after push
+	pushStatusUpdater   DHPushStatusUpdater // optional: sets dh_push_status after bulk match
+	candidatesSaver     DHCandidatesSaver   // optional: stores ambiguous candidates
+	mappingDeleter      DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
+	inventoryDeleter    DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
+	dhUnmatcher         DHUnmatcher         // optional: atomic field-clear + status set for unmatch
+	channelDelister     DHChannelDelister   // optional: takes down channels on card swap (fix-match)
+	statusCounter       DHStatusCounter     // optional: efficient push status counts
+	pendingLister       DHPendingLister     // optional: lists DH pending pipeline items
+	intelRepo           intelligence.Repository
+	trajectoryRepo      intelligence.TrajectoryRepository // optional: weekly CL-lag trajectory
+	suggestionsRepo     intelligence.SuggestionsRepository
+	intelCounter        DHIntelligenceCounter
+	suggestCounter      DHSuggestionsCounter
+	logger              observability.Logger
+	baseCtx             context.Context
+	healthReporter      DHHealthReporter    // optional: API health metrics
+	countsFetcher       DHCountsFetcher     // optional: DH inventory/order counts
+	dhApproveService    inventory.DHService // optional: approve held pushes + push config
+	matchConfirmer      DHMatchConfirmer    // optional: confirms matches with DH for learning
+	psaImporter         DHPSAImporter       // optional: PSA import fallback for retry-match
+	ordersIngester      DHOrdersIngester    // optional: POST /api/dh/ingest-orders manual trigger
+	eventRec            dhevents.Recorder   // optional: records DH state-change events
+	syncStateReader     SyncStateReader     // optional: reads dh_orders_last_poll timestamp
+	eventCountsStore    EventCountsStore    // optional: 24h event counts for orders ingest health
+	eventHistoryStore   EventHistoryStore   // optional: per-purchase/per-cert event trail reads
 
 	reconciler dhlisting.Reconciler // optional: DH inventory reconciliation
 
@@ -204,37 +207,40 @@ func (h *DHHandler) selectMatchLock(purchaseID string) *sync.Mutex {
 
 // DHHandlerDeps holds all dependencies for constructing a DHHandler.
 type DHHandlerDeps struct {
-	CertResolver      DHCertResolver
-	CardIDSaver       DHCardIDSaver
-	PurchaseLister    DHPurchaseLister
-	InventoryPusher   DHInventoryPusher   // optional: pushes matched cards to DH inventory
-	DHFieldsUpdater   DHFieldsUpdater     // optional: persists DH inventory IDs after push
-	PushStatusUpdater DHPushStatusUpdater // optional: sets dh_push_status after bulk match
-	CandidatesSaver   DHCandidatesSaver   // optional: stores ambiguous candidates
-	MappingDeleter    DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
-	InventoryDeleter  DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
-	DHUnmatcher       DHUnmatcher         // optional: atomic field-clear + status set for unmatch
-	ChannelDelister   DHChannelDelister   // optional: takes down channels on card swap (fix-match)
-	StatusCounter     DHStatusCounter     // optional: efficient push status counts
-	PendingLister     DHPendingLister     // optional: lists DH pending pipeline items
-	IntelRepo         intelligence.Repository
-	TrajectoryRepo    intelligence.TrajectoryRepository // optional: weekly CL-lag trajectory
-	SuggestionsRepo   intelligence.SuggestionsRepository
-	IntelCounter      DHIntelligenceCounter
-	SuggestCounter    DHSuggestionsCounter
-	Logger            observability.Logger
-	BaseCtx           context.Context
-	HealthReporter    DHHealthReporter     // optional: API health metrics
-	CountsFetcher     DHCountsFetcher      // optional: DH inventory/order counts
-	DHApproveService  inventory.DHService  // optional: approve held pushes + push config
-	MatchConfirmer    DHMatchConfirmer     // optional: confirms matches with DH for learning
-	PSAImporter       DHPSAImporter        // optional: PSA import fallback for retry-match
-	Reconciler        dhlisting.Reconciler // optional: DH inventory reconciliation
-	OrdersIngester    DHOrdersIngester     // optional: enables POST /api/dh/ingest-orders
-	EventRecorder     dhevents.Recorder    // optional: records DH state-change events
-	SyncStateReader   SyncStateReader      // optional: reads dh_orders_last_poll timestamp
-	EventCountsStore  EventCountsStore     // optional: 24h event counts for orders ingest health
-	EventHistoryStore EventHistoryStore    // optional: enables GET /api/dh/events
+	MutationRequired    bool
+	MutationCoordinator *inventory.DHMutationCoordinator
+	MutationGuards      inventory.DHMutationGuards
+	CertResolver        DHCertResolver
+	CardIDSaver         DHCardIDSaver
+	PurchaseLister      DHPurchaseLister
+	InventoryPusher     DHInventoryPusher   // optional: pushes matched cards to DH inventory
+	DHFieldsUpdater     DHFieldsUpdater     // optional: persists DH inventory IDs after push
+	PushStatusUpdater   DHPushStatusUpdater // optional: sets dh_push_status after bulk match
+	CandidatesSaver     DHCandidatesSaver   // optional: stores ambiguous candidates
+	MappingDeleter      DHMappingDeleter    // optional: removes auto card_id_mappings on unmatch
+	InventoryDeleter    DHInventoryDeleter  // optional: fully deletes DH inventory item on unmatch
+	DHUnmatcher         DHUnmatcher         // optional: atomic field-clear + status set for unmatch
+	ChannelDelister     DHChannelDelister   // optional: takes down channels on card swap (fix-match)
+	StatusCounter       DHStatusCounter     // optional: efficient push status counts
+	PendingLister       DHPendingLister     // optional: lists DH pending pipeline items
+	IntelRepo           intelligence.Repository
+	TrajectoryRepo      intelligence.TrajectoryRepository // optional: weekly CL-lag trajectory
+	SuggestionsRepo     intelligence.SuggestionsRepository
+	IntelCounter        DHIntelligenceCounter
+	SuggestCounter      DHSuggestionsCounter
+	Logger              observability.Logger
+	BaseCtx             context.Context
+	HealthReporter      DHHealthReporter     // optional: API health metrics
+	CountsFetcher       DHCountsFetcher      // optional: DH inventory/order counts
+	DHApproveService    inventory.DHService  // optional: approve held pushes + push config
+	MatchConfirmer      DHMatchConfirmer     // optional: confirms matches with DH for learning
+	PSAImporter         DHPSAImporter        // optional: PSA import fallback for retry-match
+	Reconciler          dhlisting.Reconciler // optional: DH inventory reconciliation
+	OrdersIngester      DHOrdersIngester     // optional: enables POST /api/dh/ingest-orders
+	EventRecorder       dhevents.Recorder    // optional: records DH state-change events
+	SyncStateReader     SyncStateReader      // optional: reads dh_orders_last_poll timestamp
+	EventCountsStore    EventCountsStore     // optional: 24h event counts for orders ingest health
+	EventHistoryStore   EventHistoryStore    // optional: enables GET /api/dh/events
 }
 
 // NewDHHandler creates a new DHHandler with the given dependencies.
@@ -245,37 +251,40 @@ func NewDHHandler(deps DHHandlerDeps) *DHHandler {
 		deps.BaseCtx = context.Background()
 	}
 	h := &DHHandler{
-		certResolver:      deps.CertResolver,
-		cardIDSaver:       deps.CardIDSaver,
-		purchaseLister:    deps.PurchaseLister,
-		inventoryPusher:   deps.InventoryPusher,
-		dhFieldsUpdater:   deps.DHFieldsUpdater,
-		pushStatusUpdater: deps.PushStatusUpdater,
-		candidatesSaver:   deps.CandidatesSaver,
-		mappingDeleter:    deps.MappingDeleter,
-		inventoryDeleter:  deps.InventoryDeleter,
-		dhUnmatcher:       deps.DHUnmatcher,
-		channelDelister:   deps.ChannelDelister,
-		statusCounter:     deps.StatusCounter,
-		pendingLister:     deps.PendingLister,
-		intelRepo:         deps.IntelRepo,
-		trajectoryRepo:    deps.TrajectoryRepo,
-		suggestionsRepo:   deps.SuggestionsRepo,
-		intelCounter:      deps.IntelCounter,
-		suggestCounter:    deps.SuggestCounter,
-		logger:            deps.Logger,
-		baseCtx:           deps.BaseCtx,
-		healthReporter:    deps.HealthReporter,
-		countsFetcher:     deps.CountsFetcher,
-		dhApproveService:  deps.DHApproveService,
-		matchConfirmer:    deps.MatchConfirmer,
-		psaImporter:       deps.PSAImporter,
-		reconciler:        deps.Reconciler,
-		ordersIngester:    deps.OrdersIngester,
-		eventRec:          deps.EventRecorder,
-		syncStateReader:   deps.SyncStateReader,
-		eventCountsStore:  deps.EventCountsStore,
-		eventHistoryStore: deps.EventHistoryStore,
+		mutationRequired:    deps.MutationRequired,
+		mutationCoordinator: deps.MutationCoordinator,
+		mutationGuards:      deps.MutationGuards,
+		certResolver:        deps.CertResolver,
+		cardIDSaver:         deps.CardIDSaver,
+		purchaseLister:      deps.PurchaseLister,
+		inventoryPusher:     deps.InventoryPusher,
+		dhFieldsUpdater:     deps.DHFieldsUpdater,
+		pushStatusUpdater:   deps.PushStatusUpdater,
+		candidatesSaver:     deps.CandidatesSaver,
+		mappingDeleter:      deps.MappingDeleter,
+		inventoryDeleter:    deps.InventoryDeleter,
+		dhUnmatcher:         deps.DHUnmatcher,
+		channelDelister:     deps.ChannelDelister,
+		statusCounter:       deps.StatusCounter,
+		pendingLister:       deps.PendingLister,
+		intelRepo:           deps.IntelRepo,
+		trajectoryRepo:      deps.TrajectoryRepo,
+		suggestionsRepo:     deps.SuggestionsRepo,
+		intelCounter:        deps.IntelCounter,
+		suggestCounter:      deps.SuggestCounter,
+		logger:              deps.Logger,
+		baseCtx:             deps.BaseCtx,
+		healthReporter:      deps.HealthReporter,
+		countsFetcher:       deps.CountsFetcher,
+		dhApproveService:    deps.DHApproveService,
+		matchConfirmer:      deps.MatchConfirmer,
+		psaImporter:         deps.PSAImporter,
+		reconciler:          deps.Reconciler,
+		ordersIngester:      deps.OrdersIngester,
+		eventRec:            deps.EventRecorder,
+		syncStateReader:     deps.SyncStateReader,
+		eventCountsStore:    deps.EventCountsStore,
+		eventHistoryStore:   deps.EventHistoryStore,
 	}
 	h.bulkMatchError.Store("")
 	return h
@@ -302,7 +311,8 @@ const DHBackgroundTimeout = 60 * time.Second
 // recovered and logged. The WaitGroup is incremented synchronously before
 // return so shutdown via Wait() always sees the pending goroutine.
 func (h *DHHandler) dispatchBackground(ctx context.Context, op string, fn func(context.Context)) {
-	bgCtx := context.WithoutCancel(ctx)
+	// Never pass a released transaction executor to detached catalog work.
+	bgCtx := h.baseCtx
 	h.bgWG.Add(1)
 	go func() {
 		defer h.bgWG.Done()
@@ -340,6 +350,9 @@ func (h *DHHandler) recordEvent(ctx context.Context, e dhevents.Event) {
 //   - errDHPersistFailed: push succeeded but local persistence failed
 //   - other errors: push API failure
 func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Purchase, dhCardID, listingPriceCents int) (int, error) {
+	if h.mutationRequired && !inventory.DHDependenciesPresent(h.inventoryPusher, h.dhFieldsUpdater) {
+		return 0, inventory.NewReturnConflict("coordination_unavailable", "push persistence collaborators required")
+	}
 	if h.inventoryPusher == nil {
 		return 0, fmt.Errorf("DH inventory pusher not configured")
 	}
@@ -350,6 +363,18 @@ func (h *DHHandler) pushAndPersistDH(ctx context.Context, purchase *inventory.Pu
 		return 0, err
 	}
 
+	if h.mutationRequired {
+		if !inventory.DHDependenciesPresent(h.dhFieldsUpdater) || pushResp == nil || len(pushResp.Results) != 1 {
+			return 0, fmt.Errorf("DH push did not return one persisted target")
+		}
+		r := pushResp.Results[0]
+		if r.CertNumber != purchase.CertNumber || r.DHInventoryID <= 0 || (r.Status != "in_stock" && r.Status != "listed" && r.Status != "") || r.Error != "" {
+			return 0, fmt.Errorf("DH push receipt target/status invalid")
+		}
+	}
+	if pushResp == nil {
+		return 0, errDHPushNoInventoryID
+	}
 	for _, result := range pushResp.Results {
 		if result.Status != "failed" && result.DHInventoryID != 0 {
 			if h.dhFieldsUpdater != nil {

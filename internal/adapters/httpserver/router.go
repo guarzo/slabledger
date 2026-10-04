@@ -64,6 +64,7 @@ type RouterConfig struct {
 	SPAHandler                *handlers.SPAHandler
 	AuthService               auth.Service
 	CampaignsHandler          *handlers.CampaignsHandler
+	ConfirmedReturnService    handlers.ConfirmedReturnService
 	CampaignsService          inventory.Service
 	ArbitrageService          arbitrage.Service
 	PortfolioService          portfolio.Service
@@ -118,6 +119,7 @@ func NewRouter(cfg RouterConfig) *Router {
 			cfg.TuningService,
 			cfg.Logger,
 			nil,
+			handlers.WithConfirmedReturnService(cfg.ConfirmedReturnService),
 		)
 	}
 

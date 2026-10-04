@@ -9,7 +9,7 @@ import (
 )
 
 func (ps *PurchaseStore) UpdatePurchaseDHFields(ctx context.Context, id string, update inventory.DHFieldsUpdate) error {
-	return ps.execAndExpectRow(ctx, "update DH fields",
+	return ps.execDHMutation(ctx, id, "update DH fields",
 		`UPDATE campaign_purchases
 		 SET dh_card_id = $1, dh_inventory_id = $2, dh_cert_status = $3,
 		     dh_listing_price_cents = $4, dh_channels_json = $5, dh_status = $6,
@@ -23,7 +23,7 @@ func (ps *PurchaseStore) UpdatePurchaseDHFields(ctx context.Context, id string, 
 // and the push status in a single UPDATE to prevent inconsistent state where
 // fields are saved (inventory ID set) but the status remains "pending".
 func (ps *PurchaseStore) UpdatePurchaseDHFieldsAndPushStatus(ctx context.Context, id string, update inventory.DHFieldsUpdate, pushStatus string) error {
-	return ps.execAndExpectRow(ctx, "update DH fields + push status",
+	return ps.execDHMutation(ctx, id, "update DH fields + push status",
 		`UPDATE campaign_purchases
 		 SET dh_card_id = $1, dh_inventory_id = $2, dh_cert_status = $3,
 		     dh_listing_price_cents = $4, dh_channels_json = $5, dh_status = $6,
@@ -40,7 +40,7 @@ func (ps *PurchaseStore) UpdatePurchaseDHFieldsAndPushStatus(ctx context.Context
 // "matched" transitions so the re-enrolled purchase starts with a clean retry
 // budget; "unmatched" preserves the counter as a diagnostic signal.
 func (ps *PurchaseStore) UnmatchPurchaseDH(ctx context.Context, purchaseID string, pushStatus string) error {
-	return ps.execAndExpectRow(ctx, "unmatch purchase DH",
+	return ps.execDHMutation(ctx, purchaseID, "unmatch purchase DH",
 		`UPDATE campaign_purchases
 		 SET dh_card_id           = 0,
 		     dh_inventory_id      = 0,
@@ -63,7 +63,7 @@ func (ps *PurchaseStore) UnmatchPurchaseDH(ctx context.Context, purchaseID strin
 // starts a clean retry budget. Transitions to 'unmatched' preserve the counter
 // as diagnostic signal for how many cycles were wasted before we gave up.
 func (ps *PurchaseStore) UpdatePurchaseDHPushStatus(ctx context.Context, id string, status string) error {
-	return ps.execAndExpectRow(ctx, "update DH push status",
+	return ps.execDHMutation(ctx, id, "update DH push status",
 		`UPDATE campaign_purchases
 		 SET dh_push_status = $1,
 		     dh_push_attempts = CASE WHEN $2 IN ('pending', 'matched', 'unmatched_created', 'override_corrected', 'already_listed') THEN 0 ELSE dh_push_attempts END,
@@ -79,24 +79,48 @@ func (ps *PurchaseStore) UpdatePurchaseDHPushStatus(ctx context.Context, id stri
 // and into 'unmatched', where it becomes user-actionable.
 func (ps *PurchaseStore) IncrementDHPushAttempts(ctx context.Context, id string) (int, error) {
 	var newCount int
-	err := ps.db.QueryRowContext(ctx,
+	err := withLocalPurchaseMutation(ctx, ps.db, id, true, func(owned context.Context) error {
+		return ps.incrementDHPushAttempts(owned, id, &newCount)
+	})
+	return newCount, err
+}
+func (ps *PurchaseStore) incrementDHPushAttempts(ctx context.Context, id string, newCount *int) error {
+	err := executor(ctx, ps.db).QueryRowContext(ctx,
 		`UPDATE campaign_purchases
 		 SET dh_push_attempts = dh_push_attempts + 1,
 		     updated_at = $1
 		 WHERE id = $2
 		 RETURNING dh_push_attempts`,
 		time.Now(), id,
-	).Scan(&newCount)
+	).Scan(newCount)
 	if err != nil {
-		return 0, fmt.Errorf("increment dh push attempts: %w", err)
+		return fmt.Errorf("increment dh push attempts: %w", err)
 	}
-	return newCount, nil
+	return nil
 }
 
 // UpdatePurchaseDHStatus updates only the dh_status column on a purchase.
 // Targeted update — does not touch other DH fields.
 func (ps *PurchaseStore) UpdatePurchaseDHStatus(ctx context.Context, id string, status string) error {
-	return ps.execAndExpectRow(ctx, "update DH status",
+	if status == inventory.DHStatusSold {
+		return withLocalPurchaseMutation(ctx, ps.db, id, false, func(owned context.Context) error {
+			store := NewConfirmedReturnStore(ps.db)
+			state, err := store.returnState(owned, id)
+			if err != nil {
+				return err
+			}
+			if state.Operation != nil {
+				if state.Sale == nil {
+					return inventory.NewReturnConflict("sale_precondition_failed", "sold status requires present sale")
+				}
+				if err := store.assertOrderNotReturned(owned, state.Purchase, state.Sale.OrderID); err != nil {
+					return err
+				}
+			}
+			return ps.execAndExpectRow(owned, "update DH status", `UPDATE campaign_purchases SET dh_status=$1,updated_at=$2 WHERE id=$3`, status, time.Now(), id)
+		})
+	}
+	return ps.execDHMutation(ctx, id, "update DH status",
 		`UPDATE campaign_purchases SET dh_status = $1, updated_at = $2 WHERE id = $3`,
 		status, time.Now(), id,
 	)
@@ -130,7 +154,7 @@ func (ps *PurchaseStore) ListStaleDHStatusSoldPurchases(ctx context.Context) ([]
 // UpdatePurchaseDHCardID updates only the dh_card_id column on a purchase.
 // Targeted update — does not touch other DH fields.
 func (ps *PurchaseStore) UpdatePurchaseDHCardID(ctx context.Context, id string, cardID int) error {
-	return ps.execAndExpectRow(ctx, "update DH card id",
+	return ps.execDHMutation(ctx, id, "update DH card id",
 		`UPDATE campaign_purchases SET dh_card_id = $1, updated_at = $2 WHERE id = $3`,
 		cardID, time.Now(), id,
 	)
@@ -138,7 +162,7 @@ func (ps *PurchaseStore) UpdatePurchaseDHCardID(ctx context.Context, id string, 
 
 // UpdatePurchaseDHCandidates stores disambiguation candidates JSON on a purchase.
 func (ps *PurchaseStore) UpdatePurchaseDHCandidates(ctx context.Context, id string, candidatesJSON string) error {
-	return ps.execAndExpectRow(ctx, "update DH candidates",
+	return ps.execDHMutation(ctx, id, "update DH candidates",
 		`UPDATE campaign_purchases SET dh_candidates = $1, updated_at = $2 WHERE id = $3`,
 		candidatesJSON, time.Now(), id,
 	)
@@ -146,7 +170,7 @@ func (ps *PurchaseStore) UpdatePurchaseDHCandidates(ctx context.Context, id stri
 
 // UpdatePurchaseDHHoldReason stores the hold reason on a purchase.
 func (ps *PurchaseStore) UpdatePurchaseDHHoldReason(ctx context.Context, id string, reason string) error {
-	return ps.execAndExpectRow(ctx, "update DH hold reason",
+	return ps.execDHMutation(ctx, id, "update DH hold reason",
 		`UPDATE campaign_purchases SET dh_hold_reason = $1, updated_at = $2 WHERE id = $3`,
 		reason, time.Now(), id,
 	)
@@ -159,7 +183,7 @@ func (ps *PurchaseStore) SetHeldWithReason(ctx context.Context, purchaseID strin
 	if reason == "" {
 		return fmt.Errorf("SetHeldWithReason: reason must not be empty")
 	}
-	return ps.execAndExpectRow(ctx, "set held with reason",
+	return ps.execDHMutation(ctx, purchaseID, "set held with reason",
 		`UPDATE campaign_purchases SET dh_push_status = $1, dh_hold_reason = $2, updated_at = $3 WHERE id = $4`,
 		inventory.DHPushStatusHeld, reason, time.Now(), purchaseID,
 	)
@@ -168,30 +192,7 @@ func (ps *PurchaseStore) SetHeldWithReason(ctx context.Context, purchaseID strin
 // ApproveHeldPurchase atomically clears the hold reason and sets the push
 // status to pending inside a single transaction.
 func (ps *PurchaseStore) ApproveHeldPurchase(ctx context.Context, purchaseID string) error {
-	tx, err := ps.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	now := time.Now()
-	result, err := tx.ExecContext(ctx,
-		`UPDATE campaign_purchases
-		 SET dh_push_status = $1, dh_hold_reason = '', dh_push_attempts = 0, updated_at = $2
-		 WHERE id = $3 AND dh_push_status = $4`,
-		inventory.DHPushStatusPending, now, purchaseID, inventory.DHPushStatusHeld,
-	)
-	if err != nil {
-		return fmt.Errorf("approve held purchase: %w", err)
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("check rows affected: %w", err)
-	}
-	if n == 0 {
-		return inventory.ErrPurchaseNotFound
-	}
-	return tx.Commit()
+	return ps.execDHMutation(ctx, purchaseID, "approve held purchase", `UPDATE campaign_purchases SET dh_push_status=$1,dh_hold_reason='',dh_push_attempts=0,updated_at=$2 WHERE id=$3 AND dh_push_status=$4`, inventory.DHPushStatusPending, time.Now(), purchaseID, inventory.DHPushStatusHeld)
 }
 
 // ResetDHFieldsForRepush atomically clears the DH inventory linkage and sets
@@ -200,7 +201,7 @@ func (ps *PurchaseStore) ApproveHeldPurchase(ctx context.Context, purchaseID str
 // dh_hold_reason is cleared to match ApproveHeldPurchase's invariant that a
 // pending row never carries a stale hold reason.
 func (ps *PurchaseStore) ResetDHFieldsForRepush(ctx context.Context, purchaseID string) error {
-	return ps.execAndExpectRow(ctx, "reset DH fields for repush",
+	return ps.execDHMutation(ctx, purchaseID, "reset DH fields for repush",
 		`UPDATE campaign_purchases
 		 SET dh_inventory_id = 0,
 		     dh_push_status = $1,
@@ -224,7 +225,7 @@ func (ps *PurchaseStore) ResetDHFieldsForRepush(ctx context.Context, purchaseID 
 // authoritative DH inventory snapshot.
 func (ps *PurchaseStore) ResetDHFieldsForRepushDueToDelete(ctx context.Context, purchaseID string) error {
 	now := time.Now()
-	return ps.execAndExpectRow(ctx, "reset DH fields for repush (DH delete)",
+	return ps.execDHMutation(ctx, purchaseID, "reset DH fields for repush (DH delete)",
 		`UPDATE campaign_purchases
 		 SET dh_inventory_id = 0,
 		     dh_push_status = $1,
@@ -244,7 +245,7 @@ func (ps *PurchaseStore) ResetDHFieldsForRepushDueToDelete(ctx context.Context, 
 // listing service when a purchase successfully transitions to 'listed' so the
 // UI badge disappears after a successful re-list.
 func (ps *PurchaseStore) ClearDHUnlistedDetectedAt(ctx context.Context, purchaseID string) error {
-	return ps.execAndExpectRow(ctx, "clear dh_unlisted_detected_at",
+	return ps.execDHMutation(ctx, purchaseID, "clear dh_unlisted_detected_at",
 		`UPDATE campaign_purchases
 		 SET dh_unlisted_detected_at = NULL,
 		     updated_at = $1
@@ -259,7 +260,7 @@ func (ps *PurchaseStore) ClearDHUnlistedDetectedAt(ctx context.Context, purchase
 // flag is cleared, which is also how a resolved conflict is re-driven.
 func (ps *PurchaseStore) SetDHSaleConflict(ctx context.Context, purchaseID, reason string) error {
 	now := time.Now()
-	return ps.execAndExpectRow(ctx, "set dh sale conflict",
+	return ps.execDHMutation(ctx, purchaseID, "set dh sale conflict",
 		`UPDATE campaign_purchases
 		 SET dh_sale_conflict = $1, dh_sale_conflict_at = $2, updated_at = $3
 		 WHERE id = $4`,
@@ -270,7 +271,7 @@ func (ps *PurchaseStore) SetDHSaleConflict(ctx context.Context, purchaseID, reas
 // ClearDHSaleConflict clears a previously flagged conflict, re-enrolling the
 // row in ListSalesNeedingDHRecord on the next recovery pass.
 func (ps *PurchaseStore) ClearDHSaleConflict(ctx context.Context, purchaseID string) error {
-	return ps.execAndExpectRow(ctx, "clear dh sale conflict",
+	return ps.execDHMutation(ctx, purchaseID, "clear dh sale conflict",
 		`UPDATE campaign_purchases
 		 SET dh_sale_conflict = '', dh_sale_conflict_at = NULL, updated_at = $1
 		 WHERE id = $2`,
@@ -291,7 +292,7 @@ func (ps *PurchaseStore) ClearDHSaleConflict(ctx context.Context, purchaseID str
 // relist path unable to actually relist.
 func (ps *PurchaseStore) ResetDHFieldsForRelistAfterVoid(ctx context.Context, purchaseID string) error {
 	now := time.Now()
-	return ps.execAndExpectRow(ctx, "reset DH fields for relist after void",
+	return ps.execDHMutation(ctx, purchaseID, "reset DH fields for relist after void",
 		`UPDATE campaign_purchases
 		 SET dh_push_status = $1,
 		     dh_push_attempts = 0,

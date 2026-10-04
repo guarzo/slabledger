@@ -757,7 +757,79 @@ Deletes the sale recorded against a purchase, returning the purchase to unsold. 
 
 **Response:** `204 No Content`
 
-**Errors:** `400` missing path param; `403` purchase does not belong to this campaign; `404` purchase not found, or no sale recorded for this purchase; `500` internal error
+**Errors:** `400` missing path param; `403` purchase does not belong to this campaign; `404` purchase not found, or no sale recorded for this purchase; `409` unresolved return/DH mutation prevents deletion; `500` internal error
+
+This remains the ordinary local/off-platform un-sell path. It does not authorize
+reversing a DH/eBay external sale. Cert Intake uses the confirmed-return endpoint
+below. An uncertain remote void may leave a durable DH fence even when local
+un-sell succeeds.
+
+---
+
+### `GET /api/purchases/{purchaseId}/confirmed-return`
+
+Auth: authenticated user required. Missing authentication middleware fails closed
+with `503`; a missing user receives `401`.
+
+Reads durable recovery state without returning or listing inventory. The JSON
+projection contains:
+
+- `operation`: nullable server episode with `id`, captured purchase/target/cert,
+  nullable captured `expectedSaleId`, `state` (`pending`, `conflicted`,
+  `completed`), returned order identity, timestamps and optional `lastError`
+  (`code`, `message`, `phase`) / observed receipt.
+- `expectedSaleId`: current local sale ID, or explicit `null`.
+- `awaitingListing`: returned stock still requires an explicit authenticated List.
+- `precedingAttempt`: nullable unresolved DH mutation with safe ID/kind/phase.
+- `purchase` and `sale`: current objects; sale idempotency keys are omitted.
+- `outcome`: optional result classification.
+
+Server idempotency keys and private request identities are never exposed.
+
+### `POST /api/purchases/{purchaseId}/confirm-return`
+
+Auth: same fail-closed requirements as the state endpoint.
+
+Confirms the exact slab is physically received and its refund/return is resolved.
+The server selects the current source and exact DH target. Unlinked local sales
+use local un-sell; supported off-platform sales use the guarded legacy void path;
+external sales use DH return-to-stock. This endpoint does **not** list inventory.
+
+**Body:**
+```json
+{
+  "returnConfirmed": true,
+  "expectedSaleId": null
+}
+```
+
+`expectedSaleId` is mandatory, including explicit `null` for already-unsold
+recovery. Use the observed sale ID otherwise. Optional `operationId` identifies a
+server episode obtained from state; retry its captured sale precondition unchanged.
+Client-selected DH targets/keys, unknown fields and nonliteral confirmation are
+rejected. Request bodies are limited to 4096 bytes.
+
+**Response:** `200 OK` — the state projection above. Outcomes include `local`,
+`legacy_void`, `no_return_required`, `completed`, and `completed_replay`.
+Completed duplicate requests are historical no-ops, not a new return of a later
+sale. A new episode requires a different persisted local sale. Successful external
+return retains an awaiting-explicit-listing hold and historical order suppression.
+
+**Errors:** `400` invalid body; `401` missing user; `404` purchase absent; `409`
+sale/target precondition, permanent return conflict or preceding unresolved
+mutation; `502` uncertain failure; `503` unavailable coordination/authentication or
+provider availability. Definitive upstream rejections preserve their status and
+bounded code/message. Error JSON is `{ "error": "message", "code": "code" }`.
+Read state after an uncertain response; do not infer completion from a timeout or
+an inventory GET alone.
+
+### `POST /api/purchases/{purchaseId}/list-on-dh`
+
+Uses the existing committed-price listing controls. For returned stock, an
+explicit authenticated request must validate received status, positive committed
+price, current sale and pause settings before releasing the exact retained hold.
+Automatic scans, price sync and schedulers cannot release it. Listing never
+implicitly returns a sold item.
 
 ---
 

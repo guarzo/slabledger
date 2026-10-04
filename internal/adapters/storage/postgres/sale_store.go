@@ -25,11 +25,19 @@ func NewSaleStore(db *sql.DB, logger observability.Logger) *SaleStore {
 var _ inventory.SaleRepository = (*SaleStore)(nil)
 
 func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
+	return withLocalPurchaseMutation(ctx, ss.db, s.PurchaseID, false, func(owned context.Context) error {
+		if err := ss.guardSaleInsert(owned, s); err != nil {
+			return err
+		}
+		return ss.createSale(owned, s)
+	})
+}
+func (ss *SaleStore) createSale(ctx context.Context, s *inventory.Sale) error {
 	query := `
 		INSERT INTO campaign_sales (` + saleColumns + `)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
 	`
-	_, err := ss.db.ExecContext(ctx, query,
+	_, err := executor(ctx, ss.db).ExecContext(ctx, query,
 		s.ID, s.PurchaseID, string(s.SaleChannel), s.SalePriceCents,
 		s.SaleFeeCents, s.SaleDate, s.DaysToSell, s.NetProfitCents,
 		s.CreatedAt, s.UpdatedAt,
@@ -52,7 +60,7 @@ func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
 
 func (ss *SaleStore) GetSaleByPurchaseID(ctx context.Context, purchaseID string) (*inventory.Sale, error) {
 	query := `SELECT ` + saleColumns + ` FROM campaign_sales WHERE purchase_id = $1`
-	s, err := scanSale(ss.db.QueryRowContext(ctx, query, purchaseID))
+	s, err := scanSale(executor(ctx, ss.db).QueryRowContext(ctx, query, purchaseID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, inventory.ErrSaleNotFound
 	}
@@ -93,7 +101,7 @@ func (ss *SaleStore) GetSalesByPurchaseIDs(ctx context.Context, purchaseIDs []st
 }
 
 func (ss *SaleStore) scanSalesChunk(ctx context.Context, query string, args []any, into map[string]*inventory.Sale) (err error) {
-	rows, err := ss.db.QueryContext(ctx, query, args...)
+	rows, err := executor(ctx, ss.db).QueryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("query sales by purchase ids chunk: %w", err)
 	}
@@ -123,7 +131,7 @@ func (ss *SaleStore) ListSalesByCampaign(ctx context.Context, campaignID string,
 		ORDER BY sale_date DESC
 		LIMIT $2 OFFSET $3
 	`
-	rows, err := ss.db.QueryContext(ctx, query, campaignID, limit, offset)
+	rows, err := executor(ctx, ss.db).QueryContext(ctx, query, campaignID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +141,10 @@ func (ss *SaleStore) ListSalesByCampaign(ctx context.Context, campaignID string,
 }
 
 func (ss *SaleStore) DeleteSale(ctx context.Context, saleID string) error {
-	result, err := ss.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE id = $1`, saleID)
+	return ss.withSaleMutation(ctx, saleID, func(owned context.Context) error { return ss.deleteSale(owned, saleID) })
+}
+func (ss *SaleStore) deleteSale(ctx context.Context, saleID string) error {
+	result, err := executor(ctx, ss.db).ExecContext(ctx, `DELETE FROM campaign_sales WHERE id = $1`, saleID)
 	if err != nil {
 		return fmt.Errorf("delete sale: %w", err)
 	}
@@ -166,7 +177,10 @@ func (ss *SaleStore) UpdateSaleReason(ctx context.Context, campaignID, saleID, r
 }
 
 func (ss *SaleStore) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
-	result, err := ss.db.ExecContext(ctx, `DELETE FROM campaign_sales WHERE purchase_id = $1`, purchaseID)
+	return withLocalPurchaseMutation(ctx, ss.db, purchaseID, false, func(owned context.Context) error { return ss.deleteSaleByPurchaseID(owned, purchaseID) })
+}
+func (ss *SaleStore) deleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
+	result, err := executor(ctx, ss.db).ExecContext(ctx, `DELETE FROM campaign_sales WHERE purchase_id = $1`, purchaseID)
 	if err != nil {
 		return fmt.Errorf("delete sale by purchase id: %w", err)
 	}
@@ -186,8 +200,39 @@ func (ss *SaleStore) DeleteSaleByPurchaseID(ctx context.Context, purchaseID stri
 // that caller wrote. Two callers can therefore never send two different keys
 // for the same sale to DH.
 func (ss *SaleStore) SetSaleIdempotencyKeyIfAbsent(ctx context.Context, saleID, key string) (string, error) {
+	var purchaseID string
+	err := executor(ctx, ss.db).QueryRowContext(ctx, `SELECT purchase_id FROM campaign_sales WHERE id=$1`, saleID).Scan(&purchaseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", inventory.ErrSaleNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	effective := ""
+	err = NewPurchaseMutationScope(ss.db).WithPurchaseMutation(ctx, purchaseID, func(owned context.Context) error {
+		if err := executor(owned, ss.db).QueryRowContext(owned, `SELECT dh_idempotency_key FROM campaign_sales WHERE id=$1 AND purchase_id=$2`, saleID, purchaseID).Scan(&effective); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return inventory.ErrSaleNotFound
+			}
+			return err
+		}
+		// Reading the committed key is permitted for same-key journal recovery;
+		// minting a fresh one while another request is unresolved is not.
+		if effective != "" {
+			return nil
+		}
+		if err := NewConfirmedReturnStore(ss.db).assertAllowed(owned, purchaseID, false); err != nil {
+			return err
+		}
+		var e error
+		effective, e = ss.setSaleIdempotencyKeyIfAbsent(owned, saleID, key)
+		return e
+	})
+	return effective, err
+}
+func (ss *SaleStore) setSaleIdempotencyKeyIfAbsent(ctx context.Context, saleID, key string) (string, error) {
 	var effective string
-	err := ss.db.QueryRowContext(ctx, `
+	err := executor(ctx, ss.db).QueryRowContext(ctx, `
 		UPDATE campaign_sales
 		   SET dh_idempotency_key = $1
 		 WHERE id = $2 AND dh_idempotency_key = ''
@@ -205,7 +250,7 @@ func (ss *SaleStore) SetSaleIdempotencyKeyIfAbsent(ctx context.Context, saleID, 
 	// re-read whatever is there now. A genuinely missing sale surfaces as
 	// ErrSaleNotFound rather than handing an empty string to DH.
 	var existing sql.NullString
-	err = ss.db.QueryRowContext(ctx,
+	err = executor(ctx, ss.db).QueryRowContext(ctx,
 		`SELECT dh_idempotency_key FROM campaign_sales WHERE id = $1`, saleID,
 	).Scan(&existing)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -221,7 +266,10 @@ func (ss *SaleStore) SetSaleIdempotencyKeyIfAbsent(ctx context.Context, saleID, 
 // RecordInventorySale call (or a replay). Without this handle a later void
 // can never reach DH (spec §5b, §7).
 func (ss *SaleStore) SetSaleDHSaleID(ctx context.Context, saleID, dhSaleID string, recordedAt time.Time) error {
-	result, err := ss.db.ExecContext(ctx,
+	return ss.withSaleMutation(ctx, saleID, func(owned context.Context) error { return ss.setSaleDHSaleID(owned, saleID, dhSaleID, recordedAt) })
+}
+func (ss *SaleStore) setSaleDHSaleID(ctx context.Context, saleID, dhSaleID string, recordedAt time.Time) error {
+	result, err := executor(ctx, ss.db).ExecContext(ctx,
 		`UPDATE campaign_sales SET dh_sale_id = $1, dh_sale_recorded_at = $2, updated_at = $3 WHERE id = $4`,
 		dhSaleID, recordedAt.UTC(), time.Now(), saleID,
 	)
@@ -291,7 +339,7 @@ func (ss *SaleStore) ListSalesNeedingDHRecord(ctx context.Context, limit int) ([
 		ORDER BY s.created_at ASC
 		LIMIT $1
 	`
-	rows, err := ss.db.QueryContext(ctx, query, limit)
+	rows, err := executor(ctx, ss.db).QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list sales needing dh record: %w", err)
 	}
