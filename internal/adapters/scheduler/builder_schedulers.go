@@ -252,6 +252,10 @@ func buildDHInventoryPollScheduler(cfg *config.Config, deps BuildDeps) *DHInvent
 		Enabled:  cfg.DH.Enabled,
 		Interval: cfg.DH.InventoryPollInterval,
 	}
+	var opts []DHInventoryPollOption
+	if deps.DHMutationRequired {
+		opts = append(opts, WithDHInventoryObservationGuards(deps.DHMutationGuards))
+	}
 	return NewDHInventoryPollScheduler(
 		deps.DHInventoryListClient,
 		deps.SyncStateStore,
@@ -260,6 +264,7 @@ func buildDHInventoryPollScheduler(cfg *config.Config, deps BuildDeps) *DHInvent
 		deps.EventRecorder,
 		deps.Logger,
 		inventoryPollCfg,
+		opts...,
 	)
 }
 
@@ -274,6 +279,9 @@ func buildDHSoldReconcilerScheduler(cfg *config.Config, deps BuildDeps) *DHSoldR
 		Interval: cfg.DHSoldReconciler.Interval,
 	}
 	var opts []DHSoldReconcilerOption
+	if deps.DHMutationRequired {
+		opts = append(opts, WithDHSoldMutationCoordinator(deps.DHMutationCoordinator, deps.DHMutationGuards, deps.PurchaseRepo, deps.DHSaleStore))
+	}
 	if deps.DHSaleRecorder != nil && deps.DHSaleStore != nil {
 		if deps.DHInventoryListClient != nil {
 			opts = append(opts, WithDHSoldSweep(
@@ -347,6 +355,9 @@ func buildDHPushScheduler(cfg *config.Config, deps BuildDeps) *DHPushScheduler {
 		Interval: cfg.DH.PushInterval,
 	}
 	var pushOpts []DHPushOption
+	if deps.DHMutationRequired {
+		pushOpts = append(pushOpts, WithDHPushMutationCoordinator(deps.DHMutationCoordinator, deps.DHMutationScope, deps.DHMutationGuards, deps.PurchaseRepo))
+	}
 	if deps.DHPushConfigLoader != nil {
 		pushOpts = append(pushOpts, WithDHPushConfigLoader(deps.DHPushConfigLoader))
 	}

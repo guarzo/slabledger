@@ -88,10 +88,15 @@ type DHSaleConflictSetter interface {
 // sweepDH and recoverDHSaleHandles for why neither subsumes the other.
 type DHSoldReconcilerScheduler struct {
 	StopHandle
-	lister  StaleDHStatusLister
-	updater DHStatusUpdater
-	logger  observability.Logger
-	config  DHSoldReconcilerConfig
+	mutationRequired bool
+	coordinator      *inventory.DHMutationCoordinator
+	guards           inventory.DHMutationGuards
+	purchaseReader   inventory.DHSalePurchaseReader
+	saleStore        inventory.DHSaleMutationStore
+	lister           StaleDHStatusLister
+	updater          DHStatusUpdater
+	logger           observability.Logger
+	config           DHSoldReconcilerConfig
 
 	// Optional DH-side sweep dependencies; the sweep is skipped unless all are
 	// present. Wired together by WithDHSoldSweep.
@@ -242,7 +247,7 @@ func (s *DHSoldReconcilerScheduler) reconcile(ctx context.Context) {
 
 	fixed := 0
 	for _, id := range ids {
-		if err := s.updater.UpdatePurchaseDHStatus(ctx, id, string(inventory.DHStatusSold)); err != nil {
+		if err := s.updateCurrentSold(ctx, id); err != nil {
 			s.logger.Warn(ctx, "dh sold reconciler: failed to update purchase",
 				observability.String("purchaseID", id),
 				observability.Err(err))
@@ -338,6 +343,12 @@ func (s *DHSoldReconcilerScheduler) sweepDH(ctx context.Context) {
 // which pass found the row, so a crash at any point leaves it in a state
 // either pass can finish.
 func (s *DHSoldReconcilerScheduler) recordSale(ctx context.Context, p *inventory.Purchase, sale *inventory.Sale) error {
+	if s.mutationRequired {
+		return inventory.RecordCoordinatedDHSale(ctx, s.coordinator, s.purchaseReader, s.saleStore, s.recorder, p.ID, sale.ID, uuid.NewString)
+	}
+	if sale.OrderID != "" {
+		return nil
+	}
 	key := sale.DHIdempotencyKey
 	if key == "" {
 		effective, err := s.writer.SetSaleIdempotencyKeyIfAbsent(ctx, sale.ID, inventory.NewDHIdempotencyKey(uuid.NewString))

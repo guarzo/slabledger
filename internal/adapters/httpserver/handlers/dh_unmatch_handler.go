@@ -24,6 +24,9 @@ type unmatchDHRequest struct {
 // Only after a successful delete are the local DB fields and status cleared.
 // Mapping cache cleanup is best-effort and runs after the DB commit.
 func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
+	if h.coordinateLink(w, r, "unmatch", h.HandleUnmatchDH) {
+		return
+	}
 	if requireUser(w, r) == nil {
 		return
 	}
@@ -100,6 +103,9 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 	// Clear any stored candidates.
 	if h.candidatesSaver != nil {
 		if err := h.candidatesSaver.UpdatePurchaseDHCandidates(ctx, purchase.ID, ""); err != nil {
+			if h.failCoordinatedWrite(w, ctx, purchase.ID, err) {
+				return
+			}
 			h.logger.Warn(ctx, "unmatch dh: failed to clear candidates",
 				observability.String("purchaseID", purchase.ID), observability.Err(err))
 		}
@@ -109,6 +115,9 @@ func (h *DHHandler) HandleUnmatchDH(w http.ResponseWriter, r *http.Request) {
 	// reuse a known-bad dh_card_id on the next cycle.
 	if h.mappingDeleter != nil {
 		if rows, derr := h.mappingDeleter.DeleteAutoMapping(ctx, purchase.CardName, purchase.SetName, purchase.CardNumber, pricing.SourceDH); derr != nil {
+			if h.failCoordinatedWrite(w, ctx, purchase.ID, derr) {
+				return
+			}
 			h.logger.Warn(ctx, "unmatch dh: failed to delete auto card id mapping, continuing",
 				observability.String("purchaseID", purchase.ID),
 				observability.String("cardName", purchase.CardName),

@@ -137,6 +137,30 @@ Two things cert intake deliberately does *not* do:
 Certs already in the system are reported as already-existing rather than duplicated,
 and any that have already sold are called out separately in the result.
 
+#### Confirming a returned slab
+
+1. Scan the cert in **Scan**. Choose **Return** for a sold card, or **Confirm DH
+   return** when a linked card was already made unsold locally but DH still needs
+   its external sale reversed.
+2. Confirm only when that exact slab is physically back and its refund or return
+   is resolved. Cancelling makes no inventory change.
+3. After success, review the price and choose **List on DH** separately. Returning
+   does not publish a listing or reopen an old eBay ask. Automatic sync cannot
+   publish returned stock using the old price.
+
+**Retry return** reuses the server operation after uncertainty. **Retry completion**
+means a remote receipt was observed but local completion failed. Reloading or
+clearing the scan queue does not remove server recovery state. A failed state
+lookup keeps price/List and Fix DH Match unavailable; **Refresh return state** is
+read-only.
+
+An earlier unresolved DH mutation or permanent identity/attribution conflict
+requires diagnosis and a separately approved correction/reconciliation. Do not
+clear it by editing browser storage, waiting for expiry, or forcing a new return.
+The original provider error remains visible; it is not merely “push pending.”
+Ordinary local/off-platform un-sell remains separate from reversing an external
+DH sale.
+
 ### PSA Sync
 
 Admins can pull PSA orders directly. Under **Admin → Integrations**, the PSA sync

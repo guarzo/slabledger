@@ -13,6 +13,10 @@ import (
 // dhListingService implements Service by coordinating inline cert intake
 // (via DH's psa_import), list transitions, channel sync, and persistence.
 type dhListingService struct {
+	mutationRequired  bool
+	coordinator       *inventory.DHMutationCoordinator
+	guards            inventory.DHMutationGuards
+	returnStates      ReturnStateReader
 	purchaseLookup    DHListingPurchaseLookup
 	psaImporter       DHPSAImporter
 	lister            DHInventoryLister
@@ -152,6 +156,14 @@ func (s *dhListingService) recordEvent(ctx context.Context, e dhevents.Event) {
 
 // ListPurchases implements Service.
 func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []string) DHListingResult {
+	if s.mutationRequired && !inventory.DHDependenciesPresent(s.coordinator, s.guards, s.returnStates, s.fieldsUpdater, s.configLoader, s.lister) {
+		failure := inventory.NewReturnConflict("coordination_unavailable", "listing coordination and persistence/config collaborators required")
+		failures := map[string]error{}
+		for _, cert := range certNumbers {
+			failures[cert] = failure
+		}
+		return DHListingResult{Total: len(certNumbers), Skipped: len(certNumbers), Error: failure, FailedCerts: failures}
+	}
 	if s.lister == nil || len(certNumbers) == 0 {
 		return DHListingResult{}
 	}
@@ -207,7 +219,7 @@ func (s *dhListingService) ListPurchases(ctx context.Context, certNumbers []stri
 	listed, synced, skipped := 0, 0, 0
 	failedCerts := map[string]error{}
 	for _, cn := range sortedCerts {
-		outcome, failErr := s.listOnePurchase(ctx, purchases[cn])
+		outcome, failErr := s.listCoordinated(ctx, purchases[cn])
 		switch outcome {
 		case outcomeListed:
 			listed++

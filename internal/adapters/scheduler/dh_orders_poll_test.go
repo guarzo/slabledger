@@ -73,6 +73,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 				Matched: []csvimport.OrdersImportMatch{
 					{
 						CertNumber:     "99998888",
+						OrderID:        "dh-12345",
 						ProductTitle:   "Charizard PSA 10",
 						SaleChannel:    inventory.SaleChannelEbay,
 						SaleDate:       "2026-04-02",
@@ -253,9 +254,9 @@ func TestDHOrdersPoll_RecordsEvents(t *testing.T) {
 	svc := &mocks.MockImportService{
 		ImportOrdersSalesFn: func(_ context.Context, _ []csvimport.OrdersExportRow) (*csvimport.OrdersImportResult, error) {
 			return &csvimport.OrdersImportResult{
-				Matched:     []csvimport.OrdersImportMatch{{CertNumber: "c-matched", PurchaseID: "pur-matched", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-04-02", SalePriceCents: 7500}},
-				NotFound:    []csvimport.OrdersImportSkip{{CertNumber: "c-orphan"}},
-				AlreadySold: []csvimport.OrdersImportSkip{{CertNumber: "c-already"}},
+				Matched:     []csvimport.OrdersImportMatch{{OrderID: "order-matched", CertNumber: "c-matched", PurchaseID: "pur-matched", SaleChannel: inventory.SaleChannelEbay, SaleDate: "2026-04-02", SalePriceCents: 7500}},
+				NotFound:    []csvimport.OrdersImportSkip{{CertNumber: "c-orphan", OrderID: "order-orphan", SalePriceCents: 5000}},
+				AlreadySold: []csvimport.OrdersImportSkip{{CertNumber: "c-already", OrderID: "order-already", SalePriceCents: 6000}},
 			}, nil
 		},
 		ConfirmOrdersSalesFn: func(_ context.Context, _ []csvimport.OrdersConfirmItem) (*inventory.BulkSaleResult, error) {

@@ -185,6 +185,7 @@ type OrdersImportResult struct {
 
 // OrdersImportMatch represents a CSV row matched to an unsold inventory purchase.
 type OrdersImportMatch struct {
+	OrderID              string                `json:"orderId"`
 	CertNumber           string                `json:"certNumber"`
 	ProductTitle         string                `json:"productTitle"`
 	SaleChannel          inventory.SaleChannel `json:"saleChannel"`
@@ -201,9 +202,11 @@ type OrdersImportMatch struct {
 
 // OrdersImportSkip represents a CSV row that was skipped or couldn't be matched.
 type OrdersImportSkip struct {
-	CertNumber   string `json:"certNumber"`
-	ProductTitle string `json:"productTitle"`
-	Reason       string `json:"reason"` // "already_sold", "not_found", "duplicate", "not_psa", "unknown_channel"
+	OrderID        string `json:"orderId"`
+	SalePriceCents int    `json:"salePriceCents"`
+	CertNumber     string `json:"certNumber"`
+	ProductTitle   string `json:"productTitle"`
+	Reason         string `json:"reason"` // "already_sold", "not_found", "duplicate", "not_psa", "unknown_channel"
 }
 
 // OrdersConfirmItem carries the data needed to create a sale from a confirmed import match.

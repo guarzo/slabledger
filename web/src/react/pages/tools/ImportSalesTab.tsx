@@ -77,6 +77,7 @@ export default function ImportSalesTab() {
         saleChannel: m.saleChannel,
         saleDate: m.saleDate,
         salePriceCents: m.salePriceCents,
+        orderId: m.orderId,
       }));
 
     if (items.length === 0) {

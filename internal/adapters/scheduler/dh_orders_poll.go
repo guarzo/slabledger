@@ -25,6 +25,7 @@ type DHOrdersPollSummary struct {
 	OrdersFetched int    // total orders returned by DH
 	Matched       int    // newly created sales (from BulkSaleResult.Created)
 	AlreadySold   int    // skipped: purchase already has a sale (len(importResult.AlreadySold))
+	Returned      int    // retained confirmed-return orders skipped
 	NotFound      int    // skipped: cert not found in local system (len(importResult.NotFound))
 	Failed        int    // bulk sale failures (BulkSaleResult.Failed)
 	LatestSoldAt  string // max sold_at observed across the batch (empty if no orders)
@@ -133,8 +134,6 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	}
 
 	rows := make([]csvimport.OrdersExportRow, 0, len(allOrders))
-	certToOrderID := make(map[string]string, len(allOrders))
-	certToPriceCents := make(map[string]int, len(allOrders))
 	for _, order := range allOrders {
 		grade, err := strconv.ParseFloat(order.Grade, 64)
 		if err != nil {
@@ -154,8 +153,6 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 			Grade:        grade,
 			UnitPrice:    float64(order.SalePriceCents) / 100.0,
 		})
-		certToOrderID[order.CertNumber] = order.OrderID
-		certToPriceCents[order.CertNumber] = order.SalePriceCents
 	}
 
 	importResult, err := s.campaignSvc.ImportOrdersSales(ctx, rows)
@@ -165,14 +162,19 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	summary.AlreadySold = len(importResult.AlreadySold)
 	summary.NotFound = len(importResult.NotFound)
 	summary.LatestSoldAt = findLatestSoldAt(allOrders)
+	for _, skipped := range importResult.Skipped {
+		if skipped.Reason == "returned_order" {
+			summary.Returned++
+		}
+	}
 
 	// Emit orphan and already_sold events (don't depend on ConfirmOrdersSales).
 	for _, nf := range importResult.NotFound {
 		s.recordEvent(ctx, dhevents.Event{
 			CertNumber:     nf.CertNumber,
 			Type:           dhevents.TypeOrphanSale,
-			DHOrderID:      certToOrderID[nf.CertNumber],
-			SalePriceCents: certToPriceCents[nf.CertNumber],
+			DHOrderID:      nf.OrderID,
+			SalePriceCents: nf.SalePriceCents,
 			Source:         dhevents.SourceDHOrdersPoll,
 			Notes:          "no local purchase matched this cert",
 		})
@@ -181,7 +183,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 		s.recordEvent(ctx, dhevents.Event{
 			CertNumber: as.CertNumber,
 			Type:       dhevents.TypeAlreadySold,
-			DHOrderID:  certToOrderID[as.CertNumber],
+			DHOrderID:  as.OrderID,
 			Source:     dhevents.SourceDHOrdersPoll,
 		})
 	}
@@ -191,13 +193,24 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	}
 
 	confirmItems := make([]csvimport.OrdersConfirmItem, 0, len(importResult.Matched))
+	eventCandidates := make([]csvimport.OrdersImportMatch, 0, len(importResult.Matched))
+	seenPurchases := map[string]bool{}
 	for _, m := range importResult.Matched {
+		// The bulk result identifies failures by purchase, not order. Confirm
+		// one original row per purchase so a later duplicate cannot hide the
+		// successful first row's event; keep the existing duplicate failure count.
+		if seenPurchases[m.PurchaseID] {
+			summary.Failed++
+			continue
+		}
+		seenPurchases[m.PurchaseID] = true
+		eventCandidates = append(eventCandidates, m)
 		confirmItems = append(confirmItems, csvimport.OrdersConfirmItem{
 			PurchaseID:     m.PurchaseID,
 			SaleChannel:    m.SaleChannel,
 			SaleDate:       m.SaleDate,
 			SalePriceCents: m.SalePriceCents,
-			OrderID:        certToOrderID[m.CertNumber],
+			OrderID:        m.OrderID,
 		})
 	}
 
@@ -206,7 +219,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 		return summary, fmt.Errorf("confirm orders: %w", err)
 	}
 	summary.Matched = bulkResult.Created
-	summary.Failed = bulkResult.Failed
+	summary.Failed += bulkResult.Failed
 
 	// Emit sold events only for items where sale creation succeeded. Items that
 	// failed during ConfirmOrdersSales must NOT emit a sold event.
@@ -214,7 +227,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	for _, e := range bulkResult.Errors {
 		failedIDs[e.PurchaseID] = true
 	}
-	for _, m := range importResult.Matched {
+	for _, m := range eventCandidates {
 		if failedIDs[m.PurchaseID] {
 			continue
 		}
@@ -223,7 +236,7 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 			CertNumber:     m.CertNumber,
 			Type:           dhevents.TypeSold,
 			NewDHStatus:    string(inventory.DHStatusSold),
-			DHOrderID:      certToOrderID[m.CertNumber],
+			DHOrderID:      m.OrderID,
 			SalePriceCents: m.SalePriceCents,
 			Source:         dhevents.SourceDHOrdersPoll,
 		})
@@ -264,6 +277,7 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 		observability.Int("matched", summary.Matched),
 		observability.Int("already_sold", summary.AlreadySold),
 		observability.Int("not_found", summary.NotFound),
+		observability.Int("returned_order", summary.Returned),
 		observability.Int("failed", summary.Failed))
 
 	if summary.LatestSoldAt != "" {

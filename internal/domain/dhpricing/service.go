@@ -11,12 +11,16 @@ import (
 
 // service is the default implementation of Service.
 type service struct {
-	lookup   PurchaseLookup
-	updater  DHPriceUpdater
-	writer   DHPriceWriter
-	resetter DHReconcileResetter
-	logger   observability.Logger
-	now      func() time.Time
+	mutationRequired bool
+	coordinator      *inventory.DHMutationCoordinator
+	guards           inventory.DHMutationGuards
+	returnStates     ReturnStateReader
+	lookup           PurchaseLookup
+	updater          DHPriceUpdater
+	writer           DHPriceWriter
+	resetter         DHReconcileResetter
+	logger           observability.Logger
+	now              func() time.Time
 }
 
 // NewService wires the domain price-sync service.
@@ -26,8 +30,9 @@ func NewService(
 	writer DHPriceWriter,
 	resetter DHReconcileResetter,
 	logger observability.Logger,
+	opts ...Option,
 ) Service {
-	return &service{
+	s := &service{
 		lookup:   lookup,
 		updater:  updater,
 		writer:   writer,
@@ -35,6 +40,10 @@ func NewService(
 		logger:   logger,
 		now:      time.Now,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // resolveListingPrice returns the operator-committed price for a purchase.
@@ -47,16 +56,19 @@ func resolveListingPrice(p *inventory.Purchase) int {
 	return inventory.ResolveListingPriceCents(p)
 }
 
-func (s *service) SyncPurchasePrice(ctx context.Context, purchaseID string) SyncResult {
-	res := SyncResult{PurchaseID: purchaseID}
-
+func (s *service) syncPurchasePrice(ctx context.Context, purchaseID string) SyncResult {
 	p, err := s.lookup.GetPurchase(ctx, purchaseID)
 	if err != nil {
-		res.Outcome = OutcomeError
-		res.Err = err
-		return res
+		return SyncResult{PurchaseID: purchaseID, Outcome: OutcomeError, Err: err}
 	}
+	return s.syncPurchaseSnapshot(ctx, p)
+}
 
+// Coordinated callers supply the snapshot whose exact request was validated
+// against the committed attempt. Ordinary price review can still commit while
+// we own the purchase; never reload it between validation and dispatch.
+func (s *service) syncPurchaseSnapshot(ctx context.Context, p *inventory.Purchase) SyncResult {
+	res := SyncResult{PurchaseID: p.ID}
 	if p.DHInventoryID == 0 {
 		res.Outcome = OutcomeSkippedNoInventory
 		return res

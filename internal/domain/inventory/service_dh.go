@@ -76,7 +76,13 @@ func (s *service) buildDHSaleRequest(sa *Sale, purchase *Purchase, key string) D
 // into a synthesized sale row: DH supplies no price, and both sold_at and
 // channel may be nil (design §4).
 func (s *service) recordDHSale(ctx context.Context, op string, sa *Sale, purchase *Purchase) {
-	if s.dhSaleRecorder == nil || purchase.DHInventoryID == 0 {
+	if s.dhSaleRecorder == nil || purchase.DHInventoryID == 0 || sa.OrderID != "" {
+		return
+	}
+	if s.mutationRequired {
+		if err := RecordCoordinatedDHSale(ctx, s.mutationCoordinator, s.purchases, s.sales, s.dhSaleRecorder, purchase.ID, sa.ID, s.idGen); err != nil && s.logger != nil {
+			s.logger.Warn(ctx, op+": coordinated DH sale remains unresolved", observability.String("purchaseID", purchase.ID), observability.Err(err))
+		}
 		return
 	}
 

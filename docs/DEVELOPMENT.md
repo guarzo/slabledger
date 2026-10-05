@@ -88,6 +88,16 @@ command, real worker/cached browser modes and artifact cleanup, follow
 [the show-preparation test guide](../web/tests/show-readiness-real.md). These
 variables are test-only, not application configuration or production credentials.
 
+Confirmed-return integration tests in `internal/integration/confirmedreturns/`
+require the separate **`CONFIRMED_RETURNS_TEST_URL`** opt-in and skip if it is unset,
+with no fallback to `POSTGRES_TEST_URL` or `DATABASE_URL`. Use only a disposable
+`slabledger_confirmed_returns_test` database, never production or the storage-test
+fixtures: every connection checks `SELECT current_database()` before setup runs
+migrations or truncates tables. Host, username, and connection query parameters
+may vary, but the connected database name must match exactly. Run explicitly with
+`go test -tags integration ./internal/integration/confirmedreturns -count=1`;
+do not run concurrent suites against this database.
+
 ### Integration tests (`-tags integration`)
 
 Tests behind the `integration` build tag call live third-party APIs, so they are

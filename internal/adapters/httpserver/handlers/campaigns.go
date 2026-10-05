@@ -31,19 +31,20 @@ type DHPriceSyncer interface {
 
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
-	service        inventory.Service
-	importSvc      csvimport.Service // optional: CSV/portal intake
-	arbSvc         arbitrage.Service
-	portSvc        portfolio.Service
-	tuningSvc      tuning.Service
-	logger         observability.Logger
-	dhListingSvc   dhlisting.Service // optional: lists cards on DH after cert import
-	dhPriceSyncer  DHPriceSyncer     // optional: async DH price re-sync on SetReviewedPrice
-	financeService finance.Service   // optional: finance operations
-	exportService  export.Service    // optional: sell sheet and eBay export
-	baseCtx        context.Context
-	bgWG           sync.WaitGroup // tracks background goroutines (e.g. DH listing)
-	rowProvider    RowProvider    // optional: fetches PSA data from the portal
+	confirmedReturns ConfirmedReturnService
+	service          inventory.Service
+	importSvc        csvimport.Service // optional: CSV/portal intake
+	arbSvc           arbitrage.Service
+	portSvc          portfolio.Service
+	tuningSvc        tuning.Service
+	logger           observability.Logger
+	dhListingSvc     dhlisting.Service // optional: lists cards on DH after cert import
+	dhPriceSyncer    DHPriceSyncer     // optional: async DH price re-sync on SetReviewedPrice
+	financeService   finance.Service   // optional: finance operations
+	exportService    export.Service    // optional: sell sheet and eBay export
+	baseCtx          context.Context
+	bgWG             sync.WaitGroup // tracks background goroutines (e.g. DH listing)
+	rowProvider      RowProvider    // optional: fetches PSA data from the portal
 
 	psaSnapshots psacampaign.SnapshotStore  // optional: PSA portal campaign snapshot reader
 	psaQueue     psacampaign.PushQueueStore // optional: PSA propose/publish push queue
@@ -264,6 +265,9 @@ func (h *CampaignsHandler) HandleDelete(w http.ResponseWriter, r *http.Request) 
 	if err := h.service.DeleteCampaign(r.Context(), id); err != nil {
 		if inventory.IsCampaignNotFound(err) {
 			writeError(w, http.StatusNotFound, "Campaign not found")
+			return
+		}
+		if writeReturnConflictIfPresent(w, err) {
 			return
 		}
 		h.logger.Error(r.Context(), "failed to delete campaign", observability.Err(err))

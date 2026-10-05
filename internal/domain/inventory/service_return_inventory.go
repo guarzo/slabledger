@@ -38,6 +38,9 @@ import (
 // logged and flagged for human review, then the sequence falls through to the
 // local reset+delete as if there had been nothing to void.
 func (s *service) DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error {
+	if s.mutationRequired {
+		return s.deleteSaleCoordinated(ctx, purchaseID, "")
+	}
 	sale, err := s.sales.GetSaleByPurchaseID(ctx, purchaseID)
 	if err != nil {
 		return fmt.Errorf("delete sale for purchase %s: %w", purchaseID, err)

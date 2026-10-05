@@ -241,11 +241,12 @@ func (w *wiring) buildCampaignsAndIntegrations(ctx context.Context, cfg *config.
 	// Constructed once so both consumers share the same instance.
 	if w.dhClient != nil && w.dhClient.EnterpriseAvailable() && w.campaignsInit.purchaseStore != nil {
 		w.dhPriceSyncService = dhpricing.NewService(
-			w.campaignsInit.purchaseStore,                    // PurchaseLookup: GetPurchase + ListDHPriceDrift
-			dhlistingadapter.NewInventoryAdapter(w.dhClient), // DHPriceUpdater
-			w.campaignsInit.purchaseStore,                    // DHPriceWriter: UpdatePurchaseDHPriceSync
-			w.campaignsInit.purchaseStore,                    // DHReconcileResetter
+			w.campaignsInit.purchaseStore,                                           // PurchaseLookup: GetPurchase + ListDHPriceDrift
+			dhlistingadapter.NewInventoryAdapter(w.dhClient).WithMutationReceipts(), // DHPriceUpdater
+			w.campaignsInit.purchaseStore,                                           // DHPriceWriter: UpdatePurchaseDHPriceSync
+			w.campaignsInit.purchaseStore,                                           // DHReconcileResetter
 			logger,
+			dhpricing.WithMutationCoordinator(w.campaignsInit.mutationCoordinator, w.campaignsInit.returnStore, w.campaignsInit.returnStore),
 		)
 	}
 }
@@ -254,7 +255,7 @@ func (w *wiring) buildCampaignsAndIntegrations(ctx context.Context, cfg *config.
 // from the wiring's fields.
 func (w *wiring) schedulerDeps(cfg *config.Config, logger observability.Logger) schedulerDeps {
 	sDeps := schedulerDeps{
-		DB:                         w.db,
+		ReturnStore: w.campaignsInit.returnStore, MutationCoordinator: w.campaignsInit.mutationCoordinator, DB: w.db,
 		Config:                     cfg,
 		Logger:                     logger,
 		DBTracker:                  w.priceRepo,
@@ -298,7 +299,7 @@ func (w *wiring) schedulerDeps(cfg *config.Config, logger observability.Logger) 
 // wire manual-refresh callbacks.
 func (w *wiring) handlerInputs(cfg *config.Config, logger observability.Logger, schedulerResult *scheduler.BuildResult) handlerInputs {
 	return handlerInputs{
-		Cfg:                  cfg,
+		ReturnStore: w.campaignsInit.returnStore, MutationCoordinator: w.campaignsInit.mutationCoordinator, ConfirmedReturns: w.campaignsInit.confirmedReturns, Cfg: cfg,
 		Logger:               logger,
 		DB:                   w.db,
 		PriceProvImpl:        w.priceProvImpl,

@@ -136,6 +136,7 @@ export interface ResolveCertResponse {
 // Orders sales import types
 
 export interface OrdersImportMatch {
+  orderId?: string;
   certNumber: string;
   productTitle: string;
   saleChannel: SaleChannel;
@@ -151,6 +152,8 @@ export interface OrdersImportMatch {
 }
 
 export interface OrdersImportSkip {
+  orderId?: string;
+  salePriceCents?: number;
   certNumber: string;
   productTitle: string;
   reason: string;

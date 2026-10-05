@@ -21,8 +21,9 @@ import (
 //	matched / unmatched_created / override_corrected / already_listed
 //	  → persist IDs, flip dh_push_status to matched, return the inventory ID.
 //	psa_error (RateLimited)
-//	  → rotate PSA key and retry once. On exhaustion, return 0 — leave
-//	    dh_push_status pending so the next scheduler cycle retries.
+//	  → legacy mode rotates PSA keys and retries. Coordinated mode returns 0
+//	    after the first call: neither free text nor a rate-limit flag proves
+//	    whole-call nonmutation, so the committed attempt remains OPEN.
 //	psa_error (other) / partner_card_error
 //	  → log the DH-supplied reason, leave dh_push_status pending, return 0.
 //	unknown resolution / empty results / missing IDs
@@ -44,10 +45,8 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		Language:       InferDHLanguage(p.SetName, p.CardName),
 	}
 
-	// Cap total attempts (initial call + rotations) at 8 — matches the push
-	// scheduler's cap and is well above any realistic PSA_ACCESS_TOKEN count.
-	// The rotator itself returns false once keys are exhausted, so the loop
-	// usually exits earlier.
+	// Legacy rotation is capped at 8. Configured mode exits on the first
+	// incomplete result, preserving uncertainty instead of redispatching.
 	const psaImportMaxAttempts = 8
 	for range psaImportMaxAttempts {
 		results, err := s.psaImporter.PSAImport(ctx, []DHPSAImportItem{item})
@@ -64,6 +63,12 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 		r := results[0]
 
 		if r.RateLimited || isPSARateLimitMessage(r.Error) {
+			if s.mutationRequired {
+				s.logger.Warn(ctx, "inline dh psa_import rate-limited — coordinated attempt remains fenced",
+					observability.String("cert", p.CertNumber),
+					observability.String("psaError", r.Error))
+				return 0
+			}
 			if rotator, ok := s.psaImporter.(PSAKeyRotator); ok && rotator.RotatePSAKey() {
 				s.logger.Info(ctx, "inline dh psa_import rate-limited, rotating PSA key",
 					observability.String("cert", p.CertNumber),
@@ -84,7 +89,7 @@ func (s *dhListingService) inlineMatchAndPush(ctx context.Context, p *inventory.
 			return 0
 		}
 
-		if r.DHCardID == 0 || r.DHInventoryID == 0 {
+		if r.DHCardID == 0 || r.DHInventoryID == 0 || (s.mutationRequired && r.CertNumber != p.CertNumber) {
 			s.logger.Warn(ctx, "inline dh psa_import success missing IDs",
 				observability.String("cert", p.CertNumber),
 				observability.String("resolution", r.Resolution),
@@ -110,6 +115,9 @@ func (s *dhListingService) persistInlinePSAImport(ctx context.Context, p *invent
 				observability.String("cert", p.CertNumber),
 				observability.String("cardName", p.CardName),
 				observability.Err(err))
+			if s.mutationRequired {
+				return 0
+			}
 		}
 	}
 
@@ -132,12 +140,17 @@ func (s *dhListingService) persistInlinePSAImport(ctx context.Context, p *invent
 
 	if s.pushStatusUpdater != nil {
 		if err := s.pushStatusUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusMatched); err != nil {
-			// Fields + inventory ID are already persisted, so DH has the item
-			// and the push scheduler's early-exit guard (dh_push.go processPurchase)
-			// will flip status to matched on its next cycle. Until then, the UI
-			// shows stale push_status=pending. Error-level to flag the
-			// inconsistency; not fatal for this call.
-			s.logger.Error(ctx, "inline dh psa_import: failed to set matched status — scheduler will repair next cycle",
+			if s.mutationRequired {
+				// Execution rolls back these local writes; the precommitted OPEN
+				// attempt blocks the scheduler. Provider-completion evidence or
+				// approved reconciliation is required, not another push cycle.
+				s.logger.Error(ctx, "inline dh psa_import: failed to set matched status — coordinated attempt needs provider evidence or approved reconciliation",
+					observability.String("cert", p.CertNumber), observability.Err(err))
+				return 0
+			}
+			// Legacy fields/ID writes are already committed. Its scheduler can
+			// repair the pending push status via the existing inventory-ID guard.
+			s.logger.Error(ctx, "inline dh psa_import: failed to set matched status — legacy scheduler will repair next cycle",
 				observability.String("cert", p.CertNumber), observability.Err(err))
 		}
 	}
@@ -163,9 +176,10 @@ func (s *dhListingService) persistInlinePSAImport(ctx context.Context, p *invent
 // isPSARateLimitMessage detects PSA rate-limit reasons in DH's per-cert
 // result.error field. DH does not always set rate_limited=true even when the
 // reason is a rate limit ("Daily PSA API limit reached" arrives with
-// resolution=psa_error and rate_limited=false), so callers must inspect the
-// message text. Mirrors dh.IsPSARateLimitMessage in the adapter; duplicated
-// here because hexagonal rules forbid the domain importing adapter packages.
+// resolution=psa_error and rate_limited=false). Legacy mode uses this to rotate;
+// coordinated mode treats it as incomplete evidence, never as retry permission.
+// Mirrors dh.IsPSARateLimitMessage in the adapter; duplicated here because
+// hexagonal rules forbid the domain importing adapter packages.
 func isPSARateLimitMessage(msg string) bool {
 	lower := strings.ToLower(msg)
 	return strings.Contains(lower, "psa api rate limit") ||

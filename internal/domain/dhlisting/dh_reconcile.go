@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/dhevents"
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -64,12 +65,15 @@ type Reconciler interface {
 
 // reconcileService implements Reconciler.
 type reconcileService struct {
-	fetcher   DHInventorySnapshotFetcher
-	purchases DHReconcilePurchaseLister
-	resetter  DHReconcileResetter
-	repairer  DHStatusRepairer  // optional: when set, repairs local dh_status drift from DH's snapshot
-	eventRec  dhevents.Recorder // optional: when set, every reset emits a TypeUnlisted event
-	logger    observability.Logger
+	observationRequired bool
+	guards              inventory.DHMutationGuards
+	returnStates        ReturnStateReader
+	fetcher             DHInventorySnapshotFetcher
+	purchases           DHReconcilePurchaseLister
+	resetter            DHReconcileResetter
+	repairer            DHStatusRepairer  // optional: when set, repairs local dh_status drift from DH's snapshot
+	eventRec            dhevents.Recorder // optional: when set, every reset emits a TypeUnlisted event
+	logger              observability.Logger
 }
 
 // ReconcilerOption configures optional dependencies on a Reconciler.
@@ -127,6 +131,17 @@ func NewReconciler(
 // aborts the run with zero resets, so a partial snapshot never flips healthy
 // items back to pending.
 func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, error) {
+	fetchedAt := time.Now()
+	if s.observationRequired {
+		if !inventory.DHDependenciesPresent(s.guards, s.returnStates) {
+			return ReconcileResult{}, inventory.NewReturnConflict("coordination_unavailable", "reconcile observation coordination required")
+		}
+		var e error
+		fetchedAt, e = s.guards.ObservationTime(ctx)
+		if e != nil {
+			return ReconcileResult{}, e
+		}
+	}
 	dhInv, err := s.fetcher.FetchAllInventory(ctx)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("fetch DH snapshot: %w", err)
@@ -166,14 +181,15 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 				targetListable := target == inventory.DHStatusInStock || target == inventory.DHStatusListed
 				localRepairable := local != inventory.DHStatusSold
 				if targetListable && localRepairable && target != local {
-					if err := s.repairer.UpdatePurchaseDHStatus(ctx, p.ID, target); err != nil {
+					applied, err := s.applyReconcileObservation(ctx, p, fetchedAt, func(c context.Context) error { return s.repairer.UpdatePurchaseDHStatus(c, p.ID, target) })
+					if err != nil {
 						s.logger.Warn(ctx, "dh reconcile: status repair failed",
 							observability.String("purchaseID", p.ID),
 							observability.Int("dhInventoryID", p.DHInventoryID),
 							observability.String("from", local),
 							observability.String("to", target),
 							observability.Err(err))
-					} else {
+					} else if applied {
 						result.StatusRepaired++
 					}
 				}
@@ -182,12 +198,16 @@ func (s *reconcileService) Reconcile(ctx context.Context) (ReconcileResult, erro
 		}
 		result.MissingOnDH++
 
-		if err := s.resetter.ResetDHFieldsForRepushDueToDelete(ctx, p.ID); err != nil {
+		applied, err := s.applyReconcileObservation(ctx, p, fetchedAt, func(c context.Context) error { return s.resetter.ResetDHFieldsForRepushDueToDelete(c, p.ID) })
+		if err != nil {
 			s.logger.Warn(ctx, "dh reconcile: reset failed",
 				observability.String("purchaseID", p.ID),
 				observability.Int("dhInventoryID", p.DHInventoryID),
 				observability.Err(err))
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", p.ID, err))
+			continue
+		}
+		if !applied {
 			continue
 		}
 		result.Reset++

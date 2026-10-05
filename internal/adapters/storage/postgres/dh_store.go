@@ -29,7 +29,7 @@ func (dhs *DHStore) GetDHPushConfig(ctx context.Context) (*inventory.DHPushConfi
 		unreviewed_change_pct_threshold, unreviewed_change_min_cents, listings_paused, updated_at
 		FROM dh_push_config WHERE id = 1`
 	var cfg inventory.DHPushConfig
-	err := dhs.db.QueryRowContext(ctx, query).Scan(
+	err := executor(ctx, dhs.db).QueryRowContext(ctx, query).Scan(
 		&cfg.SwingPctThreshold, &cfg.SwingMinCents, &cfg.DisagreementPctThreshold,
 		&cfg.UnreviewedChangePctThreshold, &cfg.UnreviewedChangeMinCents, &cfg.ListingsPaused, &cfg.UpdatedAt,
 	)

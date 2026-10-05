@@ -14,6 +14,8 @@ import {
 import { CertRowItem, StatDot } from './CardIntakeRow';
 import { useCardIntakePolling } from './useCardIntakePolling';
 import { ConfirmDialog } from '../../ui';
+import { useConfirmedReturn } from './useConfirmedReturn';
+import CardIntakeReturnDialog from './CardIntakeReturnDialog';
 
 export default function CardIntakeTab() {
   const [input, setInput] = useState('');
@@ -75,6 +77,9 @@ export default function CardIntakeTab() {
     }
   }, [updateCert]);
 
+  const returnFlow = useConfirmedReturn(certsRef, certs, updateCert, applyScanResult);
+  const refreshReturnState = returnFlow.refresh;
+
   const resolveInBackground = useCallback(async (certNumber: string) => {
     try {
       const info: ResolveCertResponse = await api.resolveCert(certNumber);
@@ -110,20 +115,20 @@ export default function CardIntakeTab() {
     try {
       await api.listPurchaseOnDH(row.purchaseId);
       updateCert(certNumber, { listingStatus: 'listed' });
+      await refreshReturnState(certNumber);
     } catch (err) {
       if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
         updateCert(certNumber, { listingStatus: 'listed' });
+        await refreshReturnState(certNumber);
         return;
       }
       const msg = err instanceof Error ? err.message : 'Listing failed';
       updateCert(certNumber, {
         listingStatus: 'list-error',
-        listingError: msg.toLowerCase().includes('stock')
-          ? 'DH push pending — check back after sync'
-          : msg,
+        listingError: msg,
       });
     }
-  }, [updateCert]);
+  }, [updateCert, refreshReturnState]);
 
   const handleScan = useCallback(async (certNumber: string) => {
     certNumber = certNumber.trim();
@@ -160,22 +165,6 @@ export default function CardIntakeTab() {
       e.preventDefault();
       handleScan(input);
       setInput('');
-    }
-  };
-
-  const handleReturnToInventory = async (certNumber: string) => {
-    const row = certsRef.current.get(certNumber);
-    if (!row?.purchaseId || !row?.campaignId) return;
-
-    updateCert(certNumber, { status: 'scanning' });
-    try {
-      await api.deleteSale(row.campaignId, row.purchaseId);
-      updateCert(certNumber, { status: 'returned', cardName: row.cardName });
-    } catch (err) {
-      updateCert(certNumber, {
-        status: 'sold',
-        error: err instanceof Error ? err.message : 'Failed to return',
-      });
     }
   };
 
@@ -425,7 +414,8 @@ export default function CardIntakeTab() {
               key={row.certNumber}
               row={row}
               highlighted={row.certNumber === highlightedCert}
-              onReturn={handleReturnToInventory}
+              onReturn={cert => { void returnFlow.start(cert); }}
+              onRefreshReturnState={cert => { void returnFlow.refresh(cert); }}
               onDismiss={handleDismiss}
               onList={handleSetPriceAndList}
               onFixDHMatch={() => setFixMatchTarget(row)}
@@ -482,6 +472,13 @@ export default function CardIntakeTab() {
           }}
         />
       )}
+
+      <CardIntakeReturnDialog
+        certNumber={returnFlow.target?.certNumber}
+        loading={returnFlow.submitting}
+        onConfirm={() => { void returnFlow.submit(); }}
+        onCancel={returnFlow.cancel}
+      />
 
       <ConfirmDialog
         open={clearAllOpen}

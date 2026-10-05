@@ -1,4 +1,4 @@
-import type { MarketSnapshot } from '../../../types/campaigns';
+import type { ConfirmedReturnState, MarketSnapshot } from '../../../types/campaigns';
 
 export type CertStatus = 'scanning' | 'existing' | 'sold' | 'returned' | 'resolving' | 'resolved' | 'failed' | 'retry' | 'importing' | 'imported';
 export type ListingStatus = 'setting-price' | 'listing' | 'listed' | 'list-error';
@@ -26,6 +26,11 @@ export interface CertRow {
   gradeValue?: number;
   population?: number;
   dhSearchQuery?: string;
+  returnState?: ConfirmedReturnState;
+  returnLoading?: boolean;
+  returnBusy?: boolean;
+  returnStatusError?: string;
+  returnError?: string;
 }
 
 export function hasDHMatch(row: CertRow): boolean {
@@ -45,8 +50,43 @@ export function dhPushStuck(row: CertRow): boolean {
   return s === 'unmatched' || s === 'held' || s === 'dismissed';
 }
 
+export function returnNeedsDiagnosis(state: ConfirmedReturnState): boolean {
+  const operation = state.operation;
+  const p = state.purchase;
+  if (operation && (state.awaitingListing || operation.state !== 'completed')
+    && (!p || operation.dhInventoryId !== p.dhInventoryId
+      || operation.certNumber !== p.certNumber || operation.grader !== (p.grader ?? 'PSA'))) return true;
+  if (operation?.state === 'conflicted') return true;
+  const attempt = state.precedingAttempt;
+  return !!attempt && !(attempt.kind === 'return' && state.operation?.state === 'pending'
+    && attempt.operationId === state.operation.id);
+}
+
+export function returnActionLabel(row: CertRow): string | null {
+  if (!row.purchaseId) return null;
+  if (row.returnStatusError) return 'Refresh return state';
+  if (row.returnLoading || row.returnBusy) return row.returnBusy ? 'Returning…' : 'Checking return…';
+  const state = row.returnState;
+  if (state && returnNeedsDiagnosis(state)) return 'Refresh return state';
+  if (state?.operation?.state === 'pending') {
+    return state.operation.observedReceipt
+      && ['completion', 'settlement'].includes(state.operation.lastError?.phase ?? '')
+      ? 'Retry completion' : 'Retry return';
+  }
+  if (state?.operation?.state === 'completed' && !state.sale) return null;
+  if (row.status === 'sold') return 'Return';
+  if (hasDHInventory(row) && row.dhStatus !== 'listed'
+    && ['existing', 'returned', 'imported'].includes(row.status)) return 'Confirm DH return';
+  return null;
+}
+
 export function rowIsListable(row: CertRow): boolean {
-  return !!row.purchaseId && hasDHInventory(row) && hasCLPrice(row);
+  const state = row.returnState;
+  const blocked = !state || row.returnStatusError || row.status === 'sold'
+    || row.dhStatus === 'sold' || row.returnBusy || row.returnLoading
+    || (state && returnNeedsDiagnosis(state)) || state?.sale || state?.precedingAttempt
+    || (state?.operation && state.operation.state !== 'completed');
+  return !blocked && !!row.purchaseId && hasDHInventory(row) && hasCLPrice(row);
 }
 
 // importErrorStatus maps a per-cert import error to its resulting terminal
@@ -57,6 +97,9 @@ export function importErrorStatus(err: { retryable?: boolean }): Extract<CertSta
 }
 
 export function rowAwaitingSync(row: CertRow): boolean {
+  if (row.purchaseId && (!row.returnState || row.returnStatusError)) return false;
+  if (row.returnLoading || row.returnBusy || row.returnState?.precedingAttempt
+    || (row.returnState?.operation && row.returnState.operation.state !== 'completed')) return false;
   if (row.listingStatus === 'listed') return false;
   if (row.status === 'failed' || row.status === 'retry' || row.status === 'sold') return false;
   if (row.status === 'resolving') return true;

@@ -281,7 +281,8 @@ func (c *Client) doEnterprise(ctx context.Context, method, fullURL string, body 
 	if dest != nil {
 		if err := json.Unmarshal(resp.Body, dest); err != nil {
 			c.recordHealth(false)
-			return apperrors.ProviderInvalidResponse(providerName, err)
+			return &httpx.RequestError{Phase: httpx.PhaseResponse, Uncertain: true,
+				Err: apperrors.ProviderInvalidResponse(providerName, err)}
 		}
 	}
 	c.recordHealth(true)

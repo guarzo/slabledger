@@ -121,6 +121,26 @@ rollback path above (steps 1–4, no `migrate.Down()` needed):
   still get a valid, non-empty `sale_reason` once the new image is
   redeployed — no manual backfill needed.
 
+## Confirmed DH return rollout and recovery
+
+- Drain old uninstrumented inventory mutators and verify outstanding DH requests
+  have finished before enabling the new return flow. A rolling overlap is unsafe.
+- Verify database/pooler statement, transaction and idle-in-transaction timeouts
+  support the bounded 90-second mutation window (or shorter caller deadline),
+  including time spent awaiting DH. Ownership uses transaction, not session locks.
+- New return/state endpoints require authentication; missing middleware is `503`,
+  not an unauthenticated fallback. Durable state/local return does not require DH
+  to remain enabled; external dispatch does.
+- Keep return episodes, mutation journal and returned-order receipts. Never drop
+  them as a cleanup or image-rollback shortcut. Older binaries ignore these
+  fences: freeze inventory mutators before an image rollback and reconcile first.
+- An OPEN unkeyed attempt needs evidence that its particular request has finished,
+  then a separately approved guarded reconciliation. Desired `in_stock` GET state
+  or elapsed time alone is not evidence. Do not blindly retry PATCH/void/repush.
+- Permanent attribution/identity conflicts remain fenced for diagnosis/correction.
+  Do not hardcode a sale link, reverse money, manually restock or publish as a
+  substitute for the confirmed-return protocol.
+
 ## Where things live
 
 - Prod URL: `https://slabledger.dpao.la`

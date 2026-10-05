@@ -26,6 +26,7 @@ let collision = false;
 let blockAdd = false;
 let releaseAdd: (() => void) | undefined;
 let partialResponse = false;
+let evaluationGate: Promise<void> | undefined;
 const evaluations = () => [evaluation({ version, certNumber: mismatchedCert ? '87654321' : '12345678' }), evaluation({ purchaseId: secondId, certNumber: '87654321', cardName: 'Charizard', version: version === 'eval-1' ? 'eval-2' : version })];
 function mount() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -39,10 +40,13 @@ function scan(cert: string) {
   return field;
 }
 beforeEach(() => {
-  writes = []; version = 'eval-1'; conflict = false; existingMember = true; ambiguous = false; listedOnly = false; evaluationFails = false; mismatchedCert = false; collision = false; blockAdd = false; releaseAdd = undefined; queryFailure.enabled = false; partialResponse = false;
+  writes = []; version = 'eval-1'; conflict = false; existingMember = true; ambiguous = false; listedOnly = false; evaluationFails = false; mismatchedCert = false; collision = false; blockAdd = false; releaseAdd = undefined; queryFailure.enabled = false; partialResponse = false; evaluationGate = undefined;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
     if (url.endsWith('/api/inventory')) return Response.json({ items: [...evaluations().filter(e => !listedOnly || e.purchaseId !== purchaseId).map(e => inventoryItem(e, e.purchaseId === purchaseId ? { certNumber: '12345678' } : collision ? { certNumber: '12345678' } : {})), ...(ambiguous ? [inventoryItem(evaluations()[1], { certNumber: '12345678' })] : [])], warnings: [] });
-    if (url.endsWith('/evaluate')) return evaluationFails ? Response.json({ error: 'Evaluation unavailable' }, { status: 400 }) : Response.json({ evaluations: evaluations() });
+    if (url.endsWith('/evaluate')) {
+      await evaluationGate;
+      return evaluationFails ? Response.json({ error: 'Evaluation unavailable' }, { status: 400 }) : Response.json({ evaluations: evaluations() });
+    }
     if (url.endsWith('/items') && options.method === 'POST') {
       writes.push(JSON.parse(String(options.body)));
       if (blockAdd) await new Promise<void>(resolve => { releaseAdd = resolve; });
@@ -87,12 +91,16 @@ it('accepts consecutive scanner enters without saving until review, using observ
 });
 
 it('keeps unmatched, repeated and already-listed scans out of the add payload', async () => {
+  let releaseEvaluation!: () => void;
+  evaluationGate = new Promise<void>(resolve => { releaseEvaluation = resolve; });
   mount(); await screen.findByRole('textbox', { name: 'Scan slab barcode' });
   scan('99999999'); scan('12345678'); scan('12345678'); scan('87654321');
   expect(await screen.findByText('Charizard')).toBeVisible();
   expect(screen.getByText(/No inventory match/)).toBeVisible();
   expect(screen.getByText(/Already on this show list/)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: 'Add 1 to show' }));
+  expect(screen.getByRole('button', { name: 'Add 0 to show' })).toBeDisabled();
+  releaseEvaluation();
+  fireEvent.click(await screen.findByRole('button', { name: 'Add 1 to show' }));
   await waitFor(() => expect(writes).toEqual([{ items: [{ purchaseId: secondId, evaluationVersion: 'eval-2' }] }]));
 });
 
