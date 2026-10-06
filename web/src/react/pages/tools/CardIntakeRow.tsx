@@ -223,8 +223,7 @@ export function CertRowItem({
           )}
           {returnLabel && (
             <button
-              onClick={() => row.returnStatusError
-                || (row.returnState && returnNeedsDiagnosis(row.returnState))
+              onClick={() => returnLabel === 'Refresh return state'
                 ? onRefreshReturnState?.(row.certNumber) : onReturn(row.certNumber)}
               disabled={!!row.returnLoading || !!row.returnBusy || !!busy}
               className="rounded-md bg-[var(--warning)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--warning)] hover:bg-[var(--warning)]/30 disabled:opacity-50 transition-colors"

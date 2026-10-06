@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../../js/api';
 import type { ConfirmedReturnState, Purchase, Sale } from '../../../types/campaigns';
 import CardIntakeTab from './CardIntakeTab';
+import { returnActionLabel, rowIsListable } from './cardIntakeTypes';
 import { loadQueue, saveQueue } from './cardIntakeStorage';
 
 const cards = [
@@ -33,6 +34,10 @@ function state(p = purchase()): ConfirmedReturnState {
   return { operation: null, expectedSaleId: null, awaitingListing: false, precedingAttempt: null, purchase: p, sale: null };
 }
 
+function soldState(p: Purchase): ConfirmedReturnState {
+  return { ...state(p), sale: sale(p), expectedSaleId: 'old-sale' };
+}
+
 function completed(initial: ConfirmedReturnState, externalSale = 848): ConfirmedReturnState {
   const p = initial.purchase ?? purchase();
   return {
@@ -46,10 +51,10 @@ function completed(initial: ConfirmedReturnState, externalSale = 848): Confirmed
   };
 }
 
-function seed(p: Purchase) {
+function seed(p: Purchase, status: 'existing' | 'sold' = 'existing') {
   saveQueue(new Map([[p.certNumber, {
     certNumber: p.certNumber, purchaseId: p.id, campaignId: p.campaignId,
-    cardName: p.cardName, status: 'existing', dhInventoryId: p.dhInventoryId,
+    cardName: p.cardName, status, dhInventoryId: p.dhInventoryId,
     dhCardId: p.dhCardId, dhStatus: p.dhStatus,
     market: { lastSoldCents: 4000, gradePriceCents: 4000, clValueCents: 5000 },
   }]]));
@@ -89,23 +94,34 @@ beforeEach(() => {
   vi.spyOn(localStorage, 'removeItem').mockImplementation(key => { saved.delete(key); });
   vi.spyOn(localStorage, 'clear').mockImplementation(() => saved.clear());
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('confirmed Cert Intake returns', () => {
-  it.each(cards)('recovers already-unsold $cert only after confirmation, then explicitly lists', async card => {
+  it('does not authorize listing or a return from a different purchase projection', () => {
+    const p = purchase();
+    const row = {
+      certNumber: p.certNumber, purchaseId: 'replacement-purchase', status: 'existing' as const,
+      dhInventoryId: p.dhInventoryId, dhStatus: p.dhStatus,
+      market: { clValueCents: 5000, lastSoldCents: 4000, gradePriceCents: 4000 },
+      returnState: completed(state(p)),
+    };
+    expect(rowIsListable(row)).toBe(false);
+    expect(returnActionLabel(row)).toBeNull();
+  });
+  it.each(cards)('returns recorded sale $cert only after confirmation, then explicitly lists', async card => {
     const p = purchase(card);
-    const mocks = transport(state(p), card.externalSale);
-    seed(p);
+    const mocks = transport(soldState(p), card.externalSale);
+    seed(p, 'sold');
     const user = userEvent.setup();
     render(<CardIntakeTab />);
-    await user.click(await screen.findByRole('button', { name: 'Confirm DH return' }));
+    await user.click(await screen.findByRole('button', { name: 'Return' }));
     const dialog = await screen.findByRole('alertdialog');
     expect(dialog).toHaveTextContent(card.cert);
     expect(dialog).toHaveTextContent(/physically back/i);
     expect(dialog).toHaveTextContent(/refund.*resolved/i);
     expect(mocks.confirm).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Confirm return' }));
-    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledWith(p.id, { returnConfirmed: true, expectedSaleId: null }));
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledWith(p.id, { returnConfirmed: true, expectedSaleId: 'old-sale' }));
     await screen.findByText(/Returned; review the price and list explicitly/i);
     expect(mocks.scan).toHaveBeenCalledWith(card.cert);
     expect(mocks.remove).not.toHaveBeenCalled();
@@ -118,11 +134,11 @@ describe('confirmed Cert Intake returns', () => {
 
   it('does not request another List when a successful listing follow-up read fails', async () => {
     const p = purchase();
-    const mocks = transport(state(p));
-    seed(p);
+    const mocks = transport(soldState(p));
+    seed(p, 'sold');
     const user = userEvent.setup();
     render(<CardIntakeTab />);
-    await user.click(await screen.findByRole('button', { name: 'Confirm DH return' }));
+    await user.click(await screen.findByRole('button', { name: 'Return' }));
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Confirm return' }));
     await screen.findByText(/Returned; review the price and list explicitly/i);
     mocks.read.mockRejectedValueOnce(new Error('Return state refresh failed'));
@@ -134,11 +150,11 @@ describe('confirmed Cert Intake returns', () => {
 
   it('cancelling confirmation never deletes a sale or returns remotely', async () => {
     const p = purchase();
-    const mocks = transport(state(p));
-    seed(p);
+    const mocks = transport(soldState(p));
+    seed(p, 'sold');
     const user = userEvent.setup();
     render(<CardIntakeTab />);
-    await user.click(await screen.findByRole('button', { name: 'Confirm DH return' }));
+    await user.click(await screen.findByRole('button', { name: 'Return' }));
     const dialog = await screen.findByRole('alertdialog');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(mocks.confirm).not.toHaveBeenCalled();
@@ -169,16 +185,16 @@ describe('confirmed Cert Intake returns', () => {
 
   it('recognizes completion after a lost response without sending a fresh return', async () => {
     const p = purchase();
-    const initial = state(p);
+    const initial = soldState(p);
     const mocks = transport(initial);
     mocks.confirm.mockImplementation(async () => {
       mocks.setState(completed(initial));
       throw new Error('Response lost');
     });
-    seed(p);
+    seed(p, 'sold');
     const user = userEvent.setup();
     render(<CardIntakeTab />);
-    await user.click(await screen.findByRole('button', { name: 'Confirm DH return' }));
+    await user.click(await screen.findByRole('button', { name: 'Return' }));
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Confirm return' }));
     await screen.findByText(/Returned; review the price and list explicitly/i);
     expect(mocks.confirm).toHaveBeenCalledTimes(1);
@@ -186,21 +202,137 @@ describe('confirmed Cert Intake returns', () => {
     expect(mocks.list).not.toHaveBeenCalled();
   });
 
-  it('shows prior unkeyed uncertainty as diagnosis-only and blocks listing', async () => {
+  it('rechecks an open intake listing automatically and restores List only after durable settlement', async () => {
     const p = purchase();
     const initial = state(p);
     initial.precedingAttempt = {
-      id: 'uncertain-patch', capturedPurchaseId: p.id, dhInventoryId: 364577,
+      id: 'intake-list', capturedPurchaseId: p.id, dhInventoryId: p.dhInventoryId ?? 0,
+      certNumber: p.certNumber, grader: 'PSA', kind: 'list', phase: 'intake_patch_sync', startedAt: stamp, outcome: 'open',
+    };
+    const mocks = transport(initial);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-03T12:00:10Z'));
+    seed(p);
+    await act(async () => { render(<CardIntakeTab />); });
+    expect(screen.getByText(/DH listing sync in progress/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Return|Refresh return state|List on DH/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/return/i)).not.toBeInTheDocument();
+    mocks.setState(state(p));
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    expect(screen.queryByText(/DH listing sync in progress/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'List on DH' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Return|Refresh return state/i })).not.toBeInTheDocument();
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+    expect(mocks.scan).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+
+  it('marks a persistent intake listing attempt as an unresolved DH hold, not a return', async () => {
+    const p = purchase();
+    const initial = state(p);
+    initial.precedingAttempt = {
+      id: 'old-intake-list', capturedPurchaseId: p.id, dhInventoryId: p.dhInventoryId ?? 0,
+      certNumber: p.certNumber, grader: 'PSA', kind: 'list', phase: 'intake_patch_sync', startedAt: stamp, outcome: 'open',
+    };
+    const mocks = transport(initial);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-03T12:01:10Z'));
+    seed(p);
+    await act(async () => { render(<CardIntakeTab />); });
+    expect(screen.getByText(/DH mutation unresolved \(list: intake_patch_sync\)/i)).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    expect(screen.getByText(/DH mutation unresolved \(list: intake_patch_sync\)/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Return|Refresh return state|List on DH/i })).not.toBeInTheDocument();
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+    expect(mocks.scan).not.toHaveBeenCalled();
+  });
+
+  it('keeps an unresolved listing hold after read failure without branding it a return', async () => {
+    const p = purchase();
+    const initial = state(p);
+    initial.precedingAttempt = {
+      id: 'uncertain-patch', capturedPurchaseId: p.id, dhInventoryId: p.dhInventoryId ?? 0,
       certNumber: p.certNumber, grader: 'PSA', kind: 'list', phase: 'patch', startedAt: stamp, outcome: 'open',
     };
     const mocks = transport(initial);
     seed(p);
-    render(<CardIntakeTab />);
-    await screen.findByText(/Earlier DH mutation unresolved/i);
-    expect(screen.getByRole('button', { name: 'Refresh return state' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Confirm DH return|Retry return|Retry completion|List on DH/ })).not.toBeInTheDocument();
+    vi.useFakeTimers();
+    await act(async () => { render(<CardIntakeTab />); });
+    expect(screen.getByText(/DH mutation unresolved/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Return|Refresh return state|List on DH/i })).not.toBeInTheDocument();
+    mocks.read.mockRejectedValueOnce(new Error('State read failed'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    expect(screen.getByText('State read failed')).toBeInTheDocument();
+    expect(screen.getByText(/DH state read failed/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Return|Refresh return state|List on DH/i })).not.toBeInTheDocument();
+    expect(mocks.scan).not.toHaveBeenCalled();
     expect(mocks.confirm).not.toHaveBeenCalled();
     expect(mocks.list).not.toHaveBeenCalled();
+    mocks.setState(state(p));
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    expect(screen.getByRole('button', { name: 'List on DH' })).toBeEnabled();
+    expect(screen.queryByText(/DH state read failed/i)).not.toBeInTheDocument();
+  });
+
+  it('does not overlap state reads, then stops polling after settlement and unmount', async () => {
+    const p = purchase();
+    const open = state(p);
+    open.precedingAttempt = {
+      id: 'intake-list', capturedPurchaseId: p.id, dhInventoryId: p.dhInventoryId ?? 0,
+      certNumber: p.certNumber, grader: 'PSA', kind: 'list', phase: 'intake_patch_sync', startedAt: stamp, outcome: 'open',
+    };
+    const mocks = transport(open);
+    let finishRead: ((value: ConfirmedReturnState) => void) | undefined;
+    const slowRead = new Promise<ConfirmedReturnState>(resolve => { finishRead = resolve; });
+    mocks.read.mockResolvedValueOnce(open).mockImplementationOnce(() => slowRead).mockResolvedValue(state(p));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-03T12:00:10Z'));
+    seed(p);
+    let unmount = () => {};
+    await act(async () => { ({ unmount } = render(<CardIntakeTab />)); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    expect(mocks.read).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'List on DH' })).not.toBeInTheDocument();
+    await act(async () => { finishRead?.(open); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    expect(mocks.read).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('button', { name: 'List on DH' })).toBeEnabled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(8000); });
+    expect(mocks.read).toHaveBeenCalledTimes(3);
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+    expect(mocks.read).toHaveBeenCalledTimes(3);
+    expect(mocks.scan).not.toHaveBeenCalled();
+  });
+
+  it('drops a slow old-purchase state read after the cert is dismissed and rescanned', async () => {
+    const p = purchase();
+    const replacement = { ...p, id: 'replacement-purchase', cardName: 'Replacement slab', dhInventoryId: 999 };
+    const mocks = transport(state(p));
+    let releaseOld: ((value: ConfirmedReturnState) => void) | undefined;
+    const slowOld = new Promise<ConfirmedReturnState>(resolve => { releaseOld = resolve; });
+    mocks.read.mockImplementation(id => id === p.id ? slowOld : Promise.resolve(state(replacement)));
+    mocks.scan.mockResolvedValue({
+      status: 'existing', purchaseId: replacement.id, campaignId: replacement.campaignId,
+      cardName: replacement.cardName, dhInventoryId: replacement.dhInventoryId,
+      dhCardId: replacement.dhCardId, dhStatus: replacement.dhStatus,
+      market: { lastSoldCents: 4000, gradePriceCents: 4000, clValueCents: 5000 },
+    });
+    seed(p);
+    const user = userEvent.setup();
+    render(<CardIntakeTab />);
+    await waitFor(() => expect(mocks.read).toHaveBeenCalledWith(p.id));
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    const input = screen.getByPlaceholderText('Scan or type cert number…');
+    fireEvent.change(input, { target: { value: p.certNumber } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(mocks.read).toHaveBeenCalledWith(replacement.id));
+    expect(await screen.findByRole('button', { name: 'List on DH' })).toBeEnabled();
+    await act(async () => { releaseOld?.(state(p)); });
+    expect(screen.getByText('Replacement slab')).toBeInTheDocument();
+    expect(screen.queryByText(p.cardName)).not.toBeInTheDocument();
+    expect(mocks.scan).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a retained awaiting-listing hold on a mismatched target in diagnosis', async () => {
@@ -218,12 +350,12 @@ describe('confirmed Cert Intake returns', () => {
   it('refreshes a failed state lookup without inventing a sale precondition', async () => {
     const p = purchase();
     const mocks = transport(state(p));
-    mocks.read.mockRejectedValue(new Error('Return status unavailable'));
+    mocks.read.mockRejectedValue(new Error('DH state unavailable'));
     seed(p);
-    const user = userEvent.setup();
     render(<CardIntakeTab />);
-    await user.click(await screen.findByRole('button', { name: 'Refresh return state' }));
-    await screen.findByText(/Return status unavailable/i);
+    await screen.findByText(/DH state unavailable/i);
+    expect(screen.getByText(/DH state read failed/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Return|Refresh return state/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'List on DH' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Fix DH Match' })).not.toBeInTheDocument();
     expect(mocks.list).not.toHaveBeenCalled();
@@ -252,7 +384,7 @@ describe('confirmed Cert Intake returns', () => {
 
   it('keeps a permanent attribution conflict actionable and diagnosis-only', async () => {
     const p = purchase(cards[0]);
-    const initial = state(p);
+    const initial = soldState(p);
     const mocks = transport(initial, 443);
     mocks.confirm.mockImplementationOnce(async () => {
       const pending = completed(initial, 443);
@@ -262,10 +394,10 @@ describe('confirmed Cert Intake returns', () => {
       mocks.setState(pending);
       throw new Error('This item has no attributable external sale.');
     });
-    seed(p);
+    seed(p, 'sold');
     const user = userEvent.setup();
     render(<CardIntakeTab />);
-    await user.click(await screen.findByRole('button', { name: 'Confirm DH return' }));
+    await user.click(await screen.findByRole('button', { name: 'Return' }));
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Confirm return' }));
     await screen.findByText('This item has no attributable external sale.');
     expect(screen.queryByText(/push pending/i)).not.toBeInTheDocument();
@@ -278,7 +410,7 @@ describe('confirmed Cert Intake returns', () => {
 
   it('does not transfer the old return busy flag to a purchase recreated during scan', async () => {
     const p = purchase();
-    const initial = state(p);
+    const initial = soldState(p);
     const newPurchase = { ...p, id: 'recreated-purchase' };
     const returned = completed(initial);
     const recreated = { ...returned, purchase: newPurchase,
@@ -296,10 +428,10 @@ describe('confirmed Cert Intake returns', () => {
       cardName: p.cardName, dhInventoryId: p.dhInventoryId, dhCardId: p.dhCardId, dhStatus: 'in_stock',
       market: { lastSoldCents: 4000, gradePriceCents: 4000, clValueCents: 5000 },
     });
-    seed(p);
+    seed(p, 'sold');
     const user = userEvent.setup();
     render(<CardIntakeTab />);
-    await user.click(await screen.findByRole('button', { name: 'Confirm DH return' }));
+    await user.click(await screen.findByRole('button', { name: 'Return' }));
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Confirm return' }));
     // Let the replacement render and hydrate before releasing the old-owner
     // read, matching network latency rather than React's same-tick batching.

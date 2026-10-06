@@ -62,8 +62,15 @@ export function returnNeedsDiagnosis(state: ConfirmedReturnState): boolean {
     && attempt.operationId === state.operation.id);
 }
 
+export function hasReturnEpisode(row: CertRow): boolean {
+  const state = row.returnState;
+  return !!(row.status === 'sold' || (state && state.purchase?.id === row.purchaseId
+    && (state.operation || state.sale || state.awaitingListing)));
+}
+
 export function returnActionLabel(row: CertRow): string | null {
-  if (!row.purchaseId) return null;
+  if (!row.purchaseId || (row.returnState && row.returnState.purchase?.id !== row.purchaseId)
+    || !hasReturnEpisode(row)) return null;
   if (row.returnStatusError) return 'Refresh return state';
   if (row.returnLoading || row.returnBusy) return row.returnBusy ? 'Returning…' : 'Checking return…';
   const state = row.returnState;
@@ -73,16 +80,13 @@ export function returnActionLabel(row: CertRow): string | null {
       && ['completion', 'settlement'].includes(state.operation.lastError?.phase ?? '')
       ? 'Retry completion' : 'Retry return';
   }
-  if (state?.operation?.state === 'completed' && !state.sale) return null;
-  if (row.status === 'sold') return 'Return';
-  if (hasDHInventory(row) && row.dhStatus !== 'listed'
-    && ['existing', 'returned', 'imported'].includes(row.status)) return 'Confirm DH return';
+  if (state?.sale && row.status === 'sold') return 'Return';
   return null;
 }
 
 export function rowIsListable(row: CertRow): boolean {
   const state = row.returnState;
-  const blocked = !state || row.returnStatusError || row.status === 'sold'
+  const blocked = !state || state.purchase?.id !== row.purchaseId || row.returnStatusError || row.status === 'sold'
     || row.dhStatus === 'sold' || row.returnBusy || row.returnLoading
     || (state && returnNeedsDiagnosis(state)) || state?.sale || state?.precedingAttempt
     || (state?.operation && state.operation.state !== 'completed');

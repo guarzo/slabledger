@@ -44,33 +44,44 @@ export function useConfirmedReturn(
   const [submitting, setSubmitting] = useState(false);
   const requested = useRef(new Set<string>());
   const versions = useRef(new Map<string, number>());
+  const inflight = useRef(new Map<string, Promise<ConfirmedReturnState | null>>());
   const alive = useRef(true);
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const refresh = useCallback(async (cert: string): Promise<ConfirmedReturnState | null> => {
     const row = certsRef.current.get(cert);
-    if (!row?.purchaseId) return null;
-    const key = `${cert}:${row.purchaseId}`;
+    const purchaseId = row?.purchaseId;
+    if (!row || !purchaseId) return null;
+    const key = `${cert}:${purchaseId}`;
+    const existing = inflight.current.get(key);
+    if (existing) return existing;
     const version = (versions.current.get(key) ?? 0) + 1;
     versions.current.set(key, version);
     const current = () => alive.current && versions.current.get(key) === version
-      && certsRef.current.get(cert)?.purchaseId === row.purchaseId;
+      && certsRef.current.get(cert)?.purchaseId === purchaseId;
     updateCert(cert, { returnLoading: true, returnStatusError: undefined });
-    try {
-      const state = await api.getConfirmedReturnState(row.purchaseId);
-      if (!current()) return null;
-      if (state.purchase?.id !== row.purchaseId || state.purchase.certNumber !== cert
-        || !Object.prototype.hasOwnProperty.call(state, 'expectedSaleId')) throw new Error('Return state identity changed');
-      updateCert(cert, projection(certsRef.current.get(cert) ?? row, state));
-      return state;
-    } catch (err) {
-      if (current()) updateCert(cert, {
-        returnLoading: false,
-        returnStatusError: err instanceof Error ? err.message : 'Return state unavailable',
-      });
-      return null;
-    }
+    const request = (async () => {
+      try {
+        const state = await api.getConfirmedReturnState(purchaseId);
+        if (!current()) return null;
+        if (!state.purchase || state.purchase.id !== purchaseId || state.purchase.certNumber !== cert
+          || !Object.prototype.hasOwnProperty.call(state, 'expectedSaleId')) throw new Error('Return state identity changed');
+        updateCert(cert, projection(certsRef.current.get(cert) ?? row, state));
+        return state;
+      } catch (err) {
+        if (current()) updateCert(cert, {
+          returnLoading: false,
+          returnStatusError: err instanceof Error ? err.message : 'Return state unavailable',
+        });
+        return null;
+      }
+    })();
+    inflight.current.set(key, request);
+    void request.then(() => {
+      if (inflight.current.get(key) === request) inflight.current.delete(key);
+    });
+    return request;
   }, [certsRef, updateCert]);
 
   // Browser queue state is presentation only. Rehydrate every known purchase
@@ -86,9 +97,32 @@ export function useConfirmedReturn(
         void refresh(row.certNumber);
       }
     }
-    for (const key of requested.current) if (!present.has(key)) requested.current.delete(key);
+    for (const key of requested.current) {
+      if (present.has(key)) continue;
+      requested.current.delete(key);
+      // A dismissed row can be rescanned with the same cert and purchase.
+      // An old GET must not populate that new row when it finally resolves.
+      versions.current.set(key, (versions.current.get(key) ?? 0) + 1);
+      inflight.current.delete(key);
+    }
     if (target && !certs.has(target.certNumber)) setTarget(null);
   }, [certs, refresh, target]);
+
+  // Listing attempts are journaled by scan's background work. Re-read only
+  // their durable projection (or a failed projection) while the row is visible;
+  // never re-trigger the scan POST or the listing mutation from this timer.
+  useEffect(() => {
+    if (certs.size === 0) return;
+    const timer = window.setInterval(() => {
+      for (const row of certsRef.current.values()) {
+        if (row.purchaseId && !row.returnLoading && !row.returnBusy
+          && (row.returnState?.precedingAttempt?.outcome === 'open' || row.returnStatusError)) {
+          void refresh(row.certNumber);
+        }
+      }
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [certs.size, certsRef, refresh]);
 
   const start = useCallback(async (cert: string) => {
     if (submitting) {
