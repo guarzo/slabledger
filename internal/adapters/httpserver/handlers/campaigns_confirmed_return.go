@@ -14,6 +14,7 @@ import (
 type ConfirmedReturnService interface {
 	ConfirmReturn(context.Context, string, inventory.ConfirmReturnRequest) (*inventory.ConfirmedReturnState, error)
 	GetReturnState(context.Context, string) (*inventory.ConfirmedReturnState, error)
+	CheckDHSale(context.Context, string) (*inventory.DHSaleCheck, error)
 }
 
 func WithConfirmedReturnService(s ConfirmedReturnService) CampaignsHandlerOption {

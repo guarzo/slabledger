@@ -786,6 +786,34 @@ projection contains:
 
 Server idempotency keys and private request identities are never exposed.
 
+### `GET /api/purchases/{purchaseId}/dh-sale-check`
+
+Auth: same fail-closed requirements as the confirmed-return state endpoint.
+This on-demand, read-only check uses the **stored** purchase inventory ID, cert and
+grader; query parameters and request bodies are rejected with `400` instead
+of accepting a client-selected target. It reads durable sale,
+return-episode and open-attempt state, checks the exact inventory ID and cert at
+DH across all pages, then re-reads durable state. It never returns inventory,
+settles an attempt, or lists a slab.
+
+**Response:** `200 OK` — `{ "status": "sold", "resolvable": true,
+"reason": "", "target": { "dhInventoryId": 147840,
+"certNumber": "160944741", "grader": "PSA" } }`. Status is `sold`,
+`in_stock` or `listed` when safely observed; it is empty when no provider read
+was possible or durable state changed. `resolvable` is false for a recorded
+local sale, an unlinked/incomplete target, an open attempt, any retained return
+episode (including a completed episode whose null-sale POST would replay), a
+non-sold status or a change during the check. `reason` is a stable diagnostic:
+`local_sale_present`, `target_unavailable`, `mutation_pending`,
+`return_episode_exists`, `not_sold` or `state_changed`. The `target` contains
+only the purchase identity, never sale details, keys or return receipts.
+
+**Errors:** `400` query parameters/body; `401` missing user; `404` purchase absent; `409` unknown provider
+status; `502` provider/read uncertainty; `503` unconfigured authentication,
+coordination or DH capability. Error JSON follows the confirmed-return format.
+A `sold` observation is not proof of sale attribution and is **not** authority
+to skip POST's captured-target, return-episode, mutation and listing guards.
+
 ### `POST /api/purchases/{purchaseId}/confirm-return`
 
 Auth: same fail-closed requirements as the state endpoint.
