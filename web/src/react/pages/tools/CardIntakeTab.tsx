@@ -170,6 +170,7 @@ export default function CardIntakeTab() {
   };
 
   const handleDismiss = (certNumber: string) => {
+    returnFlow.discard(certNumber);
     setCerts(prev => {
       const next = new Map(prev);
       next.delete(certNumber);
@@ -191,6 +192,7 @@ export default function CardIntakeTab() {
   };
 
   const handleClearAll = () => {
+    for (const cert of certsRef.current.keys()) returnFlow.discard(cert);
     setCerts(new Map());
     setClearAllOpen(false);
     // Nothing left to retry — drop the pending attempt and its message rather

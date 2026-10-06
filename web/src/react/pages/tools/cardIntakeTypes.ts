@@ -31,6 +31,7 @@ export interface CertRow {
   returnBusy?: boolean;
   returnStatusError?: string;
   returnError?: string;
+  returnStale?: boolean;
 }
 
 export function hasDHMatch(row: CertRow): boolean {
@@ -69,7 +70,7 @@ export function hasReturnEpisode(row: CertRow): boolean {
 }
 
 export function returnActionLabel(row: CertRow): string | null {
-  if (!row.purchaseId || (row.returnState && row.returnState.purchase?.id !== row.purchaseId)
+  if (row.returnStale || !row.purchaseId || (row.returnState && row.returnState.purchase?.id !== row.purchaseId)
     || !hasReturnEpisode(row)) return null;
   if (row.returnStatusError) return 'Refresh return state';
   if (row.returnLoading || row.returnBusy) return row.returnBusy ? 'Returning…' : 'Checking return…';
@@ -87,7 +88,7 @@ export function returnActionLabel(row: CertRow): string | null {
 export function rowIsListable(row: CertRow): boolean {
   const state = row.returnState;
   const blocked = !state || state.purchase?.id !== row.purchaseId || row.returnStatusError || row.status === 'sold'
-    || row.dhStatus === 'sold' || row.returnBusy || row.returnLoading
+    || row.dhStatus === 'sold' || row.returnBusy || row.returnLoading || row.returnStale
     || (state && returnNeedsDiagnosis(state)) || state?.sale || state?.precedingAttempt
     || (state?.operation && state.operation.state !== 'completed');
   return !blocked && !!row.purchaseId && hasDHInventory(row) && hasCLPrice(row);

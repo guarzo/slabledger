@@ -24,7 +24,7 @@ export function loadQueue(): Map<string, CertRow> {
         // In-flight work and durable return state are reloaded from the server,
         // never resumed or acknowledged from yesterday's browser projection.
         returnBusy: false, returnLoading: false, returnState: undefined,
-        returnStatusError: undefined, returnError: undefined,
+        returnStatusError: undefined, returnError: undefined, returnStale: false,
       },
     ]);
     return new Map(cleaned);

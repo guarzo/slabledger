@@ -8,6 +8,7 @@ import { returnNeedsDiagnosis } from './cardIntakeTypes';
 type ReturnTarget = { certNumber: string; purchaseId: string; request: ConfirmReturnRequest };
 type Snapshot = { purchaseId: string; saleId: string | null; target: ReturnTargetIdentity };
 type UpdateCert = (cert: string, updates: Partial<CertRow>) => void;
+const staleMessage = 'Return state changed; dismiss this row and physically rescan the slab before retrying.';
 
 function identity(state: ConfirmedReturnState): ReturnTargetIdentity | null {
   const p = state.purchase;
@@ -57,6 +58,7 @@ export function useConfirmedReturn(
   const snapshots = useRef(new Map<string, Snapshot>());
   const blocked = useRef(new Map<string, string>());
   const versions = useRef(new Map<string, number>());
+  const epochs = useRef(new Map<string, number>());
   const inflight = useRef(new Map<string, Promise<ConfirmedReturnState | null>>());
   const submitting = useRef(false);
   const alive = useRef(true);
@@ -86,15 +88,22 @@ export function useConfirmedReturn(
           if (target) snapshots.current.set(key, { purchaseId, saleId: state.expectedSaleId, target });
         }
         const snapshot = snapshots.current.get(key);
-        if (state.operation?.state === 'completed' && snapshot?.purchaseId === purchaseId
+        const completed = state.operation?.state === 'completed' && snapshot?.purchaseId === purchaseId
           && state.operation.expectedSaleId === snapshot.saleId
           && state.operation.dhInventoryId === snapshot.target.dhInventoryId
           && state.operation.certNumber === snapshot.target.certNumber
-          && state.operation.grader === snapshot.target.grader) blocked.current.delete(key);
+          && state.operation.grader === snapshot.target.grader;
+        if (completed) blocked.current.delete(key);
+        // A return episode may remove its captured sale even when completion is conflicted;
+        // a different live sale or target must still require a new physical scan.
+        const sameEpisode = !state.sale && state.operation?.expectedSaleId === snapshot?.saleId;
+        const stale = !!snapshot && (!sameTarget(identity(state), snapshot.target)
+          || (state.expectedSaleId !== snapshot.saleId && !sameEpisode));
         updateCert(cert, {
           ...projection(certsRef.current.get(cert) ?? row, state),
-          ...(blocked.current.has(key) && state.operation?.state !== 'pending'
-            ? { returnError: blocked.current.get(key) } : {}),
+          ...(stale || row.returnStale ? { returnStale: true, returnError: staleMessage }
+            : blocked.current.has(key) && state.operation?.state !== 'pending'
+              ? { returnError: blocked.current.get(key) } : {}),
         });
         return state;
       } catch (err) {
@@ -129,9 +138,23 @@ export function useConfirmedReturn(
       snapshots.current.delete(key);
       blocked.current.delete(key);
       versions.current.set(key, (versions.current.get(key) ?? 0) + 1);
+      epochs.current.set(key, (epochs.current.get(key) ?? 0) + 1);
       inflight.current.delete(key);
     }
   }, [certs, refresh]);
+
+  const discard = useCallback((cert: string) => {
+    // Invalidate in-flight reads before a same-cert, same-purchase rescan can arrive.
+    for (const key of requested.current) {
+      if (!key.startsWith(`${cert}:`)) continue;
+      requested.current.delete(key);
+      snapshots.current.delete(key);
+      blocked.current.delete(key);
+      versions.current.set(key, (versions.current.get(key) ?? 0) + 1);
+      epochs.current.set(key, (epochs.current.get(key) ?? 0) + 1);
+      inflight.current.delete(key);
+    }
+  }, []);
 
   // Poll only the durable projection of an open listing attempt or failed read.
   useEffect(() => {
@@ -154,8 +177,11 @@ export function useConfirmedReturn(
     const initial = row?.returnState;
     const key = `${cert}:${purchaseId}`;
     const captured = purchaseId ? snapshots.current.get(key) : undefined;
-    if (!purchaseId || !initial || !captured || row?.returnLoading || row.returnStatusError
-      || !sameTarget(identity(initial), captured.target)) return;
+    if (!purchaseId || !initial || !captured || row?.returnLoading || row.returnStatusError || row.returnStale) return;
+    if (!sameTarget(identity(initial), captured.target) || (initial.sale && initial.sale.id !== captured.saleId)) {
+      updateCert(cert, { returnStale: true, returnError: staleMessage });
+      return;
+    }
     const retry = !check && initial.operation?.state === 'pending' ? initial.operation : null;
     if (check && (blocked.current.has(key) || !check.resolvable || check.status !== 'sold'
       || initial.sale || initial.operation || initial.precedingAttempt
@@ -163,7 +189,9 @@ export function useConfirmedReturn(
     if (!check && !retry && (blocked.current.has(key) || !initial.sale || initial.expectedSaleId !== captured.saleId)) return;
     // Synchronous ref guard prevents a second click during the fresh read as well as POST.
     submitting.current = true;
-    const ownsRow = () => alive.current && certsRef.current.get(cert)?.purchaseId === purchaseId;
+    const epoch = epochs.current.get(key) ?? 0;
+    const ownsRow = () => alive.current && (epochs.current.get(key) ?? 0) === epoch
+      && certsRef.current.get(cert)?.purchaseId === purchaseId;
     updateCert(cert, { returnBusy: true, returnError: undefined });
     try {
       const fresh = await refresh(cert);
@@ -178,7 +206,7 @@ export function useConfirmedReturn(
         : same && !fresh.precedingAttempt && !!fresh.sale
           && fresh.sale.id === captured.saleId && fresh.expectedSaleId === captured.saleId;
       if (!safe) {
-        updateCert(cert, { returnError: 'Return state changed; rescan before retrying.' });
+        updateCert(cert, { returnStale: true, returnError: staleMessage });
         return;
       }
       const confirmed: ReturnTarget = { certNumber: cert, purchaseId, request: {
@@ -219,5 +247,5 @@ export function useConfirmedReturn(
     }
   }, [certsRef, updateCert, refresh, applyScanResult]);
 
-  return { start, resolve: (cert: string, check: DHSaleCheck) => start(cert, check), refresh };
+  return { start, resolve: (cert: string, check: DHSaleCheck) => start(cert, check), refresh, discard };
 }

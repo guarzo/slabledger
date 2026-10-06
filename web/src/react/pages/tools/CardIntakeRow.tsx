@@ -157,7 +157,7 @@ export function CertRowItem({
   const returnLabel = label === 'Return' && row.returnError ? null : label;
   const listed = listingStatus === 'listed';
   const inPlaceableStatus = row.status === 'existing' || row.status === 'returned' || row.status === 'imported';
-  const returnHeld = !row.returnState || !!row.returnStatusError || !!row.returnLoading
+  const returnHeld = !row.returnState || !!row.returnStatusError || !!row.returnStale || !!row.returnLoading
     || !!row.returnBusy || returnNeedsDiagnosis(row.returnState)
     || row.returnState.awaitingListing || row.returnState.operation?.state === 'pending';
   const showFixDH = !!row.purchaseId && inPlaceableStatus && !returnHeld && (
@@ -238,7 +238,14 @@ export function CertRowItem({
               {returnLabel}
             </button>
           )}
-          {showDismiss && (
+          {row.returnStale && !row.returnBusy && (
+            <button
+              onClick={() => onDismiss(row.certNumber)}
+              className="rounded-md bg-[var(--warning)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--warning)] hover:bg-[var(--warning)]/30"
+              title="Remove this browser queue row; physically rescan the slab to load current return state"
+            >Dismiss to rescan</button>
+          )}
+          {showDismiss && !row.returnStale && (
             <button
               onClick={() => onDismiss(row.certNumber)}
               aria-label="Dismiss"
@@ -357,6 +364,7 @@ function CertRowDetail({ row, dhSaleCheck, onCheckDHSale, onResolveDHSale }: {
           )}
 
           {row.purchaseId && row.returnState?.purchase?.id === row.purchaseId
+            && hasDHInventory(row) && !row.returnStale
             && !row.returnStatusError && row.status !== 'sold' && !row.returnState.sale && (
             <div className="mt-2 space-y-1 text-xs">
               <button

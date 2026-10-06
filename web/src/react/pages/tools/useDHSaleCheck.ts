@@ -82,5 +82,5 @@ export function useDHSaleCheck(certsRef: RefObject<Map<string, CertRow>>, certs:
     const entry = entries.get(cert);
     return row?.purchaseId === purchaseId && identity && entry?.identity === identity ? entry.state : undefined;
   };
-  return { check, stateFor, clear };
+  return { check, stateFor };
 }

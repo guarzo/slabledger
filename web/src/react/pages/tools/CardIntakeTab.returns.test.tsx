@@ -167,6 +167,86 @@ describe('confirmed Cert Intake returns', () => {
     expect(mocks.confirm).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { name: 'sale', change: (s: ConfirmedReturnState) => ({ ...s, sale: sale(s.purchase!, 'sale-B'), expectedSaleId: 'sale-B' }), newSale: 'sale-B' },
+    { name: 'target', change: (s: ConfirmedReturnState) => ({ ...s, purchase: { ...s.purchase!, dhInventoryId: 43 } }), newSale: 'old-sale' },
+  ])('recovers a stale $name only after dismissing and physically rescanning', async ({ change, newSale }) => {
+    const p = purchase();
+    const initial = soldState(p);
+    const changed = change(initial);
+    const mocks = transport(initial);
+    seed(p, 'sold');
+    const user = userEvent.setup();
+    render(<CardIntakeTab />);
+    await screen.findByRole('button', { name: 'Return' });
+    mocks.setState(changed);
+    await user.click(screen.getByRole('button', { name: 'Return' }));
+    expect(await screen.findByRole('button', { name: 'Dismiss to rescan' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Return' })).not.toBeInTheDocument();
+    // Entering the cert again must not quietly recapture a new sale or target.
+    const input = screen.getByPlaceholderText('Scan or type cert number…');
+    await user.type(input, `${p.certNumber}{Enter}`);
+    expect(mocks.scan).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Dismiss to rescan' })).toBeVisible();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Dismiss to rescan' }));
+    expect(screen.queryByRole('button', { name: 'Return' })).not.toBeInTheDocument();
+    await user.type(input, `${p.certNumber}{Enter}`);
+    expect(await screen.findByRole('button', { name: 'Return' })).toBeEnabled();
+    expect(mocks.scan).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Return' }));
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledWith(p.id, {
+      returnConfirmed: true, expectedSaleId: newSale,
+      expectedTarget: { dhInventoryId: changed.purchase!.dhInventoryId!, certNumber: p.certNumber, grader: 'PSA' },
+    }));
+  });
+
+  it('does not apply an old return response to a dismissed and re-added same-purchase row', async () => {
+    const p = purchase();
+    const initial = soldState(p);
+    const newer = { ...initial, sale: sale(p, 'sale-B'), expectedSaleId: 'sale-B' };
+    const mocks = transport(initial);
+    let finish: ((value: ConfirmedReturnState) => void) | undefined;
+    mocks.confirm.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    seed(p, 'sold');
+    const user = userEvent.setup();
+    render(<CardIntakeTab />);
+    await user.click(await screen.findByRole('button', { name: 'Return' }));
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: 'Clear all' }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear all' }));
+    mocks.setState(newer);
+    const input = screen.getByPlaceholderText('Scan or type cert number…');
+    await user.type(input, `${p.certNumber}{Enter}`);
+    expect(await screen.findByRole('button', { name: 'Return' })).toBeEnabled();
+    expect(mocks.scan).toHaveBeenCalledTimes(1);
+    await act(async () => { finish?.(completed(initial)); });
+    expect(mocks.scan).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Return' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Return' }));
+    await waitFor(() => expect(mocks.confirm).toHaveBeenLastCalledWith(p.id, {
+      returnConfirmed: true, expectedSaleId: 'sale-B',
+      expectedTarget: { dhInventoryId: p.dhInventoryId!, certNumber: p.certNumber, grader: 'PSA' },
+    }));
+  });
+
+  it('hides Return when a manual state refresh discovers a changed sale', async () => {
+    const p = purchase();
+    const initial = soldState(p);
+    const mocks = transport(initial);
+    seed(p, 'sold');
+    render(<CardIntakeTab />);
+    await screen.findByRole('button', { name: 'Return' });
+    mocks.read.mockRejectedValueOnce(new Error('State read failed'));
+    await userEvent.click(screen.getByRole('button', { name: 'Return' }));
+    await screen.findByRole('button', { name: 'Refresh return state' });
+    mocks.setState({ ...initial, sale: sale(p, 'sale-B'), expectedSaleId: 'sale-B' });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh return state' }));
+    expect(await screen.findByRole('button', { name: 'Dismiss to rescan' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Return' })).not.toBeInTheDocument();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
   it('reloads pending completion from the server and reuses its captured sale and operation', async () => {
     const p = purchase();
     const initial = state(p);
@@ -471,7 +551,7 @@ describe('confirmed Cert Intake returns', () => {
     await waitFor(() => expect(mocks.read).toHaveBeenCalledWith(newPurchase.id));
     releaseOld?.(initial);
     const list = await screen.findByRole('button', { name: 'List on DH' });
-    expect(list).toBeEnabled();
+    await waitFor(() => expect(list).toBeEnabled());
     expect(screen.queryByRole('button', { name: 'Returning…' })).not.toBeInTheDocument();
     expect(mocks.list).not.toHaveBeenCalled();
     await user.click(list);
@@ -513,6 +593,17 @@ describe('confirmed Cert Intake returns', () => {
     }));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(mocks.list).not.toHaveBeenCalled();
+  });
+
+  it('does not offer Check DH sale for a purchase with no DH inventory link', async () => {
+    const p = { ...purchase(), dhInventoryId: 0 };
+    const mocks = transport(state(p));
+    seed(p);
+    render(<CardIntakeTab />);
+    await screen.findByRole('button', { name: 'Show card details' });
+    await userEvent.click(screen.getByRole('button', { name: 'Show card details' }));
+    expect(screen.queryByRole('button', { name: 'Check DH sale' })).not.toBeInTheDocument();
+    expect(mocks.check).not.toHaveBeenCalled();
   });
 
   it('does not offer a second unkeyed Resolve after a lost response with no durable episode', async () => {
