@@ -827,15 +827,22 @@ external sales use DH return-to-stock. This endpoint does **not** list inventory
 ```json
 {
   "returnConfirmed": true,
-  "expectedSaleId": null
+  "expectedSaleId": null,
+  "expectedTarget": { "dhInventoryId": 147840, "certNumber": "160944741", "grader": "PSA" }
 }
 ```
 
 `expectedSaleId` is mandatory, including explicit `null` for already-unsold
-recovery. Use the observed sale ID otherwise. Optional `operationId` identifies a
-server episode obtained from state; retry its captured sale precondition unchanged.
-Client-selected DH targets/keys, unknown fields and nonliteral confirmation are
-rejected. Request bodies are limited to 4096 bytes.
+recovery. Use the sale ID from the initial durable read otherwise. A new external
+return requires `expectedTarget` from that same read; the server compares it inside
+mutation ownership before preparing any DH operation. Do not replace the captured
+sale or target with a changed value from the pre-POST fresh read: rescan instead.
+Optional `operationId` identifies a server episode obtained from state; retry its
+captured sale and target unchanged. Older clients without `expectedTarget` fail
+closed for new external returns with a reload/update response; established operation
+retries and local/off-platform un-sell retain their existing contracts. Client-selected
+keys, unknown fields and nonliteral confirmation are rejected. Request bodies are
+limited to 4096 bytes.
 
 **Response:** `200 OK` — the state projection above. Outcomes include `local`,
 `legacy_void`, `no_return_required`, `completed`, and `completed_replay`.

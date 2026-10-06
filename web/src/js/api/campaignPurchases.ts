@@ -4,7 +4,7 @@
 
 import type {
   Purchase, Sale, CreateSaleInput,
-  QuickAddRequest, ConfirmReturnRequest, ConfirmedReturnState,
+  QuickAddRequest, ConfirmReturnRequest, ConfirmedReturnState, DHSaleCheck,
 } from '../../types/campaigns';
 import type { PriceHint } from '../../types/pricing';
 import { APIClient } from './client';
@@ -18,6 +18,7 @@ declare module './client' {
     createSale(campaignId: string, input: CreateSaleInput): Promise<Sale>;
     deleteSale(campaignId: string, purchaseId: string): Promise<void>;
     getConfirmedReturnState(purchaseId: string): Promise<ConfirmedReturnState>;
+    getDHSaleCheck(purchaseId: string): Promise<DHSaleCheck>;
     confirmPurchaseReturn(purchaseId: string, request: ConfirmReturnRequest): Promise<ConfirmedReturnState>;
 
     // Quick-add
@@ -56,6 +57,10 @@ proto.deleteSale = async function (this: APIClient, campaignId: string, purchase
 
 proto.getConfirmedReturnState = async function (this: APIClient, purchaseId: string): Promise<ConfirmedReturnState> {
   return this.get<ConfirmedReturnState>(`/purchases/${encodeURIComponent(purchaseId)}/confirmed-return`);
+};
+
+proto.getDHSaleCheck = async function (this: APIClient, purchaseId: string): Promise<DHSaleCheck> {
+  return this.get<DHSaleCheck>(`/purchases/${encodeURIComponent(purchaseId)}/dh-sale-check`);
 };
 
 proto.confirmPurchaseReturn = async function (this: APIClient, purchaseId: string, request: ConfirmReturnRequest): Promise<ConfirmedReturnState> {

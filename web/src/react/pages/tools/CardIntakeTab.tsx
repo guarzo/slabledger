@@ -15,7 +15,7 @@ import { CertRowItem, StatDot } from './CardIntakeRow';
 import { useCardIntakePolling } from './useCardIntakePolling';
 import { ConfirmDialog } from '../../ui';
 import { useConfirmedReturn } from './useConfirmedReturn';
-import CardIntakeReturnDialog from './CardIntakeReturnDialog';
+import { useDHSaleCheck } from './useDHSaleCheck';
 
 export default function CardIntakeTab() {
   const [input, setInput] = useState('');
@@ -78,6 +78,7 @@ export default function CardIntakeTab() {
   }, [updateCert]);
 
   const returnFlow = useConfirmedReturn(certsRef, certs, updateCert, applyScanResult);
+  const saleCheck = useDHSaleCheck(certsRef, certs);
   const refreshReturnState = returnFlow.refresh;
 
   const resolveInBackground = useCallback(async (certNumber: string) => {
@@ -415,6 +416,13 @@ export default function CardIntakeTab() {
               row={row}
               highlighted={row.certNumber === highlightedCert}
               onReturn={cert => { void returnFlow.start(cert); }}
+              onCheckDHSale={cert => { void saleCheck.check(cert); }}
+              dhSaleCheck={row.purchaseId ? saleCheck.stateFor(row.certNumber, row.purchaseId) : undefined}
+              onResolveDHSale={cert => {
+                const current = certsRef.current.get(cert);
+                const check = current?.purchaseId && saleCheck.stateFor(cert, current.purchaseId)?.check;
+                if (check) void returnFlow.resolve(cert, check);
+              }}
               onRefreshReturnState={cert => { void returnFlow.refresh(cert); }}
               onDismiss={handleDismiss}
               onList={handleSetPriceAndList}
@@ -472,13 +480,6 @@ export default function CardIntakeTab() {
           }}
         />
       )}
-
-      <CardIntakeReturnDialog
-        certNumber={returnFlow.target?.certNumber}
-        loading={returnFlow.submitting}
-        onConfirm={() => { void returnFlow.submit(); }}
-        onCancel={returnFlow.cancel}
-      />
 
       <ConfirmDialog
         open={clearAllOpen}

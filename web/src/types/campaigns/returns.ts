@@ -1,8 +1,22 @@
 import type { Purchase, Sale } from './core';
 
+export interface ReturnTargetIdentity {
+  dhInventoryId: number;
+  certNumber: string;
+  grader: string;
+}
+
+export interface DHSaleCheck {
+  status: string;
+  resolvable: boolean;
+  reason: string;
+  target: ReturnTargetIdentity;
+}
+
 export interface ConfirmReturnRequest {
   returnConfirmed: true;
   expectedSaleId: string | null;
+  expectedTarget?: ReturnTargetIdentity;
   operationId?: string;
 }
 

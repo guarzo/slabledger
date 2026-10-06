@@ -3,7 +3,7 @@ import { formatCents } from '../../utils/formatters';
 import PriceDecisionBar from '../../ui/PriceDecisionBar';
 import { buildPriceSources } from '../../ui/priceDecisionHelpers';
 import type { PreSelection } from '../../ui/priceDecisionHelpers';
-import type { MarketSnapshot } from '../../../types/campaigns';
+import type { DHSaleCheck, MarketSnapshot } from '../../../types/campaigns';
 import type { CertRow, CertStatus } from './cardIntakeTypes';
 import { hasDHMatch, hasDHInventory, hasCLPrice, dhPushStuck, rowIsListable, rowAwaitingSync, returnActionLabel, returnNeedsDiagnosis } from './cardIntakeTypes';
 import CardIntakeReturnNotice from './CardIntakeReturnNotice';
@@ -129,6 +129,9 @@ export function CertRowItem({
   row,
   highlighted,
   onReturn,
+  onCheckDHSale,
+  dhSaleCheck,
+  onResolveDHSale,
   onRefreshReturnState,
   onDismiss,
   onList,
@@ -137,6 +140,9 @@ export function CertRowItem({
   row: CertRow;
   highlighted?: boolean;
   onReturn: (certNumber: string) => void;
+  onCheckDHSale: (certNumber: string) => void;
+  dhSaleCheck?: { loading: boolean; check?: DHSaleCheck; error?: string };
+  onResolveDHSale: (certNumber: string) => void;
   onRefreshReturnState?: (certNumber: string) => void;
   onDismiss: (certNumber: string) => void;
   onList: (certNumber: string, priceCents: number, source: string) => void;
@@ -147,7 +153,8 @@ export function CertRowItem({
   const awaitingSync = rowAwaitingSync(row);
   const { market, buyCostCents, listingStatus, listingError } = row;
   const busy = listingStatus === 'setting-price' || listingStatus === 'listing' || row.returnBusy;
-  const returnLabel = returnActionLabel(row);
+  const label = returnActionLabel(row);
+  const returnLabel = label === 'Return' && row.returnError ? null : label;
   const listed = listingStatus === 'listed';
   const inPlaceableStatus = row.status === 'existing' || row.status === 'returned' || row.status === 'imported';
   const returnHeld = !row.returnState || !!row.returnStatusError || !!row.returnLoading
@@ -257,8 +264,12 @@ export function CertRowItem({
         </div>
       </div>
 
+      {returnLabel && !['Refresh return state', 'Checking return…', 'Returning…'].includes(returnLabel) && (
+        <p className="px-4 pb-2 text-xs text-[var(--warning)]">Return confirms slab in hand and refund resolved</p>
+      )}
+
       {canExpand && expanded && (
-        <CertRowDetail row={row} />
+        <CertRowDetail row={row} dhSaleCheck={dhSaleCheck} onCheckDHSale={onCheckDHSale} onResolveDHSale={onResolveDHSale} />
       )}
 
       <CardIntakeReturnNotice row={row} />
@@ -284,7 +295,12 @@ export function CertRowItem({
   );
 }
 
-function CertRowDetail({ row }: { row: CertRow }) {
+function CertRowDetail({ row, dhSaleCheck, onCheckDHSale, onResolveDHSale }: {
+  row: CertRow;
+  dhSaleCheck?: { loading: boolean; check?: DHSaleCheck; error?: string };
+  onCheckDHSale: (cert: string) => void;
+  onResolveDHSale: (cert: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     if (!row.cardName) return;
@@ -340,6 +356,33 @@ function CertRowDetail({ row }: { row: CertRow }) {
             <div className="text-xs text-[var(--text-muted)]">{gradeLine}</div>
           )}
 
+          {row.purchaseId && row.returnState?.purchase?.id === row.purchaseId
+            && !row.returnStatusError && row.status !== 'sold' && !row.returnState.sale && (
+            <div className="mt-2 space-y-1 text-xs">
+              <button
+                onClick={() => onCheckDHSale(row.certNumber)}
+                disabled={dhSaleCheck?.loading || !!row.returnLoading || !!row.returnBusy}
+                className="rounded-md bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-[var(--text)] hover:bg-[var(--surface-3)] disabled:opacity-50"
+              >{dhSaleCheck?.loading ? 'Checking DH sale…' : 'Check DH sale'}</button>
+              {dhSaleCheck?.error && <p role="alert" className="text-[var(--danger)]">DH sale check failed: {dhSaleCheck.error}</p>}
+              {dhSaleCheck?.check && (
+                <p className="text-[var(--text-muted)]">{dhSaleCheck.check.resolvable ? 'DH sale confirmed for this slab.'
+                  : `DH sale not resolvable: ${dhSaleCheck.check.reason || dhSaleCheck.check.status || 'unknown'}`}</p>
+              )}
+              {dhSaleCheck?.check?.status === 'sold' && dhSaleCheck.check.resolvable
+                && row.returnState && !row.returnLoading && !row.returnStatusError && !row.returnBusy
+                && !row.returnState.sale && !row.returnState.operation && !row.returnState.precedingAttempt
+                && !row.returnState.awaitingListing && !returnNeedsDiagnosis(row.returnState)
+                && row.returnState.purchase?.dhInventoryId === dhSaleCheck.check.target.dhInventoryId
+                && row.returnState.purchase?.certNumber === dhSaleCheck.check.target.certNumber
+                && (row.returnState.purchase?.grader ?? 'PSA') === dhSaleCheck.check.target.grader && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={() => onResolveDHSale(row.certNumber)} className="rounded-md bg-[var(--warning)]/15 px-2.5 py-1 font-semibold text-[var(--warning)] hover:bg-[var(--warning)]/30">Resolve DH sale</button>
+                    <span className="text-[var(--warning)]">Resolve confirms slab in hand and refund resolved</span>
+                  </div>
+                )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2 mt-2">
             {(row.dhSearchQuery || row.cardName) && (
               <a

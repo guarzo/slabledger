@@ -18,7 +18,8 @@ describe('confirmed return transport', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Retry completion' }), { status: 503 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(state), { status: 200 }));
     vi.stubGlobal('fetch', fetcher);
-    const request = { returnConfirmed: true as const, expectedSaleId: null, operationId: 'persisted-operation' };
+    const request = { returnConfirmed: true as const, expectedSaleId: null, operationId: 'persisted-operation',
+      expectedTarget: { dhInventoryId: 42, certNumber: 'cert', grader: 'PSA' } };
     await client.confirmPurchaseReturn('purchase', request);
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls[0][1].body).toBe(fetcher.mock.calls[1][1].body);
@@ -33,6 +34,14 @@ describe('confirmed return transport', () => {
     expect(transport.mock.calls[0][0]).toBe('/api/purchases/purchase%2F1/confirmed-return');
   });
 
+  it('reads the on-demand DH sale check with an escaped purchase ID', async () => {
+    const check = { status: 'sold', resolvable: true, reason: '', target: { dhInventoryId: 42, certNumber: 'cert', grader: 'PSA' } };
+    const transport = vi.spyOn(api, 'fetchWithRetry').mockResolvedValue(new Response(JSON.stringify(check), { status: 200 }));
+    expect(await api.getDHSaleCheck('purchase/1')).toEqual(check);
+    expect(transport.mock.calls[0][0]).toBe('/api/purchases/purchase%2F1/dh-sale-check');
+    expect(transport.mock.calls[0][1]?.method).toBeUndefined(); // APIClient.get uses the default GET
+  });
+
   it.each([
     { expectedSaleId: null },
     { expectedSaleId: 'original-sale', operationId: 'server-operation' },
@@ -40,7 +49,8 @@ describe('confirmed return transport', () => {
     const transport = vi.spyOn(api, 'fetchWithRetry').mockResolvedValue(
       new Response(JSON.stringify(state), { status: 200 }),
     );
-    const request = { returnConfirmed: true as const, ...precondition };
+    const request = { returnConfirmed: true as const, ...precondition,
+      expectedTarget: { dhInventoryId: 42, certNumber: 'cert', grader: 'PSA' } };
     expect(await api.confirmPurchaseReturn('purchase/1', request)).toEqual(state);
     const [url, options] = transport.mock.calls[0];
     expect(url).toBe('/api/purchases/purchase%2F1/confirm-return');
