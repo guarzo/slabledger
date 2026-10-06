@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -78,15 +80,15 @@ func TestScanDHSaleCheckOpenListingAttempt(t *testing.T) {
 			release := make(chan struct{})
 			finished := make(chan struct{})
 			var releaseOnce sync.Once
-			calls := 0
+			var scopeCalls atomic.Int32
 			scope := &mocks.PurchaseMutationScopeMock{WithPurchaseMutationFn: func(c context.Context, purchaseID string, fn func(context.Context) error) error {
 				err := store.WithPurchaseMutation(c, purchaseID, fn)
-				calls++ // only the scan-triggered listing coordinator uses this scope
-				if calls == 1 && err == nil {
+				call := scopeCalls.Add(1) // only scan-triggered listing uses this scope
+				if call == 1 && err == nil {
 					close(prepared)
 					<-release
 				}
-				if calls == 2 {
+				if call == 2 {
 					close(finished)
 				}
 				return err
@@ -111,9 +113,34 @@ func TestScanDHSaleCheckOpenListingAttempt(t *testing.T) {
 			returnsSvc := inventory.NewConfirmedReturnService(store, store, adapter, nil, uuid.NewString)
 			listing, err := dhlisting.NewDHListingService(repo, logger, dhlisting.WithDHListingLister(adapter), dhlisting.WithDHListingFieldsUpdater(repo), dhlisting.WithDHListingConfigLoader(cfg), dhlisting.WithDHListingMutationCoordinator(coord, store, store))
 			require.NoError(t, err)
-			handler := handlers.NewCampaignsHandler(inv, nil, nil, nil, logger, nil, handlers.WithConfirmedReturnService(returnsSvc), handlers.WithDHListingService(listing))
+			listingCtx, cancelListing := context.WithCancel(ctx)
+			handler := handlers.NewCampaignsHandler(inv, nil, nil, nil, logger, listingCtx, handlers.WithConfirmedReturnService(returnsSvc), handlers.WithDHListingService(listing))
 			api := httptest.NewServer(httpserver.NewRouter(httpserver.RouterConfig{CampaignsHandler: handler, LocalAPIToken: "local-fixture", Logger: logger, SPAHandler: handlers.NewSPAHandler(logger)}).Setup())
-			t.Cleanup(api.Close)
+			// Release before closing the HTTP server: a timed-out request may still
+			// be unwinding on the other side of the preparation barrier.
+			t.Cleanup(func() {
+				releaseOnce.Do(func() { close(release) })
+				cancelListing()
+				api.Close()
+			})
+			// Unlike returnHTTP, this fixture bounds each request separately so a
+			// blocked GET/POST fails and releases the barrier during test cleanup.
+			returnHTTP := func(t *testing.T, server *httptest.Server, method, path, body string, authenticated bool) (int, []byte) {
+				t.Helper()
+				requestCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				req, err := http.NewRequestWithContext(requestCtx, method, server.URL+path, strings.NewReader(body))
+				require.NoError(t, err)
+				if authenticated {
+					req.Header.Set("Authorization", "Bearer local-fixture")
+				}
+				response, err := server.Client().Do(req)
+				require.NoError(t, err)
+				defer response.Body.Close()
+				raw, err := io.ReadAll(response.Body)
+				require.NoError(t, err)
+				return response.StatusCode, raw
+			}
 			path := "/api/purchases/" + id
 			body := fmt.Sprintf(`{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":{"dhInventoryId":%d,"certNumber":%q,"grader":"PSA"}}`, target, cert)
 
@@ -169,6 +196,7 @@ func TestScanDHSaleCheckOpenListingAttempt(t *testing.T) {
 				code, raw = returnHTTP(t, api, "POST", path+"/confirm-return", `{"returnConfirmed":true,"expectedSaleId":null}`, true)
 				require.Equal(t, 409, code, string(raw))
 				require.Contains(t, string(raw), "client_update_required")
+				require.Zero(t, returns.Load(), "an old client must not dispatch a return")
 				code, raw = returnHTTP(t, api, "POST", path+"/confirm-return", body, true)
 				require.Equal(t, 200, code, string(raw))
 				require.Contains(t, string(raw), `"outcome":"completed"`)
@@ -177,6 +205,30 @@ func TestScanDHSaleCheckOpenListingAttempt(t *testing.T) {
 				code, raw = returnHTTP(t, api, "POST", path+"/confirm-return", body, true)
 				require.Equal(t, 409, code, string(raw))
 				require.Contains(t, string(raw), "preceding_dh_mutation_uncertain")
+				// Another real scan must attempt auto-list, but the open journal
+				// must prevent a second preparation and provider PATCH.
+				code, raw = returnHTTP(t, api, "POST", "/api/purchases/scan-cert", fmt.Sprintf(`{"certNumber":%q}`, cert), true)
+				require.Equal(t, 200, code, string(raw))
+				require.NoError(t, json.Unmarshal(raw, &scan))
+				require.Equal(t, "existing", scan.Status)
+				require.Eventually(t, func() bool { return scopeCalls.Load() >= 3 }, 5*time.Second, 20*time.Millisecond, "second scan must reach listing preparation")
+				listingDone := make(chan struct{})
+				go func() { handler.WaitBackground(); close(listingDone) }()
+				select {
+				case <-listingDone:
+				case <-time.After(5 * time.Second):
+					t.Fatal("second scan listing did not finish")
+				}
+				require.Equal(t, int32(3), scopeCalls.Load(), "second scan must not reach execution")
+				var attempts int
+				require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM dh_mutation_attempts`).Scan(&attempts))
+				require.Equal(t, 1, attempts, "second scan must not prepare a new journal entry")
+				saved, err := store.GetReturnState(ctx, id)
+				require.NoError(t, err)
+				require.NotNil(t, saved.PrecedingAttempt)
+				require.Equal(t, attemptID, saved.PrecedingAttempt.ID)
+				require.Equal(t, "open", saved.PrecedingAttempt.Outcome)
+				require.Zero(t, returns.Load())
 			}
 			require.Equal(t, int32(1), patches.Load(), "scan must never replay an unkeyed PATCH")
 			if tc.resolvable {
