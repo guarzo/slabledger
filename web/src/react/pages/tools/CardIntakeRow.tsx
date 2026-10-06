@@ -370,7 +370,8 @@ function CertRowDetail({ row, dhSaleCheck, onCheckDHSale, onResolveDHSale }: {
                   : `DH sale not resolvable: ${dhSaleCheck.check.reason || dhSaleCheck.check.status || 'unknown'}`}</p>
               )}
               {dhSaleCheck?.check?.status === 'sold' && dhSaleCheck.check.resolvable
-                && row.returnState && !row.returnLoading && !row.returnStatusError && !row.returnBusy
+                && row.returnState && !row.returnLoading && !row.returnStatusError
+                && !row.returnError && !row.returnBusy
                 && !row.returnState.sale && !row.returnState.operation && !row.returnState.precedingAttempt
                 && !row.returnState.awaitingListing && !returnNeedsDiagnosis(row.returnState)
                 && row.returnState.purchase?.dhInventoryId === dhSaleCheck.check.target.dhInventoryId

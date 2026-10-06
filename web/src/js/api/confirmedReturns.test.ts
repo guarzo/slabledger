@@ -26,6 +26,24 @@ describe('confirmed return transport', () => {
     expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual(request);
   });
 
+  it.each([
+    { name: 'a 503 after dispatch', first: () => Promise.resolve(new Response(JSON.stringify({ error: 'Uncertain' }), { status: 503 })) },
+    { name: 'a dropped connection', first: () => Promise.reject(new TypeError('Connection lost')) },
+  ])('does not resend a new unkeyed confirmation after $name', async ({ first }) => {
+    const client = new APIClient('/api');
+    client.maxRetries = 3;
+    client.retryDelay = 0;
+    const fetcher = vi.fn().mockImplementationOnce(first)
+      .mockResolvedValueOnce(new Response(JSON.stringify(state), { status: 200 }));
+    vi.stubGlobal('fetch', fetcher);
+    const request = { returnConfirmed: true as const, expectedSaleId: null,
+      expectedTarget: { dhInventoryId: 42, certNumber: 'cert', grader: 'PSA' } };
+    await expect(client.confirmPurchaseReturn('purchase', request)).rejects.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe('/api/purchases/purchase/confirm-return');
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(request);
+  });
+
   it('reads durable state with an escaped purchase ID', async () => {
     const transport = vi.spyOn(api, 'fetchWithRetry').mockResolvedValue(
       new Response(JSON.stringify(state), { status: 200 }),

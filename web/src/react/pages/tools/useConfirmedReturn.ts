@@ -157,8 +157,9 @@ export function useConfirmedReturn(
     if (!purchaseId || !initial || !captured || row?.returnLoading || row.returnStatusError
       || !sameTarget(identity(initial), captured.target)) return;
     const retry = !check && initial.operation?.state === 'pending' ? initial.operation : null;
-    if (check && (!check.resolvable || check.status !== 'sold' || initial.sale || initial.operation
-      || initial.precedingAttempt || !sameTarget(check.target, captured.target))) return;
+    if (check && (blocked.current.has(key) || !check.resolvable || check.status !== 'sold'
+      || initial.sale || initial.operation || initial.precedingAttempt
+      || !sameTarget(check.target, captured.target))) return;
     if (!check && !retry && (blocked.current.has(key) || !initial.sale || initial.expectedSaleId !== captured.saleId)) return;
     // Synchronous ref guard prevents a second click during the fresh read as well as POST.
     submitting.current = true;

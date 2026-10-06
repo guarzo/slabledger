@@ -515,6 +515,27 @@ describe('confirmed Cert Intake returns', () => {
     expect(mocks.list).not.toHaveBeenCalled();
   });
 
+  it('does not offer a second unkeyed Resolve after a lost response with no durable episode', async () => {
+    const p = purchase();
+    const mocks = transport(state(p));
+    mocks.confirm.mockRejectedValue(new Error('Response lost'));
+    seed(p);
+    render(<CardIntakeTab />);
+    await screen.findByRole('button', { name: 'Show card details' });
+    await userEvent.click(screen.getByRole('button', { name: 'Show card details' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Check DH sale' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Resolve DH sale' }));
+    await screen.findByText('Response lost');
+    expect(mocks.read).toHaveBeenCalledTimes(3); // hydration, pre-POST guard, lost-response recovery
+    expect(mocks.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Resolve DH sale' })).not.toBeInTheDocument();
+    // A second read-only observation does not clear the uncertain mutation fence.
+    await userEvent.click(screen.getByRole('button', { name: 'Check DH sale' }));
+    await waitFor(() => expect(mocks.check).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: 'Resolve DH sale' })).not.toBeInTheDocument();
+    expect(mocks.confirm).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { label: 'in_stock', check: { status: 'in_stock', resolvable: false, reason: 'not_sold' } },
     { label: 'open attempt', check: { status: '', resolvable: false, reason: 'mutation_pending' } },
@@ -541,6 +562,25 @@ describe('confirmed Cert Intake returns', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show card details' }));
     await userEvent.click(screen.getByRole('button', { name: 'Check DH sale' }));
     await screen.findByText(new RegExp(check.reason));
+    expect(screen.queryByRole('button', { name: 'Resolve DH sale' })).not.toBeInTheDocument();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it.each(['open attempt', 'completed episode'])('does not trust a stale-positive DH check against an %s', async hold => {
+    const p = purchase();
+    const initial = state(p);
+    if (hold === 'open attempt') initial.precedingAttempt = {
+      id: 'list-open', capturedPurchaseId: p.id, dhInventoryId: p.dhInventoryId!,
+      certNumber: p.certNumber, grader: 'PSA', kind: 'list', phase: 'patch', startedAt: stamp, outcome: 'open',
+    };
+    else initial.operation = completed(initial).operation;
+    const mocks = transport(initial); // Deliberately returns sold/resolvable: true despite the hold.
+    seed(p);
+    render(<CardIntakeTab />);
+    await screen.findByRole('button', { name: 'Show card details' });
+    await userEvent.click(screen.getByRole('button', { name: 'Show card details' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Check DH sale' }));
+    await screen.findByText('DH sale confirmed for this slab.');
     expect(screen.queryByRole('button', { name: 'Resolve DH sale' })).not.toBeInTheDocument();
     expect(mocks.confirm).not.toHaveBeenCalled();
   });

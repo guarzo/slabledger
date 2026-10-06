@@ -64,7 +64,17 @@ proto.getDHSaleCheck = async function (this: APIClient, purchaseId: string): Pro
 };
 
 proto.confirmPurchaseReturn = async function (this: APIClient, purchaseId: string, request: ConfirmReturnRequest): Promise<ConfirmedReturnState> {
-  return this.post<ConfirmedReturnState>(`/purchases/${encodeURIComponent(purchaseId)}/confirm-return`, request);
+  const endpoint = `/purchases/${encodeURIComponent(purchaseId)}/confirm-return`;
+  if (request.operationId) return this.post<ConfirmedReturnState>(endpoint, request);
+  // A new return has no server-issued operation ID yet. A lost response or 5xx
+  // may mean the mutation ran; start on the final transport attempt so the hook
+  // reads durable state before any further POST. Keyed replays keep normal retry.
+  const response = await this.fetchWithRetry(`${this.baseURL}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  }, this.maxRetries);
+  return response.json();
 };
 
 proto.quickAddPurchase = async function (this: APIClient, campaignId: string, req: QuickAddRequest): Promise<Purchase> {
