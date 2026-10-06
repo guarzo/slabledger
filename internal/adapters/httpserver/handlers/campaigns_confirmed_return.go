@@ -33,9 +33,10 @@ func (h *CampaignsHandler) HandleConfirmReturn(w http.ResponseWriter, r *http.Re
 	}
 	// RawMessage distinguishes explicit null CAS from an absent field.
 	var body struct {
-		ReturnConfirmed *bool           `json:"returnConfirmed"`
-		ExpectedSaleID  json.RawMessage `json:"expectedSaleId"`
-		OperationID     string          `json:"operationId"`
+		ReturnConfirmed *bool                           `json:"returnConfirmed"`
+		ExpectedSaleID  json.RawMessage                 `json:"expectedSaleId"`
+		ExpectedTarget  *inventory.ReturnTargetIdentity `json:"expectedTarget"`
+		OperationID     string                          `json:"operationId"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 	dec.DisallowUnknownFields()
@@ -53,7 +54,7 @@ func (h *CampaignsHandler) HandleConfirmReturn(w http.ResponseWriter, r *http.Re
 		writeError(w, 400, "expectedSaleId must be null or a nonempty sale ID")
 		return
 	}
-	state, err := h.confirmedReturns.ConfirmReturn(r.Context(), id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: saleID, OperationID: body.OperationID})
+	state, err := h.confirmedReturns.ConfirmReturn(r.Context(), id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: saleID, ExpectedTarget: body.ExpectedTarget, OperationID: body.OperationID})
 	if err != nil {
 		writeConfirmedReturnError(w, err)
 		return

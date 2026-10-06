@@ -39,7 +39,7 @@ func TestConfiguredSchedulerPushAcceptance(t *testing.T) {
 				fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 					return &inventory.DHReturnResult{DHInventoryID: 42, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 				}
-				_, e = returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+				_, e = returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedTarget("push-cert")})
 				require.NoError(t, e)
 			}
 			remote := &mocks.DHPSAImportClientMock{PSAImportFn: func(_ context.Context, items []dh.PSAImportItem) (*dh.PSAImportResponse, error) {
@@ -112,7 +112,7 @@ func TestConfiguredBulkMatchAcceptance(t *testing.T) {
 				fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 					return &inventory.DHReturnResult{DHInventoryID: 42, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 				}
-				_, e = returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+				_, e = returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedTarget("bulk-cert")})
 				require.NoError(t, e)
 			}
 			discovery := &mocks.PurchaseRepositoryMock{GetPurchaseFn: repo.GetPurchase, ListAllUnsoldPurchasesFn: func(c context.Context) ([]inventory.Purchase, error) {

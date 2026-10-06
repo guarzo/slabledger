@@ -15,7 +15,7 @@ func TestReconcilerDelayedObservationAfterExplicitList(t *testing.T) {
 	fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 		return &inventory.DHReturnResult{DHInventoryID: 42, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
-	state, e := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	state, e := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("reconcile-cert", 42)})
 	require.NoError(t, e)
 	fields := NewPurchaseStore(db.DB, mocks.NewMockLogger())
 	listing, e := dhlisting.NewDHListingService(fields, mocks.NewMockLogger(), dhlisting.WithDHListingLister(&mocks.DHInventoryListerMock{}), dhlisting.WithDHListingFieldsUpdater(fields), dhlisting.WithDHListingMutationCoordinator(inventory.NewDHMutationCoordinator(store, store), store, store), dhlisting.WithDHListingConfigLoader(NewDHStore(db.DB, mocks.NewMockLogger())))

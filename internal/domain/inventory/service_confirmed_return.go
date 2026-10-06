@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -84,6 +85,15 @@ func (s *ConfirmedReturnService) ConfirmReturn(ctx context.Context, id string, r
 		source, e := SelectReturnSource(state.Purchase, state.Sale)
 		if e != nil {
 			return e
+		}
+		if source == "external" && state.Operation == nil {
+			target := req.ExpectedTarget
+			if target == nil || target.DHInventoryID <= 0 || strings.TrimSpace(target.CertNumber) == "" || strings.TrimSpace(target.Grader) == "" {
+				return NewReturnConflict("client_update_required", "reload the app before confirming an external return")
+			}
+			if target.DHInventoryID != state.Purchase.DHInventoryID || target.CertNumber != state.Purchase.CertNumber || target.Grader != state.Purchase.Grader {
+				return NewReturnConflict("identity_conflict", "observed return target differs from current purchase linkage; reload the app")
+			}
 		}
 		if source != "external" {
 			if e := s.repo.AssertMutationAllowed(owned, id); e != nil {

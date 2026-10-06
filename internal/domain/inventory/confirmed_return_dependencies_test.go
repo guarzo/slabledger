@@ -79,6 +79,54 @@ func TestConfirmedReturnDurableDependencies(t *testing.T) {
 	}
 }
 
+// A mismatched observed identity must stop preparation before any DH write.
+func TestConfirmedReturnTargetPreconditionBeforePreparation(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		observed inventory.ReturnTargetIdentity
+		wantCode string
+	}{
+		{"changed inventory ID", inventory.ReturnTargetIdentity{DHInventoryID: 43, CertNumber: "cert", Grader: "PSA"}, "identity_conflict"},
+		{"changed cert", inventory.ReturnTargetIdentity{DHInventoryID: 42, CertNumber: "new-cert", Grader: "PSA"}, "identity_conflict"},
+		{"changed grader", inventory.ReturnTargetIdentity{DHInventoryID: 42, CertNumber: "cert", Grader: "BGS"}, "identity_conflict"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			readTarget := &inventory.ReturnTargetIdentity{DHInventoryID: 42, CertNumber: "cert", Grader: "PSA"}
+			prepared, journaled, dispatched := 0, 0, 0
+			state := &inventory.ConfirmedReturnState{Purchase: &inventory.Purchase{ID: "p", DHInventoryID: tc.observed.DHInventoryID, CertNumber: tc.observed.CertNumber, Grader: tc.observed.Grader}, Sale: &inventory.Sale{ID: "sale", OrderID: "ext-848", SaleChannel: inventory.SaleChannelEbay}}
+			repo := &mocks.ConfirmedReturnRepositoryMock{
+				ResolveReturnFn: func(context.Context, string, inventory.ConfirmReturnRequest) (*inventory.ConfirmedReturnState, error) {
+					return state, nil
+				},
+				GetReturnStateFn: func(context.Context, string) (*inventory.ConfirmedReturnState, error) { return state, nil },
+				PrepareReturnFn: func(_ context.Context, _ string, _ inventory.ConfirmReturnRequest, op, key string) (*inventory.ConfirmedReturnState, error) {
+					prepared++
+					state.Operation = &inventory.ConfirmedReturnEpisode{ID: op, Key: key, DHInventoryID: tc.observed.DHInventoryID, CapturedOrderID: "ext-848"}
+					return state, nil
+				},
+				PrepareDHMutationFn: func(context.Context, string, inventory.DHMutationRequest) (*inventory.DHMutationAttempt, error) {
+					journaled++
+					return &inventory.DHMutationAttempt{ID: "attempt"}, nil
+				},
+			}
+			remote := &mocks.DHReturnerMock{ReturnInventoryToStockFn: func(_ context.Context, target int, _ string) (*inventory.DHReturnResult, error) {
+				dispatched++
+				return &inventory.DHReturnResult{DHInventoryID: target, ExternalSaleID: 848, ItemStatus: "in_stock"}, nil
+			}}
+			scope := &mocks.PurchaseMutationScopeMock{WithPurchaseMutationFn: func(ctx context.Context, _ string, fn func(context.Context) error) error { return fn(ctx) }}
+			svc := inventory.NewConfirmedReturnService(scope, repo, remote, nil, func() string { return "generated" })
+			sale := "sale"
+			_, err := svc.ConfirmReturn(context.Background(), "p", inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale, ExpectedTarget: readTarget})
+			var conflict *inventory.ReturnConflict
+			require.ErrorAs(t, err, &conflict)
+			require.Equal(t, tc.wantCode, conflict.Code)
+			require.Zero(t, prepared)
+			require.Zero(t, journaled)
+			require.Zero(t, dispatched)
+		})
+	}
+}
+
 func TestConfirmedReturnStateOnlyRequiresRepository(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

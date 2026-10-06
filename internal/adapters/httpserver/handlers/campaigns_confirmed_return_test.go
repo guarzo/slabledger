@@ -81,7 +81,12 @@ func TestConfirmedReturnHandlerContract(t *testing.T) {
 		{"absent cas", `{"returnConfirmed":true}`, true, 400, 0},
 		{"invalid cas", `{"returnConfirmed":true,"expectedSaleId":1}`, true, 400, 0},
 		{"client target", `{"returnConfirmed":true,"expectedSaleId":null,"dhInventoryId":848}`, true, 400, 0},
-		{"literal null", `{"returnConfirmed":true,"expectedSaleId":null}`, true, 200, 1},
+		{"missing external target", `{"returnConfirmed":true,"expectedSaleId":null}`, true, 409, 1},
+		{"explicit null external target", `{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":null}`, true, 409, 1},
+		{"malformed target type", `{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":"42"}`, true, 400, 0},
+		{"malformed target ID", `{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":{"dhInventoryId":"42","certNumber":"cert","grader":"PSA"}}`, true, 400, 0},
+		{"unknown target field", `{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":{"dhInventoryId":42,"certNumber":"cert","grader":"PSA","key":"injected"}}`, true, 400, 0},
+		{"captured target", `{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":{"dhInventoryId":42,"certNumber":"cert","grader":"PSA"}}`, true, 200, 1},
 		{"sale cas", `{"returnConfirmed":true,"expectedSaleId":"s1","operationId":"op1"}`, true, 200, 1},
 	}
 	for _, tt := range tests {
@@ -92,10 +97,17 @@ func TestConfirmedReturnHandlerContract(t *testing.T) {
 				if id != "p1" || !req.ReturnConfirmed {
 					t.Fatalf("bad request %s %+v", id, req)
 				}
-				if tt.name == "sale cas" && (req.ExpectedSaleID == nil || *req.ExpectedSaleID != "s1" || req.OperationID != "op1") {
+				if tt.name == "sale cas" && (req.ExpectedSaleID == nil || *req.ExpectedSaleID != "s1" || req.OperationID != "op1" || req.ExpectedTarget != nil) {
 					t.Fatalf("lost CAS: %+v", req)
 				}
-				return &inventory.ConfirmedReturnState{Outcome: "completed"}, nil
+				if tt.name == "captured target" {
+					require.Equal(t, &inventory.ReturnTargetIdentity{DHInventoryID: 42, CertNumber: "cert", Grader: "PSA"}, req.ExpectedTarget)
+				}
+				if tt.name == "missing external target" || tt.name == "explicit null external target" {
+					require.Nil(t, req.ExpectedTarget)
+					return nil, inventory.NewReturnConflict("client_update_required", "reload the app to confirm the return")
+				}
+				return &inventory.ConfirmedReturnState{Outcome: "completed", Operation: &inventory.ConfirmedReturnEpisode{Key: "private-provider-key"}}, nil
 			}}
 			h := NewCampaignsHandler(nil, nil, nil, nil, mocks.NewMockLogger(), nil, WithConfirmedReturnService(svc))
 			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
@@ -107,6 +119,10 @@ func TestConfirmedReturnHandlerContract(t *testing.T) {
 			h.HandleConfirmReturn(w, r)
 			if w.Code != tt.want || calls != tt.calls {
 				t.Fatalf("status=%d calls=%d body=%s", w.Code, calls, w.Body.String())
+			}
+			require.NotContains(t, w.Body.String(), "private-provider-key")
+			if tt.name == "missing external target" || tt.name == "explicit null external target" {
+				require.Contains(t, w.Body.String(), "client_update_required")
 			}
 		})
 	}

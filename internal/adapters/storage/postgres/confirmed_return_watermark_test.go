@@ -16,7 +16,7 @@ func TestConfirmedReturnThenListingObservationSettlementFence(t *testing.T) {
 	fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
-	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("watermark-cert", 364577)})
 	require.NoError(t, err)
 	fetchedAfterReturn, err := store.ObservationTime(ctx)
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestConfirmedReturnSettlementCommitFailure(t *testing.T) {
 		}
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
-	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("settle-failure-cert", 364577)})
 	require.Error(t, err)
 	require.Equal(t, "pending", state.Operation.State)
 	require.Equal(t, "settlement", state.Operation.LastError.Phase)

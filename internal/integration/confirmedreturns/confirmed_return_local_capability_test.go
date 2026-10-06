@@ -43,12 +43,15 @@ func TestConfirmedReturnHTTPLocalCapability(t *testing.T) {
 				require.NoError(t, err)
 				body = `{"returnConfirmed":true,"expectedSaleId":"local-sale"}`
 			}
+			if !tc.local && !tc.completed {
+				body = `{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":{"dhInventoryId":42,"certNumber":"http-local-capability","grader":"PSA"}}`
+			}
 			if tc.completed {
 				fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 					calls++
 					return &inventory.DHReturnResult{DHInventoryID: 42, ExternalSaleID: 848, ItemStatus: "in_stock"}, nil
 				}
-				_, err := initial.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+				_, err := initial.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedTarget("http-local-capability")})
 				require.NoError(t, err)
 			}
 			var scope inventory.PurchaseMutationScope = store

@@ -29,7 +29,7 @@ func TestConfirmedReturnDispatchAndPreflight(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			db, store, _, fake, id := setupReturnCore(t, "dispatch-cert", tt.target, "")
 			ctx := context.Background()
-			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("dispatch-cert", tt.target)}
 			if tt.channel != "" {
 				sale := "dispatch-sale"
 				req.ExpectedSaleID = &sale

@@ -68,7 +68,7 @@ func TestConfirmedReturnConcurrentPreparedAttribution(t *testing.T) {
 		err   error
 	}
 	doneA, doneB := make(chan result, 1), make(chan result, 1)
-	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("round1-concurrent-cert", 364577)}
 	go func() {
 		s, e := svc.ConfirmReturn(context.WithValue(ctx, reviewedReturnRequestKey{}, "A"), id, req)
 		doneA <- result{s, e}
@@ -141,7 +141,7 @@ func TestConfirmedReturnHistoricalBodyAcrossNewEpisodes(t *testing.T) {
 		t.Run(map[string]string{"": "initial null confirmation", "ext-848": "initial sale confirmation"}[capturedOrder], func(t *testing.T) {
 			db, store, svc, fake, id := setupReturnCore(t, "round1-history-cert", 364577, capturedOrder)
 			ctx := context.Background()
-			original := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+			original := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("round1-history-cert", 364577)}
 			if capturedOrder != "" {
 				sale := "old-sale"
 				original.ExpectedSaleID = &sale
@@ -164,7 +164,7 @@ func TestConfirmedReturnHistoricalBodyAcrossNewEpisodes(t *testing.T) {
 			_, err = db.ExecContext(ctx, `UPDATE campaign_purchases SET dh_status='sold' WHERE id=$1`, id)
 			require.NoError(t, err)
 			nextSale := "round1-new-sale"
-			next := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &nextSale}
+			next := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &nextSale, ExpectedTarget: observedReturnTarget("round1-history-cert", 364577)}
 			external = 999
 			timeout = true
 			b, err := svc.ConfirmReturn(ctx, id, next)
@@ -216,7 +216,7 @@ func TestConfirmedReturnPreparedHistoricalBodyAcrossNewEpisodes(t *testing.T) {
 				}
 				return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: external}, nil
 			}
-			original := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+			original := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("round1-prepared-history-cert", 364577)}
 			_, err := svc.ConfirmReturn(ctx, id, original)
 			require.Error(t, err)
 			prepared, execute := make(chan struct{}), make(chan struct{})
@@ -252,7 +252,7 @@ func TestConfirmedReturnPreparedHistoricalBodyAcrossNewEpisodes(t *testing.T) {
 			nextSale := "round1-later-sale"
 			external = 999
 			timeout = !complete
-			b, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &nextSale})
+			b, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &nextSale, ExpectedTarget: observedReturnTarget("round1-prepared-history-cert", 364577)})
 			if complete {
 				require.NoError(t, err)
 			} else {

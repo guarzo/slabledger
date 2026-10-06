@@ -31,6 +31,10 @@ func setupIntegrationReturn(t *testing.T, cert string) (*postgres.DB, *postgres.
 	svc := inventory.NewConfirmedReturnService(store, store, fake, nil, func() string { n++; return fmt.Sprintf("op-%d", n) })
 	return db, store, svc, fake, "return-p"
 }
+func observedTarget(cert string) *inventory.ReturnTargetIdentity {
+	return &inventory.ReturnTargetIdentity{DHInventoryID: 42, CertNumber: cert, Grader: "PSA"}
+}
+
 func TestConfirmedReturnOrdersRunOnceIdentity(t *testing.T) {
 	for _, external := range []int64{443, 848} {
 		for _, oldFirst := range []bool{false, true} {
@@ -41,7 +45,7 @@ func TestConfirmedReturnOrdersRunOnceIdentity(t *testing.T) {
 					fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 						return &inventory.DHReturnResult{DHInventoryID: 42, ItemStatus: "in_stock", ExternalSaleID: external}, nil
 					}
-					_, err := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+					_, err := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedTarget("orders-cert")})
 					require.NoError(t, err)
 					p := postgres.NewPurchaseStore(db.DB, mocks.NewMockLogger())
 					sa := postgres.NewSaleStore(db.DB, mocks.NewMockLogger())

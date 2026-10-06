@@ -16,7 +16,7 @@ func TestConfirmedReturnRetainedAwaitingHold(t *testing.T) {
 	fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
-	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("retain-cert", 364577)})
 	require.NoError(t, err)
 	ps := NewPurchaseStore(db.DB, mocks.NewMockLogger())
 	require.NoError(t, ps.DeletePurchase(ctx, id))
@@ -83,7 +83,7 @@ func TestDHMutationCrashAndCancellationFences(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.NoError(t, store.WithPurchaseMutation(ctx, id, func(context.Context) error { return nil }))
-	_, err = svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	_, err = svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("crash-cert", 364577)})
 	require.ErrorIs(t, err, inventory.ErrReturnConflict)
 	fetched, err := store.ObservationTime(ctx)
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestConfirmedReturnDuplicateCrossingCompletion(t *testing.T) {
 		<-release
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
-	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("duplicate-cert", 364577)}
 	done := make(chan error, 2)
 	go func() { _, err := svc.ConfirmReturn(ctx, id, req); done <- err }()
 	<-entered

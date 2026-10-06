@@ -14,7 +14,7 @@ func TestPriceWriterCannotBypassReturnedHold(t *testing.T) {
 	fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 		return &inventory.DHReturnResult{DHInventoryID: 42, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
-	_, e := returns.ConfirmReturn(context.Background(), id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	_, e := returns.ConfirmReturn(context.Background(), id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("price-writer", 42)})
 	require.NoError(t, e)
 	repo := NewPurchaseStore(db.DB, mocks.NewMockLogger())
 	at, e := store.ObservationTime(context.Background())
