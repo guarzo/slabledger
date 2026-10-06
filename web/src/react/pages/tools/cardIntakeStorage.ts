@@ -21,10 +21,10 @@ export function loadQueue(): Map<string, CertRow> {
         ...v,
         ...(v.status === 'scanning' || v.status === 'importing'
           ? { status: v.purchaseId ? 'existing' as const : 'resolving' as const } : {}),
-        // In-flight work and durable return state are reloaded from the server,
-        // never resumed or acknowledged from yesterday's browser projection.
+        // Reload in-flight and durable state, but retain the stale-row fence
+        // until the operator dismisses the row and physically rescans.
         returnBusy: false, returnLoading: false, returnState: undefined,
-        returnStatusError: undefined, returnError: undefined, returnStale: false,
+        returnStatusError: undefined, returnError: undefined,
       },
     ]);
     return new Map(cleaned);

@@ -201,6 +201,22 @@ describe('confirmed Cert Intake returns', () => {
     }));
   });
 
+  it('keeps a stale return fenced after reloading the saved scan queue', async () => {
+    const p = purchase();
+    const newer = { ...soldState(p), sale: sale(p, 'sale-B'), expectedSaleId: 'sale-B' };
+    const mocks = transport(newer);
+    seed(p, 'sold');
+    const saved = loadQueue();
+    saved.set(p.certNumber, { ...saved.get(p.certNumber)!, returnStale: true });
+    saveQueue(saved);
+
+    render(<CardIntakeTab />);
+    await waitFor(() => expect(mocks.read).toHaveBeenCalledWith(p.id));
+    expect(await screen.findByRole('button', { name: 'Dismiss to rescan' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Return' })).not.toBeInTheDocument();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
   it('does not apply an old return response to a dismissed and re-added same-purchase row', async () => {
     const p = purchase();
     const initial = soldState(p);
