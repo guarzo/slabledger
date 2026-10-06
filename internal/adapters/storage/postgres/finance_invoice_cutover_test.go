@@ -8,8 +8,16 @@ import (
 )
 
 func TestFinanceStore_InvoiceChargesExcludeNewSourcingFees(t *testing.T) {
-	db := setupTestDB(t) // dedicated throwaway Postgres only
 	ctx := context.Background()
+	prior := requireTestDB(t)
+	if _, err := prior.ExecContext(ctx, `INSERT INTO invoices (id, invoice_date, paid_cents, status)
+		VALUES ('finance-cutover-prior', '2026-08-15', 200, 'paid')`); err != nil {
+		t.Fatal(err)
+	}
+	db := setupTestDB(t) // campaign cleanup does not cascade to invoices
+	if _, err := db.ExecContext(ctx, `TRUNCATE TABLE invoices`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO campaigns (id, name) VALUES ('test', 'Test')`); err != nil {
 		t.Fatal(err)
 	}
