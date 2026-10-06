@@ -52,6 +52,7 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 	result := &PSAImportResult{
 		ByCampaign: make(map[string]CampaignImportSummary),
 	}
+	previousInvoiceDates := make(map[string]bool)
 
 	for i, row := range rows {
 		rowNum := i + 3 // PSA CSV header is row 2, data starts row 3
@@ -64,7 +65,13 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 		// Update existing purchases with PSA-specific fields (invoice date, vault status, etc.)
 		existing := existingMap[row.CertNumber]
 		if existing != nil {
+			oldInvoiceDate := existing.InvoiceDate
 			itemResult := s.handleExistingPSAPurchase(ctx, existing, row)
+			// The date update can succeed even if later enrichment fails; always
+			// reconcile the prior cycle so a partial failure cannot strand its total.
+			if oldInvoiceDate != row.InvoiceDate && oldInvoiceDate >= inventory.PSAInvoiceCorrectionDate {
+				previousInvoiceDates[oldInvoiceDate] = true
+			}
 			result.Results = append(result.Results, itemResult)
 			switch itemResult.Status {
 			case "failed":
@@ -109,8 +116,8 @@ func (s *service) ImportPSAExportGlobal(ctx context.Context, rows []PSAExportRow
 
 	s.savePendingItems(ctx, result)
 
-	// Auto-detect invoices from newly imported purchases with invoice dates
-	created, updated := s.autoDetectInvoices(ctx, rows)
+	// Reconcile invoice cycles touched by imported or reassigned purchases.
+	created, updated := s.autoDetectInvoices(ctx, rows, previousInvoiceDates)
 	result.InvoicesCreated = created
 	result.InvoicesUpdated = updated
 
@@ -235,11 +242,11 @@ func autoDetectedDueDate(invoiceDate string) string {
 	return dueDateFromInvoiceDate(invoiceDate)
 }
 
-func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (int, int) {
+func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow, previousDates map[string]bool) (int, int) {
 	// Collect all unique invoice dates touched by this import so we reconcile
 	// totals even when the CSV row has PricePaid == 0 (existing purchase may
 	// already have a stored BuyCostCents, or purchases may have been refunded).
-	dates := make(map[string]bool)
+	dates := previousDates
 	for _, row := range rows {
 		if row.InvoiceDate != "" {
 			dates[row.InvoiceDate] = true
@@ -279,7 +286,9 @@ func (s *service) autoDetectInvoices(ctx context.Context, rows []PSAExportRow) (
 			// (including zeroing out when all purchases were refunded).
 			for _, inv := range existing {
 				needsWrite := false
-				if inv.TotalCents != totalCents {
+				// Historic totals remain as recorded, but legacy due-date healing
+				// still runs below for pre-cutover invoices.
+				if inv.InvoiceDate >= inventory.PSAInvoiceCorrectionDate && inv.TotalCents != totalCents {
 					inv.TotalCents = totalCents
 					needsWrite = true
 				}

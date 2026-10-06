@@ -506,7 +506,7 @@ func TestService_ImportPSAExportGlobal_ExtractGrade(t *testing.T) {
 	}
 }
 
-func TestService_ImportPSAExportGlobal_InvoiceUpdatesOnReimport(t *testing.T) {
+func TestService_ImportPSAExportGlobal_PreservesHistoricInvoiceOnReimport(t *testing.T) {
 	repo := mocks.NewInMemoryCampaignStore()
 	svc, imp := newServices(repo, nil)
 	ctx := context.Background()
@@ -558,19 +558,11 @@ func TestService_ImportPSAExportGlobal_InvoiceUpdatesOnReimport(t *testing.T) {
 		t.Fatalf("second import: %v", err)
 	}
 
-	// Should update the existing invoice, not create a new one
-	if result2.InvoicesCreated != 0 {
-		t.Errorf("second import InvoicesCreated = %d, want 0", result2.InvoicesCreated)
+	// Re-importing older rows must not rewrite an existing pre-cutover invoice.
+	if result2.InvoicesCreated != 0 || result2.InvoicesUpdated != 0 {
+		t.Errorf("historic re-import: created %d, updated %d; want neither", result2.InvoicesCreated, result2.InvoicesUpdated)
 	}
-	if result2.InvoicesUpdated != 1 {
-		t.Errorf("second import InvoicesUpdated = %d, want 1", result2.InvoicesUpdated)
-	}
-
-	// Verify the invoice total now includes both purchases
-	// Purchase 1: 20000 cents + 300 fee = 20300
-	// Purchase 2: 15000 cents + 300 fee = 15300
-	// Total: 35600
-	if firstInvoice.TotalCents != 35600 {
-		t.Errorf("updated invoice TotalCents = %d, want 35600", firstInvoice.TotalCents)
+	if firstInvoice.TotalCents != 20300 {
+		t.Errorf("historic invoice TotalCents = %d, want 20300", firstInvoice.TotalCents)
 	}
 }

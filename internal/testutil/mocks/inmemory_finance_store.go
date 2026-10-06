@@ -42,7 +42,10 @@ func (m *InMemoryCampaignStore) SumPurchaseCostByInvoiceDate(_ context.Context, 
 	total := 0
 	for _, p := range m.Purchases {
 		if p.InvoiceDate == invoiceDate && !p.WasRefunded {
-			total += p.BuyCostCents + p.PSASourcingFeeCents
+			total += p.BuyCostCents
+			if invoiceDate < inventory.PSAInvoiceCorrectionDate {
+				total += p.PSASourcingFeeCents
+			}
 		}
 	}
 	return total, nil

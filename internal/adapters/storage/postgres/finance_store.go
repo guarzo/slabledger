@@ -102,15 +102,15 @@ func (fs *FinanceStore) UpdateInvoice(ctx context.Context, inv *inventory.Invoic
 	return nil
 }
 
-// SumPurchaseCostByInvoiceDate returns the total (buy_cost_cents + psa_sourcing_fee_cents)
-// for all non-refunded purchases with the given invoice date.
+// SumPurchaseCostByInvoiceDate preserves legacy totals before the correction
+// and excludes sourcing fees from PSA invoice charges starting October 2026.
 func (fs *FinanceStore) SumPurchaseCostByInvoiceDate(ctx context.Context, invoiceDate string) (int, error) {
 	var total int
 	err := fs.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(buy_cost_cents + psa_sourcing_fee_cents), 0)
+		`SELECT COALESCE(SUM(buy_cost_cents + CASE WHEN invoice_date < $2 THEN psa_sourcing_fee_cents ELSE 0 END), 0)
 		 FROM campaign_purchases
 		 WHERE invoice_date = $1 AND was_refunded = FALSE`,
-		invoiceDate,
+		invoiceDate, inventory.PSAInvoiceCorrectionDate,
 	).Scan(&total)
 	return total, err
 }
@@ -218,9 +218,10 @@ func (fs *FinanceStore) GetCapitalRawData(ctx context.Context) (*inventory.Capit
 	var outstanding, refunded int
 	err := fs.db.QueryRowContext(ctx,
 		`SELECT
-			COALESCE(SUM(CASE WHEN was_refunded = FALSE AND invoice_date != '' THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN was_refunded = TRUE THEN buy_cost_cents + psa_sourcing_fee_cents ELSE 0 END), 0)
+			COALESCE(SUM(CASE WHEN was_refunded = FALSE AND invoice_date != '' THEN buy_cost_cents + CASE WHEN invoice_date < $1 THEN psa_sourcing_fee_cents ELSE 0 END ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN was_refunded = TRUE THEN buy_cost_cents + CASE WHEN invoice_date < $1 THEN psa_sourcing_fee_cents ELSE 0 END ELSE 0 END), 0)
 		FROM campaign_purchases WHERE invoice_date != ''`,
+		inventory.PSAInvoiceCorrectionDate,
 	).Scan(&outstanding, &refunded)
 	if err != nil {
 		return nil, err

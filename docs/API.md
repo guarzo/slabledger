@@ -1540,6 +1540,11 @@ Lists all PSA invoices.
 `status` is `"unpaid"`, `"partial"`, or `"paid"`. `dueDate` and `paidDate` are
 `omitempty`; `paidDate` is absent until the invoice is settled.
 `pendingReceiptCents` is the cost of cards on this invoice still at PSA.
+From the 2026-10-01 invoice onward, `totalCents` sums non-refunded purchase
+prices without the separately tracked PSA sourcing fee. Purchases made on the
+1st or 15th from 2026-10-01 onward belong to the **next** invoice cycle.
+Pre-October invoice totals remain as recorded, and earlier purchase assignments
+are unchanged.
 
 ---
 

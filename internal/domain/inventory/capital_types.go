@@ -29,6 +29,10 @@ const (
 	FallbackWarningCents          = 500000  // $5K outstanding, no recovery data
 )
 
+// PSAInvoiceCorrectionDate limits the portal invoice correction to the October
+// 2026 cycle and later. Earlier purchases and invoices retain their legacy rules.
+const PSAInvoiceCorrectionDate = "2026-10-01"
+
 // InvoiceSellThrough holds sell-through metrics for a single invoice date's purchases.
 // Only returned (received_at IS NOT NULL) purchases are counted.
 type InvoiceSellThrough struct {
