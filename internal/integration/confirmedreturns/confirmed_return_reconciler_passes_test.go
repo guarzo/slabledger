@@ -57,7 +57,7 @@ func TestBothSoldPassesAfterReturnCompletionRollback(t *testing.T) {
 		return &inventory.DHReturnResult{DHInventoryID: 42, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
 	expected := "legacy-sale"
-	request := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &expected}
+	request := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &expected, ExpectedTarget: observedTarget("passes-cert")}
 	state, e := returns.ConfirmReturn(ctx, id, request)
 	require.Error(t, e)
 	require.NotNil(t, state.Operation.ObservedReceipt)

@@ -32,6 +32,10 @@ func setupReturnCore(t *testing.T, cert string, target int, order string) (*DB, 
 	return db, store, svc, fake, "return-p"
 }
 
+func observedReturnTarget(cert string, id int) *inventory.ReturnTargetIdentity {
+	return &inventory.ReturnTargetIdentity{DHInventoryID: id, CertNumber: cert, Grader: "PSA"}
+}
+
 func TestConfirmedReturnCoreLifecycle(t *testing.T) {
 	tests := []struct {
 		name, cert, order string
@@ -48,7 +52,7 @@ func TestConfirmedReturnCoreLifecycle(t *testing.T) {
 			ctx := context.Background()
 			calls := 0
 			key := ""
-			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget(tt.cert, tt.target)}
 			if tt.order != "" {
 				sale := "old-sale"
 				req.ExpectedSaleID = &sale
@@ -129,7 +133,7 @@ func TestConfirmedReturnConflictsAndUncertainty(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			db, store, svc, fake, id := setupReturnCore(t, "conflict-cert", 364577, "ext-848")
 			sale := "old-sale"
-			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale}
+			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale, ExpectedTarget: observedReturnTarget("conflict-cert", 364577)}
 			fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 				return &inventory.DHReturnResult{DHInventoryID: tt.target, ItemStatus: tt.status, ExternalSaleID: tt.external}, tt.failure
 			}
@@ -167,7 +171,7 @@ func TestConfirmedReturnCompletionRollbackSameKey(t *testing.T) {
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
 	sale := "old-sale"
-	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale}
+	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale, ExpectedTarget: observedReturnTarget("rollback-cert", 364577)}
 	state, err := svc.ConfirmReturn(ctx, id, req)
 	require.Error(t, err)
 	require.Equal(t, "pending", state.Operation.State)
@@ -197,7 +201,7 @@ func TestConfirmedReturnCompletionRollbackSameKey(t *testing.T) {
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 999}, nil
 	}
 	next := "new-current"
-	state, err = svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &next})
+	state, err = svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &next, ExpectedTarget: observedReturnTarget("rollback-cert", 364577)})
 	require.NoError(t, err)
 	require.Equal(t, "ext-999", state.Operation.ReturnedOrderID)
 	require.False(t, errors.Is(err, inventory.ErrReturnConflict))

@@ -78,7 +78,7 @@ func TestIntegratedUnkeyedRequestOutlivesCaller(t *testing.T) {
 	require.NoError(t, e)
 	require.Equal(t, "in_stock", status)
 	returnsSvc := inventory.NewConfirmedReturnService(store, store, remote, nil, uuid.NewString)
-	_, e = returnsSvc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	_, e = returnsSvc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedTarget("outlive-cert")})
 	require.ErrorIs(t, e, inventory.ErrReturnConflict)
 	require.Contains(t, e.Error(), "preceding_dh_mutation_uncertain")
 	require.Error(t, price.SyncPurchasePrice(ctx, id).Err)
@@ -90,7 +90,7 @@ func TestIntegratedUnkeyedRequestOutlivesCaller(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("remote work did not continue")
 	}
-	_, e = returnsSvc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	_, e = returnsSvc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedTarget("outlive-cert")})
 	require.ErrorIs(t, e, inventory.ErrReturnConflict)
 	state, e = store.GetReturnState(ctx, id)
 	require.NoError(t, e)

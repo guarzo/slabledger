@@ -17,7 +17,7 @@ func TestConfirmedReturnPendingLocalWriters(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 	sale := "old-sale"
-	_, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale})
+	_, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale, ExpectedTarget: observedReturnTarget("writers-cert", 364577)})
 	require.Error(t, err)
 	ss := NewSaleStore(db.DB, mocks.NewMockLogger())
 	tests := []struct {

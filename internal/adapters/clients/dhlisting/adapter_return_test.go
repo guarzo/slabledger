@@ -248,6 +248,37 @@ func TestGetReturnInventoryStatusPaginationAndFailures(t *testing.T) {
 	}
 }
 
+func TestGetReturnInventoryStatusRejectsDuplicateAcrossPages(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		require.Equal(t, "/api/v1/enterprise/inventory", r.URL.Path)
+		require.Equal(t, "160944741", r.URL.Query().Get("cert_number"))
+		calls.Add(1)
+		if r.URL.Query().Get("page") == "1" {
+			_, _ = io.WriteString(w, `{"results":[`)
+			for i := 0; i < 100; i++ {
+				if i != 0 {
+					_, _ = io.WriteString(w, ",")
+				}
+				id := i + 1
+				if i == 0 {
+					id = 147840
+				}
+				_, _ = fmt.Fprintf(w, `{"dh_inventory_id":%d,"cert_number":"160944741","status":"sold"}`, id)
+			}
+			_, _ = io.WriteString(w, `]}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"results":[{"dh_inventory_id":147840,"cert_number":"160944741","status":"sold"}]}`)
+	}))
+	defer server.Close()
+	status, err := adapter.NewInventoryAdapter(dh.NewClient(server.URL, dh.WithEnterpriseKey("test-key"), dh.WithRateLimitRPS(1000))).GetReturnInventoryStatus(context.Background(), 147840, "160944741")
+	require.ErrorContains(t, err, "conflict")
+	require.Empty(t, status)
+	require.Equal(t, int32(2), calls.Load())
+}
+
 func TestInventoryAdapterMissingReturnCapabilityFailsClosed(t *testing.T) {
 	// Existing centralized-compatible sale/list adapters need not acquire new
 	// methods just to compile. Missing optional return capability is an error.

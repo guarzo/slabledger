@@ -37,7 +37,8 @@ for (const width of [1440, 390]) {
         precedingAttempt: null, purchase: p, sale,
       };
       let priceReviewSucceeded = false;
-      const returnButton = page.getByRole('button', { name: sale ? 'Return' : 'Confirm DH return', exact: true });
+      let checkCalls = 0;
+      const returnButton = page.getByRole('button', { name: sale ? 'Return' : 'Resolve DH sale', exact: true });
       const mutations: { path: string; body: Record<string, unknown> | null }[] = [];
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
@@ -54,8 +55,16 @@ for (const width of [1440, 390]) {
           status: 'existing', ...durable.purchase, purchaseId: p.id, market,
         } });
         if (path.endsWith('/confirmed-return')) return route.fulfill({ json: durable });
+        if (path.endsWith('/dh-sale-check')) {
+          checkCalls++;
+          return route.fulfill({ json: { status: 'sold', resolvable: true, reason: '',
+            target: { dhInventoryId: card.inventoryId, certNumber: card.cert, grader: 'PSA' },
+          } });
+        }
         if (path.endsWith('/confirm-return')) {
-          expect(request.postDataJSON()).toEqual({ returnConfirmed: true, expectedSaleId });
+          expect(request.postDataJSON()).toEqual({ returnConfirmed: true, expectedSaleId,
+            expectedTarget: { dhInventoryId: card.inventoryId, certNumber: card.cert, grader: 'PSA' },
+          });
           durable = { ...durable, expectedSaleId: null, sale: null, awaitingListing: true, outcome: 'completed',
             operation: {
               id: `operation-${card.inventoryId}`, purchaseId: p.id, capturedPurchaseId: p.id,
@@ -86,16 +95,19 @@ for (const width of [1440, 390]) {
       const input = page.getByPlaceholder('Scan or type cert number…');
       await expect(page.getByText('No pending items.')).toBeVisible();
       await input.fill(card.cert); await input.press('Enter');
-      await returnButton.click();
-      const dialog = page.getByRole('alertdialog');
-      await expect(dialog).toContainText(card.cert);
-      await expect(dialog).toContainText('physically back');
-      await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
-      await page.screenshot({ path: info.outputPath(`confirm-${card.cert}-${width}.png`), fullPage: true });
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      if (!sale) {
+        await page.getByRole('button', { name: 'Show card details' }).click();
+        expect(checkCalls).toBe(0);
+        await page.getByRole('button', { name: 'Check DH sale' }).click();
+        await expect(page.getByRole('button', { name: 'Resolve DH sale' })).toBeVisible();
+        expect(checkCalls).toBe(1);
+      }
+      await expect(returnButton).toBeVisible();
+      await expect(page.getByText(`${sale ? 'Return' : 'Resolve'} confirms slab in hand and refund resolved`)).toBeVisible();
+      await page.screenshot({ path: info.outputPath(`ready-${card.cert}-${width}.png`), fullPage: true });
       expect(mutations.filter(r => r.path.endsWith('/confirm-return'))).toHaveLength(0);
       await returnButton.click();
-      await dialog.getByRole('button', { name: 'Confirm return', exact: true }).click();
+      await expect(page.getByRole('alertdialog')).toHaveCount(0);
       await expect(page.getByText('Returned; review the price and list explicitly.')).toBeVisible();
       expect(mutations.filter(r => r.path.endsWith('/confirm-return'))).toHaveLength(1);
       expect(mutations.filter(r => r.path.endsWith('/list-on-dh'))).toHaveLength(0);

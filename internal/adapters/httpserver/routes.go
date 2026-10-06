@@ -97,7 +97,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 		return h
 	}
 
-	// These two routes never inherit the legacy unauthenticated fallback.
+	// Return routes never inherit the legacy unauthenticated fallback.
 	returnRoute := func(h http.HandlerFunc) http.Handler {
 		if rt.authMW == nil {
 			return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -108,6 +108,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	}
 	mux.Handle("POST /api/purchases/{purchaseId}/confirm-return", returnRoute(rt.campaignsHandler.HandleConfirmReturn))
 	mux.Handle("GET /api/purchases/{purchaseId}/confirmed-return", returnRoute(rt.campaignsHandler.HandleConfirmedReturnState))
+	mux.Handle("GET /api/purchases/{purchaseId}/dh-sale-check", returnRoute(rt.campaignsHandler.HandleDHSaleCheck))
 
 	// Global sell sheet & inventory endpoints
 	mux.Handle("GET /api/sell-sheet", authRoute(rt.campaignsHandler.HandleGlobalSellSheet))

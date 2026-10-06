@@ -26,7 +26,7 @@ func TestConfirmedReturnTimeoutSameAttemptReplay(t *testing.T) {
 		}
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 	}
-	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("timeout-replay-cert", 364577)}
 	pending, err := svc.ConfirmReturn(ctx, id, req)
 	require.Error(t, err)
 	require.Equal(t, "pending", pending.Operation.State)
@@ -54,7 +54,7 @@ func TestConfirmedReturnObservedAttributionCannotChange(t *testing.T) {
 	fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 		return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: external}, nil
 	}
-	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+	req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("observed-attribution", 364577)}
 	pending, err := svc.ConfirmReturn(ctx, id, req)
 	require.Error(t, err)
 	require.Equal(t, int64(848), pending.Operation.ObservedReceipt.ExternalSaleID)

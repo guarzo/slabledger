@@ -20,7 +20,7 @@ func TestConfirmedReturnPreparationCommitFailureNoPhantom(t *testing.T) {
 		t.Fatal("uncommitted preparation dispatched")
 		return nil, nil
 	}
-	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+	state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("prepare-rollback-cert", 364577)})
 	require.Error(t, err)
 	require.NotNil(t, state)
 	require.Nil(t, state.Operation)
@@ -40,7 +40,7 @@ func TestConfirmedReturnCampaignDeleteAtomicAndRetention(t *testing.T) {
 				}
 				return &inventory.DHReturnResult{DHInventoryID: 364577, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 			}
-			state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+			state, err := svc.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("campaign-return-cert", 364577)})
 			if complete {
 				require.NoError(t, err)
 			} else {

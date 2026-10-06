@@ -61,14 +61,23 @@ func (a *InventoryAdapter) GetReturnInventoryStatus(ctx context.Context, invento
 	if !ok {
 		return "", fmt.Errorf("DH return client is unavailable")
 	}
+	status := ""
 	for page := 1; page <= maxSnapshotPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		resp, err := client.ListInventory(ctx, dh.InventoryFilters{
 			CertNumber: certNumber, Page: page, PerPage: snapshotPageSize,
 		})
 		if err != nil {
 			return "", err
 		}
-		status := ""
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if resp == nil {
+			return "", fmt.Errorf("DH return preflight received no inventory page")
+		}
 		for _, item := range resp.Items {
 			if item.DHInventoryID != inventoryID {
 				continue
@@ -78,10 +87,10 @@ func (a *InventoryAdapter) GetReturnInventoryStatus(ctx context.Context, invento
 			}
 			status = item.Status
 		}
-		if status != "" {
-			return status, nil
-		}
 		if len(resp.Items) < snapshotPageSize {
+			if status != "" {
+				return status, nil
+			}
 			return "", fmt.Errorf("DH return preflight inventory %d with exact cert was not found", inventoryID)
 		}
 	}

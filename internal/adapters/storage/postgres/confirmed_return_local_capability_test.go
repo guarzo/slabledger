@@ -71,7 +71,7 @@ func TestConfirmedReturnExternalMissingCapabilitiesNoGhost(t *testing.T) {
 			}
 			db, store, _, fake, id := setupReturnCore(t, "missing-capability", 364577, order)
 			ctx := context.Background()
-			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("missing-capability", 364577)}
 			if tc.sale {
 				sale := "old-sale"
 				req.ExpectedSaleID = &sale
@@ -140,7 +140,7 @@ func TestConfirmedReturnNoGeneratorForExistingEpisodeOrNoop(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			db, store, initial, fake, id := setupReturnCore(t, "existing-capability", 364577, "")
 			ctx := context.Background()
-			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true}
+			req := inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("existing-capability", 364577)}
 			calls := 0
 			fake.ReturnInventoryToStockFn = func(_ context.Context, target int, key string) (*inventory.DHReturnResult, error) {
 				calls++

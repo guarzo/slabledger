@@ -58,7 +58,7 @@ func TestCoordinatedSaleReturnAndImportedFence(t *testing.T) {
 					return nil, context.DeadlineExceeded
 				}
 				sale := "old-sale"
-				_, err := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale})
+				_, err := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedSaleID: &sale, ExpectedTarget: observedReturnTarget("fenced-sale", 42)})
 				require.Error(t, err)
 			}
 			err := inventory.RecordCoordinatedDHSale(ctx, inventory.NewDHMutationCoordinator(store, store), NewPurchaseStore(db.DB, mocks.NewMockLogger()), NewSaleStore(db.DB, mocks.NewMockLogger()), remote, id, "old-sale", func() string { return "mint" })

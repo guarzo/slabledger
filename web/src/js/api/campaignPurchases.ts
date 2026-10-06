@@ -4,7 +4,7 @@
 
 import type {
   Purchase, Sale, CreateSaleInput,
-  QuickAddRequest, ConfirmReturnRequest, ConfirmedReturnState,
+  QuickAddRequest, ConfirmReturnRequest, ConfirmedReturnState, DHSaleCheck,
 } from '../../types/campaigns';
 import type { PriceHint } from '../../types/pricing';
 import { APIClient } from './client';
@@ -18,6 +18,7 @@ declare module './client' {
     createSale(campaignId: string, input: CreateSaleInput): Promise<Sale>;
     deleteSale(campaignId: string, purchaseId: string): Promise<void>;
     getConfirmedReturnState(purchaseId: string): Promise<ConfirmedReturnState>;
+    getDHSaleCheck(purchaseId: string): Promise<DHSaleCheck>;
     confirmPurchaseReturn(purchaseId: string, request: ConfirmReturnRequest): Promise<ConfirmedReturnState>;
 
     // Quick-add
@@ -58,8 +59,22 @@ proto.getConfirmedReturnState = async function (this: APIClient, purchaseId: str
   return this.get<ConfirmedReturnState>(`/purchases/${encodeURIComponent(purchaseId)}/confirmed-return`);
 };
 
+proto.getDHSaleCheck = async function (this: APIClient, purchaseId: string): Promise<DHSaleCheck> {
+  return this.get<DHSaleCheck>(`/purchases/${encodeURIComponent(purchaseId)}/dh-sale-check`);
+};
+
 proto.confirmPurchaseReturn = async function (this: APIClient, purchaseId: string, request: ConfirmReturnRequest): Promise<ConfirmedReturnState> {
-  return this.post<ConfirmedReturnState>(`/purchases/${encodeURIComponent(purchaseId)}/confirm-return`, request);
+  const endpoint = `/purchases/${encodeURIComponent(purchaseId)}/confirm-return`;
+  if (request.operationId) return this.post<ConfirmedReturnState>(endpoint, request);
+  // A new return has no server-issued operation ID yet. A lost response or 5xx
+  // may mean the mutation ran; start on the final transport attempt so the hook
+  // reads durable state before any further POST. Keyed replays keep normal retry.
+  const response = await this.fetchWithRetry(`${this.baseURL}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  }, this.maxRetries);
+  return response.json();
 };
 
 proto.quickAddPurchase = async function (this: APIClient, campaignId: string, req: QuickAddRequest): Promise<Purchase> {

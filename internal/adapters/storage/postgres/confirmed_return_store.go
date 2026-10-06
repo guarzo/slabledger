@@ -98,6 +98,9 @@ func (s *ConfirmedReturnStore) ResolveReturn(ctx context.Context, id string, req
 		if state.Operation == nil {
 			return nil, inventory.NewReturnConflict("operation_not_found", "unknown return operation")
 		}
+		if state.Operation.CapturedPurchaseID != id {
+			return state, inventory.NewReturnConflict("identity_conflict", "return operation belongs to a different purchase")
+		}
 	} else {
 		// operationId is optional: an identical completed body still identifies its
 		// historical episode after a different persisted sale starts a newer one.

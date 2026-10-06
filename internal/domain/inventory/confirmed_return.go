@@ -21,12 +21,21 @@ func NewReturnConflict(code, message string) *ReturnConflict {
 func (e *ReturnConflict) Error() string { return fmt.Sprintf("%s: %s", e.Code, e.Message) }
 func (e *ReturnConflict) Unwrap() error { return ErrReturnConflict }
 
+// ReturnTargetIdentity is an operator-observed precondition for NEW external
+// returns. The server still captures the provider target from its own purchase.
+type ReturnTargetIdentity struct {
+	DHInventoryID int    `json:"dhInventoryId"`
+	CertNumber    string `json:"certNumber"`
+	Grader        string `json:"grader"`
+}
+
 // The HTTP boundary must independently require explicit expectedSaleId presence
 // and literal confirmation; nil represents explicit JSON null.
 type ConfirmReturnRequest struct {
-	ReturnConfirmed bool    `json:"returnConfirmed"`
-	ExpectedSaleID  *string `json:"expectedSaleId"`
-	OperationID     string  `json:"operationId,omitempty"`
+	ReturnConfirmed bool                  `json:"returnConfirmed"`
+	ExpectedSaleID  *string               `json:"expectedSaleId"`
+	ExpectedTarget  *ReturnTargetIdentity `json:"expectedTarget,omitempty"`
+	OperationID     string                `json:"operationId,omitempty"`
 }
 type ReturnFailure struct {
 	Code    string `json:"code"`

@@ -1,19 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { api } from '../../../js/api';
-import type { ConfirmReturnRequest, ConfirmedReturnState, ScanCertResponse } from '../../../types/campaigns';
+import type { ConfirmReturnRequest, ConfirmedReturnState, DHSaleCheck, ReturnTargetIdentity, ScanCertResponse } from '../../../types/campaigns';
 import type { CertRow } from './cardIntakeTypes';
 import { returnNeedsDiagnosis } from './cardIntakeTypes';
 
 type ReturnTarget = { certNumber: string; purchaseId: string; request: ConfirmReturnRequest };
+type Snapshot = { purchaseId: string; saleId: string | null; target: ReturnTargetIdentity };
 type UpdateCert = (cert: string, updates: Partial<CertRow>) => void;
+const staleMessage = 'Return state changed; dismiss this row and physically rescan the slab before retrying.';
+
+function identity(state: ConfirmedReturnState): ReturnTargetIdentity | null {
+  const p = state.purchase;
+  if (!p) return null;
+  return { dhInventoryId: p.dhInventoryId ?? 0, certNumber: p.certNumber, grader: p.grader ?? 'PSA' };
+}
+
+function sameTarget(a: ReturnTargetIdentity | null, b: ReturnTargetIdentity | null): boolean {
+  return !!a && !!b && a.dhInventoryId === b.dhInventoryId
+    && a.certNumber === b.certNumber && a.grader === b.grader;
+}
 
 function requestCompleted(state: ConfirmedReturnState | null, target: ReturnTarget): boolean {
   const operation = state?.operation;
   return !!operation && operation.state === 'completed'
     && state?.purchase?.id === target.purchaseId
     && operation.certNumber === target.certNumber
-    && operation.dhInventoryId === state.purchase.dhInventoryId
+    && operation.dhInventoryId === target.request.expectedTarget?.dhInventoryId
+    && operation.grader === target.request.expectedTarget.grader
     && operation.expectedSaleId === target.request.expectedSaleId
     && (!target.request.operationId || operation.id === target.request.operationId);
 }
@@ -40,41 +54,73 @@ export function useConfirmedReturn(
   certsRef: RefObject<Map<string, CertRow>>, certs: Map<string, CertRow>,
   updateCert: UpdateCert, applyScanResult: (cert: string, result: ScanCertResponse) => void,
 ) {
-  const [target, setTarget] = useState<ReturnTarget | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const requested = useRef(new Set<string>());
+  const snapshots = useRef(new Map<string, Snapshot>());
+  const blocked = useRef(new Map<string, string>());
   const versions = useRef(new Map<string, number>());
+  const epochs = useRef(new Map<string, number>());
+  const inflight = useRef(new Map<string, Promise<ConfirmedReturnState | null>>());
+  const submitting = useRef(false);
   const alive = useRef(true);
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const refresh = useCallback(async (cert: string): Promise<ConfirmedReturnState | null> => {
     const row = certsRef.current.get(cert);
-    if (!row?.purchaseId) return null;
-    const key = `${cert}:${row.purchaseId}`;
+    const purchaseId = row?.purchaseId;
+    if (!row || !purchaseId) return null;
+    const key = `${cert}:${purchaseId}`;
+    const existing = inflight.current.get(key);
+    if (existing) return existing;
     const version = (versions.current.get(key) ?? 0) + 1;
     versions.current.set(key, version);
     const current = () => alive.current && versions.current.get(key) === version
-      && certsRef.current.get(cert)?.purchaseId === row.purchaseId;
+      && certsRef.current.get(cert)?.purchaseId === purchaseId;
     updateCert(cert, { returnLoading: true, returnStatusError: undefined });
-    try {
-      const state = await api.getConfirmedReturnState(row.purchaseId);
-      if (!current()) return null;
-      if (state.purchase?.id !== row.purchaseId || state.purchase.certNumber !== cert
-        || !Object.prototype.hasOwnProperty.call(state, 'expectedSaleId')) throw new Error('Return state identity changed');
-      updateCert(cert, projection(certsRef.current.get(cert) ?? row, state));
-      return state;
-    } catch (err) {
-      if (current()) updateCert(cert, {
-        returnLoading: false,
-        returnStatusError: err instanceof Error ? err.message : 'Return state unavailable',
-      });
-      return null;
-    }
+    const request = (async () => {
+      try {
+        const state = await api.getConfirmedReturnState(purchaseId);
+        if (!current()) return null;
+        if (!state.purchase || state.purchase.id !== purchaseId || state.purchase.certNumber !== cert
+          || !Object.prototype.hasOwnProperty.call(state, 'expectedSaleId')) throw new Error('Return state identity changed');
+        if (!snapshots.current.has(key)) {
+          const target = identity(state);
+          if (target) snapshots.current.set(key, { purchaseId, saleId: state.expectedSaleId, target });
+        }
+        const snapshot = snapshots.current.get(key);
+        const completed = state.operation?.state === 'completed' && snapshot?.purchaseId === purchaseId
+          && state.operation.expectedSaleId === snapshot.saleId
+          && state.operation.dhInventoryId === snapshot.target.dhInventoryId
+          && state.operation.certNumber === snapshot.target.certNumber
+          && state.operation.grader === snapshot.target.grader;
+        if (completed) blocked.current.delete(key);
+        // A return episode may remove its captured sale even when completion is conflicted;
+        // a different live sale or target must still require a new physical scan.
+        const sameEpisode = !state.sale && state.operation?.expectedSaleId === snapshot?.saleId;
+        const stale = !!snapshot && (!sameTarget(identity(state), snapshot.target)
+          || (state.expectedSaleId !== snapshot.saleId && !sameEpisode));
+        updateCert(cert, {
+          ...projection(certsRef.current.get(cert) ?? row, state),
+          ...(stale || row.returnStale ? { returnStale: true, returnError: staleMessage }
+            : blocked.current.has(key) && state.operation?.state !== 'pending'
+              ? { returnError: blocked.current.get(key) } : {}),
+        });
+        return state;
+      } catch (err) {
+        if (current()) updateCert(cert, {
+          returnLoading: false,
+          returnStatusError: err instanceof Error ? err.message : 'Return state unavailable',
+        });
+        return null;
+      }
+    })();
+    inflight.current.set(key, request);
+    void request.then(() => {
+      if (inflight.current.get(key) === request) inflight.current.delete(key);
+    });
+    return request;
   }, [certsRef, updateCert]);
 
-  // Browser queue state is presentation only. Rehydrate every known purchase
-  // from durable server state, including rows that ordinary sync polling skips.
   useEffect(() => {
     const present = new Set<string>();
     for (const row of certs.values()) {
@@ -86,78 +132,120 @@ export function useConfirmedReturn(
         void refresh(row.certNumber);
       }
     }
-    for (const key of requested.current) if (!present.has(key)) requested.current.delete(key);
-    if (target && !certs.has(target.certNumber)) setTarget(null);
-  }, [certs, refresh, target]);
-
-  const start = useCallback(async (cert: string) => {
-    if (submitting) {
-      updateCert(cert, { returnError: 'Another return is still running. Wait for completion, then retry.' });
-      return;
+    for (const key of requested.current) {
+      if (present.has(key)) continue;
+      requested.current.delete(key);
+      snapshots.current.delete(key);
+      blocked.current.delete(key);
+      versions.current.set(key, (versions.current.get(key) ?? 0) + 1);
+      epochs.current.set(key, (epochs.current.get(key) ?? 0) + 1);
+      inflight.current.delete(key);
     }
-    const state = await refresh(cert);
+  }, [certs, refresh]);
+
+  const discard = useCallback((cert: string) => {
+    // Invalidate in-flight reads before a same-cert, same-purchase rescan can arrive.
+    for (const key of requested.current) {
+      if (!key.startsWith(`${cert}:`)) continue;
+      requested.current.delete(key);
+      snapshots.current.delete(key);
+      blocked.current.delete(key);
+      versions.current.set(key, (versions.current.get(key) ?? 0) + 1);
+      epochs.current.set(key, (epochs.current.get(key) ?? 0) + 1);
+      inflight.current.delete(key);
+    }
+  }, []);
+
+  // Poll only the durable projection of an open listing attempt or failed read.
+  useEffect(() => {
+    if (certs.size === 0) return;
+    const timer = window.setInterval(() => {
+      for (const row of certsRef.current.values()) {
+        if (row.purchaseId && !row.returnLoading && !row.returnBusy
+          && (row.returnState?.precedingAttempt?.outcome === 'open' || row.returnStatusError)) {
+          void refresh(row.certNumber);
+        }
+      }
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [certs.size, certsRef, refresh]);
+
+  const start = useCallback(async (cert: string, check?: DHSaleCheck) => {
+    if (submitting.current) return;
     const row = certsRef.current.get(cert);
-    if (!state || !row?.purchaseId || returnNeedsDiagnosis(state)) return;
-    const operation = state.operation;
-    const retry = operation?.state === 'pending';
-    if (operation?.state === 'completed' && !state.sale) return;
-    setTarget({
-      certNumber: cert, purchaseId: row.purchaseId,
-      request: {
-        returnConfirmed: true,
-        expectedSaleId: retry ? operation.expectedSaleId : state.expectedSaleId,
-        ...(retry ? { operationId: operation.id } : {}),
-      },
-    });
-  }, [certsRef, refresh, submitting, updateCert]);
-
-  const submit = useCallback(async () => {
-    if (!target || submitting) return;
-    const confirmed = target;
-    const ownsRow = () => alive.current
-      && certsRef.current.get(confirmed.certNumber)?.purchaseId === confirmed.purchaseId;
-    if (!ownsRow()) {
-      setTarget(null);
+    const purchaseId = row?.purchaseId;
+    const initial = row?.returnState;
+    const key = `${cert}:${purchaseId}`;
+    const captured = purchaseId ? snapshots.current.get(key) : undefined;
+    if (!purchaseId || !initial || !captured || row?.returnLoading || row.returnStatusError || row.returnStale) return;
+    if (!sameTarget(identity(initial), captured.target) || (initial.sale && initial.sale.id !== captured.saleId)) {
+      updateCert(cert, { returnStale: true, returnError: staleMessage });
       return;
     }
-    setSubmitting(true);
-    updateCert(confirmed.certNumber, { returnBusy: true, returnError: undefined });
+    const retry = !check && initial.operation?.state === 'pending' ? initial.operation : null;
+    if (check && (blocked.current.has(key) || !check.resolvable || check.status !== 'sold'
+      || initial.sale || initial.operation || initial.precedingAttempt
+      || !sameTarget(check.target, captured.target))) return;
+    if (!check && !retry && (blocked.current.has(key) || !initial.sale || initial.expectedSaleId !== captured.saleId)) return;
+    // Synchronous ref guard prevents a second click during the fresh read as well as POST.
+    submitting.current = true;
+    const epoch = epochs.current.get(key) ?? 0;
+    const ownsRow = () => alive.current && (epochs.current.get(key) ?? 0) === epoch
+      && certsRef.current.get(cert)?.purchaseId === purchaseId;
+    updateCert(cert, { returnBusy: true, returnError: undefined });
     try {
-      const result = await api.confirmPurchaseReturn(confirmed.purchaseId, confirmed.request);
-      if (!ownsRow()) return;
-      const scan = await api.scanCert(confirmed.certNumber);
-      if (!ownsRow()) return;
-      if (scan.purchaseId && scan.purchaseId !== confirmed.purchaseId) {
-        // A recreated purchase gets its own durable GET on the next render;
-        // do not transfer the old owner's busy flag or recovery projection.
-        updateCert(confirmed.certNumber, {
-          returnBusy: false, returnState: undefined, returnStatusError: undefined,
-          returnError: undefined, listingStatus: undefined, listingError: undefined,
-        });
-        applyScanResult(confirmed.certNumber, scan);
+      const fresh = await refresh(cert);
+      if (!ownsRow() || !fresh) return;
+      const freshTarget = identity(fresh);
+      const same = fresh.purchase?.id === purchaseId && sameTarget(freshTarget, captured.target)
+        && !returnNeedsDiagnosis(fresh);
+      const safe = check ? same && !fresh.precedingAttempt && !fresh.sale
+          && fresh.expectedSaleId === null && !fresh.operation
+        : retry ? same && fresh.operation?.state === 'pending' && fresh.operation.id === retry.id
+          && fresh.operation.expectedSaleId === retry.expectedSaleId
+        : same && !fresh.precedingAttempt && !!fresh.sale
+          && fresh.sale.id === captured.saleId && fresh.expectedSaleId === captured.saleId;
+      if (!safe) {
+        updateCert(cert, { returnStale: true, returnError: staleMessage });
         return;
       }
-      applyScanResult(confirmed.certNumber, scan);
-      const latest = await refresh(confirmed.certNumber);
-      if (ownsRow() && latest && !latest.sale && (result.outcome === 'local' || result.outcome === 'legacy_void')) {
-        updateCert(confirmed.certNumber, { status: 'returned' });
+      const confirmed: ReturnTarget = { certNumber: cert, purchaseId, request: {
+        returnConfirmed: true, expectedSaleId: retry ? retry.expectedSaleId : check ? null : captured.saleId,
+        expectedTarget: retry ? { dhInventoryId: retry.dhInventoryId, certNumber: retry.certNumber, grader: retry.grader } : captured.target,
+        ...(retry ? { operationId: retry.id } : {}),
+      } };
+      try {
+        const result = await api.confirmPurchaseReturn(purchaseId, confirmed.request);
+        if (!ownsRow()) return;
+        const scan = await api.scanCert(cert);
+        if (!ownsRow()) return;
+        if (scan.purchaseId && scan.purchaseId !== purchaseId) {
+          updateCert(cert, {
+            returnBusy: false, returnState: undefined, returnStatusError: undefined,
+            returnError: undefined, listingStatus: undefined, listingError: undefined,
+          });
+          applyScanResult(cert, scan);
+          return;
+        }
+        applyScanResult(cert, scan);
+        const latest = await refresh(cert);
+        if (ownsRow() && latest && !latest.sale && (result.outcome === 'local' || result.outcome === 'legacy_void')) {
+          updateCert(cert, { status: 'returned' });
+        }
+      } catch (err) {
+        const latest = ownsRow() ? await refresh(cert) : null;
+        if (ownsRow() && !requestCompleted(latest, confirmed)) {
+          const message = latest?.operation?.lastError?.message
+            ?? (err instanceof Error ? err.message : 'Return failed');
+          if (latest?.operation?.state !== 'pending') blocked.current.set(key, message);
+          updateCert(cert, { returnError: message });
+        }
       }
-    } catch (err) {
-      const latest = ownsRow() ? await refresh(confirmed.certNumber) : null;
-      // The server may have committed before the response was lost. A fresh
-      // completed receipt is historical evidence, not a reason for another POST.
-      if (ownsRow() && !requestCompleted(latest, confirmed)) updateCert(confirmed.certNumber, {
-        returnError: latest?.operation?.lastError?.message
-          ?? (err instanceof Error ? err.message : 'Return failed'),
-      });
     } finally {
-      if (alive.current) {
-        if (ownsRow()) updateCert(confirmed.certNumber, { returnBusy: false });
-        setSubmitting(false);
-        setTarget(null);
-      }
+      if (ownsRow()) updateCert(cert, { returnBusy: false });
+      submitting.current = false;
     }
-  }, [target, submitting, certsRef, updateCert, refresh, applyScanResult]);
+  }, [certsRef, updateCert, refresh, applyScanResult]);
 
-  return { target, submitting, start, submit, refresh, cancel: () => setTarget(null) };
+  return { start, resolve: (cert: string, check: DHSaleCheck) => start(cert, check), refresh, discard };
 }

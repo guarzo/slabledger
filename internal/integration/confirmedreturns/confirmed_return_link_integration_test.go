@@ -38,7 +38,7 @@ func TestConfirmedReturnWholeLinkRoutesFence(t *testing.T) {
 						}
 						return &inventory.DHReturnResult{DHInventoryID: 42, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 					}
-					_, e := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+					_, e := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedTarget("link-cert")})
 					if state == "pending" {
 						require.Error(t, e)
 					} else {

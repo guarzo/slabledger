@@ -20,7 +20,7 @@ func TestConfirmedReturnListingIntegration(t *testing.T) {
 			fake.ReturnInventoryToStockFn = func(context.Context, int, string) (*inventory.DHReturnResult, error) {
 				return &inventory.DHReturnResult{DHInventoryID: target, ItemStatus: "in_stock", ExternalSaleID: 848}, nil
 			}
-			state, err := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true})
+			state, err := returns.ConfirmReturn(ctx, id, inventory.ConfirmReturnRequest{ReturnConfirmed: true, ExpectedTarget: observedReturnTarget("listing-cert", target)})
 			require.NoError(t, err)
 			fields := NewPurchaseStore(db.DB, mocks.NewMockLogger())
 			calls := 0

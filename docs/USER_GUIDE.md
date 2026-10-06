@@ -139,11 +139,16 @@ and any that have already sold are called out separately in the result.
 
 #### Confirming a returned slab
 
-1. Scan the cert in **Scan**. Choose **Return** for a sold card, or **Confirm DH
-   return** when a linked card was already made unsold locally but DH still needs
-   its external sale reversed.
-2. Confirm only when that exact slab is physically back and its refund or return
-   is resolved. Cancelling makes no inventory change.
+1. Scan the cert in **Scan**. A card with a recorded sale offers **Return** once
+   the durable state loads. One click confirms that exact slab is physically in hand
+   and its refund or return is resolved. There is no second confirmation dialog.
+2. A locally unsold, DH-linked slab has no Return button. Expand its details and
+   choose **Check DH sale** only when investigating a possible DH sale. A live,
+   exact-target `sold` result with no open mutation or earlier return episode offers
+   **Resolve DH sale**. That click makes the same physical-possession/refund
+   affirmation; an `in_stock`/`listed` result, an uncertain read, historical return
+   or unresolved mutation is diagnostic only. A changed sale or target requires a
+   new scan, not an automatic retarget or blind retry.
 3. After success, review the price and choose **List on DH** separately. Returning
    does not publish a listing or reopen an old eBay ask. Automatic sync cannot
    publish returned stock using the old price.
@@ -152,7 +157,8 @@ and any that have already sold are called out separately in the result.
 means a remote receipt was observed but local completion failed. Reloading or
 clearing the scan queue does not remove server recovery state. A failed state
 lookup keeps price/List and Fix DH Match unavailable; **Refresh return state** is
-read-only.
+read-only. Ordinary intake listing attempts settle via a bounded read-only poll;
+a persistent attempt remains a DH mutation hold and does not invite Return.
 
 An earlier unresolved DH mutation or permanent identity/attribution conflict
 requires diagnosis and a separately approved correction/reconciliation. Do not

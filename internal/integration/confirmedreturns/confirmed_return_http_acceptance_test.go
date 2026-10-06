@@ -109,7 +109,7 @@ func TestConfirmedReturnHTTPBothCardsAcceptance(t *testing.T) {
 				require.Equal(t, 401, code)
 			}
 			var state inventory.ConfirmedReturnState
-			body := `{"returnConfirmed":true,"expectedSaleId":null}`
+			body := fmt.Sprintf(`{"returnConfirmed":true,"expectedSaleId":null,"expectedTarget":{"dhInventoryId":%d,"certNumber":%q,"grader":"PSA"}}`, tc.target, tc.cert)
 			code, raw := returnHTTP(t, api, "POST", path+"/confirm-return", body, true)
 			if tc.repair {
 				require.Equal(t, 409, code)
