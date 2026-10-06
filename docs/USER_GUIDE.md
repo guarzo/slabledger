@@ -537,7 +537,11 @@ CL valuations are a trailing indicator. By comparing real-time sold data against
 
 ### How are PSA sourcing fees handled?
 
-Each campaign has a default PSA sourcing fee (typically $3.00). This fee is added to the cost basis of each purchase and subtracted from net profit calculations.
+Each campaign has a default PSA sourcing fee (typically $3.00). This fee is added
+to the cost basis of each purchase and subtracted from net profit calculations.
+For PSA invoices dated October 1, 2026 or later, the invoice total excludes that
+fee so its charges match the portal's purchase amounts. Earlier invoice records
+are left as recorded.
 
 ### What happens when I archive a campaign?
 

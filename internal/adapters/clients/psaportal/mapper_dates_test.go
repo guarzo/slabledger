@@ -23,6 +23,11 @@ func TestInvoiceDateFor(t *testing.T) {
 		{"2026-07-15", "2026-07-15"},           // on the 15th → itself
 		{"2026-07-01", "2026-07-01"},           // on the 1st → itself
 		{"2026-07-02", "2026-07-15"},           // just after 1st → 15th
+		{"2026-09-15", "2026-09-15"},           // historical billing stays unchanged
+		{"2026-09-23", "2026-10-01"},           // September purchase stays on October 1
+		{"2026-10-01", "2026-10-15"},           // boundary day belongs to next cycle
+		{"2026-10-15", "2026-11-01"},           // same rule on the 15th
+		{"2026-11-01", "2026-11-15"},           // continues after cutover
 		{"2026-12-20", "2027-01-01"},           // year rollover
 		{"", ""},                               // empty → empty
 		{"garbage", ""},                        // unparseable → empty

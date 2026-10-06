@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/csvimport"
+	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 // Lightdash "Itemized Purchases" field keys (confirmed via live spike — see
@@ -27,8 +28,8 @@ const (
 // mapRow converts one flattened Lightdash row into a PSAExportRow.
 //
 // The tile has no invoice-date dimension. PSA invoices on a fixed cadence (the 1st
-// and 15th of each month), so InvoiceDate is derived from the buyer payment date as
-// the next 1st-or-15th on or after it (see invoiceDateFor).
+// and 15th of each month), so InvoiceDate is derived from the buyer payment date.
+// Starting October 2026, purchases on the invoice date belong to the next cycle.
 func mapRow(r map[string]string) (csvimport.PSAExportRow, error) {
 	row := csvimport.PSAExportRow{
 		CertNumber:      csvimport.NormalizePSACert(r[colCert]),
@@ -70,8 +71,9 @@ func normalizeDate(s string) string {
 	return s
 }
 
-// invoiceDateFor derives the PSA invoice date from a payment date: the next 1st or
-// 15th of the month on or after the payment date. Empty/unparseable input → "".
+// invoiceDateFor derives the PSA invoice date from a payment date. From the
+// October 2026 correction, purchases on the 1st/15th fall in the next cycle;
+// earlier purchases retain the original inclusive boundary. Invalid input → "".
 func invoiceDateFor(paymentDate string) string {
 	d := normalizeDate(paymentDate)
 	t, err := time.Parse("2006-01-02", d)
@@ -80,9 +82,9 @@ func invoiceDateFor(paymentDate string) string {
 	}
 	var inv time.Time
 	switch day := t.Day(); {
-	case day == 1:
+	case day == 1 && d < inventory.PSAInvoiceCorrectionDate:
 		inv = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
-	case day <= 15:
+	case day < 15 || (day == 15 && d < inventory.PSAInvoiceCorrectionDate):
 		inv = time.Date(t.Year(), t.Month(), 15, 0, 0, 0, 0, time.UTC)
 	default:
 		inv = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
