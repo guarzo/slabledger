@@ -132,7 +132,7 @@ describe('ExpandedDetail combined set-and-list', () => {
 
     await userEvent.click(setPriceButton);
 
-    await waitFor(() => expect(api.setReviewedPrice).toHaveBeenCalledWith('pur-1', expect.any(Number), expect.any(String)));
+    await waitFor(() => expect(api.setReviewedPrice).toHaveBeenCalledWith('pur-1', expect.any(Number), expect.any(String), { priceOnly: true }));
     expect(api.listPurchaseOnDH).not.toHaveBeenCalled();
   });
 });

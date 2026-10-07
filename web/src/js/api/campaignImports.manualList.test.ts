@@ -6,6 +6,7 @@ afterEach(() => vi.restoreAllMocks());
 it.each([
   { name: 'ordinary review', options: undefined, body: { priceCents: 12000, source: 'market' } },
   { name: 'intake explicit list', options: { manualList: true }, body: { priceCents: 12000, source: 'market', manualList: true } },
+  { name: 'set price without listing', options: { priceOnly: true }, body: { priceCents: 12000, source: 'market', priceOnly: true } },
 ])('sends $name intent with the reviewed price', async ({ options, body }) => {
   const transport = vi.spyOn(api, 'fetchWithRetry').mockResolvedValue(
     new Response(JSON.stringify({ success: true, reviewedAt: '2026-10-07T00:00:00Z' }), { status: 200 }),

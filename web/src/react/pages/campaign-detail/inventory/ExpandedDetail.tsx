@@ -77,7 +77,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const handleConfirm = async (priceCents: number, source: string) => {
     setIsSubmitting(true);
     try {
-      await api.setReviewedPrice(purchase.id, priceCents, source);
+      await api.setReviewedPrice(purchase.id, priceCents, source, combineWithList ? { priceOnly: true } : undefined);
       toast.success('Reviewed price saved');
       invalidateQueries();
       onReviewed?.();

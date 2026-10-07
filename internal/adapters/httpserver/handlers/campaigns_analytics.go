@@ -277,8 +277,13 @@ func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http
 		PriceCents int    `json:"priceCents"`
 		Source     string `json:"source"`
 		ManualList bool   `json:"manualList"`
+		PriceOnly  bool   `json:"priceOnly"`
 	}
 	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.ManualList && req.PriceOnly {
+		writeError(w, http.StatusBadRequest, "manualList and priceOnly cannot both be true")
 		return
 	}
 	if err := h.service.SetReviewedPrice(r.Context(), purchaseID, req.PriceCents, req.Source); err != nil {
@@ -299,9 +304,11 @@ func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http
 	// Launching either background DH writer would race their List request.
 	if !req.ManualList {
 		h.triggerDHPriceSync(purchaseID)
-		// A reviewed price IS the human commit the DH listing service gates on.
-		// Other callers retain their automatic sync/list behavior.
-		h.triggerDHListingByPurchaseID(purchaseID)
+		// Set Price attempts DH price sync but does not publish a listing.
+		// Other reviews retain their automatic sync/list behavior.
+		if !req.PriceOnly {
+			h.triggerDHListingByPurchaseID(purchaseID)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{

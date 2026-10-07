@@ -13,13 +13,33 @@ import (
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
 )
 
+func TestHandleSetReviewedPrice_RejectsConflictingDHIntent(t *testing.T) {
+	var saves atomic.Int32
+	svc := &mocks.MockInventoryService{SetReviewedPriceFn: func(context.Context, string, int, string) error {
+		saves.Add(1)
+		return nil
+	}}
+	h := newTestHandler(svc)
+	req := httptest.NewRequest(http.MethodPatch, "/api/purchases/p1/review-price", strings.NewReader(`{"priceCents":12000,"source":"market","manualList":true,"priceOnly":true}`))
+	req.SetPathValue("purchaseId", "p1")
+	rec := httptest.NewRecorder()
+	h.HandleSetReviewedPrice(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if n := saves.Load(); n != 0 {
+		t.Fatalf("price saves = %d, want none", n)
+	}
+}
+
 func TestHandleSetReviewedPrice_ExplicitIntakeListingDoesNotRaceBackgroundDH(t *testing.T) {
 	for _, tc := range []struct {
-		name, body  string
-		wantDHCalls int32
+		name, body                   string
+		wantPriceSyncs, wantListings int32
 	}{
-		{"ordinary review keeps background updates", `{"priceCents":12000,"source":"market"}`, 1},
-		{"intake explicit list defers background updates", `{"priceCents":12000,"source":"market","manualList":true}`, 0},
+		{"ordinary review keeps background updates", `{"priceCents":12000,"source":"market"}`, 1, 1},
+		{"set price without listing", `{"priceCents":12000,"source":"market","priceOnly":true}`, 1, 0},
+		{"intake explicit list defers background updates", `{"priceCents":12000,"source":"market","manualList":true}`, 0, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var priceSyncs, listings atomic.Int32
@@ -43,11 +63,11 @@ func TestHandleSetReviewedPrice_ExplicitIntakeListingDoesNotRaceBackgroundDH(t *
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 			}
-			if got := priceSyncs.Load(); got != tc.wantDHCalls {
-				t.Errorf("background price syncs = %d, want %d", got, tc.wantDHCalls)
+			if got := priceSyncs.Load(); got != tc.wantPriceSyncs {
+				t.Errorf("background price syncs = %d, want %d", got, tc.wantPriceSyncs)
 			}
-			if got := listings.Load(); got != tc.wantDHCalls {
-				t.Errorf("background listings = %d, want %d", got, tc.wantDHCalls)
+			if got := listings.Load(); got != tc.wantListings {
+				t.Errorf("background listings = %d, want %d", got, tc.wantListings)
 			}
 		})
 	}

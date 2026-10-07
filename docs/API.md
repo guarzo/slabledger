@@ -1396,8 +1396,10 @@ Cert Intake and combined set-and-list views send `"manualList": true` when
 they will immediately make an explicit List request. This skips both background
 DH price sync and auto-list for that price save, avoiding competing DH writes.
 For eligible `in_stock` purchases, the explicit List request applies the reviewed
-price and syncs channels on DH. Omit the flag for ordinary price review to
-retain automatic behavior.
+price and syncs channels on DH. A standalone **Set Price** action sends
+`"priceOnly": true`: it runs DH price sync without starting a listing. Omit
+both flags for ordinary price review to retain automatic sync/list behavior.
+`manualList` and `priceOnly` cannot both be true (`400`).
 
 **Path params:** `purchaseId` (purchase UUID)
 
