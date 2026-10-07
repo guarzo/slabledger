@@ -28,7 +28,7 @@ declare module './client' {
     resolveCert(certNumber: string): Promise<ResolveCertResponse>;
 
     // Price review & flags
-    setReviewedPrice(purchaseId: string, priceCents: number, source: string): Promise<{ success: boolean; reviewedAt: string }>;
+    setReviewedPrice(purchaseId: string, priceCents: number, source: string, options?: { manualList?: boolean; priceOnly?: boolean }): Promise<{ success: boolean; reviewedAt: string }>;
     createPriceFlag(purchaseId: string, reason: string): Promise<{ id: number; flaggedAt: string }>;
     listPriceFlags(status?: string): Promise<PriceFlagsResponse>;
     resolvePriceFlag(flagId: number): Promise<void>;
@@ -75,14 +75,14 @@ proto.resolveCert = async function (this: APIClient, certNumber: string): Promis
 
 // Price review & flag endpoints
 proto.setReviewedPrice = async function (
-  this: APIClient, purchaseId: string, priceCents: number, source: string,
+  this: APIClient, purchaseId: string, priceCents: number, source: string, options?: { manualList?: boolean; priceOnly?: boolean },
 ): Promise<{ success: boolean; reviewedAt: string }> {
   const response = await this.fetchWithRetry(
     `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/review-price`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ priceCents, source }),
+      body: JSON.stringify({ priceCents, source, ...(options?.manualList ? { manualList: true } : {}), ...(options?.priceOnly ? { priceOnly: true } : {}) }),
     }
   );
   return response.json() as Promise<{ success: boolean; reviewedAt: string }>;

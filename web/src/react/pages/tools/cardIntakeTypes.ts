@@ -88,7 +88,7 @@ export function returnActionLabel(row: CertRow): string | null {
 export function rowIsListable(row: CertRow): boolean {
   const state = row.returnState;
   const blocked = !state || state.purchase?.id !== row.purchaseId || row.returnStatusError || row.status === 'sold'
-    || row.dhStatus === 'sold' || row.returnBusy || row.returnLoading || row.returnStale
+    || row.dhStatus === 'sold' || row.dhStatus === 'listed' || row.returnBusy || row.returnLoading || row.returnStale
     || (state && returnNeedsDiagnosis(state)) || state?.sale || state?.precedingAttempt
     || (state?.operation && state.operation.state !== 'completed');
   return !blocked && !!row.purchaseId && hasDHInventory(row) && hasCLPrice(row);
@@ -105,7 +105,7 @@ export function rowAwaitingSync(row: CertRow): boolean {
   if (row.purchaseId && (!row.returnState || row.returnStatusError)) return false;
   if (row.returnLoading || row.returnBusy || row.returnState?.precedingAttempt
     || (row.returnState?.operation && row.returnState.operation.state !== 'completed')) return false;
-  if (row.listingStatus === 'listed') return false;
+  if (row.listingStatus === 'listed' || row.dhStatus === 'listed') return false;
   if (row.status === 'failed' || row.status === 'retry' || row.status === 'sold') return false;
   if (row.status === 'resolving') return true;
   if ((row.status === 'existing' || row.status === 'returned' || row.status === 'imported') && !rowIsListable(row)) {

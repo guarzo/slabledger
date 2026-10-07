@@ -17,6 +17,10 @@ import { ConfirmDialog } from '../../ui';
 import { useConfirmedReturn } from './useConfirmedReturn';
 import { useDHSaleCheck } from './useDHSaleCheck';
 
+function isCompletedListing(row: CertRow): boolean {
+  return row.listingStatus === 'listed' || (!row.listingStatus && row.dhStatus === 'listed');
+}
+
 export default function CardIntakeTab() {
   const [input, setInput] = useState('');
   const [certs, setCerts] = useState<Map<string, CertRow>>(() => loadQueue());
@@ -104,11 +108,13 @@ export default function CardIntakeTab() {
     }
     updateCert(certNumber, { listingStatus: 'setting-price', listingError: undefined });
     try {
-      await api.setReviewedPrice(row.purchaseId, priceCents, source);
+      await api.setReviewedPrice(row.purchaseId, priceCents, source, { manualList: true });
     } catch (err) {
       updateCert(certNumber, {
         listingStatus: 'list-error',
-        listingError: err instanceof Error ? err.message : 'Failed to set price',
+        listingError: isAPIError(err) && (err.status === 0 || err.status >= 500)
+          ? 'Price save unconfirmed; refresh the card before deciding whether to try again.'
+          : err instanceof Error ? err.message : 'Failed to set price',
       });
       return;
     }
@@ -119,8 +125,11 @@ export default function CardIntakeTab() {
       await refreshReturnState(certNumber);
     } catch (err) {
       if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
-        updateCert(certNumber, { listingStatus: 'listed' });
-        await refreshReturnState(certNumber);
+        updateCert(certNumber, {
+          dhStatus: 'listed', // Server rejected using its local listed state, not a fresh DH read.
+          listingStatus: 'list-error',
+          listingError: 'SlabLedger records this card as listed; verify live price and channels on DH before retrying.',
+        });
         return;
       }
       const msg = err instanceof Error ? err.message : 'Listing failed';
@@ -183,7 +192,7 @@ export default function CardIntakeTab() {
       const next = new Map(prev);
       for (const [k, row] of next) {
         if (row.status === 'sold') continue; // sold rows stay for Return action
-        if (row.listingStatus === 'listed' || row.status === 'failed') {
+        if (isCompletedListing(row) || row.status === 'failed') {
           next.delete(k);
         }
       }
@@ -338,7 +347,7 @@ export default function CardIntakeTab() {
       // Check sold first so a sold row that still carries a stale
       // listingStatus is not misclassified as listed.
       if (r.status === 'sold') sold++;
-      else if (r.listingStatus === 'listed') listed++;
+      else if (isCompletedListing(r)) listed++;
       else if (r.status === 'failed') failed++;
       else if (r.status === 'retry') retry++;
       else if (rowIsListable(r)) ready++;

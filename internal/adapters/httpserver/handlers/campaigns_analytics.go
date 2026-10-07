@@ -276,8 +276,14 @@ func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http
 	var req struct {
 		PriceCents int    `json:"priceCents"`
 		Source     string `json:"source"`
+		ManualList bool   `json:"manualList"`
+		PriceOnly  bool   `json:"priceOnly"`
 	}
 	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.ManualList && req.PriceOnly {
+		writeError(w, http.StatusBadRequest, "manualList and priceOnly cannot both be true")
 		return
 	}
 	if err := h.service.SetReviewedPrice(r.Context(), purchaseID, req.PriceCents, req.Source); err != nil {
@@ -294,11 +300,16 @@ func (h *CampaignsHandler) HandleSetReviewedPrice(w http.ResponseWriter, r *http
 		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
-	h.triggerDHPriceSync(purchaseID)
-	// A reviewed price IS the human commit the DH listing service gates on.
-	// Trigger an auto-list so already-pushed in_stock items don't require a
-	// second manual click. The listing service no-ops for ineligible items.
-	h.triggerDHListingByPurchaseID(purchaseID)
+	// Combined set-and-list flows explicitly list after saving this price.
+	// Launching either background DH writer would race their List request.
+	if !req.ManualList {
+		h.triggerDHPriceSync(purchaseID)
+		// Set Price attempts DH price sync but does not publish a listing.
+		// Other reviews retain their automatic sync/list behavior.
+		if !req.PriceOnly {
+			h.triggerDHListingByPurchaseID(purchaseID)
+		}
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":    true,

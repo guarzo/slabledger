@@ -2,9 +2,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../../js/api';
+import { APIError } from '../../../js/api/client';
 import type { ConfirmedReturnState, Purchase, Sale } from '../../../types/campaigns';
 import CardIntakeTab from './CardIntakeTab';
-import { returnActionLabel, rowIsListable } from './cardIntakeTypes';
+import { returnActionLabel, rowIsListable, rowAwaitingSync } from './cardIntakeTypes';
 import { loadQueue, saveQueue } from './cardIntakeStorage';
 
 const cards = [
@@ -112,6 +113,18 @@ describe('confirmed Cert Intake returns', () => {
     expect(rowIsListable(row)).toBe(false);
     expect(returnActionLabel(row)).toBeNull();
   });
+  it('does not offer List or keep polling a card already listed on DH', () => {
+    const p = purchase();
+    const row = {
+      certNumber: p.certNumber, purchaseId: p.id, status: 'existing' as const,
+      dhInventoryId: p.dhInventoryId, dhStatus: 'listed',
+      market: { clValueCents: 5000, gradePriceCents: 4000, lastSoldCents: 4000 },
+      returnState: state(p),
+    };
+    expect(rowIsListable(row)).toBe(false);
+    expect(rowAwaitingSync(row)).toBe(false);
+  });
+
   it.each(cards)('returns recorded sale $cert in one click, then explicitly lists', async card => {
     const p = purchase(card);
     const mocks = transport(soldState(p), card.externalSale);
@@ -132,8 +145,70 @@ describe('confirmed Cert Intake returns', () => {
     expect(mocks.list).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'List on DH' }));
     await waitFor(() => expect(mocks.list).toHaveBeenCalledWith(p.id));
-    expect(api.setReviewedPrice).toHaveBeenCalledWith(p.id, 4000, 'market');
+    expect(api.setReviewedPrice).toHaveBeenCalledWith(p.id, 4000, 'market', { manualList: true });
     await waitFor(() => expect(screen.queryByText(/Returned; review the price and list explicitly/i)).not.toBeInTheDocument());
+  });
+
+  it.each([
+    { name: 'confirmed refresh', refresh: 'ok', status: 'existing', listingStatus: undefined, listed: true },
+    { name: 'rejected refresh', refresh: 'reject', status: 'existing', listingStatus: undefined, listed: true },
+    { name: 'missing purchase', refresh: 'missing', status: 'existing', listingStatus: undefined, listed: true },
+    { name: 'explicit list error', refresh: 'reject', status: 'existing', listingStatus: 'list-error', listed: false },
+    { name: 'sold takes precedence', refresh: 'reject', status: 'sold', listingStatus: undefined, listed: false },
+  ] as const)('counts already-listed rows as completed and keeps sold rows separate ($name)', async card => {
+    const p = { ...purchase(), dhStatus: 'listed' };
+    transport(state(p));
+    if (card.refresh === 'reject') {
+      vi.mocked(api.getConfirmedReturnState).mockRejectedValueOnce(new Error('Return state unavailable'));
+    } else if (card.refresh === 'missing') {
+      vi.mocked(api.getConfirmedReturnState).mockResolvedValueOnce({ ...state(p), purchase: null });
+    }
+    seed(p, card.status);
+    if (card.listingStatus) {
+      const queue = loadQueue();
+      queue.set(p.certNumber, { ...queue.get(p.certNumber)!, listingStatus: card.listingStatus });
+      saveQueue(queue);
+    }
+    render(<CardIntakeTab />);
+    await waitFor(() => expect(api.getConfirmedReturnState).toHaveBeenCalled());
+    if (card.refresh !== 'ok' && card.status !== 'sold') {
+      await screen.findByText('DH state read failed. Listing paused; retrying automatically.');
+    }
+
+    expect(screen.queryByRole('button', { name: 'List on DH' })).not.toBeInTheDocument();
+    if (card.listed) {
+      expect(await screen.findByText('1 listed')).toBeVisible();
+      await userEvent.click(screen.getByRole('button', { name: 'Clear completed' }));
+      expect(screen.queryByText('1 scanned')).not.toBeInTheDocument();
+    } else {
+      expect(screen.queryByText('1 listed')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Clear completed' })).not.toBeInTheDocument();
+      if (card.status === 'sold') expect(screen.getByText('1 sold')).toBeVisible();
+    }
+  });
+
+  it('does not claim the reviewed price is live when DH reports already listed', async () => {
+    const p = purchase();
+    transport(state(p));
+    vi.mocked(api.listPurchaseOnDH).mockRejectedValueOnce(new APIError('Purchase already listed on DH', 409, undefined, { error: 'Purchase already listed on DH' }));
+    seed(p);
+    render(<CardIntakeTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 'List on DH' }));
+    expect(await screen.findByText(/SlabLedger records this card as listed; verify live price and channels on DH/i)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'List on DH' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 listed/i)).not.toBeInTheDocument();
+  });
+
+  it('treats a lost price-save response as unconfirmed and does not list', async () => {
+    const p = purchase();
+    transport(state(p));
+    vi.mocked(api.setReviewedPrice).mockRejectedValueOnce(new APIError('Connection lost', 0, 'NETWORK_ERROR'));
+    seed(p);
+    render(<CardIntakeTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 'List on DH' }));
+
+    expect(await screen.findByText(/price save unconfirmed; refresh the card before deciding whether to try again/i)).toBeVisible();
+    expect(api.listPurchaseOnDH).not.toHaveBeenCalled();
   });
 
   it('does not request another List when a successful listing follow-up read fails', async () => {

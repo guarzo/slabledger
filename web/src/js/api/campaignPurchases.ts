@@ -118,7 +118,15 @@ proto.dismissAISuggestion = async function (this: APIClient, purchaseId: string)
 };
 
 proto.listPurchaseOnDH = async function (this: APIClient, purchaseId: string): Promise<{ listed: number; synced: number; skipped: number; total: number }> {
-  return this.post<{ listed: number; synced: number; skipped: number; total: number }>(`/purchases/${encodeURIComponent(purchaseId)}/list-on-dh`);
+  // An uncertain response may have dispatched to DH. Never automatically
+  // replay this unkeyed mutation; the server retains an attempt for review.
+  const response = await this.fetchWithRetry(
+    `${this.baseURL}/purchases/${encodeURIComponent(purchaseId)}/list-on-dh`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+    this.maxRetries,
+    { timeoutMs: 90_000 },
+  );
+  return response.json() as Promise<{ listed: number; synced: number; skipped: number; total: number }>;
 };
 
 proto.createBulkSales = async function (this: APIClient, campaignId: string, saleChannel: string, saleDate: string, items: import('../../types/campaigns').BulkSaleItemInput[]): Promise<import('../../types/campaigns').BulkSaleResult> {

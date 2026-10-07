@@ -136,6 +136,14 @@ Two things cert intake deliberately does *not* do:
 
 Certs already in the system are reported as already-existing rather than duplicated,
 and any that have already sold are called out separately in the result.
+Scanning, importing and polling enroll/refresh cards for DH matching but do not
+publish listings. Once DH inventory is ready, choose a price in the existing
+**List on DH** control and confirm it; that one action saves the reviewed price
+and submits the listing. The Cert Intake scan/import/poll requests do not list
+at an old price themselves. Separately, the DH push scheduler can relist a
+previously detected unlisted card using its existing reviewed price. If a
+listing attempt becomes uncertain, stop and check its durable state rather
+than repeatedly pressing List.
 
 #### Confirming a returned slab
 
