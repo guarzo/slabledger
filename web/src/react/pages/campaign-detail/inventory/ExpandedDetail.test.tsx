@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ExpandedDetail from './ExpandedDetail';
 import { ToastProvider } from '../../../contexts/ToastContext';
 import type { AgingItem } from '../../../../types/campaigns';
+import { APIError } from '../../../../js/api/client';
 
 vi.mock('../../../../js/api', async () => {
   const actual = await vi.importActual<typeof import('../../../../js/api')>('../../../../js/api');
@@ -73,12 +74,22 @@ describe('ExpandedDetail combined set-and-list', () => {
     const confirmButton = getByRole('button', { name: /list on dh/i });
     await userEvent.click(confirmButton);
 
-    await waitFor(() => expect(api.setReviewedPrice).toHaveBeenCalledWith('pur-1', expect.any(Number), expect.any(String)));
+    await waitFor(() => expect(api.setReviewedPrice).toHaveBeenCalledWith('pur-1', expect.any(Number), expect.any(String), { manualList: true }));
     await waitFor(() => expect(api.listPurchaseOnDH).toHaveBeenCalledWith('pur-1'));
 
     const setOrder = (api.setReviewedPrice as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
     const listOrder = (api.listPurchaseOnDH as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
     expect(setOrder).toBeLessThan(listOrder);
+  });
+
+  it('does not announce listing success for an already-listed response with unconfirmed price', async () => {
+    const { api } = await import('../../../../js/api');
+    vi.mocked(api.listPurchaseOnDH).mockRejectedValueOnce(new APIError('Purchase already listed on DH', 409, undefined, { error: 'Purchase already listed on DH' }));
+    const { getByRole, findByText, queryByText } = renderWithProviders(<ExpandedDetail item={makeItem()} combineWithList />);
+
+    await userEvent.click(getByRole('button', { name: /list on dh/i }));
+    expect(await findByText(/verify live price and channels on DH/i)).toBeInTheDocument();
+    expect(queryByText('Price set and listed on DH')).not.toBeInTheDocument();
   });
 
   it('does not call listPurchaseOnDH when combineWithList is false', async () => {

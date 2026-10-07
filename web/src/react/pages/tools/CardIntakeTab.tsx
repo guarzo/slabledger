@@ -104,7 +104,7 @@ export default function CardIntakeTab() {
     }
     updateCert(certNumber, { listingStatus: 'setting-price', listingError: undefined });
     try {
-      await api.setReviewedPrice(row.purchaseId, priceCents, source);
+      await api.setReviewedPrice(row.purchaseId, priceCents, source, { manualList: true });
     } catch (err) {
       updateCert(certNumber, {
         listingStatus: 'list-error',
@@ -119,8 +119,10 @@ export default function CardIntakeTab() {
       await refreshReturnState(certNumber);
     } catch (err) {
       if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
-        updateCert(certNumber, { listingStatus: 'listed' });
-        await refreshReturnState(certNumber);
+        updateCert(certNumber, {
+          listingStatus: 'list-error',
+          listingError: 'DH reports this card already listed; verify live price and channels on DH before retrying.',
+        });
         return;
       }
       const msg = err instanceof Error ? err.message : 'Listing failed';

@@ -193,22 +193,8 @@ func (h *CampaignsHandler) HandleImportCerts(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Trigger DH listing only for certs that were successfully processed.
-	if len(result.Errors) == 0 {
-		h.triggerDHListing(req.CertNumbers)
-	} else {
-		failedCerts := make(map[string]bool, len(result.Errors))
-		for _, e := range result.Errors {
-			failedCerts[e.CertNumber] = true
-		}
-		var successCerts []string
-		for _, c := range req.CertNumbers {
-			if !failedCerts[c] {
-				successCerts = append(successCerts, c)
-			}
-		}
-		h.triggerDHListing(successCerts)
-	}
+	// Receipt enrolls these cards for the DH push scheduler. Listing waits for
+	// an operator to choose a price in the explicit List on DH flow.
 
 	writeJSON(w, http.StatusOK, result)
 }
@@ -231,12 +217,8 @@ func (h *CampaignsHandler) HandleScanCert(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Existing unsold certs just had received_at set and were enrolled in the
-	// DH push pipeline. Trigger a listing run so in-flight items promote from
-	// in_stock → listed without waiting for an unrelated import.
-	if result.Status == "existing" {
-		h.triggerDHListing([]string{req.CertNumber})
-	}
+	// Scanning can enroll a received card for DH push, but must not list it
+	// before this intake's manual price selection.
 
 	writeJSON(w, http.StatusOK, result)
 }
@@ -272,17 +254,7 @@ func (h *CampaignsHandler) HandleScanCerts(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Mirror the single-cert handler: trigger DH listing for any existing
-	// unsold certs so in-flight items promote without waiting for an import.
-	var listingCerts []string
-	for cert, res := range result.Results {
-		if res != nil && res.Status == "existing" {
-			listingCerts = append(listingCerts, cert)
-		}
-	}
-	if len(listingCerts) > 0 {
-		h.triggerDHListing(listingCerts)
-	}
+	// Polling refreshes intake state only; it never dispatches a DH listing.
 
 	writeJSON(w, http.StatusOK, result)
 }

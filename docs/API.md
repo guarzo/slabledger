@@ -1190,6 +1190,8 @@ line of the file (`csvimport/service_import_external.go:73`).
 Auth: RequireAuth
 
 Imports purchases by cert number list (fetches card metadata via PSA API).
+Receipt enrolls new cards for the DH push scheduler, but import does not
+publish DH listings. Listing follows an operator-reviewed price.
 
 **Body:**
 ```json
@@ -1390,12 +1392,18 @@ services run asynchronously: a local save does not confirm remote completion.
 Eligible received/PSA-shipped inventory can become listed; an already-listed,
 price/channel-synced item is a no-op for listing. Ineligible items are skipped.
 The price sync and listing operations are not an atomic transaction with the save.
+Cert Intake and combined set-and-list views send `"manualList": true` when
+they will immediately make an explicit List request. This skips both background
+DH price sync and auto-list for that price save, avoiding competing DH writes.
+For eligible `in_stock` purchases, the explicit List request applies the reviewed
+price and syncs channels on DH. Omit the flag for ordinary price review to
+retain automatic behavior.
 
 **Path params:** `purchaseId` (purchase UUID)
 
 **Body:**
 ```json
-{ "priceCents": 130000, "source": "manual" }
+{ "priceCents": 130000, "source": "manual", "manualList": true }
 ```
 
 **Response:** `200 OK`
@@ -2344,6 +2352,8 @@ Accepts confirmed matches from order import and creates sale records.
 Auth: RequireAuth
 
 Scans a cert number to determine if it exists in inventory, has been sold, or is new.
+An existing unsold card may be marked received and enrolled for DH push, but a
+scan does not publish a listing — the operator must review its price first.
 
 **Body:**
 ```json
@@ -2394,7 +2404,8 @@ matcher would consider. `receivedAt` being non-empty is the in-hand signal;
 Auth: RequireAuth
 
 Batch variant of `scan-cert`. Used by the cert-intake polling loop so N rows
-awaiting sync produce one request per tick instead of N.
+awaiting sync produce one request per tick instead of N. Polling refreshes state
+but never starts a listing, even when an existing card is already matched.
 
 **Body:**
 ```json
@@ -2489,7 +2500,7 @@ Preconditions: the purchase must be received, not already listed, and carry a hu
 struct's two `error`-typed fields are `json:"-"`: the handler turns them into the
 status codes below before writing a success body.
 
-**Errors:** `400` missing `purchaseId`; `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused; `502` PSA authentication temporarily unavailable — retry shortly, or listing failed with no recorded upstream error; `503` DH listing service not configured; `500` internal error
+**Errors:** `400` missing `purchaseId`; `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused / preceding DH attempt unresolved; `502` PSA authentication temporarily unavailable or listing result uncertain; `503` DH listing service not configured; `500` internal error. Cert Intake and the API client do not automatically retry this unkeyed POST. After `502` or a dropped connection, inspect `GET /api/purchases/{purchaseId}/confirmed-return` for an open `precedingAttempt` before any further write — a remote DH effect may already have occurred.
 
 ---
 

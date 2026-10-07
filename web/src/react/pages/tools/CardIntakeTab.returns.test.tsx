@@ -2,9 +2,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../../js/api';
+import { APIError } from '../../../js/api/client';
 import type { ConfirmedReturnState, Purchase, Sale } from '../../../types/campaigns';
 import CardIntakeTab from './CardIntakeTab';
-import { returnActionLabel, rowIsListable } from './cardIntakeTypes';
+import { returnActionLabel, rowIsListable, rowAwaitingSync } from './cardIntakeTypes';
 import { loadQueue, saveQueue } from './cardIntakeStorage';
 
 const cards = [
@@ -112,6 +113,18 @@ describe('confirmed Cert Intake returns', () => {
     expect(rowIsListable(row)).toBe(false);
     expect(returnActionLabel(row)).toBeNull();
   });
+  it('does not offer List or keep polling a card already listed on DH', () => {
+    const p = purchase();
+    const row = {
+      certNumber: p.certNumber, purchaseId: p.id, status: 'existing' as const,
+      dhInventoryId: p.dhInventoryId, dhStatus: 'listed',
+      market: { clValueCents: 5000, gradePriceCents: 4000, lastSoldCents: 4000 },
+      returnState: state(p),
+    };
+    expect(rowIsListable(row)).toBe(false);
+    expect(rowAwaitingSync(row)).toBe(false);
+  });
+
   it.each(cards)('returns recorded sale $cert in one click, then explicitly lists', async card => {
     const p = purchase(card);
     const mocks = transport(soldState(p), card.externalSale);
@@ -132,8 +145,31 @@ describe('confirmed Cert Intake returns', () => {
     expect(mocks.list).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'List on DH' }));
     await waitFor(() => expect(mocks.list).toHaveBeenCalledWith(p.id));
-    expect(api.setReviewedPrice).toHaveBeenCalledWith(p.id, 4000, 'market');
+    expect(api.setReviewedPrice).toHaveBeenCalledWith(p.id, 4000, 'market', { manualList: true });
     await waitFor(() => expect(screen.queryByText(/Returned; review the price and list explicitly/i)).not.toBeInTheDocument());
+  });
+
+  it('counts already-listed rows as completed and keeps sold rows separate', async () => {
+    const p = { ...purchase(), dhStatus: 'listed' };
+    transport(state(p));
+    seed(p);
+    render(<CardIntakeTab />);
+
+    expect(await screen.findByText('1 listed')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'List on DH' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear completed' }));
+    expect(screen.queryByText('1 scanned')).not.toBeInTheDocument();
+  });
+
+  it('does not claim the reviewed price is live when DH reports already listed', async () => {
+    const p = purchase();
+    transport(state(p));
+    vi.mocked(api.listPurchaseOnDH).mockRejectedValueOnce(new APIError('Purchase already listed on DH', 409, undefined, { error: 'Purchase already listed on DH' }));
+    seed(p);
+    render(<CardIntakeTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 'List on DH' }));
+    expect(await screen.findByText(/verify live price and channels on DH/i)).toBeVisible();
+    expect(screen.queryByText(/1 listed/i)).not.toBeInTheDocument();
   });
 
   it('does not request another List when a successful listing follow-up read fails', async () => {

@@ -92,7 +92,7 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
   const handleSetAndList = async (priceCents: number, source: string) => {
     setIsSubmitting(true);
     try {
-      await api.setReviewedPrice(purchase.id, priceCents, source);
+      await api.setReviewedPrice(purchase.id, priceCents, source, { manualList: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save reviewed price');
       setIsSubmitting(false);
@@ -105,9 +105,8 @@ export default function ExpandedDetail({ item, onReviewed, campaignId, onOpenFla
       onReviewed?.();
     } catch (err) {
       if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
-        toast.success('Price set and listed on DH');
+        toast.error('DH reports this card already listed; verify live price and channels on DH before retrying.');
         invalidateQueries();
-        onReviewed?.();
         return;
       }
       const msg = err instanceof Error ? err.message : 'Listing failed';
