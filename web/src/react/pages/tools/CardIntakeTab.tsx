@@ -108,7 +108,9 @@ export default function CardIntakeTab() {
     } catch (err) {
       updateCert(certNumber, {
         listingStatus: 'list-error',
-        listingError: err instanceof Error ? err.message : 'Failed to set price',
+        listingError: isAPIError(err) && (err.status === 0 || err.status >= 500)
+          ? 'Price save unconfirmed; refresh the card before deciding whether to try again.'
+          : err instanceof Error ? err.message : 'Failed to set price',
       });
       return;
     }
@@ -120,8 +122,9 @@ export default function CardIntakeTab() {
     } catch (err) {
       if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
         updateCert(certNumber, {
+          dhStatus: 'listed', // Server rejected using its local listed state, not a fresh DH read.
           listingStatus: 'list-error',
-          listingError: 'DH reports this card already listed; verify live price and channels on DH before retrying.',
+          listingError: 'SlabLedger records this card as listed; verify live price and channels on DH before retrying.',
         });
         return;
       }

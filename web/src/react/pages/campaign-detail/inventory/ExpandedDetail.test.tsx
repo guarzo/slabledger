@@ -92,6 +92,16 @@ describe('ExpandedDetail combined set-and-list', () => {
     expect(queryByText('Price set and listed on DH')).not.toBeInTheDocument();
   });
 
+  it('does not list after an unconfirmed price save', async () => {
+    const { api } = await import('../../../../js/api');
+    vi.mocked(api.setReviewedPrice).mockRejectedValueOnce(new APIError('Connection lost', 0, 'NETWORK_ERROR'));
+    const { getByRole, findByText } = renderWithProviders(<ExpandedDetail item={makeItem()} combineWithList />);
+
+    await userEvent.click(getByRole('button', { name: /list on dh/i }));
+    expect(await findByText(/price save unconfirmed; refresh the card before deciding whether to try again/i)).toBeInTheDocument();
+    expect(api.listPurchaseOnDH).not.toHaveBeenCalled();
+  });
+
   it('does not call listPurchaseOnDH when combineWithList is false', async () => {
     const { api } = await import('../../../../js/api');
     const item = makeItem();

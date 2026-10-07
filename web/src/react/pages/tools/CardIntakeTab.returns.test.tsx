@@ -168,8 +168,21 @@ describe('confirmed Cert Intake returns', () => {
     seed(p);
     render(<CardIntakeTab />);
     await userEvent.click(await screen.findByRole('button', { name: 'List on DH' }));
-    expect(await screen.findByText(/verify live price and channels on DH/i)).toBeVisible();
+    expect(await screen.findByText(/SlabLedger records this card as listed; verify live price and channels on DH/i)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'List on DH' })).not.toBeInTheDocument();
     expect(screen.queryByText(/1 listed/i)).not.toBeInTheDocument();
+  });
+
+  it('treats a lost price-save response as unconfirmed and does not list', async () => {
+    const p = purchase();
+    transport(state(p));
+    vi.mocked(api.setReviewedPrice).mockRejectedValueOnce(new APIError('Connection lost', 0, 'NETWORK_ERROR'));
+    seed(p);
+    render(<CardIntakeTab />);
+    await userEvent.click(await screen.findByRole('button', { name: 'List on DH' }));
+
+    expect(await screen.findByText(/price save unconfirmed; refresh the card before deciding whether to try again/i)).toBeVisible();
+    expect(api.listPurchaseOnDH).not.toHaveBeenCalled();
   });
 
   it('does not request another List when a successful listing follow-up read fails', async () => {

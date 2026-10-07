@@ -293,10 +293,10 @@ export function CertRowItem({
             confirmLabel={listingStatus === 'setting-price' ? 'Setting price…' : 'List on DH'}
             onConfirm={(priceCents, source) => onList(row.certNumber, priceCents, source)}
           />
-          {listingError && (
-            <p className="text-xs text-[var(--danger)] mt-2">{listingError}</p>
-          )}
         </div>
+      )}
+      {listingError && inPlaceableStatus && (
+        <p className="px-4 pb-2 text-xs text-[var(--danger)]">{listingError}</p>
       )}
     </div>
   );
