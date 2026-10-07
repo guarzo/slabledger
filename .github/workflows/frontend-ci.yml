@@ -164,8 +164,10 @@ jobs:
         key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('web/package-lock.json') }}
         restore-keys: ${{ runner.os }}-playwright-chromium-
 
+    # --with-deps runs apt update on every job, even when Chromium is cached;
+    # the runner's Azure apt mirror can hang until the job times out.
     - name: Install Playwright Chromium
-      run: npx playwright install chromium --with-deps
+      run: npx playwright install chromium
 
     - name: Start preview server
       run: |
@@ -242,7 +244,7 @@ jobs:
         restore-keys: ${{ runner.os }}-playwright-chromium-
 
     - name: Install Playwright Chromium (fast)
-      run: npx playwright install chromium --with-deps
+      run: npx playwright install chromium
 
     - name: Start preview server
       run: |
