@@ -76,7 +76,7 @@ for (const width of [1440, 390]) {
           return route.fulfill({ json: durable });
         }
         if (path.endsWith('/review-price')) {
-          expect(request.postDataJSON()).toEqual({ priceCents: 4000, source: 'market' });
+          expect(request.postDataJSON()).toEqual({ priceCents: 4000, source: 'market', manualList: true });
           await route.fulfill({ json: { success: true, reviewedAt: stamp } });
           priceReviewSucceeded = true;
           return;

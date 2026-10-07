@@ -149,16 +149,42 @@ describe('confirmed Cert Intake returns', () => {
     await waitFor(() => expect(screen.queryByText(/Returned; review the price and list explicitly/i)).not.toBeInTheDocument());
   });
 
-  it('counts already-listed rows as completed and keeps sold rows separate', async () => {
+  it.each([
+    { name: 'confirmed refresh', refresh: 'ok', status: 'existing', listingStatus: undefined, listed: true },
+    { name: 'rejected refresh', refresh: 'reject', status: 'existing', listingStatus: undefined, listed: true },
+    { name: 'missing purchase', refresh: 'missing', status: 'existing', listingStatus: undefined, listed: true },
+    { name: 'explicit list error', refresh: 'reject', status: 'existing', listingStatus: 'list-error', listed: false },
+    { name: 'sold takes precedence', refresh: 'reject', status: 'sold', listingStatus: undefined, listed: false },
+  ] as const)('counts already-listed rows as completed and keeps sold rows separate ($name)', async card => {
     const p = { ...purchase(), dhStatus: 'listed' };
     transport(state(p));
-    seed(p);
+    if (card.refresh === 'reject') {
+      vi.mocked(api.getConfirmedReturnState).mockRejectedValueOnce(new Error('Return state unavailable'));
+    } else if (card.refresh === 'missing') {
+      vi.mocked(api.getConfirmedReturnState).mockResolvedValueOnce({ ...state(p), purchase: null });
+    }
+    seed(p, card.status);
+    if (card.listingStatus) {
+      const queue = loadQueue();
+      queue.set(p.certNumber, { ...queue.get(p.certNumber)!, listingStatus: card.listingStatus });
+      saveQueue(queue);
+    }
     render(<CardIntakeTab />);
+    await waitFor(() => expect(api.getConfirmedReturnState).toHaveBeenCalled());
+    if (card.refresh !== 'ok' && card.status !== 'sold') {
+      await screen.findByText('DH state read failed. Listing paused; retrying automatically.');
+    }
 
-    expect(await screen.findByText('1 listed')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'List on DH' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Clear completed' }));
-    expect(screen.queryByText('1 scanned')).not.toBeInTheDocument();
+    if (card.listed) {
+      expect(await screen.findByText('1 listed')).toBeVisible();
+      await userEvent.click(screen.getByRole('button', { name: 'Clear completed' }));
+      expect(screen.queryByText('1 scanned')).not.toBeInTheDocument();
+    } else {
+      expect(screen.queryByText('1 listed')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Clear completed' })).not.toBeInTheDocument();
+      if (card.status === 'sold') expect(screen.getByText('1 sold')).toBeVisible();
+    }
   });
 
   it('does not claim the reviewed price is live when DH reports already listed', async () => {
