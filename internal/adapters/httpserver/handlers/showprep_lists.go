@@ -48,56 +48,13 @@ func (h *ShowPrepHandler) HandleRenameList(w http.ResponseWriter, r *http.Reques
 	list, err := h.svc.RenameList(r.Context(), id, req.Name)
 	h.respond(w, r, list, err)
 }
+
+// Stale clients receive guidance without parsing input or touching the service.
 func (h *ShowPrepHandler) HandleAddItems(w http.ResponseWriter, r *http.Request) {
-	id, ok := showPrepPath(w, r, "listID")
-	if !ok {
-		return
-	}
-	var req struct {
-		Items []sp.AddItem `json:"items"`
-	}
-	if !showPrepDecode(w, r, &req) {
-		return
-	}
-	if len(req.Items) == 0 || len(req.Items) > 200 {
-		writeError(w, 400, "invalid item batch size")
-		return
-	}
-	seen := map[string]string{}
-	for _, item := range req.Items {
-		if !showPrepID(item.PurchaseID) || !showPrepVersion(item.EvaluationVersion) {
-			writeError(w, 400, "invalid item purchase ID or evaluation version")
-			return
-		}
-		if prior, ok := seen[item.PurchaseID]; ok && prior != item.EvaluationVersion {
-			writeError(w, 400, "conflicting duplicate item versions")
-			return
-		}
-		seen[item.PurchaseID] = item.EvaluationVersion
-	}
-	detail, err := h.svc.AddItems(r.Context(), id, req.Items)
-	h.respond(w, r, detail, err)
+	writeError(w, http.StatusGone, "Add is retired; reload the application and scan each card using scan-confirm")
 }
-func showPrepVersion(version string) bool { return len(version) > 0 && len(version) <= 128 }
 func (h *ShowPrepHandler) HandleUpdateItem(w http.ResponseWriter, r *http.Request) {
-	list, ok := showPrepPath(w, r, "listID")
-	if !ok {
-		return
-	}
-	item, ok := showPrepPath(w, r, "itemID")
-	if !ok {
-		return
-	}
-	var req sp.UpdateItem
-	if !showPrepDecode(w, r, &req) {
-		return
-	}
-	if req.Version <= 0 || (req.Packed == nil && !req.Acknowledge) || ((req.Acknowledge || (req.Packed != nil && *req.Packed)) && !showPrepVersion(req.EvaluationVersion)) {
-		writeError(w, 400, "invalid item update or evaluation version")
-		return
-	}
-	detail, err := h.svc.UpdateItem(r.Context(), list, item, req)
-	h.respond(w, r, detail, err)
+	writeError(w, http.StatusGone, "Pack/Acknowledge is retired; reload the application and scan each card using scan-confirm")
 }
 func (h *ShowPrepHandler) HandleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	list, ok := showPrepPath(w, r, "listID")

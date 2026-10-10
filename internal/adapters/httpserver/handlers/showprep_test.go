@@ -51,7 +51,7 @@ func TestShowPrepHTTPErrorMapping(t *testing.T) {
 		name   string
 		err    error
 		status int
-	}{{"missing", sp.ErrNotFound, 404}, {"stale", sp.ErrConflict, 409}, {"invalid", sp.ErrInvalid, 400}, {"storage", context.DeadlineExceeded, 500}} {
+	}{{"missing", sp.ErrNotFound, 404}, {"retired", sp.ErrRetired, 410}, {"contended", sp.ErrContended, 503}, {"stale", sp.ErrConflict, 409}, {"invalid", sp.ErrInvalid, 400}, {"storage", context.DeadlineExceeded, 500}} {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &mocks.ShowPrepStoreMock{CreateListFn: func(context.Context, string, string) (sp.List, error) { return sp.List{}, tt.err }}
 			h := NewShowPrepHandler(sp.NewService(store, nil, time.Now), mocks.NewMockLogger())

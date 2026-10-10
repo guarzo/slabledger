@@ -101,6 +101,103 @@ func TestShowPrepPreviewAuthentication(t *testing.T) {
 	}
 }
 
+// Catches approval bypasses, unauthenticated access and disabled-service SPA fallthrough.
+func TestShowPrepRetiredAndScanAuthentication(t *testing.T) {
+	const id = "11111111-1111-4111-8111-111111111111"
+	for _, route := range []struct {
+		name, method, suffix, body string
+		status                     int
+	}{
+		{"scan", "POST", id + "/scan-confirm", `{"commandId":"22222222-2222-4222-8222-222222222222","certNumber":"123","withdrawalGeneration":0}`, 200},
+		{"delete list", "DELETE", id, `{"commandId":"22222222-2222-4222-8222-222222222222","expectedState":"stale"}`, 409},
+		{"legacy add", "POST", id + "/items", `{"items":[{"purchaseId":"` + id + `","evaluationVersion":"observed"}]}`, 410},
+		{"legacy pack", "PUT", id + "/items/" + id, `{"version":1,"packed":true,"evaluationVersion":"observed"}`, 410},
+		{"legacy acknowledge", "PUT", id + "/items/" + id, `{"version":1,"acknowledge":true,"evaluationVersion":"observed"}`, 410},
+		{"legacy malformed", "PUT", "bad/items/bad", `{`, 410},
+		{"legacy malformed add", "POST", "bad/items", `{`, 410},
+		{"member removal retained", "DELETE", id + "/items/" + id, "", 200},
+		{"transition not public", "POST", id + "/confirm-existing", `{}`, 404},
+	} {
+		for _, auth := range []struct {
+			name, configured, supplied string
+			composed                   bool
+			status                     int
+		}{
+			{"authenticated", "fixture", "fixture", true, 0},
+			{"unauthenticated", "fixture", "", true, 401},
+			{"wrong token", "fixture", "wrong", true, 401},
+			{"unconfigured", "", "", true, 401},
+			{"disabled authenticated", "fixture", "fixture", false, 503},
+			{"disabled unauthenticated", "fixture", "", false, 401},
+			{"disabled unconfigured", "", "", false, 401},
+		} {
+			t.Run(route.name+"/"+auth.name, func(t *testing.T) {
+				logger := mocks.NewMockLogger()
+				reads, writes := 0, 0
+				store := &mocks.ShowPrepStoreMock{
+					ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) { reads++; return nil, nil },
+					WithinFn: func(context.Context, func(sp.Session) error) error {
+						if route.status == 410 || auth.status != 0 {
+							t.Fatal("retired or unauthenticated route touched the service")
+						}
+						return nil
+					},
+					RemoveItemFn: func(context.Context, string, string) error { writes++; return nil },
+					InsertItemFn: func(context.Context, string, sp.Item) error { t.Fatal("legacy Add bypass"); return nil },
+					SaveItemFn:   func(context.Context, string, sp.Item) error { t.Fatal("legacy Pack/Acknowledge bypass"); return nil },
+				}
+				// Use real domain execution for live routes; retired routes prohibit even pre-transaction observations.
+				if route.status != 410 && auth.status == 0 {
+					store.WithinFn = nil
+				} else {
+					store.ObservePriceAssociationsFn = func(context.Context, []string) (map[string]bool, error) {
+						t.Fatal("retired or unauthenticated route observed associations")
+						return nil, nil
+					}
+					store.GetItemsFn = func(context.Context, string) ([]sp.Item, error) {
+						t.Fatal("retired or unauthenticated route read members")
+						return nil, nil
+					}
+				}
+				source := &mocks.ShowPrepSourceMock{FetchFn: func(context.Context, sp.Identity, time.Time) (sp.Snapshot, error) {
+					t.Fatal("route acquired comps")
+					return sp.Snapshot{}, nil
+				}}
+				var h *handlers.ShowPrepHandler
+				if auth.composed {
+					h = handlers.NewShowPrepHandler(sp.NewService(store, source, time.Now), logger)
+				}
+				router := NewRouter(RouterConfig{ShowPrepHandler: h, LocalAPIToken: auth.configured, Logger: logger,
+					SPAHandler: handlers.NewSPAHandler(logger), HealthHandler: handlers.NewHealthHandler(nil, nil, logger)}).Setup()
+				r := httptest.NewRequest(route.method, "/api/show-prep/lists/"+route.suffix, strings.NewReader(route.body))
+				if auth.supplied != "" {
+					r.Header.Set("Authorization", "Bearer "+auth.supplied)
+				}
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, r)
+				status := auth.status
+				if status == 0 {
+					status = route.status
+				}
+				require.Equal(t, status, w.Code, w.Body.String())
+				require.Zero(t, reads)
+				wantWrites := 0
+				if route.name == "member removal retained" && auth.status == 0 {
+					wantWrites = 1
+				}
+				require.Equal(t, wantWrites, writes)
+				if status != 401 || auth.configured == "" {
+					require.Contains(t, w.Header().Get("Content-Type"), "application/json")
+					require.NotContains(t, w.Body.String(), "<!doctype")
+				}
+				if status == 410 {
+					require.Contains(t, w.Body.String(), "scan-confirm")
+				}
+			})
+		}
+	}
+}
+
 func TestShowPrepAPIPrefixIsolation(t *testing.T) {
 	for _, tt := range []struct {
 		name, method, path, configuredToken, suppliedToken string

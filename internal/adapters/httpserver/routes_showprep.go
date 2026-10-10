@@ -39,6 +39,8 @@ func (rt *Router) registerShowPrepRoutes(mux *http.ServeMux) {
 		{"POST /api/show-prep/lists", h.HandleCreateList},
 		{"GET /api/show-prep/lists/{listID}", h.HandleListDetail},
 		{"PUT /api/show-prep/lists/{listID}", h.HandleRenameList},
+		{"DELETE /api/show-prep/lists/{listID}", h.HandleDeleteList},
+		{"POST /api/show-prep/lists/{listID}/scan-confirm", h.HandleScanConfirm},
 		{"POST /api/show-prep/lists/{listID}/items", h.HandleAddItems},
 		{"PUT /api/show-prep/lists/{listID}/items/{itemID}", h.HandleUpdateItem},
 		{"DELETE /api/show-prep/lists/{listID}/items/{itemID}", h.HandleRemoveItem},

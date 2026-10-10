@@ -12,13 +12,16 @@ import (
 	"time"
 )
 
-func TestShowPrepHTTPPackingRetriesAndStaleAcknowledgment(t *testing.T) {
+func TestShowPrepRetiredHTTPApprovals(t *testing.T) {
 	p := sp.Purchase{ID: showTestID, CardName: "Card", CertNumber: "123", Grader: "PSA", Grade: 10, Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "pending", ListedPriceCents: 30000}
 	item := sp.Item{ID: "22222222-2222-4222-8222-222222222222", PurchaseID: showTestID, Version: 1, AcknowledgedPriceCents: 30000, AcknowledgedStatus: sp.NeedsReview}
 	writes := 0
 	store := &mocks.ShowPrepStoreMock{ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) {
 		return map[string]sp.Purchase{showTestID: p}, nil
-	}, GetItemsFn: func(context.Context, string) ([]sp.Item, error) { return []sp.Item{item}, nil }, SaveItemFn: func(_ context.Context, _ string, saved sp.Item) error { item = saved; writes++; return nil }}
+	}, GetItemsFn: func(context.Context, string) ([]sp.Item, error) { return []sp.Item{item}, nil }, WithinFn: func(context.Context, func(sp.Session) error) error {
+		writes++
+		return nil
+	}, SaveItemFn: func(_ context.Context, _ string, saved sp.Item) error { item = saved; writes++; return nil }}
 	svc := sp.NewService(store, nil, time.Now)
 	h := NewShowPrepHandler(svc, mocks.NewMockLogger())
 	es, err := svc.Evaluate(context.Background(), []string{showTestID})
@@ -31,9 +34,9 @@ func TestShowPrepHTTPPackingRetriesAndStaleAcknowledgment(t *testing.T) {
 		price          int
 		status, writes int
 	}{
-		{"pack", pack, 30000, 200, 1}, {"duplicate transport request", pack, 30000, 200, 1},
-		{"stale conflicting intent", sp.UpdateItem{Version: 1, Packed: &no}, 30000, 409, 1},
-		{"stale acknowledgment after price sync", sp.UpdateItem{Version: 2, EvaluationVersion: es[0].Version, Acknowledge: true}, 40000, 409, 1},
+		{"pack", pack, 30000, 410, 0}, {"duplicate transport request", pack, 30000, 410, 0},
+		{"stale conflicting intent", sp.UpdateItem{Version: 1, Packed: &no}, 30000, 410, 0},
+		{"stale acknowledgment after price sync", sp.UpdateItem{Version: 2, EvaluationVersion: es[0].Version, Acknowledge: true}, 40000, 410, 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			p.ListedPriceCents = tt.price
@@ -46,13 +49,9 @@ func TestShowPrepHTTPPackingRetriesAndStaleAcknowledgment(t *testing.T) {
 			h.HandleUpdateItem(w, r)
 			require.Equal(t, tt.status, w.Code)
 			require.Equal(t, tt.writes, writes)
-			if tt.status == 200 {
-				var result sp.ListDetail
-				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
-				require.Len(t, result.Items, 1)
-				require.Equal(t, 1, result.Summary.PackedCount)
-				require.Equal(t, int64(2), result.Items[0].Version)
-			}
+			require.Contains(t, w.Body.String(), "scan-confirm")
+			require.Equal(t, int64(1), item.Version)
+			require.Empty(t, item.PackedAt)
 		})
 	}
 }
