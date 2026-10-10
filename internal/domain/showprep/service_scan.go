@@ -115,6 +115,23 @@ func (s *Service) ScanConfirm(ctx context.Context, listID string, cmd ScanComman
 			}
 			return finalize(code)
 		}
+		// Row locks cannot fence an exact-cert insertion in another campaign.
+		// Revalidate after the later association/evidence reads; historical price
+		// holds alone must not reject otherwise unique physical identity.
+		latest, err := tx.ReadCertPurchaseIDs(ctx, cmd.CertNumber)
+		if err != nil {
+			return err
+		}
+		slices.Sort(latest)
+		if !slices.Equal(candidates, latest) {
+			if _, err := tx.ObservePriceAssociations(ctx, ids); err != nil {
+				return err
+			}
+			if len(latest) > 1 {
+				return finalize("ambiguous_cert")
+			}
+			return finalize("identity_changed")
+		}
 		if len(candidates) == 0 {
 			return finalize("identity_changed")
 		}

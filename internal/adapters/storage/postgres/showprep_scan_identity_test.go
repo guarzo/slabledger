@@ -132,6 +132,80 @@ func TestShowPrepScanCandidateSetRequery(t *testing.T) {
 	}
 }
 
+// A live competitor found by later association/evidence reads is an identity
+// ambiguity, unlike a retained historical price hold after its owner is gone.
+func TestShowPrepScanLateCertCompetitor(t *testing.T) {
+	for _, tt := range []struct {
+		name, outcome, code                                  string
+		insertAfterRequery, insertDuringEvidence, historical bool
+	}{
+		{"after locked requery", "rejected", "ambiguous_cert", true, false, false},
+		{"during cached evidence read", "rejected", "ambiguous_cert", false, true, false},
+		{"historical hold only", "confirmed", "", false, false, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			db, store, _ := setupScanService(t)
+			ctx := context.Background()
+			seedShowEvidence(t, store)
+			if tt.historical {
+				seedShowPurchase(t, db, showOther, "camp-other", "12345678", "BGS")
+				_, err := store.ObservePriceAssociations(ctx, []string{showPurchase})
+				require.NoError(t, err)
+				_, err = db.ExecContext(ctx, `DELETE FROM campaigns WHERE id='camp-other'`)
+				require.NoError(t, err)
+			}
+			controlled := &mocks.ShowPrepStoreMock{WithinFn: func(ctx context.Context, fn func(sp.Session) error) error {
+				return store.Within(ctx, func(tx sp.Session) error {
+					m := scanSessionMock(tx)
+					reads := 0
+					m.ReadCertPurchaseIDsFn = func(ctx context.Context, cert string) ([]string, error) {
+						ids, err := tx.ReadCertPurchaseIDs(ctx, cert)
+						reads++
+						if reads == 2 && tt.insertAfterRequery {
+							seedShowPurchase(t, db, showOther, "camp-other", "12345678", "BGS")
+						}
+						return ids, err
+					}
+					m.ReadSnapshotsFn = func(ctx context.Context, identities []sp.Identity) (map[sp.Identity]*sp.Snapshot, error) {
+						if tt.insertDuringEvidence {
+							seedShowPurchase(t, db, showOther, "camp-other", "12345678", "BGS")
+						}
+						return tx.ReadSnapshots(ctx, identities)
+					}
+					return fn(m)
+				})
+			}}
+			result, err := sp.NewService(controlled, nil, time.Now).ScanConfirm(ctx, showList, showScanIntent())
+			require.NoError(t, err)
+			require.Equal(t, tt.outcome, result.Original.Outcome)
+			require.Equal(t, tt.code, result.Original.Code)
+			items, err := store.GetItems(ctx, showList)
+			require.NoError(t, err)
+			if tt.historical {
+				require.Len(t, items, 1)
+				require.EqualValues(t, 1, items[0].Version)
+				require.Equal(t, 30000, items[0].AcknowledgedPriceCents)
+				require.Equal(t, sp.Supported, items[0].AcknowledgedStatus)
+				require.True(t, result.Current.Evaluation.PriceAssociationUnclear)
+			} else {
+				require.Empty(t, items, "ambiguous identity must never create confirmed membership")
+				require.Empty(t, result.Original.ItemID)
+			}
+			scanReceiptCount(t, db, 1)
+			require.NoError(t, store.Within(ctx, func(tx sp.Session) error {
+				r, found, err := tx.GetCommandReceipt(ctx, showScanCommand)
+				require.NoError(t, err)
+				require.True(t, found)
+				require.Equal(t, result.Original, *r.Scan)
+				return nil
+			}))
+			var holds int
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM showprep_price_holds WHERE purchase_id IN ($1,$2)`, showPurchase, showOther).Scan(&holds))
+			require.Equal(t, 2, holds, "rejection must persist the observed competitors without a later observation write")
+		})
+	}
+}
+
 func TestShowPrepScanStrictStorageFailurePreservesObservedCollision(t *testing.T) {
 	db, store, _ := setupScanService(t)
 	ctx := context.Background()
