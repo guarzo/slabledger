@@ -319,6 +319,52 @@ Cards held longer than 30 days are treated as deeply stale in the sell signals.
 
 ### Show Preparation
 
+#### One-time legacy show transition (local operator tool)
+
+`cmd/showprep-transition` is a local, explicit transition tool, not an HTTP bulk
+confirmation endpoint. Use only after the coordinated schema/runtime rollout and
+separate authorization for the chosen database and exact cohort. Building/testing
+the tool does not authorize a live transition.
+
+Supply `DATABASE_URL` through the process environment, never command arguments.
+The tool does not load `.env`, migrate schema, start schedulers, or fetch provider
+comps. Keep the snapshot outside Git in a private location: it must be the full
+`ListDetail` JSON with `list`, `items` (including all persisted member state), and
+`stateFingerprint`, not just a list ID or a selection of members. Do not edit or
+rebase the snapshot. Invalid/unknown fields, duplicate IDs/keys, and a fingerprint
+that cannot be reconstructed are rejected. The public DTO omits internal
+`LastCommand`; a snapshot whose fingerprint includes a nonempty hidden command
+cannot be reconstructed by this tool and fails closed. Resolve that snapshot
+contract before authorizing such a transition; do not manufacture a fingerprint.
+
+```bash
+# DATABASE_URL is already set securely in this shell. Default: no writes.
+go run ./cmd/showprep-transition -operation confirm-existing -snapshot /private/show-before.json -command-id <generated-uuid>
+# Only after explicit authorization; retain the same snapshot and UUID.
+go run ./cmd/showprep-transition -operation confirm-existing -snapshot /private/show-before.json -command-id <same-uuid> -apply
+```
+
+Dry-run compares stored list/member state and each member's current availability
+and identity using read-only calls. It does not observe price associations or
+collect/read provider evidence. Missing asking/comps do not prevent physical
+confirmation. These separate reads are advisory, not a transaction-consistent
+snapshot or a guarantee against cert collisions elsewhere. Apply rechecks exact
+cohort/fingerprint, current readiness and cert uniqueness atomically in the domain,
+preserves existing confirmation timestamps, and acknowledges the current committed
+asking/support. It changes no purchase, receipt, sale, reservation, or DH permission.
+
+`-operation delete-empty` additionally requires the supplied snapshot and current
+state to be empty. The domain's atomic fingerprint check rejects a member added
+between dry-run and deletion. A successful deletion persists a retirement tombstone.
+
+After any uncertain response, retry **the unchanged snapshot and same command
+UUID** with `-apply`. Apply checks the completed receipt/tombstone before stale
+live-state checks, returning `replay: true` without updating the baseline or
+resurrecting a deleted show. Default dry-run is a current-state check, not a receipt
+lookup, so it may fail after successful apply. Never generate a new UUID to recover
+an uncertain response. Tool errors omit connection strings and raw database errors;
+verify schema/connectivity separately when those errors occur.
+
 Normal **Inventory** remains the default, with compact assessment links and the
 existing sale/list controls, including cards awaiting intake. Choose **Price review**
 for an **in-hand inventory only** queue and persistent price panel (focused detail
