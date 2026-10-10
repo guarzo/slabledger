@@ -42,7 +42,7 @@ func (s *ShowPrepStore) CreateList(ctx context.Context, id, name string) (sp.Lis
 		if _, retired, err := tx.GetRetiredList(ctx, id); err != nil {
 			return err
 		} else if retired {
-			return sp.ErrConflict
+			return sp.ErrRetired
 		}
 		_, err := tx.q.ExecContext(ctx, `INSERT INTO showprep_lists(id,name) VALUES($1,$2) ON CONFLICT(id) DO NOTHING`, id, name)
 		if err != nil {

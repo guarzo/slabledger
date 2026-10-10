@@ -11,6 +11,8 @@ var (
 	ErrNotFound = errors.New("show preparation record not found")
 	ErrConflict = errors.New("show preparation state changed; reload and review")
 	ErrInvalid  = errors.New("invalid show preparation input")
+	// Retired is terminal and distinct from a never-created show.
+	ErrRetired = fmt.Errorf("show preparation list retired: %w", ErrConflict)
 	// Contention is retryable without finalizing an intent; legacy consumers still see ErrConflict.
 	ErrContended = fmt.Errorf("show preparation rows contended: %w", ErrConflict)
 )

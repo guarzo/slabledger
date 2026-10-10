@@ -36,7 +36,7 @@ func (s *Service) ScanConfirm(ctx context.Context, listID string, cmd ScanComman
 			result.Original, result.Replay = *receipt.Scan, true
 			return nil
 		}
-		list, err := tx.GetList(ctx, listID)
+		list, err := liveShowList(ctx, tx, listID)
 		if err != nil {
 			return err
 		}

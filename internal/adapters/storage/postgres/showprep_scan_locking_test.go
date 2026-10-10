@@ -16,6 +16,7 @@ func scanSessionMock(tx sp.Session) *mocks.ShowPrepStoreMock {
 	return &mocks.ShowPrepStoreMock{
 		GetCommandReceiptFn: tx.GetCommandReceipt, InsertCommandReceiptFn: tx.InsertCommandReceipt,
 		GetListFn: tx.GetList, GetItemsFn: tx.GetItems, ReadCertPurchaseIDsFn: tx.ReadCertPurchaseIDs,
+		GetRetiredListFn: tx.GetRetiredList, RetireListFn: tx.RetireList,
 		LockPurchasesFn: tx.LockPurchases, ReadPurchasesFn: tx.ReadPurchases,
 		ObservePriceAssociationsFn: tx.ObservePriceAssociations, ReadSnapshotsFn: tx.ReadSnapshots,
 		CertCollisionObservedFn: tx.CertCollisionObserved,
