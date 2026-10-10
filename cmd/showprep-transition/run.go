@@ -15,8 +15,8 @@ import (
 )
 
 type options struct {
-	operation, snapshot, commandID string
-	apply                          bool
+	operation, snapshot, commandID, listID string
+	apply                                  bool
 }
 type readStorePort interface {
 	GetList(context.Context, string) (sp.List, error)
@@ -32,14 +32,21 @@ func parse(args []string) (options, error) {
 	var o options
 	fs := flag.NewFlagSet("showprep-transition", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // The flag package includes supplied values in errors.
-	fs.StringVar(&o.operation, "operation", "", "confirm-existing or delete-empty")
-	fs.StringVar(&o.snapshot, "snapshot", "", "private full ListDetail JSON path")
+	fs.StringVar(&o.operation, "operation", "", "export, confirm-existing or delete-empty")
+	fs.StringVar(&o.listID, "list-id", "", "canonical list UUID (export only)")
+	fs.StringVar(&o.snapshot, "snapshot", "", "private snapshot JSON path")
 	fs.StringVar(&o.commandID, "command-id", "", "canonical command UUID")
 	fs.BoolVar(&o.apply, "apply", false, "apply atomic command (default dry-run)")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
-		return options{}, errors.New("invalid flags; require -operation, -snapshot, -command-id; optional -apply")
+		return options{}, errors.New("invalid flags; use -operation, -snapshot, -command-id and optional -apply; export requires -list-id instead of -command-id")
 	}
-	if (o.operation != "confirm-existing" && o.operation != "delete-empty") || strings.TrimSpace(o.snapshot) == "" || !canonicalID(o.commandID) {
+	if o.operation == "export" {
+		if !canonicalID(o.listID) || strings.TrimSpace(o.snapshot) == "" || o.commandID != "" || o.apply {
+			return options{}, errors.New("export requires snapshot path and canonical list UUID; command-id/apply are not allowed")
+		}
+		return o, nil
+	}
+	if (o.operation != "confirm-existing" && o.operation != "delete-empty") || strings.TrimSpace(o.snapshot) == "" || !canonicalID(o.commandID) || o.listID != "" {
 		return options{}, errors.New("require operation confirm-existing|delete-empty, snapshot path, and canonical command UUID")
 	}
 	return o, nil

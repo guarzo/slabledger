@@ -35,9 +35,12 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	d, err := loadSnapshot(o.snapshot, o.operation)
-	if err != nil {
-		return err
+	var d sp.ListDetail
+	if o.operation != "export" {
+		d, err = loadSnapshot(o.snapshot, o.operation)
+		if err != nil {
+			return err
+		}
 	}
 	// No .env loader or URL flag: the operator explicitly supplies DATABASE_URL
 	// in the process environment. Open's retry logger is muted to avoid secrets.
@@ -51,5 +54,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	defer func() { _ = db.Close() }()
 	store := postgres.NewShowPrepStore(db.DB)
+	if o.operation == "export" {
+		return exportSnapshot(ctx, o.listID, o.snapshot, store)
+	}
 	return execute(ctx, o, d, store, sp.NewService(store, nil, nil), out)
 }

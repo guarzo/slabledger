@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -147,14 +148,38 @@ func TestPostgresUncertainResponseReplay(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			require.NoError(t, resetTransitionDB(db))
 			d := seedTransition(t, db, operation == "delete-empty")
-			path := snapshotFile(t, d)
+			if operation == "confirm-existing" {
+				_, err := db.ExecContext(ctx, `UPDATE showprep_items SET last_command=$1 WHERE id=$2`, sp.Fingerprint("legacy update"), itemID)
+				require.NoError(t, err)
+			}
+			path := filepath.Join(t.TempDir(), "exported.json")
+			beforeExport := databaseState(t, db, false)
+			t.Setenv("DATABASE_URL", os.Getenv("SHOW_PREP_TRANSITION_TEST_URL")+"&options=-c%20default_transaction_read_only%3Don")
+			var exported bytes.Buffer
+			require.NoError(t, run(ctx, []string{"-operation", "export", "-list-id", listID, "-snapshot", path}, &exported))
+			info, err := os.Stat(path)
+			require.NoError(t, err)
+			require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+			captured, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, beforeExport, databaseState(t, db, false), "export changed database rows")
+			loaded, err := loadSnapshot(path, operation)
+			require.NoError(t, err)
+			if operation == "confirm-existing" {
+				require.Equal(t, sp.Fingerprint("legacy update"), loaded.Items[0].LastCommand)
+			}
+			args := []string{"-operation", operation, "-snapshot", path, "-command-id", commandID}
+			var dry bytes.Buffer
+			require.NoError(t, run(ctx, args, &dry))
+			require.Contains(t, dry.String(), `"mode":"dry_run"`)
+			require.Equal(t, beforeExport, databaseState(t, db, false), "dry-run changed database rows")
 			t.Setenv("DATABASE_URL", os.Getenv("SHOW_PREP_TRANSITION_TEST_URL"))
 			before := databaseState(t, db, true)
 			// /dev/full fails the output AFTER the domain transaction commits.
 			full, err := os.OpenFile("/dev/full", os.O_WRONLY, 0)
 			require.NoError(t, err)
 			defer func() { _ = full.Close() }()
-			args := []string{"-operation", operation, "-snapshot", path, "-command-id", commandID, "-apply"}
+			args = append(args, "-apply")
 			err = run(ctx, args, full)
 			require.ErrorContains(t, err, "may have committed")
 			require.Equal(t, before, databaseState(t, db, true), "transition changed financial/migration rows")
@@ -185,6 +210,9 @@ func TestPostgresUncertainResponseReplay(t *testing.T) {
 			require.NoError(t, run(ctx, args, &out))
 			require.Contains(t, out.String(), `"replay":true`)
 			require.Equal(t, completed, databaseState(t, db, false), "replay mutated current baseline/lifetime")
+			afterReplay, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, captured, afterReplay, "captured snapshot changed during apply/replay")
 			args[5] = "66666666-6666-4666-8666-666666666666"
 			require.Error(t, run(ctx, args, &out))
 			require.Equal(t, completed, databaseState(t, db, false))

@@ -328,17 +328,30 @@ the tool does not authorize a live transition.
 
 Supply `DATABASE_URL` through the process environment, never command arguments.
 The tool does not load `.env`, migrate schema, start schedulers, or fetch provider
-comps. Keep the snapshot outside Git in a private location: it must be the full
-`ListDetail` JSON with `list`, `items` (including all persisted member state), and
-`stateFingerprint`, not just a list ID or a selection of members. Do not edit or
-rebase the snapshot. Invalid/unknown fields, duplicate IDs/keys, and a fingerprint
-that cannot be reconstructed are rejected. The public DTO omits internal
-`LastCommand`; a snapshot whose fingerprint includes a nonempty hidden command
-cannot be reconstructed by this tool and fails closed. Resolve that snapshot
-contract before authorizing such a transition; do not manufacture a fingerprint.
+comps. First export the explicitly chosen list to a **new** private path outside
+Git. `-operation export` requires `-list-id` and `-snapshot`; it does not accept
+`-command-id` or `-apply`. Export uses only stored list/member reads and creates a
+`0600` file, refusing to overwrite an existing path (including symlinks). Export
+writes the local snapshot file, never database state. On an export write/close
+failure, discard the incomplete file and choose a new path.
+
+The CLI-local envelope has `kind: "showprep-transition-snapshot"`, `version: 1`,
+`list`, `items`, and `stateFingerprint`. It preserves all persisted fields bound
+by the domain fingerprint, including each member's internal `lastCommand`, but
+exports no evaluations or provider evidence. Public API responses remain unchanged.
+For compatibility, full public `ListDetail` snapshots are also accepted when all
+hidden last-command values are empty and their fingerprint can be reconstructed;
+use private export for legacy members with prior commands.
+
+Do not edit or rebase the snapshot. Unknown/missing private fields, unsupported
+kind/version, duplicate IDs/keys, and altered fingerprints are rejected. Export's
+separate reads are advisory; its DTO and fingerprint derive from the same captured
+list/items, and apply still checks the current state atomically.
 
 ```bash
-# DATABASE_URL is already set securely in this shell. Default: no writes.
+# DATABASE_URL is already set securely in this shell. No database writes.
+go run ./cmd/showprep-transition -operation export -list-id <chosen-list-uuid> -snapshot /private/show-before.json
+# Default transition mode: dry-run, no writes.
 go run ./cmd/showprep-transition -operation confirm-existing -snapshot /private/show-before.json -command-id <generated-uuid>
 # Only after explicit authorization; retain the same snapshot and UUID.
 go run ./cmd/showprep-transition -operation confirm-existing -snapshot /private/show-before.json -command-id <same-uuid> -apply

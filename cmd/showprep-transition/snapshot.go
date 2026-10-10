@@ -34,10 +34,25 @@ func loadSnapshot(path, operation string) (sp.ListDetail, error) {
 	if _, err := tokens.Token(); err != io.EOF {
 		return d, errors.New("snapshot contains trailing data")
 	}
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&d); err != nil {
-		return d, errors.New("snapshot must be a full ListDetail with known fields")
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return d, errors.New("snapshot must be an object")
+	}
+	_, hasKind := fields["kind"]
+	_, hasVersion := fields["version"]
+	if hasKind || hasVersion {
+		d, err = decodePrivateSnapshot(b)
+		if err != nil {
+			return d, err
+		}
+	} else {
+		// Compatibility with full public DTO snapshots whose hidden LastCommand
+		// values are all empty; the unchanged fingerprint check enforces this.
+		dec := json.NewDecoder(bytes.NewReader(b))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&d); err != nil {
+			return d, errors.New("snapshot must be a full ListDetail with known fields")
+		}
 	}
 	return d, validateSnapshot(d, operation)
 }
