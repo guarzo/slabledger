@@ -29,6 +29,7 @@ type ShowPrepStoreMock struct {
 	WithinFn                   func(context.Context, func(sp.Session) error) error
 	LockPurchasesFn            func(context.Context, []string) error
 	ReadCertPurchaseIDsFn      func(context.Context, string) ([]string, error)
+	CertCollisionObservedFn    func(string) bool
 	GetCommandReceiptFn        func(context.Context, string) (sp.CommandReceipt, bool, error)
 	InsertCommandReceiptFn     func(context.Context, sp.CommandReceipt) error
 	GetRetiredListFn           func(context.Context, string) (sp.RetiredList, bool, error)

@@ -11,6 +11,9 @@ func (m *ShowPrepStoreMock) ReadCertPurchaseIDs(ctx context.Context, cert string
 	}
 	return []string{}, nil
 }
+func (m *ShowPrepStoreMock) CertCollisionObserved(cert string) bool {
+	return m.CertCollisionObservedFn != nil && m.CertCollisionObservedFn(cert)
+}
 func (m *ShowPrepStoreMock) GetCommandReceipt(ctx context.Context, id string) (sp.CommandReceipt, bool, error) {
 	if m.GetCommandReceiptFn != nil {
 		return m.GetCommandReceiptFn(ctx, id)

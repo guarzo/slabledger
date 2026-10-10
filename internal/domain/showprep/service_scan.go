@@ -135,6 +135,9 @@ func (s *Service) ScanConfirm(ctx context.Context, listID string, cmd ScanComman
 		if len(candidates) == 0 {
 			return finalize("identity_changed")
 		}
+		if tx.CertCollisionObserved(cmd.CertNumber) {
+			return finalize("ambiguous_cert")
+		}
 		outcome, err := confirmScanMember(ctx, tx, listID, cmd, member, e, now, hash)
 		if err != nil {
 			return err

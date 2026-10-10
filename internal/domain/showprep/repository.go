@@ -44,6 +44,10 @@ type Session interface {
 	// ReadCertPurchaseIDs returns every exact-cert candidate, including unavailable
 	// purchases. Callers lock, re-query, and compare the candidate identity set.
 	ReadCertPurchaseIDs(context.Context, string) ([]string, error)
+	// CertCollisionObserved reports a live exact-cert collision latched by this
+	// session's association observations, even if the competitor later disappears.
+	// Historical durable holds alone do not set it; this performs no storage read.
+	CertCollisionObserved(string) bool
 	GetCommandReceipt(context.Context, string) (CommandReceipt, bool, error)
 	InsertCommandReceipt(context.Context, CommandReceipt) error
 	GetRetiredList(context.Context, string) (RetiredList, bool, error)

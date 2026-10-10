@@ -138,16 +138,19 @@ func TestShowPrepScanLateCertCompetitor(t *testing.T) {
 	for _, tt := range []struct {
 		name, outcome, code                                  string
 		insertAfterRequery, insertDuringEvidence, historical bool
+		removeDuringEvidence, preexistingHolds               bool
 	}{
-		{"after locked requery", "rejected", "ambiguous_cert", true, false, false},
-		{"during cached evidence read", "rejected", "ambiguous_cert", false, true, false},
-		{"historical hold only", "confirmed", "", false, false, true},
+		{"after locked requery", "rejected", "ambiguous_cert", true, false, false, false, false},
+		{"during cached evidence read", "rejected", "ambiguous_cert", false, true, false, false, false},
+		{"observed then removed", "rejected", "ambiguous_cert", true, false, false, true, false},
+		{"observed with existing holds then removed", "rejected", "ambiguous_cert", true, false, false, true, true},
+		{"historical hold only", "confirmed", "", false, false, true, false, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			db, store, _ := setupScanService(t)
 			ctx := context.Background()
 			seedShowEvidence(t, store)
-			if tt.historical {
+			if tt.historical || tt.preexistingHolds {
 				seedShowPurchase(t, db, showOther, "camp-other", "12345678", "BGS")
 				_, err := store.ObservePriceAssociations(ctx, []string{showPurchase})
 				require.NoError(t, err)
@@ -169,6 +172,13 @@ func TestShowPrepScanLateCertCompetitor(t *testing.T) {
 					m.ReadSnapshotsFn = func(ctx context.Context, identities []sp.Identity) (map[sp.Identity]*sp.Snapshot, error) {
 						if tt.insertDuringEvidence {
 							seedShowPurchase(t, db, showOther, "camp-other", "12345678", "BGS")
+						}
+						if tt.removeDuringEvidence {
+							_, err := db.ExecContext(ctx, `DELETE FROM campaigns WHERE id='camp-other'`)
+							require.NoError(t, err)
+							// Repeat observation after deletion: a session latch must not reset.
+							_, err = tx.ObservePriceAssociations(ctx, []string{showPurchase})
+							require.NoError(t, err)
 						}
 						return tx.ReadSnapshots(ctx, identities)
 					}

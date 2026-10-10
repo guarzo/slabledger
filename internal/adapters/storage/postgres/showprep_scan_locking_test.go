@@ -18,7 +18,8 @@ func scanSessionMock(tx sp.Session) *mocks.ShowPrepStoreMock {
 		GetListFn: tx.GetList, GetItemsFn: tx.GetItems, ReadCertPurchaseIDsFn: tx.ReadCertPurchaseIDs,
 		LockPurchasesFn: tx.LockPurchases, ReadPurchasesFn: tx.ReadPurchases,
 		ObservePriceAssociationsFn: tx.ObservePriceAssociations, ReadSnapshotsFn: tx.ReadSnapshots,
-		InsertItemFn: tx.InsertItem, SaveItemFn: tx.SaveItem,
+		CertCollisionObservedFn: tx.CertCollisionObserved,
+		InsertItemFn:            tx.InsertItem, SaveItemFn: tx.SaveItem,
 	}
 }
 

@@ -18,8 +18,9 @@ type showPrepQuery interface {
 }
 type ShowPrepStore struct{ db *sql.DB }
 type showPrepSession struct {
-	q             showPrepQuery
-	observedHolds []showPrepPriceHold
+	q                      showPrepQuery
+	observedHolds          []showPrepPriceHold
+	observedCertCollisions map[string]bool
 }
 
 var _ sp.Store = (*ShowPrepStore)(nil)
