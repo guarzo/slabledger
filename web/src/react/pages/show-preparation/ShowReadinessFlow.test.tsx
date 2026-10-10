@@ -14,7 +14,7 @@ vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: ({ count }: { count:
   getTotalSize: () => count * 160, getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, start: index * 160 })), measureElement() {}, measure() {},
 }) }));
 afterEach(() => vi.unstubAllGlobals());
-it.each(['settle', 'cancel'])('selection during a real streamed evaluation %s keeps its observed version', async outcome => {
+it.each(['settle', 'cancel'])('financial selection during a real streamed evaluation %s survives without show approval', async outcome => {
   const initial = ready(0, 'current', { certNumber: 'cert-0' });
   const changed = { ...initial, version: 'server-changed', status: 'below_target' };
   const items = [inventoryItem(initial)];
@@ -42,8 +42,8 @@ it.each(['settle', 'cancel'])('selection during a real streamed evaluation %s ke
       expect(screen.queryByText(/Review and reselect/)).not.toBeInTheDocument();
     } else {
       stream.end(`${JSON.stringify([changed])}}`);
-      expect(await screen.findByText(/Review and reselect/)).toHaveTextContent('cert-0');
-      expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+      await waitFor(() => expect(screen.getByRole('link', { name: /Review price cert-0: Asking above comps/ })).toBeVisible());
+      expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
     }
     await waitFor(() => expect(qc.isFetching()).toBe(0));
     expect(screen.getByRole('checkbox', { name: 'Select cert-0' })).toBeChecked(); expect(calls).toEqual(['/api/show-prep/evaluate']);

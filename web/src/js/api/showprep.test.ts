@@ -6,20 +6,16 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe('show preparation transport', () => {
-  it('uses exact evaluation and versioned list contracts, without financial writes', async () => {
+  it('uses exact evaluation and saved list reads, without financial writes', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(json({ evaluations: [evaluation()] }))
-      .mockResolvedValueOnce(json(detail())).mockResolvedValueOnce(json(detail()));
+      .mockResolvedValueOnce(json(detail()));
     vi.stubGlobal('fetch', fetcher);
     expect((await showPrepAPI.evaluate([purchaseId])).evaluations[0].listedPriceCents).toBe(30000);
     expect(fetcher).toHaveBeenNthCalledWith(1, '/api/show-prep/evaluate', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ purchaseIds: [purchaseId] }), credentials: 'include',
     }));
-    await showPrepAPI.addItems(listId, [{ purchaseId, evaluationVersion: 'eval-1' }]);
-    await showPrepAPI.updateItem(listId, detail().items[0].id, { version: 1, evaluationVersion: 'eval-1', packed: true });
-    expect(fetcher.mock.calls.map(c => c[0])).toEqual([
-      '/api/show-prep/evaluate', `/api/show-prep/lists/${listId}/items`,
-      `/api/show-prep/lists/${listId}/items/${detail().items[0].id}`,
-    ]);
+    expect((await showPrepAPI.detail(listId)).list.withdrawalGeneration).toBe(0);
+    expect(fetcher.mock.calls.map(c => c[0])).toEqual(['/api/show-prep/evaluate', `/api/show-prep/lists/${listId}`]);
   });
 
   it('batches evaluations at 200 with at most three concurrent reads and records missing results', async () => {

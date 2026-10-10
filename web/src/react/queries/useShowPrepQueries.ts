@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { evaluateInventory, showPrepAPI, type InventoryEvaluations } from '../../js/api/showprep';
-import type { ShowItemAdd, ShowItemUpdate, ShowListDetail } from '../../types/showprep';
+import type { ShowListDetail } from '../../types/showprep';
 
 export { showPrepKeys } from './showPrepKeys';
 import { showPrepKeys } from './showPrepKeys';
@@ -44,7 +44,7 @@ export function useShowEvidence(id: string, enabled: boolean, evaluationVersion 
         qc.setQueryData([...showPrepKeys.evidence(id), data.evaluation.version], data);
       }
       // A detail read can see newer inputs. Publish its evaluation so the compact
-      // badge and subsequent add intent refer to the same evidence the operator saw.
+      // badge and price review refer to the same evidence the operator saw.
       qc.setQueriesData<InventoryEvaluations>(overlapping, old => {
         const errors = { ...old?.errors }; delete errors[id];
         return { evaluations: { ...old?.evaluations, [id]: data.evaluation }, errors };
@@ -71,8 +71,7 @@ export function useShowListWrites() {
   return {
     create: useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => showPrepAPI.createList(id, name), onSettled: invalidate }),
     rename: useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => showPrepAPI.renameList(id, name), onSettled: invalidate }),
-    add: useMutation({ mutationFn: ({ id, items }: { id: string; items: ShowItemAdd[] }) => showPrepAPI.addItems(id, items), onSettled: invalidate }),
-    update: useMutation({ mutationFn: ({ id, itemId, input }: { id: string; itemId: string; input: ShowItemUpdate }) => showPrepAPI.updateItem(id, itemId, input), onSettled: invalidate }),
-    remove: useMutation({ mutationFn: ({ id, itemId }: { id: string; itemId: string }) => showPrepAPI.removeItem(id, itemId), onSettled: invalidate }),
+    remove: useMutation({ mutationKey: ['show-prep', 'remove'], mutationFn: ({ id, itemId }: { id: string; itemId: string }) => showPrepAPI.removeItem(id, itemId),
+      onSettled: (_data, _error, variables) => qc.invalidateQueries({ queryKey: showPrepKeys.detail(variables.id) }), retry: false }),
   };
 }

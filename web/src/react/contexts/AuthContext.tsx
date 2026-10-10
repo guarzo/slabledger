@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { api } from '../../js/api';
 import { reportError } from '../../js/errors';
+import { resetAuthContext } from '../utils/authContextEvents';
 
 interface User {
   id: number;
@@ -30,12 +31,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onIdentity
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const requestId = useRef(0);
+  const acceptedIdentity = useRef<number | null>(null);
 
   const fetchCurrentUser = useCallback(async () => {
     const request = ++requestId.current;
     try {
       const userData = await api.get<User>('/auth/user');
       if (request !== requestId.current) return;
+      if (acceptedIdentity.current !== null && acceptedIdentity.current !== userData.id) resetAuthContext();
+      acceptedIdentity.current = userData.id;
       onIdentityChange?.(userData.id);
       setUser(userData);
     } catch (error) {
@@ -43,6 +47,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onIdentity
       if (error instanceof Error && 'status' in error && (error as { status: number }).status !== 401) {
         reportError('AuthContext/currentUser', error);
       }
+      resetAuthContext();
+      acceptedIdentity.current = null;
       onIdentityChange?.(null);
       setUser(null);
     } finally {
@@ -62,6 +68,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onIdentity
   };
 
   const logout = async () => {
+    discardPendingUser();
+    resetAuthContext();
+    acceptedIdentity.current = null;
     try {
       await api.post('/auth/logout');
       onIdentityChange?.(null);

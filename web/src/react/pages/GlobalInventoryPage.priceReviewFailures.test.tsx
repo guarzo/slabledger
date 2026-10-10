@@ -63,7 +63,7 @@ it('does not recertify initially unversioned cached detail after failed midnight
     expect(screen.getByRole('region', { name: 'Saved price assessment' })).toHaveTextContent(/unavailable.*stale/i);
     expect(saved().queryByText(/\d.*%.*asking|Below asking|At asking/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
     expect(selected()).toBeChecked();
     expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
   };
@@ -82,9 +82,8 @@ it('does not recertify initially unversioned cached detail after failed midnight
   expect(requests.slice(recoveryStart)).toContain('/api/show-prep/evaluate');
   expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
   expect(selected()).toBeChecked();
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
-  fireEvent.click(selected()); fireEvent.click(selected());
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Record sale (1)' })).toBeEnabled();
   expect(requests.some(url => /refresh|review-price|override|preview/.test(url))).toBe(false);
 });
 
@@ -121,7 +120,7 @@ it('does not let a recovered detail cache override a repeated unknown aggregate 
   expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('Unknown');
   expect(screen.getByRole('button', { name: 'Unavailable 1' })).toBeVisible();
   expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
   expect(selected()).toBeChecked();
   // Time alone cannot recover. Remounting stale detail performs a genuinely new read.
@@ -134,7 +133,7 @@ it('does not let a recovered detail cache override a repeated unknown aggregate 
   expect(qc.getQueryData<InventoryEvaluations>([...showPrepKeys.evaluations, [purchaseId]])?.evaluations[purchaseId].version).toBe('known-after-recovery');
   expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
   expect(selected()).toBeChecked();
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
 });
 
 it.each(['snapshot failure', 'healthy changed assessment'] as const)('keeps the latest %s aggregate authoritative over query-fresh recovered detail until a new read publishes', async outcome => {
@@ -178,7 +177,7 @@ it.each(['snapshot failure', 'healthy changed assessment'] as const)('keeps the 
   if (snapshotFailure) expect(saved().queryByText(/\d.*%.*asking|Below asking/)).toBeNull();
   expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('$2,800.00');
   expect(input).toHaveValue('unfinished draft'); expect(input).toHaveFocus(); expect(selected()).toBeChecked();
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
   // Elapsed freshness alone is not recovery. Remounting stale detail actually reads again.
   await advance(31000);
   expect(detailReads).toBe(readsBeforeRepeat);
@@ -189,9 +188,8 @@ it.each(['snapshot failure', 'healthy changed assessment'] as const)('keeps the 
   expect(qc.getQueryData<InventoryEvaluations>([...showPrepKeys.evaluations, [purchaseId]])?.evaluations[purchaseId].version).toBe('recovered-subsequent');
   expect(saved().getByText('Supported', { exact: true })).toBeVisible();
   expect(screen.getByRole('textbox', { name: 'Asking price' })).toHaveValue('unfinished draft');
-  expect(selected()).toBeChecked(); expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
-  fireEvent.click(selected()); fireEvent.click(selected());
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
+  expect(selected()).toBeChecked(); expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Record sale (1)' })).toBeEnabled();
 });
 
 it.each(['current', 'legacy'] as const)('presents the %s failed-purchase-read DTO as unavailable, never a known missing asking', async shape => {
@@ -211,7 +209,7 @@ it.each(['current', 'legacy'] as const)('presents the %s failed-purchase-read DT
   expect(screen.getByLabelText('Saved asking price')).toHaveTextContent('Unknown');
   expect(screen.getByRole('button', { name: 'Review Aurora Dragon' })).not.toHaveTextContent(/No asking price|Not set/);
   expect(screen.getByRole('button', { name: 'Save price' })).toBeDisabled();
-  fireEvent.click(selected()); expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+  fireEvent.click(selected()); expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByText('Source diagnostics'));
   expect(screen.getByText('Stored DH listed price').nextElementSibling).toHaveTextContent('Unknown');
   click('Inventory');
