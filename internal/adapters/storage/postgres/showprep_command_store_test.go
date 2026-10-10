@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
@@ -16,8 +17,9 @@ func TestShowPrepCommandReceiptLifetime(t *testing.T) {
 		scan       *sp.ScanOutcome
 		transition *sp.ConfirmExistingResult
 	}{
-		{"scan", "scan", &sp.ScanOutcome{CommandID: showCommand, ListID: showList, Outcome: "confirmed", ItemID: showPurchase, PurchaseID: "deleted-purchase", AcknowledgedPriceCents: 12345, AcknowledgedStatus: sp.ThinEvidence}, nil},
+		{"scan", "scan", &sp.ScanOutcome{CommandID: showCommand, ListID: showList, CertNumber: "12345678", Outcome: "confirmed", ItemID: showPurchase, PurchaseID: "deleted-purchase", CardName: "Card", ConfirmedAt: "2026-10-09T12:00:00Z", AcknowledgedPriceCents: 12345, AcknowledgedStatus: sp.ThinEvidence}, nil},
 		{"transition", "confirm_existing", nil, &sp.ConfirmExistingResult{CommandID: showCommand, ListID: showList, ConfirmedItemIDs: []string{showPurchase}}},
+		{"empty transition cohort", "confirm_existing", nil, &sp.ConfirmExistingResult{CommandID: showCommand, ListID: showList, ConfirmedItemIDs: []string{}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			db := setupShowPrepTestDB(t)
@@ -62,6 +64,25 @@ func TestShowPrepReceiptInvalidPayloadIsStorageError(t *testing.T) {
 		{"wrong command", "scan", `{"commandId":"other","listId":"33333333-3333-4333-8333-333333333333","outcome":"confirmed"}`},
 		{"bad outcome", "scan", `{"commandId":"55555555-5555-4555-8555-555555555555","listId":"33333333-3333-4333-8333-333333333333","outcome":"nonsense"}`},
 		{"invalid transition", "confirm_existing", `null`},
+		{"scan JSON in transition row", "confirm_existing", `{"commandId":"55555555-5555-4555-8555-555555555555","listId":"33333333-3333-4333-8333-333333333333","outcome":"confirmed"}`},
+		{"transition JSON in scan row", "scan", validShowTransitionPayload},
+		{"foreign scan field in complete transition", "confirm_existing", strings.Replace(validShowTransitionPayload, `"replay":false`, `"replay":false,"outcome":"confirmed"`, 1)},
+		{"missing transition cohort", "confirm_existing", strings.Replace(validShowTransitionPayload, `"confirmedItemIds":[],`, "", 1)},
+		{"null transition cohort", "confirm_existing", strings.Replace(validShowTransitionPayload, `"confirmedItemIds":[]`, `"confirmedItemIds":null`, 1)},
+		{"empty transition member", "confirm_existing", strings.Replace(validShowTransitionPayload, `"confirmedItemIds":[]`, `"confirmedItemIds":[""]`, 1)},
+		{"duplicate transition member", "confirm_existing", strings.Replace(validShowTransitionPayload, `"confirmedItemIds":[]`, `"confirmedItemIds":["member","member"]`, 1)},
+		{"missing transition replay", "confirm_existing", strings.Replace(validShowTransitionPayload, `,"replay":false`, "", 1)},
+		{"replayed transition persisted as original", "confirm_existing", strings.Replace(validShowTransitionPayload, `"replay":false`, `"replay":true`, 1)},
+		{"empty rejection code", "scan", strings.Replace(validShowRejectedPayload, `"code":"no_match"`, `"code":""`, 1)},
+		{"unsupported rejection code", "scan", strings.Replace(validShowRejectedPayload, `"code":"no_match"`, `"code":"unexpected"`, 1)},
+		{"missing rejection code", "scan", strings.Replace(validShowRejectedPayload, `"code":"no_match",`, "", 1)},
+		{"missing scan cert", "scan", strings.Replace(validShowRejectedPayload, `"certNumber":"12345678",`, "", 1)},
+		{"empty scan cert", "scan", strings.Replace(validShowRejectedPayload, `"certNumber":"12345678"`, `"certNumber":""`, 1)},
+		{"missing zero cents field", "scan", strings.Replace(validShowRejectedPayload, `"acknowledgedPriceCents":0,`, "", 1)},
+		{"null cents field", "scan", strings.Replace(validShowRejectedPayload, `"acknowledgedPriceCents":0`, `"acknowledgedPriceCents":null`, 1)},
+		{"null scan outcome", "scan", strings.Replace(validShowRejectedPayload, `"outcome":"rejected"`, `"outcome":null`, 1)},
+		{"success without confirmation baseline", "scan", strings.Replace(validShowRejectedPayload, `"outcome":"rejected","code":"no_match"`, `"outcome":"confirmed","code":""`, 1)},
+		{"foreign transition field in complete scan", "scan", strings.Replace(validShowRejectedPayload, `"code":"no_match"`, `"code":"no_match","confirmedItemIds":[]`, 1)},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			db := setupShowPrepTestDB(t)
@@ -71,8 +92,13 @@ func TestShowPrepReceiptInvalidPayloadIsStorageError(t *testing.T) {
 			require.NoError(t, err)
 			_, err = db.ExecContext(ctx, `INSERT INTO showprep_command_receipts(command_id,list_id,kind,payload_hash,result) VALUES($1,$2,$3,'hash',$4::jsonb)`, showCommand, showList, tt.kind, tt.payload)
 			require.NoError(t, err)
-			err = store.Within(ctx, func(tx sp.Session) error { _, _, err := tx.GetCommandReceipt(ctx, showCommand); return err })
-			require.Error(t, err)
+			err = store.Within(ctx, func(tx sp.Session) error {
+				got, found, err := tx.GetCommandReceipt(ctx, showCommand)
+				require.False(t, found, "malformed history must not be returned as committed")
+				require.Equal(t, sp.CommandReceipt{}, got)
+				return err
+			})
+			require.ErrorContains(t, err, "decode show command receipt "+showCommand)
 			require.NotErrorIs(t, err, sp.ErrNotFound)
 		})
 	}
@@ -93,7 +119,7 @@ func TestShowPrepReceiptAndMemberRollbackTogether(t *testing.T) {
 				if err := tx.InsertItem(ctx, showList, sp.Item{ID: showPurchase, PurchaseID: "p", AddedAt: "2026-10-09T12:00:00Z", Version: 1}); err != nil {
 					return err
 				}
-				if err := tx.InsertCommandReceipt(ctx, sp.CommandReceipt{CommandID: showCommand, ListID: showList, Kind: "scan", PayloadHash: "hash", Scan: &sp.ScanOutcome{CommandID: showCommand, ListID: showList, Outcome: "confirmed"}}); err != nil {
+				if err := tx.InsertCommandReceipt(ctx, sp.CommandReceipt{CommandID: showCommand, ListID: showList, Kind: "scan", PayloadHash: "hash", Scan: &sp.ScanOutcome{CommandID: showCommand, ListID: showList, CertNumber: "12345678", Outcome: "confirmed", ItemID: showPurchase, PurchaseID: "p", CardName: "Card", ConfirmedAt: "2026-10-09T12:00:00Z", AcknowledgedStatus: sp.NoListedPrice}}); err != nil {
 					return err
 				}
 				if tt.rollback {
