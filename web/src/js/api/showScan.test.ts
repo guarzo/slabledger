@@ -11,7 +11,7 @@ it('sends the exact immutable scan command with credentials', async () => {
 });
 it.each([
   ['command mismatch', { commandId: listId }], ['list mismatch', { listId: purchaseId }], ['cert mismatch', { certNumber: '123AB' }],
-  ['bad outcome', { outcome: 'packed' }], ['fraction cents', { acknowledgedPriceCents: 1.1 }], ['negative cents', { acknowledgedPriceCents: -1 }],
+  ['bad outcome', { outcome: 'packed' }], ['fraction cents', { acknowledgedPriceCents: 1.1 }],
   ['unsafe cents', { acknowledgedPriceCents: Number.MAX_SAFE_INTEGER + 1 }], ['missing item', { itemId: '' }], ['missing purchase', { purchaseId: '' }],
   ['missing time', { confirmedAt: '' }], ['invalid time', { confirmedAt: '2026-02-30T12:00:00Z' }], ['empty success status', { acknowledgedStatus: '' }],
   ['unknown status', { acknowledgedStatus: 'packed' }], ['success rejection code', { code: 'sold' }],
@@ -44,6 +44,42 @@ it.each([{ state: 'removed' }, { state: 'present' }])('rejects non-replay succes
 });
 it('rejects evaluation with malformed successful identity and cents', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ ...result(), current: { state: 'present', evaluation: evaluation({ certNumber: command.certNumber, localPriceCents: -1, cardName: undefined }) } })));
+  await expect(showPrepAPI.scanConfirm(listId, command)).rejects.toThrow(/Invalid scan response/);
+});
+it.each([
+  { acknowledgedPriceCents: -1, localPriceCents: -1, listedPriceCents: -1, replay: false },
+  { acknowledgedPriceCents: -30000, localPriceCents: 30000, listedPriceCents: 30000, replay: true },
+  { acknowledgedPriceCents: 30000, localPriceCents: -30000, listedPriceCents: 30000, replay: true },
+])('preserves signed committed asking and original baseline without blocking confirmation: %j', async values => {
+  const data = { ...result(), replay: values.replay, original: { ...result().original, acknowledgedPriceCents: values.acknowledgedPriceCents },
+    current: { state: 'present', evaluation: evaluation({ certNumber: command.certNumber, localPriceCents: values.localPriceCents, listedPriceCents: values.listedPriceCents }) } };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(data)));
+  expect(await showPrepAPI.scanConfirm(listId, command)).toEqual(data);
+});
+it.each([
+  ['outcome', ['confirmed']], ['outcome', { value: 'confirmed' }],
+  ['acknowledgedStatus', ['supported']], ['acknowledgedStatus', { value: 'supported' }],
+])('rejects non-string original %s enum %j', async (field, value) => {
+  const data = result(); Object.assign(data.original, { [field]: value });
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(data)));
+  await expect(showPrepAPI.scanConfirm(listId, command)).rejects.toThrow(/Invalid scan response/);
+});
+it.each([['present'], { value: 'present' }].map(value => [value]))('rejects non-string current state %j', async state => {
+  const data = { ...result(), replay: true, current: { ...result().current, state } };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(data)));
+  await expect(showPrepAPI.scanConfirm(listId, command)).rejects.toThrow(/Invalid scan response/);
+});
+it.each([['no_match'], { value: 'no_match' }].map(value => [value]))('rejects non-string terminal rejection code %j', async code => {
+  const data = { ...result(), original: { ...result().original, outcome: 'rejected', code, itemId: '', purchaseId: '', cardName: '', confirmedAt: '', acknowledgedPriceCents: 0, acknowledgedStatus: '' }, current: { state: 'unknown' } };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(data)));
+  await expect(showPrepAPI.scanConfirm(listId, command)).rejects.toThrow(/Invalid scan response/);
+});
+it.each([
+  { localPriceCents: 0.5 }, { localPriceCents: -Number.MAX_SAFE_INTEGER - 1 }, { listedPriceCents: -Number.MAX_SAFE_INTEGER - 1 },
+  { compCount: -1 }, { recent: { ...evaluation().recent, count: -1 } },
+])('keeps asking safely integral and evidence counts nonnegative: %j', async patch => {
+  const data = { ...result(), current: { state: 'present', evaluation: { ...result().current.evaluation, ...patch } } };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(data)));
   await expect(showPrepAPI.scanConfirm(listId, command)).rejects.toThrow(/Invalid scan response/);
 });
 it('does not automatically retry typed contention', async () => {

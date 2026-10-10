@@ -61,7 +61,6 @@ export function useShowScanCommands(listId: string, scope: string) {
     if (!mounted.current || blocked.current || running.current || !context.current.scope) return;
     const row = rows.current.find(item => item.state !== 'settled');
     if (!row || row.state !== 'queued') return;
-    const destination = row.listId;
     if (row.listId !== context.current.listId && row.command.commandId !== explicitCommandId) { row.state = 'recovery'; publish(); return; }
     const fence = epoch.current;
     const controller = new AbortController(); running.current = controller;
@@ -83,8 +82,8 @@ export function useShowScanCommands(listId: string, scope: string) {
     } finally {
       if (mounted.current && epoch.current === fence) {
         running.current = null; publish();
-        // Navigation must never resume or retarget another show's queued intents.
-        if (context.current.listId === destination) void pump();
+        // The pump checks the next row's destination/state; old recovery stays explicit.
+        void pump();
       }
     }
   }

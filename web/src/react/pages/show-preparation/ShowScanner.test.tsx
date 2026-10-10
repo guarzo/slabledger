@@ -17,12 +17,13 @@ let generation: number;
 let removed: boolean;
 let listGate: Promise<void> | undefined;
 let removeGate: Promise<void> | undefined;
+let askingCents: number;
 function response(command: ScanCommand, destination: string) {
   const rejected = command.withdrawalGeneration !== generation;
   return { original: { ...command, listId: destination, outcome: rejected ? 'rejected' : 'confirmed', code: rejected ? 'contents_changed' : '',
     itemId: rejected ? '' : member().id, purchaseId: rejected ? '' : purchaseId, cardName: rejected ? '' : 'Pikachu',
-    confirmedAt: rejected ? '' : '2026-10-09T12:00:00Z', acknowledgedPriceCents: rejected ? 0 : 30000, acknowledgedStatus: rejected ? '' : 'supported' },
-    replay: false, current: { state: rejected ? 'unknown' : 'present', ...(rejected ? {} : { evaluation: evaluation({ certNumber: command.certNumber }) }) } };
+    confirmedAt: rejected ? '' : '2026-10-09T12:00:00Z', acknowledgedPriceCents: rejected ? 0 : askingCents, acknowledgedStatus: rejected ? '' : askingCents <= 0 ? 'no_listed_price' : 'supported' },
+    replay: false, current: { state: rejected ? 'unknown' : 'present', ...(rejected ? {} : { evaluation: evaluation({ certNumber: command.certNumber, localPriceCents: askingCents, status: askingCents <= 0 ? 'no_listed_price' : 'supported' }) }) } };
 }
 function mount(navigation = false) {
   function Switch() { const navigate = useNavigate(); return <button onClick={() => navigate(`/shows?list=${secondList}`)}>Switch route</button>; }
@@ -35,7 +36,7 @@ function scan(cert: string) {
   fireEvent.change(field, { target: { value: cert } }); fireEvent.keyDown(field, { key: 'Enter' }); return field;
 }
 beforeEach(() => {
-  sessionStorage.clear(); requests = []; gate = undefined; uncertain = false; generation = 0; removed = false; listGate = undefined; removeGate = undefined;
+  sessionStorage.clear(); requests = []; gate = undefined; uncertain = false; generation = 0; removed = false; listGate = undefined; removeGate = undefined; askingCents = 30000;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
     if (url.endsWith('/auth/user')) return Response.json({ id: 7, username: 'Operator', email: 'operator@example.test', avatar_url: '', is_admin: false, last_login_at: null });
     if (url.endsWith('/inventory')) return Response.json({ items: [inventoryItem()], warnings: [] });
@@ -69,6 +70,13 @@ it('Enter immediately persists and sends a scan, accepts consecutive certs, and 
   await waitFor(() => expect(sessionStorage.length).toBe(0));
   expect(await screen.findAllByText('Confirmed')).toHaveLength(2);
 });
+it('settles valid negative asking confirmation as missing asking instead of retaining it for recovery', async () => {
+  askingCents = -30000; mount(); await ready(); scan('12345678');
+  expect(await screen.findByText('Confirmed')).toBeVisible();
+  expect(screen.getByText('Recorded asking: Missing asking price')).toBeVisible();
+  await waitFor(() => expect(sessionStorage.length).toBe(0));
+  expect(screen.queryByRole('button', { name: /Retry scan|Recover scan/ })).not.toBeInTheDocument();
+});
 it('retains an uncertain command and retries exactly its original ID and generation', async () => {
   uncertain = true; mount(); await ready(); scan('12345678');
   expect(await screen.findByText(/Not confirmed.*Retry the same scan/)).toBeVisible();
@@ -93,6 +101,28 @@ it('navigation preserves the old-show owner but does not send its queued scans o
   release(); await screen.findByText('Confirmed'); expect(requests).toHaveLength(1);
   expect(screen.getByRole('combobox', { name: 'Show list' })).toBeDisabled();
   expect(within(screen.getByRole('region', { name: 'Recent scans' })).getAllByText(new RegExp(listId))).not.toHaveLength(0);
+});
+it('continues fresh current-show scans after explicit old-show recovery without automatically recovering other old scans', async () => {
+  gate = new Promise(resolve => { release = resolve; }); mount(true); await ready();
+  scan('12345678'); scan('87654321'); scan('00123AB');
+  await waitFor(() => expect(requests).toHaveLength(1));
+  const captured = JSON.parse(sessionStorage.getItem(sessionStorage.key(0)!)!).scans;
+  fireEvent.click(screen.getByRole('button', { name: 'Switch route' }));
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Show list' })).toHaveValue(secondList)); await ready();
+  scan('99999999');
+  const currentCommand = JSON.parse(sessionStorage.getItem(sessionStorage.key(0)!)!).scans[3];
+  release(); await screen.findByRole('button', { name: 'Recover scan 87654321' }); expect(requests).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Recover scan 87654321' }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(requests[1]).toEqual({ list: listId, body: captured[1].command });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Recover scan 00123AB' })).toBeEnabled());
+  expect(requests).toHaveLength(2); // The remaining old-show row still requires explicit consent to recover.
+  fireEvent.click(screen.getByRole('button', { name: 'Recover scan 00123AB' }));
+  await waitFor(() => expect(requests).toHaveLength(4));
+  expect(requests[2]).toEqual({ list: listId, body: captured[2].command });
+  expect(requests[3]).toEqual({ list: secondList, body: currentCommand.command });
+  await waitFor(() => expect(sessionStorage.length).toBe(0));
+  expect(screen.getByRole('combobox', { name: 'Show list' })).toBeEnabled();
 });
 it('unmount never automatically sends queued work', async () => {
   gate = new Promise(resolve => { release = resolve; }); const view = mount(); await ready(); scan('12345678'); scan('87654321');

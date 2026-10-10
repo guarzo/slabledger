@@ -23,20 +23,21 @@ export function validateScanResult(value: unknown, listId: string, command: Scan
   const original = value.original;
   const current = value.current;
   if (original.commandId !== command.commandId || original.listId !== listId || original.certNumber !== command.certNumber
-    || !['confirmed', 'already_confirmed', 'rechecked', 'rejected'].includes(String(original.outcome))
-    || !nonnegativeInteger(original.acknowledgedPriceCents) || typeof original.cardName !== 'string'
-    || !['present', 'removed', 'unavailable', 'unknown'].includes(String(current.state))) return invalid();
+    || typeof original.outcome !== 'string' || !['confirmed', 'already_confirmed', 'rechecked', 'rejected'].includes(original.outcome)
+    || !Number.isSafeInteger(original.acknowledgedPriceCents) || typeof original.cardName !== 'string'
+    || typeof current.state !== 'string' || !['present', 'removed', 'unavailable', 'unknown'].includes(current.state)) return invalid();
   if (original.outcome === 'rejected') {
-    if (!codes.includes(String(original.code)) || original.itemId !== '' || original.purchaseId !== '' || original.cardName !== ''
+    if (typeof original.code !== 'string' || !codes.includes(original.code) || original.itemId !== '' || original.purchaseId !== '' || original.cardName !== ''
       || original.confirmedAt !== '' || original.acknowledgedPriceCents !== 0 || original.acknowledgedStatus !== '') return invalid();
   } else if (original.code !== '' || !isScanUUID(original.itemId) || !isScanUUID(original.purchaseId)
-    || !timestamp(original.confirmedAt) || !statuses.includes(String(original.acknowledgedStatus))) return invalid();
+    || !timestamp(original.confirmedAt) || typeof original.acknowledgedStatus !== 'string' || !statuses.includes(original.acknowledgedStatus)) return invalid();
   if (!value.replay && original.outcome !== 'rejected' && (current.state !== 'present' || current.evaluation === undefined)) return invalid();
   if (current.evaluation !== undefined) {
     const e = current.evaluation as ScanResult['current']['evaluation'];
     if (!isShowEvaluation(e) || e.purchaseId !== original.purchaseId || e.certNumber !== command.certNumber
       || typeof e.cardName !== 'string' || typeof e.grader !== 'string' || !Number.isFinite(e.grade)
-      || [e.listedPriceCents, e.localPriceCents, e.medianCents, e.compCount, e.recent.count, e.recent.medianCents,
+      || !Number.isSafeInteger(e.listedPriceCents) || !Number.isSafeInteger(e.localPriceCents)
+      || [e.medianCents, e.compCount, e.recent.count, e.recent.medianCents,
         e.recent.latestSaleCount, e.recent.latestSaleMinCents, e.recent.latestSaleMaxCents].some(value => !nonnegativeInteger(value))
       || [e.listingSyncedAt, e.latestSaleDate, e.windowStart, e.windowEnd, e.refreshedAt, e.evidenceVersion].some(value => typeof value !== 'string')) return invalid();
   }
