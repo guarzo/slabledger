@@ -141,7 +141,7 @@ func (s *showPrepSession) LockPurchases(ctx context.Context, ids []string) error
 func showPrepLockError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "55P03" { // lock_not_available
-		return sp.ErrConflict
+		return sp.ErrContended
 	}
 	return err
 }

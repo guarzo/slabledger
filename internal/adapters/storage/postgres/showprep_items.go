@@ -33,8 +33,8 @@ func (s *showPrepSession) GetItems(ctx context.Context, list string) ([]sp.Item,
 	return items, rows.Err()
 }
 func (s *showPrepSession) InsertItem(ctx context.Context, list string, i sp.Item) error {
-	_, err := s.q.ExecContext(ctx, `INSERT INTO showprep_items(id,list_id,purchase_id,card_name,cert_number,grader,grade,added_at,version,acknowledged_price_cents,acknowledged_status)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, i.ID, list, i.PurchaseID, i.CardName, i.CertNumber, i.Grader, i.Grade, i.AddedAt, i.Version, i.AcknowledgedPriceCents, i.AcknowledgedStatus)
+	_, err := s.q.ExecContext(ctx, `INSERT INTO showprep_items(id,list_id,purchase_id,card_name,cert_number,grader,grade,added_at,version,acknowledged_price_cents,acknowledged_status,packed_at,last_command)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULLIF($12,'')::timestamptz,$13)`, i.ID, list, i.PurchaseID, i.CardName, i.CertNumber, i.Grader, i.Grade, i.AddedAt, i.Version, i.AcknowledgedPriceCents, i.AcknowledgedStatus, i.PackedAt, i.LastCommand)
 	if err != nil {
 		return err
 	}

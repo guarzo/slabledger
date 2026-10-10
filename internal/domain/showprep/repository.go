@@ -3,6 +3,7 @@ package showprep
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -10,6 +11,8 @@ var (
 	ErrNotFound = errors.New("show preparation record not found")
 	ErrConflict = errors.New("show preparation state changed; reload and review")
 	ErrInvalid  = errors.New("invalid show preparation input")
+	// Contention is retryable without finalizing an intent; legacy consumers still see ErrConflict.
+	ErrContended = fmt.Errorf("show preparation rows contended: %w", ErrConflict)
 )
 
 type PurchaseReader interface {
@@ -38,6 +41,13 @@ type Session interface {
 	PriceAssociationStore
 	EvidenceReader
 	LockPurchases(context.Context, []string) error
+	// ReadCertPurchaseIDs returns every exact-cert candidate, including unavailable
+	// purchases. Callers lock, re-query, and compare the candidate identity set.
+	ReadCertPurchaseIDs(context.Context, string) ([]string, error)
+	GetCommandReceipt(context.Context, string) (CommandReceipt, bool, error)
+	InsertCommandReceipt(context.Context, CommandReceipt) error
+	GetRetiredList(context.Context, string) (RetiredList, bool, error)
+	RetireList(context.Context, RetiredList) error // insert tombstone + delete list atomically
 	GetList(context.Context, string) (List, error)
 	GetItems(context.Context, string) ([]Item, error)
 	InsertItem(context.Context, string, Item) error

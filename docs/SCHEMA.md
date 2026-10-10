@@ -1057,6 +1057,57 @@ Singleton row holding the most recent raw PSA portal fetch, so the app can serve
 
 ---
 
+## Show preparation lifecycle
+
+Show preparation is independent of financial-record lifetimes. Migration 000046
+created `showprep_lists` and `showprep_items`; members retain captured purchase
+identity and packed/acknowledged history without a purchase FK. Deleting a whole
+show cascades to its members. Migration 000049 adds scan intent safety without
+altering any legacy packed timestamps, versions or acknowledged baselines.
+
+### `showprep_lists.withdrawal_generation`
+
+`BIGINT NOT NULL DEFAULT 0`, constrained to **0–9007199254740991** (the exact
+JavaScript integer range). Each actual member removal increments it in the same
+transaction as deletion and advances `updated_at`. Removing an absent member is a
+no-op; overflow rejects and rolls back the deletion. Confirmation does not increment it.
+
+### `showprep_command_receipts`
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `command_id` | UUID | PK | Globally unique command identity |
+| `list_id` | UUID | NOT NULL, FK | References `showprep_lists(id)`, ON DELETE CASCADE |
+| `kind` | TEXT | NOT NULL, CHECK | `scan` or `confirm_existing` |
+| `payload_hash` | TEXT | NOT NULL | Binds replay to the original command payload |
+| `result` | JSONB | NOT NULL | Typed original scan outcome or confirmation-transition result |
+| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | Commit history |
+
+Receipts have no member or purchase FK: member removal and financial-record deletion
+cannot erase the original result. Whole-show deletion removes the show's receipts.
+Invalid stored results are storage errors, not missing receipts.
+
+### `showprep_retired_lists`
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `list_id` | UUID | PK | Retired show UUID, no live-show FK |
+| `delete_command_id` | UUID | NOT NULL | Original deletion command |
+| `payload_hash` | TEXT | NOT NULL | Original deletion payload fingerprint |
+| `retired_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | Retirement time |
+
+Tombstones never expire. Retirement inserts the tombstone and deletes the live show
+atomically under the feature transaction lock. Create checks this retained state
+before inserting, so delayed create retries cannot resurrect a retired UUID.
+
+Both new tables enable RLS, revoke all privileges from PUBLIC and any existing
+`anon`/`authenticated` roles, and grant access/policies only to an existing
+`service_role`. Role-dependent SQL is guarded for local Postgres installations.
+The 000049 down migration discards receipts and tombstones and drops the generation
+column: it is a destructive rollback, not an automatic production recovery step.
+
+---
+
 ## Views
 
 ### ~~`stale_prices`~~ — DROPPED (pre-cutover)

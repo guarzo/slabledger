@@ -80,7 +80,7 @@ export interface ShowSale {
   listingType: string;
 }
 export interface ShowEvidence { evaluation: ShowEvaluation; sales: ShowSale[] }
-export interface ShowList { id: string; name: string; createdAt: string; updatedAt: string }
+export interface ShowList { id: string; name: string; createdAt: string; updatedAt: string; withdrawalGeneration: number }
 export interface ShowListItem {
   id: string;
   purchaseId: string;
@@ -98,6 +98,7 @@ export interface ShowListItem {
   supportChanged: boolean;
 }
 export interface ShowListDetail {
+  stateFingerprint: string;
   list: ShowList;
   items: ShowListItem[];
   summary: {
@@ -108,6 +109,8 @@ export interface ShowListDetail {
     knownValueCents: number;
     missingPriceCount: number;
     ambiguousPriceCount: number;
+    confirmedReadyCount: number;
+    confirmedKnownValueCents: number;
   };
 }
 export interface ShowItemUpdate {
@@ -117,3 +120,36 @@ export interface ShowItemUpdate {
   acknowledge?: boolean;
 }
 export interface ShowItemAdd { purchaseId: string; evaluationVersion: string }
+
+export interface ScanCommand {
+  commandId: string;
+  certNumber: string;
+  withdrawalGeneration: number;
+}
+export interface ScanOutcome {
+  commandId: string;
+  listId: string;
+  certNumber: string;
+  outcome: 'confirmed' | 'already_confirmed' | 'rechecked' | 'rejected';
+  code: string;
+  itemId: string;
+  purchaseId: string;
+  cardName: string;
+  confirmedAt: string;
+  acknowledgedPriceCents: number;
+  acknowledgedStatus: SupportStatus | '';
+}
+export interface ScanCurrent {
+  state: 'present' | 'removed' | 'unavailable' | 'unknown';
+  evaluation?: ShowEvaluation;
+}
+export interface ScanResult { original: ScanOutcome; replay: boolean; current: ScanCurrent }
+export interface DeleteListCommand { commandId: string; expectedState: string }
+export interface DeleteListResult { listId: string; deleted: boolean; replay: boolean }
+export interface ConfirmExistingCommand { commandId: string; expectedState: string; itemIds: string[] }
+export interface ConfirmExistingResult {
+  listId: string;
+  commandId: string;
+  confirmedItemIds: string[];
+  replay: boolean;
+}

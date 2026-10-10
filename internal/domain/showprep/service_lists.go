@@ -50,7 +50,7 @@ func (s *Service) ListDetail(ctx context.Context, id string) (ListDetail, error)
 	if err != nil {
 		return ListDetail{}, err
 	}
-	detail := ListDetail{List: list, Items: items}
+	detail := ListDetail{List: list, Items: items, StateFingerprint: ListStateFingerprint(list, items)}
 	for i := range detail.Items {
 		item := &detail.Items[i]
 		e := evaluations[i]
@@ -72,6 +72,12 @@ func (s *Service) ListDetail(ctx context.Context, id string) (ListDetail, error)
 		case NotReceived:
 			detail.Summary.NotReceivedCount++
 		case Ready:
+			if item.PackedAt != "" {
+				detail.Summary.ConfirmedReadyCount++
+				if e.LocalPriceCents > 0 {
+					detail.Summary.ConfirmedKnownValueCents += e.LocalPriceCents
+				}
+			}
 		default:
 			detail.Summary.UnavailableCount++
 		}

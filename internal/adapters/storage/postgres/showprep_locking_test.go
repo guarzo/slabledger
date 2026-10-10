@@ -129,6 +129,7 @@ func TestShowPrepPackingRejectsContendedAvailability(t *testing.T) {
 			yes := true
 			_, err = svc.UpdateItem(ctx, showList, d.Items[0].ID, sp.UpdateItem{Version: 1, EvaluationVersion: d.Items[0].Evaluation.Version, Packed: &yes})
 			require.ErrorIs(t, err, sp.ErrConflict, "contention requires review rather than waiting into a possible cycle")
+			require.ErrorIs(t, err, sp.ErrContended, "new commands must distinguish transient contention from terminal rejection")
 			require.NoError(t, writer.Commit())
 			d, err = svc.ListDetail(ctx, showList)
 			require.NoError(t, err)

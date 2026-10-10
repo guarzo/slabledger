@@ -15,7 +15,7 @@ const showList = "33333333-3333-4333-8333-333333333333"
 
 func resetShowPrep(t *testing.T, db *DB) {
 	t.Helper()
-	_, err := db.ExecContext(context.Background(), `TRUNCATE TABLE showprep_items, showprep_lists, showprep_evidence, showprep_price_holds RESTART IDENTITY`)
+	_, err := db.ExecContext(context.Background(), `TRUNCATE TABLE showprep_command_receipts, showprep_retired_lists, showprep_items, showprep_lists, showprep_evidence, showprep_price_holds RESTART IDENTITY`)
 	require.NoError(t, err)
 }
 func setupShowPrepTestDB(t *testing.T) *DB {
