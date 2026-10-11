@@ -22,6 +22,7 @@ type Item struct {
 	Evaluation             Evaluation `json:"evaluation"`
 	PriceChanged           bool       `json:"priceChanged"`
 	SupportChanged         bool       `json:"supportChanged"`
+	IdentityChanged        bool       `json:"identityChanged"`
 	LastCommand            string     `json:"-"`
 }
 type Summary struct {

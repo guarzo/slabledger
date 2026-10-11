@@ -123,6 +123,24 @@ const cert = i => `910000${String(i).padStart(2,'0')}`;
     for(const viewport of [{name:'desktop',width:1440,height:1000},{name:'tablet',width:768,height:1024},{name:'mobile',width:390,height:844}]) {
       await page.setViewportSize(viewport); await capture(`${viewport.name}-confirmed`);
     }
+    // An attributed inventory grade correction retains saved identity/history,
+    // but cannot claim current confirmation or let a scan/replay approve it.
+    const identityHistory=(await state()).items;
+    snapshots.attributedGradeDrift=await command('grade-drift'); await page.reload();
+    await expect(member(1)).toContainText('Identity changed. Confirmation history retained');
+    await expect(member(1)).toContainText('Check inventory identity before scanning');
+    await expect(member(1)).toContainText('Confirmed');
+    const identityDetail=await json(`${app}/api/show-prep/lists/${listID}`);
+    expect(identityDetail.items.find(i=>i.certNumber===cert(1))).toMatchObject({identityChanged:true,grade:10,evaluation:{grade:9}});
+    expect(identityDetail.summary).toMatchObject({packedCount:2,confirmedReadyCount:1,confirmedKnownValueCents:30000,knownValueCents:62500});
+    await expect(page.getByLabel('Confirmed ready asking value')).toContainText('$300.00');
+    await scan(1); await expect(recent()).toContainText('Card identity changed');
+    expect(await json(`${app}/api/show-prep/lists/${listID}/scan-confirm`,'POST',firstCommit.body)).toMatchObject({replay:true,current:{state:'unavailable'},original:firstCommit.result.original});
+    expect((await state()).items).toEqual(identityHistory); await capture('mobile-identity-history-warning');
+    snapshots.attributedGradeRestore=await command('grade-restore'); await page.reload();
+    await expect(member(1)).not.toContainText('Identity changed');
+    await expect(page.getByLabel('Confirmed ready asking value')).toContainText('$625.00');
+    expect((await state()).items).toEqual(identityHistory);
     // Real NOWAIT contention: no receipt. Removal advances generation and old
     // recovery remains immutable across restart, including removal/re-add.
     await command('hold-purchase'); await scan(3);
@@ -206,7 +224,7 @@ const cert = i => `910000${String(i).padStart(2,'0')}`;
     snapshots.final=await state(); expect(snapshots.final).toMatchObject({sourceCalls:0,providerRequests:0,ledgerUnchanged:true,restarts:2});
     expect(snapshots.final.requests.filter(r=>!['GET','HEAD'].includes(r.method)&&!r.path.startsWith('/api/show-prep/')&&r.path!=='/api/auth/logout')).toEqual([]);
     expect(errors).toEqual([]);
-    console.log('PASS real scan FIFO/atomic persistence/reload/2 full restarts; committed lost-response exact-ID replay; drift/rescan; NOWAIT no receipt/remove/recovery; remove-readd old replay; legacy/unreceived/no-price/no-match; auth401/logout discard/200-bound; old410/tombstone; navigation destination; whole financial rows unchanged outside named fixture mutations; provider=0');
+    console.log('PASS real scan FIFO/atomic persistence/reload/2 full restarts; committed lost-response exact-ID replay; drift/rescan; grade correction identity warning/excluded totals/history/read-only replay; NOWAIT no receipt/remove/recovery; remove-readd old replay; legacy/unreceived/no-price/no-match; auth401/logout discard/200-bound; old410/tombstone; navigation destination; whole financial rows unchanged outside named fixture mutations; provider=0');
   }, [
     () => fs.writeFile(path.join(artifacts,'show-scan-proof.json'),JSON.stringify({wire,snapshots,errors,metrics},null,2)),
     () => page?.screenshot({path:path.join(artifacts,'last-view.png'),fullPage:true}),

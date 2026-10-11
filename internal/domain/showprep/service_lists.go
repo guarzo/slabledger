@@ -61,6 +61,7 @@ func (s *Service) ListDetail(ctx context.Context, id string) (ListDetail, error)
 			e.Grade = item.Grade
 		}
 		item.Evaluation = e
+		item.IdentityChanged = e.Availability != Unknown && e.Availability != Removed && (item.CertNumber != e.CertNumber || !strings.EqualFold(strings.TrimSpace(item.Grader), strings.TrimSpace(e.Grader)) || item.Grade != e.Grade)
 		// Unknown purchase fields cannot establish a change against saved history.
 		item.PriceChanged = e.Availability != Unknown && item.AcknowledgedPriceCents != e.LocalPriceCents
 		item.SupportChanged = e.Availability != Unknown && item.AcknowledgedStatus != e.Status
@@ -72,7 +73,7 @@ func (s *Service) ListDetail(ctx context.Context, id string) (ListDetail, error)
 		case NotReceived:
 			detail.Summary.NotReceivedCount++
 		case Ready:
-			if item.PackedAt != "" {
+			if item.PackedAt != "" && !item.IdentityChanged {
 				detail.Summary.ConfirmedReadyCount++
 				if e.LocalPriceCents > 0 {
 					detail.Summary.ConfirmedKnownValueCents += e.LocalPriceCents

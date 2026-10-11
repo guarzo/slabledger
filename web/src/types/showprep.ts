@@ -96,6 +96,7 @@ export interface ShowListItem {
   evaluation: ShowEvaluation;
   priceChanged: boolean;
   supportChanged: boolean;
+  identityChanged: boolean;
 }
 export interface ShowListDetail {
   stateFingerprint: string;

@@ -93,6 +93,14 @@ func (s *scanBrowserFixture) control(t *testing.T, w http.ResponseWriter, r *htt
 			if err := s.changeLedger(r.Context(), `UPDATE campaign_purchases SET reviewed_price_cents=32500 WHERE id=$1`, readinessPurchase(1), "reviewed_price_cents", float64(32500)); err != nil {
 				return err
 			}
+		case "/grade-drift":
+			if err := s.changeLedger(r.Context(), `UPDATE campaign_purchases SET grade_value=9 WHERE id=$1`, readinessPurchase(1), "grade_value", float64(9)); err != nil {
+				return err
+			}
+		case "/grade-restore":
+			if err := s.changeLedger(r.Context(), `UPDATE campaign_purchases SET grade_value=10 WHERE id=$1`, readinessPurchase(1), "grade_value", float64(10)); err != nil {
+				return err
+			}
 		case "/unreceive":
 			if err := s.changeLedger(r.Context(), `UPDATE campaign_purchases SET received_at=NULL WHERE id=$1`, readinessPurchase(2), "received_at", nil); err != nil {
 				return err

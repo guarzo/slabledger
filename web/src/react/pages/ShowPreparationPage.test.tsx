@@ -45,6 +45,18 @@ describe('scan-only saved show preparation', () => {
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Show member 12345678' })).not.toBeInTheDocument());
     expect(calls.filter(call => call.method !== 'GET').map(call => call.method)).toEqual(['DELETE']);
   });
+  it('warns about corrected identity without hiding confirmation history or mutating inventory', async () => {
+    const corrected = { ...member({ packedAt: '2026-09-14T11:00:00Z', evaluation: evaluation({ grade: 9 }) }), identityChanged: true };
+    saved = detail([corrected]);
+    saved.summary = { ...saved.summary, packedCount: 1, confirmedReadyCount: 0, confirmedKnownValueCents: 0 };
+    mount();
+    expect(await screen.findByText(/Identity changed.*Confirmation history retained/)).toBeVisible();
+    expect(screen.getByText(/Check inventory identity before scanning/)).toBeVisible();
+    expect(screen.getByText(/Confirmed 2026-09-14/)).toBeVisible();
+    expect(screen.getByLabelText('Confirmed ready asking value')).toHaveTextContent('$0.00');
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Remove 12345678 from show' })).toBeEnabled();
+  });
   it('uses confirmed-ready totals, not historical packed or legacy known value', async () => {
     saved = detail([member({ packedAt: '2026-09-14T11:00:00Z', evaluation: evaluation({ priceAssociationUnclear: true }) })]);
     saved.summary = { ...saved.summary, packedCount: 4, totalCount: 9, knownValueCents: 90000, confirmedReadyCount: 1, confirmedKnownValueCents: 30000, missingPriceCount: 2, ambiguousPriceCount: 1 };

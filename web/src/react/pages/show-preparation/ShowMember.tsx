@@ -28,6 +28,7 @@ export default function ShowMember({ item, listId, disabled = false }: { item: S
     {e && e.availability !== 'ready' && <p className="text-xs text-[var(--warning)] mt-2">{availabilityLabels[e.availability] ?? availabilityLabels.unknown}. Confirmation history retained; not currently ready for this show.</p>}
     <p className="text-xs text-[var(--text-muted)]">{item.packedAt ? `Confirmed ${showTime(item.packedAt)}` : 'Unconfirmed. Scan the checked slab to confirm.'}</p>
     <div className="show-warnings">
+      {item.identityChanged && <p>Identity changed. Confirmation history retained; not currently ready for this show. Check inventory identity before scanning; remove the saved member if it no longer matches the slab.</p>}
       {item.priceChanged && <p>Price changed. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no price'}.</p>}
       {item.supportChanged && <p>Support changed. Previously recorded status: {item.acknowledgedStatus || 'unknown'}.</p>}
       {(item.priceChanged || item.supportChanged) && <p>Check sticker and rescan to confirm.</p>}

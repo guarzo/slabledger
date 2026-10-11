@@ -2237,7 +2237,10 @@ baselines, not fluctuating evidence or availability. Each item includes its stab
 membership `id`, original `purchaseId`, saved card identity, `addedAt`, `packedAt`
 (empty for an unconfirmed legacy member), integer `version`,
 `acknowledgedPriceCents`, `acknowledgedStatus`, current `evaluation`, `priceChanged`,
-and `supportChanged`.
+`supportChanged`, and `identityChanged`. Identity drift compares the saved cert,
+grader (trimmed and case-insensitive), and grade with current known inventory;
+unknown or removed inventory cannot establish identity drift. Saved identity and
+confirmation history are retained.
 
 Whole-list DELETE requires a canonical command UUID and the exact nonempty,
 unpadded fingerprint from detail. Stale stored state returns `409` without deleting
@@ -2250,8 +2253,9 @@ resurrect it.
 The summary retains `totalCount`, `packedCount`, `notReceivedCount`,
 `unavailableCount`, `knownValueCents`, `missingPriceCount`, and
 `ambiguousPriceCount` with their legacy semantics. `confirmedReadyCount` counts
-only ready members with nonempty `packedAt`; `confirmedKnownValueCents` sums their
-positive current canonical asking in integer cents. Legacy known value includes
+only ready members with nonempty `packedAt` and matching saved/current identity;
+`confirmedKnownValueCents` sums their positive current canonical asking in integer
+cents. Legacy known value includes
 all ready members with positive asking, even unconfirmed ones. `missingPriceCount`
 counts missing local asking; `ambiguousPriceCount` independently counts DH
 association warnings. Confirmation history remains even when a member becomes

@@ -490,7 +490,9 @@ original command ID, cert, show and captured contents generation; it is not a ne
 approval. Reload recovers unsettled commands from this tab's session storage and
 offers **Recover scan**, without automatically resubmitting them. Recovery remains
 attached to the submitted show even after navigation. Session-storage failure
-pauses scanning; logout attempts and account changes discard local recovery.
+pauses scanning; logout attempts and confirmed account changes discard local
+recovery, including account changes detected after route navigation. A temporary
+identity-check failure pauses actions but preserves same-account recovery.
 **Dismiss** discards local recovery, not a possibly committed server membership.
 Check the saved list before deciding whether a new physical scan is needed.
 
@@ -501,10 +503,14 @@ still replays its original result but separately reports current removal or
 unavailability, never resurrecting the member. Removing and re-adding the same
 purchase creates a new membership; old success is not its confirmation.
 
-**Confirmed ready** counts only confirmed members that are currently eligible.
+**Confirmed ready** counts only confirmed members that are currently eligible
+and still match their saved cert, grader and grade. **Identity changed** warns
+when inventory corrections no longer match the saved slab identity. Check inventory
+identity before scanning; remove the saved member if it no longer matches the slab.
+Reads do not silently reconfirm the corrected identity.
 **Confirmation history** also includes confirmed members now sold, refunded,
-removed from inventory or in closed campaigns. Those members remain visible with
-warnings but are excluded from confirmed-ready asking value. Legacy unconfirmed
+removed from inventory, in closed campaigns or with changed identity. Those members
+remain visible with warnings but are excluded from confirmed-ready asking value. Legacy unconfirmed
 members stay readable and require a physical scan to confirm. Known value sums
 positive current asking for confirmed-ready members; missing asking is excluded,
 not valued at zero, and DH association warnings are counted separately. Historical
