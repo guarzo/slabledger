@@ -1629,9 +1629,14 @@ Returns cross-campaign health assessment.
   "totalDeployedCents": 840000,
   "totalRecoveredCents": 1300000,
   "totalAtRiskCents": 252000,
-  "overallROI": 0.35
+  "overallROI": 0.35,
+  "realizedROI": 0.18,
+  "realizedROISince": "2026-08-01"
 }
 ```
+
+`realizedROI` is net profit over per-card cost basis for sales dated on or after
+`realizedROISince` (inclusive). Earlier sales are excluded.
 
 ---
 

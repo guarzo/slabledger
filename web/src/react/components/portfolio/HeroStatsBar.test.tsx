@@ -12,6 +12,7 @@ function baseHealth(overrides: Partial<PortfolioHealth> = {}): PortfolioHealth {
     totalAtRiskCents: 20_000,
     overallROI: 0.12,
     realizedROI: 0.12,
+    realizedROISince: '2026-08-01',
     ...overrides,
   };
 }
@@ -103,6 +104,18 @@ describe('HeroStatsBar', () => {
       renderBar(baseHealth({ realizedROI: 0.12 }));
       const section = screen.getByLabelText('Portfolio summary');
       expect(section).toHaveAttribute('data-tone', 'pos');
+    });
+  });
+
+  describe('ROI start-date label', () => {
+    it('shows the month the realized ROI is counted from', () => {
+      renderBar(baseHealth({ realizedROISince: '2026-08-01' }));
+      expect(screen.getByText('Realized ROI · since Aug 2026')).toBeInTheDocument();
+    });
+
+    it('falls back to the plain label when no start date is supplied', () => {
+      renderBar(baseHealth({ realizedROISince: '' }));
+      expect(screen.getByText('Realized ROI')).toBeInTheDocument();
     });
   });
 

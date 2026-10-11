@@ -3,7 +3,6 @@ package portfolio
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
@@ -88,8 +87,6 @@ func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.P
 	inHandStats := computeInHandStatsByCampaign(allData)
 
 	health := &inventory.PortfolioHealth{Campaigns: []inventory.CampaignHealth{}}
-	totalSoldCostBasis := 0
-	totalSoldNetProfit := 0
 
 	for _, c := range campaigns {
 		// External (Shopify-imported) campaign has no real cost basis, so its
@@ -120,13 +117,6 @@ func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.P
 				status = "warning"
 			}
 			reason += fmt.Sprintf("; slow sell-through (avg %.0f days)", pnl.AvgDaysToSell)
-		}
-
-		if pnl.TotalSold > 0 && pnl.TotalPurchases > 0 {
-			soldCostBasis := int(math.Round(float64(pnl.TotalSpendCents) * float64(pnl.TotalSold) / float64(pnl.TotalPurchases)))
-			soldProfit := pnl.TotalRevenueCents - pnl.TotalFeesCents - soldCostBasis
-			totalSoldCostBasis += soldCostBasis
-			totalSoldNetProfit += soldProfit
 		}
 
 		channelHealth := healthByCampaign[c.ID]
@@ -178,9 +168,8 @@ func ComputeHealthFromData(campaigns []inventory.Campaign, allData []inventory.P
 	if health.TotalDeployed > 0 {
 		health.OverallROI = float64(health.TotalRecovered-health.TotalDeployed) / float64(health.TotalDeployed)
 	}
-	if totalSoldCostBasis > 0 {
-		health.RealizedROI = float64(totalSoldNetProfit) / float64(totalSoldCostBasis)
-	}
+	health.RealizedROI = computeRealizedROI(campaigns, allData, RealizedROISince)
+	health.RealizedROISince = RealizedROISince
 
 	return health
 }

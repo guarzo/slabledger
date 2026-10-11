@@ -9,6 +9,13 @@ import styles from './HeroStatsBar.module.css';
 
 const trendToArrow = { improving: 'up', declining: 'down', stable: 'stable' } as const;
 
+/** "2026-08-01" → "Aug 2026". Parsed by parts so the month never shifts with timezone. */
+function formatSinceMonth(isoDate: string | undefined): string | null {
+  const [year, month] = (isoDate ?? '').split('-').map(Number);
+  if (!year || !month) return null;
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
 interface HeroStatsBarProps {
   health?: PortfolioHealth;
   capital?: CapitalSummary;
@@ -57,6 +64,7 @@ export default function HeroStatsBar({
   }
 
   const roi = health.realizedROI ?? 0;
+  const sinceMonth = formatSinceMonth(health.realizedROISince);
   const negative = roi < 0;
   const magnitude =
     Math.abs(roi) >= 0.5 ? 'huge'
@@ -81,7 +89,9 @@ export default function HeroStatsBar({
           serif headline below. */}
       <div className={styles.headlineRow}>
         <div className={styles.roiBlock}>
-          <div className={styles.roiLabel}>Realized ROI</div>
+          <div className={styles.roiLabel}>
+            Realized ROI{sinceMonth ? ` · since ${sinceMonth}` : ''}
+          </div>
           <div className={styles.roiRow}>
             <span className={styles.roiValue}>
               {roi >= 0 ? '+' : ''}{formatPct(roi)}
