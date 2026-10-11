@@ -11,6 +11,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCoordinatedPriceSkipClassifiesNonListedStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name, status string
+		want         dhpricing.Outcome
+	}{
+		{"stock", inventory.DHStatusInStock, dhpricing.OutcomeSkippedUnlisted},
+		{"sold", inventory.DHStatusSold, dhpricing.OutcomeSkippedBadStatus},
+		{"empty", "", dhpricing.OutcomeSkippedBadStatus},
+		{"unknown", "skipped", dhpricing.OutcomeSkippedBadStatus},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, store, _, _, id := setupReturnCore(t, "skip-status-cert", 42, "")
+			ctx := context.Background()
+			_, err := db.ExecContext(ctx, `UPDATE campaign_purchases SET dh_status=$1 WHERE id=$2`, tc.status, id)
+			require.NoError(t, err)
+			fields := NewPurchaseStore(db.DB, mocks.NewMockLogger())
+			remote := &mocks.DHInventoryListerMock{UpdateInventoryStatusFn: func(context.Context, int, inventory.DHInventoryStatusUpdate) (int, error) {
+				t.Fatal("non-listed price dispatched")
+				return 0, nil
+			}}
+			price := dhpricing.NewService(fields, remote, fields, fields, mocks.NewMockLogger(), dhpricing.WithMutationCoordinator(inventory.NewDHMutationCoordinator(store, store), store, store))
+			result := price.SyncPurchasePrice(ctx, id)
+			require.NoError(t, result.Err)
+			require.Equal(t, tc.want, result.Outcome)
+			var attempts int
+			require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM dh_mutation_attempts`).Scan(&attempts))
+			require.Zero(t, attempts, "all non-listed statuses must exit before preparation")
+		})
+	}
+}
+
 func TestUnlistedPriceSkipPreservesExistingGuards(t *testing.T) {
 	for _, tc := range []struct{ name, sql, code string }{
 		{"open attempt", `INSERT INTO dh_mutation_attempts(id,purchase_id,captured_purchase_id,dh_inventory_id,cert_number,grader,kind,phase,payload_identity) VALUES('existing','return-p','return-p',42,'local-price-cert','PSA','price','patch','historical')`, "preceding_dh_mutation_uncertain"},

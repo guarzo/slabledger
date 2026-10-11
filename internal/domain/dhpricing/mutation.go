@@ -70,9 +70,12 @@ func (s *service) SyncPurchasePrice(ctx context.Context, id string) SyncResult {
 			return inventory.DHMutationRequest{}, errPriceNotListed
 		}
 		if state.Purchase.DHStatus != inventory.DHStatusListed {
-			// Returning before preparation creates no attempt. Listing will send
-			// the latest committed price when the operator puts this stock live.
-			result.Outcome = OutcomeSkippedUnlisted
+			// Every non-listed state exits before preparation. Only stock is
+			// waiting for listing; sold and unknown states are not listable.
+			result.Outcome = OutcomeSkippedBadStatus
+			if state.Purchase.DHStatus == inventory.DHStatusInStock {
+				result.Outcome = OutcomeSkippedUnlisted
+			}
 			return inventory.DHMutationRequest{}, errPriceNotListed
 		}
 		return inventory.DHMutationRequest{Kind: "price", Phase: "patch", PayloadIdentity: pricePayload(state.Purchase)}, nil
