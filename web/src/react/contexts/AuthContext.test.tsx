@@ -235,6 +235,29 @@ describe('AuthContext', () => {
     await waitFor(() => expect(readPendingScans('7')).toEqual([]));
   });
 
+  it.each(['server', 'network'])('preserves recovery while identity is unknown after a %s failure', async failure => {
+    const pending = [{ listId, command: { commandId: listId, certNumber: '00123AB', withdrawalGeneration: 0 } }];
+    const operator = { id: 7, username: 'Operator', email: 'operator@example.test', avatar_url: '', is_admin: false, last_login_at: null };
+    mockFetch.mockResolvedValueOnce(Response.json(operator));
+    render(<AuthProvider><TestComponent /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('loaded'));
+    writePendingScans('7', pending);
+    if (failure === 'server') mockFetch.mockResolvedValue(Response.json({ error: 'Unavailable' }, { status: 500 }));
+    else mockFetch.mockRejectedValue(new TypeError('Network unavailable'));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('loaded'), { timeout: 5000 });
+    expect(screen.getByTestId('user')).toHaveTextContent('no user');
+    expect(readPendingScans('7')).toEqual(pending);
+    mockFetch.mockResolvedValue(Response.json(operator));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('operator@example.test'));
+    expect(readPendingScans('7')).toEqual(pending);
+    // Retaining the accepted identity must still fence a confirmed account change.
+    mockFetch.mockResolvedValue(Response.json({ ...operator, id: 8 }));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(readPendingScans('7')).toEqual([]));
+  });
+
   describe('useAuth hook', () => {
     it('throws error when used outside AuthProvider', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});

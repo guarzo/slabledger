@@ -110,6 +110,15 @@ func TestShowPrepDeleteFailures(t *testing.T) {
 			m := &mocks.ShowPrepStoreMock{WithinFn: func(context.Context, func(sp.Session) error) error { return tt.err }}
 			w := scanAPI(t, m, http.MethodDelete, scanListID, `{"commandId":"`+scanCommandID+`","expectedState":"state"}`)
 			require.Equal(t, tt.status, w.Code, w.Body.String())
+			if tt.status == 503 {
+				var body struct {
+					Code      string `json:"code"`
+					Retryable bool   `json:"retryable"`
+				}
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+				require.Equal(t, "show_contended", body.Code)
+				require.True(t, body.Retryable)
+			}
 		})
 	}
 }

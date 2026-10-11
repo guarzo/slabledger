@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { AuthProvider } from '../../contexts/AuthContext';
+import { AuthProvider, useAuth } from '../../contexts/AuthContext';
 import ShowPreparationPage from '../ShowPreparationPage';
 import { detail, evaluation, inventoryItem, listId, member, purchaseId } from './fixtures.test-support';
 import type { ScanCommand } from '../../../types/showprep';
@@ -18,6 +18,8 @@ let removed: boolean;
 let listGate: Promise<void> | undefined;
 let removeGate: Promise<void> | undefined;
 let askingCents: number;
+let authFailure: boolean;
+let stalledBody: boolean;
 function response(command: ScanCommand, destination: string) {
   const rejected = command.withdrawalGeneration !== generation;
   return { original: { ...command, listId: destination, outcome: rejected ? 'rejected' : 'confirmed', code: rejected ? 'contents_changed' : '',
@@ -28,7 +30,8 @@ function response(command: ScanCommand, destination: string) {
 function mount(navigation = false) {
   function Switch() { const navigate = useNavigate(); return <button onClick={() => navigate(`/shows?list=${secondList}`)}>Switch route</button>; }
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const view = render(<QueryClientProvider client={qc}><AuthProvider><MemoryRouter initialEntries={[`/shows?list=${listId}`]}>{navigation && <Switch />}<ShowPreparationPage /></MemoryRouter></AuthProvider></QueryClientProvider>);
+  function VerifyIdentity() { const auth = useAuth(); return <button onClick={() => void auth.refetchUser()}>Verify identity</button>; }
+  const view = render(<QueryClientProvider client={qc}><AuthProvider><VerifyIdentity /><MemoryRouter initialEntries={[`/shows?list=${listId}`]}>{navigation && <Switch />}<ShowPreparationPage /></MemoryRouter></AuthProvider></QueryClientProvider>);
   return { ...view, qc };
 }
 function scan(cert: string) {
@@ -36,8 +39,9 @@ function scan(cert: string) {
   fireEvent.change(field, { target: { value: cert } }); fireEvent.keyDown(field, { key: 'Enter' }); return field;
 }
 beforeEach(() => {
-  sessionStorage.clear(); requests = []; gate = undefined; uncertain = false; generation = 0; removed = false; listGate = undefined; removeGate = undefined; askingCents = 30000;
+  sessionStorage.clear(); requests = []; gate = undefined; uncertain = false; generation = 0; removed = false; listGate = undefined; removeGate = undefined; askingCents = 30000; authFailure = false; stalledBody = false;
   vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit = {}) => {
+    if (url.endsWith('/auth/user') && authFailure) return Response.json({ error: 'Unknown identity' }, { status: 500 });
     if (url.endsWith('/auth/user')) return Response.json({ id: 7, username: 'Operator', email: 'operator@example.test', avatar_url: '', is_admin: false, last_login_at: null });
     if (url.endsWith('/inventory')) return Response.json({ items: [inventoryItem()], warnings: [] });
     if (url.endsWith('/evaluate')) return Response.json({ evaluations: [evaluation()] });
@@ -45,6 +49,7 @@ beforeEach(() => {
     if (url.endsWith('/scan-confirm')) {
       const body = JSON.parse(String(options.body)); const destination = url.split('/lists/')[1].split('/')[0]; requests.push({ list: destination, body });
       await gate;
+      if (stalledBody) return new Response(new ReadableStream({ start(stream) { stream.enqueue(new TextEncoder().encode('{')); } }));
       if (uncertain) return Response.json({ error: 'Scan temporarily contended', code: 'scan_contended', retryable: true }, { status: 503 });
       return Response.json(response(body, destination));
     }
@@ -53,7 +58,7 @@ beforeEach(() => {
     return Response.json({ error: `Unexpected ${url}` }, { status: 400 });
   }));
 });
-afterEach(() => { release?.(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { release?.(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 async function ready() { await waitFor(() => expect(screen.getByRole('textbox', { name: 'Scan slab barcode' })).toBeEnabled()); }
 
 it('Enter immediately persists and sends a scan, accepts consecutive certs, and never offers Add/Pack/Acknowledge', async () => {
@@ -69,6 +74,21 @@ it('Enter immediately persists and sends a scan, accepts consecutive certs, and 
   expect(requests[1].body.certNumber).toBe('87654321');
   await waitFor(() => expect(sessionStorage.length).toBe(0));
   expect(await screen.findAllByText('Confirmed')).toHaveLength(2);
+});
+it('captures a complete barcode during a held post-settlement background detail refetch', async () => {
+  const view = mount(); await ready();
+  let finishRead!: () => void;
+  listGate = new Promise(resolve => { finishRead = resolve; });
+  try {
+    scan('12345678');
+    await screen.findByText('Confirmed');
+    await waitFor(() => expect(view.qc.isFetching({ queryKey: ['show-prep', 'list', listId] })).toBeGreaterThan(0));
+    // No ready/enabled wait between barcodes: a scanner cannot wait for a read.
+    const field = scan('87654321');
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1].body).toMatchObject({ certNumber: '87654321', withdrawalGeneration: 0 });
+    expect(field).toHaveValue('');
+  } finally { listGate = undefined; finishRead(); }
 });
 it('settles valid negative asking confirmation as missing asking instead of retaining it for recovery', async () => {
   askingCents = -30000; mount(); await ready(); scan('12345678');
@@ -93,6 +113,40 @@ it('reload restores only for explicit recovery with an immutable destination and
   expect(requests).toHaveLength(1); expect(await screen.findByRole('button', { name: /Recover scan/ })).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: /Recover scan/ }));
   await waitFor(() => expect(requests).toHaveLength(2)); expect(requests[1]).toEqual(requests[0]);
+});
+it('a stalled response becomes uncertain, preserves recovery, and retries the same payload', async () => {
+  mount(); await ready(); stalledBody = true; vi.useFakeTimers();
+  scan('12345678');
+  await act(async () => { await vi.advanceTimersByTimeAsync(30001); });
+  vi.useRealTimers();
+  expect(await screen.findByRole('button', { name: 'Retry scan 12345678' })).toBeEnabled();
+  const captured = JSON.parse(sessionStorage.getItem(sessionStorage.key(0)!)!).scans[0].command;
+  expect(captured).toEqual(requests[0].body);
+  stalledBody = false;
+  fireEvent.click(screen.getByRole('button', { name: 'Retry scan 12345678' }));
+  await screen.findByText('Confirmed');
+  expect(requests[1]).toEqual(requests[0]);
+  await waitFor(() => expect(sessionStorage.length).toBe(0));
+});
+it('blocks authenticated actions on transient unknown identity, then restores only explicit same-user recovery', async () => {
+  uncertain = true; mount(); await ready(); scan('12345678');
+  await screen.findByRole('button', { name: 'Retry scan 12345678' });
+  const captured = sessionStorage.getItem(sessionStorage.key(0)!)!;
+  authFailure = true;
+  fireEvent.click(screen.getByRole('button', { name: 'Verify identity' }));
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Scan slab barcode' })).toBeDisabled());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 3200)); });
+  expect(sessionStorage.getItem(sessionStorage.key(0)!)).toEqual(captured);
+  expect(screen.queryByRole('button', { name: /Retry scan|Recover scan/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'New list' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /Remove.*from show/ })).toBeDisabled();
+  authFailure = false; uncertain = false;
+  fireEvent.click(screen.getByRole('button', { name: 'Verify identity' }));
+  expect(await screen.findByRole('button', { name: 'Recover scan 12345678' })).toBeEnabled();
+  expect(requests).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Recover scan 12345678' }));
+  await screen.findByText('Confirmed');
+  expect(requests[1]).toEqual(requests[0]);
 });
 it('navigation preserves the old-show owner but does not send its queued scans or publish under the new show', async () => {
   gate = new Promise(resolve => { release = resolve; }); mount(true); await ready(); scan('12345678'); scan('87654321');

@@ -1,12 +1,10 @@
 import { APIClient, type APIRequestOptions } from './client';
-import { evaluateShowEvidence } from './showRefreshTransport';
+import { evaluateShowEvidence, showJSON } from './showRefreshTransport';
 import { isScanCommand, isScanUUID, validateScanResult } from './showScanValidation';
 import type { ScanCommand, ScanResult } from '../../types/showprep';
 import type { ShowEvaluation, ShowEvidence, ShowList, ShowListDetail, ShowReadiness, ReadinessState, RefreshEligibility } from '../../types/showprep';
 
 const client = new APIClient('/api/show-prep');
-const scanClient = new APIClient('/api/show-prep');
-scanClient.maxRetries = 1;
 
 function requireArray<T>(value: T[], label: string): T[] {
   if (!Array.isArray(value)) throw new Error(`Invalid ${label} response. Retry the read.`);
@@ -74,7 +72,7 @@ async function listDetail(response: Promise<ShowListDetail>) {
 export const showPrepAPI = {
   scanConfirm: async (listId: string, input: ScanCommand, options?: APIRequestOptions): Promise<ScanResult> => {
     if (!isScanUUID(listId) || !isScanCommand(input)) throw new Error('Invalid scan command. Check cert and show state before scanning.');
-    const result = await scanClient.post<unknown>(`/lists/${listId}/scan-confirm`, input, options);
+    const result = await showJSON<unknown>(`/lists/${listId}/scan-confirm`, input, options);
     return validateScanResult(result, listId, input);
   },
   evaluate: (purchaseIds: string[], options?: APIRequestOptions) => evaluations(evaluateShowEvidence(purchaseIds, options)),

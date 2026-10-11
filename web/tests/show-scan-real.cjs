@@ -1,4 +1,4 @@
-/* global process, URL, fetch, AbortSignal, document, console, innerWidth, sessionStorage */
+/* global process, URL, fetch, AbortSignal, document, console, innerWidth, sessionStorage, setTimeout, clearTimeout */
 // Actual browser -> authenticated Go routes -> PostgreSQL. Interception may
 // abort an actual committed response, NEVER fabricate an application result.
 const { chromium, expect } = require('@playwright/test');
@@ -17,7 +17,13 @@ async function json(url, method = 'GET', body, status = 200) {
   expect(response.status, `${method} ${url}`).toBe(status);
   const result = await response.json(); wire.push({ path: new URL(url).pathname, method, body, status, result }); return result;
 }
-const state = () => json(`${control}/state`);
+const members = rows => [...rows].sort((a, b) => a.id.localeCompare(b.id));
+const state = async () => { const result = await json(`${control}/state`); return { ...result, items: members(result.items) }; };
+function bounded(promise, label) {
+  let timer;
+  const deadline = new Promise((_, reject) => { timer = setTimeout(() => reject(Error(`${label} exceeded 15s`)), 15000); });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
 const command = (route, body) => json(`${control}/${route}`, 'POST', body);
 const cert = i => `910000${String(i).padStart(2,'0')}`;
 (async () => {
@@ -29,22 +35,27 @@ const cert = i => `910000${String(i).padStart(2,'0')}`;
     let intercept = null;
     await context.route('**/scan-confirm', async route => {
       const body = route.request().postDataJSON(); const chosen = intercept; intercept = null;
-      if (chosen?.kind === 'before') { chosen.resolve(body); await chosen.wait; await route.continue(); return; }
-      const response = await route.fetch(); const result = await response.json();
-      wire.push({ path: new URL(route.request().url()).pathname, body, status: response.status(), result });
-      if (chosen) { chosen.resolve({ body, result }); if (chosen.wait) await chosen.wait; await route.abort('failed'); }
-      else await route.fulfill({ response }); // forwards the ACTUAL backend bytes/status
+      try {
+        if (chosen?.kind === 'before') { chosen.resolve(body); await bounded(chosen.wait, 'scan delivery hold'); await route.continue(); return; }
+        const response = await route.fetch({ timeout: 15000 }); const result = await response.json();
+        wire.push({ path: new URL(route.request().url()).pathname, body, status: response.status(), result });
+        if (chosen) { chosen.resolve({ body, result }); if (chosen.wait) await bounded(chosen.wait, 'scan response hold'); await route.abort('failed'); }
+        else await route.fulfill({ response }); // forwards the ACTUAL backend bytes/status
+      } catch (error) {
+        chosen?.reject(error); errors.push(error.message);
+        await route.abort('failed').catch(() => {});
+      }
     });
     function interceptNext(kind, hold = false) {
-      let resolve, release; const received = new Promise(r => { resolve = r; });
+      let resolve, reject, release; const received = new Promise((r, fail) => { resolve = r; reject = fail; });
       const wait = hold ? new Promise(r => { release = r; }) : null;
-      intercept = { kind, resolve, wait }; return { received, release };
+      intercept = { kind, resolve, reject, wait }; return { received: bounded(received, 'scan interception'), release };
     }
     const scanner = () => page.getByRole('textbox', { name: 'Scan slab barcode' });
     const member = i => page.getByRole('article', { name: `Show member ${cert(i)}`, exact: true });
     const recent = () => page.getByRole('region', { name: 'Recent scans' });
     const pendingStorage = () => page.evaluate(() => Object.keys(sessionStorage).filter(k => k.startsWith('slabledger:show-scans:')).map(k => JSON.parse(sessionStorage.getItem(k))));
-    async function scan(i) { await expect(scanner()).toBeEnabled(); await scanner().fill(cert(i)); await scanner().press('Enter'); }
+    async function scan(i) { await scanner().focus(); await page.keyboard.type(cert(i)); await page.keyboard.press('Enter'); }
     async function capture(name) {
       await page.screenshot({ path:path.join(artifacts,`${name}-viewport.png`) });
       await page.screenshot({ path:path.join(artifacts,`${name}.png`),fullPage:true });
@@ -77,7 +88,22 @@ const cert = i => `910000${String(i).padStart(2,'0')}`;
     await page.reload(); await expect(member(2)).toBeVisible();
     expect(await command('restart')).toMatchObject({restarted:true,restarts:1});
     await page.reload(); await expect(member(2)).toBeVisible(); expect((await state()).items).toEqual(s.items);
-    await scan(1); await expect(recent()).toContainText('Already confirmed');
+    // Hold the actual post-scan detail response while the next barcode arrives.
+    // Keyboard delivery never waits for an enabled/editable input, unlike fill.
+    let readStarted, releaseRead;
+    const readReceived = bounded(new Promise(resolve => { readStarted = resolve; }), 'detail interception');
+    const readHold = new Promise(resolve => { releaseRead = resolve; });
+    await context.route(`**/api/show-prep/lists/${listID}`, async route => {
+      try {
+        const response = await route.fetch({ timeout: 15000 }); readStarted();
+        await bounded(readHold, 'detail response hold'); await route.fulfill({ response });
+      } catch (error) { errors.push(error.message); await route.abort('failed').catch(() => {}); }
+    }, { times: 1 });
+    await scan(1); await readReceived;
+    await page.keyboard.type(cert(2)); await page.keyboard.press('Enter');
+    await expect.poll(() => wire.filter(w => w.body?.certNumber === cert(2)).length).toBe(2);
+    await expect(scanner()).toHaveValue('');
+    releaseRead(); await expect(recent()).toContainText('Already confirmed');
     expect((await state()).items).toEqual(s.items);
     // Lost committed response, price drift, read-only warning and exact replay.
     const lost=interceptNext('after'); await scan(1); const committed=await lost.received;

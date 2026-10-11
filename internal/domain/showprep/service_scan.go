@@ -210,7 +210,7 @@ func (s *Service) scanReplayCurrent(ctx context.Context, original ScanOutcome) S
 		if AvailabilityOf(p) == Unknown {
 			return unknown
 		}
-		if AvailabilityOf(p) != Ready || p.CertNumber != item.CertNumber || !strings.EqualFold(strings.TrimSpace(p.Grader), item.Grader) || p.Grade != item.Grade {
+		if AvailabilityOf(p) != Ready || p.CertNumber != item.CertNumber || !strings.EqualFold(strings.TrimSpace(p.Grader), strings.TrimSpace(item.Grader)) || p.Grade != item.Grade {
 			return ScanCurrent{State: "unavailable"}
 		}
 		return ScanCurrent{State: "present"}

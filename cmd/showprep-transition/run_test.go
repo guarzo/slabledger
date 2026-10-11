@@ -92,6 +92,14 @@ func TestSnapshotValidation(t *testing.T) {
 		ok        bool
 	}{
 		{"valid", nil, "confirm-existing", true},
+		{"TEXT purchase identity", func(d *sp.ListDetail) {
+			d.Items[0].PurchaseID = "legacy-card-1"
+			d.StateFingerprint = sp.ListStateFingerprint(d.List, d.Items)
+		}, "confirm-existing", true},
+		{"empty purchase identity", func(d *sp.ListDetail) {
+			d.Items[0].PurchaseID = ""
+			d.StateFingerprint = sp.ListStateFingerprint(d.List, d.Items)
+		}, "confirm-existing", false},
 		{"altered name", func(d *sp.ListDetail) { d.List.Name = "Altered" }, "confirm-existing", false},
 		{"altered cohort", func(d *sp.ListDetail) { d.Items[0].ID = commandID }, "confirm-existing", false},
 		{"bad member id", func(d *sp.ListDetail) {

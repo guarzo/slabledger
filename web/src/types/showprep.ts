@@ -113,14 +113,6 @@ export interface ShowListDetail {
     confirmedKnownValueCents: number;
   };
 }
-export interface ShowItemUpdate {
-  version: number;
-  evaluationVersion: string;
-  packed?: boolean;
-  acknowledge?: boolean;
-}
-export interface ShowItemAdd { purchaseId: string; evaluationVersion: string }
-
 export interface ScanCommand {
   commandId: string;
   certNumber: string;

@@ -105,26 +105,30 @@ func TestShowPrepScanOriginalAndCurrent(t *testing.T) {
 		name, outcome   string
 		packed          bool
 		baseline, price int
-		removed         bool
+		removed, textID bool
 	}{
-		{"new confirmation", "confirmed", false, 0, 30000, false},
-		{"no asking or comps", "confirmed", false, 0, 0, false},
-		{"already confirmed", "already_confirmed", true, 30000, 30000, false},
-		{"rechecked", "rechecked", true, 30000, 25000, false},
-		{"removed replay", "confirmed", false, 0, 30000, true},
+		{"new confirmation", "confirmed", false, 0, 30000, false, false},
+		{"TEXT purchase confirmation", "confirmed", false, 0, 30000, false, true},
+		{"no asking or comps", "confirmed", false, 0, 0, false, false},
+		{"already confirmed", "already_confirmed", true, 30000, 30000, false, false},
+		{"rechecked", "rechecked", true, 30000, 25000, false, false},
+		{"removed replay", "confirmed", false, 0, 30000, true, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			p := sp.Purchase{ID: scanPurchaseID, CardName: "Card", CertNumber: "00123AB", Grader: "PSA", Grade: 10, Known: true, Exists: true, CampaignExists: true, Received: true, Phase: "pending", LocalPriceCents: tt.price}
+			if tt.textID {
+				p.ID = "legacy-card-1"
+			}
 			items := []sp.Item{}
 			if tt.packed {
-				items = append(items, sp.Item{ID: scanPurchaseID, PurchaseID: scanPurchaseID, CardName: "Card", CertNumber: p.CertNumber, Grader: "PSA", Grade: 10, PackedAt: "2026-10-01T12:00:00Z", Version: 2, AcknowledgedPriceCents: tt.baseline, AcknowledgedStatus: sp.NeedsReview})
+				items = append(items, sp.Item{ID: scanPurchaseID, PurchaseID: p.ID, CardName: "Card", CertNumber: p.CertNumber, Grader: "PSA", Grade: 10, PackedAt: "2026-10-01T12:00:00Z", Version: 2, AcknowledgedPriceCents: tt.baseline, AcknowledgedStatus: sp.NeedsReview})
 			}
 			var receipt *sp.CommandReceipt
 			writes := 0
 			m := &mocks.ShowPrepStoreMock{
-				ReadCertPurchaseIDsFn: func(context.Context, string) ([]string, error) { return []string{scanPurchaseID}, nil },
+				ReadCertPurchaseIDsFn: func(context.Context, string) ([]string, error) { return []string{p.ID}, nil },
 				ReadPurchasesFn: func(context.Context, []string) (map[string]sp.Purchase, error) {
-					return map[string]sp.Purchase{scanPurchaseID: p}, nil
+					return map[string]sp.Purchase{p.ID: p}, nil
 				},
 				GetItemsFn:   func(context.Context, string) ([]sp.Item, error) { return items, nil },
 				InsertItemFn: func(_ context.Context, _ string, i sp.Item) error { items = append(items, i); writes++; return nil },
@@ -148,7 +152,7 @@ func TestShowPrepScanOriginalAndCurrent(t *testing.T) {
 			require.NotEmpty(t, original.Original.ItemID)
 			require.Equal(t, scanCommandID, original.Original.CommandID)
 			require.Equal(t, scanListID, original.Original.ListID)
-			require.Equal(t, scanPurchaseID, original.Original.PurchaseID)
+			require.Equal(t, p.ID, original.Original.PurchaseID)
 			require.Equal(t, "Card", original.Original.CardName)
 			require.Equal(t, "present", original.Current.State)
 			require.NotNil(t, original.Current.Evaluation)

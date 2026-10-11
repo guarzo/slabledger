@@ -3,7 +3,7 @@ import { showPrepAPI } from './showprep';
 import { evaluation, listId, member, purchaseId } from '../../react/pages/show-preparation/fixtures.test-support';
 const command = { commandId: '55555555-5555-4555-8555-555555555555', certNumber: '00123AB', withdrawalGeneration: 2 };
 const result = () => ({ original: { commandId: command.commandId, certNumber: command.certNumber, listId, outcome: 'confirmed', code: '', itemId: member().id, purchaseId, cardName: 'Card', confirmedAt: '2026-10-09T12:00:00Z', acknowledgedPriceCents: 30000, acknowledgedStatus: 'supported' }, replay: false, current: { state: 'present', evaluation: evaluation({ certNumber: command.certNumber }) } });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 it('sends the exact immutable scan command with credentials', async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json(result())); vi.stubGlobal('fetch', fetcher);
   expect(await showPrepAPI.scanConfirm(listId, command)).toEqual(result());
@@ -81,6 +81,43 @@ it.each([
   const data = { ...result(), current: { state: 'present', evaluation: { ...result().current.evaluation, ...patch } } };
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(data)));
   await expect(showPrepAPI.scanConfirm(listId, command)).rejects.toThrow(/Invalid scan response/);
+});
+it.each([200, 503])('bounds a scan body stalled after headers by its deadline (%s)', async status => {
+  vi.useFakeTimers();
+  let cancelled = false;
+  const fetcher = vi.fn(async () => new Response(new ReadableStream({
+    start(stream) { stream.enqueue(new TextEncoder().encode('{')); }, cancel() { cancelled = true; },
+  }), { status }));
+  vi.stubGlobal('fetch', fetcher);
+  let outcome: unknown;
+  void showPrepAPI.scanConfirm(listId, command, { timeoutMs: 50 }).catch(error => { outcome = error; });
+  await vi.advanceTimersByTimeAsync(51);
+  expect(outcome).toMatchObject({ code: 'TIMEOUT' });
+  expect(cancelled).toBe(true);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+it.each([200, 503])('external abort settles a scan body stalled after headers (%s)', async status => {
+  let cancelled = false;
+  const fetcher = vi.fn(async () => new Response(new ReadableStream({
+    start(stream) { stream.enqueue(new TextEncoder().encode('{')); }, cancel() { cancelled = true; },
+  }), { status }));
+  vi.stubGlobal('fetch', fetcher);
+  const abort = new AbortController();
+  let outcome: unknown;
+  void showPrepAPI.scanConfirm(listId, command, { signal: abort.signal }).catch(error => { outcome = error; });
+  await new Promise(resolve => setTimeout(resolve, 20)); // headers/body reader have been reached
+  abort.abort();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(outcome).toMatchObject({ code: 'CANCELLED' });
+  expect(cancelled).toBe(true);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it('accepts a TEXT purchase identity when original and current identities match', async () => {
+  const data = { ...result(), original: { ...result().original, purchaseId: 'legacy-card-1' },
+    current: { state: 'present', evaluation: evaluation({ purchaseId: 'legacy-card-1', certNumber: command.certNumber }) } };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(data)));
+  expect(await showPrepAPI.scanConfirm(listId, command)).toEqual(data);
 });
 it('does not automatically retry typed contention', async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json({ error: 'Retry same command', code: 'scan_contended', retryable: true }, { status: 503 })); vi.stubGlobal('fetch', fetcher);

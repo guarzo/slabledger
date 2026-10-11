@@ -10,7 +10,7 @@ export default function ShowScanner({ listId, ready, capture }: {
   const [input, setInput] = useState('');
   const field = useRef<HTMLInputElement>(null);
   const generation = list.data?.list.withdrawalGeneration;
-  const canScan = ready && !removing && !!list.data && !list.isError && !list.isFetching && Number.isSafeInteger(generation) && generation! >= 0;
+  const canScan = ready && !removing && !!list.data && !list.isError && Number.isSafeInteger(generation) && generation! >= 0;
   useEffect(() => {
     if (canScan && (document.activeElement === document.body || document.activeElement?.matches('.show-picker select'))) field.current?.focus();
   }, [canScan]);

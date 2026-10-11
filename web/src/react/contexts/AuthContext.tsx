@@ -44,12 +44,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onIdentity
       setUser(userData);
     } catch (error) {
       if (request !== requestId.current) return;
-      if (error instanceof Error && 'status' in error && (error as { status: number }).status !== 401) {
+      const authenticationLost = error instanceof Error && 'status' in error && (error as { status: number }).status === 401;
+      if (authenticationLost) {
+        resetAuthContext();
+        acceptedIdentity.current = null;
+        onIdentityChange?.(null);
+      } else {
         reportError('AuthContext/currentUser', error);
       }
-      resetAuthContext();
-      acceptedIdentity.current = null;
-      onIdentityChange?.(null);
+      // Unknown identity blocks actions, but is not evidence of logout or a new
+      // account. Keep the accepted identity and its explicit scan recovery.
       setUser(null);
     } finally {
       if (request === requestId.current) setLoading(false);

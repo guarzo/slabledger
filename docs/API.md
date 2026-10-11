@@ -2047,8 +2047,10 @@ Each evaluation identifies the purchase, card/cert/grader/grade, `status`, `reas
 `priceMismatch`, `priceAssociationUnclear`, `listingSyncedAt`, `medianCents`,
 `compCount`, `latestSaleDate`, `windowStart`, `windowEnd`, `refreshedAt`,
 `evidenceVersion`, `policyVersion`, `recent`, and `version`. `version` identifies the evaluated input state
-and is required when acknowledging evidence or packing a member. It is not a
-fresh token merely because the evaluation was read again.
+as display metadata and for internal legacy version checks. It is not a fresh
+token merely because the evaluation was read again, nor a public approval token:
+Add/Pack/Acknowledge routes return `410`. Physical scan consent uses the captured
+withdrawal generation and current server-committed asking/status instead.
 
 | `status` | Meaning |
 |---|---|
@@ -2186,11 +2188,14 @@ routes; identity changes clear the old cache. Route authentication and ordinary
 fresh-on-entry reads remain. There is no browser acquisition runner, quota, source
 retry or source-only financial write lock.
 
-Captured versions never advance automatically. Selected row membership/order stays
-stable against background evidence updates, but unavailable or changed-version rows
-immediately become non-addable. Explicit view changes still apply. Add/pack use
-existing transactional version/availability checks. Sale, price and DH forms retain
-their own pending states and error handling, independently of evidence preparation.
+Inventory selection membership/order stays stable against background evidence
+updates; explicit view changes still apply. Evaluation versions are read metadata
+and internal legacy state, not permission to add or pack publicly: those routes
+return `410`. A physical scan captures withdrawal generation at Enter and approves
+current server-committed asking/support only on its first successful transaction;
+recovery never advances that generation or amends original consent. Sale, price and
+DH forms retain their own pending states and error handling, independently of
+show confirmation.
 
 ### Saved lists
 
@@ -2213,7 +2218,9 @@ reload after the rollout, and the API retirement must not deploy independently.
 There is no HTTP bulk-confirm-existing or transition endpoint; that operation is
 domain/CLI-only. Browser recovery is tab/session/auth-scoped and explicit: reload
 must retain the submitted destination and immutable payload, not silently replay
-or generate a new approval. Logout attempts/account changes clear local recovery.
+or generate a new approval. Logout attempts, accepted authentication loss (`401`),
+and confirmed account changes clear local recovery. Transient network/timeout/server
+auth errors pause authenticated actions but preserve same-user explicit recovery.
 
 List metadata contains `id`, `name`, `createdAt`, `updatedAt`, and
 `withdrawalGeneration` (integer `0..9007199254740991`). Names are trimmed, non-empty,
@@ -2272,7 +2279,9 @@ comp support do not prohibit otherwise eligible physical confirmation.
 }
 ```
 
-List and command IDs must be canonical lowercase hyphenated UUIDs. Certs are
+List, member and command IDs are canonical lowercase hyphenated UUIDs. Purchase
+IDs are nonempty inventory TEXT identities, not necessarily UUIDs; a successful
+current evaluation must match the original purchase ID. Certs are
 trimmed once before immutable payload hashing, nonempty, and at most 128 UTF-8
 bytes; leading zeros, case and supported alphanumeric conventions are preserved.
 Generation is required (not null), an integer in `0..9007199254740991`, captured

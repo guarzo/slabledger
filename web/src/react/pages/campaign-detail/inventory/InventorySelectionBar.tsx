@@ -42,7 +42,7 @@ export default function InventorySelectionBar({ selectedItems, selected, onRecor
   return createPortal(<section ref={bar} className="show-selection-bar" aria-label="Bulk actions for selected cards" data-expanded={missing.length > 0 || outsideView > 0 || showingSelected}>
     {showingSelected && <div className="show-actions show-selection-recovery"><span>Showing selected cards.</span><Button variant="ghost" size="sm" onClick={onHideSelected}>Back to matches</Button></div>}
     {outsideView > 0 && <div className="show-actions show-selection-recovery"><span>{outsideView} selected outside this view.</span><Button variant="ghost" size="sm" onClick={onReveal}>Reveal selected</Button></div>}
-    {missing.length > 0 && <p className="show-selection-warning">Selected cards no longer in inventory: {missing.join(', ')}. Selection retained.</p>}
+    {missing.length > 0 && <p className="show-selection-warning">{missing.length} selected {missing.length === 1 ? 'card is' : 'cards are'} no longer in inventory. Selection retained.</p>}
     <div className="show-selection-main">
       <span className="text-sm tabular-nums">{selected.size} selected{totalListCents > 0 && <> · {formatCents(totalListCents)} CL value</>}</span>
       <div className="show-actions">

@@ -144,10 +144,22 @@ func TestPostgresTransition(t *testing.T) {
 func TestPostgresUncertainResponseReplay(t *testing.T) {
 	db := transitionDB(t)
 	ctx := context.Background()
-	for _, operation := range []string{"confirm-existing", "delete-empty"} {
-		t.Run(operation, func(t *testing.T) {
+	for _, tc := range []struct{ operation, purchase string }{
+		{"confirm-existing", purchaseID}, {"confirm-existing", "legacy-card-1"}, {"delete-empty", purchaseID},
+	} {
+		t.Run(tc.operation+"/"+tc.purchase, func(t *testing.T) {
+			operation := tc.operation
 			require.NoError(t, resetTransitionDB(db))
 			d := seedTransition(t, db, operation == "delete-empty")
+			if tc.purchase != purchaseID {
+				_, err := db.ExecContext(ctx, `DELETE FROM showprep_items`)
+				require.NoError(t, err)
+				_, err = db.ExecContext(ctx, `UPDATE campaign_purchases SET id=$1 WHERE id=$2`, tc.purchase, purchaseID)
+				require.NoError(t, err)
+				d.Items[0].PurchaseID = tc.purchase
+				store := postgres.NewShowPrepStore(db.DB)
+				require.NoError(t, store.Within(ctx, func(tx sp.Session) error { return tx.InsertItem(ctx, listID, d.Items[0]) }))
+			}
 			if operation == "confirm-existing" {
 				_, err := db.ExecContext(ctx, `UPDATE showprep_items SET last_command=$1 WHERE id=$2`, sp.Fingerprint("legacy update"), itemID)
 				require.NoError(t, err)
@@ -166,6 +178,7 @@ func TestPostgresUncertainResponseReplay(t *testing.T) {
 			loaded, err := loadSnapshot(path, operation)
 			require.NoError(t, err)
 			if operation == "confirm-existing" {
+				require.Equal(t, tc.purchase, loaded.Items[0].PurchaseID)
 				require.Equal(t, sp.Fingerprint("legacy update"), loaded.Items[0].LastCommand)
 			}
 			args := []string{"-operation", operation, "-snapshot", path, "-command-id", commandID}
@@ -189,7 +202,7 @@ func TestPostgresUncertainResponseReplay(t *testing.T) {
 				require.NoError(t, err)
 				require.Len(t, items, 1)
 				require.Equal(t, itemID, items[0].ID)
-				require.Equal(t, purchaseID, items[0].PurchaseID)
+				require.Equal(t, tc.purchase, items[0].PurchaseID)
 				require.Equal(t, d.Items[0].AddedAt, items[0].AddedAt)
 				require.Equal(t, d.Items[0].PackedAt, items[0].PackedAt)
 				require.Equal(t, 12345, items[0].AcknowledgedPriceCents)

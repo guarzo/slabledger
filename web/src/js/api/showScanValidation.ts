@@ -29,7 +29,7 @@ export function validateScanResult(value: unknown, listId: string, command: Scan
   if (original.outcome === 'rejected') {
     if (typeof original.code !== 'string' || !codes.includes(original.code) || original.itemId !== '' || original.purchaseId !== '' || original.cardName !== ''
       || original.confirmedAt !== '' || original.acknowledgedPriceCents !== 0 || original.acknowledgedStatus !== '') return invalid();
-  } else if (original.code !== '' || !isScanUUID(original.itemId) || !isScanUUID(original.purchaseId)
+  } else if (original.code !== '' || !isScanUUID(original.itemId) || typeof original.purchaseId !== 'string' || !original.purchaseId
     || !timestamp(original.confirmedAt) || typeof original.acknowledgedStatus !== 'string' || !statuses.includes(original.acknowledgedStatus)) return invalid();
   if (!value.replay && original.outcome !== 'rejected' && (current.state !== 'present' || current.evaluation === undefined)) return invalid();
   if (current.evaluation !== undefined) {

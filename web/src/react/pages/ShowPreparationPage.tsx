@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { showError } from './show-preparation/showPrepLabels';
 import './show-preparation/show-preparation.css';
 
-function PackingList({ listId }: { listId: string }) {
+function PackingList({ listId, authenticated }: { listId: string; authenticated: boolean }) {
   const query = useShowList(listId);
   const data = query.data;
   const summary = data?.summary;
@@ -36,7 +36,7 @@ function PackingList({ listId }: { listId: string }) {
       </dl>
       <p className="text-xs text-[var(--text-muted)] mt-2">Known value includes only confirmed, ready members with a positive SlabLedger asking price. Missing asking prices are excluded, not valued at zero. DH association warnings are counted separately and do not exclude known asking value.</p>
       {data.items.length === 0 ? <p className="py-8 text-[var(--text-muted)]">No slabs in this list. Scan a checked slab to confirm it for this show.</p> : <>
-        {data.items.map(item => <ShowMember key={item.id} item={item} listId={listId} />)}
+        {data.items.map(item => <ShowMember key={item.id} item={item} listId={listId} disabled={!authenticated} />)}
       </>}
     </>}
   </section>;
@@ -53,10 +53,10 @@ export default function ShowPreparationPage() {
       <div className="show-actions justify-between"><h1 className="page-title">Shows</h1><Link className="show-link" to="/inventory">Inventory →</Link></div>
       <p className="text-sm text-[var(--text-muted)]">Choose a show, scan the checked slab and sticker, then put it in the show stack. Scans do not change prices, listings, or sales.</p>
     </header>
-    <ShowListPicker value={listId} onChange={id => setParams(id ? { list: id } : {})} allowRename disabled={scans.pending > 0} />
+    <ShowListPicker value={listId} onChange={id => setParams(id ? { list: id } : {})} allowRename disabled={scans.pending > 0 || auth.loading || !auth.user} />
     {listId && <ShowScanner key={`scanner:${listId}`} listId={listId} ready={scans.ready && !auth.loading && !!auth.user} capture={scans.capture} />}
     {scans.error && <p role="alert" className="text-sm text-[var(--danger)] mt-3">{scans.error}</p>}
     <ShowScanActivity activity={scans.activity} listId={listId} retry={scans.retry} dismiss={scans.dismiss} sending={scans.sending} />
-    {listId ? <PackingList key={`members:${listId}`} listId={listId} /> : !!lists.data?.length && <p className="text-sm text-[var(--text-muted)] py-8">Choose a show list to scan and confirm its slabs.</p>}
+    {listId ? <PackingList key={`members:${listId}`} listId={listId} authenticated={!auth.loading && !!auth.user} /> : !!lists.data?.length && <p className="text-sm text-[var(--text-muted)] py-8">Choose a show list to scan and confirm its slabs.</p>}
   </div>;
 }

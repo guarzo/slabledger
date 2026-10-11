@@ -47,7 +47,8 @@ describe('InventorySelectionBar', () => {
     const onRecordSale = vi.fn(); const onListOnDH = vi.fn();
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><RealSelectionBar
       selected={new Set(['deleted'])} selectedItems={[]} onClear={() => {}} onRecordSale={onRecordSale} onListOnDH={onListOnDH} /></MemoryRouter></QueryClientProvider>);
-    expect(screen.getByText(/no longer in inventory/)).toHaveTextContent('deleted');
+    expect(screen.getByText(/no longer in inventory/)).toHaveTextContent('1 selected card is no longer in inventory');
+    expect(screen.queryByText(/deleted/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Record sale/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /List on DH/ })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /Record sale/ }));

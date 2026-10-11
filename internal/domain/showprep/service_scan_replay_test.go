@@ -17,6 +17,7 @@ func TestScanConfirmReplay(t *testing.T) {
 		change      func(*mocks.ShowPrepStoreMock, *[]sp.Item, *sp.Purchase)
 	}{
 		{"changed price", "present", func(_ *mocks.ShowPrepStoreMock, _ *[]sp.Item, p *sp.Purchase) { p.LocalPriceCents = 50000 }},
+		{"padded member grader", "present", func(_ *mocks.ShowPrepStoreMock, i *[]sp.Item, _ *sp.Purchase) { (*i)[0].Grader = " PSA " }},
 		{"removed", "removed", func(_ *mocks.ShowPrepStoreMock, i *[]sp.Item, _ *sp.Purchase) { *i = nil }},
 		{"readded", "removed", func(_ *mocks.ShowPrepStoreMock, i *[]sp.Item, _ *sp.Purchase) { (*i)[0].ID = "new-member" }},
 		{"sold", "unavailable", func(_ *mocks.ShowPrepStoreMock, _ *[]sp.Item, p *sp.Purchase) { p.Sold = true }},

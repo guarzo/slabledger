@@ -7,7 +7,7 @@ import { formatCents } from '../../utils/formatters';
 import ShowEvidenceDisclosure from './ShowEvidence';
 import { availabilityLabels, showError, showTime } from './showPrepLabels';
 
-export default function ShowMember({ item, listId }: { item: ShowListItem; listId: string }) {
+export default function ShowMember({ item, listId, disabled = false }: { item: ShowListItem; listId: string; disabled?: boolean }) {
   const { remove } = useShowListWrites();
   const [error, setError] = useState('');
   const e = isShowEvaluation(item.evaluation) ? item.evaluation : undefined;
@@ -22,7 +22,7 @@ export default function ShowMember({ item, listId }: { item: ShowListItem; listI
         <h3>{item.cardName || 'Saved card'}</h3>
         <div className="text-xs text-[var(--text-muted)] tabular-nums">Cert {item.certNumber || 'Unknown'} · <GradeBadge grader={item.grader} grade={item.grade} size="sm" /></div>
       </div>
-      <Button variant="ghost" size="sm" aria-label={`Remove ${item.certNumber} from show`} disabled={remove.isPending} onClick={() => void removeMember()}>Remove</Button>
+      <Button variant="ghost" size="sm" aria-label={`Remove ${item.certNumber} from show`} disabled={disabled || remove.isPending} onClick={() => void removeMember()}>Remove</Button>
     </div>
     {!e && <p className="text-[var(--warning)]">Availability unknown. Check inventory before scanning.</p>}
     {e && e.availability !== 'ready' && <p className="text-xs text-[var(--warning)] mt-2">{availabilityLabels[e.availability] ?? availabilityLabels.unknown}. Confirmation history retained; not currently ready for this show.</p>}

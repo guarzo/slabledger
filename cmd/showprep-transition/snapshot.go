@@ -108,8 +108,8 @@ func validateSnapshot(d sp.ListDetail, operation string) error {
 	}
 	members, purchases := map[string]bool{}, map[string]bool{}
 	for _, i := range d.Items {
-		if !canonicalID(i.ID) || !canonicalID(i.PurchaseID) || members[i.ID] || purchases[i.PurchaseID] || i.Version < 1 || !timestamp(i.AddedAt) || (i.PackedAt != "" && !timestamp(i.PackedAt)) {
-			return errors.New("snapshot requires unique canonical member/purchase IDs and full member state")
+		if !canonicalID(i.ID) || i.PurchaseID == "" || members[i.ID] || purchases[i.PurchaseID] || i.Version < 1 || !timestamp(i.AddedAt) || (i.PackedAt != "" && !timestamp(i.PackedAt)) {
+			return errors.New("snapshot requires unique canonical member IDs, nonempty purchase IDs and full member state")
 		}
 		members[i.ID], purchases[i.PurchaseID] = true, true
 	}
