@@ -1,10 +1,11 @@
 package showprep
 
 type List struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	CreatedAt            string `json:"createdAt"`
+	UpdatedAt            string `json:"updatedAt"`
+	WithdrawalGeneration int64  `json:"withdrawalGeneration"`
 }
 type Item struct {
 	ID                     string     `json:"id"`
@@ -21,21 +22,25 @@ type Item struct {
 	Evaluation             Evaluation `json:"evaluation"`
 	PriceChanged           bool       `json:"priceChanged"`
 	SupportChanged         bool       `json:"supportChanged"`
+	IdentityChanged        bool       `json:"identityChanged"`
 	LastCommand            string     `json:"-"`
 }
 type Summary struct {
-	TotalCount          int `json:"totalCount"`
-	PackedCount         int `json:"packedCount"`
-	NotReceivedCount    int `json:"notReceivedCount"`
-	UnavailableCount    int `json:"unavailableCount"`
-	KnownValueCents     int `json:"knownValueCents"`
-	MissingPriceCount   int `json:"missingPriceCount"`
-	AmbiguousPriceCount int `json:"ambiguousPriceCount"`
+	TotalCount               int `json:"totalCount"`
+	PackedCount              int `json:"packedCount"`
+	NotReceivedCount         int `json:"notReceivedCount"`
+	UnavailableCount         int `json:"unavailableCount"`
+	KnownValueCents          int `json:"knownValueCents"`
+	MissingPriceCount        int `json:"missingPriceCount"`
+	AmbiguousPriceCount      int `json:"ambiguousPriceCount"`
+	ConfirmedReadyCount      int `json:"confirmedReadyCount"`
+	ConfirmedKnownValueCents int `json:"confirmedKnownValueCents"`
 }
 type ListDetail struct {
-	List    List    `json:"list"`
-	Items   []Item  `json:"items"`
-	Summary Summary `json:"summary"`
+	List             List    `json:"list"`
+	Items            []Item  `json:"items"`
+	Summary          Summary `json:"summary"`
+	StateFingerprint string  `json:"stateFingerprint"`
 }
 type AddItem struct {
 	PurchaseID        string `json:"purchaseId"`

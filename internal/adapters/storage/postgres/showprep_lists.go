@@ -9,13 +9,13 @@ import (
 func scanShowList(row interface{ Scan(...any) error }) (sp.List, error) {
 	var list sp.List
 	var created, updated time.Time
-	err := row.Scan(&list.ID, &list.Name, &created, &updated)
+	err := row.Scan(&list.ID, &list.Name, &created, &updated, &list.WithdrawalGeneration)
 	list.CreatedAt = sp.Timestamp(created)
 	list.UpdatedAt = sp.Timestamp(updated)
 	return list, showPrepError(err)
 }
 func (s *ShowPrepStore) Lists(ctx context.Context) ([]sp.List, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name,created_at,updated_at FROM showprep_lists ORDER BY created_at DESC,id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,name,created_at,updated_at,withdrawal_generation FROM showprep_lists ORDER BY created_at DESC,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -34,11 +34,16 @@ func (s *ShowPrepStore) GetList(ctx context.Context, id string) (sp.List, error)
 	return (&showPrepSession{q: s.db}).GetList(ctx, id)
 }
 func (s *showPrepSession) GetList(ctx context.Context, id string) (sp.List, error) {
-	return scanShowList(s.q.QueryRowContext(ctx, `SELECT id,name,created_at,updated_at FROM showprep_lists WHERE id=$1`, id))
+	return scanShowList(s.q.QueryRowContext(ctx, `SELECT id,name,created_at,updated_at,withdrawal_generation FROM showprep_lists WHERE id=$1`, id))
 }
 func (s *ShowPrepStore) CreateList(ctx context.Context, id, name string) (sp.List, error) {
 	var list sp.List
 	err := s.transaction(ctx, func(tx *showPrepSession) error {
+		if _, retired, err := tx.GetRetiredList(ctx, id); err != nil {
+			return err
+		} else if retired {
+			return sp.ErrRetired
+		}
 		_, err := tx.q.ExecContext(ctx, `INSERT INTO showprep_lists(id,name) VALUES($1,$2) ON CONFLICT(id) DO NOTHING`, id, name)
 		if err != nil {
 			return err
@@ -58,7 +63,7 @@ func (s *ShowPrepStore) RenameList(ctx context.Context, id, name string) (sp.Lis
 	var list sp.List
 	err := s.transaction(ctx, func(tx *showPrepSession) error {
 		var err error
-		list, err = scanShowList(tx.q.QueryRowContext(ctx, `UPDATE showprep_lists SET name=$2,updated_at=CASE WHEN name=$2 THEN updated_at ELSE now() END WHERE id=$1 RETURNING id,name,created_at,updated_at`, id, name))
+		list, err = scanShowList(tx.q.QueryRowContext(ctx, `UPDATE showprep_lists SET name=$2,updated_at=CASE WHEN name=$2 THEN updated_at ELSE now() END WHERE id=$1 RETURNING id,name,created_at,updated_at,withdrawal_generation`, id, name))
 		return err
 	})
 	return list, err
@@ -79,7 +84,17 @@ func (s *ShowPrepStore) RemoveItem(ctx context.Context, list, id string) error {
 		if n == 0 {
 			return nil
 		}
-		_, err = tx.q.ExecContext(ctx, `UPDATE showprep_lists SET updated_at=now() WHERE id=$1`, list)
-		return err
+		res, err = tx.q.ExecContext(ctx, `UPDATE showprep_lists SET updated_at=now(),withdrawal_generation=withdrawal_generation+1 WHERE id=$1 AND withdrawal_generation<$2`, list, sp.MaxWithdrawalGeneration)
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return sp.ErrConflict // transaction rolls back the deletion at the bound
+		}
+		return nil
 	})
 }

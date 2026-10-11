@@ -54,7 +54,7 @@ export default function ShowListPicker({ value, onChange, allowRename = false, d
     {lists.isError && <p role="alert">Could not load lists: {showError(lists.error)} <button className="show-link" disabled={lists.isFetching} onClick={() => lists.refetch()}>Retry lists</button></p>}
     {empty && <div className="show-empty-lists">
       <h2>{allowRename ? 'No show lists yet' : 'Name your first show'}</h2>
-      <p className="text-[var(--text-muted)]">{allowRename ? 'Create a list, then select slabs from Inventory.' : 'Create a destination for the selected slabs.'}</p>
+      <p className="text-[var(--text-muted)]">{allowRename ? 'Create a list, then scan each checked slab for this show.' : 'Create a destination for the selected slabs.'}</p>
     </div>}
     <div className="show-list-controls">
       {!empty && lists.data && <>

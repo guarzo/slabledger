@@ -1,6 +1,8 @@
 import { APIClient, type APIRequestOptions } from './client';
-import { evaluateShowEvidence } from './showRefreshTransport';
-import type { ShowEvaluation, ShowEvidence, ShowList, ShowListDetail, ShowItemAdd, ShowItemUpdate, ShowReadiness, ReadinessState, RefreshEligibility } from '../../types/showprep';
+import { evaluateShowEvidence, showJSON } from './showRefreshTransport';
+import { isScanCommand, isScanUUID, validateScanResult } from './showScanValidation';
+import type { ScanCommand, ScanResult } from '../../types/showprep';
+import type { ShowEvaluation, ShowEvidence, ShowList, ShowListDetail, ShowReadiness, ReadinessState, RefreshEligibility } from '../../types/showprep';
 
 const client = new APIClient('/api/show-prep');
 
@@ -68,6 +70,11 @@ async function listDetail(response: Promise<ShowListDetail>) {
 }
 
 export const showPrepAPI = {
+  scanConfirm: async (listId: string, input: ScanCommand, options?: APIRequestOptions): Promise<ScanResult> => {
+    if (!isScanUUID(listId) || !isScanCommand(input)) throw new Error('Invalid scan command. Check cert and show state before scanning.');
+    const result = await showJSON<unknown>(`/lists/${listId}/scan-confirm`, input, options);
+    return validateScanResult(result, listId, input);
+  },
   evaluate: (purchaseIds: string[], options?: APIRequestOptions) => evaluations(evaluateShowEvidence(purchaseIds, options)),
   evidence: async (purchaseId: string, options?: APIRequestOptions): Promise<ShowEvidence> => {
     const result = await client.get<ShowEvidence>(`/evidence/${encodeURIComponent(purchaseId)}`, options);
@@ -82,8 +89,6 @@ export const showPrepAPI = {
   createList: (id: string, name: string) => client.post<ShowList>('/lists', { id, name }),
   renameList: (id: string, name: string) => client.put<ShowList>(`/lists/${encodeURIComponent(id)}`, { name }),
   detail: (id: string) => listDetail(client.get(`/lists/${encodeURIComponent(id)}`)),
-  addItems: (id: string, items: ShowItemAdd[]) => listDetail(client.post(`/lists/${encodeURIComponent(id)}/items`, { items })),
-  updateItem: (id: string, itemId: string, input: ShowItemUpdate) => listDetail(client.put(`/lists/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}`, input)),
   removeItem: (id: string, itemId: string) => client.deleteResource(`/lists/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}`),
 };
 

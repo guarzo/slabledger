@@ -49,7 +49,6 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
   const pricing = !campaignId && params.get('view') === 'pricing';
   const reviewId = pricing ? params.get('review') : null;
   const queryClient = useQueryClient();
-  const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
   const [selectionBarHeight, setSelectionBarHeight] = useState(0);
   const purchaseIds = useMemo(() => items.map(item => item.purchase.id), [items]);
   const evaluationsQuery = useShowEvaluations(purchaseIds);
@@ -116,27 +115,8 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
     [items, selected],
   );
 
-  // Capture only explicit selection intent. A hidden card's background recheck
-  // must not advance the version that adding it would acknowledge.
-  function captureSelection(ids: string[], adding: boolean) {
-    setSelectedVersions(prev => {
-      const next = { ...prev };
-      for (const id of ids) {
-        if (!adding) delete next[id];
-        else if (!selected.has(id)) next[id] = evaluations[id]?.version ?? '';
-      }
-      return next;
-    });
-  }
-  function toggleCard(id: string) {
-    captureSelection([id], !selected.has(id));
-    toggleSelect(id);
-  }
-  function toggleVisible() {
-    const ids = visibleItems.map(item => item.purchase.id);
-    captureSelection(ids, !ids.every(id => selected.has(id)));
-    toggleAll(ids);
-  }
+  function toggleCard(id: string) { toggleSelect(id); }
+  function toggleVisible() { toggleAll(visibleItems.map(item => item.purchase.id)); }
 
   // Keep in sync with the conditional modal renders below — every overlay
   // that traps focus or occludes the selection bar belongs here.
@@ -441,10 +421,9 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
       )}
 
       <InventorySelectionBar
-        selectedItems={selectedItems} selected={selected} selectedVersions={selectedVersions} evaluations={evaluations}
+        selectedItems={selectedItems} selected={selected}
         onHeightChange={setSelectionBarHeight} outsideView={outsideView} onReveal={revealSelected}
         showingSelected={pricing ? review.showingSelection : state.showingSelected} onHideSelected={pricing ? review.hideSelection : state.hideSelected}
-        onAdded={ids => setSelected(prev => { const next = new Set(prev); for (const id of ids) next.delete(id); return next; })}
         onRecordSale={() => openSaleModal(selectedItems)}
         onListOnDH={() => handleBulkListOnDH(selectedItems.map(i => i.purchase.id))}
         onClear={() => setSelected(new Set())}

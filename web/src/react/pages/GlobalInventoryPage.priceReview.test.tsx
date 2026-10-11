@@ -96,7 +96,7 @@ it('deep links and retains shared search, selection, both drafts and active iden
   fireEvent.change(screen.getByLabelText('Search cards'), { target: { value: 'Autumn' } });
   await waitFor(() => expect(screen.getByText('2 of 2 in-hand cards')).toBeVisible());
   click('Inventory'); expect(screen.getByLabelText('Search cards')).toHaveValue('Autumn');
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Record sale (1)' })).toBeVisible();
   click('Price review'); expect(input()).toHaveValue('2400'); expect(selectedA()).toBeChecked();
   reviewCard('Moon Tortoise'); expect(input()).toHaveValue('2500');
   expect(screen.getByLabelText('Location')).toHaveTextContent(`review=${otherId}`);
@@ -128,7 +128,7 @@ it('retains owner/data/drafts/focus/selection after confirmed PATCH then failed 
   expect(requests.slice(start).some(r => r.url === '/api/inventory')).toBe(true);
   expect(requests.slice(start).every(r => r.method === 'GET' || r.url.endsWith('/evaluate'))).toBe(true); expect(writes()).toHaveLength(1);
   reviewCard('Moon Tortoise'); expect(input()).toHaveValue('2500');
-  expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled(); // captured version never silently advanced
+  expect(screen.queryByRole('button', { name: /Add.*show/ })).not.toBeInTheDocument(); // price review cannot approve show preparation
 });
 
 it('failed PATCH retains draft and error without success or advance and never calls override API', async () => {
@@ -142,7 +142,7 @@ it('failed PATCH retains draft and error without success or advance and never ca
 it('select all uses the review queue, independent of normal operational filters', async () => {
   values[1] = { ...values[1], status: 'supported' }; mount('/inventory?view=pricing'); await ready();
   click(/^Supported 1$/); fireEvent.click(screen.getByRole('checkbox', { name: 'Select all visible cards' }));
-  expect(selectedB()).toBeChecked(); expect(screen.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
+  expect(selectedB()).toBeChecked(); expect(screen.getByRole('button', { name: 'Record sale (1)' })).toBeEnabled();
   click('Inventory'); expect(selectedB()).toBeChecked(); expect(selectedA()).not.toBeChecked();
 });
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { api } from '../../js/api';
 import { reportError } from '../../js/errors';
+import { acceptAuthIdentity, resetAuthContext } from '../utils/authContextEvents';
 
 interface User {
   id: number;
@@ -36,14 +37,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onIdentity
     try {
       const userData = await api.get<User>('/auth/user');
       if (request !== requestId.current) return;
+      acceptAuthIdentity(userData.id);
       onIdentityChange?.(userData.id);
       setUser(userData);
     } catch (error) {
       if (request !== requestId.current) return;
-      if (error instanceof Error && 'status' in error && (error as { status: number }).status !== 401) {
+      const authenticationLost = error instanceof Error && 'status' in error && (error as { status: number }).status === 401;
+      if (authenticationLost) {
+        resetAuthContext();
+        onIdentityChange?.(null);
+      } else {
         reportError('AuthContext/currentUser', error);
       }
-      onIdentityChange?.(null);
+      // Unknown identity blocks actions, but is not evidence of logout or a new
+      // account. Keep the accepted identity and its explicit scan recovery.
       setUser(null);
     } finally {
       if (request === requestId.current) setLoading(false);
@@ -62,6 +69,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, onIdentity
   };
 
   const logout = async () => {
+    discardPendingUser();
+    resetAuthContext();
     try {
       await api.post('/auth/logout');
       onIdentityChange?.(null);

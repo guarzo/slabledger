@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 )
@@ -44,27 +45,45 @@ func (s *showPrepSession) ObservePriceAssociations(ctx context.Context, ids []st
 }
 
 func (s *showPrepSession) observePriceCollisions(ctx context.Context, ids []string) error {
-	// One SQL snapshot observes all competitors, even outside this batch. Capture
-	// inserted identities and provenance so a rejected mutation can preserve them.
-	rows, err := s.q.QueryContext(ctx, `INSERT INTO showprep_price_holds(purchase_id,cert_number,grader)
+	// One SQL snapshot both observes live competitors and persists new holds.
+	// Return every live collision, not only INSERT RETURNING: existing historical
+	// hold rows must not hide a newly observed live collision in this session.
+	rows, err := s.q.QueryContext(ctx, `WITH collisions AS MATERIALIZED (
  SELECT p.id,p.cert_number,p.grader FROM campaign_purchases p
  WHERE p.cert_number<>''
  AND p.cert_number IN (SELECT cert_number FROM campaign_purchases WHERE id=ANY($1::text[]))
  AND EXISTS(SELECT 1 FROM campaign_purchases other WHERE other.cert_number=p.cert_number AND other.id<>p.id)
+ ), inserted AS (
+ INSERT INTO showprep_price_holds(purchase_id,cert_number,grader)
+ SELECT id,cert_number,grader FROM collisions
  ON CONFLICT(purchase_id) DO NOTHING
- RETURNING purchase_id,cert_number,grader,first_detected_at`, ids)
+ RETURNING purchase_id,first_detected_at
+ ) SELECT c.id,c.cert_number,c.grader,i.first_detected_at FROM collisions c
+ LEFT JOIN inserted i ON i.purchase_id=c.id`, ids)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var hold showPrepPriceHold
-		if err := rows.Scan(&hold.purchaseID, &hold.certNumber, &hold.grader, &hold.firstDetectedAt); err != nil {
+		var insertedAt sql.NullTime
+		if err := rows.Scan(&hold.purchaseID, &hold.certNumber, &hold.grader, &insertedAt); err != nil {
 			return err
 		}
-		s.observedHolds = append(s.observedHolds, hold)
+		if s.observedCertCollisions == nil {
+			s.observedCertCollisions = make(map[string]bool)
+		}
+		s.observedCertCollisions[hold.certNumber] = true
+		if insertedAt.Valid {
+			hold.firstDetectedAt = insertedAt.Time
+			s.observedHolds = append(s.observedHolds, hold)
+		}
 	}
 	return rows.Err()
+}
+
+func (s *showPrepSession) CertCollisionObserved(cert string) bool {
+	return s.observedCertCollisions[cert]
 }
 
 func (s *showPrepSession) restorePriceHolds(ctx context.Context) error {

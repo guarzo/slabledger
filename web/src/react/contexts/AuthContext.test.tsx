@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider, useAuth } from './AuthContext';
+import { writePendingScans, readPendingScans } from '../pages/show-preparation/showScanRecovery';
+import { listId } from '../pages/show-preparation/fixtures.test-support';
 
 // Mock fetch - the centralized API client uses fetch internally
 const mockFetch = vi.fn();
@@ -8,12 +10,13 @@ const mockFetch = vi.fn();
 
 // Test component that exposes AuthContext
 function TestComponent() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, refetchUser } = useAuth();
   return (
     <div>
       <div data-testid="loading">{loading ? 'loading' : 'loaded'}</div>
       <div data-testid="user">{user ? JSON.stringify(user) : 'no user'}</div>
       <button onClick={logout}>Logout</button>
+      <button onClick={refetchUser}>Refetch</button>
     </div>
   );
 }
@@ -21,6 +24,7 @@ function TestComponent() {
 describe('AuthContext', () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    sessionStorage.clear();
     // Mock window.location
     Object.defineProperty(window, 'location', {
       value: { href: '' },
@@ -203,6 +207,55 @@ describe('AuthContext', () => {
       });
       consoleError.mockRestore();
     });
+  });
+
+  it.each([200, 400])('clears recovery before every logout attempt, even status %s and same-user login', async status => {
+    const operator = { id: 7, username: 'Operator', email: 'operator@example.test', avatar_url: '', is_admin: false, last_login_at: null };
+    mockFetch.mockResolvedValueOnce(Response.json(operator));
+    render(<AuthProvider><TestComponent /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('loaded'));
+    writePendingScans('7', [{ listId, command: { commandId: listId, certNumber: '00123AB', withdrawalGeneration: 0 } }]);
+    mockFetch.mockImplementationOnce(async () => {
+      expect(readPendingScans('7')).toEqual([]);
+      return Response.json(status === 200 ? {} : { error: 'Logout failed' }, { status });
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Logout' }));
+    expect(readPendingScans('7')).toEqual([]);
+    mockFetch.mockResolvedValueOnce(Response.json(operator));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    expect(readPendingScans('7')).toEqual([]);
+  });
+  it.each([8, null])('clears recovery on accepted account identity %s', async id => {
+    mockFetch.mockResolvedValueOnce(Response.json({ id: 7 }));
+    render(<AuthProvider><TestComponent /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('loaded'));
+    writePendingScans('7', [{ listId, command: { commandId: listId, certNumber: '00123AB', withdrawalGeneration: 0 } }]);
+    mockFetch.mockResolvedValueOnce(id ? Response.json({ id }) : Response.json({ error: 'Unauthorized' }, { status: 401 }));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(readPendingScans('7')).toEqual([]));
+  });
+
+  it.each(['server', 'network'])('preserves recovery while identity is unknown after a %s failure', async failure => {
+    const pending = [{ listId, command: { commandId: listId, certNumber: '00123AB', withdrawalGeneration: 0 } }];
+    const operator = { id: 7, username: 'Operator', email: 'operator@example.test', avatar_url: '', is_admin: false, last_login_at: null };
+    mockFetch.mockResolvedValueOnce(Response.json(operator));
+    render(<AuthProvider><TestComponent /></AuthProvider>);
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('loaded'));
+    writePendingScans('7', pending);
+    if (failure === 'server') mockFetch.mockResolvedValue(Response.json({ error: 'Unavailable' }, { status: 500 }));
+    else mockFetch.mockRejectedValue(new TypeError('Network unavailable'));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('loaded'), { timeout: 5000 });
+    expect(screen.getByTestId('user')).toHaveTextContent('no user');
+    expect(readPendingScans('7')).toEqual(pending);
+    mockFetch.mockResolvedValue(Response.json(operator));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('operator@example.test'));
+    expect(readPendingScans('7')).toEqual(pending);
+    // Retaining the accepted identity must still fence a confirmed account change.
+    mockFetch.mockResolvedValue(Response.json({ ...operator, id: 8 }));
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(readPendingScans('7')).toEqual([]));
   });
 
   describe('useAuth hook', () => {

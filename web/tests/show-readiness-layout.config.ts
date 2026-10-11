@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Focused DOM publication regression, not the separate real-worker/PG proof.
 // Own the server; never reuse a developer server or the screenshot port.
 export default defineConfig({
-  testDir: '.', testMatch: 'show-readiness-layout.spec.ts',
+  testDir: '.', testMatch: ['show-readiness-layout.spec.ts', 'show-preparation.spec.ts'],
   timeout: 30_000, retries: 0, workers: 1,
   outputDir: process.env.SHOW_LAYOUT_ARTIFACTS ?? '/tmp/showprep-layout',
   reporter: [['list']],

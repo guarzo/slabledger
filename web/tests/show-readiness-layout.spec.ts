@@ -4,7 +4,7 @@ import { evaluation, inventoryItem } from '../src/react/pages/show-preparation/f
 
 // The retired support/readiness header has no footprint to pin. Preserve the
 // meaningful regression: selection causes no layout jump or collection request,
-// and the existing UTC observer still fences the captured evaluation version.
+// and the existing UTC observer updates evidence without clearing financial selection.
 for (const width of [1440, 390]) {
   for (const pricing of [false, true]) {
     test(`cached observation and selection without old header at ${width}, pricing=${pricing}`, async ({ page, baseURL }, info) => {
@@ -40,15 +40,19 @@ for (const width of [1440, 390]) {
       expect(calls.slice(requestStart)).toEqual([]);
       // Cross the next UTC date without dispatching a synthetic application event.
       published = true; await page.clock.fastForward(11_000);
-      await expect(page.getByText(/Review and reselect/)).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Add to show (1)' })).toBeDisabled();
+      if (!pricing) await expect(page.getByRole('link', { name: /Review price 12345678: Asking above comps/ })).toBeVisible();
+      else await expect(page.getByRole('button', { name: /^Above comps 1$/ })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Add.*show/ })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Record sale (1)' })).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'List on DH (1)' })).toBeEnabled();
       await expect(checkbox).toBeChecked();
       expect(calls.slice(requestStart).some(path => path.endsWith('/evaluate'))).toBe(true);
       expect(calls.some(path => /refresh|coverage|review-price|override/.test(path))).toBe(false);
       await writeFile(info.outputPath('selection-observation.json'), JSON.stringify({ initial, selected, after: await checkbox.boundingBox(), calls }, null, 2));
-      // Reselection is explicit; a read never updates captured intent for the user.
+      // Financial selection remains explicit and usable after evidence publication.
       await checkbox.uncheck(); await checkbox.check();
-      await expect(page.getByRole('button', { name: 'Add to show (1)' })).toBeEnabled();
+      await expect(page.getByText(/Review and reselect/)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Record sale (1)' })).toBeEnabled();
       await page.screenshot({ path: info.outputPath(`selection-${width}-${pricing}.png`), fullPage: true });
     });
   }

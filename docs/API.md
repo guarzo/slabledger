@@ -2047,8 +2047,10 @@ Each evaluation identifies the purchase, card/cert/grader/grade, `status`, `reas
 `priceMismatch`, `priceAssociationUnclear`, `listingSyncedAt`, `medianCents`,
 `compCount`, `latestSaleDate`, `windowStart`, `windowEnd`, `refreshedAt`,
 `evidenceVersion`, `policyVersion`, `recent`, and `version`. `version` identifies the evaluated input state
-and is required when acknowledging evidence or packing a member. It is not a
-fresh token merely because the evaluation was read again.
+as display metadata and for internal legacy version checks. It is not a fresh
+token merely because the evaluation was read again, nor a public approval token:
+Add/Pack/Acknowledge routes return `410`. Physical scan consent uses the captured
+withdrawal generation and current server-committed asking/status instead.
 
 | `status` | Meaning |
 |---|---|
@@ -2186,11 +2188,14 @@ routes; identity changes clear the old cache. Route authentication and ordinary
 fresh-on-entry reads remain. There is no browser acquisition runner, quota, source
 retry or source-only financial write lock.
 
-Captured versions never advance automatically. Selected row membership/order stays
-stable against background evidence updates, but unavailable or changed-version rows
-immediately become non-addable. Explicit view changes still apply. Add/pack use
-existing transactional version/availability checks. Sale, price and DH forms retain
-their own pending states and error handling, independently of evidence preparation.
+Inventory selection membership/order stays stable against background evidence
+updates; explicit view changes still apply. Evaluation versions are read metadata
+and internal legacy state, not permission to add or pack publicly: those routes
+return `410`. A physical scan captures withdrawal generation at Enter and approves
+current server-committed asking/support only on its first successful transaction;
+recovery never advances that generation or amends original consent. Sale, price and
+DH forms retain their own pending states and error handling, independently of
+show confirmation.
 
 ### Saved lists
 
@@ -2200,59 +2205,156 @@ their own pending states and error handling, independently of evidence preparati
 | `POST /api/show-prep/lists` | `{ "id": "caller-generated-uuid", "name": "Atlanta show" }` | List metadata |
 | `GET /api/show-prep/lists/{listID}` | None | List detail |
 | `PUT /api/show-prep/lists/{listID}` | `{ "name": "New name" }` | List metadata |
-| `POST /api/show-prep/lists/{listID}/items` | `{ "items": [{ "purchaseId": "uuid", "evaluationVersion": "observed-version" }] }`, 1–200 items | List detail |
-| `PUT /api/show-prep/lists/{listID}/items/{itemID}` | `{ "version": 1, "evaluationVersion": "observed-version", "packed": true }` or an explicit `acknowledge: true` operation | List detail |
+| `POST /api/show-prep/lists/{listID}/scan-confirm` | Scan command below | `200 ScanResult`, including committed terminal rejections |
+| `DELETE /api/show-prep/lists/{listID}` | `{ "commandId": "canonical-uuid", "expectedState": "stateFingerprint-from-detail" }` | `{ "listId": "uuid", "deleted": true, "replay": false }` |
+| `POST /api/show-prep/lists/{listID}/items` | Ignored (retired Add route) | Authenticated JSON `410` with scan-confirm guidance; no service/store/provider calls |
+| `PUT /api/show-prep/lists/{listID}/items/{itemID}` | Ignored (retired Pack/Acknowledge route) | Authenticated JSON `410` with scan-confirm guidance; no service/store/provider calls |
 | `DELETE /api/show-prep/lists/{listID}/items/{itemID}` | None | `{ "removed": true }` |
 
-List metadata contains `id`, `name`, `createdAt`, and `updatedAt`. Names are trimmed,
-non-empty, and at most 120 Unicode characters. Repeating list creation with the
-same caller-generated ID/name returns the existing list; reusing the ID with a
-different name conflicts. Adding an existing member does not reset its packing
-state or silently acknowledge new evidence. Such an idempotent existing-membership
-add can return200; test a new membership/destination when checking stale Add409.
-New additions still validate the submitted evaluation version transactionally.
+All saved-list routes require authentication. Legacy Add, Pack and Acknowledge
+requests return `410` even with malformed bodies/IDs; they cannot approve cards.
+This is a coordinated schema/API/frontend compatibility change: an old client must
+reload after the rollout, and the API retirement must not deploy independently.
+There is no HTTP bulk-confirm-existing or transition endpoint; that operation is
+domain/CLI-only. Browser recovery is tab/session/auth-scoped and explicit: reload
+must retain the submitted destination and immutable payload, not silently replay
+or generate a new approval. Logout attempts, accepted authentication loss (`401`),
+and confirmed account changes clear local recovery. Transient network/timeout/server
+auth errors pause authenticated actions but preserve same-user explicit recovery.
 
-List detail contains `list`, `items`, and `summary`. Each item includes its stable
+List metadata contains `id`, `name`, `createdAt`, `updatedAt`, and
+`withdrawalGeneration` (integer `0..9007199254740991`). Names are trimmed, non-empty,
+and at most 120 Unicode characters. Repeating list creation with the same
+caller-generated ID/name returns the existing list; reusing the ID with a different
+name conflicts. A retired list UUID cannot be recreated (`410`). Each successful
+member removal increments the withdrawal generation atomically; deleting an
+already absent member does not increment it. Reads, scans and rechecks do not
+increment it.
+
+List detail contains `list`, `items`, `summary`, and `stateFingerprint`. The
+fingerprint reflects stored show/member identities, versions, confirmation and
+baselines, not fluctuating evidence or availability. Each item includes its stable
 membership `id`, original `purchaseId`, saved card identity, `addedAt`, `packedAt`
-(empty when unpacked), integer `version`, `acknowledgedPriceCents`,
-`acknowledgedStatus`, current `evaluation`, `priceChanged`, and `supportChanged`.
-New pack/ack operations must send both the observed item version and evaluation
-version. An exact retry of the most recently applied command returns current list
-detail without repacking, re-acknowledging, or incrementing the item version, even
-if price/evidence/availability changed or the purchase is locked. Current warnings
-remain visible. An intervening different item command supersedes that replay;
-other stale intents still conflict. Unpacking remains possible when a purchase
-becomes unavailable.
+(empty for an unconfirmed legacy member), integer `version`,
+`acknowledgedPriceCents`, `acknowledgedStatus`, current `evaluation`, `priceChanged`,
+`supportChanged`, and `identityChanged`. Identity drift compares the saved cert,
+grader (trimmed and case-insensitive), and grade with current known inventory;
+unknown or removed inventory cannot establish identity drift. Saved identity and
+confirmation history are retained.
 
-The summary contains `totalCount`, `packedCount`, `notReceivedCount`,
+Whole-list DELETE requires a canonical command UUID and the exact nonempty,
+unpadded fingerprint from detail. Stale stored state returns `409` without deleting
+anything. Successful retirement atomically deletes the list and persists a UUID
+tombstone. An exact retry returns `200` with `replay:true` without consulting live
+state; changed payload with the same deletion command returns `409`, another
+command targeting the retired show returns `410`. Delayed create retries cannot
+resurrect it.
+
+The summary retains `totalCount`, `packedCount`, `notReceivedCount`,
 `unavailableCount`, `knownValueCents`, `missingPriceCount`, and
-`ambiguousPriceCount`. Known value includes only ready-to-pack members with a
-positive canonical local asking. `missingPriceCount` counts missing local asking;
-`ambiguousPriceCount` independently counts DH association warnings. Packing history
-is retained even when a member is no longer available.
+`ambiguousPriceCount` with their legacy semantics. `confirmedReadyCount` counts
+only ready members with nonempty `packedAt` and matching saved/current identity;
+`confirmedKnownValueCents` sums their positive current canonical asking in integer
+cents. Legacy known value includes
+all ready members with positive asking, even unconfirmed ones. `missingPriceCount`
+counts missing local asking; `ambiguousPriceCount` independently counts DH
+association warnings. Confirmation history remains even when a member becomes
+unavailable.
 
-Legacy acknowledged amounts/statuses, packing timestamps and exact command replays
-are retained verbatim. Historical status copy is policy-neutral: the old
-`no_listed_price` did not establish absence of a local asking. Only an explicit
-fresh Add/Pack/Acknowledge records the new canonical asking/status; reads never
-silently reinterpret or backfill historical acknowledgments.
+Legacy acknowledged amounts/statuses and packing timestamps remain verbatim.
+Historical status copy is policy-neutral: the old `no_listed_price` did not establish
+absence of a local asking. A new physical scan records current canonical
+asking/status; reads and receipt replays never reinterpret or backfill history.
 
 Availability values are `ready`, `not_received`, `sold`, `refunded`,
-`campaign_closed`, `removed`, and `unknown`. Sold/refunded/removed/closed members
-remain visible but cannot be newly packed. Unreceived cards can be planning
-members but cannot be packed. Pending campaigns remain eligible. Weak comp
-support does not itself prevent physical packing.
+`campaign_closed`, `removed`, and `unknown`. Unavailable cards cannot be newly
+confirmed. Pending campaigns remain eligible. Missing asking or comps and weak
+comp support do not prohibit otherwise eligible physical confirmation.
 
-**Errors:** `400` invalid input; `401` unauthenticated; `404` missing resource;
-`409` stale/conflicting state, concurrent inventory-write contention, or an
-unavailable membership/packing mutation;
-`500` internal storage failure; `503` preparation service unavailable. Feature
-handlers return JSON errors; shared authentication middleware can return a
-plain-text `401 Unauthorized`. Refresh failures must not be mistaken for
-`no_recent_comps`. After a conflict, read the current state before resubmitting;
-do not silently acknowledge a price or evidence change the operator has not seen.
-When preparation is configured, unknown paths under `/api/show-prep/` require
-authentication and return a JSON `404`, rather than falling through to the SPA.
+### Physical scan confirmation
+
+`POST /api/show-prep/lists/{listID}/scan-confirm` accepts exactly:
+
+```json
+{
+  "commandId": "22222222-2222-4222-8222-222222222222",
+  "certNumber": "00123AB",
+  "withdrawalGeneration": 0
+}
+```
+
+List, member and command IDs are canonical lowercase hyphenated UUIDs. Purchase
+IDs are nonempty inventory TEXT identities, not necessarily UUIDs; a successful
+current evaluation must match the original purchase ID. Certs are
+trimmed once before immutable payload hashing, nonempty, and at most 128 UTF-8
+bytes; leading zeros, case and supported alphanumeric conventions are preserved.
+Generation is required (not null), an integer in `0..9007199254740991`, captured
+at Enter and never rebased on retry. Command bodies are bounded to 128 KiB;
+unknown fields and trailing JSON are rejected.
+
+A new command approves the current committed asking/status at its first successful
+transaction. Unchanged physical rescans return `already_confirmed` without
+advancing confirmation time; a fresh scan after drift returns `rechecked`, updates
+the baseline and preserves the first confirmation time. Asking is signed integer
+cents, including zero/negative recorded values; only positive asking contributes
+to known-value summaries. A scan never records receipt or approves a DH push.
+
+A committed success or terminal per-scan rejection returns `200 ScanResult`:
+
+```json
+{
+  "original": {
+    "commandId": "22222222-2222-4222-8222-222222222222",
+    "listId": "11111111-1111-4111-8111-111111111111",
+    "certNumber": "00123AB",
+    "outcome": "confirmed",
+    "code": "",
+    "itemId": "44444444-4444-4444-8444-444444444444",
+    "purchaseId": "33333333-3333-4333-8333-333333333333",
+    "cardName": "Card",
+    "confirmedAt": "2026-10-09T12:00:00Z",
+    "acknowledgedPriceCents": 30000,
+    "acknowledgedStatus": "needs_review"
+  },
+  "replay": false,
+  "current": { "state": "present", "evaluation": {} }
+}
+```
+
+`current.evaluation`, when present, is the full Evaluation shape above (the empty
+object in this example is abbreviated). `original.outcome` is `confirmed`,
+`already_confirmed`, `rechecked`, or `rejected`. Rejections have a stable `code`:
+`contents_changed`, `no_match`, `ambiguous_cert`, `identity_changed`, `not_received`,
+`sold`, `refunded`, `campaign_closed`, `removed`, or `unknown_availability`;
+identity/confirmation fields remain empty/zero. These are finalized receipts, not
+transport errors. Any intervening removal invalidates older unfinalized commands
+with `contents_changed`.
+
+Retry with the same command ID, trimmed cert and captured generation.
+`replay:true` returns the original outcome and baseline verbatim before checking
+current generation/readiness, without mutating membership or consent. `current`
+is a separate projection: `present`, `removed`, `unavailable`, or `unknown`;
+`evaluation` is optional. Failed replay reads yield `unknown` without losing the
+original result. Removing/re-adding the same purchase does not confirm its new
+membership through an old receipt.
+
+**Errors:** `400` malformed input; `401` unauthenticated; `404` never-created/missing
+show; `410` retired show or retired legacy route; `409` changed command payload or
+stale deletion fingerprint; `500` internal storage failure. Transient scan
+contention returns `503 { "error": "Scan temporarily contended; retry the same
+command", "code": "scan_contended", "retryable": true }` with no receipt;
+whole-list deletion contention uses `code:"show_contended", retryable:true`.
+Do not turn those retries into new intents. Other storage/transport failures do not
+establish whether a command committed: retain the immutable command for recovery.
+Do not interpret a transport error as a finalized business rejection.
+
+Authenticated requests with the service disabled/uncomposed return JSON `503`;
+they still require authentication. Without auth configuration, the prefix returns
+JSON `401` and cannot expose ledger data. Shared auth middleware can return
+plain-text `401 Unauthorized`. Unknown paths under `/api/show-prep/` require auth
+and return JSON `404` when configured, never an HTML SPA fallback. After stale
+state/payload conflicts, fetch current state and seek new physical consent rather
+than silently acknowledging changed prices/evidence.
 
 ---
 

@@ -13,6 +13,8 @@ func TestMigration000046SecurityAndRollback(t *testing.T) {
 	require.NoError(t, err)
 	down, err := MigrationsFS.ReadFile("migrations/000046_show_preparation.down.sql")
 	require.NoError(t, err)
+	scanDown, err := MigrationsFS.ReadFile("migrations/000049_showprep_scan_confirmation.down.sql")
+	require.NoError(t, err)
 	for _, tt := range []struct {
 		name        string
 		createRoles bool
@@ -23,6 +25,10 @@ func TestMigration000046SecurityAndRollback(t *testing.T) {
 			tx, err := db.BeginTx(ctx, nil)
 			require.NoError(t, err)
 			defer func() { _ = tx.Rollback() }()
+			// Remove the later receipt FK dependency inside this rollback-restored
+			// transaction before testing the original shipped migration's rollback.
+			_, err = tx.ExecContext(ctx, string(scanDown))
+			require.NoError(t, err)
 			_, err = tx.ExecContext(ctx, string(down))
 			require.NoError(t, err)
 			if tt.createRoles {

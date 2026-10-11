@@ -21,8 +21,8 @@ type ShowPrepService interface {
 	CreateList(context.Context, string, string) (sp.List, error)
 	ListDetail(context.Context, string) (sp.ListDetail, error)
 	RenameList(context.Context, string, string) (sp.List, error)
-	AddItems(context.Context, string, []sp.AddItem) (sp.ListDetail, error)
-	UpdateItem(context.Context, string, string, sp.UpdateItem) (sp.ListDetail, error)
+	ScanConfirm(context.Context, string, sp.ScanCommand) (sp.ScanResult, error)
+	DeleteList(context.Context, string, sp.DeleteListCommand) (sp.DeleteListResult, error)
 	RemoveItem(context.Context, string, string) error
 }
 
@@ -48,6 +48,16 @@ func (h *ShowPrepHandler) respond(w http.ResponseWriter, r *http.Request, result
 	case errors.Is(err, sp.ErrNotFound):
 		status = http.StatusNotFound
 		message = err.Error()
+	case errors.Is(err, sp.ErrRetired):
+		status = http.StatusGone
+		message = "Show preparation list retired"
+	case errors.Is(err, sp.ErrContended):
+		writeJSON(w, http.StatusServiceUnavailable, struct {
+			Error     string `json:"error"`
+			Code      string `json:"code"`
+			Retryable bool   `json:"retryable"`
+		}{"Show preparation temporarily contended", "show_contended", true})
+		return
 	case errors.Is(err, sp.ErrConflict):
 		status = http.StatusConflict
 		message = err.Error()

@@ -59,7 +59,7 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 	require.NoError(t, os.MkdirAll(artifacts, 0750))
 	legacy := seedReadinessUpgrade(t, db, f.clock())
 	archiveReadiness(t, artifacts, "upgrade-legacy-45", map[string]any{"version": 45, "ledger": legacy})
-	archiveReadiness(t, artifacts, "upgrade-empty-47", readinessProof(t, db, f))
+	archiveReadiness(t, artifacts, "upgrade-empty-49", readinessProof(t, db, f))
 	f.workerDataset = mode == "worker"
 	source := startReadinessProvider(t, f)
 	t.Setenv("CL_SEARCH_URL", source.URL+"/search")
@@ -105,6 +105,23 @@ func TestShowReadinessRealBrowser(t *testing.T) {
 		}
 		if r.Method == "POST" {
 			switch r.URL.Path {
+			case "/legacy-member":
+				var body struct {
+					ListID   string `json:"listId"`
+					Purchase int    `json:"purchase"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					return err
+				}
+				if body.Purchase != 2 && body.Purchase != 29 {
+					return fmt.Errorf("unsupported legacy fixture purchase")
+				}
+				mu.Lock()
+				err := seedReadinessLegacyMember(r.Context(), db, body.ListID, body.Purchase)
+				mu.Unlock()
+				if err != nil {
+					return err
+				}
 			case "/cached-complete":
 				f.mu.Lock()
 				unchanged := len(f.calls) == sourceBaseline && len(f.providerRequests) == providerBaseline

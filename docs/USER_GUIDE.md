@@ -319,6 +319,65 @@ Cards held longer than 30 days are treated as deeply stale in the sell signals.
 
 ### Show Preparation
 
+#### One-time legacy show transition (local operator tool)
+
+`cmd/showprep-transition` is a local, explicit transition tool, not an HTTP bulk
+confirmation endpoint. Use only after the coordinated schema/runtime rollout and
+separate authorization for the chosen database and exact cohort. Building/testing
+the tool does not authorize a live transition.
+
+Supply `DATABASE_URL` through the process environment, never command arguments.
+The tool does not load `.env`, migrate schema, start schedulers, or fetch provider
+comps. First export the explicitly chosen list to a **new** private path outside
+Git. `-operation export` requires `-list-id` and `-snapshot`; it does not accept
+`-command-id` or `-apply`. Export uses only stored list/member reads and creates a
+`0600` file, refusing to overwrite an existing path (including symlinks). Export
+writes the local snapshot file, never database state. On an export write/close
+failure, discard the incomplete file and choose a new path.
+
+The CLI-local envelope has `kind: "showprep-transition-snapshot"`, `version: 1`,
+`list`, `items`, and `stateFingerprint`. It preserves all persisted fields bound
+by the domain fingerprint, including each member's internal `lastCommand`, but
+exports no evaluations or provider evidence. Public API responses remain unchanged.
+For compatibility, full public `ListDetail` snapshots are also accepted when all
+hidden last-command values are empty and their fingerprint can be reconstructed;
+use private export for legacy members with prior commands.
+
+Do not edit or rebase the snapshot. Unknown/missing private fields, unsupported
+kind/version, duplicate IDs/keys, and altered fingerprints are rejected. Export's
+separate reads are advisory; its DTO and fingerprint derive from the same captured
+list/items, and apply still checks the current state atomically.
+
+```bash
+# DATABASE_URL is already set securely in this shell. No database writes.
+go run ./cmd/showprep-transition -operation export -list-id <chosen-list-uuid> -snapshot /private/show-before.json
+# Default transition mode: dry-run, no writes.
+go run ./cmd/showprep-transition -operation confirm-existing -snapshot /private/show-before.json -command-id <generated-uuid>
+# Only after explicit authorization; retain the same snapshot and UUID.
+go run ./cmd/showprep-transition -operation confirm-existing -snapshot /private/show-before.json -command-id <same-uuid> -apply
+```
+
+Dry-run compares stored list/member state and each member's current availability
+and identity using read-only calls. It does not observe price associations or
+collect/read provider evidence. Missing asking/comps do not prevent physical
+confirmation. These separate reads are advisory, not a transaction-consistent
+snapshot or a guarantee against cert collisions elsewhere. Apply rechecks exact
+cohort/fingerprint, current readiness and cert uniqueness atomically in the domain,
+preserves existing confirmation timestamps, and acknowledges the current committed
+asking/support. It changes no purchase, receipt, sale, reservation, or DH permission.
+
+`-operation delete-empty` additionally requires the supplied snapshot and current
+state to be empty. The domain's atomic fingerprint check rejects a member added
+between dry-run and deletion. A successful deletion persists a retirement tombstone.
+
+After any uncertain response, retry **the unchanged snapshot and same command
+UUID** with `-apply`. Apply checks the completed receipt/tombstone before stale
+live-state checks, returning `replay: true` without updating the baseline or
+resurrecting a deleted show. Default dry-run is a current-state check, not a receipt
+lookup, so it may fail after successful apply. Never generate a new UUID to recover
+an uncertain response. Tool errors omit connection strings and raw database errors;
+verify schema/connectivity separately when those errors occur.
+
 Normal **Inventory** remains the default, with compact assessment links and the
 existing sale/list controls, including cards awaiting intake. Choose **Price review**
 for an **in-hand inventory only** queue and persistent price panel (focused detail
@@ -407,64 +466,84 @@ lists use **Update list status** and invalidation after actions instead of these
 timers. Old successful sales remain inspectable with their acquisition date.
 
 For a stack of slabs, open **Prepare for show** from Inventory, choose or create a
-show list, and focus **Scan slab barcode**. A USB/Bluetooth scanner that types the
-cert number followed by Enter adds each scan to a review queue, not directly to the
-list. Check matches and availability, remove mistakes, then choose **Add to show**.
-Duplicate scans do not add another row; unmatched, ambiguous, already-listed and
-unavailable certs remain visible but are not submitted. A changed assessment needs
-removal and a new scan. A failed add leaves the queue in place for review and retry.
+show list, and focus **Scan slab barcode**. Check the slab and sticker, scan its
+cert number followed by Enter, then put it into that show's stack. Manual typing
+plus Enter works identically. **Enter is the approval** of the current recorded
+SlabLedger asking and evidence status; it is not a trial price or a review queue.
+Wait for **Confirmed** before treating the slab as saved. Consecutive scans are
+queued in order while a response is pending; the show picker is disabled until
+unsettled scans are recovered or dismissed. At 200 unsettled scans the input
+retains the next cert and asks you to recover or dismiss work before continuing.
 
-Alternatively, use the existing card checkboxes and choose **Add to show** in the
-same selected-items bar as Record sale and List on DH. Its **CL value** total is a valuation, not the
-DH listed or reviewed price. Choose a saved list or name a new one, then add.
-Escape closes destination details before clearing selection. Successful Add links
-to the submitted packing list. Creating a list alone does not select inventory.
-Unreceived cards can be planned but cannot be packed. Missing or weak comp evidence
-does not prohibit a physically eligible manual shortlist.
+A new physical scan reports **Already confirmed** when unchanged, without moving
+the original confirmation time. Later price/support drift shows **Check sticker
+and rescan to confirm**. After checking, a fresh scan reports **Rechecked** and
+records the current asking/status while preserving the first confirmation time.
+Missing asking, weak/missing comps or a provider outage do not block otherwise
+eligible physical confirmation. Unknown or ambiguous certs, unreceived, sold,
+refunded or closed-campaign cards cannot be confirmed. Scanning never records
+receipt, changes a price, delists/reserves inventory, approves a DH push, or sells
+a card. Use the existing intake, price-review, listing and sale workflows for those.
 
-If selected data changes, rows stay identifiable and Add is blocked until you
-explicitly review/reselect; the application never silently acknowledges new prices
-or evidence. Normal Inventory retains its operational filters, price bands and
-Needs Attention controls; inactive zero-count bands and a quiet attention banner
-hide normally, even with a selection. Price review instead provides focused assessment
-filters and sorting alongside the persistent price editor. Shared search, selected
-cards and unsaved drafts survive switching between Inventory and Price review.
-Neither view has the retired price-support/coverage header.
-**Reveal selected** recovers cards outside your current filters, but Price review
-never reveals unreceived cards. Those selections remain available in normal Inventory.
-Financial forms retain
-their own pending states and do not wait for comp collection. If an evaluation read
-fails, cached facts remain inspectable but do not certify current support. Retry the
-read; a successful recovery does not silently advance selected versions.
+A timeout or lost response is not proof of failure. **Retry scan** replays the
+original command ID, cert, show and captured contents generation; it is not a new
+approval. Reload recovers unsettled commands from this tab's session storage and
+offers **Recover scan**, without automatically resubmitting them. Recovery remains
+attached to the submitted show even after navigation. Session-storage failure
+pauses scanning; logout attempts and confirmed account changes discard local
+recovery, including account changes detected after route navigation. A temporary
+identity-check failure pauses actions but preserves same-account recovery.
+**Dismiss** discards local recovery, not a possibly committed server membership.
+Check the saved list before deciding whether a new physical scan is needed.
 
-On the saved list, check **Packed** as you load each slab. Price/support changes
-are flagged for review rather than silently acknowledged. A price change after
-packing is a reminder to check the physical sticker. Sold, refunded, removed, or
-closed-campaign members stay visible with their packing history; they are excluded
-from available value and cannot be newly packed. You can still unpack or remove
-them explicitly.
+**Remove** withdraws a member and invalidates every older unsettled scan for that
+show. An old scan with no committed receipt reports **Show contents changed after
+this scan; rescan to confirm** rather than adding it back. A completed receipt
+still replays its original result but separately reports current removal or
+unavailability, never resurrecting the member. Removing and re-adding the same
+purchase creates a new membership; old success is not its confirmation.
 
-Known ready-to-pack asking totals use positive canonical local asking; missing
-asking and DH association warnings are counted separately. Historical acknowledged
-amounts/status codes and packing times are retained without migration or automatic
-acknowledgment. An old `no_listed_price` code meant no DH listed price under the old
-policy, not necessarily no local asking. Only explicit Add, Pack or Acknowledge
-records the current asking/status. Adding or packing cards **does not** change prices,
-delist online inventory, reserve a card, or record a sale. Continue recording sales
-through the existing sales workflow. **Update list status** rereads saved prices
-and availability; it never requests source acquisition.
+**Confirmed ready** counts only confirmed members that are currently eligible
+and still match their saved cert, grader and grade. **Identity changed** warns
+when inventory corrections no longer match the saved slab identity. Check inventory
+identity before scanning; remove the saved member if it no longer matches the slab.
+Reads do not silently reconfirm the corrected identity.
+**Confirmation history** also includes confirmed members now sold, refunded,
+removed from inventory, in closed campaigns or with changed identity. Those members
+remain visible with warnings but are excluded from confirmed-ready asking value. Legacy unconfirmed
+members stay readable and require a physical scan to confirm. Known value sums
+positive current asking for confirmed-ready members; missing asking is excluded,
+not valued at zero, and DH association warnings are counted separately. Historical
+amounts/statuses remain verbatim: old `no_listed_price` did not establish missing
+local asking. **Update list status** rereads prices/availability, never acquires
+comps or silently approves changed inputs. There is no Packed checkbox,
+Acknowledge action, or Inventory Add-to-show button. An old client receiving `410`
+must reload and use the scan workflow.
+
+Inventory checkboxes still support **Record sale** and **List on DH**. Their
+**CL value** total is a valuation, not the asking or DH listed price. Normal
+Inventory retains operational filters, price bands and Needs Attention controls;
+Price review retains assessment filters, sorting and a persistent price editor.
+Search, financial selections and unsaved drafts survive switching views. Evidence
+publication does not clear selection or block unrelated financial forms.
+**Reveal selected** recovers cards outside filters, but Price review never reveals
+unreceived cards; those selections remain available in normal Inventory. Neither
+view has the retired price-support/coverage header. Failed evaluation reads keep
+cached facts inspectable without certifying current support; retry the read.
 
 Local verification has two real-browser/Go/PostgreSQL modes: explicitly seeded
 cached-use preconditions, and actual server-worker population from an empty verified
 store before any browser starts. Both stop the worker and block all provider endpoints
 for cached operator use, preserving source-request history. A separately counted
-background-publication phase verifies held selections and stale Add/Pack conflicts.
+background-publication phase verifies held financial selections and retired Add/Pack `410`.
 A separate seven-case pricing test proves six in-hand review cases and exclusion of
 an unreceived direct link, read-only trials and whole-row immutability. Two explicit
 Price review saves and the unreceived card's normal Inventory price edit retain the
 three-save proof of reviewed-price persistence and nonzero controlled DH sync/list
 effects with real services and storage. It also exercises failed-read
-recovery, stale Add/Pack and mobile deep links. Reproduction instructions are in
+recovery, retired Add/Pack and mobile deep links. A scan-specific real browser test
+proves consecutive scans, lost-response same-ID recovery, reload/runtime restart,
+withdrawal-generation fencing and read-only financial/provider boundaries. Reproduction instructions are in
 [the real-wire test guide](../web/tests/show-readiness-real.md).
 Production access, repricing, backfill, population and rollout still require
 separate authorization.

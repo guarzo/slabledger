@@ -7,25 +7,10 @@ import { formatCents } from '../../utils/formatters';
 import ShowEvidenceDisclosure from './ShowEvidence';
 import { availabilityLabels, showError, showTime } from './showPrepLabels';
 
-export default function ShowMember({ item, listId, stale }: {
-  item: ShowListItem; listId: string; stale: boolean;
-}) {
-  const { update, remove } = useShowListWrites();
+export default function ShowMember({ item, listId, disabled = false }: { item: ShowListItem; listId: string; disabled?: boolean }) {
+  const { remove } = useShowListWrites();
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const saving = update.isPending || remove.isPending;
-  const busy = saving;
   const e = isShowEvaluation(item.evaluation) ? item.evaluation : undefined;
-  const packed = !!item.packedAt;
-  const available = e?.availability === 'ready';
-  async function change(input: { packed?: boolean; acknowledge?: boolean }) {
-    setError(''); setMessage('');
-    try {
-      await update.mutateAsync({ id: listId, itemId: item.id,
-        input: { version: item.version, evaluationVersion: e?.version || '', ...input } });
-      setMessage(input.acknowledge ? 'Changes acknowledged.' : input.packed ? 'Packing saved.' : 'Unpacked.');
-    } catch (err) { setError(`${showError(err)} Review updated data before retrying.`); }
-  }
   async function removeMember() {
     setError('');
     try { await remove.mutateAsync({ id: listId, itemId: item.id }); }
@@ -37,25 +22,19 @@ export default function ShowMember({ item, listId, stale }: {
         <h3>{item.cardName || 'Saved card'}</h3>
         <div className="text-xs text-[var(--text-muted)] tabular-nums">Cert {item.certNumber || 'Unknown'} · <GradeBadge grader={item.grader} grade={item.grade} size="sm" /></div>
       </div>
-      <div className="show-actions">
-        <label className="show-check"><input type="checkbox" aria-label={`Packed ${item.certNumber}`} checked={packed}
-          disabled={busy || (!packed && (stale || !e?.canPack || !available))}
-          onChange={event => void change({ packed: event.target.checked })} />Packed</label>
-        <Button variant="ghost" size="sm" aria-label={`Remove ${item.certNumber} from show`} disabled={busy} onClick={() => void removeMember()}>Remove</Button>
-      </div>
+      <Button variant="ghost" size="sm" aria-label={`Remove ${item.certNumber} from show`} disabled={disabled || remove.isPending} onClick={() => void removeMember()}>Remove</Button>
     </div>
-    {!e && <p className="text-[var(--warning)]">Availability unknown. Evaluation missing; packing disabled.</p>}
-    {e && !available && <p className="text-xs text-[var(--warning)] mt-2">{availabilityLabels[e.availability] ?? availabilityLabels.unknown}. {packed ? 'Packing history retained. Unpack or remove explicitly.' : 'Cannot pack in this state.'}</p>}
-    {packed && <p className="text-xs text-[var(--text-muted)]">Packed {showTime(item.packedAt)}</p>}
+    {!e && <p className="text-[var(--warning)]">Availability unknown. Check inventory before scanning.</p>}
+    {e && e.availability !== 'ready' && <p className="text-xs text-[var(--warning)] mt-2">{availabilityLabels[e.availability] ?? availabilityLabels.unknown}. Confirmation history retained; not currently ready for this show.</p>}
+    <p className="text-xs text-[var(--text-muted)]">{item.packedAt ? `Confirmed ${showTime(item.packedAt)}` : 'Unconfirmed. Scan the checked slab to confirm.'}</p>
     <div className="show-warnings">
-      {item.priceChanged && <p>Price changed{packed ? ': check the physical sticker' : ''}. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no price'}.</p>}
+      {item.identityChanged && <p>Identity changed. Confirmation history retained; not currently ready for this show. Check inventory identity before scanning; remove the saved member if it no longer matches the slab.</p>}
+      {item.priceChanged && <p>Price changed. Previously acknowledged {item.acknowledgedPriceCents > 0 ? formatCents(item.acknowledgedPriceCents) : 'no price'}.</p>}
       {item.supportChanged && <p>Support changed. Previously recorded status: {item.acknowledgedStatus || 'unknown'}.</p>}
+      {(item.priceChanged || item.supportChanged) && <p>Check sticker and rescan to confirm.</p>}
     </div>
     <ShowEvidenceDisclosure purchaseId={item.purchaseId} certNumber={item.certNumber} evaluation={e} />
-    {(item.priceChanged || item.supportChanged) && <Button variant="secondary" size="sm" aria-label={`Acknowledge changes ${item.certNumber}`}
-      disabled={busy || stale || !e?.version} onClick={() => void change({ acknowledge: true })}>Acknowledge changes</Button>}
-    {saving && <p role="status">Saving…</p>}
+    {remove.isPending && <p role="status">Removing…</p>}
     {error && <p role="alert" className="text-[var(--danger)]">{error}</p>}
-    {message && <p role="status" className="text-[var(--text-muted)]">{message}</p>}
   </article>;
 }

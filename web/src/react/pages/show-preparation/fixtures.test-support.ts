@@ -27,15 +27,18 @@ export function member(overrides: Partial<ShowListItem> = {}): ShowListItem {
     cardName: evaluation().cardName, certNumber: '12345678', grader: 'PSA', grade: 10,
     addedAt: '2026-09-14T10:00:00Z', packedAt: '', version: 1,
     acknowledgedPriceCents: 30000, acknowledgedStatus: 'supported',
-    evaluation: evaluation(), priceChanged: false, supportChanged: false, ...overrides,
+    evaluation: evaluation(), priceChanged: false, supportChanged: false, identityChanged: false, ...overrides,
   };
 }
 export function detail(items: ShowListItem[] = [member()]): ShowListDetail {
   return {
-    list: { id: listId, name: 'September show', createdAt: '2026-09-14T10:00:00Z', updatedAt: '2026-09-14T10:00:00Z' },
+    stateFingerprint: 'stored-state-1',
+    list: { id: listId, name: 'September show', createdAt: '2026-09-14T10:00:00Z', updatedAt: '2026-09-14T10:00:00Z', withdrawalGeneration: 0 },
     items,
     summary: { totalCount: 1, packedCount: 0, notReceivedCount: 0, unavailableCount: 0,
-      knownValueCents: 30000, missingPriceCount: 0, ambiguousPriceCount: 0 },
+      knownValueCents: 30000, missingPriceCount: 0, ambiguousPriceCount: 0,
+      confirmedReadyCount: items.filter(item => item.packedAt && !item.identityChanged && item.evaluation.availability === 'ready').length,
+      confirmedKnownValueCents: items.reduce((value, item) => value + (item.packedAt && !item.identityChanged && item.evaluation.availability === 'ready' ? Math.max(0, item.evaluation.localPriceCents) : 0), 0) },
   };
 }
 export function inventoryItem(e = evaluation(), overrides: Partial<AgingItem['purchase']> = {}): AgingItem {

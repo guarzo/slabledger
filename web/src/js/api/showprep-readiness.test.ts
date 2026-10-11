@@ -76,9 +76,7 @@ describe('validated optional show readiness', () => {
     expect((await api.showPrepAPI.evidence(purchaseId)).evaluation.status).toBe('supported');
     expect((await api.showPrepAPI.evaluate([purchaseId])).evaluations[0].status).toBe('supported');
     expect((await api.showPrepAPI.detail(listId)).items[0].evaluation.status).toBe('supported');
-    await api.showPrepAPI.addItems(listId, [{ purchaseId, evaluationVersion: value.version }]);
-    expect(fetcher).toHaveBeenLastCalledWith(`/api/show-prep/lists/${listId}/items`, expect.objectContaining({
-      body: JSON.stringify({ items: [{ purchaseId, evaluationVersion: value.version }] }),
-    }));
+    await api.showPrepAPI.removeItem(listId, list.items[0].id);
+    expect(fetcher).toHaveBeenLastCalledWith(`/api/show-prep/lists/${listId}/items/${list.items[0].id}`, expect.objectContaining({ method: 'DELETE' }));
   });
 });

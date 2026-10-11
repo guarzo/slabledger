@@ -7,7 +7,7 @@ import RealSelectionBar, { type InventorySelectionBarProps } from './InventorySe
 
 function InventorySelectionBar(props: Pick<InventorySelectionBarProps, 'selectedItems' | 'onRecordSale' | 'onListOnDH' | 'onClear' | 'disabled'>) {
   return <QueryClientProvider client={new QueryClient()}><MemoryRouter><RealSelectionBar {...props}
-    selected={new Set(props.selectedItems.map(i => i.purchase.id))} selectedVersions={{}} evaluations={{}} onAdded={() => {}} /></MemoryRouter></QueryClientProvider>;
+    selected={new Set(props.selectedItems.map(i => i.purchase.id))} /></MemoryRouter></QueryClientProvider>;
 }
 
 function makeItem(id: string, clValueCents: number | undefined): AgingItem {
@@ -46,9 +46,9 @@ describe('InventorySelectionBar', () => {
   it('retains missing selected IDs for review without opening empty financial forms', () => {
     const onRecordSale = vi.fn(); const onListOnDH = vi.fn();
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><RealSelectionBar
-      selected={new Set(['deleted'])} selectedItems={[]} selectedVersions={{ deleted: 'old' }} evaluations={{}}
-      onAdded={() => {}} onClear={() => {}} onRecordSale={onRecordSale} onListOnDH={onListOnDH} /></MemoryRouter></QueryClientProvider>);
-    expect(screen.getByText(/Review and reselect/)).toHaveTextContent('deleted');
+      selected={new Set(['deleted'])} selectedItems={[]} onClear={() => {}} onRecordSale={onRecordSale} onListOnDH={onListOnDH} /></MemoryRouter></QueryClientProvider>);
+    expect(screen.getByText(/no longer in inventory/)).toHaveTextContent('1 selected card is no longer in inventory');
+    expect(screen.queryByText(/deleted/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Record sale/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /List on DH/ })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /Record sale/ }));
