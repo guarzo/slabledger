@@ -309,7 +309,7 @@ func (ps *PurchaseStore) UpdatePurchaseDHPriceSync(ctx context.Context, id strin
 	)
 }
 
-// ListDHPriceDrift returns unsold purchases whose reviewed price has diverged
+// ListDHPriceDrift returns listed unsold purchases whose reviewed price has diverged
 // from dh_listing_price_cents. Excludes items not on DH yet, items with no
 // reviewed price, items whose push was dismissed or held, and sold items.
 // Ordered oldest-synced first so the most-stale items sync first across
@@ -320,6 +320,7 @@ func (ps *PurchaseStore) ListDHPriceDrift(ctx context.Context) ([]inventory.Purc
 		`SELECT %s FROM campaign_purchases p
 		 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		 WHERE p.dh_inventory_id > 0
+		   AND p.dh_status = 'listed'
 		   AND p.reviewed_price_cents > 0
 		   AND p.reviewed_price_cents != COALESCE(p.dh_listing_price_cents, 0)
 		   AND COALESCE(p.dh_push_status, '') NOT IN ($1, $2)

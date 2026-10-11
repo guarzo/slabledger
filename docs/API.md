@@ -1397,8 +1397,13 @@ they will immediately make an explicit List request. This skips both background
 DH price sync and auto-list for that price save, avoiding competing DH writes.
 For eligible `in_stock` purchases, the explicit List request applies the reviewed
 price and syncs channels on DH. A standalone **Set Price** action sends
-`"priceOnly": true`: it runs DH price sync without starting a listing. Omit
-both flags for ordinary price review to retain automatic sync/list behavior.
+`"priceOnly": true`: it saves the price without starting a listing. Unlisted
+prices stay local: no price PATCH or DH attempt is created. Listing sends the
+latest committed price; it does not depend on an earlier inventory-price sync.
+For already-listed cards, the existing asynchronous DH price sync still runs.
+The scheduled drift scan also selects only listed cards. Existing unresolved DH
+attempts and sale/return guards are not cleared or bypassed by saving a price.
+Omit both flags for ordinary price review to retain automatic listing behavior.
 `manualList` and `priceOnly` cannot both be true (`400`).
 
 **Path params:** `purchaseId` (purchase UUID)
