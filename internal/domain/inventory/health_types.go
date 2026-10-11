@@ -10,12 +10,13 @@ type ChannelVelocity struct {
 
 // PortfolioHealth represents cross-campaign health assessment.
 type PortfolioHealth struct {
-	Campaigns      []CampaignHealth `json:"campaigns"`
-	TotalDeployed  int              `json:"totalDeployedCents"`
-	TotalRecovered int              `json:"totalRecoveredCents"`
-	TotalAtRisk    int              `json:"totalAtRiskCents"`
-	OverallROI     float64          `json:"overallROI"`
-	RealizedROI    float64          `json:"realizedROI"`
+	Campaigns        []CampaignHealth `json:"campaigns"`
+	TotalDeployed    int              `json:"totalDeployedCents"`
+	TotalRecovered   int              `json:"totalRecoveredCents"`
+	TotalAtRisk      int              `json:"totalAtRiskCents"`
+	OverallROI       float64          `json:"overallROI"`
+	RealizedROI      float64          `json:"realizedROI"`
+	RealizedROISince string           `json:"realizedROISince"` // YYYY-MM-DD; first sale date counted in RealizedROI
 }
 
 // CampaignHealth represents health status for a single campaign.

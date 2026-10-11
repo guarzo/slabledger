@@ -263,6 +263,8 @@ export interface PortfolioHealth {
   totalAtRiskCents: number;
   overallROI: number;
   realizedROI: number;
+  /** YYYY-MM-DD; first sale date counted in realizedROI. */
+  realizedROISince: string;
 }
 
 // Expected Value types

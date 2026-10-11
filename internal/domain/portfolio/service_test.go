@@ -180,63 +180,91 @@ func TestService_GetPortfolioHealth_OverallROI(t *testing.T) {
 }
 
 func TestService_GetPortfolioHealth_RealizedROI(t *testing.T) {
-	repo := mocks.NewInMemoryCampaignStore()
-	svc := newPortfolioSvc(repo)
-	ctx := context.Background()
-
-	c1 := &inventory.Campaign{ID: "c1", Name: "Fully Sold", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
-	c2 := &inventory.Campaign{ID: "c2", Name: "Mixed", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
-	repo.Campaigns[c1.ID] = c1
-	repo.Campaigns[c2.ID] = c2
-
-	// Campaign 1: all sold (5/5) → soldCostBasis=100000, soldProfit=120000-10000-100000=10000
-	repo.PNLData[c1.ID] = &inventory.CampaignPNL{
-		CampaignID: c1.ID, TotalSpendCents: 100000, TotalRevenueCents: 120000, TotalFeesCents: 10000,
-		ROI: 0.10, TotalSold: 5, TotalUnsold: 0, TotalPurchases: 5,
-	}
-	// Campaign 2: partially sold (2/5) → soldCostBasis=20000, soldProfit=30000-3000-20000=7000
-	repo.PNLData[c2.ID] = &inventory.CampaignPNL{
-		CampaignID: c2.ID, TotalSpendCents: 50000, TotalRevenueCents: 30000, TotalFeesCents: 3000,
-		ROI: -0.20, TotalSold: 2, TotalUnsold: 3, TotalPurchases: 5,
+	type soldCard struct {
+		campaignID string
+		costCents  int
+		saleDate   string
+		netProfit  int
 	}
 
-	health, err := svc.GetPortfolioHealth(ctx)
-	if err != nil {
-		t.Fatalf("GetPortfolioHealth: %v", err)
+	cases := []struct {
+		name  string
+		sales []soldCard
+		want  float64
+	}{
+		{
+			name: "per-card cost basis across campaigns",
+			sales: []soldCard{
+				{campaignID: "c1", costCents: 20000, saleDate: "2026-08-15", netProfit: 4000},
+				{campaignID: "c2", costCents: 10000, saleDate: "2026-09-01", netProfit: -1000},
+			},
+			want: float64(3000) / float64(30000),
+		},
+		{
+			name: "sales before the cutoff are excluded",
+			sales: []soldCard{
+				{campaignID: "c1", costCents: 20000, saleDate: "2026-07-31", netProfit: -9000},
+				{campaignID: "c1", costCents: 10000, saleDate: "2026-08-20", netProfit: 2500},
+			},
+			want: float64(2500) / float64(10000),
+		},
+		{
+			name: "sale on the cutoff date is included",
+			sales: []soldCard{
+				{campaignID: "c1", costCents: 8000, saleDate: portfolio.RealizedROISince, netProfit: 2000},
+			},
+			want: float64(2000) / float64(8000),
+		},
+		{
+			name: "external campaign is excluded",
+			sales: []soldCard{
+				{campaignID: "c1", costCents: 10000, saleDate: "2026-08-10", netProfit: 1000},
+				{campaignID: inventory.ExternalCampaignID, costCents: 0, saleDate: "2026-08-10", netProfit: 50000},
+			},
+			want: float64(1000) / float64(10000),
+		},
+		{
+			name: "only pre-cutoff sales yields zero",
+			sales: []soldCard{
+				{campaignID: "c1", costCents: 10000, saleDate: "2026-06-01", netProfit: 3000},
+			},
+			want: 0,
+		},
 	}
 
-	// totalSoldCostBasis = 100000 + 20000 = 120000
-	// totalSoldNetProfit = 10000 + 7000 = 17000
-	// RealizedROI = 17000 / 120000 ≈ 0.14167
-	wantROI := float64(17000) / float64(120000)
-	if diff := health.RealizedROI - wantROI; diff > 0.0001 || diff < -0.0001 {
-		t.Errorf("RealizedROI = %f, want ~%f", health.RealizedROI, wantROI)
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := mocks.NewInMemoryCampaignStore()
+			svc := newPortfolioSvc(repo)
 
-func TestService_GetPortfolioHealth_RealizedROI_Rounding(t *testing.T) {
-	repo := mocks.NewInMemoryCampaignStore()
-	svc := newPortfolioSvc(repo)
-	ctx := context.Background()
+			for _, id := range []string{"c1", "c2", inventory.ExternalCampaignID} {
+				repo.Campaigns[id] = &inventory.Campaign{ID: id, Name: id, Phase: inventory.PhaseActive}
+				repo.PNLData[id] = &inventory.CampaignPNL{CampaignID: id}
+			}
 
-	c1 := &inventory.Campaign{ID: "c1", Name: "Odd Split", BuyTermsCLPct: 0.78, Phase: inventory.PhaseActive}
-	repo.Campaigns[c1.ID] = c1
+			data := make([]inventory.PurchaseWithSale, 0, len(tc.sales))
+			for i, sc := range tc.sales {
+				id := fmt.Sprintf("p%d", i)
+				data = append(data, inventory.PurchaseWithSale{
+					Purchase: inventory.Purchase{ID: id, CampaignID: sc.campaignID, BuyCostCents: sc.costCents},
+					Sale:     &inventory.Sale{PurchaseID: id, SaleDate: sc.saleDate, NetProfitCents: sc.netProfit},
+				})
+			}
+			repo.GetAllPurchasesWithSalesFn = func(_ context.Context, _ ...inventory.PurchaseFilterOpt) ([]inventory.PurchaseWithSale, error) {
+				return data, nil
+			}
 
-	// 1000 cents spent, 1 of 3 sold → soldCostBasis = round(1000*1/3) = round(333.33) = 333
-	// soldProfit = 500 - 50 - 333 = 117
-	repo.PNLData[c1.ID] = &inventory.CampaignPNL{
-		CampaignID: c1.ID, TotalSpendCents: 1000, TotalRevenueCents: 500, TotalFeesCents: 50,
-		ROI: 0, TotalSold: 1, TotalUnsold: 2, TotalPurchases: 3,
-	}
-
-	health, err := svc.GetPortfolioHealth(ctx)
-	if err != nil {
-		t.Fatalf("GetPortfolioHealth: %v", err)
-	}
-
-	wantROI := float64(117) / float64(333)
-	if diff := health.RealizedROI - wantROI; diff > 0.001 || diff < -0.001 {
-		t.Errorf("RealizedROI = %f, want ~%f", health.RealizedROI, wantROI)
+			health, err := svc.GetPortfolioHealth(context.Background())
+			if err != nil {
+				t.Fatalf("GetPortfolioHealth: %v", err)
+			}
+			if diff := health.RealizedROI - tc.want; diff > 0.0001 || diff < -0.0001 {
+				t.Errorf("RealizedROI = %f, want ~%f", health.RealizedROI, tc.want)
+			}
+			if health.RealizedROISince != portfolio.RealizedROISince {
+				t.Errorf("RealizedROISince = %q, want %q", health.RealizedROISince, portfolio.RealizedROISince)
+			}
+		})
 	}
 }
 
