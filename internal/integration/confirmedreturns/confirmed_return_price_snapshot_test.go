@@ -26,7 +26,9 @@ import (
 func TestCoordinatedPriceUsesValidatedSnapshot(t *testing.T) {
 	for _, kind := range []string{"reviewed", "override"} {
 		t.Run(kind, func(t *testing.T) {
-			_, _, _, _, id := setupIntegrationReturn(t, "price-snapshot-cert")
+			fixtureDB, _, _, _, id := setupIntegrationReturn(t, "price-snapshot-cert")
+			_, err := fixtureDB.ExecContext(t.Context(), `UPDATE campaign_purchases SET dh_status='listed' WHERE id=$1`, id)
+			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			logger := mocks.NewMockLogger()
@@ -83,10 +85,10 @@ func TestCoordinatedPriceUsesValidatedSnapshot(t *testing.T) {
 				sentPrice.Store(int32(*request.ListingPriceCents))
 				var payload, outcome string
 				require.NoError(t, writerDB.QueryRowContext(ctx, `SELECT payload_identity,outcome FROM dh_mutation_attempts WHERE kind='price'`).Scan(&payload, &outcome))
-				require.JSONEq(t, `{"ID":42,"Status":"in_stock","Price":25000}`, payload)
+				require.JSONEq(t, `{"ID":42,"Status":"listed","Price":25000}`, payload)
 				require.Equal(t, "open", outcome, "marker must already be committed")
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"dh_inventory_id":42,"status":"in_stock","listing_price_cents":%d}`, *request.ListingPriceCents)
+				_, _ = fmt.Fprintf(w, `{"dh_inventory_id":42,"status":"listed","listing_price_cents":%d}`, *request.ListingPriceCents)
 			}))
 			defer provider.Close()
 			remote := adapter.NewInventoryAdapter(dh.NewClient(provider.URL, dh.WithEnterpriseKey("fixture"), dh.WithRateLimitRPS(1000))).WithMutationReceipts()

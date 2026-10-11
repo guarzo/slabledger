@@ -25,6 +25,8 @@ import (
 func TestIntegratedUnkeyedRequestOutlivesCaller(t *testing.T) {
 	db, store, _, _, id := setupIntegrationReturn(t, "outlive-cert")
 	ctx := context.Background()
+	_, err := db.ExecContext(ctx, `UPDATE campaign_purchases SET dh_status='listed' WHERE id=$1`, id)
+	require.NoError(t, err)
 	logger := mocks.NewMockLogger()
 	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var releaseOnce sync.Once
@@ -37,7 +39,7 @@ func TestIntegratedUnkeyedRequestOutlivesCaller(t *testing.T) {
 				close(started)
 			}
 			<-release // deliberately ignore r.Context().Done: work can survive cancellation
-			_, _ = io.WriteString(w, `{"dh_inventory_id":42,"status":"in_stock","listing_price_cents":25000}`)
+			_, _ = io.WriteString(w, `{"dh_inventory_id":42,"status":"listed","listing_price_cents":25000}`)
 			close(finished)
 		case "GET":
 			_, _ = io.WriteString(w, `{"results":[{"dh_inventory_id":42,"cert_number":"outlive-cert","status":"in_stock"}],"meta":{"total_count":1}}`)

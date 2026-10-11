@@ -1,7 +1,7 @@
 // Package dhpricing re-syncs DH listing prices when a user's reviewed price
 // changes. Keeps DH's listing_price_cents aligned with ReviewedPriceCents
-// for purchases already pushed to or listed on DH. Sibling of dhlisting;
-// does not import it — the tiny price-resolution helper is inlined here.
+// for purchases already listed on DH. Unlisted prices stay local until listing. Sibling of dhlisting;
+// does not import it — both use the inventory hub's price resolver.
 package dhpricing
 
 import (
@@ -16,6 +16,7 @@ type Outcome string
 
 const (
 	OutcomeSynced              Outcome = "synced"
+	OutcomeSkippedUnlisted     Outcome = "skipped_unlisted"
 	OutcomeSkippedNoInventory  Outcome = "skipped_no_inventory"
 	OutcomeSkippedZeroReviewed Outcome = "skipped_zero_reviewed"
 	OutcomeSkippedNoDrift      Outcome = "skipped_no_drift"

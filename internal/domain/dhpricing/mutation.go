@@ -3,11 +3,14 @@ package dhpricing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
 type Option func(*service)
+
+var errPriceNotListed = errors.New("price sync requires listed inventory")
 
 // ReturnStateReader must honor the owning context so purchase and current sale
 // eligibility are read without opening another transaction or connection.
@@ -62,6 +65,16 @@ func (s *service) SyncPurchasePrice(ctx context.Context, id string) SyncResult {
 		if e := s.guards.AssertMutationAllowed(c, id); e != nil {
 			return inventory.DHMutationRequest{}, e
 		}
+		if state.Purchase.DHInventoryID == 0 {
+			result.Outcome = OutcomeSkippedNoInventory
+			return inventory.DHMutationRequest{}, errPriceNotListed
+		}
+		if state.Purchase.DHStatus != inventory.DHStatusListed {
+			// Returning before preparation creates no attempt. Listing will send
+			// the latest committed price when the operator puts this stock live.
+			result.Outcome = OutcomeSkippedUnlisted
+			return inventory.DHMutationRequest{}, errPriceNotListed
+		}
 		return inventory.DHMutationRequest{Kind: "price", Phase: "patch", PayloadIdentity: pricePayload(state.Purchase)}, nil
 	}, func(c context.Context, a *inventory.DHMutationAttempt) (*inventory.DHMutationSettlement, error) {
 		state, e := s.freshPriceState(c, id)
@@ -92,6 +105,9 @@ func (s *service) SyncPurchasePrice(ctx context.Context, id string) SyncResult {
 		}
 		return &inventory.DHMutationSettlement{Outcome: "succeeded", Receipt: receipt}, nil
 	})
+	if errors.Is(err, errPriceNotListed) {
+		return result
+	}
 	if err != nil {
 		result.Outcome = OutcomeError
 		result.Err = err

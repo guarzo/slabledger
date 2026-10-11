@@ -310,7 +310,7 @@ func assertPriceReviewSaved(t *testing.T, before, after map[string]string, proof
 	require.Len(t, proof.syncs, 3)
 	require.Len(t, proof.lists, 3)
 	require.Len(t, proof.wire, 3)
-	for i, want := range []dhpricing.Outcome{dhpricing.OutcomeSynced, dhpricing.OutcomeSkippedNoDrift, dhpricing.OutcomeSkippedNoInventory} {
+	for i, want := range []dhpricing.Outcome{dhpricing.OutcomeSynced, dhpricing.OutcomeSkippedUnlisted, dhpricing.OutcomeSkippedNoInventory} {
 		result := proof.syncs[readinessPurchase(i+1)]
 		require.NoError(t, result.Err)
 		require.Equal(t, want, result.Outcome)

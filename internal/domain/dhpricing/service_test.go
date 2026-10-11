@@ -302,11 +302,11 @@ func TestSyncDriftedPurchases(t *testing.T) {
 	if got.Total != 3 {
 		t.Errorf("Total = %d, want 3", got.Total)
 	}
-	if got.ByOutcome[OutcomeSynced] != 3 {
-		t.Errorf("synced = %d, want 3 (map: %v)", got.ByOutcome[OutcomeSynced], got.ByOutcome)
+	if got.ByOutcome[OutcomeSynced] != 2 || got.ByOutcome[OutcomeSkippedUnlisted] != 1 {
+		t.Errorf("outcomes = %v, want synced=2 skipped_unlisted=1", got.ByOutcome)
 	}
-	if len(updater.calls) != 3 {
-		t.Errorf("updater calls = %d, want 3", len(updater.calls))
+	if len(updater.calls) != 2 {
+		t.Errorf("updater calls = %d, want 2", len(updater.calls))
 	}
 }
 
