@@ -75,7 +75,7 @@ func (s *Service) ConfirmExisting(ctx context.Context, listID string, cmd Confir
 		}
 		for _, item := range items {
 			e := byID[item.PurchaseID]
-			if e.Availability != Ready || item.CertNumber == "" || item.CertNumber != e.CertNumber || !strings.EqualFold(strings.TrimSpace(item.Grader), e.Grader) || item.Grade != e.Grade {
+			if e.Availability != Ready || item.CertNumber == "" || item.CertNumber != e.CertNumber || !strings.EqualFold(strings.TrimSpace(item.Grader), strings.TrimSpace(e.Grader)) || item.Grade != e.Grade {
 				return ErrConflict
 			}
 			if err := validateTransitionCert(ctx, tx, item, purchaseIDs); err != nil {

@@ -99,7 +99,7 @@ func (s *Service) ScanConfirm(ctx context.Context, listID string, cmd ScanComman
 		var member Item
 		for _, item := range items {
 			if item.PurchaseID == ids[0] || item.CertNumber == cmd.CertNumber {
-				if e.Availability != Removed && e.Availability != Unknown && (item.PurchaseID != e.PurchaseID || item.CertNumber != e.CertNumber || !strings.EqualFold(strings.TrimSpace(item.Grader), e.Grader) || item.Grade != e.Grade) {
+				if e.Availability != Removed && e.Availability != Unknown && (item.PurchaseID != e.PurchaseID || item.CertNumber != e.CertNumber || !strings.EqualFold(strings.TrimSpace(item.Grader), strings.TrimSpace(e.Grader)) || item.Grade != e.Grade) {
 					return finalize("identity_changed")
 				}
 				member = item
