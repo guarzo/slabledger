@@ -18,14 +18,14 @@ postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode
 Verify the owner's resource before running:
 
 ```bash
-docker inspect slabledger-price-review-test --format '{{.Id}} {{.State.Running}} {{json .Config.Labels}} {{json .NetworkSettings.Ports}}'
-docker exec slabledger-price-review-test psql -U showprep -d showprep_readiness_e2e \
+docker inspect slabledger-show-scan-e2e --format '{{.Id}} {{.State.Running}} {{json .Config.Labels}} {{json .NetworkSettings.Ports}}'
+docker exec slabledger-show-scan-e2e psql -U showprep -d showprep_readiness_e2e \
   -c 'SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();'
 ```
 
 Expected container ID:
-`dadbb5bfc768c851ede6956c966172d03161f796d800c28c52d1aa40ad6a45b1`, running,
-label `slabledger.task=inventory-price-review`,
+`c06b81b629b557a3b6fd6fec04e578409d79c47051f4dfa815043e23322a778d`, running,
+label `slabledger.task=show-scan-confirmation`,
 5432 published only at `127.0.0.1:44620`; database/user/owner are
 `showprep_readiness_e2e`/`showprep`/`showprep`. The harness also verifies the exact
 URL and database/user/owner before reset. Retain this parent-owned container.
@@ -33,7 +33,7 @@ URL and database/user/owner before reset. Retain this parent-owned container.
 Use installed Go 1.26 and worktree-lockfile web dependencies with matching
 Playwright Chromium. Build first: `cd web && npm run build && cd ..`.
 Do not substitute a default/developer/production DB or run `make screenshots`.
-Use three separate databases: `showprep_cached_test` for storage tests,
+Use three separate databases: `slabledger_show_scan_test` at loopback5434 for storage tests,
 `showprep_runtime_test` for cmd production-runtime tests, and
 `showprep_readiness_e2e` for browser fixtures. Storage resets schema while Go runs
 packages in parallel. Runtime tests require **`SHOW_PREP_RUNTIME_TEST_URL`** and
@@ -47,8 +47,8 @@ After verifying the exact container above, create the dedicated runtime DB once
 (if absent) and verify ownership:
 
 ```bash
-docker exec slabledger-price-review-test createdb -U showprep -O showprep showprep_runtime_test
-docker exec slabledger-price-review-test psql -U showprep -d showprep_runtime_test \
+docker exec slabledger-show-scan-e2e createdb -U showprep -O showprep showprep_runtime_test
+docker exec slabledger-show-scan-e2e psql -U showprep -d showprep_runtime_test \
   -c 'SELECT current_database(),current_user,pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();'
 ```
 
@@ -58,7 +58,7 @@ exercises the same **parallel-package isolation**, not a claim that remote CI ra
 
 ```bash
 unset DATABASE_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL SHOW_READINESS_E2E_URL
-POSTGRES_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_cached_test?sslmode=disable' \
+POSTGRES_TEST_URL='postgres://slabledger:slabledger@127.0.0.1:5434/slabledger_show_scan_test?sslmode=disable' \
 SHOW_PREP_RUNTIME_TEST_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_runtime_test?sslmode=disable' \
 TZ=UTC go test -race -count=1 -timeout 10m ./...
 ```
@@ -71,7 +71,7 @@ artifact directories instead of overwriting them.
 | Mode/phase | Evidence precondition | Provider counts |
 |---|---|---|
 | `cached` | Explicit store-seeded qualified/old/failed snapshots | Absolute zero SDK and source requests throughout |
-| `worker`, A | Legacy ledger/comps at migration45, upgrade47 with empty verified store; actual `initializeSchedulers` → configured source provider → Group → EvidenceWorker → PG → source adapter | 142 sales requests + one Firebase token exchange, **before browser launch** |
+| `worker`, A | Legacy ledger/comps at migration45, upgrade49 with empty verified store; actual `initializeSchedulers` → configured source provider → Group → EvidenceWorker → PG → source adapter | 142 sales requests + one Firebase token exchange, **before browser launch** |
 | Both modes, B | Worker cancelled/stopped/joined; provider blocked; new disabled production composition for cached reads | Zero **additional** requests; full population history retained; restart stays disabled |
 | `worker`, C | After B is archived, separately enable the actual runtime and hold one failed-identity repair | Exactly one additional sales request + one token exchange; never attributed to zero-source B |
 
@@ -88,8 +88,9 @@ additionally supplies old successful evidence and retained sales after failure;
 these seeded results are not a claim of worker ingestion.
 
 B drives Admin status, normal inventory → Price review → Supported → checkbox → stored evidence →
-create/list/add/pack → reload → rebuilt SQL pool/auth/router/services → add to an
-existing list → UTC stale selection and explicit Add/Pack409. It preserves whole
+create/list/scan-confirm → reload → rebuilt SQL pool/auth/router/services → seeded
+legacy unconfirmed member → UTC stale evidence with retained financial selection
+and authenticated retired Add/Pack410. It preserves whole
 campaign/purchase/sale/legacy-comp rows and packing history. Checkbox/filter/select
 all/clear request logs are independently empty; browser refresh POSTs are zero.
 Unauthenticated/authorized explicit401/410 retirement probes are logged separately.
@@ -97,7 +98,7 @@ Unauthenticated/authorized explicit401/410 retirement probes are logged separate
 C repairs only card29 through the real admin retry endpoint and runtime, while it
 is selected with unavailable evidence in normal inventory. A real financial form opens and cancels while the
 source is held. Publication changes its status to Supported but retains selected
-ID/version and row position. Explicit stale Add/Pack return409; no silent rebinding,
+ID/version and row position. Retired Add/Pack return410; no silent selection loss,
 financial write, or packing-history change. This phase returns the test clock from
 B's synthetic next-day stale observation to real wall time before starting runtime;
 there is no production clock or reset API.
@@ -154,7 +155,7 @@ of the full dedicated cmd and storage race suites, not duplicated here.
 
 ## Artifacts and browser checks
 
-- `upgrade-legacy-45.json`, `upgrade-empty-47.json`: actual before/after ledger and
+- `upgrade-legacy-45.json`, `upgrade-empty-49.json`: actual before/after ledger and
   initially empty verified store. Upgrade asserts every financial row unchanged.
 - Worker mode `worker-before.json`, `worker-populated.json`: exact source query
   history, evidence, durable worker state, coverage and full ledger.
@@ -166,10 +167,10 @@ of the full dedicated cmd and storage race suites, not duplicated here.
 - `operator-final.json`: final persisted ledger/evidence/coverage; in worker mode
   it includes the explicitly separate repair phase.
 - `metrics.json`: desktop/mobile/tablet geometry, repeated review/detail/normal return,
-  stable virtual rows, last-row clearance, keyboard packing/destination focus,
+  stable virtual rows, last-row clearance, keyboard scan focus,
   fine/coarse pointer geometry and rendered webfont checks.
 - Actual full-page/viewport PNGs, including Admin, selected evidence, mobile
-  destinations and concurrent publication. Public Google font GETs are the only
+  financial selections and concurrent publication. Public Google font GETs are the only
   external browser allowlist, fetched without credentials or redirects. No overlay.
 - Event-to-rendered-frame 155-card filter/select/clear timings are local samples
   against a <100ms goal, not a flaky CI wall-clock gate or production percentile.
@@ -179,6 +180,34 @@ Cleanup is owned: servers, Groups, SQL pools and the launched Chromium close aft
 success/failure; the PG container stays running. `SHOW_READINESS_SERVE=1` remains
 an optional separate interactive session; stop with SIGINT/SIGTERM. Never attach
 to shared Chrome. Test-only controls are compiled only in `_test.go`.
+
+## Scan-confirmation real-wire acceptance
+
+`TestShowScanRealBrowser` uses the same exact-DSN/owner guard, disabled production
+runtime, real auth routes and built frontend. Run separately from all other
+browser fixtures (they reset the same owned database):
+
+```bash
+unset DATABASE_URL POSTGRES_TEST_URL SHOW_PREP_RUNTIME_TEST_URL POSTGRES_TEST_DSN POSTGRES_ADMIN_URL LOCAL_DB_URL SUPABASE_URL
+SHOW_READINESS_E2E_URL='postgres://showprep:showprep_test@127.0.0.1:44620/showprep_readiness_e2e?sslmode=disable' \
+SHOW_READINESS_ARTIFACTS=/tmp/show-scan-fresh \
+TZ=UTC go test -race -v -count=1 -timeout 10m ./cmd/slabledger -run '^TestShowScanRealBrowser$'
+```
+
+The driver types consecutive Enter scans and proves FIFO capture, atomic receipts,
+confirmation persistence through reload and two full SQL-pool/auth/router/service
+restarts. It can abort a response only **after fetching actual backend bytes**;
+recovery must replay the exact ID/cert/generation and original asking/time.
+Real purchase-row NOWAIT contention yields no receipt, then removal/restart fences
+the unchanged pending command. Remove/re-add does not let an old success confirm
+new membership. Legacy unconfirmed members are fixture-seeded, never public Add.
+Unreceived history, no-price and no-match outcomes, auth401, retired Add/Pack410
+and cross-show navigation are exercised. Provider counts remain absolute zero.
+Whole financial rows are compared throughout, with only two separately attributed
+fixture changes (one asking field and one receipt field) allowed. Artifacts include
+`show-scan-proof.json`, `scan-final.json` and desktop/tablet/mobile full-page and
+viewport PNGs with overflow/touch-target metrics. No product control/reset API is
+added, and no fixture may fabricate a successful scan result.
 
 ## Price-review real-wire acceptance
 
@@ -219,8 +248,8 @@ Phases and authority:
    skips price drift (preset230000), then persists listed/matched/ebay+shopify.
    Not-received/no-inventory card skips both remote effects. Zero calls fail.
 4. **Recovery and shows:** an attributed server503 inventory-read fault proves
-   save confirmation/draft retention and read-only retry. Fresh Add/Pack explicitly
-   acknowledge240000; stale Add/Pack409 leave list rows unchanged. Mobile fresh-
+   save confirmation/draft retention and read-only retry. A physical scan records
+   authoritative240000; retired Add/Pack410 leave list rows unchanged. Mobile fresh-
    context deep link and queue return focus use owned Chromium.
 
 The handler's `WaitBackground()` is joined after HTTP saves, before assertions,
@@ -248,7 +277,8 @@ layout test**; it is not worker/source/financial proof.
 The test advances the UTC boundary to trigger the existing evaluation observer,
 not minute coverage polling. Initial checkbox geometry is asserted unchanged by
 selection, with no selection-triggered requests. After publication it asserts the
-checkbox remains selected and Add stays disabled until explicit reselection. It
+checkbox remains selected, the published assessment updates, and financial
+selection remains usable. The retired Add control stays absent. It
 records post-publication geometry without asserting equality to the initial box.
 No refresh, coverage or financial requests are permitted. Zero-count/header-space
 retention and clear/view-reset geometry are not promised or tested; normal Inventory

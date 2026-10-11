@@ -1085,7 +1085,12 @@ no-op; overflow rejects and rolls back the deletion. Confirmation does not incre
 
 Receipts have no member or purchase FK: member removal and financial-record deletion
 cannot erase the original result. Whole-show deletion removes the show's receipts.
-Invalid stored results are storage errors, not missing receipts.
+Invalid stored results are storage errors, not missing receipts. Receipts have no
+TTL for a live show. Terminal business rejection also persists a receipt;
+transient contention does not. Replay returns the saved asking/status/time without
+changing a newer member baseline, and membership ID distinguishes a removed and
+re-added purchase from its historical confirmation. Asking baselines are signed
+integer cents; reads do not normalize them or convert old unconfirmed history.
 
 ### `showprep_retired_lists`
 

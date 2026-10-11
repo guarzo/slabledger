@@ -112,8 +112,9 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     await expect(page.getByText(/Saved asking changed from \$3,200.00 to \$3,100.00/)).toBeVisible();
     await expect(page.getByLabel('Asking price', { exact: true })).toHaveValue('2400');
     await expect(page.getByRole('checkbox', { name: 'Select Declining fixture', exact: true })).toBeChecked();
-    await expect(bar()).toContainText('Review and reselect');
-    await expect(page.getByRole('button', { name: 'Add to show (1)', exact: true })).toBeDisabled();
+    await expect(bar()).toContainText('1 selected');
+    await expect(page.getByRole('button', { name: /Add.*show/ })).toHaveCount(0);
+    await expect(bar().getByRole('button', { name: 'Record sale (1)', exact: true })).toBeEnabled();
     // Local save is intentionally NOT a no-write phase. Inventory read failure
     // after the committed PATCH must leave the owner/draft and outcome mounted.
     await command('fail-inventory-read');
@@ -151,33 +152,27 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     expect(snapshots.saved.rows.showprep_price_holds).toBe(before.rows.showprep_price_holds);
     const requests = snapshots.saved.requests.filter(r => r.method === 'PATCH');
     expect(requests.map(r => r.path)).toEqual([1,2,3].map(i => `/api/purchases/${id(i)}/review-price`));
-    // Explicit list commands: stale observed Add fails; fresh Add and Pack
-    // acknowledge the authoritative saved asking, never a trial amount.
+    // Retired Add/Pack cannot approve even a current evaluation. A physical
+    // scan records authoritative saved asking, never the price-review draft.
     const listID = '22222222-2222-4222-8222-222222222222';
     await json(`${app}/api/show-prep/lists`, 'POST', { id: listID, name: 'Price review packing' });
     snapshots.beforeStaleAdd = await state();
-    await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(1), evaluationVersion: original.evaluation.version }] }, 409);
+    await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(1), evaluationVersion: original.evaluation.version }] }, 410);
     snapshots.afterStaleAdd = await state();
     for (const table of ['showprep_lists', 'showprep_items']) {
       expect(snapshots.afterStaleAdd.rows[table], `stale Add must preserve ${table}`).toBe(snapshots.beforeStaleAdd.rows[table]);
     }
-    await page.getByRole('button', { name: 'Clear', exact: true }).click();
-    await page.getByRole('button', { name: 'Inventory', exact: true }).click();
-    await page.getByLabel('Search cards', { exact: true }).fill('91000001');
-    await page.getByRole('checkbox', { name: 'Select 91000001', exact: true }).check();
-    await page.getByRole('button', { name: 'Add to show (1)', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Show list', exact: true }).selectOption(listID);
-    await page.getByRole('button', { name: 'Add to show (1)', exact: true }).click();
-    await page.getByRole('link', { name: 'Open packing list →' }).click();
-    const packed = page.getByRole('checkbox', { name: 'Packed 91000001', exact: true });
-    await expect(packed).toBeEnabled();
+    await page.goto(`${app}/shows?list=${listID}`);
+    const scanner = page.getByRole('textbox', { name: 'Scan slab barcode' });
+    await expect(scanner).toBeEnabled(); await scanner.fill('91000001'); await scanner.press('Enter');
+    const packed = page.getByRole('article', { name: 'Show member 91000001', exact: true });
+    await expect(packed).toContainText('Confirmed');
     const added = await json(`${app}/api/show-prep/lists/${listID}`);
     await json(`${app}/api/show-prep/lists/${listID}/items/${added.items[0].id}`, 'PUT', {
       version: added.items[0].version, evaluationVersion: original.evaluation.version, packed: true,
-    }, 409);
+    }, 410);
     expect((await json(`${app}/api/show-prep/lists/${listID}`)).items).toEqual(added.items);
-    await packed.focus(); await packed.press('Space'); await expect(packed).toBeChecked();
-    await page.reload(); await expect(packed).toBeChecked();
+    await page.reload(); await expect(packed).toContainText('Confirmed');
     snapshots.packed = await state();
     const item = JSON.parse(snapshots.packed.rows.showprep_items)[0];
     expect(item.acknowledged_price_cents).toBe(240000);
@@ -220,7 +215,7 @@ const evidence = i => json(`${app}/api/show-prep/evidence/${id(i)}`);
     () => {
       observer.assertNoUnexpected();
       expect(failures.some(failure => failure.controlled), 'marked inventory read fault exercised').toBe(true);
-      if (exerciseCompleted) console.log('PASS seven-case cached real-wire pricing: six in-hand review cases, excluded unreceived direct link; whole-row immutable navigation/trials; controlled background+503; two review saves plus one normal Inventory reviewed save; real DH sync/list results and persisted effects; stale Add/Pack409, explicit packing, mobile deep link/focus; provider acquisition=0; all-context HTTP observers drained');
+      if (exerciseCompleted) console.log('PASS seven-case cached real-wire pricing: six in-hand review cases, excluded unreceived direct link; whole-row immutable navigation/trials; controlled background+503; two review saves plus one normal Inventory reviewed save; real DH sync/list results and persisted effects; retired Add/Pack410, scan-confirmed authoritative asking, mobile deep link/focus; provider acquisition=0; all-context HTTP observers drained');
     },
   ], () => browser.close());
 })().catch(error => { console.error(error); process.exitCode = 1; });

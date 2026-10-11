@@ -2211,7 +2211,9 @@ requests return `410` even with malformed bodies/IDs; they cannot approve cards.
 This is a coordinated schema/API/frontend compatibility change: an old client must
 reload after the rollout, and the API retirement must not deploy independently.
 There is no HTTP bulk-confirm-existing or transition endpoint; that operation is
-domain/CLI-only.
+domain/CLI-only. Browser recovery is tab/session/auth-scoped and explicit: reload
+must retain the submitted destination and immutable payload, not silently replay
+or generate a new approval. Logout attempts/account changes clear local recovery.
 
 List metadata contains `id`, `name`, `createdAt`, `updatedAt`, and
 `withdrawalGeneration` (integer `0..9007199254740991`). Names are trimmed, non-empty,
@@ -2276,6 +2278,13 @@ bytes; leading zeros, case and supported alphanumeric conventions are preserved.
 Generation is required (not null), an integer in `0..9007199254740991`, captured
 at Enter and never rebased on retry. Command bodies are bounded to 128 KiB;
 unknown fields and trailing JSON are rejected.
+
+A new command approves the current committed asking/status at its first successful
+transaction. Unchanged physical rescans return `already_confirmed` without
+advancing confirmation time; a fresh scan after drift returns `rechecked`, updates
+the baseline and preserves the first confirmation time. Asking is signed integer
+cents, including zero/negative recorded values; only positive asking contributes
+to known-value summaries. A scan never records receipt or approves a DH push.
 
 A committed success or terminal per-scan rejection returns `200 ScanResult`:
 

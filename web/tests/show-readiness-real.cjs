@@ -81,7 +81,7 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
       if (geometry.width <= 768) assertTouchTargetHeights(geometry.controls, name);
     }
     const checkbox = i => page.getByRole('checkbox', { name: `Select ${cert(i)}`, exact: true });
-    const add = n => page.getByRole('button', { name: `Add to show (${n})`, exact: true });
+    const financial = n => page.getByRole('button', { name: `Record sale (${n})`, exact: true });
     const bar = () => page.getByRole('region', { name: 'Bulk actions for selected cards' });
     async function idle() { await page.waitForLoadState('networkidle'); }
     async function pure(label, action) {
@@ -149,7 +149,7 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
     const filters = () => page.getByRole('group', { name: 'Price assessment filters' });
     await expect(filters().getByRole('button', { name: 'All 155', exact: true })).toBeVisible();
     await pure('Supported filter', () => filters().getByRole('button', { name: `Supported ${workerMode ? 149 : 147}`, exact: true }).click());
-    await expect(page.getByText(`${workerMode ? 149 : 147} of 155 cards`, { exact: true })).toBeVisible();
+    await expect(page.getByText(`${workerMode ? 149 : 147} of 155 in-hand cards`, { exact: true })).toBeVisible();
     // Measure event -> next rendered frame inside the browser, excluding driver latency.
     const interaction = await page.evaluate(async () => {
       const all = [...document.querySelectorAll('[aria-label="Price assessment filters"] button')].find(button => button.textContent.startsWith('All'));
@@ -163,12 +163,12 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
     // Report local measurements against the <100ms goal, not a flaky CI percentile gate.
     metrics.push({ name: '155-card-target', targetMs: 100, met: Object.values(interaction).every(ms => ms < 100) });
     await pure('select all 155', () => page.getByRole('checkbox', { name: 'Select all visible cards', exact: true }).check());
-    await expect(add(155)).toBeEnabled(); await pure('clear all 155', () => page.getByRole('button', { name: 'Clear', exact: true }).click());
+    await expect(financial(155)).toBeEnabled(); await pure('clear all 155', () => page.getByRole('button', { name: 'Clear', exact: true }).click());
     await pure('Supported filter again', () => filters().getByRole('button', { name: `Supported ${workerMode ? 149 : 147}`, exact: true }).click());
     await page.getByRole('button', { name: 'Inventory', exact: true }).click();
     // Existing geometry assertions exercise stable virtual rows with stored sales.
     await exerciseGeometry(page, context, capture, metrics, cert(1));
-    await pure('checkbox', () => checkbox(1).check()); await expect(add(1)).toBeEnabled();
+    await pure('checkbox', () => checkbox(1).check()); await expect(financial(1)).toBeEnabled();
     await expect(bar()).toContainText('$310.00 CL value');
     await expect(bar()).not.toContainText('$310.00 list');
     await expect(bar().getByRole('button', { name: 'Record sale (1)' })).toBeEnabled();
@@ -178,42 +178,37 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
     await expect(page.getByRole('region', { name: 'Price details' })).toContainText('$290.00');
     await capture('desktop-selected-evidence');
     await page.getByRole('button', { name: 'Inventory', exact: true }).click();
-    await add(1).click(); await expect(page.getByLabel('New show name')).toBeVisible();
-    await page.getByRole('button', { name: 'Close destination', exact: true }).click(); await expect(add(1)).toBeFocused();
-    await add(1).click(); await page.getByLabel('New show name').fill('Cached local show');
+    await expect(page.getByRole('button', { name: /Add.*show/ })).toHaveCount(0);
+    await page.goto(`${app}/shows`); await page.getByLabel('New show name').fill('Cached local show');
     await page.getByRole('button', { name: 'Create show list', exact: true }).click();
-    await expect(page.getByRole('combobox', { name: 'Show list', exact: true })).not.toHaveValue('');
-    await add(1).click(); await page.getByRole('link', { name: 'Open packing list →' }).click();
-    const packed = i => page.getByRole('checkbox', { name: `Packed ${cert(i)}`, exact: true });
-    await packed(1).focus(); await packed(1).press('Space'); await expect(packed(1)).toBeChecked();
-    await page.reload(); await expect(packed(1)).toBeChecked(); await capture('desktop-packed');
+    const scanner = () => page.getByRole('textbox', { name: 'Scan slab barcode' });
+    const packed = i => page.getByRole('article', { name: `Show member ${cert(i)}`, exact: true });
+    async function scan(i) { await expect(scanner()).toBeEnabled(); await scanner().fill(cert(i)); await scanner().press('Enter'); await expect(packed(i)).toContainText('Confirmed'); }
+    await scan(1); await page.reload(); await expect(packed(1)).toContainText('Confirmed'); await capture('desktop-confirmed');
     let s = await state(); snapshots.packed = s;
     const listID = s.lists[0].id; const packedRow = s.items[0];
-    expect(listWrites(s).map(r => r.method)).toEqual(['POST','POST','PUT']);
-    await command('restart'); await page.reload(); await expect(packed(1)).toBeChecked();
-    await page.getByRole('link', { name: 'Inventory →', exact: true }).click(); await inventory();
-    await checkbox(2).check(); await add(1).click();
-    await page.getByRole('combobox', { name: 'Show list', exact: true }).selectOption(listID); await add(1).click();
-    await page.getByRole('link', { name: 'Open packing list →' }).click();
-    await expect(packed(2)).not.toBeChecked();
+    expect(listWrites(s).map(r => r.method)).toEqual(['POST','POST']);
+    await command('restart'); await page.reload(); await expect(packed(1)).toContainText('Confirmed');
+    await json(`${control}/legacy-member`, 'POST', { listId: listID, purchase: 2 });
+    await page.reload(); await expect(packed(2)).toContainText('Unconfirmed. Scan');
     s = await state(); snapshots.existingListAdded = s;
     const second = s.items.find(item => item.purchase_id === id(2)); const old = await evidence(2);
     const third = await evidence(3);
-    // A clock change invalidates selected versions, without changing stored prices.
+    // A clock change updates evidence, retaining financial selection and prices.
     await page.getByRole('link', { name: 'Inventory →', exact: true }).click(); await inventory();
     await checkbox(3).check(); await page.getByRole('button', { name: 'Price review', exact: true }).click();
     await filters().getByRole('button', { name: `Supported ${workerMode ? 149 : 147}`, exact: true }).click();
     s = await command('rollover'); await page.clock.setFixedTime(new Date(s.now));
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(bar()).toContainText('Review and reselect');
+    await expect(bar()).toContainText('1 selected outside this view.');
     await bar().getByRole('button', { name: 'Reveal selected', exact: true }).click();
-    await expect(page.getByRole('checkbox', { name: 'Select Readiness slab 03', exact: true })).toBeChecked(); await expect(add(1)).toBeDisabled();
-    await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(3), evaluationVersion: third.evaluation.version }] }, 409);
-    await json(`${app}/api/show-prep/lists/${listID}/items/${second.id}`, 'PUT', { version: second.version, evaluationVersion: old.evaluation.version, packed: true }, 409);
+    await expect(page.getByRole('checkbox', { name: 'Select Readiness slab 03', exact: true })).toBeChecked(); await expect(financial(1)).toBeEnabled(); await expect(page.getByRole('button', { name: /Add.*show/ })).toHaveCount(0);
+    await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(3), evaluationVersion: third.evaluation.version }] }, 410);
+    await json(`${app}/api/show-prep/lists/${listID}/items/${second.id}`, 'PUT', { version: second.version, evaluationVersion: old.evaluation.version, packed: true }, 410);
     s = await state(); expect(s.items).toEqual(snapshots.existingListAdded.items); assertNoSource(s);
     await capture('desktop-changed-selection');
     await page.getByRole('button', { name: 'Clear', exact: true }).click();
-    await expect(page.getByText('No cards match. Change the price filter or search.', { exact: true })).toBeVisible();
+    await expect(page.getByText('No in-hand cards match. Change the price filter or search.', { exact: true })).toBeVisible();
     expect((await evidence(3)).evaluation.readiness.state).toBe('stale'); await capture('desktop-incomplete-supported');
     await filters().getByRole('button', { name: 'All 155', exact: true }).click();
     await page.getByRole('button', { name: 'Inventory', exact: true }).click();
@@ -221,8 +216,7 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
       await page.setViewportSize(viewport); await page.evaluate(() => window.scrollTo(0,0));
       await checkbox(1).check(); await checkbox(1).scrollIntoViewIfNeeded();
       await page.evaluate(() => window.scrollBy(0,240)); await capture(`${viewport.name}-selected`);
-      await add(1).click(); await capture(`${viewport.name}-destination`);
-      await page.getByRole('button', { name: 'Close destination', exact: true }).click();
+      await expect(financial(1)).toBeEnabled(); await capture(`${viewport.name}-financial-selection`);
       for (let turn = 0; turn < 3; turn++) {
         await page.evaluate(() => { document.querySelectorAll('.show-inventory .overflow-y-auto').forEach(e => { e.scrollTop = e.scrollHeight; }); window.scrollTo(0,document.body.scrollHeight); });
         await page.waitForTimeout(180);
@@ -231,9 +225,9 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
       await page.keyboard.press('Escape'); await expect(bar()).toHaveCount(0);
       await page.evaluate(() => document.querySelectorAll('.show-inventory .overflow-y-auto').forEach(e => { e.scrollTop = 0; }));
     }
-    await page.goto(`${app}/shows?list=${listID}`); await expect(packed(1)).toBeChecked();
-    // Weak/stale evidence is not a blanket packing prohibition; current version is explicit.
-    await expect(packed(2)).toBeEnabled(); await packed(2).focus(); await packed(2).press('Space'); await expect(packed(2)).toBeChecked(); await capture('tablet-packing-history');
+    await page.goto(`${app}/shows?list=${listID}`); await expect(packed(1)).toContainText('Confirmed');
+    // Weak/stale evidence is not a blanket physical-confirmation prohibition.
+    await scan(2); await capture('tablet-confirmation-history');
     s = await state(); snapshots.final = s;
     expect(s.items.find(item => item.purchase_id === id(1))).toEqual(packedRow);
     assertNoSource(s); expect(s.evidence).toEqual(before.evidence); expect(s.ledgerUnchanged).toBe(true);
@@ -251,11 +245,11 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
       await page.getByLabel('Search cards', { exact: true }).fill(cert(29));
       await expect(page.getByRole('link', { name: `Review price ${cert(29)}: Data unavailable`, exact: true })).toBeVisible();
       const held = await evidence(29);
-      await json(`${app}/api/show-prep/lists/${listID}/items`, 'POST', { items: [{ purchaseId: id(29), evaluationVersion: held.evaluation.version }] });
+      await json(`${control}/legacy-member`, 'POST', { listId: listID, purchase: 29 });
       const conflictList = '22222222-2222-4222-8222-222222222222';
       await json(`${app}/api/show-prep/lists`, 'POST', { id: conflictList, name: 'Publication conflict target' });
       const added = await state(); const heldItem = added.items.find(item => item.purchase_id === id(29));
-      await checkbox(29).check(); await expect(add(1)).toBeEnabled();
+      await checkbox(29).check(); await expect(financial(1)).toBeEnabled();
       await json(`${app}/api/admin/show-prep/worker/retry`, 'POST', undefined, 202);
       await expect.poll(async () => (await state()).calls.length).toBe(sourceBaseline + 1);
       expect((await json(`${app}/api/admin/show-prep/worker`)).state).toBe('running');
@@ -273,22 +267,22 @@ const listWrites = s => s.requests.filter(r => r.path.startsWith('/api/show-prep
       await expect.poll(async () => (await json(`${app}/api/admin/show-prep/worker`)).state).toBe('idle');
       await command('publication-stop');
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-      await expect(bar()).toContainText('Review and reselect');
-      await expect(checkbox(29)).toBeChecked(); await expect(add(1)).toBeDisabled();
+      await expect(page.getByRole('link', { name: `Review price ${cert(29)}: Supported`, exact: true })).toBeVisible();
+      await expect(checkbox(29)).toBeChecked(); await expect(financial(1)).toBeEnabled(); await expect(page.getByRole('button', { name: /Add.*show/ })).toHaveCount(0);
       const boxAfter = await checkbox(29).boundingBox();
       metrics.push({ name: 'background-publication-held-row', before: boxBefore, after: boxAfter });
       expect(Math.abs(boxAfter.y - boxBefore.y)).toBeLessThan(2);
-      // A new destination exercises stale Add, rather than the intentionally
-      // idempotent replay of an already-added membership.
-      await json(`${app}/api/show-prep/lists/${conflictList}/items`, 'POST', { items: [{ purchaseId: id(29), evaluationVersion: held.evaluation.version }] }, 409);
-      await json(`${app}/api/show-prep/lists/${listID}/items/${heldItem.id}`, 'PUT', { version: heldItem.version, evaluationVersion: held.evaluation.version, packed: true }, 409);
+      // Retired mutation routes cannot approve newly published evidence, for
+      // either a new destination or an existing historical membership.
+      await json(`${app}/api/show-prep/lists/${conflictList}/items`, 'POST', { items: [{ purchaseId: id(29), evaluationVersion: held.evaluation.version }] }, 410);
+      await json(`${app}/api/show-prep/lists/${listID}/items/${heldItem.id}`, 'PUT', { version: heldItem.version, evaluationVersion: held.evaluation.version, packed: true }, 410);
       const published = await state(); const changed = await evidence(29);
       expect(changed.evaluation.status).toBe('supported'); expect(changed.evaluation.version).not.toBe(held.evaluation.version);
       expect(published.items).toEqual(added.items); expect(published.ledgerUnchanged).toBe(true);
       expect(published.calls.length).toBe(sourceBaseline + 1); expect(published.providerRequests.length).toBe(providerBaseline + 2);
       snapshots.concurrentPublication = { held, changed, before: added, after: published };
       await capture('desktop-background-publication-conflict');
-      console.log('PASS separate concurrent-publication phase: actual runtime +1 source/+1 token, held selection/geometry retained, explicit Add/Pack409, financial form usable, list history and financial rows unchanged');
+      console.log('PASS separate concurrent-publication phase: actual runtime +1 source/+1 token, held selection/geometry retained, retired Add/Pack410, financial form usable, list history and financial rows unchanged');
     }
     snapshots.browserRequests = pageRequests;
     expect(acquisitionRequests).toEqual([]); expect(errors).toEqual([]);

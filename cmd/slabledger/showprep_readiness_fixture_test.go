@@ -113,10 +113,10 @@ func seedReadinessUpgrade(t *testing.T, db *postgres.DB, now time.Time) map[stri
 	require.NoError(t, migration.Up())
 	upgraded, err := readinessLedger(ctx, db)
 	require.NoError(t, err)
-	require.Equal(t, legacy, upgraded, "45->47 must preserve every financial and legacy comp row")
+	require.Equal(t, legacy, upgraded, "45->49 must preserve every financial and legacy comp row")
 	var version, count int
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version))
-	require.Equal(t, 47, version)
+	require.Equal(t, 49, version)
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM showprep_evidence`).Scan(&count))
 	require.Zero(t, count)
 	return legacy
