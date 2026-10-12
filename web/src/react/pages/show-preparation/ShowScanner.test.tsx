@@ -34,8 +34,7 @@ function mount(navigation = false) {
   const view = render(<QueryClientProvider client={qc}><AuthProvider><VerifyIdentity /><MemoryRouter initialEntries={[`/shows?list=${listId}`]}>{navigation && <Switch />}<ShowPreparationPage /></MemoryRouter></AuthProvider></QueryClientProvider>);
   return { ...view, qc };
 }
-function scan(cert: string) {
-  const field = screen.getByRole('textbox', { name: 'Scan slab barcode' });
+function scan(cert: string, field = screen.getByRole('textbox', { name: 'Scan slab barcode' })) {
   fireEvent.change(field, { target: { value: cert } }); fireEvent.keyDown(field, { key: 'Enter' }); return field;
 }
 beforeEach(() => {
@@ -214,7 +213,14 @@ it('auth reset discards in-flight owners and prevents queued calls or stale comp
 });
 it('never silently drops the 201st unsettled barcode', async () => {
   gate = new Promise(resolve => { release = resolve; }); mount(); await ready();
-  for (let i = 0; i < 200; i++) scan(String(i)); scan('overflow');
+  // Avoid repeated accessibility walks through the growing DOM under CI load;
+  // reuse the stable input without batching its keyboard events.
+  const field = screen.getByRole('textbox', { name: 'Scan slab barcode' });
+  const lookups = vi.spyOn(screen, 'getByRole');
+  for (let i = 0; i < 200; i++) scan(String(i), field); scan('overflow', field);
+  expect(lookups).not.toHaveBeenCalled();
+  lookups.mockRestore();
+  expect(screen.getByRole('textbox', { name: 'Scan slab barcode' })).toBe(field);
   expect(await screen.findByRole('alert')).toHaveTextContent(/200.*unsettled/i);
   expect(JSON.parse(sessionStorage.getItem(sessionStorage.key(0)!)!).scans).toHaveLength(200);
 });

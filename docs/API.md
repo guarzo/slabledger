@@ -1400,11 +1400,37 @@ price and syncs channels on DH. A standalone **Set Price** action sends
 `"priceOnly": true`: it saves the price without starting a listing. Unlisted
 prices stay local: no price PATCH or DH attempt is created. Listing sends the
 latest committed price; it does not depend on an earlier inventory-price sync.
-For already-listed cards, the existing asynchronous DH price sync still runs.
-The scheduled drift scan also selects only listed cards. Existing unresolved DH
+For already-listed cards, asynchronous repricing requires the explicit
+`DH_LIVE_PRICE_ENABLED=true` deployment gate (default `false`). When disabled,
+neither inline nor scheduled repricing is constructed; there is no legacy price
+PATCH fallback. Normal listing is independent of this gate.
+The scheduled drift scan selects listed candidates using reviewed/override prices
+and resolves their timestamp precedence under ownership. Existing unresolved DH
 attempts and sale/return guards are not cleared or bypassed by saving a price.
 Omit both flags for ordinary price review to retain automatic listing behavior.
 `manualList` and `priceOnly` cannot both be true (`400`).
+
+Enabled repricing uses `POST /api/v1/enterprise/inventory/:id/live-price` with
+only `listing_price_cents`. The operation key, target, and cents are committed in
+the existing journal before dispatch. An open keyed `price/live_price` operation
+is replayed with identical input before a newer price is prepared, including
+when the current price is overridden or the card is no longer listed. Pending
+operations are discovered separately from ordinary price drift. A successful
+historical receipt settles the journal; it is not proof of the current DH price
+or eBay/Shopify completion, and cannot restore status or overwrite reviewed prices.
+
+Transport uncertainty and 5xx leave the operation open for the next scheduler
+tick. A 429 stores its `Retry-After` deadline in `retry_not_before`; both inline
+and scheduled calls honor that timestamp across restarts. Missing/malformed
+`Retry-After` conservatively defers for 15 minutes. Exact receipt validation and
+local completion share the owning transaction; persistence/COMMIT errors require
+a fresh durable read and same-key replay, never a fresh replacement key.
+Structured post-key-lock refusals can settle a rejected live-price operation;
+authentication, conflicting-key, unknown/malformed response, and generic 404
+failures remain fenced for investigation. No stale-link reset is inferred from
+an error. Historical unkeyed `price/patch` operations are not replayed, rekeyed,
+or cleared. Do not enable this gate until DH's live-price migration and API
+deployment are confirmed; client installation alone does not repair incidents.
 
 **Path params:** `purchaseId` (purchase UUID)
 

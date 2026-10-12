@@ -112,13 +112,15 @@ func (c *Client) handleHTTPError(ctx context.Context, method, url string, status
 	// http.Response.Header is always non-nil for any response returned by
 	// the transport, so we can read it directly without nil guards.
 	ue := &UpstreamError{
-		Provider:   c.providerName,
-		Op:         fmt.Sprintf("%s %s", method, opURL),
-		StatusCode: statusCode,
-		Body:       sanitized,
-		Message:    extractUpstreamMessage(body, headers.Get("Content-Type")),
-		Code:       extractUpstreamCode(body),
-		RequestID:  headers.Get("X-Request-Id"),
+		Provider:    c.providerName,
+		Op:          fmt.Sprintf("%s %s", method, opURL),
+		StatusCode:  statusCode,
+		Body:        sanitized,
+		Message:     extractUpstreamMessage(body, headers.Get("Content-Type")),
+		Code:        extractUpstreamCode(body),
+		RequestID:   headers.Get("X-Request-Id"),
+		RetryAfter:  headers.Get("Retry-After"),
+		ContentType: headers.Get("Content-Type"),
 	}
 	switch statusCode {
 	case 400:

@@ -239,14 +239,17 @@ func (w *wiring) buildCampaignsAndIntegrations(ctx context.Context, cfg *config.
 	// DH price re-sync service: drives both the inline goroutine on review-price
 	// edits (via CampaignsHandler) and the periodic reconciliation scheduler.
 	// Constructed once so both consumers share the same instance.
-	if w.dhClient != nil && w.dhClient.EnterpriseAvailable() && w.campaignsInit.purchaseStore != nil {
-		w.dhPriceSyncService = dhpricing.NewService(
-			w.campaignsInit.purchaseStore,                                           // PurchaseLookup: GetPurchase + ListDHPriceDrift
-			dhlistingadapter.NewInventoryAdapter(w.dhClient).WithMutationReceipts(), // DHPriceUpdater
-			w.campaignsInit.purchaseStore,                                           // DHPriceWriter: UpdatePurchaseDHPriceSync
-			w.campaignsInit.purchaseStore,                                           // DHReconcileResetter
+	if cfg.DHPriceSync.LivePriceEnabled && w.dhClient != nil && w.dhClient.EnterpriseAvailable() && w.campaignsInit.purchaseStore != nil {
+		// Do not construct a legacy price PATCH service when this gate is off.
+		// Both inline saves and the scheduler share this receipt-backed service.
+		w.dhPriceSyncService = dhpricing.NewLivePriceService(
+			w.campaignsInit.purchaseStore,
+			dhlistingadapter.NewLivePriceAdapter(w.dhClient),
+			w.campaignsInit.purchaseStore,
+			w.campaignsInit.mutationCoordinator,
+			w.campaignsInit.returnStore,
+			w.campaignsInit.returnStore,
 			logger,
-			dhpricing.WithMutationCoordinator(w.campaignsInit.mutationCoordinator, w.campaignsInit.returnStore, w.campaignsInit.returnStore),
 		)
 	}
 }

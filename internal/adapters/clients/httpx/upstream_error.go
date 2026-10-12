@@ -20,13 +20,15 @@ import (
 // they return only the existing apperrors. An upstream error is a received
 // response, NOT evidence that a mutation did not execute (especially for 5xx).
 type UpstreamError struct {
-	Provider   string // e.g. "dh"
-	Op         string // logical operation, e.g. "POST /v1/enterprise/inventory/123/sync"
-	StatusCode int    // upstream HTTP status (e.g. 422)
-	Body       string // upstream response body (sanitized, length-capped)
-	Message    string // best-effort extracted human message (e.g. JSON "error" field)
-	Code       string // structured JSON code, extracted before body truncation
-	RequestID  string // upstream x-request-id header if present
+	Provider    string // e.g. "dh"
+	Op          string // logical operation, e.g. "POST /v1/enterprise/inventory/123/sync"
+	StatusCode  int    // upstream HTTP status (e.g. 422)
+	Body        string // upstream response body (sanitized, length-capped)
+	Message     string // best-effort extracted human message (e.g. JSON "error" field)
+	Code        string // structured JSON code, extracted before body truncation
+	RequestID   string // upstream x-request-id header if present
+	RetryAfter  string // raw Retry-After header; callers interpret it for their operation
+	ContentType string // response media type; display text is not a structured contract
 }
 
 // Error implements error.

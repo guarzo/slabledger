@@ -12,11 +12,11 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-const attemptColumns = `id,captured_purchase_id,dh_inventory_id,cert_number,grader,kind,phase,idempotency_key,payload_identity,COALESCE(return_operation_id,''),started_at,settled_at,outcome`
+const attemptColumns = `id,captured_purchase_id,dh_inventory_id,cert_number,grader,kind,phase,idempotency_key,payload_identity,COALESCE(return_operation_id,''),started_at,settled_at,outcome,retry_not_before`
 
 func scanAttempt(row scanner) (*inventory.DHMutationAttempt, error) {
 	var a inventory.DHMutationAttempt
-	err := row.Scan(&a.ID, &a.CapturedPurchaseID, &a.DHInventoryID, &a.CertNumber, &a.Grader, &a.Kind, &a.Phase, &a.Key, &a.PayloadIdentity, &a.ReturnOperationID, &a.StartedAt, &a.SettledAt, &a.Outcome)
+	err := row.Scan(&a.ID, &a.CapturedPurchaseID, &a.DHInventoryID, &a.CertNumber, &a.Grader, &a.Kind, &a.Phase, &a.Key, &a.PayloadIdentity, &a.ReturnOperationID, &a.StartedAt, &a.SettledAt, &a.Outcome, &a.RetryNotBefore)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -49,7 +49,7 @@ func (s *ConfirmedReturnStore) PrepareDHMutation(ctx context.Context, id string,
 	p := state.Purchase
 	open := state.PrecedingAttempt
 	if open != nil {
-		if (req.Kind != "sale" && req.Kind != "return") || req.Key == "" || open.Key != req.Key || open.Kind != req.Kind || open.Phase != req.Phase || open.PayloadIdentity != req.PayloadIdentity || open.ReturnOperationID != req.ReturnOperationID || open.CapturedPurchaseID != id || open.DHInventoryID != p.DHInventoryID || open.CertNumber != p.CertNumber || open.Grader != p.Grader {
+		if (req.Kind != "sale" && req.Kind != "return" && (req.Kind != "price" || req.Phase != "live_price")) || req.Key == "" || open.Key != req.Key || open.Kind != req.Kind || open.Phase != req.Phase || open.PayloadIdentity != req.PayloadIdentity || open.ReturnOperationID != req.ReturnOperationID || open.CapturedPurchaseID != id || open.DHInventoryID != p.DHInventoryID || open.CertNumber != p.CertNumber || open.Grader != p.Grader {
 			return nil, inventory.NewReturnConflict("preceding_dh_mutation_uncertain", "preceding DH attempt "+open.ID+" ("+open.Kind+"/"+open.Phase+") requires verified completion evidence")
 		}
 		open.Replaying = true
@@ -94,7 +94,7 @@ func (s *ConfirmedReturnStore) OwnDHMutation(ctx context.Context, id string, a *
 	}
 	open := state.PrecedingAttempt
 	p := state.Purchase
-	if a == nil || open == nil || open.ID != a.ID || open.Kind != a.Kind || open.Key != a.Key || open.PayloadIdentity != a.PayloadIdentity || open.ReturnOperationID != a.ReturnOperationID || p.DHInventoryID != a.DHInventoryID || p.CertNumber != a.CertNumber || p.Grader != a.Grader || id != a.CapturedPurchaseID {
+	if a == nil || open == nil || open.ID != a.ID || open.Kind != a.Kind || open.Phase != a.Phase || open.CapturedPurchaseID != a.CapturedPurchaseID || open.DHInventoryID != a.DHInventoryID || open.CertNumber != a.CertNumber || open.Grader != a.Grader || open.Key != a.Key || open.PayloadIdentity != a.PayloadIdentity || open.ReturnOperationID != a.ReturnOperationID || p.DHInventoryID != a.DHInventoryID || p.CertNumber != a.CertNumber || p.Grader != a.Grader || id != a.CapturedPurchaseID {
 		return inventory.NewReturnConflict("identity_conflict", "prepared attempt or target changed before execution")
 	}
 	scope.attemptID = a.ID
