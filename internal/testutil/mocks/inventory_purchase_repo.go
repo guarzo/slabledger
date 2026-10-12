@@ -62,6 +62,7 @@ type PurchaseRepositoryMock struct {
 	UpdatePurchaseDHPriceSyncFn          func(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error
 	UnmatchPurchaseDHFn                  func(ctx context.Context, purchaseID string, pushStatus string) error
 	ListDHPriceDriftFn                   func(ctx context.Context) ([]inventory.Purchase, error)
+	ListPendingDHLivePricesFn            func(ctx context.Context) ([]string, error)
 	ReattributePurchaseFn                func(ctx context.Context, purchaseID string, r inventory.Reattribution) error
 	UpdatePurchaseAttributionNameFn      func(ctx context.Context, purchaseID, psaName, source string) error
 	SetDHSaleConflictFn                  func(ctx context.Context, purchaseID, reason string) error

@@ -420,15 +420,21 @@ A manual trigger is available at `POST /api/admin/dh-reconcile/trigger` (admin-o
 ### DH Price Sync
 
 **File:** `dh_price_sync.go`
-**Purpose:** Reconciles drift between `reviewed_price_cents` and
-`dh_listing_price_cents` for items already on DH.
+**Purpose:** Reconciles committed reviewed/override prices for listed inventory
+using DH's receipt-backed live-price endpoint. Unlisted prices remain local until
+listing. Open keyed live-price operations replay before newer drift, even when
+local sale/status/price changes remove them from ordinary drift candidates.
 
-Also runs inline on every review-price edit; the scheduler is the safety net for failed
-or missed inline syncs.
+Inline saves and this scheduler share one service, constructed only after
+`DH_LIVE_PRICE_ENABLED=true`. Wait for confirmed provider migration/API deployment
+before enabling. Disabled means no repricing, not a fallback to status PATCH.
+Transport/5xx failures replay on later ticks; persisted `Retry-After` cooldowns
+are honored across processes and restarts. Old unkeyed attempts remain fenced.
 
 | Config | Env Var | Default | Description |
 |--------|---------|---------|-------------|
-| `Enabled` | `DH_PRICE_SYNC_ENABLED` | `true` | Enable/disable |
+| `LivePriceEnabled` | `DH_LIVE_PRICE_ENABLED` | `false` | Gate both inline and scheduled live repricing |
+| `Enabled` | `DH_PRICE_SYNC_ENABLED` | `true` | Enable/disable scheduler after the live-price gate |
 | `Interval` | `DH_PRICE_SYNC_INTERVAL` | `15m` | How often to run |
 
 ### DH Push

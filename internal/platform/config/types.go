@@ -230,12 +230,13 @@ func (c *DHSoldReconcilerConfig) ApplyDefaults() {
 
 // DHPriceSyncConfig controls the DH price re-sync scheduler. Periodically
 // reconciles drift between reviewed_price_cents and dh_listing_price_cents
-// for purchases already pushed to or listed on DH. Also runs inline on
+// for purchases already listed on DH. Also runs inline on
 // every review-price edit; the scheduler is the safety net for
 // failed/missed inline syncs.
 type DHPriceSyncConfig struct {
-	Enabled  bool          // default: true
-	Interval time.Duration // default: 15m
+	LivePriceEnabled bool          // default: false; requires deployed receipt-backed endpoint
+	Enabled          bool          // default: true
+	Interval         time.Duration // default: 15m
 }
 
 // ApplyDefaults sets zero-valued fields to sensible defaults.

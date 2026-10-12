@@ -8,7 +8,7 @@ import (
 
 // DHMutationRequest describes ONE immutable outbound orchestration. The payload
 // identity must cover every request field and phase (including sync/revert).
-// Only receipt-backed sale/return operations can replay an open attempt.
+// Only receipt-backed keyed sale/return and price/live_price can replay an open attempt.
 type DHMutationRequest struct {
 	Kind              string
 	Phase             string
@@ -29,6 +29,7 @@ type DHMutationAttempt struct {
 	ReturnOperationID  string     `json:"operationId,omitempty"`
 	StartedAt          time.Time  `json:"startedAt"`
 	SettledAt          *time.Time `json:"settledAt,omitempty"`
+	RetryNotBefore     *time.Time `json:"retryNotBefore,omitempty"`
 	Outcome            string     `json:"outcome"`
 	Replaying          bool       `json:"-"`
 }
@@ -39,6 +40,9 @@ type DHMutationAttempt struct {
 type DHMutationSettlement struct {
 	Outcome string
 	Receipt string
+	// A price-only execution with no local writes can commit its cooldown
+	// under uninterrupted ownership. This is not terminal evidence.
+	RetryNotBefore *time.Time
 }
 
 // DHMutationGuards is the narrow shared integration port. Authorization is
@@ -114,6 +118,7 @@ func (c *DHMutationCoordinator) Run(ctx context.Context, id string, prepare func
 		return err
 	}
 	var rejection *DHNonMutationError
+	var retry *DHMutationRetryError
 	err = c.scope.WithPurchaseMutation(ctx, id, func(owned context.Context) error {
 		if e := c.repo.OwnDHMutation(owned, id, attempt); e != nil {
 			return e
@@ -121,13 +126,43 @@ func (c *DHMutationCoordinator) Run(ctx context.Context, id string, prepare func
 		result, e := execute(owned, attempt)
 		if e != nil {
 			errors.As(e, &rejection)
+			errors.As(e, &retry)
 			return e
 		}
 		if result == nil {
 			return NewReturnConflict("terminal_receipt_required", "no verified terminal response")
 		}
+		if result.RetryNotBefore != nil {
+			if attempt.Kind != "price" || attempt.Phase != "live_price" || attempt.Key == "" || result.Outcome != "" || result.Receipt != "" {
+				return NewReturnConflict("invalid_mutation_deferral", "only a keyed price-only response can commit a nonterminal cooldown")
+			}
+			// Retain the received deadline if cancellation or COMMIT failure
+			// prevents the preferred atomic deferral from becoming durable.
+			retry = &DHMutationRetryError{NotBefore: *result.RetryNotBefore}
+			retries, ok := c.repo.(DHMutationRetryRepository)
+			if !ok {
+				return NewReturnConflict("coordination_unavailable", "durable DH retry persistence required")
+			}
+			return retries.DeferDHMutation(owned, id, attempt, *result.RetryNotBefore)
+		}
 		return c.repo.SettleDHMutation(owned, id, attempt, *result)
 	})
+	// Rate limits keep uncertainty open. Atomic live-price deferral is preferred;
+	// retain its deadline after a failed commit or a caller-cancelled execution.
+	if err != nil && retry != nil {
+		persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		e := c.scope.WithPurchaseMutation(persist, id, func(owned context.Context) error {
+			if e := c.repo.OwnDHMutation(owned, id, attempt); e != nil {
+				return e
+			}
+			if repo, ok := c.repo.(DHMutationRetryRepository); ok {
+				return repo.DeferDHMutation(owned, id, attempt, retry.NotBefore)
+			}
+			return NewReturnConflict("coordination_unavailable", "durable DH retry persistence required")
+		})
+		return errors.Join(err, e)
+	}
 	// Discard execute's local writes on rejection; settle its known nonmutation
 	// in a new short transaction. Cancellation is not a reason to lose evidence.
 	if err != nil && rejection != nil && IsDefinitiveDHNonMutation(err) && !attempt.Replaying {

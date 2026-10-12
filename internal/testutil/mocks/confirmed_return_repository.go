@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
@@ -13,6 +14,7 @@ type ConfirmedReturnRepositoryMock struct {
 	PrepareDHMutationFn          func(context.Context, string, inventory.DHMutationRequest) (*inventory.DHMutationAttempt, error)
 	OwnDHMutationFn              func(context.Context, string, *inventory.DHMutationAttempt) error
 	SettleDHMutationFn           func(context.Context, string, *inventory.DHMutationAttempt, inventory.DHMutationSettlement) error
+	DeferDHMutationFn            func(context.Context, string, *inventory.DHMutationAttempt, time.Time) error
 	GetReturnStateFn             func(context.Context, string) (*inventory.ConfirmedReturnState, error)
 	ResolveReturnFn              func(context.Context, string, inventory.ConfirmReturnRequest) (*inventory.ConfirmedReturnState, error)
 	AssertMutationAllowedFn      func(context.Context, string) error
@@ -23,6 +25,14 @@ type ConfirmedReturnRepositoryMock struct {
 }
 
 var _ inventory.ConfirmedReturnRepository = (*ConfirmedReturnRepositoryMock)(nil)
+var _ inventory.DHMutationRetryRepository = (*ConfirmedReturnRepositoryMock)(nil)
+
+func (m *ConfirmedReturnRepositoryMock) DeferDHMutation(ctx context.Context, id string, a *inventory.DHMutationAttempt, notBefore time.Time) error {
+	if m.DeferDHMutationFn != nil {
+		return m.DeferDHMutationFn(ctx, id, a, notBefore)
+	}
+	return nil
+}
 
 func (m *ConfirmedReturnRepositoryMock) AssertDHPreparationAllowed(ctx context.Context) error {
 	if m.AssertDHPreparationAllowedFn != nil {

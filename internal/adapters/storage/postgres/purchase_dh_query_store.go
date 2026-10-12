@@ -297,7 +297,7 @@ func (ps *PurchaseStore) UpdatePurchaseCLCardMetadata(ctx context.Context, id, p
 
 // UpdatePurchaseDHPriceSync updates only dh_listing_price_cents and
 // dh_last_synced_at. Used by the DH price re-sync flow after a successful
-// DH PATCH; avoids the full-field overwrite of UpdatePurchaseDHFields.
+// DH price update; avoids the full-field overwrite of UpdatePurchaseDHFields.
 func (ps *PurchaseStore) UpdatePurchaseDHPriceSync(ctx context.Context, id string, listingPriceCents int, syncedAt time.Time) error {
 	return ps.execDHMutation(ctx, id, "update dh price sync",
 		`UPDATE campaign_purchases
@@ -309,9 +309,10 @@ func (ps *PurchaseStore) UpdatePurchaseDHPriceSync(ctx context.Context, id strin
 	)
 }
 
-// ListDHPriceDrift returns listed unsold purchases whose reviewed price has diverged
-// from dh_listing_price_cents. Excludes items not on DH yet, items with no
-// reviewed price, items whose push was dismissed or held, and sold items.
+// ListDHPriceDrift returns listed unsold purchases whose reviewed or override price
+// has diverged from dh_listing_price_cents. This is a conservative candidate
+// query; the service resolves timestamp precedence under ownership. Excludes
+// items not on DH yet, held/dismissed pushes, no committed price, and sold items.
 // Ordered oldest-synced first so the most-stale items sync first across
 // scheduler ticks; never-synced items (default empty-string timestamp) sort
 // before any RFC3339 string in ASC order.
@@ -321,8 +322,8 @@ func (ps *PurchaseStore) ListDHPriceDrift(ctx context.Context) ([]inventory.Purc
 		 LEFT JOIN campaign_sales s ON s.purchase_id = p.id
 		 WHERE p.dh_inventory_id > 0
 		   AND p.dh_status = 'listed'
-		   AND p.reviewed_price_cents > 0
-		   AND p.reviewed_price_cents != COALESCE(p.dh_listing_price_cents, 0)
+		   AND ((p.reviewed_price_cents > 0 AND p.reviewed_price_cents != COALESCE(p.dh_listing_price_cents, 0))
+		        OR (p.override_price_cents > 0 AND p.override_price_cents != COALESCE(p.dh_listing_price_cents, 0)))
 		   AND COALESCE(p.dh_push_status, '') NOT IN ($1, $2)
 		   AND s.id IS NULL
 		 ORDER BY p.dh_last_synced_at ASC, p.id`,
