@@ -141,6 +141,24 @@ rollback path above (steps 1–4, no `migrate.Down()` needed):
   Do not hardcode a sale link, reverse money, manually restock or publish as a
   substitute for the confirmed-return protocol.
 
+### Legacy unkeyed price PATCH administrative abandonment
+
+- Deploy migration `000051` before any repair; do not restart an older binary
+  against the newer migration version without checking migration compatibility.
+- The storage-only `ConfirmedReturnStore.AbandonLegacyDHPrice` requires purchase
+  ownership, exact frozen attempt/target/payload, unchanged positive approved
+  price, operator authorization and evidence that the old request is quiescent.
+  It refuses sales, return episodes, sale conflicts and existing receipt evidence.
+- `abandoned` means **original provider outcome unknown**, not provider rejection
+  or success. Its administrative JSON audit is excluded from normal receipt
+  replay. Preserve the journal, payload and empty idempotency key; never retry,
+  rekey or delete the old attempt as part of closure.
+- Closure changes no purchase or remote state. Only after independently confirming
+  a deleted DH target may an operator separately call
+  `ResetDHFieldsForRepushDueToDelete` in the **same owned transaction**.
+- Migration `000051` cannot be rolled back while abandoned history is retained;
+  down fails without coercing or deleting that history.
+
 ## Where things live
 
 - Prod URL: `https://slabledger.dpao.la`
