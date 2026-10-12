@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -309,9 +310,11 @@ func (ps *PurchaseStore) UpdatePurchaseDHPriceSync(ctx context.Context, id strin
 	)
 }
 
-// ListDHPriceDrift returns listed unsold purchases whose reviewed or override price
-// has diverged from dh_listing_price_cents. This is a conservative candidate
-// query; the service resolves timestamp precedence under ownership. Excludes
+// ListDHPriceDrift returns listed unsold purchases whose effective committed price
+// has diverged from dh_listing_price_cents. SQL finds reviewed/override candidates;
+// the canonical resolver filters them before returning, avoiding no-op ownership
+// while preserving offset-aware parsing and malformed legacy timestamp fallback.
+// The service rechecks the price under ownership. Excludes
 // items not on DH yet, held/dismissed pushes, no committed price, and sold items.
 // Ordered oldest-synced first so the most-stale items sync first across
 // scheduler ticks; never-synced items (default empty-string timestamp) sort
@@ -333,9 +336,16 @@ func (ps *PurchaseStore) ListDHPriceDrift(ctx context.Context) ([]inventory.Purc
 	if err != nil {
 		return nil, fmt.Errorf("list dh price drift: %w", err)
 	}
-	return scanRows(ctx, rows, func(rs *sql.Rows) (inventory.Purchase, error) {
+	purchases, err := scanRows(ctx, rows, func(rs *sql.Rows) (inventory.Purchase, error) {
 		var p inventory.Purchase
 		err := scanPurchase(rs, &p)
 		return p, err
 	})
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(purchases, func(p inventory.Purchase) bool {
+		price := inventory.ResolveListingPriceCents(&p)
+		return price <= 0 || price == p.DHListingPriceCents
+	}), nil
 }
