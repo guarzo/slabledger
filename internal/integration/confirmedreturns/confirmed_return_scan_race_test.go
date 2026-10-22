@@ -149,6 +149,10 @@ func TestScanDHSaleCheckOpenListingAttempt(t *testing.T) {
 			var scan inventory.ScanCertResult
 			require.NoError(t, json.Unmarshal(raw, &scan))
 			require.Equal(t, "existing", scan.Status)
+			// Scanning no longer auto-lists. Start the ordinary listing caller
+			// explicitly so this fixture still exercises its preparation barrier.
+			listingFinished := make(chan struct{})
+			go func() { listing.ListPurchases(listingCtx, []string{cert}); close(listingFinished) }()
 			select {
 			case <-prepared:
 			case <-time.After(10 * time.Second):
@@ -179,6 +183,11 @@ func TestScanDHSaleCheckOpenListingAttempt(t *testing.T) {
 			case <-time.After(10 * time.Second):
 				t.Fatal("listing execution did not finish")
 			}
+			select {
+			case <-listingFinished:
+			case <-time.After(10 * time.Second):
+				t.Fatal("listing recovery bookkeeping did not finish")
+			}
 			require.Eventually(t, func() bool {
 				var outcome string
 				return db.QueryRowContext(ctx, `SELECT outcome FROM dh_mutation_attempts WHERE id=$1`, attemptID).Scan(&outcome) == nil && outcome == tc.outcome
@@ -205,21 +214,16 @@ func TestScanDHSaleCheckOpenListingAttempt(t *testing.T) {
 				code, raw = returnHTTP(t, api, "POST", path+"/confirm-return", body, true)
 				require.Equal(t, 409, code, string(raw))
 				require.Contains(t, string(raw), "preceding_dh_mutation_uncertain")
-				// Another real scan must attempt auto-list, but the open journal
-				// must prevent a second preparation and provider PATCH.
+				// Another scan must not auto-list. A background listing caller
+				// also cannot spend the pending operator retry permission.
+				before := scopeCalls.Load()
 				code, raw = returnHTTP(t, api, "POST", "/api/purchases/scan-cert", fmt.Sprintf(`{"certNumber":%q}`, cert), true)
 				require.Equal(t, 200, code, string(raw))
 				require.NoError(t, json.Unmarshal(raw, &scan))
 				require.Equal(t, "existing", scan.Status)
-				require.Eventually(t, func() bool { return scopeCalls.Load() >= 3 }, 5*time.Second, 20*time.Millisecond, "second scan must reach listing preparation")
-				listingDone := make(chan struct{})
-				go func() { handler.WaitBackground(); close(listingDone) }()
-				select {
-				case <-listingDone:
-				case <-time.After(5 * time.Second):
-					t.Fatal("second scan listing did not finish")
-				}
-				require.Equal(t, int32(3), scopeCalls.Load(), "second scan must not reach execution")
+				require.Equal(t, before, scopeCalls.Load(), "scan must not start listing")
+				listing.ListPurchases(listingCtx, []string{cert})
+				require.Equal(t, before+1, scopeCalls.Load(), "background listing must not reach execution")
 				var attempts int
 				require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM dh_mutation_attempts`).Scan(&attempts))
 				require.Equal(t, 1, attempts, "second scan must not prepare a new journal entry")

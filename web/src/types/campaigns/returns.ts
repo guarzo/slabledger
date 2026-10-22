@@ -63,6 +63,7 @@ export interface DHMutationAttempt {
   startedAt: string;
   settledAt?: string;
   retryNotBefore?: string;
+  retryable?: boolean;
   outcome: string;
 }
 

@@ -111,6 +111,20 @@ POST /api/v1/enterprise/inventory/{id}/sync
 
 This is triggered when a user marks a card for listing in the UI.
 
+## Retrying a failed listing
+
+If listing an already-enrolled card fails at the inventory PATCH step, SlabLedger
+can retain that same attempt as retryable. Cert Intake offers **Retry listing**:
+it resends the captured card, approved price, images and channels without saving
+a new price first. Return/sale/pause/identity checks still apply, and changed
+request inputs must be restored before retrying. Background callers do not replay
+the attempt automatically.
+
+This permission does not extend to uncertain inline PSA import or channel-sync
+failures. A successful PATCH followed by failed sync remains protected from blind
+repetition. Old unknown-stage attempts are not automatically promoted to retryable.
+Missing inventory IDs require rematching, not repeated calls to a stale target.
+
 ## Push Sites
 
 There are 5 places that push inventory to DH:

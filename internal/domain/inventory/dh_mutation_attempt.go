@@ -8,13 +8,15 @@ import (
 
 // DHMutationRequest describes ONE immutable outbound orchestration. The payload
 // identity must cover every request field and phase (including sync/revert).
-// Only receipt-backed keyed sale/return and price/live_price can replay an open attempt.
+// Keyed sale/return/live-price replay their receipts. Listing can resume only
+// with persisted PATCH-retry permission and an explicit same-payload request.
 type DHMutationRequest struct {
-	Kind              string
-	Phase             string
-	Key               string
-	PayloadIdentity   string
-	ReturnOperationID string
+	AllowListingReplay bool
+	Kind               string
+	Phase              string
+	Key                string
+	PayloadIdentity    string
+	ReturnOperationID  string
 }
 type DHMutationAttempt struct {
 	ID                 string     `json:"id"`
@@ -32,6 +34,7 @@ type DHMutationAttempt struct {
 	RetryNotBefore     *time.Time `json:"retryNotBefore,omitempty"`
 	Outcome            string     `json:"outcome"`
 	Replaying          bool       `json:"-"`
+	Retryable          bool       `json:"retryable,omitempty"`
 }
 
 // DHMutationSettlement is a caller-verified terminal provider response, NOT
@@ -119,14 +122,18 @@ func (c *DHMutationCoordinator) Run(ctx context.Context, id string, prepare func
 	}
 	var rejection *DHNonMutationError
 	var retry *DHMutationRetryError
+	var listingRetry *DHListingPatchRetryError
+	executionEntered := false
 	err = c.scope.WithPurchaseMutation(ctx, id, func(owned context.Context) error {
 		if e := c.repo.OwnDHMutation(owned, id, attempt); e != nil {
 			return e
 		}
+		executionEntered = true
 		result, e := execute(owned, attempt)
 		if e != nil {
 			errors.As(e, &rejection)
 			errors.As(e, &retry)
+			errors.As(e, &listingRetry)
 			return e
 		}
 		if result == nil {
@@ -174,9 +181,21 @@ func (c *DHMutationCoordinator) Run(ctx context.Context, id string, prepare func
 			}
 			return c.repo.SettleDHMutation(owned, id, attempt, DHMutationSettlement{Outcome: "rejected", Receipt: rejection.Code})
 		})
-		if e != nil {
-			return errors.Join(err, e)
-		}
+		return errors.Join(err, e)
+	}
+	// A consumed replay that failed before execute never sent a new PATCH.
+	// Restore its permission even if ownership/identity guards refused execution.
+	if err != nil && (listingRetry != nil || (!executionEntered && attempt.Replaying && attempt.Kind == "list" && attempt.Phase == "intake_patch_sync")) {
+		persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		e := c.scope.WithPurchaseMutation(persist, id, func(owned context.Context) error {
+			repo, ok := c.repo.(DHListingRetryRepository)
+			if !ok {
+				return NewReturnConflict("coordination_unavailable", "durable listing retry persistence required")
+			}
+			return repo.EnableDHListingRetry(owned, id, attempt)
+		})
+		return errors.Join(err, e)
 	}
 	return err
 }

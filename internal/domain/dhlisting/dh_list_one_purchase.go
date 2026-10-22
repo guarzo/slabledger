@@ -100,9 +100,8 @@ func (s *dhListingService) listOnePurchase(ctx context.Context, p *inventory.Pur
 		return outcomeSkipped, errors.New("no committed price; skipped list transition")
 	}
 
-	// DH's inventory_upsert_service cancels+recreates MarketOrders on
-	// every PATCH regardless of whether values changed, so skip the call
-	// when status/price/channels are already in the target state. Empty
+	// DH updates an existing listed MarketOrder in place. Still avoid an
+	// unnecessary PATCH and channel enqueue when everything is in sync. Empty
 	// DHChannelsJSON means no prior successful sync on record — fall
 	// through in that case even if status/price look correct.
 	if p.DHStatus == inventory.DHStatusListed &&
@@ -123,6 +122,9 @@ func (s *dhListingService) listOnePurchase(ctx context.Context, p *inventory.Pur
 			if errors.As(err, &rejection) {
 				err = &inventory.DHNonMutationError{Code: rejection.Code, Message: rejection.Message, Cause: err, Uncertain: true}
 			}
+		}
+		if s.mutationRequired && !pushedInline && !apperrors.HasErrorCode(err, apperrors.ErrCodeProviderNotFound) {
+			err = &inventory.DHListingPatchRetryError{Cause: err}
 		}
 		return s.handleStatusUpdateFailure(ctx, p, err)
 	}

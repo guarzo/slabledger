@@ -1,5 +1,5 @@
 import type { CertRow } from './cardIntakeTypes';
-import { hasReturnEpisode, returnNeedsDiagnosis } from './cardIntakeTypes';
+import { hasReturnEpisode, returnNeedsDiagnosis, rowCanRetryListing } from './cardIntakeTypes';
 
 export default function CardIntakeReturnNotice({ row }: { row: CertRow }) {
   const state = row.returnState;
@@ -9,10 +9,17 @@ export default function CardIntakeReturnNotice({ row }: { row: CertRow }) {
   const readError = !!row.returnStatusError;
   const error = row.returnStatusError ?? row.returnError;
   const listingAttempt = earlier?.kind === 'list' && !hasReturnEpisode(row);
-  const listingStalled = listingAttempt && Date.now() - Date.parse(earlier.startedAt) >= 60_000;
+  const listingRetrying = earlier?.kind === 'list' && earlier.phase === 'intake_patch_sync'
+    && earlier.retryable && earlier.outcome === 'open' && row.listingStatus === 'listing';
+  const listingStalled = listingAttempt && !listingRetrying && Date.now() - Date.parse(earlier.startedAt) >= 60_000;
+  const warning = listingStalled || (diagnosis && !listingAttempt && !listingRetrying);
   let message: string | undefined;
-  if (readError && !hasReturnEpisode(row)) {
+  if (rowCanRetryListing(row)) {
+    message = 'Listing failed. Retry the same approved listing.';
+  } else if (readError && !hasReturnEpisode(row)) {
     message = 'DH state read failed. Listing paused; retrying automatically.';
+  } else if (listingRetrying) {
+    message = 'Retrying the same approved listing…';
   } else if (diagnosis && listingAttempt && earlier.phase === 'intake_patch_sync' && !listingStalled) {
     message = 'DH listing sync in progress. Listing paused until the attempt settles.';
   } else if (diagnosis && listingAttempt) {
@@ -28,8 +35,8 @@ export default function CardIntakeReturnNotice({ row }: { row: CertRow }) {
   }
   if (!message && !error) return null;
   return (
-    <div className="border-t border-[var(--surface-2)] px-4 py-2 text-xs" role={error || listingStalled || (diagnosis && !listingAttempt) ? 'alert' : 'status'}>
-      {message && <p className={listingStalled || (diagnosis && !listingAttempt) ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'}>{message}</p>}
+    <div className="border-t border-[var(--surface-2)] px-4 py-2 text-xs" role={error || warning ? 'alert' : 'status'}>
+      {message && <p className={warning ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'}>{message}</p>}
       {error && <p className="text-[var(--danger)]">{error}</p>}
     </div>
   );

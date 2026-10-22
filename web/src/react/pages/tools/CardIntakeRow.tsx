@@ -5,7 +5,7 @@ import { buildPriceSources } from '../../ui/priceDecisionHelpers';
 import type { PreSelection } from '../../ui/priceDecisionHelpers';
 import type { DHSaleCheck, MarketSnapshot } from '../../../types/campaigns';
 import type { CertRow, CertStatus } from './cardIntakeTypes';
-import { hasDHMatch, hasDHInventory, hasCLPrice, dhPushStuck, rowIsListable, rowAwaitingSync, returnActionLabel, returnNeedsDiagnosis } from './cardIntakeTypes';
+import { hasDHMatch, hasDHInventory, hasCLPrice, dhPushStuck, rowIsListable, rowAwaitingSync, returnActionLabel, returnNeedsDiagnosis, rowCanRetryListing } from './cardIntakeTypes';
 import CardIntakeReturnNotice from './CardIntakeReturnNotice';
 
 const DH_SEARCH_BASE = 'https://doubleholo.com/marketplace';
@@ -135,6 +135,7 @@ export function CertRowItem({
   onRefreshReturnState,
   onDismiss,
   onList,
+  onRetryListing,
   onFixDHMatch,
 }: {
   row: CertRow;
@@ -146,10 +147,13 @@ export function CertRowItem({
   onRefreshReturnState?: (certNumber: string) => void;
   onDismiss: (certNumber: string) => void;
   onList: (certNumber: string, priceCents: number, source: string) => void;
+  onRetryListing: (certNumber: string) => void;
   onFixDHMatch: () => void;
 }) {
   const s = STATUS_STYLE[row.status];
   const canList = rowIsListable(row);
+  const canRetry = rowCanRetryListing(row);
+  const retrying = row.listingStatus === 'listing' && row.returnState?.precedingAttempt?.retryable;
   const awaitingSync = rowAwaitingSync(row);
   const { market, buyCostCents, listingStatus, listingError } = row;
   const busy = listingStatus === 'setting-price' || listingStatus === 'listing' || row.returnBusy;
@@ -281,6 +285,15 @@ export function CertRowItem({
 
       <CardIntakeReturnNotice row={row} />
 
+      {(canRetry || retrying) && (
+        <div className="border-t border-[var(--surface-2)] px-4 py-2.5">
+          <button
+            onClick={() => onRetryListing(row.certNumber)}
+            disabled={busy || !canRetry}
+            className="rounded-md bg-[var(--brand-500)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >{busy ? 'Retrying listing…' : 'Retry listing'}</button>
+        </div>
+      )}
       {canList && (
         <div className="border-t border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.015)] px-4 py-2.5">
           <PriceDecisionBar

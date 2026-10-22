@@ -780,7 +780,9 @@ projection contains:
   (`code`, `message`, `phase`) / observed receipt.
 - `expectedSaleId`: current local sale ID, or explicit `null`.
 - `awaitingListing`: returned stock still requires an explicit authenticated List.
-- `precedingAttempt`: nullable unresolved DH mutation with safe ID/kind/phase.
+- `precedingAttempt`: nullable unresolved DH mutation with safe ID/kind/phase. Optional
+  `retryable: true` permits an explicit retry of the same approved listing PATCH;
+  it does not permit price changes or replay of other mutations.
 - `purchase` and `sale`: current objects; sale idempotency keys are omitted.
 - `outcome`: optional result classification.
 
@@ -2640,7 +2642,7 @@ Preconditions: the purchase must be received, not already listed, and carry a hu
 struct's two `error`-typed fields are `json:"-"`: the handler turns them into the
 status codes below before writing a success body.
 
-**Errors:** `400` missing `purchaseId`; `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused / preceding DH attempt unresolved; `502` PSA authentication temporarily unavailable or listing result uncertain; `503` DH listing service not configured; `500` internal error. Cert Intake and the API client do not automatically retry this unkeyed POST. After `502` or a dropped connection, inspect `GET /api/purchases/{purchaseId}/confirmed-return` for an open `precedingAttempt` before any further write — a remote DH effect may already have occurred.
+**Errors:** `400` missing `purchaseId`; `404` purchase not found; `409` not received / already listed / not `in_stock` / push held, unmatched, or dismissed / price not reviewed / DH listings globally paused / preceding DH attempt unresolved / approved listing request changed (`listing_request_changed`); `502` PSA authentication temporarily unavailable or listing result uncertain; `503` DH listing service not configured; `500` internal error. Cert Intake and the API client do not automatically retry this unkeyed POST. After `502` or a dropped connection, inspect `GET /api/purchases/{purchaseId}/confirmed-return` for an open `precedingAttempt` before any further write — a remote DH effect may already have occurred. If that attempt has `retryable: true`, an operator can retry this endpoint directly using the same card and approved price; Cert Intake offers **Retry listing** without another price save. The server checks the entire captured request and consumes permission before dispatch. Changed request inputs must be restored before replay. Background listing never consumes this permission. Uncertain inline import/channel sync and historical unknown-stage attempts remain blocked; missing inventory IDs need rematching rather than retrying the stale target.
 
 ---
 

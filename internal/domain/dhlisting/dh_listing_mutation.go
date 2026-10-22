@@ -100,25 +100,31 @@ func (s *dhListingService) listCoordinated(ctx context.Context, cached *inventor
 				}
 			}
 		}
-		// Guard AFTER authorization, still in the preparation transaction.
-		if e := s.guards.AssertMutationAllowed(c, p.ID); e != nil {
-			return inventory.DHMutationRequest{}, e
-		}
-		return inventory.DHMutationRequest{Kind: "list", Phase: "intake_patch_sync", PayloadIdentity: listingPayload(p)}, nil
+		// The repository checks every guard during preparation, exempting only
+		// a matching operator-approved replay from its own preceding-attempt fence.
+		explicit, ok := ctx.Value(explicitListingKey{}).(explicitListing)
+		return inventory.DHMutationRequest{Kind: "list", Phase: "intake_patch_sync", PayloadIdentity: listingPayload(p), AllowListingReplay: ok && explicit.purchaseID == p.ID}, nil
 	}, func(c context.Context, a *inventory.DHMutationAttempt) (*inventory.DHMutationSettlement, error) {
+		beforeDispatchFailure := func(err error) (*inventory.DHMutationSettlement, error) {
+			if a.Replaying {
+				err = &inventory.DHListingPatchRetryError{Cause: err}
+			}
+			return nil, err
+		}
 		p, e := s.freshListingPurchase(c, cached)
 		if e != nil {
-			return nil, e
+			return beforeDispatchFailure(e)
 		}
 		if listingPayload(p) != a.PayloadIdentity {
-			return nil, inventory.NewReturnConflict("identity_conflict", "prepared listing request changed")
+			return beforeDispatchFailure(inventory.NewReturnConflict("identity_conflict", "prepared listing request changed; restore the approved request before retrying"))
 		}
 		if e := s.guards.AssertMutationAllowed(c, p.ID); e != nil {
-			return nil, e
+			return beforeDispatchFailure(e)
 		}
-		// These noops occur before any dispatch and cannot clear an older marker:
-		// Run already refuses every open unkeyed request during preparation.
 		if !p.IsReceivedOrShipped() || ResolveListingPriceCents(p) <= 0 || (p.DHInventoryID == 0 && (p.DHPushStatus != inventory.DHPushStatusPending || s.psaImporter == nil)) {
+			if a.Replaying {
+				return beforeDispatchFailure(inventory.NewReturnConflict("invalid_listing_precondition", "listing is no longer eligible; the earlier attempt remains unresolved"))
+			}
 			return &inventory.DHMutationSettlement{Outcome: "rejected", Receipt: "not-dispatched:listing-ineligible"}, nil
 		}
 		outcome, e = s.listOnePurchase(c, p)

@@ -85,6 +85,29 @@ export function returnActionLabel(row: CertRow): string | null {
   return null;
 }
 
+// This permits only resuming the captured listing, not changing its price or
+// bypassing a return. Full immutable request matching remains server-side.
+export function rowCanRetryListing(row: CertRow): boolean {
+  const state = row.returnState;
+  const p = state?.purchase;
+  const a = state?.precedingAttempt;
+  if (!state || !p || !a || !a.retryable || a.outcome !== 'open'
+    || a.kind !== 'list' || a.phase !== 'intake_patch_sync'
+    || row.returnLoading || row.returnBusy || row.returnStale || row.returnStatusError
+    || row.status === 'sold' || state.sale || state.awaitingListing
+    || ['listing', 'setting-price', 'listed'].includes(row.listingStatus ?? '')
+    || p.id !== row.purchaseId || a.capturedPurchaseId !== p.id
+    || p.certNumber !== row.certNumber || a.certNumber !== p.certNumber
+    || a.grader !== (p.grader ?? 'PSA') || !p.receivedAt
+    || a.dhInventoryId <= 0 || a.dhInventoryId !== p.dhInventoryId
+    || a.dhInventoryId !== row.dhInventoryId || p.dhStatus !== 'in_stock'
+    || row.dhStatus !== 'in_stock') return false;
+  const operation = state.operation;
+  return !operation || (operation.state === 'completed'
+    && operation.dhInventoryId === p.dhInventoryId
+    && operation.certNumber === p.certNumber && operation.grader === (p.grader ?? 'PSA'));
+}
+
 export function rowIsListable(row: CertRow): boolean {
   const state = row.returnState;
   const blocked = !state || state.purchase?.id !== row.purchaseId || row.returnStatusError || row.status === 'sold'

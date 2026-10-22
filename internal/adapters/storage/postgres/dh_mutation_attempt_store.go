@@ -12,11 +12,11 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/inventory"
 )
 
-const attemptColumns = `id,captured_purchase_id,dh_inventory_id,cert_number,grader,kind,phase,idempotency_key,payload_identity,COALESCE(return_operation_id,''),started_at,settled_at,outcome,retry_not_before`
+const attemptColumns = `id,captured_purchase_id,dh_inventory_id,cert_number,grader,kind,phase,idempotency_key,payload_identity,COALESCE(return_operation_id,''),started_at,settled_at,outcome,retry_not_before,listing_retryable`
 
 func scanAttempt(row scanner) (*inventory.DHMutationAttempt, error) {
 	var a inventory.DHMutationAttempt
-	err := row.Scan(&a.ID, &a.CapturedPurchaseID, &a.DHInventoryID, &a.CertNumber, &a.Grader, &a.Kind, &a.Phase, &a.Key, &a.PayloadIdentity, &a.ReturnOperationID, &a.StartedAt, &a.SettledAt, &a.Outcome, &a.RetryNotBefore)
+	err := row.Scan(&a.ID, &a.CapturedPurchaseID, &a.DHInventoryID, &a.CertNumber, &a.Grader, &a.Kind, &a.Phase, &a.Key, &a.PayloadIdentity, &a.ReturnOperationID, &a.StartedAt, &a.SettledAt, &a.Outcome, &a.RetryNotBefore, &a.Retryable)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -49,8 +49,26 @@ func (s *ConfirmedReturnStore) PrepareDHMutation(ctx context.Context, id string,
 	p := state.Purchase
 	open := state.PrecedingAttempt
 	if open != nil {
-		if (req.Kind != "sale" && req.Kind != "return" && (req.Kind != "price" || req.Phase != "live_price")) || req.Key == "" || open.Key != req.Key || open.Kind != req.Kind || open.Phase != req.Phase || open.PayloadIdentity != req.PayloadIdentity || open.ReturnOperationID != req.ReturnOperationID || open.CapturedPurchaseID != id || open.DHInventoryID != p.DHInventoryID || open.CertNumber != p.CertNumber || open.Grader != p.Grader {
+		listReplay := req.AllowListingReplay && req.Kind == "list" && req.Phase == "intake_patch_sync" && req.Key == "" && open.Retryable && p.DHInventoryID > 0 && req.ReturnOperationID == ""
+		keyedReplay := (req.Kind == "sale" || req.Kind == "return" || (req.Kind == "price" && req.Phase == "live_price")) && req.Key != ""
+		sameAttempt := open.Key == req.Key && open.Kind == req.Kind && open.Phase == req.Phase && open.ReturnOperationID == req.ReturnOperationID && open.CapturedPurchaseID == id && open.DHInventoryID == p.DHInventoryID && open.CertNumber == p.CertNumber && open.Grader == p.Grader
+		if listReplay && sameAttempt && open.PayloadIdentity != req.PayloadIdentity {
+			return nil, inventory.NewReturnConflict("listing_request_changed", "approved listing request changed; restore the approved price, images and channels before retrying")
+		}
+		if (!listReplay && !keyedReplay) || !sameAttempt || open.PayloadIdentity != req.PayloadIdentity {
 			return nil, inventory.NewReturnConflict("preceding_dh_mutation_uncertain", "preceding DH attempt "+open.ID+" ("+open.Kind+"/"+open.Phase+") requires verified completion evidence")
+		}
+		if listReplay {
+			if state.Sale != nil {
+				return nil, inventory.NewReturnConflict("current_sale_present", "sold inventory cannot be listed")
+			}
+			if err := s.assertAllowedExcept(ctx, id, true, open.ID); err != nil {
+				return nil, err
+			}
+			if _, err := executor(ctx, s.db).ExecContext(ctx, "UPDATE dh_mutation_attempts SET listing_retryable=false WHERE id=$1", open.ID); err != nil {
+				return nil, err
+			}
+			open.Retryable = false
 		}
 		open.Replaying = true
 		return open, nil
@@ -139,6 +157,9 @@ func (s *ConfirmedReturnStore) AssertMutationAllowed(ctx context.Context, id str
 	return s.assertAllowed(ctx, id, true)
 }
 func (s *ConfirmedReturnStore) assertAllowed(ctx context.Context, id string, awaiting bool) error {
+	return s.assertAllowedExcept(ctx, id, awaiting, "")
+}
+func (s *ConfirmedReturnStore) assertAllowedExcept(ctx context.Context, id string, awaiting bool, ignoredAttempt string) error {
 	scope, err := ownedScope(ctx, s.db, id)
 	if err != nil {
 		return err
@@ -149,7 +170,7 @@ func (s *ConfirmedReturnStore) assertAllowed(ctx context.Context, id string, awa
 	}
 	e := state.Operation
 	p := state.Purchase
-	if a := state.PrecedingAttempt; a != nil && a.ID != scope.attemptID {
+	if a := state.PrecedingAttempt; a != nil && a.ID != scope.attemptID && a.ID != ignoredAttempt {
 		return inventory.NewReturnConflict("preceding_dh_mutation_uncertain", "preceding DH attempt "+a.ID+" ("+a.Kind+"/"+a.Phase+") is unresolved")
 	}
 	if e != nil {
