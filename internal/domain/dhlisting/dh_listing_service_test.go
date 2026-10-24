@@ -866,11 +866,10 @@ func TestListPurchases_RecordsChannelSyncFailureInFailedCerts(t *testing.T) {
 // when a purchase is already DHStatusListed with DHListingPriceCents equal to
 // the resolved listing price AND has a non-empty DHChannelsJSON (evidence of
 // a prior successful channel sync), ListPurchases skips the PATCH, the
-// SyncChannels call, the persist, and event emission. DH's
-// inventory_upsert_service cancels and recreates MarketOrders on every
-// request regardless of whether values changed, so unguarded re-sends churn
-// eBay/Shopify state for nothing. Drift in any of status / price / channels
-// falls through to the full path.
+// SyncChannels call, the persist, and event emission. DH updates an existing
+// listed order in place; this guard still avoids unnecessary PATCH and channel
+// sync calls. Drift in any of status / price / channels falls through to the
+// full path.
 func TestListPurchases_NoOpGuard(t *testing.T) {
 	const listingPrice = 34360
 

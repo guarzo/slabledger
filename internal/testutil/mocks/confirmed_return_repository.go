@@ -10,6 +10,7 @@ import (
 // ConfirmedReturnRepositoryMock exposes the durable core ports without an
 // adapter dependency in domain boundary tests.
 type ConfirmedReturnRepositoryMock struct {
+	EnableDHListingRetryFn       func(context.Context, string, *inventory.DHMutationAttempt) error
 	AssertDHPreparationAllowedFn func(context.Context) error
 	PrepareDHMutationFn          func(context.Context, string, inventory.DHMutationRequest) (*inventory.DHMutationAttempt, error)
 	OwnDHMutationFn              func(context.Context, string, *inventory.DHMutationAttempt) error
@@ -26,6 +27,13 @@ type ConfirmedReturnRepositoryMock struct {
 
 var _ inventory.ConfirmedReturnRepository = (*ConfirmedReturnRepositoryMock)(nil)
 var _ inventory.DHMutationRetryRepository = (*ConfirmedReturnRepositoryMock)(nil)
+
+func (m *ConfirmedReturnRepositoryMock) EnableDHListingRetry(ctx context.Context, id string, a *inventory.DHMutationAttempt) error {
+	if m.EnableDHListingRetryFn != nil {
+		return m.EnableDHListingRetryFn(ctx, id, a)
+	}
+	return nil
+}
 
 func (m *ConfirmedReturnRepositoryMock) DeferDHMutation(ctx context.Context, id string, a *inventory.DHMutationAttempt, notBefore time.Time) error {
 	if m.DeferDHMutationFn != nil {

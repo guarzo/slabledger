@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { api, isAPIError } from '../../../js/api';
+import { api } from '../../../js/api';
 import type { ScanCertResponse, ResolveCertResponse, CertImportResult } from '../../../types/campaigns';
 import FixDHMatchDialog from '../campaign-detail/inventory/FixDHMatchDialog';
 import type { CertRow } from './cardIntakeTypes';
@@ -16,6 +16,7 @@ import { useCardIntakePolling } from './useCardIntakePolling';
 import { ConfirmDialog } from '../../ui';
 import { useConfirmedReturn } from './useConfirmedReturn';
 import { useDHSaleCheck } from './useDHSaleCheck';
+import { useCardIntakeListing } from './useCardIntakeListing';
 
 function isCompletedListing(row: CertRow): boolean {
   return row.listingStatus === 'listed' || (!row.listingStatus && row.dhStatus === 'listed');
@@ -99,46 +100,7 @@ export default function CardIntakeTab() {
 
   const { pollCert } = useCardIntakePolling(certsRef, certs.size, updateCert, resolveInBackground);
 
-  const handleSetPriceAndList = useCallback(async (certNumber: string, priceCents: number, source: string) => {
-    const row = certsRef.current.get(certNumber);
-    if (!row?.purchaseId) return;
-    if (priceCents <= 0) {
-      updateCert(certNumber, { listingError: 'Enter a valid price before listing.' });
-      return;
-    }
-    updateCert(certNumber, { listingStatus: 'setting-price', listingError: undefined });
-    try {
-      await api.setReviewedPrice(row.purchaseId, priceCents, source, { manualList: true });
-    } catch (err) {
-      updateCert(certNumber, {
-        listingStatus: 'list-error',
-        listingError: isAPIError(err) && (err.status === 0 || err.status >= 500)
-          ? 'Price save unconfirmed; refresh the card before deciding whether to try again.'
-          : err instanceof Error ? err.message : 'Failed to set price',
-      });
-      return;
-    }
-    updateCert(certNumber, { listingStatus: 'listing' });
-    try {
-      await api.listPurchaseOnDH(row.purchaseId);
-      updateCert(certNumber, { listingStatus: 'listed' });
-      await refreshReturnState(certNumber);
-    } catch (err) {
-      if (isAPIError(err) && err.status === 409 && err.data?.error === 'Purchase already listed on DH') {
-        updateCert(certNumber, {
-          dhStatus: 'listed', // Server rejected using its local listed state, not a fresh DH read.
-          listingStatus: 'list-error',
-          listingError: 'SlabLedger records this card as listed; verify live price and channels on DH before retrying.',
-        });
-        return;
-      }
-      const msg = err instanceof Error ? err.message : 'Listing failed';
-      updateCert(certNumber, {
-        listingStatus: 'list-error',
-        listingError: msg,
-      });
-    }
-  }, [updateCert, refreshReturnState]);
+  const { handleSetPriceAndList, handleRetryListing } = useCardIntakeListing(certsRef, updateCert, refreshReturnState);
 
   const handleScan = useCallback(async (certNumber: string) => {
     certNumber = certNumber.trim();
@@ -437,6 +399,7 @@ export default function CardIntakeTab() {
               onRefreshReturnState={cert => { void returnFlow.refresh(cert); }}
               onDismiss={handleDismiss}
               onList={handleSetPriceAndList}
+              onRetryListing={cert => { void handleRetryListing(cert); }}
               onFixDHMatch={() => setFixMatchTarget(row)}
             />
           ))}

@@ -19,6 +19,9 @@ export function loadQueue(): Map<string, CertRow> {
       k,
       {
         ...v,
+        // The previous page's busy state is not authoritative after reload.
+        listingStatus: v.listingStatus === 'listing' || v.listingStatus === 'setting-price'
+          ? undefined : v.listingStatus,
         ...(v.status === 'scanning' || v.status === 'importing'
           ? { status: v.purchaseId ? 'existing' as const : 'resolving' as const } : {}),
         // Reload in-flight and durable state, but retain the stale-row fence

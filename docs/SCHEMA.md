@@ -4,6 +4,17 @@ SlabLedger uses Postgres (Supabase in prod, local Postgres in the devcontainer).
 
 All monetary values are stored in **cents** (integer).
 
+## DH listing retry permission
+
+Migration 000052 adds `dh_mutation_attempts.listing_retryable`, a non-null BOOLEAN
+defaulting to false. True is allowed only on an open, unkeyed
+`list/intake_patch_sync` attempt with a positive inventory ID and no return operation.
+It records permission to repeat the same listing PATCH, not a terminal receipt or
+evidence of nonmutation. An explicit replay consumes it before execution; an
+eligible PATCH failure can enable it again. Historical attempts default to false
+because their failed step was not recorded. Any one-time historical recovery needs
+verified failure evidence and separate production-write authorization.
+
 ## Migration numbering
 
 Every `migration NNNNN` citation in this document refers to a file in
