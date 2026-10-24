@@ -90,10 +90,14 @@ web/coverage/
 /cache/
 .superpowers/
 .worktrees/
+.ralph/
 
 # Private docs (sensitive business data, kept locally only)
 docs/private/
 .claude/commands/campaign-analysis.md
+CLAUDE.local.md
+cardyeti-listed-certs.txt
+holo-inventory.pdf
 
 # Internal engineering docs (not for public consumption)
 docs/AI_USAGE_AUDIT.md
