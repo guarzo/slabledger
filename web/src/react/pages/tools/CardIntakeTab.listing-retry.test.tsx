@@ -7,7 +7,7 @@ import CardIntakeTab from './CardIntakeTab';
 import CardIntakeReturnNotice from './CardIntakeReturnNotice';
 import { rowCanRetryListing, rowIsListable } from './cardIntakeTypes';
 import type { CertRow } from './cardIntakeTypes';
-import { saveQueue } from './cardIntakeStorage';
+import { loadQueue, saveQueue } from './cardIntakeStorage';
 
 const stamp = '2026-10-21T12:00:00Z';
 const purchase: Purchase = {
@@ -66,6 +66,32 @@ it.each([
  const candidate=change(row());
  expect(rowCanRetryListing(candidate)).toBe(want);
  expect(rowIsListable(candidate)).toBe(false);
+});
+
+it.each([
+ ['listing', undefined],
+ ['setting-price', undefined],
+ ['list-error', 'list-error'],
+ ['listed', 'listed'],
+ [undefined, undefined],
+] as const)('hydrates listing status %s as %s', (listingStatus, expected)=>{
+ saveQueue(new Map([[purchase.certNumber, {...row(), listingStatus, listingError:'provider failed'}]]));
+ const restored=loadQueue().get(purchase.certNumber);
+ expect(restored?.listingStatus).toBe(expected);
+ expect(restored?.listingError).toBe('provider failed');
+ expect(restored?.status).toBe('existing');
+});
+
+it.each(['listing','setting-price'] as const)('refreshes server retry state after reloading during %s', async listingStatus=>{
+ const m=transport(state(true));
+ saveQueue(new Map([[purchase.certNumber,{...row(),listingStatus}]]));
+ render(<CardIntakeTab/>);
+ const retry=await screen.findByRole('button',{name:'Retry listing'});
+ expect(retry).toBeEnabled();
+ expect(m.list).not.toHaveBeenCalled();
+ await userEvent.click(retry);
+ await waitFor(()=>expect(m.list).toHaveBeenCalledTimes(1));
+ expect(m.save).not.toHaveBeenCalled();
 });
 
 it('restores retry from server state after remount and never saves a price', async ()=>{
