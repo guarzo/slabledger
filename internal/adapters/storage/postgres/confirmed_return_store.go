@@ -46,7 +46,16 @@ func (s *ConfirmedReturnStore) latestReturn(ctx context.Context, p *inventory.Pu
 }
 func (s *ConfirmedReturnStore) GetReturnState(ctx context.Context, id string) (*inventory.ConfirmedReturnState, error) {
 	var state *inventory.ConfirmedReturnState
-	err := s.WithPurchaseMutation(ctx, id, func(owned context.Context) error { var e error; state, e = s.returnState(owned, id); return e })
+	err := s.WithPurchaseMutation(ctx, id, func(owned context.Context) error {
+		var e error
+		state, e = s.returnState(owned, id)
+		if e != nil {
+			return e
+		}
+		attempts, e := s.failedListingDeleteAttempts(owned, state)
+		state.FailedListingDeleteAllowed = len(attempts) > 0
+		return e
+	})
 	return state, err
 }
 func (s *ConfirmedReturnStore) returnState(ctx context.Context, id string) (*inventory.ConfirmedReturnState, error) {

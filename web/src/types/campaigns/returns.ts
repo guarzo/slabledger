@@ -69,6 +69,7 @@ export interface DHMutationAttempt {
 
 // Keys and request identities are server-only and deliberately absent.
 export interface ConfirmedReturnState {
+  failedListingDeleteAllowed?: boolean;
   operation: ConfirmedReturnEpisode | null;
   expectedSaleId: string | null;
   awaitingListing: boolean;

@@ -24,7 +24,7 @@ func (a *InventoryAdapter) VoidInventorySaleVerified(ctx context.Context, handle
 		return fmt.Errorf("DH void receipt missing")
 	}
 	for _, item := range receipt.Items {
-		if item.DHInventoryID == target && item.Status == inventory.DHStatusInStock {
+		if item.DHInventoryID == target && item.ItemStatus == inventory.DHStatusInStock {
 			return nil
 		}
 	}

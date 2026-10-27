@@ -222,22 +222,24 @@ func (ps *PurchaseStore) GetDHStatusByCertNumber(ctx context.Context, certNumber
 
 // DeletePurchase removes a purchase and its associated sales within a transaction.
 func (ps *PurchaseStore) DeletePurchase(ctx context.Context, id string) error {
-	return withLocalPurchaseMutation(ctx, ps.db, id, false, func(owned context.Context) error {
-		x := executor(owned, ps.db)
-		if _, err := x.ExecContext(owned, `DELETE FROM campaign_sales WHERE purchase_id=$1`, id); err != nil {
-			return err
-		}
-		result, err := x.ExecContext(owned, `DELETE FROM campaign_purchases WHERE id=$1`, id)
-		if err != nil {
-			return fmt.Errorf("delete purchase: %w", err)
-		}
-		n, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if n == 0 {
-			return inventory.ErrPurchaseNotFound
-		}
-		return nil
+	return ps.withFailedListingDelete(ctx, id, func(ctx context.Context) error {
+		return withLocalPurchaseMutation(ctx, ps.db, id, false, func(owned context.Context) error {
+			x := executor(owned, ps.db)
+			if _, err := x.ExecContext(owned, `DELETE FROM campaign_sales WHERE purchase_id=$1`, id); err != nil {
+				return err
+			}
+			result, err := x.ExecContext(owned, `DELETE FROM campaign_purchases WHERE id=$1`, id)
+			if err != nil {
+				return fmt.Errorf("delete purchase: %w", err)
+			}
+			n, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return inventory.ErrPurchaseNotFound
+			}
+			return nil
+		})
 	})
 }

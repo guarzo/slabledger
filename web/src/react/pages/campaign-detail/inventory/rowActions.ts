@@ -1,5 +1,8 @@
 import type { AgingItem } from '../../../../types/campaigns';
+import { api } from '../../../../js/api';
 import { type ActionIntent, deriveActionIntent, canDismiss } from './inventoryCalcs';
+
+export const FAILED_LISTING_DELETE_WARNING = 'A DH listing update for this item failed. DH may still have it listed; check DH after deleting.';
 
 // Single source of truth for row action labels. Both DesktopRow and MobileCard
 // use these names — no more "Fix" vs "Fix Pricing", "Fix DH" vs "Fix DH Match".
@@ -26,7 +29,7 @@ export interface RowActionHandlers {
   onListOnDH?: (purchaseId: string) => void;
   onDismiss?: () => void;
   onUndismiss?: () => void;
-  onDelete?: () => void;
+  onDelete?: (confirmFailedListing?: boolean) => void;
 }
 
 export interface RowActionFlags {
@@ -36,7 +39,8 @@ export interface RowActionFlags {
 export interface ResolvedAction {
   key: string;
   label: string;
-  onSelect: () => void;
+  onSelect: (confirmFailedListing?: boolean) => void;
+  checkFailedListing?: () => Promise<boolean>;
   disabled?: boolean;
   /** Reversible actions skip confirm; destructive ones go through ConfirmDialog. */
   confirm?: { title: string; message: string; confirmLabel: string; variant?: 'danger' };
@@ -148,6 +152,7 @@ export function resolveOverflowActions(
       key: 'delete',
       label: ACTION_LABELS.delete,
       onSelect: handlers.onDelete,
+      checkFailedListing: async () => !!(await api.getConfirmedReturnState(item.purchase.id)).failedListingDeleteAllowed,
       confirm: {
         title: `Delete "${item.purchase.cardName || 'this card'}"?`,
         message: 'This permanently removes the purchase and any associated sale. This cannot be undone.',

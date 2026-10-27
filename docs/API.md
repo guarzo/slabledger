@@ -625,13 +625,15 @@ Creates a purchase by cert number lookup (fetches card metadata automatically).
 
 Auth: RequireAuth
 
-Deletes a purchase. Verifies the purchase belongs to the campaign.
+Deletes local purchase tracking and associated sales. Verifies the purchase belongs to the campaign; does not delist or call DH.
+
+If only retryable failed existing-target listing PATCH attempts for this exact purchase block deletion, returns `409 failed_listing_delete_confirmation_required`. After displaying the failed-listing warning, send `?confirmFailedListing=true` to acknowledge possible remaining DH exposure. The server rechecks **every** matching open attempt under purchase/cert ownership, marks eligible attempts `abandoned` (original outcome unknown), clears retry permission and deletes locally in one transaction. Other attempt kinds, receipts and financial/return obligations cannot use this exception. No acknowledgement is needed for an ordinary unblocked delete.
 
 **Path params:** `id` (campaign UUID), `purchaseId` (purchase UUID)
 
 **Response:** `204 No Content`
 
-**Errors:** `403` purchase belongs to different campaign; `404` not found
+**Errors:** `403` purchase belongs to different campaign; `404` not found; `409` listing warning needs acknowledgement or another mutation/financial obligation remains unresolved
 
 ---
 
@@ -780,6 +782,7 @@ projection contains:
   (`code`, `message`, `phase`) / observed receipt.
 - `expectedSaleId`: current local sale ID, or explicit `null`.
 - `awaitingListing`: returned stock still requires an explicit authenticated List.
+- `failedListingDeleteAllowed` (optional bool): only failed listing attempts block local Delete; show the DH-exposure warning before acknowledging. Advisory only; DELETE rechecks current state.
 - `precedingAttempt`: nullable unresolved DH mutation with safe ID/kind/phase. Optional
   `retryable: true` permits an explicit retry of the same approved listing PATCH;
   it does not permit price changes or replay of other mutations.
