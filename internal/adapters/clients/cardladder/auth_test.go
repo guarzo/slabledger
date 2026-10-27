@@ -63,6 +63,56 @@ func TestFirebaseRefreshToken(t *testing.T) {
 	}
 }
 
+// Both Firebase endpoints must accept the request with the browser's Origin;
+// neither should invent a Referer when the browser's policy omits it.
+func TestFirebaseAuth_BrowserOrigin(t *testing.T) {
+	for _, tc := range []struct {
+		name, path, contentType, response string
+		call                              func(*FirebaseAuth) error
+	}{
+		{
+			name: "login", path: "/v1/accounts:signInWithPassword", contentType: "application/json",
+			response: `{"idToken":"fixture-id","refreshToken":"fixture-refresh"}`,
+			call: func(auth *FirebaseAuth) error {
+				_, err := auth.Login(context.Background(), "user@example.com", "fixture-password")
+				return err
+			},
+		},
+		{
+			name: "refresh", path: "/v1/token", contentType: "application/x-www-form-urlencoded",
+			response: `{"id_token":"fixture-id","refresh_token":"fixture-refresh"}`,
+			call: func(auth *FirebaseAuth) error {
+				_, err := auth.RefreshToken(context.Background(), "fixture-refresh")
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Origin") != "https://app.cardladder.com" {
+					http.Error(w, "browser origin required", http.StatusForbidden)
+					return
+				}
+				if r.Method != http.MethodPost || r.URL.Path != tc.path {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+				if got := r.Header.Get("Content-Type"); got != tc.contentType {
+					t.Errorf("Content-Type = %q, want %q", got, tc.contentType)
+				}
+				if got := r.Header.Get("Referer"); got != "" {
+					t.Errorf("unexpected Referer = %q", got)
+				}
+				_, _ = w.Write([]byte(tc.response))
+			}))
+			defer server.Close()
+			auth := NewFirebaseAuth("fixture-key", WithAuthBaseURL(server.URL), WithTokenBaseURL(server.URL))
+			if err := tc.call(auth); err != nil {
+				t.Fatalf("Firebase request with browser headers failed: %v", err)
+			}
+		})
+	}
+}
+
 func TestFirebaseAuth_UsesHTTPXClient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(FirebaseAuthResponse{

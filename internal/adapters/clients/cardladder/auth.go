@@ -15,6 +15,8 @@ import (
 const (
 	defaultAuthBaseURL  = "https://identitytoolkit.googleapis.com"
 	defaultTokenBaseURL = "https://securetoken.googleapis.com"
+	// Match the browser's Origin on Firebase authentication requests.
+	cardLadderOrigin = "https://app.cardladder.com"
 )
 
 // FirebaseAuth handles Firebase email/password authentication.
@@ -75,7 +77,11 @@ func (a *FirebaseAuth) Login(ctx context.Context, email, password string) (*Fire
 
 	fullURL := fmt.Sprintf("%s/v1/accounts:signInWithPassword?key=%s",
 		a.authBaseURL, url.QueryEscape(a.apiKey))
-	resp, err := a.httpClient.Post(ctx, fullURL, map[string]string{"Content-Type": "application/json"}, bodyBytes, 0)
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       cardLadderOrigin,
+	}
+	resp, err := a.httpClient.Post(ctx, fullURL, headers, bodyBytes, 0)
 	if err != nil {
 		return nil, fmt.Errorf("firebase login: %w", err)
 	}
@@ -100,7 +106,11 @@ func (a *FirebaseAuth) RefreshToken(ctx context.Context, refreshToken string) (*
 
 	fullURL := fmt.Sprintf("%s/v1/token?key=%s",
 		a.tokenBaseURL, url.QueryEscape(a.apiKey))
-	resp, err := a.httpClient.Post(ctx, fullURL, map[string]string{"Content-Type": "application/x-www-form-urlencoded"}, bodyBytes, 0)
+	headers := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+		"Origin":       cardLadderOrigin,
+	}
+	resp, err := a.httpClient.Post(ctx, fullURL, headers, bodyBytes, 0)
 	if err != nil {
 		// Firebase returns documented credential rejections as HTTP 400. Keep
 		// other bad requests distinct; the worker must hold on auth, not walk
