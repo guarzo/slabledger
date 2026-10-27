@@ -183,10 +183,11 @@ export function useInventoryState(items: AgingItem[], campaignId?: string) {
 
   // No confirm here: every route to this handler is the row `delete` action,
   // which RowActions already gates behind ConfirmDialog (rowActions.ts).
-  const handleDelete = useCallback(async (item: AgingItem) => {
+  const handleDelete = useCallback(async (item: AgingItem, confirmFailedListing = false) => {
     const name = item.purchase.cardName || 'this card';
     try {
-      await api.deletePurchase(item.purchase.campaignId, item.purchase.id);
+      if (confirmFailedListing) await api.deletePurchase(item.purchase.campaignId, item.purchase.id, true);
+      else await api.deletePurchase(item.purchase.campaignId, item.purchase.id);
       toast.success(`Deleted "${name}"`);
       if (expandedId === item.purchase.id) setExpandedId(null);
       invalidateInventory();

@@ -74,8 +74,14 @@ type VoidSaleRequest struct {
 // VoidSaleResponse is DH's response to a void. Reversed is false, not an
 // error, when the sale was already void.
 type VoidSaleResponse struct {
-	Reversed bool                `json:"reversed"`
-	Items    []InventoryListItem `json:"items"`
+	Reversed bool           `json:"reversed"`
+	Items    []VoidSaleItem `json:"items"`
+}
+
+// VoidSaleItem is the void endpoint receipt, not a GET inventory row.
+type VoidSaleItem struct {
+	DHInventoryID int    `json:"dh_inventory_id"`
+	ItemStatus    string `json:"item_status"`
 }
 
 // RecordInventorySale POSTs .../inventory/:id/sale with the required

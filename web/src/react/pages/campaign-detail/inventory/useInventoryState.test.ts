@@ -209,6 +209,16 @@ describe('useInventoryState — expanded row reconciliation', () => {
     expect(result.current.expandedId).toBeNull();
   });
 
+  it('passes failed-listing acknowledgement to the existing Delete API', async () => {
+    vi.mocked(api.deletePurchase).mockResolvedValue(undefined as never);
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInventoryState(EMPTY_ITEMS, 'camp-1'), { wrapper });
+    await act(async () => {
+      await result.current.handleDelete(mockItem({ id: 'purchase-1', campaignId: 'camp-1' }), true);
+    });
+    expect(api.deletePurchase).toHaveBeenCalledExactlyOnceWith('camp-1', 'purchase-1', true);
+  });
+
   it('handleDelete leaves a different row expanded', async () => {
     vi.mocked(api.deletePurchase).mockResolvedValue(undefined as never);
 

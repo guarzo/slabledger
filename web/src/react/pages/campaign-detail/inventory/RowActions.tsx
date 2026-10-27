@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DropdownMenu } from 'radix-ui';
 import { Button, ConfirmDialog } from '../../../ui';
-import type { ResolvedAction } from './rowActions';
+import { FAILED_LISTING_DELETE_WARNING, type ResolvedAction } from './rowActions';
 
 interface RowActionsProps {
   primary: ResolvedAction | null;
@@ -25,8 +25,22 @@ export default function RowActions({ primary, fallbackPrimary, overflow, variant
 
   const sizeClass = variant === 'mobile' ? 'min-w-[64px]' : '';
 
-  const triggerAction = (action: ResolvedAction) => {
+  const checkingDelete = useRef(false);
+  const triggerAction = async (action: ResolvedAction) => {
     if (action.confirm) {
+      if (action.checkFailedListing) {
+        if (checkingDelete.current) return;
+        checkingDelete.current = true;
+        let confirmed = false;
+        try { confirmed = await action.checkFailedListing(); }
+        catch { /* No consent on read failure; the server still guards Delete. */ }
+        finally { checkingDelete.current = false; }
+        setPendingConfirm({ ...action,
+          confirm: { ...action.confirm, message: action.confirm.message + (confirmed ? ` ${FAILED_LISTING_DELETE_WARNING}` : '') },
+          onSelect: () => action.onSelect(confirmed),
+        });
+        return;
+      }
       setPendingConfirm(action);
     } else {
       action.onSelect();

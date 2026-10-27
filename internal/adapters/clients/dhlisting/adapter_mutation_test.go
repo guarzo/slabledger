@@ -27,7 +27,7 @@ func TestInitialPatchSoldRejectionClassification(t *testing.T) {
 }
 func TestVerifiedVoidRejectsWrongTarget(t *testing.T) {
 	client := &mocks.DHInventoryMutationClientMock{VoidInventorySaleFn: func(context.Context, string, dh.VoidSaleRequest) (*dh.VoidSaleResponse, error) {
-		return &dh.VoidSaleResponse{Reversed: true, Items: []dh.InventoryListItem{{DHInventoryID: 99, Status: "in_stock"}}}, nil
+		return &dh.VoidSaleResponse{Reversed: true, Items: []dh.VoidSaleItem{{DHInventoryID: 99, ItemStatus: "in_stock"}}}, nil
 	}}
 	a := adapter.NewInventoryAdapter(client)
 	if e := a.VoidInventorySaleVerified(context.Background(), "handle", 42, "un-sell"); e == nil {

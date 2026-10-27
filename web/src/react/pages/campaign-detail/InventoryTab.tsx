@@ -261,7 +261,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                       onUnmatchDH={getOnUnmatchDH(item.purchase)}
                       onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
                       onSetPrice={() => handleSetPrice(item)}
-                      onDelete={() => handleDelete(item)}
+                      onDelete={(confirmed) => handleDelete(item, confirmed)}
                       onListOnDH={handleListOnDH}
                       onDismiss={() => handleDismiss(item.purchase.id)}
                       onUndismiss={() => handleUndismiss(item.purchase.id)}
@@ -329,7 +329,7 @@ export default function InventoryTab({ items, isLoading: loading, campaignId, sh
                         onUnmatchDH={getOnUnmatchDH(item.purchase)}
                         onRetryDHMatch={getOnRetryDHMatch(item.purchase)}
                         onSetPrice={() => handleSetPrice(item)}
-                        onDelete={() => handleDelete(item)}
+                        onDelete={(confirmed) => handleDelete(item, confirmed)}
                         onListOnDH={handleListOnDH}
                         onInlinePriceSave={handleInlinePriceSave}
                         onDismiss={() => handleDismiss(item.purchase.id)}

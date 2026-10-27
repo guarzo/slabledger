@@ -61,13 +61,14 @@ type ConfirmedReturnEpisode struct {
 	ObservedReceipt     *DHReturnResult `json:"observedReceipt,omitempty"`
 }
 type ConfirmedReturnState struct {
-	Operation        *ConfirmedReturnEpisode `json:"operation"`
-	ExpectedSaleID   *string                 `json:"expectedSaleId"`
-	AwaitingListing  bool                    `json:"awaitingListing"`
-	PrecedingAttempt *DHMutationAttempt      `json:"precedingAttempt"`
-	Purchase         *Purchase               `json:"purchase"`
-	Sale             *Sale                   `json:"sale"`
-	Outcome          string                  `json:"outcome,omitempty"`
+	FailedListingDeleteAllowed bool                    `json:"failedListingDeleteAllowed,omitempty"`
+	Operation                  *ConfirmedReturnEpisode `json:"operation"`
+	ExpectedSaleID             *string                 `json:"expectedSaleId"`
+	AwaitingListing            bool                    `json:"awaitingListing"`
+	PrecedingAttempt           *DHMutationAttempt      `json:"precedingAttempt"`
+	Purchase                   *Purchase               `json:"purchase"`
+	Sale                       *Sale                   `json:"sale"`
+	Outcome                    string                  `json:"outcome,omitempty"`
 }
 type ConfirmedReturnRepository interface {
 	DHMutationRepository

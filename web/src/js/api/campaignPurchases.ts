@@ -12,7 +12,7 @@ import { APIClient } from './client';
 declare module './client' {
   interface APIClient {
     // Purchases
-    deletePurchase(campaignId: string, purchaseId: string): Promise<void>;
+    deletePurchase(campaignId: string, purchaseId: string, confirmFailedListing?: boolean): Promise<void>;
 
     // Sales
     createSale(campaignId: string, input: CreateSaleInput): Promise<Sale>;
@@ -43,8 +43,8 @@ declare module './client' {
 
 const proto = APIClient.prototype;
 
-proto.deletePurchase = async function (this: APIClient, campaignId: string, purchaseId: string): Promise<void> {
-  await this.deleteResource(`/campaigns/${encodeURIComponent(campaignId)}/purchases/${encodeURIComponent(purchaseId)}`);
+proto.deletePurchase = async function (this: APIClient, campaignId: string, purchaseId: string, confirmFailedListing = false): Promise<void> {
+  await this.deleteResource(`/campaigns/${encodeURIComponent(campaignId)}/purchases/${encodeURIComponent(purchaseId)}${confirmFailedListing ? '?confirmFailedListing=true' : ''}`);
 };
 
 proto.createSale = async function (this: APIClient, campaignId: string, input: CreateSaleInput): Promise<Sale> {

@@ -33,7 +33,11 @@ func (h *CampaignsHandler) HandleDeletePurchase(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := h.service.DeletePurchase(r.Context(), purchaseID); err != nil {
+	ctx := r.Context()
+	if r.URL.Query().Get("confirmFailedListing") == "true" {
+		ctx = inventory.WithFailedListingDeleteConfirmation(ctx)
+	}
+	if err := h.service.DeletePurchase(ctx, purchaseID); err != nil {
 		if writeReturnConflictIfPresent(w, err) {
 			return
 		}
