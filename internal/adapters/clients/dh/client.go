@@ -343,6 +343,11 @@ func IsPSARateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
+	var upstream *httpx.UpstreamError
+	if goerrors.As(err, &upstream) && upstream.StatusCode == 422 &&
+		(IsPSARateLimitMessage(upstream.Message) || IsPSARateLimitMessage(upstream.Body)) {
+		return true
+	}
 	return IsPSARateLimitMessage(err.Error())
 }
 

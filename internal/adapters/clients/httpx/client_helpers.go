@@ -123,8 +123,8 @@ func (c *Client) handleHTTPError(ctx context.Context, method, url string, status
 		ContentType: headers.Get("Content-Type"),
 	}
 	switch statusCode {
-	case 400:
-		return apperrors.ProviderInvalidRequest(c.providerName, fmt.Errorf("HTTP 400: %s: %w", sanitized, ue))
+	case 400, 409, 422:
+		return apperrors.ProviderInvalidRequest(c.providerName, fmt.Errorf("HTTP %d: %s: %w", statusCode, sanitized, ue))
 	case 401, 403:
 		return apperrors.ProviderAuthFailed(c.providerName, fmt.Errorf("HTTP %d: %s: %w", statusCode, sanitized, ue))
 	case 404:
