@@ -162,6 +162,8 @@ describe('safe no-password summary', () => {
   });
   it.each([
     ['https://user:password@app.collectors.com/signin?code=secret#fragment', 'https://app.collectors.com/signin'],
+    ['about:blank', '[about:]'],
+    ['data:text/html,private-payload', '[data:]'],
     ['https://%', '[invalid-url]'],
   ])('sanitizes %s', (url, expected) => { expect(safePageURL(url)).toBe(expected); });
 });

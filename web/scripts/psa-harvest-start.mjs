@@ -17,6 +17,7 @@ export async function gotoStart(page, url) {
 export function safePageURL(value) {
   try {
     const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return `[${url.protocol}]`;
     return url.origin + url.pathname;
   } catch {
     return '[invalid-url]';
