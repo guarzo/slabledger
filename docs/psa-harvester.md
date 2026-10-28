@@ -46,8 +46,24 @@ docker run --rm \
 ```
 
 On success it logs `psa-harvest: token and rows snapshot refreshed` and exits 0.
-On failure the underlying Playwright script's stderr (and a debug screenshot/HTML)
-is surfaced in the logs; exit is non-zero.
+On failure the underlying Playwright script's stderr is surfaced in the logs; exit is
+non-zero. Debug screenshots/HTML stay in `/tmp` (or `PSA_HARVEST_DEBUG_DIR`), not in the
+logs, and the default ephemeral files are lost when the Fly VM stops.
+
+When the sign-in page has no visible password field, one bounded stderr summary survives:
+UTC time, phase, URL origin/path, page title, and visible input/button type, name, ID, role
+and accessible name. It excludes field values, URL queries/fragments, cookies, headers and
+HTML; known login/token/proxy credentials are redacted. Collection is capped at five seconds
+and 20 controls, with text/line size limits. A diagnostic failure never retries the login or
+replaces its error. Use this evidence before changing selectors; no new sign-in shape is assumed.
+
+Only the initial portal navigation, before any email/password form interaction, can retry
+once after five seconds on `ERR_TUNNEL_CONNECTION_FAILED`, `ERR_PROXY_CONNECTION_FAILED`,
+`ERR_CONNECTION_RESET`, `ERR_CONNECTION_CLOSED`, `ERR_EMPTY_RESPONSE` or `ERR_NETWORK_CHANGED`.
+Timeouts, unknown errors, HTTP failures, missing fields and the entire SSO flow are not
+retried. Password submission, authenticated data requests and queued pushes are outside
+this new retry boundary; their existing behavior is unchanged. The five-minute job limit
+and no-restart policy are unchanged.
 
 ## Scheduling
 
@@ -140,14 +156,16 @@ fly machine run registry.fly.io/slabledger-psa-harvest:harvest --region iad --vm
 ### Schedule
 
 **The primary cadence is a GitHub Actions cron** (`.github/workflows/psa-harvest-cron.yml`):
-every hour it runs `fly machine start` on the app's machine, which works regardless of the
-machine's schedule state — so a deploy recreating the machine can no longer silently kill
-the pipeline (which Fly's own scheduler did on 2026-07-16 and again on 2026-07-19). It
-needs a `FLY_API_TOKEN` repo secret (`fly tokens create deploy -a slabledger-psa-harvest`).
+at minute **47** of each hour it runs `fly machine start` on the app's machine, away from
+GitHub's minute-0 load peak and the Fly machine's approximate :26 tick. GitHub schedules can
+still be delayed or dropped: this is a best-effort mitigation, not an hourly guarantee.
+The start command does not depend on the machine's schedule state, providing a fallback
+when a deploy disrupts Fly's timer (as on 2026-07-16 and 2026-07-19). It needs a
+`FLY_API_TOKEN` repo secret (`fly tokens create deploy -a slabledger-psa-harvest`).
 A red run in the Actions tab is the alert surface; "machine already started" is treated as
 success. Fly's on-machine schedule (below) stays as a second layer — GitHub cron is
-best-effort and either layer alone keeps the pipeline alive; a double fire is a harmless
-duplicate harvest.
+best-effort and either layer may provide an attempt when the other misses. A double fire
+can produce a duplicate harvest; neither timer proves that fresh rows were written.
 
 The Fly-side cadence lives on the **machine**, not in `fly.harvest.toml` or the deploy — it
 is set with `fly machine update --schedule` and is what makes Fly fire the machine on its own:
