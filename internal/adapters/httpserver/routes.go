@@ -108,6 +108,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 	}
 	mux.Handle("POST /api/purchases/{purchaseId}/confirm-return", returnRoute(rt.campaignsHandler.HandleConfirmReturn))
 	mux.Handle("GET /api/purchases/{purchaseId}/confirmed-return", returnRoute(rt.campaignsHandler.HandleConfirmedReturnState))
+	mux.Handle("POST /api/admin/purchases/{purchaseId}/dh-recovery/{action}", rt.authMW.RequireAdmin(http.HandlerFunc(rt.campaignsHandler.HandleDHInventoryRecovery)))
 	mux.Handle("GET /api/purchases/{purchaseId}/dh-sale-check", returnRoute(rt.campaignsHandler.HandleDHSaleCheck))
 
 	// Global sell sheet & inventory endpoints
