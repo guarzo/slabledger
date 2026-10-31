@@ -31,6 +31,7 @@ import (
 
 // ServerDependencies bundles all dependencies required by startWebServer.
 type ServerDependencies struct {
+	DHInventoryRecovery       handlers.DHInventoryRecovery
 	ConfirmedReturnService    handlers.ConfirmedReturnService
 	ShowPrepWorkerHandler     *handlers.ShowPrepWorkerHandler
 	ShowPrepHandler           *handlers.ShowPrepHandler
@@ -296,7 +297,7 @@ func startWebServer(ctx context.Context, deps ServerDependencies) error {
 // that builds the handler directly with the option already in hand.
 func campaignsHandlerOptions(deps ServerDependencies) []handlers.CampaignsHandlerOption {
 	var opts []handlers.CampaignsHandlerOption
-	opts = append(opts, handlers.WithConfirmedReturnService(deps.ConfirmedReturnService))
+	opts = append(opts, handlers.WithConfirmedReturnService(deps.ConfirmedReturnService), handlers.WithDHInventoryRecovery(deps.DHInventoryRecovery))
 	if deps.DHListingService != nil {
 		opts = append(opts, handlers.WithDHListingService(deps.DHListingService))
 	}

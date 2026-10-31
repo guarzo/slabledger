@@ -637,6 +637,20 @@ If only retryable failed existing-target listing PATCH attempts for this exact p
 
 ---
 
+### `POST /api/admin/purchases/{purchaseId}/dh-recovery/{action}`
+
+Auth: RequireAdmin. Body: `{"confirm":true}`; additional fields are rejected.
+
+Local-only recovery of two retained inventory shapes:
+- `relink-returned`: an unlinked row adopts the target of its latest same-cert/grader, detached, completed and listing-authorized return, as `listed` / `matched`. The caller cannot supply a target; historical return evidence is unchanged.
+- `release-void`: an in-stock linked row with an exact stranded unkeyed void abandons that attempt as **original provider outcome unknown**, clears its sale-conflict flag/timestamp and becomes `in_stock` / `matched`, preserving its target.
+
+Both require received inventory and no local sale, unresolved return, foreign target owner or other open mutation. Receipt-bearing financial attempts and unsupported shapes remain blocked. Recovery, admin-identity audit event and settlement watermark share one transaction. No DH call, listing, sale or deletion is performed. A confirmed recovery is not proof that an earlier provider operation succeeded.
+
+**Response:** `204 No Content`. **Errors:** `400` invalid confirmation/body; `401` unauthenticated; `403` non-admin; `404` missing purchase; `409` unsupported/unsafe shape (`dh_recovery_blocked` or another retained-guard conflict code); `503` not configured; `500` database failure (rolled back).
+
+---
+
 ## Campaign Sales
 
 ### `GET /api/campaigns/{id}/sales`
