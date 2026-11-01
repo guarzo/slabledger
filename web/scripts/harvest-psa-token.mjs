@@ -110,16 +110,19 @@ async function loginWithPassword(page) {
   await emailField.fill(EMAIL);
 
   // Some flows reveal the password only after a "Continue"/"Next" click.
+  const diagnostics = { continueFound: false, continueClicked: false };
   let passwordField = await firstVisible(page, ['input[type="password"]'], 2500);
   if (!passwordField) {
     const cont = await firstVisible(page, [
       (p) => p.getByRole('button', { name: /continue|next|sign in|log ?in/i }),
     ], 5000);
-    if (cont) await cont.click().catch(() => {});
-    passwordField = await firstVisible(page, ['input[type="password"]'], 15000);
+    diagnostics.continueFound = Boolean(cont);
+    if (cont) await cont.click().then(() => { diagnostics.continueClicked = true; }).catch(() => {});
+    passwordField = await firstVisible(page, ['input[type="password"]'], 60000);
   }
   if (!passwordField) {
-    await logNoPasswordSummary(page, [EMAIL, PASSWORD, ACCESS_TOKEN, proxy?.username, proxy?.password]);
+    await logNoPasswordSummary(page, [EMAIL, PASSWORD, ACCESS_TOKEN, proxy?.username, proxy?.password],
+      { ...requestFailures, ...diagnostics });
     await dumpDebug(page, 'no-password-field');
     throw new Error('could not find the password field on the sign-in page');
   }
@@ -155,6 +158,15 @@ const proxy = proxyFromEnv(process.env.PSA_PORTAL_PROXY_URL);
 if (proxy) contextOpts.proxy = proxy;
 const context = await browser.newContext(contextOpts);
 const page = await context.newPage();
+const requestFailures = { failedRequestCount: 0, failedRequestOrigins: [] };
+page.on('requestfailed', (request) => {
+  requestFailures.failedRequestCount++;
+  try {
+    const url = new URL(request.url());
+    if (/^https?:$/.test(url.protocol) && requestFailures.failedRequestOrigins.length < 4 &&
+        !requestFailures.failedRequestOrigins.includes(url.origin)) requestFailures.failedRequestOrigins.push(url.origin);
+  } catch { /* Invalid and non-HTTP request URLs carry no origin evidence. */ }
+});
 
 try {
   // Inject a previously harvested token so a still-valid session skips SSO.
