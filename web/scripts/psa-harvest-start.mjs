@@ -25,8 +25,11 @@ export function safePageURL(value) {
 }
 
 // Snapshot suffixes/children contain field values. Read ONLY the role/name header.
-export async function logNoPasswordSummary(page, secrets) {
-  const summary = { time: new Date().toISOString(), phase: 'no-password-field' };
+export async function logNoPasswordSummary(page, secrets, metadata = {}) {
+  let summary = { time: new Date().toISOString(), phase: 'no-password-field' };
+  for (const key of ['continueFound', 'continueClicked', 'failedRequestCount']) summary[key] = metadata[key];
+  if (metadata.failedRequestOrigins) summary.failedRequestOrigins = metadata.failedRequestOrigins
+    .map(safePageURL).filter((url) => /^https?:\/\//.test(url)).map((url) => new URL(url).origin).slice(0, 4);
   const redactions = secrets.filter(Boolean).flatMap((s) => [s, encodeURIComponent(s)])
     .sort((a, b) => b.length - a.length).map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   const pattern = redactions ? new RegExp(redactions, 'gi') : null;
@@ -61,7 +64,21 @@ export async function logNoPasswordSummary(page, secrets) {
   } finally {
     clearTimeout(timer);
   }
-  const serialize = () => JSON.stringify(summary, (_, value) => typeof value === 'string' ? clean(value) : value);
-  while (summary.controls?.length && Buffer.byteLength(serialize()) > 3500) summary.controls.pop();
-  console.error(`harvest-psa-token: ${serialize()}`);
+  // Sanitize before pruning/shortening, so truncation cannot leave a credential prefix.
+  summary = JSON.parse(JSON.stringify(summary, (_, value) => typeof value === 'string' ? clean(value) : value));
+  if (summary.failedRequestOrigins) summary.failedRequestOrigins = summary.failedRequestOrigins.map((url) => url.replace(/\/$/, ''));
+  if (summary.controls) summary.controlsOmitted = 0;
+  const line = () => `harvest-psa-token: ${JSON.stringify(summary)}`;
+  // Include prefix/newline, Go JSON string escaping (including U+2028/29), and envelope headroom.
+  const bytes = () => Buffer.byteLength(JSON.stringify(line() + '\n').replace(/[\u2028\u2029]/g, '\\u2028')) + 128;
+  while (summary.controls?.length && bytes() > 1024) {
+    summary.controls.pop();
+    summary.controlsOmitted++;
+  }
+  // Mandatory fields alone can exceed the budget; keep the phase and omission count intact.
+  while (bytes() > 1024) {
+    if (summary.failedRequestOrigins?.length) summary.failedRequestOrigins.pop();
+    else for (const key of ['title', 'url']) summary[key] = summary[key]?.slice(0, Math.floor(summary[key].length / 2));
+  }
+  console.error(line());
 }

@@ -126,6 +126,60 @@ describe('safe no-password summary', () => {
     await logNoPasswordSummary(page, []);
     expect(stderr.mock.calls[0][0]).toContain('Continue');
   });
+  it.each(['界', '\u2028\u2029', '"\\\u0000\n\t', '<>&'])('caps the full Go-escaped line and counts pruned controls for %j', async (text) => {
+    const el = document.createElement('button');
+    for (const key of ['type', 'name', 'id', 'role']) el.setAttribute(key, text.repeat(80));
+    const control = { isVisible: async () => true, evaluate: async (fn) => fn(el), ariaSnapshot: async () => '- button' };
+    const page = {
+      url: () => 'https://app.collectors.com/signin', title: async () => text.repeat(80),
+      locator: () => ({ all: async () => Array(20).fill(control) }),
+    };
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await logNoPasswordSummary(page, []);
+    const line = stderr.mock.calls[0][0];
+    const summary = JSON.parse(line.slice(line.indexOf('{')));
+    // Go's JSON string quoting adds escapes for these two separators, not HTML.
+    const escaped = JSON.stringify(line + '\n').replaceAll('\u2028', '\\u2028').replaceAll('\u2029', '\\u2029');
+    expect(Buffer.byteLength(escaped) + 128).toBeLessThanOrEqual(1024);
+    expect(summary.controls.length + summary.controlsOmitted).toBe(20);
+    expect(summary.controlsOmitted).toBeGreaterThan(0);
+    expect(stderr).toHaveBeenCalledTimes(1);
+    expect(line).not.toMatch(/[\r\n]/);
+  });
+  it('bounds mandatory fields without controls and sanitizes secrets before shortening', async () => {
+    const page = {
+      url: () => 'https://app.collectors.com/' + '\u2028'.repeat(80) + 'credential-tail',
+      title: async () => '\u2029'.repeat(70) + 'credential-tail', locator: () => ({ all: async () => [] }),
+    };
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await logNoPasswordSummary(page, ['credential-tail'], {
+      failedRequestCount: 4, failedRequestOrigins: ['a', 'b', 'c', 'd'].map((host) => `https://${host.repeat(63)}.example`),
+    });
+    const line = stderr.mock.calls[0][0];
+    expect(line).not.toContain('credential');
+    const summary = JSON.parse(line.slice(line.indexOf('{')));
+    expect(summary.controls).toEqual([]);
+    expect(summary.phase).toBe('no-password-field');
+    expect(Buffer.byteLength(JSON.stringify(line + '\n').replaceAll('\u2028', '\\u2028').replaceAll('\u2029', '\\u2029')) + 128).toBeLessThanOrEqual(1024);
+  });
+  it('allowlists metadata and reports at most four query-free HTTP origins, never unknown data', async () => {
+    const page = { url: () => 'about:blank', title: async () => 'Sign in', locator: () => ({ all: async () => [] }) };
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const stdout = vi.spyOn(process.stdout, 'write');
+    await logNoPasswordSummary(page, [], {
+      continueFound: true, continueClicked: false, failedRequestCount: 8,
+      failedRequestOrigins: ['https://a.example/path?secret=hidden', 'data:text/plain,hidden',
+        ...['b', 'c', 'd', 'e'].map((host) => `https://${host}.example/path?hidden`)],
+      headers: { authorization: 'hidden' }, mainScript: 'hidden', unknown: 'hidden',
+    });
+    const line = stderr.mock.calls[0][0];
+    expect(JSON.parse(line.slice(line.indexOf('{')))).toMatchObject({
+      continueFound: true, continueClicked: false, failedRequestCount: 8,
+      failedRequestOrigins: ['https://a.example', 'https://b.example', 'https://c.example', 'https://d.example'],
+    });
+    expect(line).not.toMatch(/hidden|headers|mainScript|unknown|data:/);
+    expect(stdout).not.toHaveBeenCalled();
+  });
   it('does not propagate a diagnostic failure or log its sensitive error', async () => {
     const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(logNoPasswordSummary({ url: () => { throw new Error('secret'); } }, [])).resolves.toBeUndefined();
