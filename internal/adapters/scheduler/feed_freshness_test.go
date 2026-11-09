@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -35,6 +36,8 @@ func TestFeedFreshnessClockOutcomes(t *testing.T) {
 		{"inventory stale", "feed_dh_inventory_clean", now.Add(-6*time.Hour - time.Second).Format(time.RFC3339), 0, nil, false, false, false, true},
 		{"CL boundary", "feed_cardladder_clean", now.Add(-30 * time.Hour).Format(time.RFC3339), 0, nil, false, false, false, false},
 		{"CL stale", "feed_cardladder_clean", now.Add(-30*time.Hour - time.Second).Format(time.RFC3339), 0, nil, false, false, false, true},
+		{"CL config missing", "feed_cardladder_clean", now.Format(time.RFC3339), 0, nil, false, false, false, true},
+		{"CL config unreadable", "feed_cardladder_clean", now.Format(time.RFC3339), 0, nil, false, false, false, true},
 		{"PSA import stale", "feed_psa_clean", now.Add(-30*time.Hour - time.Second).Format(time.RFC3339), 0, nil, false, false, false, true},
 		{"future", "feed_dh_orders_clean", now.Add(time.Second).Format(time.RFC3339), 0, nil, false, false, false, true},
 		{"missing", "feed_dh_orders_clean", "", 0, nil, false, false, false, true},
@@ -62,6 +65,15 @@ func TestFeedFreshnessClockOutcomes(t *testing.T) {
 			deps.CardLadderStore = &postgres.CardLadderStore{}
 			deps.CardLadderPurchaseLister = repo
 			deps.CardLadderValueUpdater = repo
+			deps.ShowPrepCredentials = cardladder.NewConfiguredClient(&mocks.CardLadderStoreMock{GetConfigFn: func(context.Context) (*postgres.CardLadderConfig, error) {
+				if tc.name == "CL config missing" {
+					return nil, nil
+				}
+				if tc.name == "CL config unreadable" {
+					return nil, errors.New("secret credentials")
+				}
+				return &postgres.CardLadderConfig{FirebaseAPIKey: "fixture", RefreshToken: "fixture"}, nil
+			}}, nil, deps.Logger)
 			if tc.unavailable {
 				deps.DHOrdersClient = nil
 			}
@@ -89,7 +101,7 @@ func TestFeedFreshnessClockOutcomes(t *testing.T) {
 			}
 			s := buildFeedFreshnessScheduler(&cfg, deps, nil)
 			s.showPrep = func(context.Context) (ShowPrepWorkerStatus, error) {
-				return ShowPrepWorkerStatus{Configured: true}, nil
+				return ShowPrepWorkerStatus{}, errors.New("disabled evidence store unavailable")
 			}
 			body, failed := s.report(context.Background(), func() time.Time { return readNow })
 			require.Equal(t, tc.fail, failed)

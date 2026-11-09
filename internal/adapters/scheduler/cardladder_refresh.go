@@ -423,7 +423,7 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) er
 	}
 
 	if s.freshnessStore != nil && !outcome.failed && ctx.Err() == nil {
-		if err := s.freshnessStore.Set(ctx, "feed_cardladder_clean", time.Now().UTC().Format(time.RFC3339)); err != nil {
+		if err := s.freshnessStore.Set(ctx, syncStateKeyCLClean, time.Now().UTC().Format(time.RFC3339)); err != nil {
 			s.logger.Warn(ctx, "CL refresh: clean marker write failed")
 		}
 	}

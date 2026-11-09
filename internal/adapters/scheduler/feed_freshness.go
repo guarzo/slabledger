@@ -10,7 +10,13 @@ import (
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
-	"github.com/guarzo/slabledger/internal/platform/config"
+)
+
+const (
+	syncStateKeyDHOrdersClean    = "feed_dh_orders_clean"
+	syncStateKeyDHInventoryClean = "feed_dh_inventory_clean"
+	syncStateKeyCLClean          = "feed_cardladder_clean"
+	syncStateKeyPSAClean         = "feed_psa_clean"
 )
 
 type freshnessFeed struct {
@@ -26,36 +32,11 @@ type FeedFreshnessScheduler struct {
 	state                       SyncStateStore
 	feeds                       []freshnessFeed
 	showPrep                    func(context.Context) (ShowPrepWorkerStatus, error)
+	clConfigured                func(context.Context) (bool, error)
 	showPrepEnabled, psaEnabled bool
 	snapshotAt                  func(context.Context) (time.Time, error)
 	client                      *http.Client
 	logger                      observability.Logger
-}
-
-func buildFeedFreshnessScheduler(cfg *config.Config, deps BuildDeps, show *ShowPrepRefreshScheduler) *FeedFreshnessScheduler {
-	orders, inventory := cfg.DH.OrdersPollInterval, cfg.DH.InventoryPollInterval
-	if orders <= 0 {
-		orders = 30 * time.Minute
-	}
-	if inventory <= 0 {
-		inventory = 2 * time.Hour
-	}
-	s := &FeedFreshnessScheduler{
-		StopHandle: NewStopHandle(), url: cfg.Adapters.FeedFreshnessPingURL, state: deps.SyncStateStore,
-		showPrepEnabled: cfg.ShowPrepRefresh.Enabled, psaEnabled: cfg.PSASync.Enabled,
-		snapshotAt: deps.PSASnapshotFetchedAt, logger: deps.Logger,
-		client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
-		feeds: []freshnessFeed{
-			{"DH orders", "feed_dh_orders_clean", 3 * orders, cfg.DH.Enabled, deps.DHOrdersClient != nil && deps.OrdersImporter != nil},
-			{"DH inventory", "feed_dh_inventory_clean", 3 * inventory, cfg.DH.Enabled, deps.DHInventoryListClient != nil && deps.DHFieldsUpdater != nil && deps.PurchaseByCertLookup != nil},
-			{"CardLadder", "feed_cardladder_clean", 30 * time.Hour, cfg.CardLadder.Enabled, deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil},
-			{"PSA sync", "feed_psa_clean", 30 * time.Hour, cfg.PSASync.Enabled, deps.PSARowProvider != nil && deps.PSAImporter != nil},
-		},
-	}
-	if show != nil {
-		s.showPrep = show.Status
-	}
-	return s
 }
 
 func (s *FeedFreshnessScheduler) Start(ctx context.Context) {
@@ -115,9 +96,9 @@ func (s *FeedFreshnessScheduler) report(parent context.Context, now func() time.
 		}
 		reason := freshnessReason(at, now(), f.maxAge)
 		if f.name == "CardLadder" {
-			if s.showPrep == nil {
+			if s.clConfigured == nil {
 				reason = "configuration unavailable"
-			} else if status, e := s.showPrep(ctx); e != nil || !status.Configured {
+			} else if configured, e := s.clConfigured(ctx); e != nil || !configured {
 				reason = "configuration unavailable"
 			}
 		}

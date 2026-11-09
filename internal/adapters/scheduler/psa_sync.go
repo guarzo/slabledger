@@ -193,7 +193,7 @@ func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 		return err
 	}
 	if s.freshness != nil && result.Failed == 0 && len(result.Errors) == 0 && importCtx.Err() == nil {
-		if err := s.freshness.Set(ctx, "feed_psa_clean", time.Now().UTC().Format(time.RFC3339)); err != nil {
+		if err := s.freshness.Set(ctx, syncStateKeyPSAClean, time.Now().UTC().Format(time.RFC3339)); err != nil {
 			s.logger.Warn(ctx, "PSA sync: clean marker write failed")
 		}
 	}

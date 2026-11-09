@@ -248,7 +248,7 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			return
 		}
 	}
-	if err := s.syncState.Set(ctx, "feed_dh_inventory_clean", time.Now().UTC().Format(time.RFC3339)); err != nil {
+	if err := s.syncState.Set(ctx, syncStateKeyDHInventoryClean, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		s.logger.Warn(ctx, "dh inventory poll: clean marker write failed")
 	}
 }

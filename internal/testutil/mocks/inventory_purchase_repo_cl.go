@@ -26,6 +26,9 @@ func (m *PurchaseRepositoryMock) UpdatePurchaseSetName(ctx context.Context, id, 
 	}
 	return nil
 }
-func (m *PurchaseRepositoryMock) UpdatePurchasePSASpecID(context.Context, string, int) error {
+func (m *PurchaseRepositoryMock) UpdatePurchasePSASpecID(ctx context.Context, id string, specID int) error {
+	if m.UpdatePurchasePSASpecIDFn != nil {
+		return m.UpdatePurchasePSASpecIDFn(ctx, id, specID)
+	}
 	return nil
 }

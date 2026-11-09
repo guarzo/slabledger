@@ -288,7 +288,7 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 			return
 		}
 	}
-	if err := s.syncState.Set(ctx, "feed_dh_orders_clean", time.Now().UTC().Format(time.RFC3339)); err != nil {
+	if err := s.syncState.Set(ctx, syncStateKeyDHOrdersClean, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		s.logger.Warn(ctx, "dh orders poll: clean marker write failed")
 	}
 }
