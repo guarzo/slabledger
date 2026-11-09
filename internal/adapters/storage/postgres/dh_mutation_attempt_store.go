@@ -50,13 +50,21 @@ func (s *ConfirmedReturnStore) PrepareDHMutation(ctx context.Context, id string,
 	open := state.PrecedingAttempt
 	if open != nil {
 		listReplay := req.AllowListingReplay && req.Kind == "list" && req.Phase == "intake_patch_sync" && req.Key == "" && open.Retryable && p.DHInventoryID > 0 && req.ReturnOperationID == ""
+		// PSA import is idempotent by cert; only the scheduler's unlinked
+		// intake can replay its immutable request, never another mutation kind.
+		pushReplay := req.Kind == "push" && req.Phase == "psa_import" && req.Key == "" && req.ReturnOperationID == "" && p.DHInventoryID == 0 && p.Grader == "PSA" && p.CertNumber != ""
 		keyedReplay := (req.Kind == "sale" || req.Kind == "return" || (req.Kind == "price" && req.Phase == "live_price")) && req.Key != ""
 		sameAttempt := open.Key == req.Key && open.Kind == req.Kind && open.Phase == req.Phase && open.ReturnOperationID == req.ReturnOperationID && open.CapturedPurchaseID == id && open.DHInventoryID == p.DHInventoryID && open.CertNumber == p.CertNumber && open.Grader == p.Grader
 		if listReplay && sameAttempt && open.PayloadIdentity != req.PayloadIdentity {
 			return nil, inventory.NewReturnConflict("listing_request_changed", "approved listing request changed; restore the approved price, images and channels before retrying")
 		}
-		if (!listReplay && !keyedReplay) || !sameAttempt || open.PayloadIdentity != req.PayloadIdentity {
+		if (!listReplay && !keyedReplay && !pushReplay) || !sameAttempt || open.PayloadIdentity != req.PayloadIdentity {
 			return nil, inventory.NewReturnConflict("preceding_dh_mutation_uncertain", "preceding DH attempt "+open.ID+" ("+open.Kind+"/"+open.Phase+") requires verified completion evidence")
+		}
+		if pushReplay {
+			if err := s.assertAllowedExcept(ctx, id, true, open.ID); err != nil {
+				return nil, err
+			}
 		}
 		if listReplay {
 			if state.Sale != nil {
