@@ -294,6 +294,9 @@ func (w *wiring) schedulerDeps(cfg *config.Config, logger observability.Logger) 
 	if w.psaRowProvider != nil {
 		sDeps.PSARowProvider = w.psaRowProvider
 	}
+	if w.psaSnapshotStore != nil {
+		sDeps.PSASnapshotFetchedAt = w.psaSnapshotStore.SnapshotFetchedAt
+	}
 	return sDeps
 }
 

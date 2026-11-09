@@ -480,6 +480,51 @@ Setting `BACKFILL_IMAGES=true` enqueues every unsold PSA purchase with empty ima
 once at startup. It draws on the PSA daily budget, so set it back to `false` after one
 run.
 
+### Feed Freshness
+
+**File:** `feed_freshness.go`
+**Purpose:** One aggregate outcome alert, without calling providers or the app's status HTTP endpoints.
+
+`FEED_FRESHNESS_PING_URL` is an optional secret UUID URL on `https://hc-ping.com`.
+Unset logs once and disables the checker. It POSTs a safe summary to that URL when
+healthy, or to `/fail` when a feed fails, is held, unconfigured or unreadable.
+Redirects are refused; delivery must return HTTP 200 and an `OK` acknowledgement.
+Reads and delivery each have a 10-second deadline. Payloads contain feed names,
+state/counts and timestamps, never raw provider/database errors or inventory details.
+
+The first evaluation is after **60 minutes of uptime**, then every **15 minutes**.
+No startup success ping is sent: a wake does not establish recovery. Wakes shorter
+than an hour will not evaluate. This fixed allowance is not a guarantee that every
+catch-up finishes: an unsuccessful same-day CL attempt can suppress its existing
+scheduled catch-up, and PSA may wait until its scheduled hour.
+
+| Feed | Healthy outcome clock / condition |
+|---|---|
+| DH orders | `sync_state.feed_dh_orders_clean`, at most 3× effective poll interval (default 90m) |
+| DH inventory | `sync_state.feed_dh_inventory_clean`, at most 3× effective poll interval (default 6h) |
+| CardLadder valuations | `sync_state.feed_cardladder_clean`, at most 30h; no API/quota/read/write failures during valuation phases |
+| PSA sync | `sync_state.feed_psa_clean`, at most 30h after a clean import; stored input snapshot at most 26h old |
+| Show-prep | Existing coverage; hold/failed immediately unhealthy; missing/stale coverage unhealthy except 00:00–02:00 UTC |
+
+Disabled-by-config feeds are reported but exempt. Missing/invalid/future success
+clocks fail; first rollout can remain unhealthy until actual clean work completes.
+CL no-cert/no-match/no-value answers are valid; comps/collection hygiene and stats
+telemetry are not part of the valuation marker; neither are DH push re-enrollment
+or event writes. An empty PSA input performs no
+import and does not renew its success clock. Successful empty DH polls do renew
+their clocks. Both DH source cursors stay put on any failed row, allowing the next
+poll to retry. Replays can repeat observation events; permanent row errors can
+hold the cursor until the growing window reaches the existing pagination cap.
+
+Scale-to-zero is intentional: **this is not an app-down monitor**. With the practical
+single-machine-at-a-time deployment, no leader election is used; overlapping app
+instances can send conflicting pings. For sleep-tolerant Healthchecks settings,
+use a Simple period of **365 days** and grace of **365 days**, Only POST, HTTP body
+filtering off, and one notification destination. `/fail` still signals active
+failures promptly. Silence is not ignored forever: after about 730 days without a
+ping the check can time out. A failure remains open while the app sleeps until a
+later healthy evaluation. See [Healthchecks configuration](https://healthchecks.io/docs/configuring_checks/).
+
 ## Startup Timing
 
 There is no staggering. `StartAll` launches every scheduler at `T=0`, and each one's
