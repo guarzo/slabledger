@@ -23,6 +23,7 @@ func TestPSAPushReplay(t *testing.T) {
 		batch, uncertain, blocked bool
 	}{
 		{name: "already imported", resolution: dh.PSAImportStatusAlreadyListed},
+		{name: "set enriched after attempt", resolution: dh.PSAImportStatusAlreadyListed},
 		{name: "batch rejected", batch: true, receipt: "batch_rejected"},
 		{name: "PSA error", resolution: dh.PSAImportStatusPSAError, receipt: "psa_error"},
 		{name: "rate limited", resolution: dh.PSAImportStatusPSAError, receipt: "rate_limited"},
@@ -49,7 +50,11 @@ func TestPSAPushReplay(t *testing.T) {
 			_, err := db.ExecContext(ctx, `UPDATE campaign_purchases SET dh_inventory_id=0,dh_push_status='pending',buy_cost_cents=1000 WHERE id=$1`, id)
 			require.NoError(t, err)
 			repo := postgres.NewPurchaseStore(db.DB, logger)
-			item := dh.PSAImportItem{CertNumber: "push-cert", CostBasisCents: 1000, Status: "in_stock", Overrides: &dh.PSAImportOverrides{Name: "Card"}}
+			item := dh.PSAImportItem{CertNumber: "push-cert", CostBasisCents: 1000, Status: "in_stock", Overrides: &dh.PSAImportOverrides{Name: "Card", SetName: "Captured set", CardNumber: "1"}}
+			if tc.name == "set enriched after attempt" {
+				item.Overrides.SetName = ""
+				require.NoError(t, postgres.NewCardIDMappingRepository(db.DB).SaveExternalID(ctx, "Card", "", "1", pricing.SourceDH, "777"))
+			}
 			payload, err := json.Marshal(item)
 			require.NoError(t, err)
 			coord := inventory.NewDHMutationCoordinator(store, store)
@@ -59,7 +64,7 @@ func TestPSAPushReplay(t *testing.T) {
 				return nil, context.DeadlineExceeded
 			}), context.DeadlineExceeded)
 			// Match a legacy open target-0 attempt, with receipt and metadata changed later.
-			_, err = db.ExecContext(ctx, `UPDATE campaign_purchases SET received_at=now()+interval '1 second',buy_cost_cents=2222,card_name='Edited card' WHERE id=$1`, id)
+			_, err = db.ExecContext(ctx, `UPDATE campaign_purchases SET received_at=now()+interval '1 second',buy_cost_cents=2222,card_name='Edited card',set_name='Enriched set' WHERE id=$1`, id)
 			require.NoError(t, err)
 			before, err := store.GetReturnState(ctx, id)
 			require.NoError(t, err)
@@ -150,9 +155,16 @@ func TestPSAPushReplay(t *testing.T) {
 			} else {
 				require.Equal(t, "matched", after.Purchase.DHPushStatus)
 				require.Equal(t, 99, after.Purchase.DHInventoryID)
-				mapped, e := postgres.NewCardIDMappingRepository(db.DB).GetExternalID(ctx, "Card", "", "", pricing.SourceDH)
+				mapped, e := postgres.NewCardIDMappingRepository(db.DB).GetExternalID(ctx, "Card", item.Overrides.SetName, "1", pricing.SourceDH)
 				require.NoError(t, e)
-				require.Equal(t, "123", mapped, "map the captured metadata, not later edits")
+				expected := "123"
+				if tc.name == "set enriched after attempt" {
+					expected = "777" // Don't overwrite another card's ambiguous key.
+				}
+				require.Equal(t, expected, mapped)
+				mapped, e = postgres.NewCardIDMappingRepository(db.DB).GetExternalID(ctx, "Edited card", "Enriched set", "", pricing.SourceDH)
+				require.NoError(t, e)
+				require.Empty(t, mapped, "do not combine captured identity with later enrichment")
 			}
 		})
 	}

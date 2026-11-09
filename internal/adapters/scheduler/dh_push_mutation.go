@@ -34,15 +34,17 @@ func (s *DHPushScheduler) processCoordinatedPurchase(ctx context.Context, cached
 		}
 		// Only route an open PSA import to preparation; do not make preflight
 		// writes while it is uncertain. Preparation and ownership enforce guards.
-		if reader, ok := s.guards.(returnStateReader); ok {
-			state, e := reader.GetReturnState(c, p.ID)
-			if e != nil {
-				return e
-			}
-			if a := state.PrecedingAttempt; a != nil && a.Kind == "push" && a.Phase == "psa_import" {
-				push = true
-				return nil
-			}
+		reader, ok := s.guards.(returnStateReader)
+		if !ok {
+			return inventory.NewReturnConflict("coordination_unavailable", "push state reader required")
+		}
+		state, e := reader.GetReturnState(c, p.ID)
+		if e != nil {
+			return e
+		}
+		if a := state.PrecedingAttempt; a != nil && a.Kind == "push" && a.Phase == "psa_import" {
+			push = true
+			return nil
 		}
 		if e := s.guards.AssertMutationAllowed(c, p.ID); e != nil {
 			return e
@@ -55,14 +57,6 @@ func (s *DHPushScheduler) processCoordinatedPurchase(ctx context.Context, cached
 			return inventory.NewReturnConflict("coordination_unavailable", "push config required")
 		}
 		cfg = *freshConfig
-		reader, ok := s.guards.(returnStateReader)
-		if !ok {
-			return inventory.NewReturnConflict("coordination_unavailable", "push state reader required")
-		}
-		state, e := reader.GetReturnState(c, p.ID)
-		if e != nil {
-			return e
-		}
 		if state.Sale != nil {
 			return nil
 		}
@@ -229,8 +223,12 @@ func (s *DHPushScheduler) pushPSACoordinated(ctx context.Context, id string, cfg
 		if item.Overrides != nil {
 			name, set, number = item.Overrides.Name, item.Overrides.SetName, item.Overrides.CardNumber
 		}
-		if e := s.cardIDSaver.SaveExternalID(c, name, set, number, pricing.SourceDH, fmt.Sprint(r.DHCardID)); e != nil {
-			return nil, e
+		// A replay may predate enrichment. Never publish an incomplete captured
+		// key into the shared mapping cache or fill it from unverified new metadata.
+		if !a.Replaying || (item.Overrides != nil && name != "" && set != "" && number != "") {
+			if e := s.cardIDSaver.SaveExternalID(c, name, set, number, pricing.SourceDH, fmt.Sprint(r.DHCardID)); e != nil {
+				return nil, e
+			}
 		}
 		outcome = processMatchedComplete
 		return &inventory.DHMutationSettlement{Outcome: "succeeded", Receipt: fmt.Sprintf("psa-import:%s:%d", r.Resolution, r.DHInventoryID)}, nil
