@@ -14,6 +14,7 @@ import (
 // Unset Fn fields return zero values and a nil error, which for GetConfig means
 // the "not configured" state the handler treats as valid.
 type CardLadderStoreMock struct {
+	SaveMappingPricingFn   func(context.Context, string, string, string) error
 	GetConfigFn            func(ctx context.Context) (*cardladder.Config, error)
 	SaveConfigFn           func(ctx context.Context, email, refreshToken, collectionID, firebaseAPIKey, firebaseUID string) error
 	ListMappingsFn         func(ctx context.Context) ([]cardladder.CardMapping, error)
@@ -70,4 +71,17 @@ func (m *CardLadderStoreMock) GetCLCoverageByMonth(ctx context.Context) (*cardla
 		return m.GetCLCoverageByMonthFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *CardLadderStoreMock) SaveMappingPricing(ctx context.Context, cert, profile, condition string) error {
+	if m.SaveMappingPricingFn != nil {
+		return m.SaveMappingPricingFn(ctx, cert, profile, condition)
+	}
+	return nil
+}
+func (m *CardLadderStoreMock) GetMapping(ctx context.Context, cert string) (*cardladder.CardMapping, error) {
+	return nil, nil
+}
+func (m *CardLadderStoreMock) DeleteMapping(ctx context.Context, cert string) error {
+	return nil
 }

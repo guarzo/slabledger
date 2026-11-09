@@ -51,6 +51,7 @@ var _ Scheduler = (*PSASyncScheduler)(nil)
 type PSASyncScheduler struct {
 	StopHandle
 	provider     RowProvider
+	freshness    SyncStateStore
 	refresher    TokenRefresher
 	importer     PSAImporter
 	logger       observability.Logger
@@ -87,6 +88,11 @@ func NewPSASyncScheduler(
 
 // PSASyncOption configures optional PSASyncScheduler dependencies.
 type PSASyncOption func(*PSASyncScheduler)
+
+// WithPSAFreshnessStore records successful imports independently of input fetches.
+func WithPSAFreshnessStore(store SyncStateStore) PSASyncOption {
+	return func(s *PSASyncScheduler) { s.freshness = store }
+}
 
 // WithPSATokenRefresher wires an optional token refresher run before each fetch.
 func WithPSATokenRefresher(r TokenRefresher) PSASyncOption {
@@ -185,6 +191,11 @@ func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
 		s.logger.Error(ctx, "PSA import failed", observability.Err(err))
 		s.recordFailure(start, err)
 		return err
+	}
+	if s.freshness != nil && result.Failed == 0 && len(result.Errors) == 0 && importCtx.Err() == nil {
+		if err := s.freshness.Set(ctx, "feed_psa_clean", time.Now().UTC().Format(time.RFC3339)); err != nil {
+			s.logger.Warn(ctx, "PSA sync: clean marker write failed")
+		}
 	}
 
 	s.logger.Info(ctx, "PSA sync completed",

@@ -15,6 +15,21 @@ import (
 	"github.com/guarzo/slabledger/internal/platform/config"
 )
 
+// clRefreshStore is the persistence used by valuation and collection hygiene.
+type clRefreshStore interface {
+	GetConfig(context.Context) (*postgres.CardLadderConfig, error)
+	ListMappings(context.Context) ([]postgres.CLCardMapping, error)
+	GetMapping(context.Context, string) (*postgres.CLCardMapping, error)
+	SaveMappingPricing(context.Context, string, string, string) error
+	SaveMapping(context.Context, string, string, string, string) error
+	DeleteMapping(context.Context, string) error
+}
+
+// WithCLFreshnessStore records completion of clean valuation sweeps.
+func WithCLFreshnessStore(store SyncStateStore) CardLadderRefreshOption {
+	return func(s *CardLadderRefreshScheduler) { s.freshnessStore = store }
+}
+
 // CardLadderPurchaseLister lists unsold purchases with their image URLs.
 type CardLadderPurchaseLister interface {
 	ListAllUnsoldPurchases(ctx context.Context) ([]inventory.Purchase, error)
@@ -88,7 +103,8 @@ type CardLadderRefreshScheduler struct {
 	statsMu          sync.RWMutex
 	clientMu         sync.RWMutex
 	client           *cardladder.Client
-	store            *postgres.CardLadderStore
+	store            clRefreshStore
+	freshnessStore   SyncStateStore
 	purchaseLister   CardLadderPurchaseLister
 	valueUpdater     CardLadderValueUpdater
 	gemRateUpdater   CardLadderGemRateUpdater
@@ -134,7 +150,7 @@ func (s *CardLadderRefreshScheduler) recordEvent(ctx context.Context, e dhevents
 // NewCardLadderRefreshScheduler creates a new CL refresh scheduler.
 func NewCardLadderRefreshScheduler(
 	client *cardladder.Client,
-	store *postgres.CardLadderStore,
+	store clRefreshStore,
 	purchaseLister CardLadderPurchaseLister,
 	valueUpdater CardLadderValueUpdater,
 	gemRateUpdater CardLadderGemRateUpdater,
@@ -230,7 +246,7 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 	}
 
 	if p.CertNumber == "" {
-		s.recordCLError(ctx, p.ID, CLReasonNoCert)
+		s.recordCLError(ctx, p.ID, CLReasonNoCert, nil)
 		return nil
 	}
 
@@ -241,7 +257,7 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 		mappingByCert[p.CertNumber] = *m
 	}
 
-	gemRateID, condition, ok, _ := s.resolveGemRate(ctx, client, p, mappingByCert)
+	gemRateID, condition, ok, _ := s.resolveGemRate(ctx, client, p, mappingByCert, nil)
 	if !ok {
 		return nil // resolveGemRate already recorded the failure reason.
 	}
@@ -255,11 +271,11 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 		if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
 			reason = CLReasonQuotaExhausted
 		}
-		s.recordCLError(ctx, p.ID, reason)
+		s.recordCLError(ctx, p.ID, reason, nil)
 		return nil
 	}
 	if est.value <= 0 {
-		s.recordCLError(ctx, p.ID, CLReasonNoValue)
+		s.recordCLError(ctx, p.ID, CLReasonNoValue, nil)
 		return nil
 	}
 
@@ -273,7 +289,7 @@ func (s *CardLadderRefreshScheduler) PriceSinglePurchase(ctx context.Context, p 
 	// in PricingEnrichJob (MM, today) and any caller iterating this purchase
 	// operate on the freshly persisted value instead of a stale snapshot.
 	p.CLValueCents = newCLCents
-	s.recordCLError(ctx, p.ID, "")
+	s.recordCLError(ctx, p.ID, "", nil)
 
 	if s.dhPushUpdater != nil && newCLCents != oldCLCents && shouldReenrollForCLChange(p) {
 		if err := s.dhPushUpdater.UpdatePurchaseDHPushStatus(ctx, p.ID, inventory.DHPushStatusPending); err != nil {
@@ -349,8 +365,10 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) er
 		return err
 	}
 
+	outcome := &clValuationOutcome{}
 	existingMappings, err := s.store.ListMappings(ctx)
 	if err != nil {
+		outcome.fail()
 		s.logger.Warn(ctx, "CL refresh: failed to load card mappings — continuing without mapping cache", observability.Err(err))
 	}
 	mappingByCert := make(map[string]postgres.CLCardMapping, len(existingMappings))
@@ -371,11 +389,11 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) er
 		p := &purchases[i]
 		if p.CertNumber == "" {
 			stats.NoCert++
-			s.recordCLError(ctx, p.ID, CLReasonNoCert)
+			s.recordCLError(ctx, p.ID, CLReasonNoCert, outcome)
 			continue
 		}
 
-		gemRateID, condition, ok, quotaHit := s.resolveGemRate(ctx, client, p, mappingByCert)
+		gemRateID, condition, ok, quotaHit := s.resolveGemRate(ctx, client, p, mappingByCert, outcome)
 		if quotaHit {
 			// CL quota wall hit during cert resolution. Stop resolving — every
 			// further BuildCollectionCard would fail identically. Mark the run
@@ -400,8 +418,14 @@ func (s *CardLadderRefreshScheduler) runOnce(ctx context.Context, gated bool) er
 	// apply it. Extracted into applyCLEstimates (cardladder_catalog.go) so the
 	// batch-cache-shape regression it guards against is unit-testable without
 	// a live CardLadderStore.
-	if err := s.applyCLEstimates(ctx, client, resolvedPurchases, &stats); err != nil {
+	if err := s.applyCLEstimates(ctx, client, resolvedPurchases, &stats, outcome); err != nil {
 		return err
+	}
+
+	if s.freshnessStore != nil && !outcome.failed && ctx.Err() == nil {
+		if err := s.freshnessStore.Set(ctx, "feed_cardladder_clean", time.Now().UTC().Format(time.RFC3339)); err != nil {
+			s.logger.Warn(ctx, "CL refresh: clean marker write failed")
+		}
 	}
 
 	// Phase 4: refresh sales comps (decoupled — queries gem_rate_id directly).

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
@@ -57,6 +58,7 @@ type schedulerDeps struct {
 	DHTombstoneStore           *postgres.DHCardTombstoneStore
 	PSARowProvider             scheduler.RowProvider
 	PSATokenRefresher          scheduler.TokenRefresher
+	PSASnapshotFetchedAt       func(context.Context) (time.Time, error)
 }
 
 // initializeSchedulers builds and starts the scheduler group, returning the
@@ -72,6 +74,7 @@ func initializeSchedulers(ctx context.Context, deps schedulerDeps) (*scheduler.B
 		AuthService:                deps.AuthService,
 		Logger:                     deps.Logger,
 		SyncStateStore:             deps.SyncStateRepo,
+		PSASnapshotFetchedAt:       deps.PSASnapshotFetchedAt,
 		InventoryLister:            &inventoryListAdapter{repo: deps.PurchaseStore},
 		SnapshotRefresher:          &snapshotRefreshAdapter{svc: deps.CampaignsService},
 		SnapshotEnrichService:      deps.CampaignsService,

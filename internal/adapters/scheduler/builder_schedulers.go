@@ -122,7 +122,7 @@ func buildCardLadderRefreshScheduler(cfg *config.Config, deps BuildDeps) *CardLa
 	if deps.CardLadderStore == nil || deps.CardLadderPurchaseLister == nil || deps.CardLadderValueUpdater == nil {
 		return nil
 	}
-	var clOpts []CardLadderRefreshOption
+	clOpts := []CardLadderRefreshOption{WithCLFreshnessStore(deps.SyncStateStore)}
 	if deps.DHPushStatusUpdater != nil {
 		clOpts = append(clOpts, WithCLDHPushUpdater(deps.DHPushStatusUpdater))
 	}
@@ -395,6 +395,7 @@ func buildPSASyncScheduler(cfg *config.Config, deps BuildDeps) *PSASyncScheduler
 		deps.PSARowProvider, deps.PSAImporter,
 		deps.Logger, cfg.PSASync,
 		WithPSATokenRefresher(deps.PSATokenRefresher),
+		WithPSAFreshnessStore(deps.SyncStateStore),
 	)
 }
 
