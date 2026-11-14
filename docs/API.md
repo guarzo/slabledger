@@ -3009,6 +3009,12 @@ match succeeded; it carries the error string otherwise. `api_health`,
 `last_orders_poll_at` and the three `orders_*_24h` counters are likewise
 `omitempty`. The remaining keys are always present.
 
+The `orders_*_24h` counters count recorded events, not rows fetched by the scheduled
+poll. Its seven-day lookback emits orphan/already-sold events only for orders whose
+`sold_at` is strictly newer than the stored cursor; replayed skips appear only in
+poll summary logs. A late orphan at or before that cursor does not raise the admin
+orphan alarm. Newly created sales still emit matched events regardless of age.
+
 Two of the counts are deliberately different views of "pending", and the gap
 between them is the diagnostic:
 

@@ -368,9 +368,26 @@ budget to recompute the same numbers.
 **File:** `dh_orders_poll.go`
 **Purpose:** Polls the DH v2 orders endpoint and lands new orders as sales.
 
-Cursor state lives in the shared `SyncStateStore`, so a restart resumes rather than
-re-importing. Import goes through `OrdersImporter` rather than `CampaignService`
-because CSV/orders intake lives in its own package.
+Cursor state lives in the shared `SyncStateStore` as a forward-only high-water mark
+of the newest valid `sold_at` processed. Each scheduled pass queries seven days
+before that cursor to recover orders DH records or releases late with their original
+sale timestamp. Import goes through `OrdersImporter`, whose existing-sale check
+prevents duplicates or overwrites, including hand-entered sales without an order ID.
+
+With no cursor, the scheduler persists a seed 24 hours ago before the first query,
+even if that query fails. Later passes query seven days before the persisted seed
+until the cursor advances. Failed or partially failed passes do not advance it;
+an invalid stored cursor stops the pass without resetting it or marking it clean.
+DH caps `since` at 90 days; this scheduler does not clamp old cursors or recover
+orders older than its seven-day cursor-relative window.
+
+Replayed skips at or before the cursor contribute to summary counts only. Per-order
+orphan/already-sold events and grade/channel warnings are emitted only for orders
+strictly newer than the cursor; newly created sales emit sold events regardless of
+age. Thus a late orphan below the cursor has no per-cert event or admin orphan alarm.
+A sale removed locally can be re-created if its order remains active on DH inside
+the replay window and no completed-return or mutation guard blocks it. There is no
+persistent suppression of locally removed sales.
 
 | Config | Env Var | Default | Description |
 |--------|---------|---------|-------------|
