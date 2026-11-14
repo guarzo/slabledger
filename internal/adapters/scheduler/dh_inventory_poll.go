@@ -43,6 +43,7 @@ type DHInventoryPollConfig struct {
 type DHInventoryPollScheduler struct {
 	StopHandle
 	observationRequired bool
+	onFirstRun          func()
 	guards              inventory.DHMutationGuards
 	client              DHInventoryListClient
 	syncState           SyncStateStore
@@ -93,11 +94,12 @@ func (s *DHInventoryPollScheduler) Start(ctx context.Context) {
 	}
 
 	RunLoop(ctx, LoopConfig{
-		Name:     "dh-inventory-poll",
-		Interval: s.config.Interval,
-		WG:       s.WG(),
-		StopChan: s.Done(),
-		Logger:   s.logger,
+		Name:       "dh-inventory-poll",
+		OnFirstRun: s.onFirstRun,
+		Interval:   s.config.Interval,
+		WG:         s.WG(),
+		StopChan:   s.Done(),
+		Logger:     s.logger,
 	}, s.poll)
 }
 

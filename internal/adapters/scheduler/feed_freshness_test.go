@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
+	"github.com/guarzo/slabledger/internal/domain/csvimport"
 	sp "github.com/guarzo/slabledger/internal/domain/showprep"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
@@ -103,7 +105,7 @@ func TestFeedFreshnessClockOutcomes(t *testing.T) {
 			s.showPrep = func(context.Context) (ShowPrepWorkerStatus, error) {
 				return ShowPrepWorkerStatus{}, errors.New("disabled evidence store unavailable")
 			}
-			body, failed := s.report(context.Background(), func() time.Time { return readNow })
+			body, failed, _ := s.report(context.Background(), func() time.Time { return readNow })
 			require.Equal(t, tc.fail, failed)
 			require.NotContains(t, body, "secret")
 			if tc.name == "orders stale" {
@@ -150,7 +152,7 @@ func TestFeedFreshnessCoverage(t *testing.T) {
 				}
 				return status, nil
 			}
-			body, failed := s.report(context.Background(), func() time.Time { return time.Date(2026, 11, 8, tc.hour, 0, 0, 0, time.UTC) })
+			body, failed, _ := s.report(context.Background(), func() time.Time { return time.Date(2026, 11, 8, tc.hour, 0, 0, 0, time.UTC) })
 			require.Equal(t, tc.wantFail, failed)
 			require.NotContains(t, body, "secret")
 		})
@@ -210,6 +212,163 @@ func TestFeedFreshnessTransport(t *testing.T) {
 			require.NotContains(t, fmt.Sprint(logger.Entries()), testFeedURL)
 		})
 	}
+}
+
+func TestFeedFreshnessStartupJudgment(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want []string
+	}{
+		{"fresh saved outcomes", []string{"healthy"}},
+		{"pending only", nil},
+		{"finished failure and pending", []string{"fail"}},
+		{"completion during read", []string{"healthy"}},
+		{"all recover", []string{"healthy"}},
+		{"CL configuration missing", []string{"fail"}},
+		{"CL configuration missing, unreadable clock", []string{"fail"}},
+		{"show-prep unconfigured", []string{"fail"}},
+		{"auth hold", []string{"fail"}},
+		{"show-prep failed pending", nil},
+		{"cancelled", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				s := buildFeedFreshnessScheduler(defaultCfg(), minimalDeps(), nil)
+				s.url, s.psaEnabled, s.showPrepEnabled = testFeedURL, false, false
+				s.feeds = []freshnessFeed{{"DH orders", syncStateKeyDHOrdersClean, time.Hour, true, true}, {"DH inventory", syncStateKeyDHInventoryClean, time.Hour, true, true}}
+				ordersDone, inventoryDone := s.observeStartup("DH orders"), s.observeStartup("DH inventory")
+				fresh := tc.name == "fresh saved outcomes"
+				inventoryFresh := fresh
+				reads := 0
+				store := newMockSyncStateStore()
+				s.state = store
+				store.GetFn = func(_ context.Context, key string) (string, error) {
+					reads++
+					if strings.HasSuffix(tc.name, "unreadable clock") && key == syncStateKeyCLClean {
+						return "", errors.New("unreadable")
+					}
+					value := ""
+					if fresh && (key != syncStateKeyDHInventoryClean || inventoryFresh) {
+						value = time.Now().Format(time.RFC3339)
+					}
+					if tc.name == "completion during read" && reads == 1 {
+						fresh, inventoryFresh = true, true
+						ordersDone()
+						inventoryDone()
+					}
+					return value, nil
+				}
+				if tc.name == "finished failure and pending" {
+					ordersDone()
+				}
+				if strings.HasPrefix(tc.name, "CL configuration missing") {
+					s.feeds = append(s.feeds, freshnessFeed{"CardLadder", syncStateKeyCLClean, time.Hour, true, true})
+					s.observeStartup("CardLadder")
+					s.clConfigured = func(context.Context) (bool, error) { return false, nil }
+				}
+				if strings.HasPrefix(tc.name, "show-prep") || tc.name == "auth hold" {
+					s.showPrepEnabled = true
+					s.observeStartup("Show-prep")
+					s.showPrep = func(context.Context) (ShowPrepWorkerStatus, error) {
+						state := "failed"
+						if tc.name == "auth hold" {
+							state = "auth_hold"
+						}
+						return ShowPrepWorkerStatus{Configured: tc.name != "show-prep unconfigured", WorkerStatus: sp.WorkerStatus{State: state}}, nil
+					}
+				}
+				var got []string
+				s.client.Transport = mocks.HTTPTransportFunc(func(r *http.Request) (*http.Response, error) {
+					kind := "healthy"
+					if strings.HasSuffix(r.URL.Path, "/fail") {
+						kind = "fail"
+					}
+					got = append(got, kind)
+					body, err := io.ReadAll(r.Body)
+					require.NoError(t, err)
+					if tc.name == "finished failure and pending" {
+						require.Contains(t, string(body), "DH inventory: startup catch-up pending; not judged")
+					}
+					return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("OK")), Header: make(http.Header)}, nil
+				})
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if tc.name == "cancelled" {
+					cancel()
+				}
+				go s.Start(ctx)
+				synctest.Wait()
+				if tc.name == "all recover" {
+					require.Empty(t, got)
+					fresh = true
+					ordersDone()
+					synctest.Wait()
+					require.Empty(t, got) // A completed fresh feed cannot clear another pending feed.
+					inventoryFresh = true
+					inventoryDone()
+					ordersDone()
+					synctest.Wait()
+				}
+				require.Equal(t, len(tc.want) == 0, len(got) == 0)
+				for _, kind := range got {
+					require.Contains(t, tc.want, kind)
+				}
+				if tc.name == "cancelled" {
+					require.Zero(t, reads)
+				}
+				cancel()
+				synctest.Wait()
+			})
+		})
+	}
+}
+
+func TestFeedFreshnessStartupWiring(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		cfg := defaultCfg()
+		cfg.DH.Enabled, cfg.PSASync.Enabled = enabled, enabled
+		built := BuildGroup(cfg, fullyGatedDeps())
+		for _, sched := range built.Group.schedulers {
+			if s, ok := sched.(*FeedFreshnessScheduler); ok {
+				want := 0
+				if enabled {
+					want = 2
+				} // Only inventory and PSA have dependencies in this fixture.
+				require.Len(t, s.startup, want)
+				if enabled {
+					require.Contains(t, s.startup, "DH inventory")
+					require.Contains(t, s.startup, "PSA sync")
+				}
+			}
+		}
+	}
+}
+
+func TestPSAFirstAttemptWaitsForOwner(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fetchDone := make(chan struct{})
+		provider := &mocks.PSARowProviderMock{FetchRowsFn: func(context.Context) ([]csvimport.PSAExportRow, error) {
+			<-fetchDone
+			return nil, errors.New("failed fetch")
+		}}
+		s := NewPSASyncScheduler(provider, &mocks.MockImportService{}, nopLogger{}, config.PSASyncConfig{Enabled: true, SyncHour: -1})
+		completed := 0
+		s.onFirstRun = func() { completed++ }
+		go func() { require.Error(t, s.RunOnce(context.Background())) }()
+		synctest.Wait()
+		s.config.InitialDelay = 0
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go s.Start(ctx)
+		synctest.Wait()
+		require.Zero(t, completed)
+		require.ErrorIs(t, s.RunOnce(ctx), ErrSyncInProgress)
+		close(fetchDone)
+		synctest.Wait()
+		require.Equal(t, 1, completed)
+		cancel()
+		synctest.Wait()
+	})
 }
 
 func TestFeedFreshnessStartupDoesNotJudge(t *testing.T) {

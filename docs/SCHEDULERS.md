@@ -492,11 +492,26 @@ Redirects are refused; delivery must return HTTP 200 and an `OK` acknowledgement
 Reads and delivery each have a 10-second deadline. Payloads contain feed names,
 state/counts and timestamps, never raw provider/database errors or inventory details.
 
-The first evaluation is after **60 minutes of uptime**, then every **15 minutes**.
-No startup success ping is sent: a wake does not establish recovery. Wakes shorter
-than an hour will not evaluate. This fixed allowance is not a guarantee that every
-catch-up finishes: an unsuccessful same-day CL attempt can suppress its existing
-scheduled catch-up, and PSA may wait until its scheduled hour.
+Evaluation starts immediately, then runs every **15 minutes**, with additional
+checks when each watched feed finishes its first attempt. There is no fixed startup
+allowance: a non-fresh feed is **pending / not judged** until its own first attempt
+returns, including failure or a scheduled skip. PSA notifies from the actual import,
+not a skipped busy-mutex invocation. Completion permits judgment, not recovery;
+the outcome clocks and coverage rules below still determine health. Saved fresh
+outcomes can be judged immediately.
+
+A confirmed failure can send `/fail` while other feeds remain explicitly pending.
+Pending-only reports send nothing, and pending feeds can never clear an alert.
+Missing configuration and a durable show-prep authentication hold fail immediately;
+PSA input age is independent of the app's import and is also judged immediately.
+Completion notifications close the pending gate before sending a buffered wake hint;
+pending state is captured before status reads so a concurrent completion forces a
+reread instead of judging pre-completion evidence.
+
+Existing scheduler timing is unchanged. Before CL's or PSA's configured UTC hour,
+a stale feed may wait for that hour; a hung first attempt remains pending indefinitely.
+A wake ending before any sound judgment stays silent. The checker does not keep the
+app awake, and an unsuccessful same-day CL attempt can still suppress its catch-up.
 
 | Feed | Healthy outcome clock / condition |
 |---|---|

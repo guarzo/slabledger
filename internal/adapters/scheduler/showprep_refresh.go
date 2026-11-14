@@ -30,6 +30,7 @@ type ShowPrepWorkerStatus struct {
 type ShowPrepRefreshScheduler struct {
 	StopHandle
 	worker        *sp.EvidenceWorker
+	onFirstRun    func()
 	configuration ShowPrepConfiguration
 	logger        observability.Logger
 	enabled       bool
@@ -63,7 +64,7 @@ func (s *ShowPrepRefreshScheduler) Start(parent context.Context) {
 	s.mu.Unlock()
 	defer close(joined)
 	defer cancel()
-	RunLoop(ctx, LoopConfig{Name: "show-prep-evidence", Interval: s.interval, StopChan: s.Done(), Wake: s.wake, Logger: s.logger}, func(ctx context.Context) {
+	RunLoop(ctx, LoopConfig{Name: "show-prep-evidence", Interval: s.interval, StopChan: s.Done(), Wake: s.wake, OnFirstRun: s.onFirstRun, Logger: s.logger}, func(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}

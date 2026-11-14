@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/domain/observability"
@@ -31,6 +32,8 @@ type FeedFreshnessScheduler struct {
 	url                         string
 	state                       SyncStateStore
 	feeds                       []freshnessFeed
+	startup                     map[string]<-chan struct{}
+	wake                        chan struct{}
 	showPrep                    func(context.Context) (ShowPrepWorkerStatus, error)
 	clConfigured                func(context.Context) (bool, error)
 	showPrepEnabled, psaEnabled bool
@@ -49,8 +52,24 @@ func (s *FeedFreshnessScheduler) Start(ctx context.Context) {
 		s.logger.Warn(ctx, "feed freshness disabled: invalid ping URL")
 		return
 	}
-	// Deliberately silent during catch-up: waking must not manufacture recovery.
-	RunLoop(ctx, LoopConfig{Name: "feed-freshness", Interval: 15 * time.Minute, InitialDelay: time.Hour, StopChan: s.Done(), WG: s.WG(), Logger: s.logger}, s.check)
+	RunLoop(ctx, LoopConfig{Name: "feed-freshness", Interval: 15 * time.Minute, Wake: s.wake, StopChan: s.Done(), WG: s.WG(), Logger: s.logger}, s.check)
+}
+
+// observeStartup is wired before any scheduler starts. Completion allows judgment,
+// never recovery by itself; a failed or skipped first attempt must also notify.
+func (s *FeedFreshnessScheduler) observeStartup(name string) func() {
+	if s.startup == nil {
+		s.startup = make(map[string]<-chan struct{})
+	}
+	done := make(chan struct{})
+	s.startup[name] = done
+	return sync.OnceFunc(func() {
+		close(done)
+		select {
+		case s.wake <- struct{}{}:
+		default:
+		}
+	})
 }
 
 func freshnessReason(at, now time.Time, age time.Duration) string {
@@ -63,13 +82,26 @@ func freshnessReason(at, now time.Time, age time.Duration) string {
 	return ""
 }
 
-func (s *FeedFreshnessScheduler) report(parent context.Context, now func() time.Time) (string, bool) {
+func (s *FeedFreshnessScheduler) report(parent context.Context, now func() time.Time) (string, bool, bool) {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
+	// Snapshot BEFORE reads: completion during a read queues a fresh evaluation,
+	// rather than permitting failure based on evidence read before completion.
+	waiting := make(map[string]bool, len(s.startup))
+	for name, done := range s.startup {
+		select {
+		case <-done:
+		default:
+			waiting[name] = true
+		}
+	}
 	var lines []string
-	failed := false
+	failed, pending := false, false
 	add := func(name, reason string) {
-		if reason != "" {
+		if reason != "" && waiting[name] {
+			pending = true
+			lines = append(lines, name+": startup catch-up pending; not judged")
+		} else if reason != "" {
 			failed = true
 			lines = append(lines, name+": "+reason)
 		} else {
@@ -82,8 +114,21 @@ func (s *FeedFreshnessScheduler) report(parent context.Context, now func() time.
 			continue
 		}
 		if !f.available || s.state == nil {
+			waiting[f.name] = false
 			add(f.name, "unconfigured")
 			continue
+		}
+		if f.name == "CardLadder" {
+			configured := false
+			var err error
+			if s.clConfigured != nil {
+				configured, err = s.clConfigured(ctx)
+			}
+			if !configured || err != nil {
+				waiting[f.name] = false
+				add(f.name, "configuration unavailable")
+				continue
+			}
 		}
 		value, err := s.state.Get(ctx, f.key)
 		if err != nil {
@@ -94,15 +139,7 @@ func (s *FeedFreshnessScheduler) report(parent context.Context, now func() time.
 		if parseErr != nil {
 			at = time.Time{}
 		}
-		reason := freshnessReason(at, now(), f.maxAge)
-		if f.name == "CardLadder" {
-			if s.clConfigured == nil {
-				reason = "configuration unavailable"
-			} else if configured, e := s.clConfigured(ctx); e != nil || !configured {
-				reason = "configuration unavailable"
-			}
-		}
-		add(f.name, reason)
+		add(f.name, freshnessReason(at, now(), f.maxAge))
 	}
 	if s.psaEnabled {
 		at := time.Time{}
@@ -121,6 +158,9 @@ func (s *FeedFreshnessScheduler) report(parent context.Context, now func() time.
 		if s.showPrep != nil {
 			status, err := s.showPrep(ctx)
 			if err == nil {
+				if !status.Configured || status.State == "auth_hold" {
+					waiting["Show-prep"] = false
+				}
 				reason = ""
 				switch {
 				case !status.Configured:
@@ -136,11 +176,21 @@ func (s *FeedFreshnessScheduler) report(parent context.Context, now func() time.
 	} else {
 		lines = append(lines, "Show-prep: disabled by config")
 	}
-	return strings.Join(lines, "\n"), failed
+	return strings.Join(lines, "\n"), failed, pending
 }
 
 func (s *FeedFreshnessScheduler) check(parent context.Context) {
-	body, failed := s.report(parent, time.Now)
+	select {
+	case <-parent.Done():
+		return
+	case <-s.Done():
+		return
+	default:
+	}
+	body, failed, pending := s.report(parent, time.Now)
+	if pending && !failed {
+		return // Silence cannot clear an alert while any feed is unjudged.
+	}
 	target := s.url
 	if failed {
 		target += "/fail"
