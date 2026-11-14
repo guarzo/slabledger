@@ -189,6 +189,7 @@ func FromEnv(base Config) Config {
 	cfg.Adapters.LocalAPIToken = os.Getenv("LOCAL_API_TOKEN")
 	cfg.Adapters.DHEnterpriseKey = os.Getenv("DH_ENTERPRISE_API_KEY")
 	envString("DH_API_BASE_URL", &cfg.Adapters.DHBaseURL)
+	envString("FEED_FRESHNESS_PING_URL", &cfg.Adapters.FeedFreshnessPingURL)
 	envIntPositive("DH_CACHE_TTL_HOURS", &cfg.DH.CacheTTLHours)
 	envIntPositive("DH_RATE_LIMIT_RPS", &cfg.DH.RateLimitRPS)
 	cfg.DH.Enabled = parseBool(os.Getenv("DH_ENABLED"), cfg.DH.Enabled)

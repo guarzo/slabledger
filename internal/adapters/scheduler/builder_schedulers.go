@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/guarzo/slabledger/internal/platform/config"
@@ -122,7 +123,7 @@ func buildCardLadderRefreshScheduler(cfg *config.Config, deps BuildDeps) *CardLa
 	if deps.CardLadderStore == nil || deps.CardLadderPurchaseLister == nil || deps.CardLadderValueUpdater == nil {
 		return nil
 	}
-	var clOpts []CardLadderRefreshOption
+	clOpts := []CardLadderRefreshOption{WithCLFreshnessStore(deps.SyncStateStore)}
 	if deps.DHPushStatusUpdater != nil {
 		clOpts = append(clOpts, WithCLDHPushUpdater(deps.DHPushStatusUpdater))
 	}
@@ -395,7 +396,37 @@ func buildPSASyncScheduler(cfg *config.Config, deps BuildDeps) *PSASyncScheduler
 		deps.PSARowProvider, deps.PSAImporter,
 		deps.Logger, cfg.PSASync,
 		WithPSATokenRefresher(deps.PSATokenRefresher),
+		WithPSAFreshnessStore(deps.SyncStateStore),
 	)
+}
+
+func buildFeedFreshnessScheduler(cfg *config.Config, deps BuildDeps, show *ShowPrepRefreshScheduler) *FeedFreshnessScheduler {
+	orders, inventory := cfg.DH.OrdersPollInterval, cfg.DH.InventoryPollInterval
+	if orders <= 0 {
+		orders = 30 * time.Minute
+	}
+	if inventory <= 0 {
+		inventory = 2 * time.Hour
+	}
+	s := &FeedFreshnessScheduler{
+		StopHandle: NewStopHandle(), url: cfg.Adapters.FeedFreshnessPingURL, state: deps.SyncStateStore,
+		showPrepEnabled: cfg.ShowPrepRefresh.Enabled, psaEnabled: cfg.PSASync.Enabled,
+		snapshotAt: deps.PSASnapshotFetchedAt, logger: deps.Logger,
+		client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		feeds: []freshnessFeed{
+			{"DH orders", syncStateKeyDHOrdersClean, 3 * orders, cfg.DH.Enabled, deps.DHOrdersClient != nil && deps.OrdersImporter != nil},
+			{"DH inventory", syncStateKeyDHInventoryClean, 3 * inventory, cfg.DH.Enabled, deps.DHInventoryListClient != nil && deps.DHFieldsUpdater != nil && deps.PurchaseByCertLookup != nil},
+			{"CardLadder", syncStateKeyCLClean, 30 * time.Hour, cfg.CardLadder.Enabled, deps.CardLadderStore != nil && deps.CardLadderPurchaseLister != nil && deps.CardLadderValueUpdater != nil},
+			{"PSA sync", syncStateKeyPSAClean, 30 * time.Hour, cfg.PSASync.Enabled, deps.PSARowProvider != nil && deps.PSAImporter != nil},
+		},
+	}
+	if show != nil {
+		s.showPrep = show.Status
+	}
+	if deps.ShowPrepCredentials != nil {
+		s.clConfigured = deps.ShowPrepCredentials.Configured
+	}
+	return s
 }
 
 // buildCertEnrichJob builds the cert enrichment scheduler (if cert lookup is provided).

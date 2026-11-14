@@ -22,6 +22,7 @@ func TestDefault(t *testing.T) {
 }
 
 func TestFromEnv(t *testing.T) {
+	t.Setenv("FEED_FRESHNESS_PING_URL", "https://hc-ping.com/12345678-1234-1234-1234-123456789abc")
 	// Save original env vars
 	origLogLevel := os.Getenv("LOG_LEVEL")
 	origListenAddr := os.Getenv("HTTP_LISTEN_ADDR")
@@ -40,6 +41,9 @@ func TestFromEnv(t *testing.T) {
 	_ = os.Setenv("RATE_LIMIT_REQUESTS", "200")
 
 	cfg := FromEnv(Default())
+	if cfg.Adapters.FeedFreshnessPingURL != os.Getenv("FEED_FRESHNESS_PING_URL") {
+		t.Fatal("feed freshness URL was not loaded")
+	}
 
 	if cfg.Logging.Level != "debug" {
 		t.Errorf("expected log level 'debug' from env, got %s", cfg.Logging.Level)

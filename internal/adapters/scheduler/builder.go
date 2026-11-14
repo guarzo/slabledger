@@ -1,6 +1,9 @@
 package scheduler
 
 import (
+	"context"
+	"time"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -113,9 +116,10 @@ type BuildDeps struct {
 	SchedulerStatsStore *postgres.SchedulerStatsStore
 
 	// PSA sync dependencies (optional)
-	PSARowProvider    RowProvider
-	PSATokenRefresher TokenRefresher
-	PSAImporter       PSAImporter
+	PSARowProvider       RowProvider
+	PSATokenRefresher    TokenRefresher
+	PSAImporter          PSAImporter
+	PSASnapshotFetchedAt func(context.Context) (time.Time, error)
 
 	// Cert enrichment dependencies (optional).
 	// If CertEnrichJobPrebuilt is set, it is used directly (skipping creation from CertLookup/PurchaseRepo).
@@ -219,6 +223,8 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	if psaSync != nil {
 		schedulers = append(schedulers, psaSync)
 	}
+
+	schedulers = append(schedulers, buildFeedFreshnessScheduler(cfg, deps, showPrep))
 
 	certEnrichJob := buildCertEnrichJob(deps)
 	if certEnrichJob != nil {

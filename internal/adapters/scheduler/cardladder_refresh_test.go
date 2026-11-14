@@ -685,7 +685,7 @@ func TestApplyCLEstimates_CacheSharesConfidenceAcrossCopies(t *testing.T) {
 	}
 	stats := CLRunStats{}
 
-	err := s.applyCLEstimates(context.Background(), client, resolved, &stats)
+	err := s.applyCLEstimates(context.Background(), client, resolved, &stats, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, int64(2), calls.Load(), "one call per distinct (gemRateID, condition); p2 should hit the cache")

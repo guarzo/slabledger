@@ -10,13 +10,15 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 	"github.com/guarzo/slabledger/internal/platform/config"
 	"github.com/guarzo/slabledger/internal/testutil/mocks"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPSASyncScheduler_Tick(t *testing.T) {
 	tests := []struct {
 		name               string
 		providerFn         func(ctx context.Context) ([]csvimport.PSAExportRow, error)
-		importerFn         func(ctx context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error)
+		result             csvimport.PSAImportResult
+		importErr          error
 		wantImporterCalled bool
 	}{
 		{
@@ -26,9 +28,7 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 					{CertNumber: "12345678", Grade: 10, PricePaid: 125.00},
 				}, nil
 			},
-			importerFn: func(_ context.Context, _ []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
-				return &csvimport.PSAImportResult{Allocated: 1}, nil
-			},
+			result:             csvimport.PSAImportResult{Allocated: 1},
 			wantImporterCalled: true,
 		},
 		{
@@ -45,20 +45,27 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 			},
 			wantImporterCalled: false,
 		},
+		{name: "failed row", result: csvimport.PSAImportResult{Failed: 1}, wantImporterCalled: true},
+		{name: "row errors", result: csvimport.PSAImportResult{Errors: []csvimport.ImportError{{Row: 1, Error: "private detail"}}}, wantImporterCalled: true},
+		{name: "import error", importErr: errors.New("import failed"), wantImporterCalled: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			provider := &mocks.PSARowProviderMock{FetchRowsFn: tt.providerFn}
+			if tt.providerFn == nil {
+				provider.FetchRowsFn = func(context.Context) ([]csvimport.PSAExportRow, error) {
+					return []csvimport.PSAExportRow{{CertNumber: "12345678"}}, nil
+				}
+			}
+			store := newMockSyncStateStore()
+			store.values["feed_psa_clean"] = "previous"
 
 			importerCalled := false
 			importer := &mocks.MockImportService{
 				ImportPSAExportGlobalFn: func(ctx context.Context, rows []csvimport.PSAExportRow) (*csvimport.PSAImportResult, error) {
 					importerCalled = true
-					if tt.importerFn != nil {
-						return tt.importerFn(ctx, rows)
-					}
-					return &csvimport.PSAImportResult{}, nil
+					return &tt.result, tt.importErr
 				},
 			}
 
@@ -66,12 +73,20 @@ func TestPSASyncScheduler_Tick(t *testing.T) {
 				provider, importer,
 				observability.NewNoopLogger(),
 				config.PSASyncConfig{Enabled: true, Interval: 24 * time.Hour, SyncHour: -1},
+				WithPSAFreshnessStore(store),
 			)
 
 			s.runOnce(context.Background()) //nolint:errcheck
 
 			if importerCalled != tt.wantImporterCalled {
 				t.Errorf("importer called = %v, want %v", importerCalled, tt.wantImporterCalled)
+			}
+			if tt.name == "success" {
+				stamp, err := time.Parse(time.RFC3339, store.values["feed_psa_clean"])
+				require.NoError(t, err)
+				require.WithinDuration(t, time.Now(), stamp, 2*time.Second)
+			} else {
+				require.Equal(t, "previous", store.values["feed_psa_clean"])
 			}
 		})
 	}

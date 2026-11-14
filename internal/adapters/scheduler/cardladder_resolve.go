@@ -26,6 +26,7 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 	client *cardladder.Client,
 	p *inventory.Purchase,
 	mappingByCert map[string]postgres.CLCardMapping,
+	outcome *clValuationOutcome,
 ) (gemRateID, condition string, ok, quotaHit bool) {
 	// Bypass the cache when set_name is generic so BuildCollectionCard fires
 	// and the repair block below (which needs resp.Set) can run. Without this,
@@ -48,6 +49,7 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 
 	resp, err := client.BuildCollectionCard(ctx, p.CertNumber, grader)
 	if err != nil {
+		outcome.fail()
 		quota := apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit)
 		reason := CLReasonAPIError
 		if quota {
@@ -57,7 +59,7 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 			observability.String("cert", p.CertNumber),
 			observability.Bool("quotaExhausted", quota),
 			observability.Err(err))
-		s.recordCLError(ctx, p.ID, reason)
+		s.recordCLError(ctx, p.ID, reason, outcome)
 		return "", "", false, quota
 	}
 	resp.GemRateID = strings.TrimSpace(resp.GemRateID)
@@ -66,11 +68,12 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 			observability.String("cert", p.CertNumber),
 			observability.String("gemRateId", resp.GemRateID),
 			observability.String("condition", resp.Condition))
-		s.recordCLError(ctx, p.ID, CLReasonCertResolveFailed)
+		s.recordCLError(ctx, p.ID, CLReasonCertResolveFailed, outcome)
 		return "", "", false, false
 	}
 
 	if err := s.store.SaveMappingPricing(ctx, p.CertNumber, resp.GemRateID, resp.Condition); err != nil {
+		outcome.fail()
 		s.logger.Warn(ctx, "CL refresh: failed to save pricing mapping",
 			observability.String("cert", p.CertNumber),
 			observability.Err(err))
@@ -83,10 +86,11 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 			CLCondition: resp.Condition,
 		}
 	}
-	s.persistVerifiedProfile(ctx, p, resp.GemRateID)
+	s.persistVerifiedProfile(ctx, p, resp.GemRateID, outcome)
 	if s.gemRateUpdater != nil {
 		if resp.Player != "" || resp.Variation != "" || resp.Category != "" {
 			if err := s.gemRateUpdater.UpdatePurchaseCLCardMetadata(ctx, p.ID, resp.Player, resp.Variation, resp.Category); err != nil {
+				outcome.fail()
 				s.logger.Warn(ctx, "CL refresh: failed to persist card metadata",
 					observability.String("cert", p.CertNumber),
 					observability.Err(err))
@@ -97,6 +101,7 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 		// CL can resolve, so adopt it only when the current value is generic.
 		if constants.IsGenericSetName(p.SetName) && !constants.IsGenericSetName(resp.Set) {
 			if err := s.gemRateUpdater.UpdatePurchaseSetName(ctx, p.ID, resp.Set); err != nil {
+				outcome.fail()
 				s.logger.Warn(ctx, "CL refresh: failed to persist set name from CL",
 					observability.String("cert", p.CertNumber),
 					observability.String("clSet", resp.Set),
@@ -113,11 +118,12 @@ func (s *CardLadderRefreshScheduler) resolveGemRate(
 // membership. A serial-only cache cannot supply missing purchase identity.
 // Never replace a known identity or infer grader/grade from a valuation condition.
 // Existing price holds stay intact.
-func (s *CardLadderRefreshScheduler) persistVerifiedProfile(ctx context.Context, p *inventory.Purchase, profile string) {
+func (s *CardLadderRefreshScheduler) persistVerifiedProfile(ctx context.Context, p *inventory.Purchase, profile string, outcome *clValuationOutcome) {
 	if s.gemRateUpdater == nil || strings.TrimSpace(p.GemRateID) != "" || profile == "" {
 		return
 	}
 	if err := s.gemRateUpdater.UpdatePurchaseGemRateID(ctx, p.ID, profile); err != nil {
+		outcome.fail()
 		s.logger.Warn(ctx, "CL refresh: failed to persist gemRateID on purchase",
 			observability.String("cert", p.CertNumber), observability.Err(err))
 	} else {

@@ -32,6 +32,20 @@ func (s *DHPushScheduler) processCoordinatedPurchase(ctx context.Context, cached
 		if e != nil {
 			return e
 		}
+		// Only route an open PSA import to preparation; do not make preflight
+		// writes while it is uncertain. Preparation and ownership enforce guards.
+		reader, ok := s.guards.(returnStateReader)
+		if !ok {
+			return inventory.NewReturnConflict("coordination_unavailable", "push state reader required")
+		}
+		state, e := reader.GetReturnState(c, p.ID)
+		if e != nil {
+			return e
+		}
+		if a := state.PrecedingAttempt; a != nil && a.Kind == "push" && a.Phase == "psa_import" {
+			push = true
+			return nil
+		}
 		if e := s.guards.AssertMutationAllowed(c, p.ID); e != nil {
 			return e
 		}
@@ -43,14 +57,6 @@ func (s *DHPushScheduler) processCoordinatedPurchase(ctx context.Context, cached
 			return inventory.NewReturnConflict("coordination_unavailable", "push config required")
 		}
 		cfg = *freshConfig
-		reader, ok := s.guards.(returnStateReader)
-		if !ok {
-			return inventory.NewReturnConflict("coordination_unavailable", "push state reader required")
-		}
-		state, e := reader.GetReturnState(c, p.ID)
-		if e != nil {
-			return e
-		}
 		if state.Sale != nil {
 			return nil
 		}
@@ -105,6 +111,7 @@ func pushPayload(p *inventory.Purchase) string {
 	return string(b)
 }
 func (s *DHPushScheduler) pushPSACoordinated(ctx context.Context, id string, cfg inventory.DHPushConfig) processResult {
+	outcome := processSkipped
 	err := s.coordinator.Run(ctx, id, func(c context.Context) (inventory.DHMutationRequest, error) {
 		p, e := s.purchaseReader.GetPurchase(c, id)
 		if e != nil {
@@ -124,9 +131,6 @@ func (s *DHPushScheduler) pushPSACoordinated(ctx context.Context, id string, cfg
 		if state.Sale != nil {
 			return inventory.DHMutationRequest{}, inventory.NewReturnConflict("push_precondition_failed", "purchase has a current sale")
 		}
-		if e := s.guards.AssertMutationAllowed(c, id); e != nil {
-			return inventory.DHMutationRequest{}, e
-		}
 		freshConfig, e := s.configLoader.GetDHPushConfig(c)
 		if e != nil {
 			return inventory.DHMutationRequest{}, e
@@ -138,14 +142,20 @@ func (s *DHPushScheduler) pushPSACoordinated(ctx context.Context, id string, cfg
 		if p.DHInventoryID != 0 || p.DHPushStatus != "pending" || !p.IsReceivedOrShipped() || dhlisting.EvaluateHoldTriggers(p, cfg) != "" {
 			return inventory.DHMutationRequest{}, inventory.NewReturnConflict("push_precondition_failed", "purchase no longer eligible for push")
 		}
-		return inventory.DHMutationRequest{Kind: "push", Phase: "psa_import", PayloadIdentity: pushPayload(p)}, nil
+		payload := pushPayload(p)
+		if a := state.PrecedingAttempt; a != nil && a.Kind == "push" && a.Phase == "psa_import" {
+			// Replay the captured request, not newly edited cost or overrides.
+			payload = a.PayloadIdentity
+		}
+		return inventory.DHMutationRequest{Kind: "push", Phase: "psa_import", PayloadIdentity: payload}, nil
 	}, func(c context.Context, a *inventory.DHMutationAttempt) (*inventory.DHMutationSettlement, error) {
 		p, e := s.purchaseReader.GetPurchase(c, id)
 		if e != nil {
 			return nil, e
 		}
-		if pushPayload(p) != a.PayloadIdentity {
-			return nil, inventory.NewReturnConflict("identity_conflict", "prepared PSA import changed")
+		var item dh.PSAImportItem
+		if e := json.Unmarshal([]byte(a.PayloadIdentity), &item); e != nil || item.CertNumber != p.CertNumber || item.Status != dh.InventoryStatusInStock || item.ListingPriceCents != nil || item.ShippingPriceCents != nil {
+			return nil, inventory.NewReturnConflict("identity_conflict", "prepared PSA import invalid")
 		}
 		if e := s.guards.AssertMutationAllowed(c, id); e != nil {
 			return nil, e
@@ -159,6 +169,9 @@ func (s *DHPushScheduler) pushPSACoordinated(ctx context.Context, id string, cfg
 			return nil, e
 		}
 		if state.Sale != nil {
+			if a.Replaying {
+				return nil, inventory.NewReturnConflict("push_precondition_failed", "purchase has a current sale")
+			}
 			return &inventory.DHMutationSettlement{Outcome: "rejected", Receipt: "not-dispatched:current-sale"}, nil
 		}
 		freshConfig, e := s.configLoader.GetDHPushConfig(c)
@@ -166,22 +179,38 @@ func (s *DHPushScheduler) pushPSACoordinated(ctx context.Context, id string, cfg
 			return nil, e
 		}
 		if freshConfig == nil || p.DHInventoryID != 0 || p.DHPushStatus != "pending" || !p.IsReceivedOrShipped() || dhlisting.EvaluateHoldTriggers(p, *freshConfig) != "" {
+			if a.Replaying {
+				return nil, inventory.NewReturnConflict("push_precondition_failed", "purchase no longer eligible for push")
+			}
 			return &inventory.DHMutationSettlement{Outcome: "rejected", Receipt: "not-dispatched:push-ineligible"}, nil
 		}
-		resp, e := s.psaImporter.PSAImport(c, []dh.PSAImportItem{buildPSAImportItem(*p)})
+		resp, e := s.psaImporter.PSAImport(c, []dh.PSAImportItem{item})
 		if e != nil {
 			return nil, e
 		}
+		if resp != nil && !resp.Success && resp.Error != "" {
+			return &inventory.DHMutationSettlement{Outcome: "rejected", Receipt: "psa-import:batch_rejected"}, nil
+		}
 		if resp == nil || !resp.Success || len(resp.Results) != 1 {
-			return nil, fmt.Errorf("PSA import did not return one successful target")
+			return nil, fmt.Errorf("PSA import did not return one target")
 		}
 		r := resp.Results[0]
+		if r.CertNumber != p.CertNumber {
+			return nil, inventory.NewReturnConflict("identity_conflict", "PSA import receipt cert invalid")
+		}
 		switch r.Resolution {
 		case dh.PSAImportStatusMatched, dh.PSAImportStatusUnmatchedCreated, dh.PSAImportStatusOverrideCorrected, dh.PSAImportStatusAlreadyListed:
 		default:
-			return nil, fmt.Errorf("PSA import unresolved: %s", r.Resolution)
+			category := "unknown_resolution"
+			if r.Resolution == dh.PSAImportStatusPSAError || r.Resolution == dh.PSAImportStatusPartnerCardError {
+				category = r.Resolution
+			}
+			if r.Resolution == dh.PSAImportStatusPSAError && r.RateLimited {
+				category = "rate_limited"
+			}
+			return &inventory.DHMutationSettlement{Outcome: "rejected", Receipt: "psa-import:" + category}, nil
 		}
-		if r.CertNumber != p.CertNumber || r.DHInventoryID <= 0 || r.DHCardID <= 0 {
+		if r.DHInventoryID <= 0 || r.DHCardID <= 0 {
 			return nil, inventory.NewReturnConflict("identity_conflict", "PSA import receipt target invalid")
 		}
 		if e := s.fieldsUpdater.UpdatePurchaseDHFields(c, id, inventory.DHFieldsUpdate{CardID: r.DHCardID, InventoryID: r.DHInventoryID, CertStatus: dh.CertStatusMatched, DHStatus: inventory.DHStatusForPush(r.Status)}); e != nil {
@@ -190,14 +219,23 @@ func (s *DHPushScheduler) pushPSACoordinated(ctx context.Context, id string, cfg
 		if e := s.statusUpdater.UpdatePurchaseDHPushStatus(c, id, "matched"); e != nil {
 			return nil, e
 		}
-		if e := s.cardIDSaver.SaveExternalID(c, p.CardName, p.SetName, p.CardNumber, pricing.SourceDH, fmt.Sprint(r.DHCardID)); e != nil {
-			return nil, e
+		name, set, number := p.CardName, p.SetName, p.CardNumber
+		if item.Overrides != nil {
+			name, set, number = item.Overrides.Name, item.Overrides.SetName, item.Overrides.CardNumber
 		}
+		// A replay may predate enrichment. Never publish an incomplete captured
+		// key into the shared mapping cache or fill it from unverified new metadata.
+		if !a.Replaying || (item.Overrides != nil && name != "" && set != "" && number != "") {
+			if e := s.cardIDSaver.SaveExternalID(c, name, set, number, pricing.SourceDH, fmt.Sprint(r.DHCardID)); e != nil {
+				return nil, e
+			}
+		}
+		outcome = processMatchedComplete
 		return &inventory.DHMutationSettlement{Outcome: "succeeded", Receipt: fmt.Sprintf("psa-import:%s:%d", r.Resolution, r.DHInventoryID)}, nil
 	})
 	if err != nil {
 		s.logger.Warn(ctx, "DH push remains fenced", observability.String("purchaseID", id), observability.Err(err))
 		return processSkipped
 	}
-	return processMatchedComplete
+	return outcome
 }

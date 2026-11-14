@@ -9,6 +9,11 @@ import (
 
 // PurchaseRepositoryMock implements inventory.PurchaseRepository with Fn-field pattern.
 type PurchaseRepositoryMock struct {
+	UpdatePurchaseCLErrorFn              func(context.Context, string, string, string) error
+	UpdatePurchasePSASpecIDFn            func(context.Context, string, int) error
+	UpdatePurchaseGemRateIDFn            func(context.Context, string, string) error
+	UpdatePurchaseCLCardMetadataFn       func(context.Context, string, string, string, string) error
+	UpdatePurchaseSetNameFn              func(context.Context, string, string) error
 	CreatePurchaseFn                     func(ctx context.Context, p *inventory.Purchase) error
 	GetPurchaseFn                        func(ctx context.Context, id string) (*inventory.Purchase, error)
 	DeletePurchaseFn                     func(ctx context.Context, id string) error

@@ -251,11 +251,16 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 	since, err := s.syncState.Get(ctx, syncStateKeyDHOrdersPoll)
 	if err != nil {
-		s.logger.Warn(ctx, "failed to read dh orders sync state, defaulting to 24h ago",
-			observability.Err(err))
+		s.logger.Warn(ctx, "dh orders poll: cursor read failed")
+		return
 	}
 	if since == "" {
 		since = time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+		// Persist the replay bound before ingest, including when the first pass fails.
+		if err := s.syncState.Set(ctx, syncStateKeyDHOrdersPoll, since); err != nil {
+			s.logger.Warn(ctx, "dh orders poll: cursor seed failed")
+			return
+		}
 	}
 
 	summary, runErr := s.RunOnce(ctx, since)
@@ -263,12 +268,6 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 		s.logger.Warn(ctx, "dh orders poll failed",
 			observability.String("since", since),
 			observability.Err(runErr))
-		return
-	}
-
-	if summary.OrdersFetched == 0 {
-		s.logger.Debug(ctx, "dh orders poll: no new orders",
-			observability.String("since", since))
 		return
 	}
 
@@ -280,12 +279,17 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 		observability.Int("returned_order", summary.Returned),
 		observability.Int("failed", summary.Failed))
 
+	if summary.Failed > 0 || ctx.Err() != nil {
+		return
+	}
 	if summary.LatestSoldAt != "" {
 		if setErr := s.syncState.Set(ctx, syncStateKeyDHOrdersPoll, summary.LatestSoldAt); setErr != nil {
-			s.logger.Warn(ctx, "failed to update dh orders sync state",
-				observability.String("timestamp", summary.LatestSoldAt),
-				observability.Err(setErr))
+			s.logger.Warn(ctx, "dh orders poll: cursor write failed")
+			return
 		}
+	}
+	if err := s.syncState.Set(ctx, syncStateKeyDHOrdersClean, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		s.logger.Warn(ctx, "dh orders poll: clean marker write failed")
 	}
 }
 
