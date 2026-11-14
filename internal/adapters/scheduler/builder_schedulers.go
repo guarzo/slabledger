@@ -409,7 +409,7 @@ func buildFeedFreshnessScheduler(cfg *config.Config, deps BuildDeps, show *ShowP
 		inventory = 2 * time.Hour
 	}
 	s := &FeedFreshnessScheduler{
-		StopHandle: NewStopHandle(), url: cfg.Adapters.FeedFreshnessPingURL, state: deps.SyncStateStore,
+		StopHandle: NewStopHandle(), url: cfg.Adapters.FeedFreshnessPingURL, state: deps.SyncStateStore, wake: make(chan struct{}, 1),
 		showPrepEnabled: cfg.ShowPrepRefresh.Enabled, psaEnabled: cfg.PSASync.Enabled,
 		snapshotAt: deps.PSASnapshotFetchedAt, logger: deps.Logger,
 		client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},

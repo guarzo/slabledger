@@ -53,6 +53,7 @@ type DHOrdersPollConfig struct {
 type DHOrdersPollScheduler struct {
 	StopHandle
 	client      DHOrdersClient
+	onFirstRun  func()
 	syncState   SyncStateStore
 	campaignSvc DHOrdersImporter
 	eventRec    dhevents.Recorder // may be nil
@@ -93,11 +94,12 @@ func (s *DHOrdersPollScheduler) Start(ctx context.Context) {
 	}
 
 	RunLoop(ctx, LoopConfig{
-		Name:     "dh-orders-poll",
-		Interval: s.config.Interval,
-		WG:       s.WG(),
-		StopChan: s.Done(),
-		Logger:   s.logger,
+		Name:       "dh-orders-poll",
+		OnFirstRun: s.onFirstRun,
+		Interval:   s.config.Interval,
+		WG:         s.WG(),
+		StopChan:   s.Done(),
+		Logger:     s.logger,
 	}, s.poll)
 }
 

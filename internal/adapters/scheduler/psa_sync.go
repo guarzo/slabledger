@@ -52,6 +52,7 @@ type PSASyncScheduler struct {
 	StopHandle
 	provider     RowProvider
 	freshness    SyncStateStore
+	onFirstRun   func()
 	refresher    TokenRefresher
 	importer     PSAImporter
 	logger       observability.Logger
@@ -148,6 +149,10 @@ func (s *PSASyncScheduler) GetLastRunStats() *PSASyncRunStats {
 }
 
 func (s *PSASyncScheduler) runOnce(ctx context.Context) error {
+	// Notify from the actual owner, never from a scheduled busy-mutex skip.
+	if s.onFirstRun != nil {
+		defer s.onFirstRun()
+	}
 	start := time.Now()
 	s.logger.Info(ctx, "running PSA portal sync")
 

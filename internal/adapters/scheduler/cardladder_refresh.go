@@ -105,6 +105,7 @@ type CardLadderRefreshScheduler struct {
 	client           *cardladder.Client
 	store            clRefreshStore
 	freshnessStore   SyncStateStore
+	onFirstRun       func()
 	purchaseLister   CardLadderPurchaseLister
 	valueUpdater     CardLadderValueUpdater
 	gemRateUpdater   CardLadderGemRateUpdater
@@ -186,6 +187,7 @@ func (s *CardLadderRefreshScheduler) Start(ctx context.Context) {
 
 	RunLoop(ctx, LoopConfig{
 		Name:         "card-ladder-refresh",
+		OnFirstRun:   s.onFirstRun,
 		Interval:     s.config.Interval,
 		InitialDelay: timeUntilHour(time.Now(), s.config.RefreshHour),
 		WG:           s.WG(),

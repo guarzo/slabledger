@@ -200,8 +200,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, dhOrdersPoll)
 	}
 
-	if s := buildDHInventoryPollScheduler(cfg, deps); s != nil {
-		schedulers = append(schedulers, s)
+	dhInventoryPoll := buildDHInventoryPollScheduler(cfg, deps)
+	if dhInventoryPoll != nil {
+		schedulers = append(schedulers, dhInventoryPoll)
 	}
 	if s := buildDHSoldReconcilerScheduler(cfg, deps); s != nil {
 		schedulers = append(schedulers, s)
@@ -224,7 +225,23 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, psaSync)
 	}
 
-	schedulers = append(schedulers, buildFeedFreshnessScheduler(cfg, deps, showPrep))
+	freshness := buildFeedFreshnessScheduler(cfg, deps, showPrep)
+	if cfg.DH.Enabled && dhOrdersPoll != nil {
+		dhOrdersPoll.onFirstRun = freshness.observeStartup("DH orders")
+	}
+	if cfg.DH.Enabled && dhInventoryPoll != nil {
+		dhInventoryPoll.onFirstRun = freshness.observeStartup("DH inventory")
+	}
+	if cfg.CardLadder.Enabled && clRefresh != nil {
+		clRefresh.onFirstRun = freshness.observeStartup("CardLadder")
+	}
+	if cfg.PSASync.Enabled && psaSync != nil {
+		psaSync.onFirstRun = freshness.observeStartup("PSA sync")
+	}
+	if cfg.ShowPrepRefresh.Enabled && showPrep != nil {
+		showPrep.onFirstRun = freshness.observeStartup("Show-prep")
+	}
+	schedulers = append(schedulers, freshness)
 
 	certEnrichJob := buildCertEnrichJob(deps)
 	if certEnrichJob != nil {
