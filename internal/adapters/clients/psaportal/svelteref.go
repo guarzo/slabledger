@@ -167,5 +167,5 @@ func packedFromEnvelope(raw []byte) ([]json.RawMessage, error) {
 			return env.Nodes[i].Data, nil
 		}
 	}
-	return nil, fmt.Errorf("psaportal: no data node in envelope")
+	return nil, env.missingDataError()
 }
