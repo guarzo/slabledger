@@ -15,6 +15,9 @@ import (
 
 const syncStateKeyDHOrdersPoll = "dh_orders_last_poll"
 
+// DH releases held orders with their original sold_at, not their release time.
+const ordersPollLookback = 7 * 24 * time.Hour
+
 // maxOrderPagesPerPoll prevents unbounded pagination if the DH API misreports totals.
 const maxOrderPagesPerPoll = 100
 
@@ -124,6 +127,12 @@ func (s *DHOrdersPollScheduler) recordEvent(ctx context.Context, e dhevents.Even
 // Used by both the scheduled poll loop (via poll()) and the manual
 // POST /api/dh/ingest-orders endpoint.
 func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHOrdersPollSummary, error) {
+	return s.runOnce(ctx, since, time.Time{})
+}
+
+// notifyAfter quiets scheduled replays without suppressing newly created sales.
+// A zero cutoff preserves the explicit RunOnce caller's per-order diagnostics.
+func (s *DHOrdersPollScheduler) runOnce(ctx context.Context, since string, notifyAfter time.Time) (*DHOrdersPollSummary, error) {
 	summary := &DHOrdersPollSummary{Since: since}
 
 	allOrders, err := s.fetchAllPages(ctx, since)
@@ -136,19 +145,27 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	}
 
 	rows := make([]csvimport.OrdersExportRow, 0, len(allOrders))
+	notify := make(map[string]bool, len(allOrders))
 	for _, order := range allOrders {
+		soldAt, _ := time.Parse(time.RFC3339, order.SoldAt)
+		firstSighting := notifyAfter.IsZero() || soldAt.After(notifyAfter)
+		notify[order.OrderID] = firstSighting
 		grade, err := strconv.ParseFloat(order.Grade, 64)
-		if err != nil {
+		if err != nil && firstSighting {
 			s.logger.Warn(ctx, "dh orders poll: could not parse grade, falling back to 0",
 				observability.String("orderID", order.OrderID),
 				observability.String("cert", order.CertNumber),
 				observability.String("grade", order.Grade),
 				observability.Err(err))
 		}
+		var rowLogger observability.Logger
+		if firstSighting {
+			rowLogger = s.logger
+		}
 		rows = append(rows, csvimport.OrdersExportRow{
 			OrderNumber:  order.OrderID,
 			Date:         parseDHSoldAt(order.SoldAt),
-			SalesChannel: mapDHChannel(ctx, order.Channel, s.logger),
+			SalesChannel: mapDHChannel(ctx, order.Channel, rowLogger),
 			ProductTitle: order.CardName,
 			Grader:       "PSA",
 			CertNumber:   order.CertNumber,
@@ -170,8 +187,12 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 		}
 	}
 
-	// Emit orphan and already_sold events (don't depend on ConfirmOrdersSales).
+	// Skip events describe first sightings, not every lookback replay. Late
+	// orphans at/before the cursor remain visible in the poll summary only.
 	for _, nf := range importResult.NotFound {
+		if !notify[nf.OrderID] {
+			continue
+		}
 		s.recordEvent(ctx, dhevents.Event{
 			CertNumber:     nf.CertNumber,
 			Type:           dhevents.TypeOrphanSale,
@@ -182,6 +203,9 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 		})
 	}
 	for _, as := range importResult.AlreadySold {
+		if !notify[as.OrderID] {
+			continue
+		}
 		s.recordEvent(ctx, dhevents.Event{
 			CertNumber: as.CertNumber,
 			Type:       dhevents.TypeAlreadySold,
@@ -247,16 +271,16 @@ func (s *DHOrdersPollScheduler) RunOnce(ctx context.Context, since string) (*DHO
 	return summary, nil
 }
 
-// poll runs one scheduled ingest pass. It resolves the since checkpoint from
-// sync state, delegates to RunOnce, logs the result, and advances the
-// checkpoint so the next tick picks up where this one left off.
+// poll replays a bounded window before the high-water mark to recover late
+// orders. Successful passes may advance the checkpoint, never move it backward.
 func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 	since, err := s.syncState.Get(ctx, syncStateKeyDHOrdersPoll)
 	if err != nil {
 		s.logger.Warn(ctx, "dh orders poll: cursor read failed")
 		return
 	}
-	if since == "" {
+	firstRun := since == ""
+	if firstRun {
 		since = time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
 		// Persist the replay bound before ingest, including when the first pass fails.
 		if err := s.syncState.Set(ctx, syncStateKeyDHOrdersPoll, since); err != nil {
@@ -265,7 +289,16 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 		}
 	}
 
-	summary, runErr := s.RunOnce(ctx, since)
+	cursor, err := time.Parse(time.RFC3339, since)
+	if err != nil {
+		s.logger.Warn(ctx, "dh orders poll: invalid cursor")
+		return
+	}
+	if !firstRun {
+		since = cursor.Add(-ordersPollLookback).UTC().Format(time.RFC3339Nano)
+	}
+
+	summary, runErr := s.runOnce(ctx, since, cursor)
 	if runErr != nil {
 		s.logger.Warn(ctx, "dh orders poll failed",
 			observability.String("since", since),
@@ -284,7 +317,8 @@ func (s *DHOrdersPollScheduler) poll(ctx context.Context) {
 	if summary.Failed > 0 || ctx.Err() != nil {
 		return
 	}
-	if summary.LatestSoldAt != "" {
+	latest, _ := time.Parse(time.RFC3339, summary.LatestSoldAt)
+	if latest.After(cursor) {
 		if setErr := s.syncState.Set(ctx, syncStateKeyDHOrdersPoll, summary.LatestSoldAt); setErr != nil {
 			s.logger.Warn(ctx, "dh orders poll: cursor write failed")
 			return
@@ -328,8 +362,10 @@ func mapDHChannel(ctx context.Context, channel string, logger observability.Logg
 	case "shopify":
 		return inventory.SaleChannelWebsite
 	default:
-		logger.Warn(ctx, "dh orders poll: unknown channel, defaulting to 'other'",
-			observability.String("channel", channel))
+		if logger != nil {
+			logger.Warn(ctx, "dh orders poll: unknown channel, defaulting to 'other'",
+				observability.String("channel", channel))
+		}
 		return inventory.SaleChannelOther
 	}
 }
@@ -343,18 +379,18 @@ func parseDHSoldAt(soldAt string) string {
 	return t.Format("2006-01-02")
 }
 
-// findLatestSoldAt returns the lexicographically greatest sold_at value from the orders.
+// findLatestSoldAt returns the chronologically newest valid sold_at. Invalid
+// timestamps cannot become a checkpoint that stalls the next poll.
 func findLatestSoldAt(orders []dh.Order) string {
-	if len(orders) == 0 {
-		return ""
-	}
-	latest := orders[0].SoldAt
-	for _, o := range orders[1:] {
-		if o.SoldAt > latest {
-			latest = o.SoldAt
+	var latest time.Time
+	var value string
+	for _, o := range orders {
+		at, err := time.Parse(time.RFC3339, o.SoldAt)
+		if err == nil && at.After(latest) {
+			latest, value = at, o.SoldAt
 		}
 	}
-	return latest
+	return value
 }
 
 // Compile-time check that dh.Client satisfies DHOrdersClient.

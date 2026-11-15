@@ -135,8 +135,18 @@ func TestDHCleanPollCursorReplay(t *testing.T) {
 					require.Zero(t, applied)
 					retry = true
 					run() // A new scheduler instance must replay the persisted window.
-					require.Equal(t, seen[0], seen[len(seen)-1])
-					require.Equal(t, next, store.values[key])
+					wantSince := seen[0]
+					if feed == "orders" && mode == "seed" {
+						seed, err := time.Parse(time.RFC3339, bound)
+						require.NoError(t, err)
+						wantSince = seed.Add(-7 * 24 * time.Hour).Format(time.RFC3339)
+					}
+					require.Equal(t, wantSince, seen[len(seen)-1])
+					wantCursor := next
+					if feed == "orders" && mode == "seed" {
+						wantCursor = bound // The fixture order predates the first-run seed.
+					}
+					require.Equal(t, wantCursor, store.values[key])
 					require.NotEmpty(t, store.values[marker])
 					require.Equal(t, 1, applied)
 				}
