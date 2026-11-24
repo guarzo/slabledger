@@ -637,6 +637,20 @@ If only retryable failed existing-target listing PATCH attempts for this exact p
 
 ---
 
+### `POST /api/admin/purchases/{purchaseId}/dh-recovery/{action}`
+
+Auth: RequireAdmin. Body: `{"confirm":true}`; additional fields are rejected.
+
+Local-only recovery of two retained inventory shapes:
+- `relink-returned`: an unlinked row adopts the target of its latest same-cert/grader, detached, completed and listing-authorized return, as `listed` / `matched`. The caller cannot supply a target; historical return evidence is unchanged.
+- `release-void`: an in-stock linked row with an exact stranded unkeyed void abandons that attempt as **original provider outcome unknown**, clears its sale-conflict flag/timestamp and becomes `in_stock` / `matched`, preserving its target.
+
+Both require received inventory and no local sale, unresolved return, foreign target owner or other open mutation. Receipt-bearing financial attempts and unsupported shapes remain blocked. Recovery, admin-identity audit event and settlement watermark share one transaction. No DH call, listing, sale or deletion is performed. A confirmed recovery is not proof that an earlier provider operation succeeded.
+
+**Response:** `204 No Content`. **Errors:** `400` invalid confirmation/body; `401` unauthenticated; `403` non-admin; `404` missing purchase; `409` unsupported/unsafe shape (`dh_recovery_blocked` or another retained-guard conflict code); `503` not configured; `500` database failure (rolled back).
+
+---
+
 ## Campaign Sales
 
 ### `GET /api/campaigns/{id}/sales`
@@ -3015,6 +3029,12 @@ match succeeded; it carries the error string otherwise. `api_health`,
 `dh_inventory_count`, `dh_listings_count`, `dh_orders_count`,
 `last_orders_poll_at` and the three `orders_*_24h` counters are likewise
 `omitempty`. The remaining keys are always present.
+
+The `orders_*_24h` counters count recorded events, not rows fetched by the scheduled
+poll. Its seven-day lookback emits orphan/already-sold events only for orders whose
+`sold_at` is strictly newer than the stored cursor; replayed skips appear only in
+poll summary logs. A late orphan at or before that cursor does not raise the admin
+orphan alarm. Newly created sales still emit matched events regardless of age.
 
 Two of the counts are deliberately different views of "pending", and the gap
 between them is the diagnostic:

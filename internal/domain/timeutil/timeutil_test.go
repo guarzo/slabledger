@@ -8,6 +8,7 @@ import (
 )
 
 func TestDaysSince(t *testing.T) {
+	now := time.Now().UTC()
 	tests := []struct {
 		name    string
 		date    string
@@ -16,13 +17,13 @@ func TestDaysSince(t *testing.T) {
 	}{
 		{
 			name:    "today returns 0",
-			date:    time.Now().Format("2006-01-02"),
+			date:    now.Format("2006-01-02"),
 			wantMin: 0,
 			wantMax: 0,
 		},
 		{
 			name:    "10 days ago",
-			date:    time.Now().AddDate(0, 0, -10).Format("2006-01-02"),
+			date:    now.AddDate(0, 0, -10).Format("2006-01-02"),
 			wantMin: 10,
 			wantMax: 10,
 		},

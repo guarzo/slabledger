@@ -368,9 +368,26 @@ budget to recompute the same numbers.
 **File:** `dh_orders_poll.go`
 **Purpose:** Polls the DH v2 orders endpoint and lands new orders as sales.
 
-Cursor state lives in the shared `SyncStateStore`, so a restart resumes rather than
-re-importing. Import goes through `OrdersImporter` rather than `CampaignService`
-because CSV/orders intake lives in its own package.
+Cursor state lives in the shared `SyncStateStore` as a forward-only high-water mark
+of the newest valid `sold_at` processed. Each scheduled pass queries seven days
+before that cursor to recover orders DH records or releases late with their original
+sale timestamp. Import goes through `OrdersImporter`, whose existing-sale check
+prevents duplicates or overwrites, including hand-entered sales without an order ID.
+
+With no cursor, the scheduler persists a seed 24 hours ago before the first query,
+even if that query fails. Later passes query seven days before the persisted seed
+until the cursor advances. Failed or partially failed passes do not advance it;
+an invalid stored cursor stops the pass without resetting it or marking it clean.
+DH caps `since` at 90 days; this scheduler does not clamp old cursors or recover
+orders older than its seven-day cursor-relative window.
+
+Replayed skips at or before the cursor contribute to summary counts only. Per-order
+orphan/already-sold events and grade/channel warnings are emitted only for orders
+strictly newer than the cursor; newly created sales emit sold events regardless of
+age. Thus a late orphan below the cursor has no per-cert event or admin orphan alarm.
+A sale removed locally can be re-created if its order remains active on DH inside
+the replay window and no completed-return or mutation guard blocks it. There is no
+persistent suppression of locally removed sales.
 
 | Config | Env Var | Default | Description |
 |--------|---------|---------|-------------|
@@ -479,6 +496,66 @@ the same instance can be injected into `inventory.Service` via `WithCertEnrichEn
 Setting `BACKFILL_IMAGES=true` enqueues every unsold PSA purchase with empty image URLs
 once at startup. It draws on the PSA daily budget, so set it back to `false` after one
 run.
+
+### Feed Freshness
+
+**File:** `feed_freshness.go`
+**Purpose:** One aggregate outcome alert, without calling providers or the app's status HTTP endpoints.
+
+`FEED_FRESHNESS_PING_URL` is an optional secret UUID URL on `https://hc-ping.com`.
+Unset logs once and disables the checker. It POSTs a safe summary to that URL when
+healthy, or to `/fail` when a feed fails, is held, unconfigured or unreadable.
+Redirects are refused; delivery must return HTTP 200 and an `OK` acknowledgement.
+Reads and delivery each have a 10-second deadline. Payloads contain feed names,
+state/counts and timestamps, never raw provider/database errors or inventory details.
+
+Evaluation starts immediately, then runs every **15 minutes**, with additional
+checks when each watched feed finishes its first attempt. There is no fixed startup
+allowance: a non-fresh feed is **pending / not judged** until its own first attempt
+returns, including failure or a scheduled skip. PSA notifies from the actual import,
+not a skipped busy-mutex invocation. Completion permits judgment, not recovery;
+the outcome clocks and coverage rules below still determine health. Saved fresh
+outcomes can be judged immediately.
+
+A confirmed failure can send `/fail` while other feeds remain explicitly pending.
+Pending-only reports send nothing, and pending feeds can never clear an alert.
+Missing configuration and a durable show-prep authentication hold fail immediately;
+PSA input age is independent of the app's import and is also judged immediately.
+Completion notifications close the pending gate before sending a buffered wake hint;
+pending state is captured before status reads so a concurrent completion forces a
+reread instead of judging pre-completion evidence.
+
+Existing scheduler timing is unchanged. Before CL's or PSA's configured UTC hour,
+a stale feed may wait for that hour; a hung first attempt remains pending indefinitely.
+A wake ending before any sound judgment stays silent. The checker does not keep the
+app awake, and an unsuccessful same-day CL attempt can still suppress its catch-up.
+
+| Feed | Healthy outcome clock / condition |
+|---|---|
+| DH orders | `sync_state.feed_dh_orders_clean`, at most 3× effective poll interval (default 90m) |
+| DH inventory | `sync_state.feed_dh_inventory_clean`, at most 3× effective poll interval (default 6h) |
+| CardLadder valuations | `sync_state.feed_cardladder_clean`, at most 30h; no API/quota/read/write failures during valuation phases |
+| PSA sync | `sync_state.feed_psa_clean`, at most 30h after a clean import; stored input snapshot at most 26h old |
+| Show-prep | Existing coverage; hold/failed immediately unhealthy; missing/stale coverage unhealthy except 00:00–02:00 UTC |
+
+Disabled-by-config feeds are reported but exempt. Missing/invalid/future success
+clocks fail; first rollout can remain unhealthy until actual clean work completes.
+CL no-cert/no-match/no-value answers are valid; comps/collection hygiene and stats
+telemetry are not part of the valuation marker; neither are DH push re-enrollment
+or event writes. An empty PSA input performs no
+import and does not renew its success clock. Successful empty DH polls do renew
+their clocks. Both DH source cursors stay put on any failed row, allowing the next
+poll to retry. Replays can repeat observation events; permanent row errors can
+hold the cursor until the growing window reaches the existing pagination cap.
+
+Scale-to-zero is intentional: **this is not an app-down monitor**. With the practical
+single-machine-at-a-time deployment, no leader election is used; overlapping app
+instances can send conflicting pings. For sleep-tolerant Healthchecks settings,
+use a Simple period of **365 days** and grace of **365 days**, Only POST, HTTP body
+filtering off, and one notification destination. `/fail` still signals active
+failures promptly. Silence is not ignored forever: after about 730 days without a
+ping the check can time out. A failure remains open while the app sleeps until a
+later healthy evaluation. See [Healthchecks configuration](https://healthchecks.io/docs/configuring_checks/).
 
 ## Startup Timing
 

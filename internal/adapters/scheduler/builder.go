@@ -1,6 +1,9 @@
 package scheduler
 
 import (
+	"context"
+	"time"
+
 	"github.com/guarzo/slabledger/internal/adapters/clients/cardladder"
 	"github.com/guarzo/slabledger/internal/adapters/clients/dh"
 	"github.com/guarzo/slabledger/internal/adapters/storage/postgres"
@@ -113,9 +116,10 @@ type BuildDeps struct {
 	SchedulerStatsStore *postgres.SchedulerStatsStore
 
 	// PSA sync dependencies (optional)
-	PSARowProvider    RowProvider
-	PSATokenRefresher TokenRefresher
-	PSAImporter       PSAImporter
+	PSARowProvider       RowProvider
+	PSATokenRefresher    TokenRefresher
+	PSAImporter          PSAImporter
+	PSASnapshotFetchedAt func(context.Context) (time.Time, error)
 
 	// Cert enrichment dependencies (optional).
 	// If CertEnrichJobPrebuilt is set, it is used directly (skipping creation from CertLookup/PurchaseRepo).
@@ -196,8 +200,9 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 		schedulers = append(schedulers, dhOrdersPoll)
 	}
 
-	if s := buildDHInventoryPollScheduler(cfg, deps); s != nil {
-		schedulers = append(schedulers, s)
+	dhInventoryPoll := buildDHInventoryPollScheduler(cfg, deps)
+	if dhInventoryPoll != nil {
+		schedulers = append(schedulers, dhInventoryPoll)
 	}
 	if s := buildDHSoldReconcilerScheduler(cfg, deps); s != nil {
 		schedulers = append(schedulers, s)
@@ -219,6 +224,24 @@ func BuildGroup(cfg *config.Config, deps BuildDeps) BuildResult {
 	if psaSync != nil {
 		schedulers = append(schedulers, psaSync)
 	}
+
+	freshness := buildFeedFreshnessScheduler(cfg, deps, showPrep)
+	if cfg.DH.Enabled && dhOrdersPoll != nil {
+		dhOrdersPoll.onFirstRun = freshness.observeStartup("DH orders")
+	}
+	if cfg.DH.Enabled && dhInventoryPoll != nil {
+		dhInventoryPoll.onFirstRun = freshness.observeStartup("DH inventory")
+	}
+	if cfg.CardLadder.Enabled && clRefresh != nil {
+		clRefresh.onFirstRun = freshness.observeStartup("CardLadder")
+	}
+	if cfg.PSASync.Enabled && psaSync != nil {
+		psaSync.onFirstRun = freshness.observeStartup("PSA sync")
+	}
+	if cfg.ShowPrepRefresh.Enabled && showPrep != nil {
+		showPrep.onFirstRun = freshness.observeStartup("Show-prep")
+	}
+	schedulers = append(schedulers, freshness)
 
 	certEnrichJob := buildCertEnrichJob(deps)
 	if certEnrichJob != nil {

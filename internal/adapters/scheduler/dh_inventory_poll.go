@@ -43,6 +43,7 @@ type DHInventoryPollConfig struct {
 type DHInventoryPollScheduler struct {
 	StopHandle
 	observationRequired bool
+	onFirstRun          func()
 	guards              inventory.DHMutationGuards
 	client              DHInventoryListClient
 	syncState           SyncStateStore
@@ -93,11 +94,12 @@ func (s *DHInventoryPollScheduler) Start(ctx context.Context) {
 	}
 
 	RunLoop(ctx, LoopConfig{
-		Name:     "dh-inventory-poll",
-		Interval: s.config.Interval,
-		WG:       s.WG(),
-		StopChan: s.Done(),
-		Logger:   s.logger,
+		Name:       "dh-inventory-poll",
+		OnFirstRun: s.onFirstRun,
+		Interval:   s.config.Interval,
+		WG:         s.WG(),
+		StopChan:   s.Done(),
+		Logger:     s.logger,
 	}, s.poll)
 }
 
@@ -128,8 +130,8 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 	}
 	since, err := s.syncState.Get(ctx, syncStateKeyDHInventoryPoll)
 	if err != nil {
-		s.logger.Warn(ctx, "failed to read dh inventory sync state, defaulting to no filter",
-			observability.Err(err))
+		s.logger.Warn(ctx, "dh inventory poll: cursor read failed")
+		return
 	}
 
 	allItems, err := s.fetchAllPages(ctx, since)
@@ -140,24 +142,20 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 		return
 	}
 
-	if len(allItems) == 0 {
-		s.logger.Debug(ctx, "dh inventory poll: no items",
-			observability.String("since", since))
-		return
-	}
-
 	updated := 0
 	skipped := 0
+	failed := false
 	var latestUpdatedAt string
 
 	for _, item := range allItems {
-		// Always advance the checkpoint so persistent failures don't block progress.
+		// Keep the maximum observed timestamp, but commit it only after a clean pass.
 		if item.UpdatedAt > latestUpdatedAt {
 			latestUpdatedAt = item.UpdatedAt
 		}
 
 		purchaseID, prevDHStatus, lookupErr := s.lookup.GetDHStatusByCertNumber(ctx, item.CertNumber)
 		if lookupErr != nil {
+			failed = true
 			s.logger.Warn(ctx, "dh inventory poll: cert lookup error",
 				observability.String("cert", item.CertNumber),
 				observability.Err(lookupErr))
@@ -192,6 +190,7 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 			LastSyncedAt:      fetchedAt.UTC().Format(time.RFC3339),
 		})
 		if updateErr != nil {
+			failed = true
 			s.logger.Warn(ctx, "dh inventory poll: failed to update purchase",
 				observability.String("purchaseID", purchaseID),
 				observability.String("cert", item.CertNumber),
@@ -242,12 +241,17 @@ func (s *DHInventoryPollScheduler) poll(ctx context.Context) {
 		observability.Int("updated", updated),
 		observability.Int("skipped", skipped))
 
+	if failed || ctx.Err() != nil {
+		return
+	}
 	if latestUpdatedAt != "" {
 		if setErr := s.syncState.Set(ctx, syncStateKeyDHInventoryPoll, latestUpdatedAt); setErr != nil {
-			s.logger.Warn(ctx, "failed to update dh inventory sync state",
-				observability.String("timestamp", latestUpdatedAt),
-				observability.Err(setErr))
+			s.logger.Warn(ctx, "dh inventory poll: cursor write failed")
+			return
 		}
+	}
+	if err := s.syncState.Set(ctx, syncStateKeyDHInventoryClean, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		s.logger.Warn(ctx, "dh inventory poll: clean marker write failed")
 	}
 }
 

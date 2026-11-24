@@ -10,6 +10,15 @@ import (
 	"github.com/guarzo/slabledger/internal/domain/observability"
 )
 
+// clValuationOutcome belongs to one sweep; nil leaves on-demand behavior unchanged.
+type clValuationOutcome struct{ failed bool }
+
+func (o *clValuationOutcome) fail() {
+	if o != nil {
+		o.failed = true
+	}
+}
+
 // CL failure reason tags. Short, stable strings used by the /failures admin endpoint.
 const (
 	CLReasonNoCert            = "no_cert"             // Purchase has no cert number to look up.
@@ -23,12 +32,13 @@ const (
 // purchase. Never fails the refresh loop — diagnostics are best-effort — but
 // the admin UI depends on these rows, so a persistence failure is logged at
 // Warn level so operators see it.
-func (s *CardLadderRefreshScheduler) recordCLError(ctx context.Context, purchaseID, reason string) {
+func (s *CardLadderRefreshScheduler) recordCLError(ctx context.Context, purchaseID, reason string, outcome *clValuationOutcome) {
 	var reasonAt string
 	if reason != "" {
 		reasonAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	if err := s.valueUpdater.UpdatePurchaseCLError(ctx, purchaseID, reason, reasonAt); err != nil {
+		outcome.fail()
 		s.logger.Warn(ctx, "CL refresh: failed to persist error reason",
 			observability.String("purchaseId", purchaseID),
 			observability.String("reason", reason),

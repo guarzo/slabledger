@@ -48,7 +48,8 @@ name: psa-harvest-cron
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    # Avoid GitHub's minute-0 load peak and the Fly machine's approximate :26 tick.
+    - cron: '47 * * * *'
   workflow_dispatch:
 
 concurrency:

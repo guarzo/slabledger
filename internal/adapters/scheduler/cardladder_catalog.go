@@ -87,7 +87,7 @@ type clResolvedPurchase struct {
 // point) so the cache-shape regression this exists to prevent — a
 // float-keyed cache silently zeroing every confidence after the first cache
 // hit — is unit-testable without a database.
-func (s *CardLadderRefreshScheduler) applyCLEstimates(ctx context.Context, client *cardladder.Client, resolvedPurchases []clResolvedPurchase, stats *CLRunStats) error {
+func (s *CardLadderRefreshScheduler) applyCLEstimates(ctx context.Context, client *cardladder.Client, resolvedPurchases []clResolvedPurchase, stats *CLRunStats, outcome *clValuationOutcome) error {
 	estimates := make(map[estimateKey]clEstimate, len(resolvedPurchases))
 	for _, r := range resolvedPurchases {
 		if ctx.Err() != nil {
@@ -97,40 +97,43 @@ func (s *CardLadderRefreshScheduler) applyCLEstimates(ctx context.Context, clien
 		est, cached := estimates[key]
 		if !cached {
 			if stats.QuotaExhausted {
+				outcome.fail()
 				// Quota wall already hit this cycle — don't burn more calls.
 				// Tagged quota_exhausted (not api_error) so the admin /failures
 				// view doesn't read these as genuine CL failures: they were
 				// never attempted.
 				stats.SkippedQuota++
-				s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted)
+				s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted, outcome)
 				continue
 			}
 			var err error
 			est, err = s.fetchCLEstimate(ctx, client, r.gemRateID, r.condition, r.purchase.CardName)
 			if err != nil {
+				outcome.fail()
 				if apperrors.HasErrorCode(err, apperrors.ErrCodeProviderRateLimit) {
 					stats.QuotaExhausted = true
 					stats.SkippedQuota++
-					s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted)
+					s.recordCLError(ctx, r.purchase.ID, CLReasonQuotaExhausted, outcome)
 					s.logger.Warn(ctx, "CL refresh: daily quota exhausted, skipping remaining estimates this cycle",
 						observability.Int("updatedSoFar", stats.Updated))
 					continue
 				}
 				stats.EstimateFailed++
-				s.recordCLError(ctx, r.purchase.ID, CLReasonAPIError)
+				s.recordCLError(ctx, r.purchase.ID, CLReasonAPIError, outcome)
 				continue
 			}
 			estimates[key] = est
 		}
 		if est.value <= 0 {
 			stats.NoValue++
-			s.recordCLError(ctx, r.purchase.ID, CLReasonNoValue)
+			s.recordCLError(ctx, r.purchase.ID, CLReasonNoValue, outcome)
 			continue
 		}
 		newCLCents := mathutil.ToCentsInt(est.value)
 		oldCLCents := r.purchase.CLValueCents
 		conf := est.confidence
 		if err := s.valueUpdater.UpdatePurchaseCLValue(ctx, r.purchase.ID, newCLCents, r.purchase.Population, &conf); err != nil {
+			outcome.fail()
 			s.logger.Warn(ctx, "CL refresh: failed to update CL value",
 				observability.String("cert", r.purchase.CertNumber),
 				observability.Err(err))
@@ -138,7 +141,7 @@ func (s *CardLadderRefreshScheduler) applyCLEstimates(ctx context.Context, clien
 		}
 		r.purchase.CLValueCents = newCLCents
 		stats.Updated++
-		s.recordCLError(ctx, r.purchase.ID, "")
+		s.recordCLError(ctx, r.purchase.ID, "", outcome)
 
 		// Re-enroll for DH push when market value changes. Two qualifying cases:
 		//  1. Already-pushed rows (DHInventoryID != 0) — so DH picks up the new price.

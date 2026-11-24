@@ -31,6 +31,7 @@
 import { chromium } from '@playwright/test';
 import { proxyFromEnv } from './proxy-from-env.mjs';
 import { jwtExpiry, reusableToken, selectAccessToken } from './psa-token-expiry.mjs';
+import { gotoStart, logNoPasswordSummary, safePageURL } from './psa-harvest-start.mjs';
 
 const EMAIL = process.env.PSA_PORTAL_EMAIL;
 const PASSWORD = process.env.PSA_PORTAL_PASSWORD;
@@ -84,7 +85,7 @@ async function dumpDebug(page, label) {
       fs.chmodSync(png, 0o600);
       fs.writeFileSync(`${DEBUG_DIR}/psa-harvest-${label}.html`, html, { mode: 0o600 });
     });
-    console.error(`harvest-psa-token: wrote debug ${DEBUG_DIR}/psa-harvest-${label}.{png,html} (url=${page.url()})`);
+    console.error(`harvest-psa-token: wrote debug ${DEBUG_DIR}/psa-harvest-${label}.{png,html} (url=${safePageURL(page.url())})`);
   } catch (e) {
     console.error('harvest-psa-token: debug dump failed:', e.message);
   }
@@ -109,15 +110,19 @@ async function loginWithPassword(page) {
   await emailField.fill(EMAIL);
 
   // Some flows reveal the password only after a "Continue"/"Next" click.
+  const diagnostics = { continueFound: false, continueClicked: false };
   let passwordField = await firstVisible(page, ['input[type="password"]'], 2500);
   if (!passwordField) {
     const cont = await firstVisible(page, [
       (p) => p.getByRole('button', { name: /continue|next|sign in|log ?in/i }),
     ], 5000);
-    if (cont) await cont.click().catch(() => {});
-    passwordField = await firstVisible(page, ['input[type="password"]'], 15000);
+    diagnostics.continueFound = Boolean(cont);
+    if (cont) await cont.click().then(() => { diagnostics.continueClicked = true; }).catch(() => {});
+    passwordField = await firstVisible(page, ['input[type="password"]'], 60000);
   }
   if (!passwordField) {
+    await logNoPasswordSummary(page, [EMAIL, PASSWORD, ACCESS_TOKEN, proxy?.username, proxy?.password],
+      { ...requestFailures, ...diagnostics });
     await dumpDebug(page, 'no-password-field');
     throw new Error('could not find the password field on the sign-in page');
   }
@@ -153,6 +158,15 @@ const proxy = proxyFromEnv(process.env.PSA_PORTAL_PROXY_URL);
 if (proxy) contextOpts.proxy = proxy;
 const context = await browser.newContext(contextOpts);
 const page = await context.newPage();
+const requestFailures = { failedRequestCount: 0, failedRequestOrigins: [] };
+page.on('requestfailed', (request) => {
+  requestFailures.failedRequestCount++;
+  try {
+    const url = new URL(request.url());
+    if (/^https?:$/.test(url.protocol) && requestFailures.failedRequestOrigins.length < 4 &&
+        !requestFailures.failedRequestOrigins.includes(url.origin)) requestFailures.failedRequestOrigins.push(url.origin);
+  } catch { /* Invalid and non-HTTP request URLs carry no origin evidence. */ }
+});
 
 try {
   // Inject a previously harvested token so a still-valid session skips SSO.
@@ -174,7 +188,7 @@ try {
     );
   }
 
-  await page.goto(START_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await gotoStart(page, START_URL);
   // Authenticated sessions stay on the portal; everyone else bounces to
   // app.collectors.com/signin. Wait for either outcome, then check where we are.
   //
@@ -221,7 +235,7 @@ try {
     // Include the actual landing URL so an unexpected third page (interstitial,
     // consent, changed path) is diagnosable rather than hidden behind a generic
     // "no accessToken cookie" error.
-    console.error(`harvest-psa-token: no accessToken cookie; landed on ${page.url()}`);
+    console.error(`harvest-psa-token: no accessToken cookie; landed on ${safePageURL(page.url())}`);
     await dumpDebug(page, 'no-access-cookie');
     throw new Error('login completed but no accessToken cookie was set');
   }

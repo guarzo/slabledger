@@ -56,6 +56,7 @@ func TestDHOrdersPoll_RecordsSale(t *testing.T) {
 		},
 	}
 	syncStore := newMockSyncStateStore()
+	syncStore.values[syncStateKeyDHOrdersPoll] = "2026-04-01T00:00:00Z"
 
 	var capturedConfirmItems []csvimport.OrdersConfirmItem
 

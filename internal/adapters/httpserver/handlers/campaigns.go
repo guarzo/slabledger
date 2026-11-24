@@ -31,6 +31,7 @@ type DHPriceSyncer interface {
 
 // CampaignsHandler handles campaign-related HTTP requests.
 type CampaignsHandler struct {
+	dhRecovery       DHInventoryRecovery
 	confirmedReturns ConfirmedReturnService
 	service          inventory.Service
 	importSvc        csvimport.Service // optional: CSV/portal intake

@@ -22,7 +22,7 @@ func (l nopLogger) With(_ context.Context, _ ...observability.Field) observabili
 }
 
 func TestRunLoop_BasicTickCycle(t *testing.T) {
-	var count atomic.Int32
+	var count, notifications atomic.Int32
 	stopChan := make(chan struct{})
 	// Signal closed when workFn has been called at least twice (initial + tick).
 	ready := make(chan struct{})
@@ -37,6 +37,12 @@ func TestRunLoop_BasicTickCycle(t *testing.T) {
 			Interval: 10 * time.Millisecond,
 			StopChan: stopChan,
 			Logger:   nopLogger{},
+			OnFirstRun: func() {
+				if count.Load() != 1 {
+					t.Error("notified before first work returned")
+				}
+				notifications.Add(1)
+			},
 		}, func(_ context.Context) {
 			if count.Add(1) == 2 {
 				close(ready)
@@ -56,6 +62,9 @@ func TestRunLoop_BasicTickCycle(t *testing.T) {
 	cancel()
 	<-done
 
+	if notifications.Load() != 1 {
+		t.Error("first completion must notify once, not every tick")
+	}
 	c := count.Load()
 	if c < 2 {
 		t.Errorf("expected at least 2 workFn calls (initial + tick), got %d", c)
@@ -172,6 +181,7 @@ func TestRunLoop_InitialDelayStopDuringDelay(t *testing.T) {
 			InitialDelay: 1 * time.Hour,
 			StopChan:     stopChan,
 			Logger:       nopLogger{},
+			OnFirstRun:   func() { t.Error("stopped delay must not notify completion") },
 		}, func(_ context.Context) {
 			count.Add(1)
 		})

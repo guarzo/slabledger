@@ -16,6 +16,7 @@ type LoopConfig struct {
 	WG           *sync.WaitGroup // nil = don't track
 	StopChan     <-chan struct{}
 	Wake         <-chan struct{} // optional bounded/coalesced wake hints
+	OnFirstRun   func()          // optional notification after the first work call returns
 	Logger       observability.Logger
 	LogFields    []observability.Field // extra fields for startup log
 }
@@ -53,6 +54,9 @@ func RunLoop(ctx context.Context, cfg LoopConfig, workFn func(context.Context)) 
 		}
 	} else {
 		workFn(ctx)
+	}
+	if cfg.OnFirstRun != nil {
+		cfg.OnFirstRun()
 	}
 
 	ticker := time.NewTicker(cfg.Interval)

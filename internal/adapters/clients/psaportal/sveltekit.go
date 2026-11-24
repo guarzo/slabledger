@@ -3,14 +3,64 @@ package psaportal
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 )
 
 type envelope struct {
-	Type  string `json:"type"`
-	Nodes []struct {
+	Type     string          `json:"type"`
+	Location json.RawMessage `json:"location"`
+	Nodes    []struct {
 		Type string            `json:"type"`
 		Data []json.RawMessage `json:"data"`
 	} `json:"nodes"`
+}
+
+// missingDataError reports envelope metadata, never node contents or page bodies.
+func (env envelope) missingDataError() error {
+	types := make([]string, 0, min(len(env.Nodes), 8))
+	for _, node := range env.Nodes[:min(len(env.Nodes), 8)] {
+		types = append(types, truncateRunes(node.Type, 64))
+	}
+	if len(env.Nodes) > 8 {
+		types = append(types, "…")
+	}
+	return fmt.Errorf("psaportal: no data node in envelope (type=%q, nodes=%q, redirect=%q)",
+		truncateRunes(env.Type, 64), types, safeRedirectTarget(env.Location))
+}
+
+// safeRedirectTarget decodes optional diagnostic metadata only on failure, so
+// an unrelated location field cannot break successful data decoding. Only known
+// public route paths are shown: arbitrary paths can contain session tokens too.
+func safeRedirectTarget(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var location string
+	if err := json.Unmarshal(raw, &location); err != nil {
+		return "[redacted]"
+	}
+	if location == "" {
+		return ""
+	}
+	u, err := url.Parse(location)
+	if err != nil || u.Opaque != "" || (u.Scheme != "" && u.Scheme != "https" && u.Scheme != "http") {
+		return "[redacted]"
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	u.RawFragment = ""
+	switch u.Path {
+	case "", "/", "/signin", "/campaigns", "/analytics":
+	default:
+		u.Path = "/REDACTED"
+	}
+	u.RawPath = ""
+	if u.Host == "" && u.Path == "" {
+		return "[redacted]"
+	}
+	return truncateRunes(u.String(), 256)
 }
 
 // DecodeSvelteKitValue resolves a SvelteKit flattened __data.json payload and
@@ -28,7 +78,7 @@ func DecodeSvelteKitValue(raw []byte, topKey string) (json.RawMessage, error) {
 		}
 	}
 	if data == nil {
-		return nil, fmt.Errorf("psaportal: no data node in __data.json")
+		return nil, env.missingDataError()
 	}
 	resolved, err := unflatten(data, 0, map[int]json.RawMessage{})
 	if err != nil {
