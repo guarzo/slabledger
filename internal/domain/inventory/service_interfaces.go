@@ -35,6 +35,7 @@ type CertService interface {
 	GetPurchasesByCertNumbers(ctx context.Context, certNumbers []string) (map[string]*Purchase, error)
 	ScanCert(ctx context.Context, certNumber string) (*ScanCertResult, error)
 	ScanCerts(ctx context.Context, certNumbers []string) (*ScanCertsResult, error)
+	GetSaleStatusByCert(ctx context.Context, certNumber string) (*SaleStatusByCert, error)
 	ResolveCert(ctx context.Context, certNumber string) (*CertInfo, error)
 }
 

@@ -4,7 +4,7 @@
 
 import type {
   Purchase, Sale, CreateSaleInput,
-  QuickAddRequest, ConfirmReturnRequest, ConfirmedReturnState, DHSaleCheck,
+  QuickAddRequest, SaleByCertResponse, ConfirmReturnRequest, ConfirmedReturnState, DHSaleCheck,
 } from '../../types/campaigns';
 import type { PriceHint } from '../../types/pricing';
 import { APIClient } from './client';
@@ -16,7 +16,8 @@ declare module './client' {
 
     // Sales
     createSale(campaignId: string, input: CreateSaleInput): Promise<Sale>;
-    deleteSale(campaignId: string, purchaseId: string): Promise<void>;
+    deleteSale(campaignId: string, purchaseId: string, expectedSaleId?: string): Promise<void>;
+    getSaleByCert(cert: string): Promise<SaleByCertResponse>;
     getConfirmedReturnState(purchaseId: string): Promise<ConfirmedReturnState>;
     getDHSaleCheck(purchaseId: string): Promise<DHSaleCheck>;
     confirmPurchaseReturn(purchaseId: string, request: ConfirmReturnRequest): Promise<ConfirmedReturnState>;
@@ -51,8 +52,13 @@ proto.createSale = async function (this: APIClient, campaignId: string, input: C
   return this.post<Sale>(`/campaigns/${encodeURIComponent(campaignId)}/sales`, input);
 };
 
-proto.deleteSale = async function (this: APIClient, campaignId: string, purchaseId: string): Promise<void> {
-  await this.deleteResource(`/campaigns/${encodeURIComponent(campaignId)}/purchases/${encodeURIComponent(purchaseId)}/sale`);
+proto.deleteSale = async function (this: APIClient, campaignId: string, purchaseId: string, expectedSaleId?: string): Promise<void> {
+  const query = expectedSaleId ? `?expectedSaleId=${encodeURIComponent(expectedSaleId)}` : '';
+  await this.deleteResource(`/campaigns/${encodeURIComponent(campaignId)}/purchases/${encodeURIComponent(purchaseId)}/sale${query}`);
+};
+
+proto.getSaleByCert = async function (this: APIClient, cert: string): Promise<SaleByCertResponse> {
+  return this.get<SaleByCertResponse>(`/sales/by-cert/${encodeURIComponent(cert)}`);
 };
 
 proto.getConfirmedReturnState = async function (this: APIClient, purchaseId: string): Promise<ConfirmedReturnState> {

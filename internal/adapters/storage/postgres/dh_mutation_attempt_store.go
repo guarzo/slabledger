@@ -183,7 +183,7 @@ func (s *ConfirmedReturnStore) assertAllowedExcept(ctx context.Context, id strin
 	}
 	if e != nil {
 		// An unlinked/new target cannot escape a retained return hold or receipt.
-		if !episodeTargetMatches(e, p) {
+		if !episodeTargetMatches(e, p) && (!scope.warnedDelete || e.State != "completed") {
 			return inventory.NewReturnConflict("identity_conflict", "retained return target must be resolved before mutation")
 		}
 		if e.State != "completed" && e.ID != scope.returnID {
@@ -260,4 +260,38 @@ func (s *ConfirmedReturnStore) ApplyDHSoldObservation(ctx context.Context, id, s
 		return apply(owned)
 	})
 	return applied && valid, err
+}
+
+// assertSaleAllowed is the fence for recording a LOCAL sale. It changes only
+// SlabLedger's books, so unresolved non-financial DH attempts (push, list,
+// price, link; sale/record once its local sale is gone) and a completed return for a different target do not block it.
+// Open sale/void/return attempts and unfinished return episodes still do.
+func (s *ConfirmedReturnStore) assertSaleAllowed(ctx context.Context, id string) error {
+	scope, err := ownedScope(ctx, s.db, id)
+	if err != nil {
+		return err
+	}
+	state, err := s.returnState(ctx, id)
+	if err != nil {
+		return err
+	}
+	p := state.Purchase
+	open, err := s.openAttemptRows(ctx, p, localKindClause(state.Sale)+` AND return_operation_id IS NULL`)
+	if err != nil {
+		return err
+	}
+	for _, a := range open {
+		if !a.ok && a.id != scope.attemptID {
+			return inventory.NewReturnConflict("preceding_dh_mutation_uncertain", "preceding DH attempt "+a.id+" is unresolved")
+		}
+	}
+	if e := state.Operation; e != nil && e.State != "completed" {
+		if !episodeTargetMatches(e, p) {
+			return inventory.NewReturnConflict("identity_conflict", "retained return target must be resolved before mutation")
+		}
+		if e.ID != scope.returnID {
+			return inventory.NewReturnConflict("confirmed_return_unresolved", "return operation "+e.ID+" is unresolved")
+		}
+	}
+	return nil
 }

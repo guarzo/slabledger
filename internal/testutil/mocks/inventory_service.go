@@ -33,6 +33,7 @@ type MockInventoryService struct {
 	CreateBulkSalesFn           func(ctx context.Context, campaignID string, channel inventory.SaleChannel, saleDate string, items []inventory.BulkSaleInput) (*inventory.BulkSaleResult, error)
 	ListSalesByCampaignFn       func(ctx context.Context, campaignID string, limit, offset int) ([]inventory.Sale, error)
 	DeleteSaleByPurchaseIDFn    func(ctx context.Context, purchaseID string) error
+	DeleteExpectedSaleFn        func(ctx context.Context, purchaseID, expectedSaleID string) error
 	LookupCertFn                func(ctx context.Context, certNumber string) (*inventory.CertInfo, *inventory.MarketSnapshot, error)
 	QuickAddPurchaseFn          func(ctx context.Context, campaignID string, req inventory.QuickAddRequest) (*inventory.Purchase, error)
 	GetCampaignPNLFn            func(ctx context.Context, campaignID string) (*inventory.CampaignPNL, error)
@@ -87,6 +88,7 @@ type MockInventoryService struct {
 	ImportCertsFn               func(ctx context.Context, certNumbers []string) (*inventory.CertImportResult, error)
 	GetPurchasesByCertNumbersFn func(ctx context.Context, certNumbers []string) (map[string]*inventory.Purchase, error)
 	ScanCertFn                  func(ctx context.Context, certNumber string) (*inventory.ScanCertResult, error)
+	GetSaleStatusByCertFn       func(ctx context.Context, certNumber string) (*inventory.SaleStatusByCert, error)
 	ScanCertsFn                 func(ctx context.Context, certNumbers []string) (*inventory.ScanCertsResult, error)
 	ResolveCertFn               func(ctx context.Context, certNumber string) (*inventory.CertInfo, error)
 
@@ -194,6 +196,13 @@ func (m *MockInventoryService) DeleteSaleByPurchaseID(ctx context.Context, purch
 		return m.DeleteSaleByPurchaseIDFn(ctx, purchaseID)
 	}
 	return nil
+}
+
+func (m *MockInventoryService) DeleteExpectedSale(ctx context.Context, purchaseID, expectedSaleID string) error {
+	if m.DeleteExpectedSaleFn != nil {
+		return m.DeleteExpectedSaleFn(ctx, purchaseID, expectedSaleID)
+	}
+	return m.DeleteSaleByPurchaseID(ctx, purchaseID)
 }
 
 func (m *MockInventoryService) LookupCert(ctx context.Context, certNumber string) (*inventory.CertInfo, *inventory.MarketSnapshot, error) {
@@ -452,6 +461,13 @@ func (m *MockInventoryService) ScanCerts(ctx context.Context, certNumbers []stri
 		return m.ScanCertsFn(ctx, certNumbers)
 	}
 	return &inventory.ScanCertsResult{Results: map[string]*inventory.ScanCertResult{}}, nil
+}
+
+func (m *MockInventoryService) GetSaleStatusByCert(ctx context.Context, certNumber string) (*inventory.SaleStatusByCert, error) {
+	if m.GetSaleStatusByCertFn != nil {
+		return m.GetSaleStatusByCertFn(ctx, certNumber)
+	}
+	return nil, inventory.ErrPurchaseNotFound
 }
 
 func (m *MockInventoryService) ScanCert(ctx context.Context, certNumber string) (*inventory.ScanCertResult, error) {

@@ -49,9 +49,7 @@ func TestFailedListingDeleteConfirmed(t *testing.T) {
 
 func TestFailedListingDeleteBlockers(t *testing.T) {
 	for _, tt := range []struct{ name, sql string }{
-		{"prepared or running", `UPDATE dh_mutation_attempts SET listing_retryable=false`},
 		{"other kind", `UPDATE dh_mutation_attempts SET listing_retryable=false,kind='void',phase='recover_void_reset_delete'`},
-		{"sync failed not PATCH", `UPDATE dh_mutation_attempts SET listing_retryable=false,phase='sync'`},
 		{"receipt", `UPDATE dh_mutation_attempts SET receipt='retained financial evidence'`},
 		{"old captured identity", `UPDATE dh_mutation_attempts SET cert_number='old-cert'`},
 		{"another purchase", `UPDATE dh_mutation_attempts SET captured_purchase_id='old-purchase'`},

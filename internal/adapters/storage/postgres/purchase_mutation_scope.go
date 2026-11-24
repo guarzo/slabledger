@@ -23,6 +23,9 @@ type mutationScope struct {
 	attemptID   string
 	returnID    string
 	observation bool
+	// warnedDelete: an acknowledged local Delete abandoned its non-financial
+	// attempts; a completed return for another target no longer blocks it.
+	warnedDelete bool
 }
 
 func executor(ctx context.Context, db *sql.DB) mutationExecutor {

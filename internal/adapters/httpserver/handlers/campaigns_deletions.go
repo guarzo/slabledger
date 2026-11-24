@@ -69,7 +69,9 @@ func (h *CampaignsHandler) HandleDeleteSale(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.service.DeleteSaleByPurchaseID(r.Context(), purchaseID); err != nil {
+	// Optional expectedSaleId makes the un-sell fail (409 sale_precondition_failed)
+	// if the purchase's current sale is not the one the user confirmed.
+	if err := h.service.DeleteExpectedSale(r.Context(), purchaseID, r.URL.Query().Get("expectedSaleId")); err != nil {
 		if writeReturnConflictIfPresent(w, err) {
 			return
 		}

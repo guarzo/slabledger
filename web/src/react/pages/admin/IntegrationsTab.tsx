@@ -6,6 +6,7 @@ import { DHOperationsPanel } from './DHOperationsPanel';
 import { IntegrationHealthStrip } from './IntegrationHealthStrip';
 import { useCardLadderStatus, useDHStatus, usePSASyncStatus } from '../../queries/useAdminQueries';
 import SalesImportSection from '../tools/SalesImportSection';
+import UndoSaleSection from '../tools/UndoSaleSection';
 import { StatusPill } from '../../ui';
 import { SECTION_HEADER } from './shared';
 
@@ -154,6 +155,11 @@ export function IntegrationsTab({ enabled = true }: { enabled?: boolean }) {
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Import sales from order CSVs.</p>
         </div>
         <SalesImportSection />
+        <div className="mt-6 mb-3">
+          <h3 className={SECTION_HEADER + ' !mb-0'}>Undo a Sale</h3>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Look up a card by PSA cert and return a sold card to inventory.</p>
+        </div>
+        <UndoSaleSection />
       </section>
     </div>
   );
