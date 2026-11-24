@@ -197,6 +197,7 @@ type Service interface {
 	CreateBulkSales(ctx context.Context, campaignID string, channel SaleChannel, saleDate string, items []BulkSaleInput) (*BulkSaleResult, error)
 	ListSalesByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]Sale, error)
 	DeleteSaleByPurchaseID(ctx context.Context, purchaseID string) error
+	DeleteExpectedSale(ctx context.Context, purchaseID, expectedSaleID string) error
 	UpdateSaleReason(ctx context.Context, campaignID, saleID, reason string) error
 
 	ReassignPurchase(ctx context.Context, purchaseID string, newCampaignID string) error

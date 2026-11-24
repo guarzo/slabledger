@@ -757,9 +757,11 @@ Deletes the sale recorded against a purchase, returning the purchase to unsold. 
 
 **Path params:** `id` (campaign UUID), `purchaseId` (purchase UUID)
 
+**Query params:** `expectedSaleId` (optional). When set, the un-sell succeeds only if the purchase's current sale has this id; otherwise it returns `409` `sale_precondition_failed` and deletes nothing.
+
 **Response:** `204 No Content`
 
-**Errors:** `400` missing path param; `403` purchase does not belong to this campaign; `404` purchase not found, or no sale recorded for this purchase; `409` unresolved return/DH mutation prevents deletion; `500` internal error
+**Errors:** `400` missing path param; `403` purchase does not belong to this campaign; `404` purchase not found, or no sale recorded for this purchase; `409` unresolved return/DH mutation prevents deletion, or the current sale is not `expectedSaleId`; `500` internal error
 
 This remains the ordinary local/off-platform un-sell path. It does not authorize
 reversing a DH/eBay external sale. Cert Intake uses the confirmed-return endpoint

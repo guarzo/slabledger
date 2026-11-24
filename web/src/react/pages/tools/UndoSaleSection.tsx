@@ -47,7 +47,7 @@ export default function UndoSaleSection() {
     setRemoving(true);
     setError(null);
     try {
-      await api.deleteSale(found.purchase.campaignId, found.purchase.id);
+      await api.deleteSale(found.purchase.campaignId, found.purchase.id, found.sale.id);
       setConfirmOpen(false);
       setFound(null);
       setCert('');

@@ -175,7 +175,7 @@ func (s *ConfirmedReturnStore) assertAllowedExcept(ctx context.Context, id strin
 	}
 	if e != nil {
 		// An unlinked/new target cannot escape a retained return hold or receipt.
-		if !episodeTargetMatches(e, p) && !(scope.warnedDelete && e.State == "completed") {
+		if !episodeTargetMatches(e, p) && (!scope.warnedDelete || e.State != "completed") {
 			return inventory.NewReturnConflict("identity_conflict", "retained return target must be resolved before mutation")
 		}
 		if e.State != "completed" && e.ID != scope.returnID {

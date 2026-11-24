@@ -41,3 +41,32 @@ func TestGetSaleStatusByCert(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteExpectedSale(t *testing.T) {
+	tests := []struct {
+		name     string
+		expected string
+		wantErr  error
+		wantGone bool
+	}{
+		{"matching sale is deleted", "s1", nil, true},
+		{"different sale is kept", "s-old", ErrReturnConflict, false},
+		{"no expectation deletes current sale", "", nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newMockRepo()
+			repo.purchases["p1"] = &Purchase{ID: "p1", CertNumber: "11111111", Grader: "PSA"}
+			repo.sales["p1"] = &Sale{ID: "s1", PurchaseID: "p1", SalePriceCents: 5000}
+			svc := &service{purchases: repo, sales: repo}
+
+			err := svc.DeleteExpectedSale(context.Background(), "p1", tt.expected)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if _, kept := repo.sales["p1"]; kept == tt.wantGone {
+				t.Fatalf("sale kept = %v, want gone = %v", kept, tt.wantGone)
+			}
+		})
+	}
+}

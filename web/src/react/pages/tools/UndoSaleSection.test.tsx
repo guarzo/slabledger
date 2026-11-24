@@ -31,7 +31,7 @@ it('un-sells a sold card after confirmation', async () => {
   expect(await screen.findByText(/Un-sell Spheal\? This deletes the .* sale of \$272\.73 on 2026-02-07/)).toBeInTheDocument();
   const buttons = screen.getAllByRole('button', { name: 'Un-sell' });
   await userEvent.click(buttons[buttons.length - 1]);
-  await waitFor(() => expect(del).toHaveBeenCalledWith('c1', 'p1'));
+  await waitFor(() => expect(del).toHaveBeenCalledWith('c1', 'p1', sale.id));
   expect(await screen.findByText('Sale removed; card is back in inventory')).toBeInTheDocument();
 });
 

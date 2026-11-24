@@ -820,6 +820,31 @@ func TestHandleDeleteSale(t *testing.T) {
 	}
 }
 
+func TestHandleDeleteSalePassesExpectedSaleID(t *testing.T) {
+	var got string
+	svc := &mocks.MockInventoryService{
+		GetPurchaseFn: func(_ context.Context, id string) (*inventory.Purchase, error) {
+			return &inventory.Purchase{ID: id, CampaignID: "c-1"}, nil
+		},
+		DeleteExpectedSaleFn: func(_ context.Context, _ string, expected string) error {
+			got = expected
+			return inventory.NewReturnConflict("sale_precondition_failed", "current sale differs from confirmed sale")
+		},
+	}
+	h := newTestHandler(svc)
+	req := httptest.NewRequest(http.MethodDelete, "/api/campaigns/c-1/purchases/p-1/sale?expectedSaleId=s-9", nil)
+	req.SetPathValue("id", "c-1")
+	req.SetPathValue("purchaseId", "p-1")
+	rec := httptest.NewRecorder()
+	h.HandleDeleteSale(rec, req)
+	if got != "s-9" {
+		t.Fatalf("expected sale id = %q, want s-9", got)
+	}
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // --- HandleUpdateSaleReason ---
 
 func TestHandleUpdateSaleReason(t *testing.T) {
