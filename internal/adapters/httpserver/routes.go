@@ -147,6 +147,7 @@ func (rt *Router) registerCampaignRoutes(mux *http.ServeMux) {
 
 	// Global sale-import endpoints (cross-campaign)
 	// Distinct from POST /api/purchases/import-certs below: that imports inventory (creates purchases), this records sales against inventory already owned.
+	mux.Handle("GET /api/sales/by-cert/{certNumber}", authRoute(rt.campaignsHandler.HandleGetSaleByCert))
 	mux.Handle("POST /api/sales/import-certs", authRoute(rt.campaignsHandler.HandleImportCertSales))
 	mux.Handle("POST /api/sales/import-certs/confirm", authRoute(rt.campaignsHandler.HandleConfirmCertSales))
 

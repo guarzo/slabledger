@@ -25,7 +25,10 @@ func NewSaleStore(db *sql.DB, logger observability.Logger) *SaleStore {
 var _ inventory.SaleRepository = (*SaleStore)(nil)
 
 func (ss *SaleStore) CreateSale(ctx context.Context, s *inventory.Sale) error {
-	return withLocalPurchaseMutation(ctx, ss.db, s.PurchaseID, false, func(owned context.Context) error {
+	assert := func(store *ConfirmedReturnStore, owned context.Context) error {
+		return store.assertSaleAllowed(owned, s.PurchaseID)
+	}
+	return withGuardedPurchaseMutation(ctx, ss.db, s.PurchaseID, assert, func(owned context.Context) error {
 		if err := ss.guardSaleInsert(owned, s); err != nil {
 			return err
 		}

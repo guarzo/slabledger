@@ -7,7 +7,7 @@ import type { AgingItem, ConfirmedReturnState } from '../../../../types/campaign
 
 vi.mock('../../../../js/api', () => ({ api: { getConfirmedReturnState: vi.fn() } }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
-const warning = 'A DH listing update for this item failed. DH may still have it listed; check DH after deleting.';
+const warning = 'An earlier DH update for this item never finished. DH may still have it listed or sold; check DH after deleting.';
 const item = { purchase: { id: 'p', cardName: 'Card', campaignId: 'c' }, daysHeld: 0 } as AgingItem;
 
 function showDelete(variant: 'desktop' | 'mobile' = 'desktop') {

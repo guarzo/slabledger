@@ -235,3 +235,9 @@ export interface CreateSaleInput {
   wasCracked?: boolean;
   saleReason?: string;
 }
+
+/** Response of GET /api/sales/by-cert/{cert}. `sale` is null when the card isn't recorded as sold. */
+export interface SaleByCertResponse {
+  purchase: Pick<Purchase, 'id' | 'campaignId' | 'cardName' | 'certNumber' | 'setName' | 'gradeValue'>;
+  sale: { id: string; saleChannel: string; saleDate: string; salePriceCents: number } | null;
+}

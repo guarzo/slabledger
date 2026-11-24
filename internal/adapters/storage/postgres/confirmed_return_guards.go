@@ -9,9 +9,16 @@ import (
 )
 
 func withLocalPurchaseMutation(ctx context.Context, db *sql.DB, id string, awaiting bool, fn func(context.Context) error) error {
+	return withGuardedPurchaseMutation(ctx, db, id, func(store *ConfirmedReturnStore, owned context.Context) error {
+		return store.assertAllowed(owned, id, awaiting)
+	}, fn)
+}
+
+// withGuardedPurchaseMutation runs fn under ownership after the given fence.
+func withGuardedPurchaseMutation(ctx context.Context, db *sql.DB, id string, assert func(*ConfirmedReturnStore, context.Context) error, fn func(context.Context) error) error {
 	store := NewConfirmedReturnStore(db)
 	return store.WithPurchaseMutation(ctx, id, func(owned context.Context) error {
-		if err := store.assertAllowed(owned, id, awaiting); err != nil {
+		if err := assert(store, owned); err != nil {
 			return err
 		}
 		before, err := store.returnState(owned, id)

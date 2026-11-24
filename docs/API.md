@@ -1219,6 +1219,25 @@ publish DH listings. Listing follows an operator-reviewed price.
 
 ---
 
+### `GET /api/sales/by-cert/{certNumber}`
+
+Auth: RequireAuth
+
+Read-only lookup of a PSA purchase by cert number, with its sale if one exists. Lets the UI find a sold card to un-sell it. Money is in cents.
+
+Response `200`:
+
+```json
+{
+  "purchase": { "id": "abc", "campaignId": "xyz", "cardName": "Charizard", "certNumber": "12345678", "setName": "Base Set", "gradeValue": 9 },
+  "sale": { "id": "s1", "saleChannel": "local", "saleDate": "2026-08-09", "salePriceCents": 8500 }
+}
+```
+
+`sale` is `null` when the card is unsold. `404` when no PSA purchase has that cert; `400` on an empty cert.
+
+---
+
 ### `POST /api/sales/import-certs`
 
 Auth: RequireAuth

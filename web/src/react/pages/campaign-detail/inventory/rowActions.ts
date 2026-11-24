@@ -2,7 +2,7 @@ import type { AgingItem } from '../../../../types/campaigns';
 import { api } from '../../../../js/api';
 import { type ActionIntent, deriveActionIntent, canDismiss } from './inventoryCalcs';
 
-export const FAILED_LISTING_DELETE_WARNING = 'A DH listing update for this item failed. DH may still have it listed; check DH after deleting.';
+export const FAILED_LISTING_DELETE_WARNING = 'An earlier DH update for this item never finished. DH may still have it listed or sold; check DH after deleting.';
 
 // Single source of truth for row action labels. Both DesktopRow and MobileCard
 // use these names — no more "Fix" vs "Fix Pricing", "Fix DH" vs "Fix DH Match".

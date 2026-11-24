@@ -52,8 +52,8 @@ func (s *ConfirmedReturnStore) GetReturnState(ctx context.Context, id string) (*
 		if e != nil {
 			return e
 		}
-		attempts, e := s.failedListingDeleteAttempts(owned, state)
-		state.FailedListingDeleteAllowed = len(attempts) > 0
+		_, warn, e := s.failedListingDeleteAttempts(owned, state)
+		state.FailedListingDeleteAllowed = warn
 		return e
 	})
 	return state, err
